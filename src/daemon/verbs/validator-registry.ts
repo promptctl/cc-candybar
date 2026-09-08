@@ -1,67 +1,28 @@
-// [LAW:one-type-per-behavior] The keyed-validator-registry ALGEBRA, extracted
-// from state-validators.ts (candybar-config-engine-71o.2) so it has exactly
-// ONE implementation shared by two independent keyspaces: SessionState writes
-// (`set` actions, state-validators.ts) and persistent config writes (`persist`
-// actions, config-validators.ts). What differs between the two is only DATA —
-// which keys are baseline/permanent and what namespace the keys live in — so
-// this module is the "one cutter" and each keyspace is an instance of it, not
-// a hand-rolled copy of the merge/dispose/rebuild logic.
-//
-// [LAW:one-source-of-truth] THE spec algebra: a key's live registrations
-// (DerivedValidatorSpec[]) collapse to ONE spec via mergeKeySpecs, and a spec
-// is residue-projected to a KeyValidator via validatorForSpec. Both keyspaces
-// read this from the SAME functions, so "what does a range/allow-list/int
-// spec mean" cannot drift between session and config gates.
+// [LAW:one-type-per-behavior] ONE registry algebra for both keyspaces; what differs is DATA.
+// [LAW:one-source-of-truth] One spec merge, one projection, so a spec cannot drift per keyspace.
 
-// [LAW:types-are-the-program] Discriminated union — every legal return is
-// either an accepted-and-canonicalized string or a structured rejection
-// reason. There is no third state (no `null`, no thrown exception path
-// inside a validator). The verb body matches exhaustively on `ok`.
+// [LAW:types-are-the-program] An accepted string or a structured rejection; no third state.
 export type ValidateResult =
   | { ok: true; value: string }
   | { ok: false; reason: string };
 
-// [LAW:one-type-per-behavior] All key validators have the same shape — they
-// don't carry the key name, the registry does. The validator's only concern
-// is: does this raw string belong in this key's value-set?
+// [LAW:one-type-per-behavior] A validator does not carry its key name; the registry does.
 export type KeyValidator = (rawValue: string) => ValidateResult;
 
-// [LAW:types-are-the-program] A derived key's SEMANTIC identity — the data an
-// action's `set`/`persist` declares about a key, from which the validator is
-// residue. A key is one of three key shapes: an integer (a menu's page
-// index), an allow-list (the union of values some button can write), or a
-// bounded integer range (a stepper's value). The registry compares specs to
-// decide whether two registrations can share a key (same `kind`) and merges
-// them by unioning content (allow-list members; range bounds); the opaque
-// `KeyValidator` it builds from the spec cannot be compared or merged, which
-// is why registration takes the spec and owns validator construction.
-//
-// [LAW:one-source-of-truth] The spec carries only content (kind + allow-list
-// members + range bounds), never the human label — the label is a pure
-// function of the key, computed where the validator is built, so two
-// registrations of one key yield byte-identical validators regardless of
-// which config registered first.
+// [LAW:types-are-the-program] Registration takes the SPEC because the opaque KeyValidator
+// cannot be compared or merged. [LAW:one-source-of-truth] A spec carries no label.
 export type DerivedValidatorSpec =
   | { readonly kind: "int" }
   | { readonly kind: "allow-list"; readonly allowed: readonly string[] }
   | {
-      // [LAW:one-source-of-truth] A bounded-integer state key (a stepper's
-      // value). `min`/`max` gate the value; `seed` is the value an UNSET key
-      // reads as — sourced from the backing default so the first relative
-      // click steps from the same number the bar displays (not silently from
-      // `min`). The validator ignores `seed` (it only clamps); the caller
-      // reads it via rangeParamsFor when the key is unset.
+      // [LAW:one-source-of-truth] `seed` is what an UNSET key reads as, not `min`.
       readonly kind: "range";
       readonly min: number;
       readonly max: number;
       readonly seed: number;
     };
 
-// [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair —
-// every action's write declaration projects to. mergeContributions folds a
-// list of these into the final per-key validator specs, so multiple actions
-// writing one key feed ONE coherence merge regardless of which action
-// authored the write.
+// [LAW:one-source-of-truth] One shape, so every action on a key feeds ONE coherence merge.
 export interface KeySpecContribution {
   readonly key: string;
   readonly spec: DerivedValidatorSpec;
@@ -69,11 +30,7 @@ export interface KeySpecContribution {
 
 const INT_RE = /^-?\d+$/;
 
-// [LAW:one-source-of-truth] The unset seed for a stepped key is the backing
-// default — the SAME number the bar displays before the first click — so the
-// first relative step doesn't silently start from `min`. Absent or
-// non-integer default falls back to `min` (the historical render-side
-// behavior).
+// [LAW:one-source-of-truth] The unset seed is the backing default, the number already shown.
 export function clampSeed(
   seed: number | undefined,
   min: number,
@@ -83,36 +40,17 @@ export function clampSeed(
   return Math.max(min, Math.min(max, seed));
 }
 
-// [LAW:one-type-per-behavior] The "values come from list Y" pattern IS the
-// canonical widget-config use case (theme picker draws from themes(), style
-// picker draws from styles(), a custom enum picker draws from a
-// user-declared list). One factory builds the validator from the list —
-// every callsite that registers an allow-list key passes through the same
-// shape, so error messages, empty-input rejection, and lookup semantics are
-// identical by construction.
-//
-// [LAW:no-silent-fallbacks] Empty input is rejected with a label-referencing
-// reason rather than silently mapped to a default.
-//
-// [LAW:one-source-of-truth] `wire` names the ACTUAL wire this allow-list's
-// values travel over — "set-state" for SessionState keys, "set-config" for
-// config-file (persist) keys — so the slash-rejection message points at the wire
-// the operator is actually debugging. Defaults to "set-state" (this
-// factory's original, sole caller) so existing direct callers (tests) don't
-// need to pass it; validatorForSpec passes the correct wire for its noun.
+// [LAW:one-type-per-behavior] One factory builds every allow-list validator, so messages
+// and lookup semantics are identical by construction.
+// [LAW:no-silent-fallbacks] Empty input is rejected with a label-referencing reason.
+// [LAW:one-source-of-truth] `wire` names the ACTUAL wire these values travel over.
 export function makeAllowListValidator(
   allowed: readonly string[],
   label: string,
   wire: string = "set-state",
 ): KeyValidator {
-  // [LAW:types-are-the-program] The factory's contract is "options = allow
-  // list" — every value the picker can RENDER must also be a value the wire
-  // can DELIVER. Two structural reasons a declared option can't reach the
-  // validator as itself: (1) the wire splits the tail on "/"; (2) the
-  // validator's empty-input rejection fires before the allow-list check, so
-  // an "" in the allow list would be listed-but-undeliverable. Catching at
-  // factory-build time (config-load) surfaces a misconfigured option list
-  // immediately, not on the operator's first click.
+  // [LAW:types-are-the-program] Every value the picker can RENDER must be one the wire can
+  // DELIVER — caught at config-load, not on the operator's first click.
   const slashOffenders = allowed.filter((v) => v.includes("/"));
   if (slashOffenders.length > 0) {
     throw new Error(
@@ -143,10 +81,7 @@ export function makeAllowListValidator(
   };
 }
 
-// [LAW:types-are-the-program] An integer-valued state key (a menu's page
-// index). The wire delivers a string; the validator IS the parse boundary —
-// it accepts only `^-?\d+$` and canonicalizes to the minimal decimal form.
-// Negative is legal: -1 is the menu's CLOSED sentinel.
+// [LAW:types-are-the-program] The validator IS the parse boundary. -1 is the CLOSED sentinel.
 export function makeIntValidator(label: string): KeyValidator {
   return (raw) => {
     if (!raw) return { ok: false, reason: `${label} value is required` };
@@ -160,10 +95,7 @@ export function makeIntValidator(label: string): KeyValidator {
   };
 }
 
-// [LAW:types-are-the-program] A bounded-integer state key (a stepper's
-// value). The validator is the parse-AND-clamp boundary: it accepts only
-// `^-?\d+$` then clamps into [min,max]. [LAW:single-enforcer] This is the ONE
-// place bounds are enforced.
+// [LAW:types-are-the-program][LAW:single-enforcer] Parse-AND-clamp: the ONE bounds check.
 export function makeRangeValidator(
   min: number,
   max: number,
@@ -179,20 +111,8 @@ export function makeRangeValidator(
   };
 }
 
-// [LAW:types-are-the-program] Collapse one key's spec contributions into the
-// single spec that gates it. A key is an INTEGER spec (a paged cursor `int`
-// or a bounded `range`) or an allow-list — never both. An integer spec
-// ABSORBS integer allow-list members (a trigger writing "0" to a page cursor
-// is a legal int write), and a NON-integer member aimed at it is the genuine
-// contradiction that throws. Two ranges widen-union; two allow-lists union;
-// an int and a range on one key conflict.
-// [LAW:one-source-of-truth] `noun` ("state"/"config") names the keyspace in
-// every thrown message — this function is the SAME merge both
-// deriveActionValidators (state-validators.ts) and deriveConfigActionValidators
-// (config-validators.ts) call, so a conflict thrown while merging a `persist`
-// action's contributions must say "config", never the SessionState-era
-// "state" wording (or the operator debugging a persist action gets pointed at
-// the wrong keyspace's mental model).
+// [LAW:types-are-the-program] A key is an INTEGER spec or an allow-list, never both: an int
+// absorbs int members, a non-integer one throws. [LAW:one-source-of-truth] `noun` names the keyspace.
 export function mergeKeySpecs(
   key: string,
   specs: readonly DerivedValidatorSpec[],
@@ -245,22 +165,13 @@ export function mergeKeySpecs(
   return { kind: "int" };
 }
 
-// [LAW:one-source-of-truth] The click-wire verb name a keyspace's writes
-// travel over — "set-state" for the SessionState keyspace, "set-config" for
-// the config file. Mirrors loader/actions.ts's wireName (same concept, the
-// loader's discriminator vocabulary is "set"/"persist" instead of
-// "state"/"config").
+// [LAW:one-source-of-truth] The click-wire verb name a keyspace's writes travel over.
 function wireForNoun(noun: string): string {
   return noun === "config" ? "set-config" : "set-state";
 }
 
-// [LAW:types-are-the-program] The validator is RESIDUE of a SETTLED spec:
-// given one merged spec, its validator is forced. Pure projection — kind ⇒
-// constructor — with NO union or widen of its own. `noun` ("state"/"config")
-// is threaded through so the SAME shared projection labels a rejection
-// message with the keyspace it actually belongs to — this is the one place
-// that builds every validator, so it is the one place that can misname the
-// keyspace if the noun doesn't ride along.
+// [LAW:types-are-the-program] The validator is RESIDUE of a settled spec — pure projection,
+// no union or widen of its own; `noun` rides along so it cannot misname the keyspace.
 function validatorForSpec(
   key: string,
   spec: DerivedValidatorSpec,
@@ -284,11 +195,7 @@ function buildValidatorFromSpecs(
   return validatorForSpec(key, mergeKeySpecs(key, specs, noun), noun);
 }
 
-// [LAW:single-enforcer] THE coherence merge: group every contribution by key
-// and collapse each key's specs into the one spec that gates it. `noun`
-// names the keyspace (default "state" — the original, sole caller before
-// config-validators.ts's twin) so a conflict thrown mid-merge for a
-// `persist` action's contributions names the config keyspace, not state.
+// [LAW:single-enforcer] THE coherence merge: group by key, collapse each key's specs to one.
 export function mergeContributions(
   contributions: readonly KeySpecContribution[],
   noun: string = "state",
@@ -327,28 +234,13 @@ export interface ValidatorRegistry {
   register(key: string, spec: DerivedValidatorSpec): () => void;
   validate(key: string, rawValue: string): ValidateResult;
   listKeys(): readonly string[];
-  // [LAW:one-source-of-truth] The permanent/baseline subset of listKeys() —
-  // exposed so a consumer that needs to distinguish "derived from an action
-  // table" from "always writable" (e.g. dropping an allow-list contribution
-  // aimed at a baseline key) reads it from the registry that owns the
-  // distinction, rather than re-declaring the baseline set as a second list.
+  // [LAW:one-source-of-truth] Read from the registry that owns the derived/permanent split.
   listBaselineKeys(): readonly string[];
   rangeParamsFor(key: string): RangeParams | null;
 }
 
-// [LAW:one-type-per-behavior] ONE registry implementation, instantiated once
-// per keyspace. `baseline` seeds PERMANENT entries (raw KeyValidator
-// functions, never re-claimable — SessionState's legacy theme/style/
-// toolbar-expanded); an empty baseline (the config-file keyspace) means
-// every key is fully derived from the action table, exactly the epic's
-// "zero engine edits to add a menu-able field" goal. `noun` names the
-// keyspace in every message ("state"/"config") so the two instances stay
-// operator-distinguishable — a "state key" and "config key" error can never
-// be confused for the other keyspace's gate.
-//
-// [LAW:no-silent-fallbacks] An unknown key is a caller-visible rejection
-// (validate) or a loud throw (a baseline re-claim, a kind clash) — never a
-// silent accept-and-store.
+// [LAW:one-type-per-behavior] ONE registry implementation per keyspace; `baseline` seeds
+// never-re-claimable entries. [LAW:no-silent-fallbacks] An unknown key is never stored.
 export function createValidatorRegistry(
   baseline: Readonly<Record<string, KeyValidator>>,
   noun: string = "state",
@@ -369,10 +261,7 @@ export function createValidatorRegistry(
   return {
     register(key, spec) {
       if (!key) throw new Error("register: key is required");
-      // [LAW:types-are-the-program] The set-state wire splits its tail on
-      // `/`, so a slash-bearing key can never be addressed — listing it
-      // would be registry-vs-wire drift. Reject at registration so the
-      // unreachable-but-listed state is unrepresentable.
+      // [LAW:types-are-the-program] The wire splits on `/`: a slash key would be unaddressable.
       if (key.includes("/")) {
         throw new Error(
           `register: key "${key}" contains "/" — the wire shape splits on ` +

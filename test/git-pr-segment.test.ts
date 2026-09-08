@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] The shipped gitPr segment, driven through the REAL
-// spine (registerDslConfig + renderDsl) and the REAL loader — the same path the
-// daemon renders through. Asserts the three render-distinguishable states the
-// forge outcome produces, and that the OSC-8 link region opens AND closes
-// cleanly (the link-bleed guard: a region that opens but never closes bleeds
-// the hyperlink onto the rest of the terminal).
+// [LAW:verifiable-goals] The shipped gitPr segment driven through the REAL spine and loader — the path the daemon renders through.
 
 import { getThemePalette } from "@promptctl/rich-js";
 
@@ -15,9 +10,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { EDIT_NS } from "../src/config/loader/edit-mode";
 
-// Reparse the AUTHORED literal (pre-synthesis) — see
-// test/default-dsl-config.test.ts for why this must be the raw form, not the
-// already-synthesized DEFAULT_DSL_CONFIG.
+// Must be the raw pre-synthesis literal, not the already-synthesized DEFAULT_DSL_CONFIG.
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 const OPTS = {
@@ -26,8 +19,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// OSC-8 open carries a non-empty URL; the close is the same introducer with an
-// EMPTY url. Capturing only non-empty urls means every match is an OPEN.
+// The close is the same introducer with an EMPTY url, so capturing only non-empty urls means every match is an OPEN.
 // eslint-disable-next-line no-control-regex
 const OSC8_OPEN = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
 // eslint-disable-next-line no-control-regex
@@ -39,19 +31,7 @@ function linkUrls(rendered: string): string[] {
 
 function renderGitPr(git: Record<string, unknown>): string {
   const base = parseAndValidate("<default>", SERIALIZED);
-  // Narrow the spread default to just the gitPr segment so the rendered line is
-  // exactly that segment's output.
-  //
-  // [LAW:locality-or-seam] `toolbar` references `edit.toggle`
-  // (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
-  // `parseAndValidate`, BEFORE this narrowing) has already baked a spliced
-  // copy of the full root into `presets.default.root` and per-preset
-  // `insertSegmentFrom` actions (`edit.addable.<preset>`) into `actions` —
-  // both keyed off presets this test doesn't want. Reset `presets` (so the
-  // narrowed `root` below isn't shadowed by that baked-in copy — see
-  // `presetRoot`/`presets.ts`) and drop every synthesized `edit.*` entry
-  // (gitPr's own template never references `edit.toggle`, so none of that
-  // machinery is needed here).
+  // Reset `presets` so the narrowed `root` isn't shadowed by the copy edit-chrome synthesis already baked in, and drop its `edit.*` entries.
   const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
     Object.fromEntries(
       Object.entries(rec).filter(([name]) => !name.startsWith(EDIT_NS)),
@@ -101,13 +81,9 @@ describe("gitPr segment render", () => {
       prUrl: url,
     });
 
-    // Exactly one clickable region, carrying the PR url verbatim (the terminal
-    // opens https directly — no cc-candybar:// verb round-trip).
     expect(linkUrls(out)).toEqual([url]);
-    // The number is shown; the region closes cleanly (no link bleed).
     expect(out).toContain("#76");
     expect(out).toContain(OSC8_CLOSE);
-    // Exactly one open and one close — the region is balanced.
     expect(out.split(OSC8_CLOSE).length - 1).toBe(1);
   });
 

@@ -1,8 +1,4 @@
-// [LAW:behavior-not-structure] The contract of the source-tree identity: the
-// same bytes at the same paths digest the same whatever the clock or the
-// readdir order says; a content edit or a rename changes it; nothing under a
-// dotfile or `~` backup counts; a symlink contributes its link text and is
-// never followed (brandon-build-notice-5d6).
+// [LAW:behavior-not-structure] The same bytes at the same paths digest the same; dotfiles and `~` backups are excluded, and a symlink is never followed.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -95,10 +91,8 @@ describe("sourceDigest", () => {
     fs.symlinkSync(external, path.join(root, "vendored"));
     const linked = sourceDigest(root);
     expect(linked).not.toBe(sourceDigest(scratch()));
-    // The target's content is not part of this tree's identity.
     fs.writeFileSync(path.join(external, "lib.ts"), "two");
     expect(sourceDigest(root)).toBe(linked);
-    // Self-links and dangling links are entries, not paths to walk.
     fs.symlinkSync(".", path.join(root, "loop"));
     fs.symlinkSync(path.join(root, "gone.ts"), path.join(root, "dangling.ts"));
     expect(sourceDigest(root)).toMatch(/^[0-9a-f]{64}$/);
@@ -110,8 +104,6 @@ describe("sourceDigest", () => {
     expect(sourceDigest(empty)).not.toBe(sourceDigest(scratch()));
   });
 
-  // [LAW:no-silent-failure] A tree that cannot be read has no digest — a
-  // digest over part of the source would be a lie.
   test("a missing tree throws", () => {
     expect(() => sourceDigest(path.join(os.tmpdir(), "ccb-digest-absent"))).toThrow(
       /ENOENT/,

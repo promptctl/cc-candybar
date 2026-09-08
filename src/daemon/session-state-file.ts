@@ -4,17 +4,10 @@ import { debug } from "../utils/logger";
 import type { DaemonLogger } from "./log";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
 
-// [LAW:locality-or-seam] Logging is injected, not hard-wired to daemon.log.
-// The daemon passes `dlog`; tests and non-daemon callers take this quiet
-// default, which stays silent unless CC_CANDYBAR_DEBUG is set — so unit tests
-// never open the real daemon log stream.
+// [LAW:locality-or-seam] Logging is injected; this quiet default keeps unit tests off the real daemon log stream.
 const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
-// [LAW:no-silent-fallbacks] Corrupt/missing file → empty state is the *defined*
-// recovery, not a hidden fallback to different data: an empty store re-rolls
-// random picks exactly as a first-ever boot would. Anything that isn't the
-// expected sessionId→key→value shape is rejected here so the store never
-// hydrates from a half-written or hand-edited file.
+// [LAW:no-silent-fallbacks] Corrupt/missing → empty state is the DEFINED recovery, identical to a first-ever boot; anything off-shape is rejected here.
 function isSnapshot(value: unknown): value is SessionSnapshot {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -29,9 +22,6 @@ function isSnapshot(value: unknown): value is SessionSnapshot {
   return true;
 }
 
-// [LAW:single-enforcer] The debounce + atomic write lives here, not in
-// SessionState. The store calls save() on every mutation; this coalesces the
-// bursty 22-session × 1 Hz write load into at most one disk write per window.
 export class FileSessionStorage implements SessionStorage {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pending: SessionSnapshot | null = null;
@@ -47,9 +37,6 @@ export class FileSessionStorage implements SessionStorage {
     try {
       raw = fs.readFileSync(this.filePath, "utf8");
     } catch (e) {
-      // [LAW:no-silent-fallbacks] A missing file is the expected first-boot
-      // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
-      // anomaly worth surfacing before recovering to empty.
       const code = (e as NodeJS.ErrnoException).code;
       if (code !== "ENOENT") {
         this.logger(
@@ -90,16 +77,11 @@ export class FileSessionStorage implements SessionStorage {
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
-      // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
-      // pid/spawn.lock. Session state carries conversation identifiers, so it
-      // gets the same perms — chmod defeats umask and re-perms a reused tmp.
+      // [LAW:single-enforcer] Owner-only, like pid/spawn.lock — chmod defeats umask and re-perms a reused tmp.
       fs.writeFileSync(tmp, JSON.stringify(snapshot), { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, this.filePath);
-      // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
-      // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
-      // the snapshot for a later flush (e.g. shutdown) to retry rather than
-      // silently dropping the last known state.
+      // [LAW:one-source-of-truth] Clear `pending` only once the rename lands, so a transient EIO leaves the snapshot for a later flush to retry.
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${(e as Error).message}`);

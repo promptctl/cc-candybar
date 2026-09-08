@@ -1,10 +1,5 @@
-// [LAW:behavior-not-structure] Regression net for render-bugs-pdu.3, a STALE
-// bug: per-part colors were reported collapsing to the segment fg, but the
-// interior spans already survive (bzh.9's StripCell→RichText migration fixed
-// ROOT A — the same lossy-serialization root as the pdu.1 link bleed). This
-// pins that so the collapse can't silently return. Merging onto the real
-// DEFAULT_DSL_CONFIG (not a hand-rolled template) is deliberate: a synthetic
-// segment could pass while the SHIPPED gitaculous regresses.
+// [LAW:behavior-not-structure] Pins that per-part interior colors never collapse to the segment fg.
+// Merging onto the real DEFAULT_DSL_CONFIG is deliberate: a synthetic segment could pass while the SHIPPED gitaculous regresses.
 
 import { getThemePalette } from "@promptctl/rich-js";
 
@@ -16,8 +11,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 
-// Fires every interior-colored branch: staged→green "S", unstaged→red "U",
-// ahead→green "+1", behind→red "-1".
 const GIT_PAYLOAD = {
   hook_event_name: "Status",
   session_id: "deadbeef-1234-5678-9abc-def012345678",
@@ -58,19 +51,11 @@ function parseRuns(ansi: string): Run[] {
   return runs;
 }
 
-// A truecolor RGB component (0-255) can numerically fall inside a basic-code
-// range (e.g. a blue of 106 collides with the 100-107 bright-bg range), so
-// the scan must SKIP a recognized `38;2;r;g;b` / `48;2;r;g;b` run's three
-// component tokens rather than re-inspecting them as standalone codes —
-// otherwise an unrelated color's component number gets misread as a legacy
-// ANSI introducer.
+// A truecolor component can fall inside a basic-code range, so the scan must SKIP a recognized run's three component tokens.
 function skipTruecolorRun(params: readonly string[], i: number): number {
   return params[i + 1] === "2" ? i + 4 : i;
 }
 
-// The foreground a run sets — the value pdu.3's defect collapsed to a single
-// segment fg; comparing it across runs is the behavioral invariant. Both the
-// truecolor `38;2;r;g;b` form and a basic ANSI code (30-37/90-97) count.
 function foregroundKey(sgr: string): string | null {
   const params = sgr.split(";");
   for (let i = 0; i < params.length; i++) {
@@ -87,9 +72,6 @@ function foregroundKey(sgr: string): string | null {
   return null;
 }
 
-// The background a run sets (truecolor `48;2;r;g;b` or basic 40-47/100-107) —
-// compositing means every interior glyph keeps the SEGMENT's bg, so this must
-// match across the segment and its colored glyphs.
 function backgroundKey(sgr: string): string | null {
   const params = sgr.split(";");
   for (let i = 0; i < params.length; i++) {

@@ -15,8 +15,6 @@ const {
   installSuccessMessage,
 } = __test__;
 
-// Every temp dir is registered here and removed once after the whole file, so
-// tests stay free to create as many as they need without leaking into /tmp.
 const tmpDirs: string[] = [];
 afterAll(() => {
   for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
@@ -28,8 +26,7 @@ function mkTmpDir(prefix: string): string {
   return dir;
 }
 
-// A realistic staged path — the space in "Application Support" exercises the
-// quoting the real darwin path needs.
+// The space in "Application Support" exercises the quoting the darwin path needs.
 const BIN = path.join(
   os.homedir(),
   "Library",
@@ -100,7 +97,6 @@ describe("install — clobber protection", () => {
 
   test("refuses to overwrite user-customized command", () => {
     const p = tmpSettingsPath();
-    // Write a non-standard command manually.
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(
       p,
@@ -112,7 +108,6 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    // Should refuse and leave the file unchanged.
     const stderr: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
     process.stderr.write = (chunk: string | Buffer) => {
@@ -132,8 +127,8 @@ describe("install — clobber protection", () => {
   test("a path-superset command (ours + suffix) is NOT claimed as ours", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    // Bare (unquoted) path whose string is a superset of the staged bin path:
-    // startsWith would match; the token-boundary rule must not.
+    // A bare path whose string is a superset of the staged bin path: startsWith
+    // would match it; the token-boundary rule must not.
     const bareBin = "/opt/bin/cc-candybar";
     fs.writeFileSync(
       p,
@@ -207,9 +202,6 @@ describe("install — clobber protection", () => {
 });
 
 describe("installSuccessMessage", () => {
-  // Same contract as --help's own text (test/help-text.test.ts): the tip names
-  // the surface the controls live on, with the glyph read from the synthesis
-  // that renders it rather than spelled again here.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     const msg = installSuccessMessage();
     expect(msg).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
@@ -219,8 +211,6 @@ describe("installSuccessMessage", () => {
 
 describe("resolveRenderEntry", () => {
   test("resolves the native binary from node_modules beside the dist", () => {
-    // The repo checkout installs every platform package (workspace-yaml
-    // supportedArchitectures), so the current platform's is always present.
     const sourceDist = path.resolve(__dirname, "..", "dist", "index.mjs");
     const entry = resolveRenderEntry(sourceDist);
     expect(entry.kind).toBe("native");
@@ -257,7 +247,6 @@ describe("stagedEntryKind", () => {
   test("a binary (non-shebang) file is native", () => {
     const dir = mkTmpDir("cpwl-kind-test-");
     const f = path.join(dir, "cc-candybar");
-    // Mach-O 64-bit magic — what a previously staged Rust binary starts with.
     fs.writeFileSync(f, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00]));
     expect(stagedEntryKind(f)).toBe("native");
   });
@@ -277,7 +266,6 @@ describe("stageFile", () => {
     const dir = mkTmpDir("cpwl-stage-test-");
     const f = path.join(dir, "same.bin");
     fs.writeFileSync(f, "payload");
-    // Same file reached through a dot-dot detour — must not truncate it.
     stageFile(f, path.join(dir, "..", path.basename(dir), "same.bin"));
     expect(fs.readFileSync(f, "utf-8")).toBe("payload");
   });

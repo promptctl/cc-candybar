@@ -1,10 +1,3 @@
-// [LAW:types-are-the-program] The helpers schema is the simplest possible: a
-// record of name → template-body STRING. Each value is a Go-template source the
-// renderer compiles into a `{{ define }}` block; whether the body PARSES (and
-// whether a `{{ template "name" }}` reference resolves) is a render-time concern
-// (registerDslConfig parses each helper and throws a per-helper diagnostic).
-// This file changes only if the helper authoring shape changes.
-
 import { findKeyLine } from "./diagnostics.js";
 import {
   describeType,
@@ -13,9 +6,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:single-enforcer] Structural validation of the `helpers` block: an object
-// whose every value is a string template body. Null-prototype record so a helper
-// named "__proto__"/"constructor" is an ordinary own property, matching actions.
+// [LAW:single-enforcer] Structural only; whether a body parses is render-time.
 export function validateHelpers(
   ctx: ValidateCtx,
   raw: unknown,

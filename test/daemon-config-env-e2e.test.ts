@@ -1,11 +1,6 @@
-// [LAW:verifiable-goals] brandon-config-5g8's acceptance, measured the way
-// the ticket measured the defect: a REAL daemon over a REAL socket. The
-// ticket set CC_CANDYBAR_CONFIG on the statusline command and saw a rejected
-// config render byte-identically to no config — because the variable was
-// read from the DAEMON's own environment, which the client's shell never
-// reaches once a daemon is running. So this daemon is spawned with NO such
-// variable, and every override arrives the only way a client can send one:
-// as the `configEnv` hint, the `--config` flag, or a load-config click.
+// [LAW:verifiable-goals] A REAL daemon over a REAL socket, spawned with NO
+// CC_CANDYBAR_CONFIG: every override must arrive the only way a client can send
+// one — the `configEnv` hint, the `--config` flag, or a load-config click.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -28,7 +23,7 @@ import {
 
 jest.setTimeout(30_000);
 
-// The argv a client sends: binary path first, as parseRenderArgs expects.
+// Binary path first, as parseRenderArgs expects.
 const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
 
 describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running daemon", () => {
@@ -37,8 +32,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   let removeTmpDirs: () => void;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
-  // The shape every shipped template failed with (brandon-plugin-templates-irq):
-  // a top-level key the loader does not know.
   let rejected: string;
   let absent: string;
   let override: string;
@@ -48,8 +41,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     sockPath = prepared.sockPath;
     env = prepared.env;
     removeTmpDirs = prepared.removeTmpDirs;
-    // The daemon's own shell says nothing — as in production, where the
-    // daemon was spawned by whichever session came first.
+    // The daemon's own shell says nothing, as in production.
     delete prepared.env.CC_CANDYBAR_CONFIG;
     projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-config-env-e2e-project-"),
@@ -71,13 +63,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     removeTmpDirs();
   });
 
-  // Four renders, four different bars:
-  //   • no override — the bundled default, no strip;
-  //   • an override naming a valid file — that file's own bar, no strip;
-  //   • an override naming a file the loader rejects — the red strip naming
-  //     the file and its first issue, enough to send the user to `check`;
-  //   • an override naming a file that does not exist — the bar says so, and
-  //     names the path, instead of the silent default the ticket measured.
+  // Four renders, four visibly different bars.
   test("a rejected override and an absent override are each visibly distinct from no override", async () => {
     const plain = stripAnsi(
       await render(sockPath, "cfg-env-plain", projectDir),
@@ -110,8 +96,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(viaRejected).toContain(rejected);
     expect(viaRejected).toContain('Unknown top-level key "theme"');
 
-    // The strip word-wraps at the client's width, so the path (one word)
-    // sits on a row of its own beneath the sentence that names it.
     expect(viaAbsent).toContain("⚠ Config file not found:");
     expect(viaAbsent).toContain(absent);
     expect(viaAbsent).not.toContain("Invalid config");
@@ -120,12 +104,8 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(viaAbsent).not.toBe(plain);
   });
 
-  // The three spellings of an explicit config have ONE precedence, composed
-  // at the request boundary (server.ts): a load-config pick over the
-  // `--config` flag over the `configEnv` hint. Each render below carries the
-  // two lower spellings naming DIFFERENT files, so the bar itself says which
-  // one won. An empty `--config` is no override at all — the hint applies —
-  // never an empty path collapsing the chain to nothing.
+  // Each render carries the two lower spellings naming DIFFERENT files, so the
+  // bar itself says which won. An empty `--config` is no override at all.
   test("a load-config pick outranks --config, which outranks the configEnv hint; an empty flag is no flag", async () => {
     const sid = "cfg-env-precedence";
     const hints = { configEnv: absent };
@@ -156,19 +136,11 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(pickOverBoth).not.toContain("Config file not found");
   });
 
-  // The production wiring end to end: the REAL client (`dist/index.mjs`,
-  // the bundle `cc-candybar install` stages) reads the hook payload from
-  // stdin, lifts CC_CANDYBAR_CONFIG from ITS OWN environment into the
-  // `configEnv` hint (src/index.ts), and relays it over the socket — the
-  // daemon, spawned without the variable, renders the hinted file's bar.
+  // The production wiring end to end, through the real staged bundle.
   test("the real client carries its own CC_CANDYBAR_CONFIG to the daemon", async () => {
     const sid = "cfg-env-real-client";
-    // Warm the entry so the client's one bounded request cannot hit a cold
-    // first-load timeout (a real client shows a blank line and retries on
-    // the next tick; a test has no next tick). The cache key is
-    // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
-    // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
-    // one this warmed.
+    // Warm the entry: the client's one bounded request has no next tick to
+    // retry on. It is spawned in projectDir so it hits the entry warmed here.
     await render(sockPath, sid, projectDir, { configEnv: override });
     const client = spawnSync(
       process.execPath,

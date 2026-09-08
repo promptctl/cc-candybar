@@ -1,23 +1,5 @@
-// [LAW:verifiable-goals] candybar-settings-ui-aok.1 acceptance — the global
-// settings menu, driven through the real loader (parse → merge → validate), the
-// real spine (registerDslConfig + renderDsl), and the real set-state gate.
-//
-// The measuring stick the ticket names: a USER config whose `root` is a whole
-// tree of one row of two segments — a tree replaces the bundled rows, so the
-// menu must be spliced into the user's own row. A change that only works from
-// the bundled default has fixed nothing, so every case below starts from a
-// user file merged over DEFAULT_DSL_CONFIG.
-//
-//   1. The menu renders from a minimal user root, and from it a user reaches
-//      preset switching and edit mode.
-//   2. Placement is a POSITION: placing the anchor moves the menu, removing it
-//      puts it back at the default position, and the rendered content is the
-//      same either way.
-//   3. A second placement is a loud load error.
-//   4. Every declared preset carries it — `compact` included, whose whole point
-//      is being narrow.
-//   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
-//      back into edit mode.
+// [LAW:verifiable-goals] The settings menu through the real loader, spine and gate. Every case
+// starts from a USER file whose whole `root` replaces the bundled rows, so the menu must splice in.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -71,9 +53,6 @@ function extractUrls(rendered: string): string[] {
   return urls;
 }
 
-// The acceptance shape, verbatim: a user file that declares its own `root` of
-// one row of two segments, merged over the BUNDLED default (production's
-// cascade), never over an empty one.
 function userConfig(root: string): string {
   return `{
     globals: {},
@@ -106,7 +85,6 @@ function buildRuntime(src: string) {
       handler(e.value, ctx);
     }
   };
-  // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
     const url = extractUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
@@ -125,8 +103,7 @@ const PAYLOAD = {
   model: { display_name: "Opus" },
 };
 
-// The tree a render actually walks: the active preset's resolved root, which is
-// what the synthesis passes rewrite. `config.root` stays as the author wrote it.
+// A render walks the active preset's resolved root; `config.root` stays as authored.
 function resolvedRoot(config: DslConfig, preset = "default"): LayoutNode {
   return presetRoot(config, preset).node;
 }
@@ -137,13 +114,9 @@ function segmentNames(node: LayoutNode): string[] {
     : node.children.flatMap(segmentNames);
 }
 
-// ─── 1. Reachable from a minimal user root ───────────────────────────────────
-
 describe("the global settings menu is reachable from a user config", () => {
   test("a user root of one row of two segments still renders the menu", () => {
     const { render, dispose } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
-    // The user declared two segments; the bar shows three cells, and the third
-    // is the door their `root` could not close.
     expect(stripAnsi(render())).toContain("☰ ▸");
     dispose();
   });
@@ -158,8 +131,6 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
     expect(opened).toContain("☰ ▾");
-    // The two things the ticket's acceptance names: enter edit mode, and switch
-    // presets (the picker's own disclosure glyph, hosted by the preset entry).
     expect(opened).toContain("✎ edit");
     expect(opened).toContain("▦");
     dispose();
@@ -172,10 +143,7 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     clickWriting(render(), EDIT_MODE_KEY, "open");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
-    // Edit mode being ON is what makes the `+`/`-` chrome visible, so this is
-    // the whole route the shadowed `toolbar` trigger used to be the only way
-    // to. Asserted on the affordances' own verb, not on a bare "-" glyph that
-    // any template could have produced.
+    // Asserted on the affordances' own verb, not a bare "-" glyph any template could emit.
     const editing = extractUrls(render()).filter((u) =>
       u.includes("apply-layout-op"),
     );
@@ -188,9 +156,7 @@ describe("the global settings menu is reachable from a user config", () => {
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    // Open the picker's own disclosure, then pick `compact` from its options.
-    // Both clicks go through the real verb handlers against the derived gate —
-    // a menu the gate did not admit would throw here, not silently no-op.
+    // Both clicks run the real verb handlers: a menu the gate did not admit throws here.
     const pickerUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1]?.startsWith("menus.settings_")),
     );
@@ -202,8 +168,6 @@ describe("the global settings menu is reachable from a user config", () => {
   });
 });
 
-// ─── 2. Placement is a position ──────────────────────────────────────────────
-
 describe("placement is a position, not a mode", () => {
   test("placing the anchor moves the menu; the rendered content is the same", () => {
     const defaulted = buildRuntime(userConfig(TWO_SEGMENT_ROW));
@@ -214,8 +178,6 @@ describe("placement is a position, not a mode", () => {
     const defaultedLines = stripAnsi(defaulted.render()).split("\n");
     const placedLines = stripAnsi(placed.render()).split("\n");
 
-    // Defaulted: the menu joins the bar's first row. Placed: it is the row the
-    // author put it on. Same cell, different position — one splice, two values.
     expect(defaultedLines[0]).toContain("☰ ▸");
     expect(placedLines[0]).not.toContain("☰ ▸");
     expect(placedLines[1]).toContain("☰ ▸");
@@ -237,7 +199,6 @@ describe("placement is a position, not a mode", () => {
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    // Including `compact`, whose whole point is being narrow, and `verbose`.
     expect(presetNames(config.presets)).toEqual(
       expect.arrayContaining(["default", "compact", "verbose"]),
     );
@@ -259,8 +220,7 @@ describe("placement is a position, not a mode", () => {
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    // The alt preset put the menu FIRST; the splice left it there rather than
-    // appending a second one.
+    // The alt preset put the menu FIRST; the splice left it there, adding no second one.
     expect(countAnchors(resolvedRoot(config, "alt"))).toBe(1);
     const names = segmentNames(resolvedRoot(config, "alt")).filter((n) =>
       n.startsWith(SETTINGS_NS),
@@ -268,8 +228,6 @@ describe("placement is a position, not a mode", () => {
     expect(names[0]).toBe(SETTINGS_ANCHOR);
   });
 });
-
-// ─── 3. A second placement is a loud load error ──────────────────────────────
 
 describe("the anchor may be placed at most once", () => {
   test("two placements in one layout fail at load, naming the problem", () => {
@@ -337,16 +295,8 @@ describe("the anchor may be placed at most once", () => {
   });
 });
 
-// ─── 3b. A `when` the author wrote never reaches the menu ────────────────────
-
-// The guarantee is "present in every bar, whatever the config says". A `when`
-// on the row the default placement lands in used to defeat it silently: the
-// anchor inherited the gate, so an author writing an ordinary conditional row
-// (a git row shown only inside a repo) deleted the undeletable door by accident
-// under exactly that condition. Asserted on the resolved tree rather than on a
-// render, because it must hold for every value the predicate could take.
+// Asserted on the resolved tree: "present in every bar" must hold for every value a `when` takes.
 describe("the default placement never inherits an author's gate", () => {
-  // Every `when` on the path from the resolved root down to the anchor.
   function gatesOverAnchor(node: LayoutNode): string[] {
     const walk = (n: LayoutNode, above: string[]): string[] | null => {
       const here = n.when === undefined ? above : [...above, n.when];
@@ -424,11 +374,7 @@ describe("the default placement never inherits an author's gate", () => {
   ])(
     "a `when` on %s is honored — there is no bar to host a menu on",
     (_label, root) => {
-      // The exemption, asserted rather than left implicit: gating the ROOT is an
-      // explicit statement that the whole bar is conditional, unlike a gate on
-      // one inner row the default placement merely happened to land in. It is
-      // also what keeps edit chrome's reset banner gated with the content it
-      // describes (see dsl-layout-edit's banner tests, which read this `when`).
+      // Gating the ROOT is an explicit statement that the whole bar is conditional.
       const config = parseAndValidate(
         "<user>",
         withFlag(root),
@@ -440,8 +386,7 @@ describe("the default placement never inherits an author's gate", () => {
   );
 
   test("an author who places the anchor inside a gated row keeps it there", () => {
-    // Their placement is their answer — the pass honors the position, gate and
-    // all. Only the DEFAULT placement is lifted out.
+    // Only the DEFAULT placement is lifted out; an authored one keeps its gate.
     const config = parseAndValidate(
       "<user>",
       withFlag(
@@ -455,18 +400,8 @@ describe("the default placement never inherits an author's gate", () => {
   });
 });
 
-// ─── 4. The anchor's precondition is loud ────────────────────────────────────
-
-// [LAW:one-source-of-truth] cross-ref accepts an authored `settings.menu` on the
-// promise that synthesizeSettingsMenu will declare it. When the two read
-// different facts, that promise breaks silently: the config loads clean, the
-// anchor is never lowered, and the dangling reference reaches the render walk to
-// throw at `lookupSegment` — a load-time mistake surfacing three layers away.
-// These tests pin the two halves of the one predicate.
-//
-// The default here is the EMPTY one (parseAndValidate's default argument), which
-// is the only way to reach a config with no `session.id`: production's cascade
-// merges the bundled default, which declares it.
+// [LAW:one-source-of-truth] cross-ref accepts an authored `settings.menu` on the promise the
+// synthesis declares it; disagree and the config loads clean, then throws at `lookupSegment`.
 describe("placing the anchor where the menu cannot be synthesized", () => {
   const placing = (variables: string): string => `{
     globals: {},
@@ -484,8 +419,6 @@ describe("placing the anchor where the menu cannot be synthesized", () => {
       const message = (err as ConfigError).message;
       expect(message).toContain(SETTINGS_ANCHOR);
       expect(message).toContain("session.id");
-      // Not the generic dangling-reference error: true, but it teaches the
-      // author to hunt for a typo in a name they copied from the docs.
       expect(message).not.toContain("does not match any declared segment");
     }
   });
@@ -498,16 +431,12 @@ describe("placing the anchor where the menu cannot be synthesized", () => {
       ),
       ALLOWED,
     );
-    // The invariant whose violation used to throw at render: every segment the
-    // resolved root names is a segment the config declares.
     for (const name of segmentNames(resolvedRoot(config))) {
       expect(Object.keys(config.segments)).toContain(name);
     }
     expect(segmentNames(resolvedRoot(config))).toContain(SETTINGS_ANCHOR);
   });
 });
-
-// ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
 
 describe("the menu is chrome-exempt", () => {
   test("no `-` affordance targets a settings segment", () => {
@@ -535,9 +464,7 @@ describe("the menu is chrome-exempt", () => {
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    // The addable domain is "declared, non-exempt segments not already present".
-    // A settings segment in it would mean `+` could insert a second copy of the
-    // one node that must exist exactly once.
+    // A settings segment in the addable domain would let `+` insert a second copy.
     const compiled = registerDslConfig(
       config,
       new SourceRegistry(
@@ -549,13 +476,9 @@ describe("the menu is chrome-exempt", () => {
       { cwd: "/tmp/proj" },
     );
     expect(compiled).toBeDefined();
-    // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that
-    // field holds the domain's NAME (`addableDomainName` → `edit.addable.<p>`),
-    // which is EDIT_NS-prefixed by construction, so checking it for a
-    // SETTINGS_NS prefix passes however broken `isChromeExempt` gets.
+    // On the domain's VALUES: `insertSegmentFrom` holds an EDIT_NS name and would always pass.
     const domains = [...addableSegmentDomains(config).values()];
-    // The non-emptiness is half the assertion: `every` over an empty list is
-    // the same vacuous pass one indirection further out.
+    // `every` over an empty list is a vacuous pass, so non-emptiness is half the assertion.
     expect(domains.length).toBeGreaterThan(0);
     for (const offered of domains) {
       expect(offered.length).toBeGreaterThan(0);

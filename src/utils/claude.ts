@@ -1,6 +1,5 @@
 import { existsSync, createReadStream } from "node:fs";
-// [LAW:single-enforcer] readdir/readFile/stat come from the gated transcript-fs
-// owner, not node:fs/promises — the in-flight-I/O bound lives at one seam.
+// [LAW:single-enforcer] fs goes through transcript-fs: one in-flight-I/O seam.
 import { readdir, readFile, readAppended, stat } from "./transcript-fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -9,10 +8,8 @@ import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
 
 export interface ClaudeHookData {
-  // cc-candybar internal — not part of Anthropic's schema
   hook_event_name: string;
 
-  // Always present per Anthropic schema
   session_id: string;
   transcript_path: string;
   cwd: string;
@@ -23,13 +20,10 @@ export interface ClaudeHookData {
   workspace: {
     current_dir: string;
     project_dir: string;
-    // "Empty array if none have been added" — always present, not absent
     added_dirs: string[];
-    // Absent when not inside a linked git worktree
     git_worktree?: string;
   };
 
-  // Optional per Anthropic schema (listed under "Fields that may be absent")
   session_name?: string;
   version?: string;
   output_style?: {
@@ -46,10 +40,9 @@ export interface ClaudeHookData {
     total_input_tokens: number;
     total_output_tokens: number;
     context_window_size: number;
-    // Always present within context_window, but value may be null (schema: "Fields that may be null")
     used_percentage: number | null;
     remaining_percentage: number | null;
-    // Null before first API call and after /compact — present, not absent
+    // Null before the first API call and after /compact
     current_usage: {
       input_tokens: number;
       output_tokens: number;
@@ -148,11 +141,7 @@ export async function findProjectPaths(
 export async function findAgentTranscripts(
   sessionId: string,
   projectPath: string,
-  // [LAW:one-source-of-truth] Agent-file session identity is IMMUTABLE — a file
-  // that belonged to this session never changes owner. Paths in `verified` skip
-  // the first-line readFile, so an incremental refold (which passes its prior
-  // file set) pays the O(file) verification only for NEWLY-appeared sidechains,
-  // not every sidechain every render. The readdir still runs (cheap).
+  // [LAW:one-source-of-truth] Session identity is IMMUTABLE, so `verified` skips.
   verified?: ReadonlySet<string>,
 ): Promise<string[]> {
   const agentFiles: string[] = [];
@@ -256,12 +245,7 @@ export async function getFileModificationDate(
   }
 }
 
-// [LAW:types-are-the-program] exception: kept as type-aliases (not
-// interfaces) so they're structurally assignable to `Record<string,
-// unknown>` at the `extractModelId` boundary in segments/pricing.ts.
-// Switching to `interface` removes the implicit index signature and
-// breaks typecheck. A proper fix tightens that boundary to take
-// `PrunedRaw` directly and is out of scope for the CI-fix branch.
+// [LAW:types-are-the-program] exception: a type-alias keeps the index signature.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type UsageCounts = {
   input_tokens?: number;
@@ -270,11 +254,7 @@ type UsageCounts = {
   cache_read_input_tokens?: number;
 };
 
-// [LAW:one-source-of-truth] The only fields ever read from raw are
-// model, message.{id,model,usage}, and requestId. Storing the full
-// parsed JSON (including content arrays with full message text) causes
-// hundreds of MB of V8 heap churn per transcript re-parse. raw is
-// pruned to this shape at parse time so the GC pressure is bounded.
+// [LAW:one-source-of-truth] raw is pruned to this shape at parse time.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type PrunedRaw = {
   model?: string;
@@ -284,13 +264,7 @@ export type PrunedRaw = {
 
 export interface ParsedEntry {
   timestamp: Date;
-  // [LAW:one-source-of-truth] The pruned projection carries every scalar any
-  // consumer reads. `type`, `message.role/type/firstContentType` are the
-  // message-classification discriminators the metrics segment needs; they are
-  // small enum-like strings, so projecting them keeps metrics on this one parse
-  // path WITHOUT retaining the multi-MB `message.content[]` arrays the pruning
-  // exists to drop. `firstContentType` is the `type` of the first content block
-  // only (undefined when content is text/absent) — never the array itself.
+  // [LAW:one-source-of-truth] Every scalar any consumer reads, so no second parse.
   type?: string;
   message?: {
     id?: string;
@@ -306,9 +280,6 @@ export interface ParsedEntry {
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
-  // Both message.id paths are now equivalent (makeEntry syncs them), but
-  // raw.message.id is kept as the canonical source to preserve call-site
-  // compatibility with callers that pass a PrunedRaw directly.
   const messageId = entry.message?.id ?? entry.raw.message?.id;
   const requestId = entry.raw.requestId;
 
@@ -321,9 +292,7 @@ export function createUniqueHash(entry: ParsedEntry): string | null {
 
 const STREAMING_THRESHOLD_BYTES = 1024 * 1024;
 
-// [LAW:no-shared-mutable-globals] Bounded LRU — single owner, hard cap, documented invariants.
-// Key: filePath. Value: last-seen mtime+size for freshness check plus parsed entries.
-// Files larger than PARSE_CACHE_SKIP_BYTES are streamed and not retained (too expensive).
+// [LAW:no-shared-mutable-globals] Bounded LRU — single owner, hard cap.
 const PARSE_CACHE_MAX = 16;
 const PARSE_CACHE_SKIP_BYTES = 5 * 1024 * 1024;
 
@@ -351,7 +320,6 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
       cached.size === fileSizeBytes
     ) {
       debug(`[parse-cache] hit ${filePath}`);
-      // LRU: move to most-recently-used end via delete+reinsert
       parseCache.delete(filePath);
       parseCache.set(filePath, cached);
       return cached.entries;
@@ -369,14 +337,11 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
 
     debug(`Parsed ${entries.length} entries from ${filePath}`);
 
-    // Large files are already streamed — retaining parsed entries pins memory. Skip cache.
     if (fileSizeBytes > PARSE_CACHE_SKIP_BYTES) {
       return entries;
     }
 
-    // Evict stale entry for this path (mtime changed) before measuring capacity.
     parseCache.delete(filePath);
-    // Evict LRU entry if at cap.
     if (parseCache.size >= PARSE_CACHE_MAX) {
       parseCache.delete(parseCache.keys().next().value!);
     }
@@ -387,11 +352,7 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     });
     return entries;
   } catch (error) {
-    // [LAW:no-silent-failure] A transcript that doesn't exist yet is the
-    // domain's genuine "no entries" (new session pre-first-write) — every
-    // other read error propagates so the consuming provider classifies it
-    // as a failed outcome and the payload boundary logs it. The old
-    // catch-all-to-[] dressed EACCES/EIO as an empty session.
+    // [LAW:no-silent-failure] Only a missing transcript is "no entries".
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       debug(`Transcript not present yet: ${filePath}`);
       return [];
@@ -400,17 +361,11 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   }
 }
 
-// Build a ParsedEntry from a full parsed JSONL line, retaining only the
-// fields actually used downstream. The full parsed object (which includes
-// message.content arrays with complete LLM response text) is discarded so
-// the GC can reclaim that memory promptly instead of pinning it via raw.
 // [LAW:one-source-of-truth] All callers go through here; no second parse path.
 function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   if (!parsed.timestamp) return null;
   const msg = parsed.message as Record<string, unknown> | undefined;
   const usage = msg?.usage as UsageCounts | undefined;
-  // Project only the first content block's `type` scalar; the array (full LLM
-  // text) is never retained. Text content (a bare string) has no block type.
   const content = msg?.content;
   const firstBlock =
     Array.isArray(content) && typeof content[0] === "object" && content[0]
@@ -447,9 +402,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   };
 }
 
-// [LAW:one-source-of-truth] The one line→entry loop. Both the whole-file parse
-// and the incremental append reader frame their text into lines through here, so
-// a malformed-line policy or a projected field can never diverge between the two.
+// [LAW:one-source-of-truth] One line→entry loop; the two readers cannot diverge.
 function parseJsonlLines(text: string): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
   for (const line of text.split("\n")) {
@@ -472,33 +425,16 @@ async function parseJsonlFileInMemory(
   return parseJsonlLines(content);
 }
 
-// A byte cursor into an append-only transcript: the offset consumed through the
-// last complete line, the mtime observed at that read, and the inode. The store
-// keys its per-file fold by this — `offset` bounds the next read to only what's
-// new; `mtimeMs` lets an unchanged file skip the read entirely; `ino` detects a
-// rewrite (a rename-based /compact swaps the inode) so the fold resets instead
-// of splicing new bytes onto a stale prefix.
+// `ino` detects a rewrite, so the fold resets instead of splicing onto a stale prefix.
 export interface TranscriptCursor {
   readonly offset: number;
   readonly mtimeMs: number;
   readonly ino: number;
 }
 
-// [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Read only the entries
-// appended to an append-only transcript since `prior`. The returned `entries`
-// are TRANSIENT — the caller folds them into its own compact aggregate and drops
-// them, so this reader (unlike the retained parseCache) pins no O(file) memory:
-// its cost is O(bytes appended since last render), which is the whole point.
-//
-// A partial trailing line (a render observing the file mid-write, before its
-// newline) is NOT consumed: the cursor advances only through the last complete
-// line, so the partial line is re-read intact once its newline lands. Cutting at
-// a newline also guarantees clean UTF-8 boundaries (0x0A is never a continuation
-// byte), so no multibyte codepoint is split across reads.
-//
-// `reset` (from readAppended) means the file shrank/was rewritten (a /compact):
-// `entries` then cover the whole new file from offset 0 and the caller discards
-// its prior fold for this file. Absent/failed pass straight through.
+// [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Entries are TRANSIENT,
+// so this pins no O(file) memory; the newline cut defers a partial line and keeps
+// UTF-8 boundaries clean.
 export async function readAppendedEntries(
   filePath: string,
   prior: TranscriptCursor | undefined,
@@ -511,7 +447,6 @@ export async function readAppendedEntries(
   );
   if (r.kind !== "ok") return r;
   const { buf, start, mtimeMs, ino, reset } = r.value;
-  // Consume only through the last newline; a trailing partial line waits.
   const lastNl = buf.lastIndexOf(0x0a);
   if (lastNl < 0) {
     return ok({ entries: [], cursor: { offset: start, mtimeMs, ino }, reset });
@@ -619,16 +554,7 @@ async function collectProjectFiles(
   }
 }
 
-/**
- * Loads entries from Claude projects with deterministic deduplication.
- * @param timeFilter Optional filter to apply based on timestamp
- * @param fileFilter Optional filter to apply based on file path and modification time
- * @param sortFiles Whether to sort files by modification time
- * @returns Deduplicated entries sorted by timestamp
- * @note Sorts entries by timestamp before deduplication to ensure consistent
- *       duplicate selection. Otherwise, parallel file loading causes race conditions
- *       where different duplicates are kept on each run, leading to flickering values.
- */
+// Sorts BEFORE deduplication, or parallel loading flickers between duplicates.
 export async function loadEntriesFromProjects(
   timeFilter?: (entry: ParsedEntry) => boolean,
   fileFilter?: (filePath: string, modTime: Date) => boolean,

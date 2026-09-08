@@ -1,8 +1,5 @@
-// [LAW:verifiable-goals] candybar-render-ai7.1: the colour function. Each
-// `describe` is one line of the ticket's Done-when, pinned as a property over
-// generated tree SHAPES (test/helpers/seeded-trees.ts), not over hand-picked
-// branches. [LAW:behavior-not-structure] Every assertion is about bytes out
-// for addresses in; a different implementation of the same contract passes.
+// [LAW:verifiable-goals] Pinned as a property over generated tree SHAPES, not hand-picked
+// branches. [LAW:behavior-not-structure] Every assertion is bytes out for addresses in.
 
 import {
   blendRgb,
@@ -82,8 +79,6 @@ describe("the vocabulary", () => {
   });
 
   test("error/success/warning are absent from DECOR_HUES", () => {
-    // The module also pins this at compile time; this is the runtime half so a
-    // future edit fails BOTH `pnpm typecheck` and `pnpm test`.
     for (const semantic of ["error", "success", "warning"]) {
       expect(DECOR_HUES).not.toContain(semantic);
     }
@@ -117,12 +112,8 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
   });
 
   test("ports the demo's pick formula: row then cell, decaying weight, rounded", () => {
-    // The pinned index is the demo's value at the demo's vocabulary size; a
-    // resized vocabulary fails here first, naming the drift.
     const DEMO_SIZE = 18;
     expect(DECOR_VOCABULARY).toHaveLength(DEMO_SIZE);
-    // Row 0 of 2 (vdc 0 -> 0), cell 3 of 6 (vdc 0.75 × 0.37 × 18 = 4.995 -> 5):
-    // entry 5 is amount-major index 0, hue 1, base 2.
     const vdc = DISTRIBUTIONS["van-der-corput"];
     const address: Address = [
       { index: 0, count: 2, distribution: vdc },
@@ -137,10 +128,7 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
   });
 
   test("each step is placed by its OWN distribution: a heterogeneous address folds per step", () => {
-    // Row 0 of 2 under monotonic (0.25), cell 3 of 6 under vdc (0.75):
-    // round(0.25·18 + 0.75·0.37·18) = round(9.495) = 9. A fold reusing one
-    // function for every step lands elsewhere — 5 with vdc for both, 8 with
-    // monotonic for both — so the per-step property is what this pins.
+    // A fold reusing one function for every step lands elsewhere; the per-step property is what this pins.
     const vdc = DISTRIBUTIONS["van-der-corput"];
     const mixed: Address = [
       { index: 0, count: 2, distribution: DISTRIBUTIONS.monotonic },
@@ -199,14 +187,12 @@ describe("done-when: any node's colour is computable alone", () => {
         const rng = seededRng(seed);
         const nodes = allNodes(shape, distribution);
         const inOrder = colourMap(shape, distribution);
-        // A single node, evaluated with no other node ever visited.
         const lone = drawFrom(rng, nodes);
         expect([name, seed, decorFor(DRACULA, lone.address).hex]).toEqual([
           name,
           seed,
           inOrder.get(pathKey(lone.path)),
         ]);
-        // The whole tree, evaluated back to front — a walk cursor would diverge here.
         for (const { path, address } of [...nodes].reverse()) {
           expect(decorFor(DRACULA, address).hex).toBe(inOrder.get(pathKey(path)));
         }
@@ -256,7 +242,6 @@ describe("done-when: permuting an unrelated subtree", () => {
       const distribution = DISTRIBUTIONS[name];
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
-        // Below the root only: permuting the root's children leaves no node outside.
         const parents = allNodes(shape, distribution).filter(
           ({ path }) => path.length > 0 && nodeAt(shape, path).children.length >= 2,
         );
@@ -291,11 +276,7 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
   });
 });
 
-// --- candybar-render-ai7.2: the state floor -----------------------------------
-// [LAW:verifiable-goals] Each `describe` is one line of the ticket's Done-when,
-// over the WHOLE registry — the failures the floor exists for were
-// theme-specific (textual-dark, textual-ansi, solarized-dark), so a sample
-// proves nothing.
+// [LAW:verifiable-goals] Over the WHOLE registry: the failures the floor exists for were theme-specific.
 
 /** The most-tinted cell `hue` produces on each base — the tint region's edge. */
 function tintEdge(palette: Palette, hue: DecorHue) {
@@ -335,7 +316,6 @@ describe("done-when: contrast(state, decorMax) >= 2.2 for every theme × hue × 
   });
 
   test("a hue that cannot clear even at foreground throws, naming palette and hue", () => {
-    // Every role one grey: every candidate sits at contrast 1 against every tint.
     const grey = new ColorRgba(128, 128, 128);
     const roles = [...DECOR_BASES, ...DECOR_HUES, "foreground", "background"] as const;
     const flat = new Palette("flat", true, new Map(roles.map((role) => [role, grey])));
@@ -361,8 +341,6 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
         ]);
       }
     }
-    // The measured registry: 30 of 69 pairs stay the pure mix. At least one
-    // must, or the "floor not transform" clause is vacuous.
     expect(untouched).toBeGreaterThan(0);
   });
 });
@@ -387,15 +365,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears 3:1 on e
   });
 });
 
-// ─── candybar-render-ai7.3: disclosure depth — bands, nesting, trigger ────────
-//
-// [LAW:verifiable-goals] Each `describe` is one of the ticket's three rules or
-// one line of its Done-when, pinned over EVERY shipped theme × hue × depth.
-// "Distinguishable" is measured as ΔE in OKLab (Euclidean distance over the
-// coordinates rich-js's `Oklch` exposes): luminance contrast cannot see two
-// hues at one lightness, and a nested trigger differs from its parent by HUE.
-// The floors are the measured registry minima rounded down — a regression
-// that moves a theme below its own floor fails, whichever theme it is.
+// [LAW:verifiable-goals] "Distinguishable" is ΔE in OKLab: contrast cannot see two hues at one lightness.
 
 const THEMES = listThemePalettes().map((name) => getThemePalette(name));
 const DEPTHS = [0, 1, 2] as const;
@@ -449,7 +419,6 @@ describe("a band is a plane", () => {
         expect(plane.hex).toBe(blendRgb(state, background, recession).hex);
       }
     }
-    // The cap bites: depth 4 would be 0.98 uncapped, and 0.75 is the ceiling.
     expect(BAND_RECESSION.base + BAND_RECESSION.perDepth * 4).toBeGreaterThan(
       BAND_RECESSION.cap,
     );
@@ -459,16 +428,12 @@ describe("a band is a plane", () => {
     const disclosure = { hue: "primary", depth: 0 } as const;
     for (const palette of THEMES) {
       const { state, plane } = bandFor(palette, disclosure);
-      // `uniform` puts every item at the window's midpoint — the formula, once.
       const mid = bandItemFor(palette, disclosure, [
         { index: 0, count: 1, distribution: DISTRIBUTIONS.uniform },
       ]);
       expect(mid.hex).toBe(
         blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
       );
-      // `monotonic` walks the axis: each item is further from the plane than
-      // the one before it, and none is the plane or the state (the window
-      // keeps them off both ends).
       const distances = [0, 1, 2, 3].map((index) => {
         const item = bandItemFor(palette, disclosure, [
           { index, count: 4, distribution: DISTRIBUTIONS.monotonic },
@@ -503,9 +468,6 @@ describe("a band is a plane", () => {
     };
     for (const palette of THEMES) {
       const { state, plane } = bandFor(palette, disclosure);
-      // A row of four under the second cell of a row of four: every nested
-      // cell lands where the fold says, inside the window, and the four are
-      // pairwise distinct — from each other and from their parent's own place.
       const parent = bandItemFor(palette, disclosure, [step(1)]);
       const nested = [0, 1, 2, 3].map((index) => {
         const item = bandItemFor(palette, disclosure, [step(1), step(index)]);
@@ -515,21 +477,15 @@ describe("a band is a plane", () => {
         return item.hex;
       });
       expect(new Set([parent.hex, ...nested]).size).toBe(5);
-      // The row decides the coarse position and the cell refines it: the
-      // same two steps in the other order land somewhere else.
       expect(bandItemFor(palette, disclosure, [step(3), step(0)]).hex).not.toBe(
         bandItemFor(palette, disclosure, [step(0), step(3)]).hex,
       );
-      // A raw sum past 1 (0.875 + 0.875·0.37) wraps into the same window.
       const wrapped = bandItemFor(palette, disclosure, [step(3), step(3)]);
       expect(wrapped.hex).toBe(expected(palette, [step(3), step(3)]));
       expect(deltaE(wrapped, plane)).toBeLessThan(deltaE(parent, plane));
     }
   });
 
-  // Registry minimum: solarized-dark/accent's depth-1 plane (#3b5f6b) reads at
-  // 2.188 against its better pole — the band floor sits just under STATE_FLOOR
-  // (2.2), which governs the trigger, not the plane.
   const TEXT_FLOOR = 2.15;
 
   test("text on every band cell is contrast-chosen and clears the band floor on every theme", () => {
@@ -557,9 +513,6 @@ describe("a band is a plane", () => {
 });
 
 describe("open trigger, its band, and a nested band are mutually distinguishable on every theme", () => {
-  // Registry minima at the time of writing (ΔE in OKLab): trigger/plane 0.119
-  // (textual-ansi primary), plane/nested plane 0.040 (rose-pine-dawn accent),
-  // nested trigger/enclosing plane 0.087 (rose-pine primary).
   const TRIGGER_VS_PLANE = 0.1;
   const PLANE_VS_NESTED_PLANE = 0.035;
   const NESTED_TRIGGER_VS_PLANE = 0.08;
@@ -588,14 +541,7 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   });
 
   test("a nested band's plane stands off the plane it is nested in", () => {
-    // Covered over the depths a bar reaches: the bundled ☰ → ⚙ → picker is
-    // depth 2, so the adjacent-plane pairs are (0,1) and (1,2). Depth 3 is
-    // deliberately NOT covered — BAND_RECESSION.cap leaves 0.05 of recession
-    // between depths 2 and 3 while hueAtDepth has wrapped back onto a hue
-    // already used, and 20 lineages land at 0.016–0.034. The design doc's
-    // "recession still separates what the wrapped hue no longer does" holds
-    // for triggers (state vs plane, the next test) and not for adjacent
-    // planes; the design doc states the limit (ai7.6).
+    // Depth 3 is deliberately NOT covered; the design doc states the limit.
     expect(
       below(
         PLANE_VS_NESTED_PLANE,
@@ -618,10 +564,7 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   });
 
   test("distinct hues yield distinct triggers; a theme whose vocabulary repeats a colour repeats its trigger", () => {
-    // The model SELECTS from the theme and never synthesises, so two hues the
-    // theme spells with one colour (`default`'s accent IS its primary) open
-    // to one state — stated here, never skipped. Registry minimum over
-    // distinct hues: 0.0196 (atom-one-dark's two purples).
+    // Two hues a theme spells with one colour open to one state — stated, never skipped.
     const DISTINCT_HUES = 0.015;
     const wrong = LINEAGES.flatMap(({ palette, hue, name }) => {
       const next = hueAtDepth(hue, 1);

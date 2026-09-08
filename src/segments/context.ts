@@ -6,9 +6,6 @@ import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 export interface ContextInfo {
   totalTokens: number;
-  // Used / remaining percentages. Sourced from Claude's native
-  // context_window.used_percentage / remaining_percentage when present; a
-  // plain token-ratio is the only fallback (no auto-compact buffer guess).
   percentage: number;
   contextLeftPercentage: number;
   maxTokens: number;
@@ -19,12 +16,8 @@ interface ContextUsageThresholds {
   MEDIUM: number;
 }
 
-// [LAW:one-source-of-truth] The context-window size is NEVER guessed from the
-// model name. Claude Code reports the real size for the active model in
-// `context_window.context_window_size` (1M for the [1m] variants, 200k
-// otherwise) — that field is the single authority. This constant is the
-// last-resort floor for ancient clients that omit `context_window` entirely;
-// it is not a per-model table and must not grow into one.
+// [LAW:one-source-of-truth] The window size is NEVER guessed from the model
+// name: this is a last-resort floor, not a per-model table, and must not grow.
 const DEFAULT_CONTEXT_WINDOW = 200000;
 
 export class ContextProvider {
@@ -37,11 +30,7 @@ export class ContextProvider {
     return this.thresholds;
   }
 
-  // Token-ratio percentages — the fallback ONLY. Used when Claude doesn't
-  // report used_percentage / remaining_percentage natively (transcript path,
-  // or a native window whose percentages are still null pre-first-call). No
-  // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
-  // a soft second source; the native remaining_percentage is authoritative.
+  // The fallback ONLY; the natively reported percentages are authoritative.
   private ratioPercentages(
     totalTokens: number,
     contextLimit: number,
@@ -53,10 +42,6 @@ export class ContextProvider {
     return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
   }
 
-  /**
-   * Calculate context info from native Claude Code context_window data (preferred).
-   * Requires Claude Code 2.0.70+ with current_usage field.
-   */
   calculateContextFromHookData(hookData: ClaudeHookData): ContextInfo | null {
     const cw = hookData.context_window;
     if (!cw?.current_usage) {
@@ -67,9 +52,7 @@ export class ContextProvider {
     }
 
     const currentUsage = cw.current_usage;
-    // [LAW:no-defensive-null-guards] context_window_size is a required `number`
-    // within context_window; reaching here proves cw is present, so the size
-    // is too. No `|| default` — that would mask a malformed payload as 200k.
+    // [LAW:no-defensive-null-guards] cw present proves its required size present.
     const contextLimit = cw.context_window_size;
     const totalTokens =
       (currentUsage.input_tokens || 0) +
@@ -80,10 +63,7 @@ export class ContextProvider {
       `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`,
     );
 
-    // [LAW:one-source-of-truth] Claude's reported used/remaining percentages
-    // are authoritative; the token-ratio is only a floor for the window whose
-    // percentages are still null (pre-first-call). remaining_percentage is NOT
-    // recomputed from a local buffer — it measures real headroom to the limit.
+    // [LAW:one-source-of-truth] The reported percentages are authoritative.
     const ratio = this.ratioPercentages(totalTokens, contextLimit);
     return {
       totalTokens,
@@ -99,14 +79,7 @@ export class ContextProvider {
     };
   }
 
-  /**
-   * Calculate context tokens by parsing the transcript file (fallback).
-   * Used for older Claude Code versions that don't provide context_window.
-   *
-   * [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
-   * boundary logs it); a transcript with no usable usage entry is `absent`.
-   * The old catch-to-null collapsed both into "no data".
-   */
+  /** [LAW:no-silent-failure] Unreadable is `failed`; no usable entry is `absent`. */
   async calculateContextTokensFromTranscript(
     transcriptPath: string,
     contextLimit: number,
@@ -164,9 +137,6 @@ export class ContextProvider {
     }
   }
 
-  /**
-   * Get context info using native data if available, falling back to transcript parsing.
-   */
   async getContextInfo(
     hookData: ClaudeHookData,
   ): Promise<Outcome<ContextInfo>> {
@@ -175,10 +145,7 @@ export class ContextProvider {
       return ok(nativeContext);
     }
 
-    // [LAW:one-source-of-truth] current_usage can be null (pre-first-call or
-    // post-/compact) while context_window_size is still present and
-    // authoritative — prefer it here too, and only fall to the floor when the
-    // client omits context_window entirely.
+    // [LAW:one-source-of-truth] current_usage can be null while size is present.
     const contextLimit =
       hookData.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
 

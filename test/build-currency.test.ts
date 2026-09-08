@@ -1,8 +1,4 @@
-// [LAW:behavior-not-structure] The contract of the build verdict, pinned in a
-// scratch checkout with the running stamp injected: identity is the source
-// DIGEST, so the same bytes are current whatever their mtimes say, and every
-// way the comparison cannot be made is the typed `unchecked`, never a
-// stale-looking default (brandon-build-notice-5d6, before it candybar-build-2s5).
+// [LAW:behavior-not-structure] Identity is the source DIGEST, so the same bytes are current whatever their mtimes say.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -24,8 +20,6 @@ interface Scratch {
   readonly running: SourceStamp;
 }
 
-// A checkout root with `dist/index.mjs`, a package.json, and two source
-// files — and the stamp a bundle built from exactly this source would carry.
 function scratchCheckout(): Scratch {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-build-"));
   const bundle = path.join(root, "dist", "index.mjs");
@@ -70,8 +64,6 @@ describe("assessBuild", () => {
     });
   });
 
-  // The ticket's criterion: a checkout/rebase rewrites mtimes on files whose
-  // bytes did not change, and that must not read as stale.
   test("mtime churn over unchanged content is current", () => {
     bumpMtimes(c.src);
     expect(assessBuild(c.entryUrl, () => c.running).kind).toBe("current");
@@ -127,7 +119,6 @@ describe("assessBuild", () => {
     expect(assessBuild("data:text/javascript,", () => c.running).kind).toBe("unchecked");
   });
 
-  // Root ignores directory permissions, so the condition cannot be built.
   (process.getuid?.() === 0 ? test.skip : test)(
     "an unreadable source directory is unchecked naming the reason, never a verdict over partial source",
     () => {
@@ -144,9 +135,6 @@ describe("assessBuild", () => {
   );
 });
 
-// [LAW:no-silent-failure] Untranspiled source (this test) carries no digest:
-// the production reader says so, and through assessBuild that is the typed
-// `unchecked` — "cannot check" never reads as "current".
 test("a runtime without a baked digest cannot be compared, and says so", () => {
   expect(() => bakedStamp()).toThrow(/no source digest/);
   const c = scratchCheckout();

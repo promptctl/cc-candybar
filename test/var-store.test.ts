@@ -86,15 +86,13 @@ describe("VariableStore — computed nodes track dependencies", () => {
       evals++;
       return toBool(read("flag")) ? toNumber(read("x")) : toNumber(read("y"));
     });
-    expect(store.read("picked")).toBe(2); // reads flag + y
+    expect(store.read("picked")).toBe(2);
     const evalsAfterFirst = evals;
 
-    // x changes; flag is false so x was never read — no invalidation expected.
     store.setBox("x", 999);
     store.read("picked");
     expect(evals).toBe(evalsAfterFirst);
 
-    // y changes; was read on the previous pass — invalidation expected.
     store.setBox("y", 100);
     expect(store.read("picked")).toBe(100);
     expect(evals).toBe(evalsAfterFirst + 1);
@@ -154,32 +152,22 @@ describe("VariableStore — introspection", () => {
     expect(store.names().sort()).toEqual(["derived", "seed"]);
   });
 
-  // [LAW:types-are-the-program] The VarNode returned by getNode is the
-  // read-only view of a variable. A BoxNode's `.set` must NOT be reachable
-  // through the returned wrapper at any level (no structural escape, no
-  // plain-JS reach-through), so introspection consumers cannot accidentally
-  // bypass setBox + runInAction.
+  // [LAW:types-are-the-program] No reach-through to `.set` may let a consumer bypass setBox + runInAction.
   it("getNode returns a wrapper whose mutation surface is unreachable", () => {
     const store = new VariableStore();
     store.defineBox("seed", "number", 7);
     const node = store.getNode("seed");
 
-    // The advertised surface works.
     expect(node.name).toBe("seed");
     expect(node.kind).toBe("box");
     expect(node.kind !== "document" && node.type).toBe("number");
     expect(node.read()).toBe(7);
     expect(node.lastUpdatedMs()).toBeGreaterThan(0);
 
-    // .set must not exist on the wrapper — no key, no accessor, no path.
-    // Cast to record-of-unknown to assert at runtime (the wrapper hides
-    // .set; reaching for it as `unknown` returns undefined).
     expect((node as unknown as Record<string, unknown>).set).toBeUndefined();
   });
 
   it("getNode's wrapper read() reflects subsequent setBox", () => {
-    // The wrapper is bound to the underlying node, so values change as
-    // the store mutates — it isn't a frozen snapshot.
     const store = new VariableStore();
     store.defineBox("seed", "number", 7);
     const node = store.getNode("seed");
@@ -251,11 +239,7 @@ describe("type-checked cast helpers", () => {
   });
 });
 
-// ─── Documents ───────────────────────────────────────────────────────────────
-
-// [LAW:behavior-not-structure] A document node holds an Outcome, is read by its
-// own accessor, and is refused by the scalar reads by name — the contract the
-// scope proxy and the registry's publishers build on.
+// [LAW:behavior-not-structure] A document holds an Outcome, has its own accessor, and is refused by the scalar reads.
 describe("VariableStore — documents", () => {
   const doc = () => ({ a: 1, b: { c: "x" } });
 
@@ -350,7 +334,7 @@ describe("VariableStore — documents", () => {
     store.defineDocument("d", ok(doc()));
     store.defineBox("n", "number", 7);
     const before = store.changeKey("d");
-    store.setDocument("d", ok(doc())); // a rescan yielding the same content
+    store.setDocument("d", ok(doc()));
     expect(store.changeKey("d")).toBe(before);
     store.setDocument("d", ok({ ...doc(), a: 2 }));
     expect(store.changeKey("d")).not.toBe(before);

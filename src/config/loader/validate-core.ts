@@ -1,9 +1,5 @@
-// [LAW:single-enforcer] The validation engine's primitives: the shared
-// ValidateCtx every per-type validator threads, the field-combinators
-// (requireString / optionalEnum / …) they compose from, and the type-describe
-// helpers used in messages. Each per-type schema module (variables, segments,
-// …) is a DECLARATION built from these; changing a primitive changes every
-// validator uniformly. This file changes when the combinator vocabulary changes.
+// [LAW:single-enforcer] The validation engine's primitives. Each per-type schema
+// module is a DECLARATION built from these; a primitive changes every validator.
 
 import {
   SOURCE_KINDS,
@@ -16,11 +12,7 @@ export interface ValidateCtx {
   readonly source: string;
   readonly issues: ConfigIssue[];
   readonly allowedPalettes: ReadonlySet<string>;
-  // [LAW:one-source-of-truth] The `group` sugar nodes collected during the root
-  // walk — the single record the loader's synthesis pass (group state var +
-  // cycle action + toggle segment) derives from. Parse-time collection, post-
-  // walk synthesis: the walk owns positions, the synthesis owns cross-section
-  // emission.
+  // [LAW:one-source-of-truth] Collected during the walk, which owns positions; the later synthesis pass owns cross-section emission.
   readonly groups: GroupSugarDecl[];
 }
 
@@ -54,10 +46,7 @@ export function optionalString(
   return v === undefined ? {} : { [field]: v };
 }
 
-// [LAW:types-are-the-program] Input-var defaults must match the declared
-// `type` exactly — a string default on a number-typed input would silently
-// coerce or throw on first render. Reject the mismatch at load time so the
-// renderer can read `.default` as the declared type without re-checking.
+// [LAW:types-are-the-program] Rejected at load time so the renderer can read `.default` as the declared type without re-checking.
 export function optionalTypedDefault(
   ctx: ValidateCtx,
   path: string,
@@ -100,9 +89,7 @@ export function optionalStringField(
   return v;
 }
 
-// [LAW:single-enforcer] One place validates a palette NAME, shared by globals
-// and per-segment. An unknown name is a hard error, never a silent fallback —
-// the renderer must never receive a name that won't resolve to a Palette.
+// [LAW:single-enforcer] The renderer must never receive a name that won't resolve to a Palette.
 export function validatePaletteName(
   ctx: ValidateCtx,
   path: string,
@@ -161,24 +148,13 @@ export function describeValue(v: unknown): string {
   return String(v);
 }
 
-// ─── Schema engine kernel ────────────────────────────────────────────────────
-
-// [LAW:types-are-the-program] A FieldSpec is the parser for ONE field of a record:
-// it reads raw[field] at `${path}.${field}`, reports any issue into ctx, and
-// yields the parsed value or undefined (absent or invalid → omitted from output).
-// `required` lets `record` fail the whole record when a load-bearing field is
-// absent or invalid, so a per-type schema declares its shape as DATA instead of
-// hand-threading combinator results through `if (x === null) return null`.
+// [LAW:types-are-the-program] The parser for ONE field: undefined means absent or
+// invalid, and `required` is what lets a per-type schema declare its shape as DATA
+// instead of hand-threading `if (x === null) return null`.
 export interface FieldSpec<T> {
   readonly required: boolean;
-  // [LAW:one-source-of-truth] The emit facet, authored beside `parse`: the
-  // JSON-Schema fragment for THIS field's value. `parse` is the validate
-  // interpreter, `json` the schema interpreter — two projections of one
-  // declaration, so the editor-facing schema can never describe a different
-  // grammar than the runtime validator. Both read the same source constants
-  // (e.g. an enum spec's `allowed` feeds both `parse`'s membership check and
-  // `json`'s `enum`), so they cannot drift. A JSON Schema fragment IS data
-  // (JSON Schema is its own serialization), so the facet is a plain object.
+  // [LAW:one-source-of-truth] The emit facet, authored beside `parse` and reading the
+  // same constants, so the editor-facing schema cannot describe a different grammar.
   readonly json: JsonNode;
   parse(
     ctx: ValidateCtx,
@@ -188,35 +164,22 @@ export interface FieldSpec<T> {
   ): T | undefined;
 }
 
-// [LAW:types-are-the-program] A JSON-Schema fragment: the schema-shape facet of
-// a declaration. JSON Schema is itself JSON, so the emit AST is just the target
-// format — no parallel descriptor type to keep in sync with the serializer.
+// [LAW:types-are-the-program] JSON Schema is itself JSON, so the emit AST is the target format, with no descriptor type to keep in sync.
 export type JsonNode = Readonly<Record<string, unknown>>;
 
-// [LAW:types-are-the-program] The field map must cover EXACTLY the keys of the
-// target type — `-?` forces a spec for every field (forgetting one is a compile
-// error) and NonNullable lets an optional field declare a spec for its present
-// value type. The schema is checked against T, so the record body needs no cast
-// beyond the final dynamic assembly.
+// [LAW:types-are-the-program] `-?` forces a spec for every field of the target type,
+// so forgetting one is a compile error, and NonNullable types an optional field.
 export type FieldSpecMap<T> = {
   [K in keyof T]-?: FieldSpec<NonNullable<T[K]>>;
 };
 
 export interface RecordSchema<T> {
-  // The noun in this record's unknown-key message ("globals key", "layout-node
-  // key", …) — the one phrasing that varies per record; everything else is shared.
   readonly noun: string;
   readonly fields: FieldSpecMap<T>;
 }
 
-// [LAW:dataflow-not-control-flow] The record interpreter: the same unconditional
-// sequence for every record — guard object, reject unknown keys, run each field
-// spec, collect the present values. The variability (which fields, required-ness,
-// each field's message) lives in the schema DATA, never in branches here. Returns
-// the assembled record, or null when raw is not an object or a required field
-// failed — the two recovery shapes a caller wraps (`?? {}` for an optional block,
-// a drop for a union arm). This absorbs the per-type isPlainObject guard, the
-// reject-unknown-key loop, the result-threading, and the optional-omission spreads.
+// [LAW:dataflow-not-control-flow] The record interpreter: one unconditional sequence
+// for every record, with all variability living in the schema DATA.
 export function record<T>(
   ctx: ValidateCtx,
   schema: RecordSchema<T>,
@@ -242,13 +205,9 @@ export function record<T>(
   return fields(ctx, schema.fields, path, raw);
 }
 
-// [LAW:decomposition] The field-assembly core: run each field spec against an
-// already-guarded object, collect the present values, fail the whole when a
-// required field is absent or invalid. `record` adds the object guard and
-// unknown-key rejection on top; a tagged-union arm reuses THIS directly, because
-// an arm must NOT reject unknown keys — the discriminator (`kind`) is a sibling
-// key the arm doesn't list. Returns the assembled record, or null when a required
-// field failed. This is the join `record` and `taggedUnion`'s arms share.
+// [LAW:decomposition] The join `record` and a union arm share. An arm reuses THIS
+// rather than `record` because it must NOT reject unknown keys: the discriminator
+// is a sibling key the arm doesn't list.
 export function fields<T>(
   ctx: ValidateCtx,
   fieldMap: FieldSpecMap<T>,
@@ -266,9 +225,6 @@ export function fields<T>(
   return ok ? (out as T) : null;
 }
 
-// [LAW:single-enforcer] One reject-unknown-key loop for every record, replacing
-// the per-module hand-rolled copies. The `noun` carries the only per-record
-// variation in the message; the allowed set is the schema's declared field names.
 function rejectUnknownKeys(
   ctx: ValidateCtx,
   path: string,
@@ -287,9 +243,6 @@ function rejectUnknownKeys(
   }
 }
 
-// [LAW:single-enforcer] One arm helper to push a variant's bespoke message and
-// drop — the message is the only thing that varies per arm, carried as DATA.
-// Shared by every present-key schema (cache, parse).
 export function reject<M>(
   ctx: ValidateCtx,
   path: string,
@@ -303,16 +256,9 @@ export function reject<M>(
   return null;
 }
 
-// [LAW:types-are-the-program] A tag-by-which-key-present union: every member
-// carries exactly one own key (CacheDecl's ttl/watch_file/…, an action's
-// set/copy/open). PresentArm parses the VALUE held at that key into its member
-// shape; the arm map must cover every present-key (the `-?` + Extract force an
-// arm per member, typed to return exactly that member — forgetting one is a
-// compile error). The bespoke per-arm message lives in its parse closure as DATA.
+// [LAW:types-are-the-program] A tag-by-which-key-present union: an arm parses the
+// VALUE held at that key, and `-?` + Extract force an arm per member.
 export interface PresentArm<M> {
-  // [LAW:one-source-of-truth] The emit facet: the JSON-Schema for the VALUE held
-  // at this arm's present key (oneOfPresentJson wraps it in the single-required
-  // object the present-key contract describes). Authored beside `parse`.
   readonly json: JsonNode;
   parse(ctx: ValidateCtx, path: string, value: unknown): M | null;
 }
@@ -326,20 +272,11 @@ export type PresentArmMap<T> = {
 };
 
 export interface OneOfPresentSchema<T> {
-  // The noun in this union's structural messages ("cache must be an object",
-  // "Unknown cache key", "cache must declare exactly one of") — the one phrasing
-  // that varies per union; the candidate key list is the arm-map's key order.
   readonly noun: string;
   readonly arms: PresentArmMap<T>;
 }
 
-// [LAW:dataflow-not-control-flow] The tag-by-present-key interpreter: the same
-// unconditional sequence for every such union — guard object, reject unknown
-// keys, enforce exactly-one present, dispatch to that arm. Distinct from `record`
-// because the contract differs ("Expected exactly one of", zero/multiple-present
-// counting); the variability (noun, arms, each arm's message) is DATA. Returns
-// the parsed member, or null when raw is not an object, no/multiple keys are
-// present, or the single arm fails — the drop shape a union caller recovers.
+// [LAW:dataflow-not-control-flow] Distinct from `record` because the contract is exactly-one-present, not a field set.
 export function oneOfPresent<T>(
   ctx: ValidateCtx,
   schema: OneOfPresentSchema<T>,
@@ -388,19 +325,9 @@ export function oneOfPresent<T>(
   return arms[key]!.parse(ctx, `${path}.${key}`, raw[key]);
 }
 
-// [LAW:types-are-the-program] A tag-by-field-value union: every member carries a
-// shared discriminator field (VariableDecl's `kind`) whose value selects the arm.
-// TaggedArm parses the WHOLE raw object into its member shape (an arm reads many
-// sibling fields, so it receives `raw`, not one extracted value), at the union's
-// own path (the discriminator is a sibling, so the path doesn't descend). The arm
-// map must cover every tag value (`-?` + Extract force an arm per member, typed
-// to return exactly that member). The bespoke per-arm field schema lives in its
-// parse closure as DATA.
+// [LAW:types-are-the-program] A tag-by-field-value union: an arm receives the WHOLE
+// raw object at the union's own path, since the discriminator is a sibling field.
 export interface TaggedArm<M> {
-  // [LAW:one-source-of-truth] The emit facet: the FULL object schema for this
-  // member, discriminator included (the arm knows its own tag value, so it bakes
-  // `{ [tag]: { const } }` into `json`). taggedUnionJson simply collects each
-  // arm's `json` into the `anyOf`. Authored beside `parse`.
   readonly json: JsonNode;
   parse(ctx: ValidateCtx, path: string, raw: Record<string, unknown>): M | null;
 }
@@ -413,23 +340,12 @@ export type TaggedArmMap<T, K extends string> = {
 };
 
 export interface TaggedUnionSchema<T, K extends string> {
-  // The discriminator field name ("kind") and the noun in its unknown-value
-  // message ("source kind") — the two phrasings that vary per union; the valid
-  // tag-value list is the arm-map's key order.
   readonly tag: K;
   readonly noun: string;
   readonly arms: TaggedArmMap<T, K>;
 }
 
-// [LAW:dataflow-not-control-flow] The tag-by-field-value interpreter: the same
-// unconditional sequence for every such union — guard object, read the
-// discriminator, reject a non-string or unknown tag, dispatch to that arm.
-// Distinct from `oneOfPresent` because the tag is a named field's VALUE, not
-// which key is present; the variability (tag name, noun, arms) is DATA. Returns
-// the parsed member, or null when raw is not an object, the tag is missing/
-// non-string/unknown, or the arm fails — the drop shape the per-name caller
-// recovers. A non-string tag points at the variable (the key may be absent); an
-// unknown tag value points at the discriminator key itself.
+// [LAW:dataflow-not-control-flow] A non-string tag points at the variable, since the key may be absent; an unknown value points at the key itself.
 export function taggedUnion<T, K extends string>(
   ctx: ValidateCtx,
   schema: TaggedUnionSchema<T, K>,
@@ -468,50 +384,30 @@ export function taggedUnion<T, K extends string>(
   return arms[tagValue]!.parse(ctx, path, raw);
 }
 
-// [LAW:types-are-the-program] An arm parser narrows an already-guarded record to
-// a member shape or null — the signature `fields`, `refine`, and a union arm all
-// speak. Exposing it as a name lets a per-type schema compose arms (refine a
-// fields-record, hand it to a present-key dispatch) without restating the shape.
+// [LAW:types-are-the-program] The one signature `fields`, `refine` and a union arm all speak, so a schema can compose them.
 export type ArmParse<T> = (
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
 ) => T | null;
 
-// [LAW:types-are-the-program] The recursion seam: a parser referenced before it
-// exists. A recursive config shape (the layout node tree — a container's children
-// are themselves nodes) declares its child-list field as DATA that points back at
-// the very parser it is part of; reading that parser at schema-construction time
-// is a temporal-dead-zone crash, so `lazy` defers the read to call time. Generic
-// over any parser signature (a node parser takes raw:unknown and recovers, an arm
-// takes a guarded record and may drop) — it owns no validation, only the deferral,
-// so the same primitive serves every self-referential schema [LAW:decomposition].
+// [LAW:types-are-the-program] The recursion seam: a self-referential schema names the
+// parser it is part of, and reading that at construction time is a temporal-dead-zone
+// crash, so `lazy` defers the read to call time. It owns no validation, only deferral.
 export function lazy<A extends readonly unknown[], R>(
   thunk: () => (...args: A) => R,
 ): (...args: A) => R {
   return (...args) => thunk()(...args);
 }
 
-// [LAW:types-are-the-program] A cross-field refinement: a predicate over the
-// ASSEMBLED member that the field specs cannot express alone (min < max, by != 0
-// — invariants relating two fields), paired with the bespoke issue it yields when
-// violated. `ok` and `issue` both read the value, so an interpolated message
-// ("min (0) must be less than max (-1)") is DATA derived from the value, not a
-// branch. `issue.field` names the sub-path the message points at ("" = the record
-// itself); the engine prepends the path and resolves the source line.
+// [LAW:types-are-the-program] An invariant relating two fields, which a field spec
+// cannot express alone. `issue.field` is the sub-path to point at, "" being the record.
 export interface Refinement<T> {
   ok(value: T): boolean;
   issue(value: T): { readonly field: string; readonly message: string };
 }
 
-// [LAW:dataflow-not-control-flow] The refinement interpreter: run the inner arm,
-// then fold the assembled value through each refinement in order, surfacing the
-// first violated invariant and dropping the member. The lawful generalization of
-// the hand-rolled `if (min >= max) { push; return null }` tail every record grew
-// for its cross-field checks — the invariant is a DECLARATION, the report is
-// mechanical. Null threads through untouched (a failed inner parse never reaches
-// a refinement), and the order of `checks` is the order of reporting — the same
-// short-circuit the inline tail expressed with sequential `if`s.
+// [LAW:dataflow-not-control-flow] The order of `checks` is the order of reporting, and a failed inner parse never reaches a refinement.
 export function refine<T>(
   inner: ArmParse<T>,
   ...checks: ReadonlyArray<Refinement<T>>
@@ -534,10 +430,6 @@ export function refine<T>(
   };
 }
 
-// [LAW:dataflow-not-control-flow] Field specs lift the existing field combinators
-// into the record vocabulary. An optional string is included when present-and-
-// valid, omitted (with an issue) when present-and-wrong, omitted silently when
-// absent — the same three-way the hand-rolled loops expressed as `continue`.
 export function optionalStringSpec(): FieldSpec<string> {
   return {
     required: false,
@@ -547,9 +439,6 @@ export function optionalStringSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:dataflow-not-control-flow] An optional boolean field: present-and-valid
-// is included, present-and-wrong reports an issue and omits, absent omits
-// silently — the boolean twin of `optionalStringSpec`.
 export function optionalBooleanSpec(): FieldSpec<boolean> {
   return {
     required: false,
@@ -570,10 +459,7 @@ export function optionalBooleanSpec(): FieldSpec<boolean> {
   };
 }
 
-// [LAW:dataflow-not-control-flow] An optional bounded-integer field: the bounds
-// are DATA feeding both interpreters — `parse` checks them and interpolates them
-// into the one message, `json` emits them as minimum/maximum — so the validator
-// and the editor-facing schema cannot describe different ranges.
+// [LAW:dataflow-not-control-flow] The bounds feed both interpreters, so the validator and the emitted schema cannot describe different ranges.
 export function optionalIntSpec(bounds: {
   readonly min: number;
   readonly max: number;
@@ -598,12 +484,7 @@ export function optionalIntSpec(bounds: {
   };
 }
 
-// [LAW:dataflow-not-control-flow] An optional finite-number field: the optional
-// lower bound is DATA feeding both interpreters — `parse` checks it and
-// interpolates it into the one message, `json` emits it as `minimum` — so the
-// validator and the editor-facing schema cannot describe different ranges.
-// Finite matters: JSON5 admits `NaN`/`Infinity` literals, and a non-finite axis
-// would corrupt every OKLCH channel it touches downstream.
+// Finite matters: JSON5 admits `NaN`/`Infinity` literals, and a non-finite axis would corrupt every OKLCH channel downstream.
 export function optionalNumberSpec(
   bounds: { readonly min?: number } = {},
 ): FieldSpec<number> {
@@ -633,25 +514,16 @@ export function optionalNumberSpec(
   };
 }
 
-// [LAW:single-enforcer] The palette field defers to the one palette-name
-// authority; the field key is conventionally "palette", which validatePaletteName
-// reads directly.
 export function paletteSpec(): FieldSpec<string> {
   return {
     required: false,
-    // Palette NAME membership is semantic (the allowed set is resolved at load
-    // from installed palettes, not a closed compile-time enum), so the schema
-    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    // Membership is resolved at load from installed palettes, not a compile-time enum.
     json: { type: "string" },
     parse: (ctx, path, _field, raw) => validatePaletteName(ctx, path, raw),
   };
 }
 
-// [LAW:dataflow-not-control-flow] A required string field: present-and-valid is
-// included, present-and-wrong reports an issue and fails the record, absent fails
-// the record — the map key names the field, so one spec serves path/command/
-// layout/name/key. `requireString` returns null on failure; the record engine
-// reads undefined as "absent or invalid", so null collapses to undefined.
+// The record engine reads undefined as "absent or invalid", so null collapses to it.
 export function requireStringSpec(): FieldSpec<string> {
   return {
     required: true,
@@ -661,30 +533,19 @@ export function requireStringSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:dataflow-not-control-flow] An optional enum field over a closed set; the
-// allowed values are DATA, the field key comes from the map. Present-and-invalid
-// reports the one-of message and omits; absent omits silently.
 export function optionalEnumSpec<T extends string>(
   allowed: readonly T[],
 ): FieldSpec<T> {
   return {
     required: false,
-    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
-    // membership against it, `json` lists it as the schema `enum`.
     json: { enum: [...allowed] },
     parse: (ctx, path, field, raw) =>
       optionalEnum(ctx, path, raw, field, allowed),
   };
 }
 
-// ─── Schema emit: the second interpreter over the same declarations ──────────
-
-// [LAW:dataflow-not-control-flow] The record/field emit-twin of `fields`: walk
-// the SAME field-map the validator walks, projecting each spec's `json` into a
-// JSON-Schema `properties` map and collecting the required field names. The
-// caller chooses whether unknown keys are forbidden — a `record` forbids them
-// (additionalProperties:false), a tagged-union arm allows the sibling
-// discriminator. The structure is the declaration; emit is mechanical.
+// [LAW:dataflow-not-control-flow] The emit-twin of `fields`, walking the SAME field
+// map. A `record` forbids unknown keys; a union arm allows the sibling discriminator.
 export function objectJson<T>(
   fieldMap: FieldSpecMap<T>,
   opts: { readonly closed: boolean } = { closed: true },
@@ -704,15 +565,10 @@ export function objectJson<T>(
   };
 }
 
-// [LAW:one-source-of-truth] The emit-twin of `record`: a closed object schema
-// over the schema's fields — the same shape `record` enforces at runtime.
 export function recordJson<T>(schema: RecordSchema<T>): JsonNode {
   return objectJson(schema.fields);
 }
 
-// [LAW:dataflow-not-control-flow] Merge a discriminator constant into an object
-// schema: add `{ [tag]: { const } }` to its properties and `tag` to required.
-// An arm bakes this in so taggedUnionJson can collect arms verbatim.
 export function withConst(
   base: JsonNode,
   key: string,
@@ -727,9 +583,6 @@ export function withConst(
   return { ...b, properties, required };
 }
 
-// [LAW:one-source-of-truth] The emit-twin of `taggedUnion`: each arm already
-// carries its full member schema (discriminator baked in), so the union is just
-// the `anyOf` of arm schemas — the same disjoint set the dispatcher selects from.
 export function taggedUnionJson<T, K extends string>(
   schema: TaggedUnionSchema<T, K>,
 ): JsonNode {
@@ -737,9 +590,6 @@ export function taggedUnionJson<T, K extends string>(
   return { anyOf: Object.values(arms).map((arm) => arm.json) };
 }
 
-// [LAW:one-source-of-truth] The emit-twin of `oneOfPresent`: each member is the
-// closed single-key object the present-key contract describes (exactly that key
-// required, no others) — the `anyOf` of those is the tag-by-present-key shape.
 export function oneOfPresentJson<T>(schema: OneOfPresentSchema<T>): JsonNode {
   const arms = schema.arms as Readonly<Record<string, PresentArm<T>>>;
   return {

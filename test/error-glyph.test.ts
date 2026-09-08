@@ -6,19 +6,13 @@ import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 
-// [LAW:behavior-not-structure] These tests assert the contract — the glyph's
-// visible text, single-line shape, prefix, and reset tail — not the
-// implementation. The Rust mirror (rust-client/src/error_glyph.rs) carries an
-// equivalent unit test that pins byte-identical output for the same causes.
+// [LAW:behavior-not-structure] The contract is the glyph's visible text, not the implementation; the Rust mirror pins byte-identical output.
 
 const OPEN = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
 const TAIL = "\x1b[0m\n";
 const PREFIX = "⚠ cc-candybar: ";
 
-// [LAW:one-source-of-truth] Fixtures derive both versions from the canonical
-// PROTOCOL_VERSION imported at the top of this file. Expected strings are
-// built via template literals against the same source. A PROTOCOL_VERSION
-// bump in src/daemon/protocol.ts flows through here automatically.
+// [LAW:one-source-of-truth] Fixtures derive both versions from PROTOCOL_VERSION, so a bump flows through automatically.
 const CLIENT_V = PROTOCOL_VERSION;
 const OTHER_V = PROTOCOL_VERSION + 1;
 
@@ -40,7 +34,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       const glyph = formatPermanentGlyph(outcome);
       expect(glyph.startsWith(`${OPEN}${PREFIX}`)).toBe(true);
       expect(glyph.endsWith(TAIL)).toBe(true);
-      // Exactly one \n — the trailing one. No embedded newlines mid-string.
       expect(glyph.split("\n").length).toBe(2);
       expect(glyph.endsWith("\n")).toBe(true);
     }
@@ -105,33 +98,16 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       cause: "render_failed",
       message: long,
     });
-    // 60-char budget: 59 x's then an ellipsis. The full 200 must not appear.
     expect(glyph).not.toContain("x".repeat(200));
     expect(glyph).toContain("…");
-    // Body fits well under any reasonable statusline width.
     const body = glyph.slice(OPEN.length, -TAIL.length);
     expect(body.length).toBeLessThan(100);
   });
 
-  // [LAW:one-type-per-behavior] The single-line glyph contract documented in
-  // src/render/error-glyph.ts and rust-client/src/error_glyph.rs requires no
-  // embedded newlines mid-string. The current corpus uses inputs without
-  // newlines, so the contract was previously asserted but unverified for the
-  // adversarial case where a daemon error string contains \n or \r. Both
-  // newline classes are sanitized to spaces at the same boundary that
-  // enforces the code-point budget.
-  // [LAW:one-type-per-behavior] ESC and other C0 controls would otherwise
-  // let a daemon (or a caller whose input the daemon echoes) inject ANSI
-  // sequences that hijack the glyph's styled envelope. The fix sanitizes
-  // the entire C0 range + DEL to spaces at the same boundary that handles
-  // LF/CR. This test pins the specific attack shape — an `\x1b[0m` mid-
-  // message MUST NOT survive the truncate pass.
+  // [LAW:one-type-per-behavior] Newlines and the whole C0 range + DEL are sanitized to
+  // spaces at the boundary that enforces the code-point budget, so no injected ANSI survives.
   test("control characters (C0, DEL, and C1/8-bit CSI) are sanitized to spaces", () => {
-    // 0x1B = ESC (7-bit CSI introducer), 0x9B = 8-bit CSI (some terminals
-    // interpret this directly without needing ESC). The sanitizer must
-    // neutralize BOTH so a daemon-echoed payload can't reach the terminal
-    // via either path. 0x07 (BEL) and 0x7F (DEL) included as extra coverage
-    // across the C0 range plus DEL.
+    // 0x1B is the 7-bit CSI introducer and 0x9B the 8-bit one; both must be neutralized.
     const escapeInjection =
       "verb=danger\x1b[0m injected\x1b[31m text\x9b[0mbypass\x07\x7f end";
     const glyph = formatPermanentGlyph({
@@ -143,29 +119,19 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     for (let i = 0; i < body.length; i++) {
       const code = body.charCodeAt(i);
       // Unicode Cc class = C0 (0x00..=0x1F) + DEL (0x7F) + C1 (0x80..=0x9F).
-      // Every code point in this class must have been replaced.
       const isControl =
         code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
       expect(isControl).toBe(false);
     }
-    // The styled glyph envelope (OPEN…TAIL) is intact.
     expect(glyph.startsWith(OPEN)).toBe(true);
     expect(glyph.endsWith(TAIL)).toBe(true);
-    // Safe text retained.
     expect(body).toContain("verb=danger");
     expect(body).toContain("injected");
     expect(body).toContain("bypass");
   });
 
   test("embedded newlines in daemon error string are sanitized + collapsed to single spaces", () => {
-    // [LAW:behavior-not-structure] The load-bearing contract is "no embedded
-    // newline/CR/control-char in the output". The shared sanitizer now also
-    // collapses runs of whitespace to a single space (so the daemon-side
-    // diagnostic strip — which surfaces multi-line config errors with
-    // existing indentation — displays as a clean single line). The
-    // permanent-glyph path inherits that behavior; we assert what every
-    // caller cares about (no embedded line breaks, content preserved in
-    // order) rather than the exact count of separator spaces.
+    // [LAW:behavior-not-structure] Assert no embedded line breaks and content in order, not the exact separator-space count.
     const cases: Array<[string, string[]]> = [
       ["line1\nline2\nline3", ["line1", "line2", "line3"]],
       ["line1\rline2\rline3", ["line1", "line2", "line3"]],
@@ -177,36 +143,26 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
         cause: "render_failed",
         message,
       });
-      // Exactly one \n total — the trailing one from the ANSI reset tail.
       expect(glyph.split("\n").length).toBe(2);
       expect(glyph.endsWith(TAIL)).toBe(true);
       const body = glyph.slice(OPEN.length, -TAIL.length);
       expect(body).not.toMatch(/[\n\r]/);
-      // Each part appears, in order, separated by exactly one space.
       expect(body).toContain(parts.join(" "));
     }
   });
 
-  // [LAW:one-type-per-behavior] Truncation must count Unicode scalar values,
-  // not UTF-16 code units. Astral characters (each 2 UTF-16 units / 1 code
-  // point) would otherwise truncate at a different boundary than the Rust
-  // mirror, and the byte-identical contract this module advertises would only
-  // hold for ASCII input. Rocket (U+1F680) is a single emoji that exercises
-  // surrogate-pair handling specifically.
+  // [LAW:one-type-per-behavior] Truncation counts Unicode scalar values, not UTF-16 units, or the Rust mirror diverges.
   test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
-    const rockets = "🚀".repeat(100); // 100 code points, 200 UTF-16 units
+    const rockets = "🚀".repeat(100);
     const glyph = formatPermanentGlyph({
       kind: "permanent",
       cause: "render_failed",
       message: rockets,
     });
     const body = glyph.slice(OPEN.length + PREFIX.length, -TAIL.length);
-    // After "render failed: " prefix in the body, the message is truncated
-    // to exactly MAX_MESSAGE_LEN code points (59 rockets + ellipsis).
     const message = body.slice("render failed: ".length);
     expect([...message].length).toBe(60);
     expect(message.endsWith("…")).toBe(true);
-    // Critically, no lone surrogate ever appears in the output.
     for (let i = 0; i < glyph.length; i++) {
       const code = glyph.charCodeAt(i);
       const isHigh = code >= 0xd800 && code <= 0xdbff;
@@ -223,14 +179,7 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
   });
 });
 
-// --- end-to-end: stubbed daemon → tryRenderViaDaemon → formatPermanentGlyph ---
-//
-// [LAW:behavior-not-structure] The pipeline contract: a daemon that returns
-// VERSION_MISMATCH causes the client to produce a permanent/version_mismatch
-// outcome, and the glyph formatter on that outcome carries the version
-// numbers in its visible text. This is the load-bearing path — the whole
-// point of chunk 2 is that this end-to-end flow produces a readable error
-// instead of a blank statusline.
+// [LAW:behavior-not-structure] End to end: a VERSION_MISMATCH daemon reply must reach the glyph as readable text, not a blank statusline.
 
 function spinUpMismatchSocket(
   sockPath: string,
@@ -241,9 +190,6 @@ function spinUpMismatchSocket(
       const reader = makeFrameReader(
         (frame) => {
           const req = frame as { v?: number };
-          // The stubbed daemon always answers VERSION_MISMATCH (with daemonV
-          // echoed) regardless of the actual request version — we want to
-          // observe what happens when the daemon disagrees with the client.
           sock.write(
             encodeFrame({
               ok: false,
@@ -255,7 +201,6 @@ function spinUpMismatchSocket(
           sock.end();
         },
         () => {
-          /* parse error ignored on daemon side */
         },
       );
       sock.on("data", reader);
@@ -272,7 +217,7 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
     const stateDir = path.join(tmpRoot, "cc-candybar");
     fs.mkdirSync(stateDir, { recursive: true });
     const sockPath = path.join(stateDir, "socket");
-    const daemonV = PROTOCOL_VERSION + 7; // arbitrary "other" version
+    const daemonV = PROTOCOL_VERSION + 7;
 
     const server = await spinUpMismatchSocket(sockPath, daemonV);
     const prevXdg = process.env.XDG_STATE_HOME;
@@ -280,9 +225,7 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
     process.env.XDG_STATE_HOME = tmpRoot;
     process.env.CC_CANDYBAR_SOCKET = sockPath;
     try {
-      // Import client lazily so socketPath() resolves to CC_CANDYBAR_SOCKET
-      // (paths.ts reads env at call time, but using a fresh import is robust
-      // against any future caching of the resolved path).
+      // Import client lazily so socketPath() resolves to CC_CANDYBAR_SOCKET.
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
       const outcome = await tryRenderViaDaemon(
         {
@@ -315,7 +258,6 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
       try {
         fs.rmSync(tmpRoot, { recursive: true, force: true });
       } catch {
-        /* tmpdir cleanup best-effort */
       }
     }
   });

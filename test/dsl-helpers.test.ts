@@ -1,10 +1,4 @@
-// [LAW:verifiable-goals] bdi.2 acceptance: config-level shared helper templates.
-// A `helpers` block compiles to one define set every template this config
-// parses inherits, so `{{ template "name" .arg }}` resolves a single shared
-// definition from any segment/predicate/action. These tests pin the four
-// acceptance criteria byte-for-byte: a helper renders, a by-name override changes
-// output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
-// key is a no-op (an inherited define emits nothing).
+// [LAW:verifiable-goals] A `helpers` block compiles to ONE inherited define set.
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -19,8 +13,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 
-// [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
-// each render a single line so substring assertions are stable.
 const OPTS = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
@@ -29,9 +21,6 @@ const OPTS = {
 
 const BASE_PALETTE = getThemePalette("textual-dark"!);
 
-// A minimal default to merge onto: an empty config so each test exercises only
-// its own helper slice (the production cascade is tested separately via the
-// mergeWithDefault unit test below).
 const EMPTY_DEFAULT: DslConfig = {
   globals: {},
   variables: {},
@@ -70,7 +59,6 @@ function render(source: string, payload: unknown, dflt?: DslConfig): string {
   );
 }
 
-// Strip ANSI SGR + OSC-8 so assertions target the rendered TEXT, not styling.
 function plain(s: string): string {
   return s
     .replace(/\x1b\]8;[^\x07]*\x07/g, "")
@@ -89,7 +77,6 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("a parameterized helper is defined ONCE, called from many segments", () => {
-    // [LAW:single-enforcer] The whole point: one define, N call sites, no drift.
     const source = `{
       variables: {
         a: { kind: "input", path: "a", type: "number" },
@@ -104,7 +91,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
     }`;
     const out = plain(render(source, { a: 2, b: 10.005 }));
     expect(out).toContain("$2.00");
-    expect(out).toContain("$10.01"); // %.2f rounds half-up at the boundary
+    expect(out).toContain("$10.01");
   });
 
   test("a helper may call another helper (defines share one parse unit)", () => {
@@ -121,10 +108,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("a helper may call one declared AFTER it: resolution is by name at render, not by declaration order", () => {
-    // [LAW:behavior-not-structure] The contract is the shared define set, not
-    // the order it was folded in: a call is looked up when it executes, against
-    // the full set every template inherits. The bundled default relies on this
-    // (formatEta calls formatLongTimeRemaining, declared later).
+    // [LAW:behavior-not-structure] A call resolves on execution, not fold order.
     const source = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: {
@@ -138,7 +122,6 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("by-name override (merge cascade): user helper wins, renders the override", () => {
-    // The default supplies `money`; the user re-declares it by name.
     const dflt: DslConfig = {
       ...EMPTY_DEFAULT,
       helpers: { money: '\${{ printf "%.2f" . }}' },
@@ -155,22 +138,20 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("mergeWithDefault: helpers merge by name, user wins, others retained", () => {
-    // [LAW:one-source-of-truth] Same cascade as variables/segments/actions.
     const dflt: DslConfig = {
       ...EMPTY_DEFAULT,
       helpers: { money: "DFLT-money", tokens: "DFLT-tokens" },
     };
     const merged = mergeWithDefault({ helpers: { money: "USER-money" } }, dflt);
     expect(merged.helpers).toEqual({
-      money: "USER-money", // user override
-      tokens: "DFLT-tokens", // inherited
+      money: "USER-money",
+      tokens: "DFLT-tokens",
     });
   });
 
   test("a malformed helper body fails LOUDLY with a per-helper diagnostic", () => {
-    // [LAW:no-silent-fallbacks] validateHelpers accepts any string; the parse
-    // failure surfaces at registerDslConfig, attributed to the helper by name —
-    // not blamed on the first segment that calls it, not silently skipped.
+    // [LAW:no-silent-fallbacks] The parse failure is attributed to the helper by
+    // name, never blamed on the first segment that calls it.
     const source = `{
       helpers: { broken: '{{ printf "%.2f" }' },
       segments: { s: { template: 'x' } },
@@ -191,8 +172,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("an UNUSED helper is output-neutral (byte-identical to no helpers)", () => {
-    // [LAW:dataflow-not-control-flow] An inherited define emits nothing; a config
-    // carrying an unused helper renders the SAME bytes as one with no helpers.
+    // [LAW:dataflow-not-control-flow] An unused helper renders the SAME bytes.
     const withHelper = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: { unused: 'NEVER' },

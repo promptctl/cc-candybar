@@ -2,8 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// package.json is the version's sole authority; the tests read it the same way
-// the build does rather than restating the number.
+// package.json is the version's sole authority; never restate the number.
 const pkg = JSON.parse(
   readFileSync(join(process.cwd(), "package.json"), "utf8"),
 ) as { version: string };
@@ -14,8 +13,6 @@ describe("PACKAGE_VERSION", () => {
     expect(PACKAGE_VERSION).toBe(pkg.version);
   });
 
-  // [LAW:no-silent-failure] An unsubstituted build must not answer with a
-  // plausible word ("dev"); loading the module without the stamp is an error.
   test("refuses to load when __PACKAGE_VERSION__ was never substituted", async () => {
     const g = globalThis as { __PACKAGE_VERSION__?: string };
     const saved = g.__PACKAGE_VERSION__;
@@ -31,8 +28,6 @@ describe("PACKAGE_VERSION", () => {
     }
   });
 
-  // The answering side of the Rust routing test: every spelling the native
-  // client forwards prints the same one line and exits 0, with nothing on stdin.
   test.each(["--version", "-V"])(
     "%s prints `cc-candybar <version>`",
     (flag) => {

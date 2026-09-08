@@ -1,20 +1,5 @@
-// [LAW:behavior-not-structure] Every bar carries chrome no config declares:
-// the global settings menu (candybar-settings-ui-aok.1) and the edit-mode
-// affordances it makes reachable. Both are synthesized into every validated
-// config, so their derived gates and their clickable regions appear in every
-// render — including the small fixtures whose subject is something else
-// entirely.
-//
-// A test about "what does MY action derive" or "what does MY template click"
-// asserts a contract about its own declarations. Filtering the ambient chrome
-// out keeps that assertion pointed at the contract instead of at the current
-// contents of the standard library, which is exactly the difference between a
-// behavior test and a structure test. A test whose subject IS the chrome reads
-// the unfiltered list.
-//
-// [LAW:one-source-of-truth] The namespaces are IMPORTED, never re-spelled: a
-// rename in the synthesis pass must break this helper loudly, not silently stop
-// matching and let every filtered assertion drift.
+// [LAW:behavior-not-structure] Every bar carries chrome no config declares, so a test
+// about its OWN declarations filters it out; a test whose subject IS the chrome does not.
 
 import { actionDestinations, type ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
@@ -36,61 +21,32 @@ import {
 } from "../../src/click/wire";
 import { effectsOf } from "./click";
 
-// [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
-// for both consumers below. Every arm is under a namespace the loader reserves,
-// so no author declaration can land here and no authorship check is needed:
-// membership alone proves the key is chrome.
+// [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce. Every arm is under a
+// reserved namespace, so membership alone proves the key is chrome.
 function isReservedChromeKey(key: string): boolean {
   return (
     key.startsWith(SETTINGS_NS) ||
     key.startsWith(EDIT_NS) ||
     // The settings menu's own pickers, hosted on `settings.<setting>`.
     key.startsWith(`${MENU_NS}settings_`) ||
-    // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
-    // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertChrome
-    // calls menuStateKey directly), and `ident()` collapses the dots — so a
-    // bundled-default config really does derive 30+ keys under this prefix.
     key.startsWith(`${MENU_NS}edit_`) ||
-    // Edit chrome registers a preset-root key per preset the moment any
-    // `+`/`-` affordance exists — which is now every config, since the settings
-    // menu makes edit mode reachable from every bar.
-    //
-    // [LAW:parse-dont-validate] Asked of the canonical parser rather than
-    // matched as `presets.` + `.root`. persist-target.ts owns that format
-    // (its own comment records two write-side spellings drifting before they
-    // were consolidated), and its regex captures greedily so a dotted preset
-    // name like "v1.compact" round-trips — a hand-rolled prefix/suffix pair
-    // gets that silently wrong.
+    // [LAW:parse-dont-validate] Asked of the canonical parser rather than matched as
+    // `presets.` + `.root`: its greedy capture round-trips a dotted preset name.
     parsePersistTarget(key)?.scope === "preset-root"
   );
 }
 
-// The reserved keys, plus the plain keys the settings menu's own controls
-// write — `preset`/`theme`/`palette`/`look`/`style`/`autoWrap`/`padding`, both
-// destinations of every dual control (candybar-settings-ui-aok.3). Those are
-// bare words an author CAN own, which is why every consumer of this predicate
-// must pair it with an authorship check. The set is IMPORTED from the synthesis
-// that writes them, never re-spelled here.
+// Plus bare keys the menu's controls write, which an author CAN own — pair with authorship.
 function isAmbientChromeKey(key: string): boolean {
   return SETTINGS_WRITTEN_KEYS.has(key) || isReservedChromeKey(key);
 }
 
-// [LAW:one-source-of-truth] The SessionState keys the config's OWN actions
-// write. `key === "preset"` above is a bare word — unlike the reserved
-// namespaces, nothing stops a fixture from declaring an action that writes it,
-// and several already do. Reading the config makes ownership a fact about this
-// config rather than a guess: a key an authored action writes is the author's,
-// whatever the ambient shape says, so a fixture's own contribution can never be
-// swallowed into a vacuous assertion.
+// [LAW:one-source-of-truth] Ownership read from the config, so a fixture's own key survives.
 function authorWrittenKeys(config: DslConfig): Set<string> {
   const keys = new Set<string>();
   for (const [name, decl] of Object.entries(config.actions)) {
     if (isSynthesizedActionName(name)) continue;
-    // [LAW:one-source-of-truth] Folded through the SAME explosion the real
-    // derivations use: a DUAL action carries both `set` and `persist`, and
-    // writtenKey's first-match chain below would report only the session half
-    // — silently dropping an authored `persist: "palette"` and letting the
-    // ambient filter swallow the fixture's own contribution.
+    // [LAW:one-source-of-truth] The SAME explosion the derivations use; a dual has two halves.
     for (const dest of actionDestinations(decl)) {
       const key = writtenKey(dest);
       if (key !== undefined) keys.add(key);
@@ -108,12 +64,7 @@ function isSynthesizedActionName(name: string): boolean {
   );
 }
 
-// [LAW:types-are-the-program] Total over the ActionDecl union: `set` (the
-// SessionState key deriveActionValidators gates), `persist` and `reset` (the
-// globals key deriveConfigActionValidators gates — call sites here derive both
-// flavors, so reading only `set` would leave a fixture's `persist: 'preset'`
-// swallowed by the very arm this function exists to narrow). `copy`/`open`/
-// `undo`/`redo` name no key and so write none.
+// [LAW:types-are-the-program] Total over ActionDecl; call sites derive both validator flavors.
 function writtenKey(decl: ActionDecl): string | undefined {
   if ("set" in decl) return decl.set;
   if ("persist" in decl) return decl.persist;
@@ -131,12 +82,7 @@ export function ownValidators<T extends { key: string }>(
   );
 }
 
-// [LAW:one-source-of-truth] The keys a click URL writes, decoded the way the
-// daemon decodes them (`effectsOf`) rather than sniffed as substrings of the
-// wire encoding. Every key-writing verb takes `[sessionId, key, …]`; the rest
-// (apply-layout-op, undo/redo, copy, open) write no key and so contribute none
-// — which is what keeps a layout-edit affordance out of these filters, since
-// its layout write is a preset's business, not the settings menu's.
+// [LAW:one-source-of-truth] Decoded the way the daemon decodes, never sniffed as substrings.
 const KEY_WRITING_VERBS = new Set<string>([
   VERB_SET_STATE,
   VERB_STEP_STATE,
@@ -152,56 +98,26 @@ function keysWrittenBy(url: string): string[] {
     .filter((k): k is string => k !== undefined);
 }
 
-// The settings menu's OWN surfaces: its `☰` toggle and — the part a substring
-// match on the anchor missed — its hosted preset picker, whose disclosure key
-// is `menus.settings_presets.…` and shares none of the anchor's spelling. A
-// test that opens the menu before collecting links would otherwise have counted
-// the picker's toggle as one of its fixture's own regions.
+// The menu's own surfaces: its `☰` toggle and its hosted picker, which shares no spelling.
 function isSettingsMenuKey(key: string): boolean {
   return key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}settings_`);
 }
 
-// The click URLs the ambient chrome emits, removed from a collected list so a
-// template's own clickable regions are what the assertion counts.
-//
-// [LAW:no-silent-failure] Deliberately does NOT filter the bare `preset` key
-// the menu's picker applies. Unlike every key above, `preset` is a name an
-// author can own — test/dsl-persist-actions.ts declares `{ persist: 'preset' }`
-// and calls this function — and unlike `ownValidators`, this signature has no
-// config to check authorship against. Under-filtering surfaces as an unexpected
-// extra link in an assertion; over-filtering silently swallows the fixture's
-// own link and makes the assertion vacuous. The loud direction wins.
+// [LAW:no-silent-failure] Deliberately does NOT filter the bare `preset` key: an author
+// can own it and this signature has no config to check, so under-filtering is the loud way.
 export function ownLinks(urls: readonly string[]): string[] {
-  // [LAW:one-source-of-truth] Reads the same reserved-key predicate the
-  // validator filter does, rather than restating a prefix list that drifted
-  // once already: matching `edit.` alone missed edit chrome's own insert-menu
-  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<n>.…`.
-  //
-  // Safe for a layout-edit test's own subject because `apply-layout-op` is not
-  // a key-writing verb — `keysWrittenBy` reports nothing for it, so a `+`/`-`
-  // click is never a filter candidate whatever this predicate says.
+  // [LAW:one-source-of-truth] The same reserved-key predicate the validator filter reads.
   return withoutSettingsLinks(urls).filter(
     (u) => !keysWrittenBy(u).some(isReservedChromeKey),
   );
 }
 
-// The narrower filter, for a test whose OWN subject is edit mode: only the
-// settings menu is ambient there, and its `✎ edit` entry is `when`-gated behind
-// a closed disclosure, so it emits nothing to confuse it.
+// The narrower filter, for a test whose OWN subject is edit mode.
 export function withoutSettingsLinks(urls: readonly string[]): string[] {
   return urls.filter((u) => !keysWrittenBy(u).some(isSettingsMenuKey));
 }
 
-// Declaration NAMES the synthesis passes add to a validated config — the
-// reserved namespaces plus the one ordinary variable edit chrome ensures for
-// its own banner. A test asserting "what did the AUTHOR declare" filters these.
-//
-// `PRESET_CUSTOMIZED_VAR` gets no authorship check, unlike `ownValidators`'
-// bare `preset`, because there is no discriminator to read: a WRITE carries its
-// author in the action's name, but a DECLARATION name carries nothing, and by
-// the time these names are collected the merged config holds one entry whether
-// edit chrome ensured it or an author declared it. Closing that collision would
-// mean reserving or namespacing the name upstream, not filtering harder here.
+// Declaration NAMES the synthesis adds. `PRESET_CUSTOMIZED_VAR` gets no authorship check because a name carries no author.
 export function ownDeclNames(names: readonly string[]): string[] {
   return names.filter(
     (n) =>

@@ -6,10 +6,6 @@ import { waitForExit } from "./helpers/daemon-wire";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
-// [LAW:behavior-not-structure] The claim under test is an ORDERING of the real
-// binary's boot: a malformed memory budget is refused through daemon.log before
-// any resource is committed. The grammar itself is vector-tested in
-// daemon-limits.test.ts; this drives the daemon and reads what it left behind.
 test("a malformed budget is refused through daemon.log before any resource is committed", async () => {
   const iso = prepareIsolatedDaemonEnv("ccb-boot");
   const { child, killTree, release } = await spawnTestDaemon({

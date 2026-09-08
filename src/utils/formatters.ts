@@ -9,9 +9,7 @@ export function formatModelName(rawName: string): string {
     return "Claude";
   }
 
-  // [LAW:one-source-of-truth] strip variant decorations (e.g. " (1M context)",
-  // "[1m]") so all callers see canonical "Family X.Y" output regardless of
-  // whether the input came from model.id or model.display_name.
+  // [LAW:one-source-of-truth] model.id and display_name both reach "Family X.Y".
   const stripped = rawName
     .trim()
     .replace(/\s*\([^)]*\)\s*$/, "")
@@ -51,8 +49,7 @@ export function formatModelName(rawName: string): string {
 }
 
 export function shortenModelName(formatted: string): string {
-  // [LAW:one-type-per-behavior] same parser, different rendering — operates on
-  // the canonical output of formatModelName so callers don't reparse raw IDs.
+  // [LAW:one-type-per-behavior] Same parser on formatModelName's canonical output.
   const match = formatted.match(FRIENDLY_MODEL_PATTERN);
   if (!match?.groups) return formatted;
   const family = match.groups.family!;
@@ -63,37 +60,20 @@ export function shortenModelName(formatted: string): string {
   return `${initial}${version}`;
 }
 
-// [LAW:decomposition] Fish-shell `prompt_pwd` abbreviation: collapse every path
-// segment EXCEPT the leaf to its leading character, keeping any leading dots so
-// `.config` → `.c`. A pure string→string transform that knows nothing about
-// home-collapse or project-relative logic — those live in the directory
-// template and this abbreviates whatever collapsed display path they produce.
-// `~/code/cc-candybar` → `~/c/cc-candybar`; a leading "/" is preserved because
-// the empty pre-slash segment abbreviates to empty (`/usr/local/bin` → `/u/l/bin`).
+// [LAW:decomposition] Fish `prompt_pwd`, knowing nothing of home-collapse or project paths.
 export function abbreviatePath(path: string): string {
   const segments = path.split("/");
   const lastIndex = segments.length - 1;
   return segments
     .map((seg, i) => {
       if (i === lastIndex) return seg;
-      // Leading dot-run plus the first following char (fish keeps dotfiles
-      // legible: `.config` → `.c`, `..` → `..`). No following char (empty
-      // segment) means no match — return it unchanged.
       const abbreviated = seg.match(/^\.*./);
       return abbreviated ? abbreviated[0] : seg;
     })
     .join("/");
 }
 
-// [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
-// want "50,000" instead of "50000" go through this rather than calling
-// toLocaleString() ad-hoc — the legacy context segment used the latter
-// pattern inline, and the DSL formatter (template-engine/funcs.ts)
-// delegates here so the two producers agree by construction.
-//
-// No locale argument: the default-locale behaviour is exactly what the
-// legacy renderer did (`n.toLocaleString()`), so byte-parity holds with
-// whatever locale the host process picks at startup.
+// [LAW:one-source-of-truth] Every grouped integer goes here, never an ad-hoc toLocaleString.
 export function formatInteger(n: number): string {
   return n.toLocaleString();
 }

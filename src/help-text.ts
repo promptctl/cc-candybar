@@ -2,24 +2,9 @@ import { DISCLOSURE_GLYPH_CLOSED } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
 import { NODE_FLAGS } from "./cli-flags";
 
-// [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
-// effect. Kept as its own module so the text is importable (and testable) without
-// pulling in index.ts's top-level `main()` call.
-// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts
-// (the same constant the theme/look picker itself renders with), so this text
-// can't drift from what a user actually sees on the bar.
-// [LAW:one-source-of-truth] THE help corpus, as data. `--help` and the bar's
-// own `(?)` disclosures are two RENDERINGS of these arrays, never two copies of
-// the sentences: a `(?)` segment's template IS one of these strings, and the
-// paragraphs below interpolate the same values. A help sentence typed into a
-// segment template — where nothing would ever notice it drifting from the CLI's
-// wording — is the defect this shape exists to make unrepresentable.
-//
-// [LAW:representation] One line is one CELL on the bar, so each is a complete
-// thought that stands alone and each stays short: `(?)` bodies drop below their
-// row, and a body that overflows `term.cols` wraps into more rows than the fact
-// it explains is worth. Every line leads with the glyph it explains, so the
-// reader matches text to affordance by shape rather than by reading order.
+// [LAW:one-source-of-truth] THE help corpus: `--help` and the bar's own `(?)`
+// disclosures render these same arrays, never a second copy of the sentences.
+// [LAW:representation] One line is one CELL on the bar — a complete thought, short.
 export const EDIT_MODE_HELP = [
   "+ inserts here",
   "- removes the one left of it",

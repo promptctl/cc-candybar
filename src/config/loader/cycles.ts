@@ -1,7 +1,5 @@
-// [LAW:types-are-the-program] Dependency-cycle detection over the variable graph.
-// Edges come from three sources (template refs, cache.key refs, cache.depends_on);
-// a single DFS catches mixed cycles spanning edge types. This file changes when
-// what constitutes a runtime dependency edge changes.
+// [LAW:types-are-the-program] One DFS, so a cycle spanning template, cache.key
+// and depends_on edges is still caught.
 
 import {
   hasCacheField,
@@ -12,8 +10,6 @@ import { findKeyLine } from "./diagnostics.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { extractTemplateRefs } from "./refs.js";
 
-// Carries declaration metadata for each graph node so cycle errors report the
-// correct config path (variables.X vs segments.S.vars.X) and correct line.
 interface NodeInfo {
   readonly declarationPath: string;
   readonly linePathParts: readonly string[];
@@ -32,7 +28,7 @@ export function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
 
   for (const start of graph.keys()) {
     if (color.get(start) !== WHITE) continue;
-    if (dfs(start)) return; // first cycle is enough — report and stop walking
+    if (dfs(start)) return;
   }
 
   function dfs(node: string): boolean {
@@ -63,17 +59,7 @@ export function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
   }
 }
 
-// [LAW:types-are-the-program] Build the full variable dependency graph: edges
-// are X → Y for any of three edge kinds:
-//   1. template-kind vars: template string references Y (eval dependency)
-//   2. any var with cache.key: key template references Y (cache-key dependency)
-//   3. any var with cache.depends_on: each listed name is Y (invalidation dep)
-// All three kinds can form infinite loops at runtime; a single DFS catches
-// mixed cycles that span multiple edge types.
-//
-// Segment vars use the namespaced form (segName.varName) as their sole graph
-// node — eliminates bare-name collisions when two segments both declare a var
-// named e.g. "local". Global vars keep their bare names.
+// A segment var's node is its namespaced form, so two "local"s cannot collide.
 function buildTemplateGraph(cfg: DslConfig): {
   graph: Map<string, Set<string>>;
   nodeInfo: Map<string, NodeInfo>;
@@ -102,19 +88,14 @@ function buildTemplateGraph(cfg: DslConfig): {
   const graph = new Map<string, Set<string>>();
   for (const name of allVarNames) graph.set(name, new Set());
 
-  // [LAW:one-source-of-truth] Edges resolve refs exactly as the runtime scope
-  // proxy does: a ref is the literal store key (globals bare, segment locals
-  // namespaced as segName.varName) — never re-derived per segment. Bare
-  // own-segment refs are not aliased here because the runtime has no such
-  // aliasing; cross-ref rejects them at load with the namespaced suggestion.
+  // [LAW:one-source-of-truth] Refs resolve as the runtime scope proxy does, so a
+  // bare own-segment ref is not aliased here either.
   const addTemplateEdges = (from: string, template: string): void => {
     for (const ref of extractTemplateRefs(template)) {
       if (allVarNames.has(ref)) {
         graph.get(from)!.add(ref);
         continue;
       }
-      // Resolve "first identifier" — `.session.id` may indicate dependence on
-      // `session` if that's the declared var (matches scope.ts proxy walk).
       const head = ref.split(".")[0]!;
       if (head !== ref && allVarNames.has(head)) {
         graph.get(from)!.add(head);

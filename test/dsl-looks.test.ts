@@ -1,16 +1,4 @@
-// [LAW:verifiable-goals] brandon-themes-07p done-gates: (1) a `looks` block
-// loads/validates loudly; (2) an action `{ set: "look", from: "looks" }` ranges
-// the config's look names in BOTH the rendered options and the derived wire
-// gate (one source, no drift); (3) clicking a look recolors the whole bar live,
-// COMPOSING with the active theme (session look over config default over the
-// "none" identity floor); (4) an explicit per-segment `palette:` pin ignores
-// the look, exactly as it ignores the session theme; (5) a stale session look
-// (a name a prior config's vocabulary admitted) collapses to "none".
-//
-// [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, deriveActionValidators +
-// registerStateValidator + the real dispatch for the click, and the same
-// effectiveLookName/lookKeyByName the daemon calls. No parallel rig.
+// [LAW:single-enforcer] Drives the real spine — loader, render, click dispatch — no parallel test rig.
 
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -51,10 +39,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// ─── Loader validation ────────────────────────────────────────────────────────
-
-// The loader's real error text — the same strings docs/interaction-authoring.md
-// quotes and `cc-candybar check` prints.
+// These are the loader's exact error strings — also quoted by docs/interaction-authoring.md.
 describe("looks block — loader validation", () => {
   const parseIssues = (src: string): string => {
     try {
@@ -121,8 +106,6 @@ describe("looks block — loader validation", () => {
   });
 });
 
-// ─── Normalization + merge ────────────────────────────────────────────────────
-
 describe("looks block — normalization and merge", () => {
   test("absent axes normalize to identity at parse (a full ThemeKey downstream)", () => {
     const raw = parseDslConfig(
@@ -147,15 +130,13 @@ describe("looks block — normalization and merge", () => {
       ALLOWED,
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
-    // The identity floor is always present — effectiveLookName's collapse
-    // target cannot be merged away.
+    // The identity floor is always present — the collapse target can't be merged away.
     expect(merged.looks.none).toEqual({
       hueShift: 0,
       chromaScale: 1,
       lightnessScale: 1,
       lightnessShift: 0,
     });
-    // User override wins per name; user addition lands beside the stdlib.
     expect(merged.looks.vivid?.chromaScale).toBe(2);
     expect(merged.looks.mine?.hueShift).toBe(10);
     expect(Object.keys(merged.looks)).toEqual(
@@ -171,8 +152,6 @@ describe("looks block — normalization and merge", () => {
     );
   });
 });
-
-// ─── Options + derived gate: one source ───────────────────────────────────────
 
 describe('from: "looks" — rendered options and the derived gate share the config', () => {
   const SRC = `{
@@ -221,8 +200,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
         paletteForThemeName(THEME),
         OPTS,
       );
-      // Each look name appears as a clickable region writing itself to `look` —
-      // the same names the gate above allows, from the same config map.
+      // Same names the gate above allows, read from the same config map.
       for (const name of ["none", "vapor", "washed"]) {
         expect(rendered).toContain(name);
       }
@@ -232,11 +210,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
   });
 });
 
-// ─── Live recolor: the whole loop, composing with the theme ───────────────────
-
-// Mirrors the daemon's per-render resolution verbatim (server.ts): basePalette
-// from effectiveThemeName, the look ThemeKey from effectiveLookName →
-// lookKeyByName, threaded into renderDsl. The click drives the REAL wire.
+// Mirrors the daemon's per-render resolution verbatim; the click drives the REAL wire.
 describe("look click — live whole-bar recolor over the active theme", () => {
   const SRC = `{
     globals: { palette: '${THEME}' },
@@ -260,8 +234,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    // The daemon's cache installs the derived gate at config load; mirror it so
-    // the click below passes through the real validator.
+    // Mirrors the daemon's gate install so the click below hits the real validator.
     const disposers = deriveActionValidators(config).map(({ key, spec }) =>
       registerStateValidator(key, spec),
     );
@@ -303,10 +276,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     );
   };
 
-  // The bg SGR of the row containing the named glyph run. Row-scoped: each
-  // root row holds exactly one segment here, so the row's first bg SGR IS that
-  // segment's background (a whole-render scan would match the first row's bg
-  // for every marker).
+  // Row-scoped: each root row holds exactly one segment, so its first bg SGR is that segment's.
   const bgOf = (rendered: string, marker: string): string => {
     const line = rendered.split("\n").find((l) => l.includes(marker));
     expect(line).toBeDefined();
@@ -321,10 +291,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
       const before = bgOf(render(), "◆ here");
       clickLook(sessionState, "inverted");
       const adapted = bgOf(render(), "◆ here");
-      // The inverted look flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
-      // "none" is the identity look, not a special case: byte-exact restore
-      // (rich-js isIdentityKey fast-paths the identity transposition).
       clickLook(sessionState, "none");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
@@ -337,8 +304,6 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     try {
       const before = bgOf(render(), "▣ pinned");
       clickLook(sessionState, "inverted");
-      // The pinned segment's colors are frozen by author intent — the look
-      // adapts everything else (the plain segment moved; asserted above).
       expect(bgOf(render(), "▣ pinned")).toBe(before);
     } finally {
       dispose();
@@ -349,9 +314,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     const { sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "◆ here");
-      // A prior config's vocabulary admitted "vapor"; this config doesn't
-      // declare it. Write it directly into SessionState (the gate would reject
-      // it today — this models the leftover value, not a fresh click).
+      // Bypasses the click gate to model a leftover value an older config's vocabulary admitted.
       sessionState.set(SID, "look", "vapor");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
@@ -359,8 +322,6 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     }
   });
 });
-
-// ─── Policy: resolution and the loud name→key boundary ────────────────────────
 
 describe("effectiveLookName / lookKeyByName", () => {
   const LOOKS = {

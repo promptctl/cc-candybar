@@ -1,9 +1,3 @@
-// Contract tests for the prompt-cache warmth provider. The provider answers
-// one question — the epoch-seconds instant the prompt cache expires — by
-// tail-reading the transcript for the last cache-bearing entry and projecting
-// it forward by the 1h TTL. These assert the BEHAVIOR (which timestamp wins,
-// when the outcome is absent), not the tail-read mechanics.
-
 import { chmodSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,9 +25,7 @@ function entry(opts: {
   });
 }
 
-// [LAW:one-source-of-truth] The temp dir is tracked at the moment it is created,
-// so afterAll removes the exact directories that exist — not a file path's
-// guessed-at parent. Every transcript this suite writes is cleaned up.
+// [LAW:one-source-of-truth] afterAll removes the exact directories created, never a guessed parent.
 const createdDirs: string[] = [];
 
 function writeTranscript(lines: string[]): string {
@@ -64,7 +56,6 @@ describe("cacheExpiresAt", () => {
     const cacheHit = "2026-05-30T11:00:00.000Z";
     const path = writeTranscript([
       entry({ ts: cacheHit, cacheRead: 100 }),
-      // Later in the file but NO cache activity — must not win.
       entry({ ts: "2026-05-30T12:00:00.000Z", cacheRead: 0, cacheCreation: 0 }),
     ]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
@@ -89,8 +80,6 @@ describe("cacheExpiresAt", () => {
     const path = join(dir, "transcript.jsonl");
     writeFileSync(path, entry({ ts: "2026-05-30T11:00:00.000Z" }) + "\n");
     chmodSync(path, 0o000);
-    // A transcript that EXISTS but can't be read is a real failure, not the
-    // everyday "no transcript yet" — it must not silently hide the segment.
     expect(await cacheExpiresAt(path)).toMatchObject({ kind: "failed" });
     chmodSync(path, 0o644);
   });
@@ -100,19 +89,16 @@ describe("cacheExpiresAt", () => {
     const filler = Array.from({ length: 2000 }, (_, i) =>
       entry({ ts: `2026-05-30T11:${String(i % 60).padStart(2, "0")}:00.000Z` }),
     );
-    // One cache-bearing entry, then >64KB of zero-cache filler after it.
     const path = writeTranscript([entry({ ts: cacheHit, cacheRead: 1 }), ...filler]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
     expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
 
   it("ignores a cache-token string that appears in message CONTENT, not usage", async () => {
-    // The regex is only a candidate filter — authority is `message.usage`. A
-    // later line whose CONTENT quotes the token string (zero actual usage) must
-    // NOT win over an earlier real cache hit.
+    // The regex is only a candidate filter — authority is `message.usage`.
     const realHit = "2026-05-30T10:00:00.000Z";
     const decoy = JSON.stringify({
-      timestamp: "2026-05-30T12:00:00.000Z", // later, but content-only
+      timestamp: "2026-05-30T12:00:00.000Z",
       message: {
         content: 'pasted "cache_read_input_tokens":999 from a log',
         usage: {

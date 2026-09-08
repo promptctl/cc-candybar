@@ -1,9 +1,4 @@
-// [LAW:single-enforcer] All cross-reference resolution on the MERGED config:
-// layout nodes name declared segments, every template-bearing field references
-// only existing variables/actions, depends_on points at declared variables, and
-// state/set-action configs declare the session.id anchor. Runs after merge so a
-// user surface can reference default-provided segments/actions. This file changes
-// when the visibility/scoping rules between config parts change.
+// [LAW:single-enforcer] All cross-reference resolution runs on the MERGED config.
 
 import JSON5 from "json5";
 import {
@@ -53,43 +48,13 @@ import {
   type TemplateScope,
 } from "./refs.js";
 
-// [LAW:one-source-of-truth] The renamed built-in segments: old name → current
-// name. A user config (which merges on top of the bundled default) that names a
-// renamed segment in `root` finds no matching declaration and would otherwise
-// get the generic "does not match any declared segment" error. This map turns
-// that into a migration pointer [LAW:no-silent-failure] — data, not a per-name
-// branch, so a future rename is one row here, not new control flow.
+// [LAW:one-source-of-truth] Renamed built-ins, so a stale reference gets a migration pointer.
 export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
   gitTaculous: "gitaculous",
 };
 
-// [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
-// in loader/presets.ts's per-file structural pass (where a round-1 version
-// of this check lived): that pass validates one config source at a time
-// (the bundled default's own RAW_DEFAULT_DSL_CONFIG, or a user's file,
-// independently), so it could only ever catch a collision between two
-// preset names declared in ONE source. synthesizeEditChrome — the thing
-// this guard protects, which keys its per-preset reset action/segment (and
-// the pre-existing per-gap +/- actions) by `ident(presetName)` in a plain
-// object accumulator with no re-entrant cross-ref check — runs on the
-// MERGED config (dsl-loader.ts), so the collision it can actually produce
-// is a merged one: a user preset whose ident collides with a name the
-// BUNDLED library or a different file contributed. This is the one place
-// that sees that merged set, so it's the one place that can prove no
-// collision exists in it.
-//
-// [LAW:one-source-of-truth] `ident` is imported from ../ident.ts — the ONE
-// collapse rule menu-keys.ts, edit-chrome.ts, and this guard all now share,
-// so a future tweak to the rule can't silently desync the guard from the
-// thing it checks.
-//
-// [LAW:no-silent-failure] Two preset names that collapse to the SAME
-// synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_
-// look") would silently steal each other's synthesized artifacts: the
-// SECOND preset processed overwrites the first's entries, leaving the
-// first preset's already-built tree holding a segment ref to a name that
-// now points at the second preset's reset action. A user clicking "reset"
-// on preset A would silently reset preset B instead.
+// [LAW:no-silent-failure] Two preset names collapsing to one `ident` would make edit mode's
+// synthesized artifacts steal each other's; only this pass sees the merged set.
 function presetIdentCollisions(
   ctx: ValidateCtx,
   presets: Readonly<Record<string, PresetDecl>>,
@@ -115,10 +80,7 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
 ): void {
-  // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
-  // block (a user's default may be a bundled look — same reason every cross-ref
-  // runs post-merge). Same existence-check shape as layout→segments; an unknown
-  // name is a load error, never a silent identity fallback.
+  // [LAW:locality-or-seam] An unknown look name is a load error, never a silent fallback.
   if (
     cfg.globals.look !== undefined &&
     !Object.prototype.hasOwnProperty.call(cfg.looks, cfg.globals.look)
@@ -129,14 +91,7 @@ export function validateCrossReferences(
       line: findKeyLine(ctx.source, ["globals", "look"]),
     });
   }
-  // [LAW:one-type-per-behavior] globals.preset is globals.look one dimension
-  // over — the same post-merge membership check against the same kind of
-  // per-config block, for the same reason (a user's default may name a
-  // bundled preset). A typo'd DEFAULT is a load error even though a stale
-  // SESSION pick collapses silently to the floor: the config file is authored
-  // and re-readable, so naming a preset that does not exist is a mistake we can
-  // point at; a session pick is a click made against a config that has since
-  // changed, which is not [LAW:no-silent-failure].
+  // [LAW:one-type-per-behavior] The same membership check one dimension over.
   if (
     cfg.globals.preset !== undefined &&
     !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)
@@ -148,14 +103,7 @@ export function validateCrossReferences(
     });
   }
   presetIdentCollisions(ctx, cfg.presets);
-  // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
-  // against this config's per-config domains ("looks", the merged looks:
-  // block) plus the global registry (themes/styles, and any future
-  // registration), the SAME set resolveOptionDomain consults at render and
-  // gate-derivation time. An inline array `from` is its own domain — nothing
-  // to resolve. Runs post-merge for the same reason globals.look does above:
-  // "looks" isn't fully known until the user's looks: block has merged onto
-  // the bundled stdlib.
+  // [LAW:one-source-of-truth] A `from` NAME resolves against the domains render also uses.
   const optionDomains = perConfigDomainsFor(cfg);
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
@@ -167,19 +115,7 @@ export function validateCrossReferences(
       });
     }
   }
-  // [LAW:no-silent-failure] A dual action's `persistWhen` must name a key some
-  // `state` variable declares. The structural pass proves only that it is a
-  // deliverable wire key; whether it RESOLVES is a cross-ref concern, exactly
-  // as `from`'s domain is above.
-  //
-  // Without this, a typo loads perfectly cleanly and then does nothing
-  // forever: compileDual falls back to the raw key name, activeDestination
-  // reads it, finds nothing, and `parseSessionBoolean` answers null — which
-  // means "session". So the checkbox the author wired to the real key flips a
-  // value no control reads, the destination never changes, and there is no
-  // error anywhere to explain why. A silently-permanent session write is the
-  // worst possible shape for this failure, since it looks exactly like
-  // working software.
+  // [LAW:no-silent-failure] An unresolved `persistWhen` selector reads as "session" forever.
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!actionIsDual(a)) continue;
     const selector = a[PERSIST_WHEN];
@@ -191,16 +127,7 @@ export function validateCrossReferences(
       });
     }
   }
-  // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
-  // Globals field OR a declared segment's `palette` (candybar-config-engine-
-  // 71o.6 — `segments.<name>.palette`, parsed by the one shared authority in
-  // persist-target.ts) — the loader's structural pass (loader/actions.ts)
-  // only proves the key is non-empty/slash-free, the same shape a `set` key
-  // needs for the wire, but a persist/reset key additionally has to land
-  // somewhere real. Catching a typo (`persist: "pallete"`) or a dangling
-  // segment name here turns a confusing click-time "registration invariant
-  // broken" error into a clear load-time one naming the actual allowed
-  // targets — the same species of fix as the `from` domain check just above.
+  // [LAW:no-silent-failure] A `persist`/`reset` key must land somewhere real, not merely parse.
   for (const [name, a] of Object.entries(cfg.actions)) {
     const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
     if (key === null) continue;
@@ -214,10 +141,7 @@ export function validateCrossReferences(
       });
       continue;
     }
-    // [LAW:single-enforcer] The arm-pairing check in both directions: a
-    // tree op names a preset-root target (checkPresetRootTarget rejects the
-    // absence), and only a preset-root target takes a tree op — otherwise
-    // the click's own "not a presets.<name>.root target" is the first sign.
+    // [LAW:single-enforcer] Only a preset-root target takes a tree op, and a tree op takes only one.
     const treeOps = TREE_OP_ARMS.filter((arm) => arm in a);
     if (target.scope !== "preset-root" && treeOps.length > 0) {
       ctx.issues.push({
@@ -248,12 +172,7 @@ export function validateCrossReferences(
       });
       continue;
     }
-    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
-    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
-    // Globals field where nothing today enforces value/field-kind agreement
-    // either way. Rejecting it here (rather than tolerating a numeric-string
-    // palette name that only fails later at `paletteForThemeName`) keeps
-    // the failure at load time, next to the typo it actually is.
+    // [LAW:types-are-the-program] A palette is a NAME; a bounded stepper has no meaning over it.
     if ("min" in a) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
@@ -262,60 +181,17 @@ export function validateCrossReferences(
       });
     }
   }
-  // [LAW:one-source-of-truth] THE set of resolvable variable names — a
-  // faithful mirror of the runtime store's key set (declareOne in
-  // src/dsl/render.ts registers globals under their bare names and segment
-  // locals under segName.varName, nothing else). The runtime scope proxy
-  // (src/template-engine/scope.ts) resolves only keys literally present in
-  // the store, and the depends_on reaction (src/var-system/sources.ts) calls
-  // store.read with each listed name verbatim — so exactly the names in this
-  // set exist at runtime. One set for every reference surface, template refs
-  // and depends_on lists alike: a name's meaning is a pure function of the
-  // name string, never of which segment declares or renders it.
+  // [LAW:one-source-of-truth] THE resolvable names, mirroring the runtime store's keys.
   const templateScope = templateScopeOf(cfg);
 
-  // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
-  // every layout cross-ref: each cells node's segment names must resolve to a
-  // declared segment, and any node's `when` predicate (a template like any
-  // other) must reference only existing variables. Cross-ref runs on the MERGED
-  // config so a node can name default-provided segments without re-declaring
-  // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
-  // form is already collapsed and unrecoverable post-merge — so the path
-  // describes the tree and `line` points at whichever layout key the user wrote.
-  // [LAW:one-source-of-truth] Which top-level layout surface the user authored
-  // is read from the PARSED structure, not a text probe: a nested key named
-  // `root` (a variable, a segment) — or `layout` (a `time` var's `layout`
-  // field) — would fool a raw `findKeyLine` search and misclassify the config.
-  // Validation is cold-path, so reading the source's top-level keys is exact.
-  // The reported path/message then point at the surface the user wrote.
-  //
-  // [LAW:one-type-per-behavior] A PRESET's `root` is a root: it gets this exact
-  // walk, not a reduced copy. The only thing that varies between the config's
-  // own tree and a preset's is the diagnostic key + line — data threaded in,
-  // never a second traversal that could learn a different idea of what a valid
-  // layout is. This is what makes `cc-candybar check` catch a preset staging a
-  // segment nobody declared.
-  //
-  // [LAW:single-enforcer] The menu precondition is asked once, of the same
-  // predicate synthesizeSettingsMenu gates on, and read by every tree walked.
+  // [LAW:single-enforcer] ONE pre-order walk owns every layout cross-ref: segment
+  // names resolve, each `when` references only declared variables.
+  // [LAW:one-type-per-behavior] A preset's `root` gets that same walk.
+  // [LAW:one-source-of-truth] The authored layout surface is read from parsed keys.
+  // [LAW:single-enforcer] The menu precondition is synthesizeSettingsMenu's own predicate.
   const menuWillSynthesize = canHostSessionState(cfg);
-  // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
-  // an author may place and the walk below must therefore accept, even though
-  // no config declares a segment by that name — synthesizeSettingsMenu provides
-  // it unconditionally, immediately after these checks pass. Two placements is
-  // the real error: one state key holds one open state, so a second anchor
-  // would be a second toggle writing one disclosure, with two bodies claiming
-  // to be it. Counted over the SAME census the synthesis reads, so "placed"
-  // means one thing [LAW:single-enforcer] — and over the tree that RENDERS
-  // (the preset's fragment merged over the config's root, presetRoot), because
-  // a `{ rows }` fragment and a row it inherits can each place one.
-  //
-  // [LAW:types-are-the-program] A menu-hosting segment placed twice in one
-  // layout is the same ambiguity one level down: its disclosure open-state is
-  // keyed by segment name, so two placements would share one state and a
-  // click on either would toggle both. Identity stays name-derived (no
-  // placement path threaded into the key); two disclosures = two named
-  // segments. Counted over the same rendered tree, for the same reason.
+  // [LAW:one-source-of-truth] The anchor is a position no config declares a segment for.
+  // [LAW:types-are-the-program] Placed twice, one name-keyed open state serves two cells.
   const menuHosts = Object.entries(cfg.segments)
     .filter(([, seg]) => segmentReferencesMenu(seg.template))
     .map(([name]) => name);
@@ -347,18 +223,14 @@ export function validateCrossReferences(
       }
     }
   };
-  // Walks what the author WROTE at this key (a whole tree, or the rows a
-  // fragment names), so an unknown segment is reported against the layout
-  // that names it rather than against a row it inherited.
+  // Walks what the author WROTE at this key, so errors name that layout, not an inherited row.
   const checkLayoutTree = (
     root: LayoutNode,
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
     for (const node of walkNodes(root)) {
-      // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
-      // globals + namespaced segment vars) — the same existence-check shape as a
-      // segment template, surfaced at load time.
+      // [LAW:locality-or-seam] A node's `when` reads the global scope, checked at load.
       if (node.when !== undefined) {
         checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
           line: layoutLine,
@@ -366,14 +238,7 @@ export function validateCrossReferences(
       }
       if (node.kind !== "segment") continue;
       if (isSettingsAnchor(node.name)) {
-        // [LAW:one-source-of-truth] Accepting the anchor asserts that
-        // synthesizeSettingsMenu WILL declare a segment by this name, so the
-        // acceptance reads the very predicate that pass decides by rather than
-        // assuming its answer. When it is false the reference is genuinely
-        // dangling, and the error names the unmet precondition: the author
-        // placed a documented anchor, they did not typo a segment name, and the
-        // generic "does not match any declared segment" would teach the wrong
-        // lesson [LAW:no-silent-failure].
+        // [LAW:one-source-of-truth] Acceptance reads synthesizeSettingsMenu's own predicate.
         if (!menuWillSynthesize) {
           ctx.issues.push({
             path: layoutKey,
@@ -409,10 +274,7 @@ export function validateCrossReferences(
     const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
     checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
   }
-  // [LAW:one-source-of-truth] Placement counts run over the tree each preset
-  // RENDERS, keyed by the path presetRoot reports it authored at — so a
-  // fragment that is the merge identity collapses onto `root` by data and is
-  // neither re-walked nor reported under a path nothing edits.
+  // [LAW:one-source-of-truth] Counted over the tree each preset RENDERS.
   const rendered = new Map<string, LayoutNode>([["root", rootNode(cfg.root)]]);
   for (const name of presetNames(cfg.presets)) {
     const { node, path } = presetRoot(cfg, name);
@@ -422,19 +284,12 @@ export function validateCrossReferences(
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
   }
 
-  // For each variable's template/cache.key, every dotted ref must exist
-  // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of Object.entries(cfg.variables)) {
     checkVarRefs(ctx, `variables.${name}`, v, templateScope);
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
-    // [LAW:one-source-of-truth] Segment templates check against the SAME
-    // templateScope as everything else — segment locals resolve via the
-    // namespaced segName.varName form only, exactly as the runtime store
-    // keys them. The segment name is passed purely as a diagnostic hint: a
-    // bare ref to an own local is rejected with a message naming the
-    // namespaced form the author should write.
+    // [LAW:one-source-of-truth] The same scope as everything else; locals only namespaced.
     if (seg.vars) {
       for (const [vName, vDecl] of Object.entries(seg.vars)) {
         checkVarRefs(
@@ -446,11 +301,7 @@ export function validateCrossReferences(
         );
       }
     }
-    // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs
-    // are checked across EVERY template-bearing field, not just `template` —
-    // bg/fg/when are templates too, so an unknown ref in them is a load error, not
-    // a render-time surprise. Same existence-check shape as layout→segments; runs
-    // on the merged config so a segment can reference a default-provided action.
+    // [LAW:locality-or-seam] bg/fg/when are templates too, so unknown refs fail at load.
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
@@ -463,9 +314,7 @@ export function validateCrossReferences(
           segCtx: segName,
         },
       );
-      // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
-      // action table on the merged config so a segment can reference a
-      // default-provided action.
+      // [LAW:locality-or-seam] Action refs resolve against the merged action table.
       for (const aref of extractActionRefs(tpl)) {
         if (!Object.prototype.hasOwnProperty.call(cfg.actions, aref)) {
           ctx.issues.push({
@@ -475,11 +324,7 @@ export function validateCrossReferences(
           });
         }
       }
-      // [LAW:locality-or-seam] A `{{ picker "apply" "page" … }}` OR `{{ menu
-      // "apply" "page" … }}` references two named actions — both resolve against
-      // the action table at load, same existence-check shape as a bare action ref.
-      // A menu binds the same pair as a picker, so it routes through the SAME
-      // check rather than failing only when the disclosure is opened.
+      // [LAW:locality-or-seam] A menu binds the same action pair as a picker; one check covers both.
       for (const pref of extractPickerMenuRefs(tpl)) {
         if (!Object.prototype.hasOwnProperty.call(cfg.actions, pref)) {
           ctx.issues.push({
@@ -492,10 +337,6 @@ export function validateCrossReferences(
     }
   }
 
-  // depends_on lists must point at declared variables — checked against the
-  // SAME templateScope as template refs, since both resolve against the one
-  // runtime store. The segment name is a diagnostic hint only, never a
-  // resolution rule, exactly as for templates.
   for (const [name, v] of Object.entries(cfg.variables)) {
     checkDependsOn(ctx, `variables.${name}`, v, templateScope);
   }
@@ -512,28 +353,11 @@ export function validateCrossReferences(
     }
   }
 
-  // [LAW:verifiable-goals] state-kind variables have an implicit dependency
-  // on the canonical session-id input variable. Same shape as the
-  // depends_on / template-ref existence checks above — surface a missing
-  // anchor at load time so the user fixes the config from a config-file
-  // error message, not from a render-time ReferenceError.
-  //
-  // [LAW:types-are-the-program] Check against `cfg.variables` directly: the
-  // accept/reject table for this predicate is "GLOBAL session.id declared".
-  // A segment-local declaration named "session.id" registers at runtime as
-  // `<seg>.session.id` and does NOT satisfy declareState's read of the
-  // global `session.id` box.
-  // [LAW:verifiable-goals] A widget `set` action composes a set-state click URL
-  // whose first segment is `session.id` (read from the store at render). Without
-  // a global session.id the URL is malformed and the daemon rejects the click
-  // (requireSessionId is the single enforcer — it rejects empty/slash session
-  // ids loudly, so there is no silent corruption; this surfaces the SAME
-  // requirement at load instead of at first click). Same anchor + same shape as
-  // the state-kind requirement above; OR them so either trigger fires it once.
-  // [LAW:dataflow-not-control-flow] A `set` action composes a set-state click URL
-  // whose first segment is session.id. OR it into the same requirement so an
-  // actions-only config (no state vars) still demands the anchor it needs. A
-  // picker's ✕/←/→/apply-close all go through `set` actions, so this covers them.
+  // [LAW:verifiable-goals] state reads and `set` clicks both need the global
+  // session.id anchor; surface it at load, not at first click.
+  // [LAW:types-are-the-program] A segment-local "session.id" registers namespaced and
+  // does not satisfy it.
+  // [LAW:dataflow-not-control-flow] OR the triggers so an actions-only config demands it.
   if (
     (hasStateKind(cfg) || hasActionSetAction(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
@@ -546,14 +370,7 @@ export function validateCrossReferences(
   }
 }
 
-// [LAW:no-silent-failure] brandon-layout-edit-2gc.1's structural-edit target
-// check, one arm of the persist/reset key cross-ref above. Three things must
-// hold at load time, same spirit as the segment-palette check just above it:
-// the preset name must be real (mirrors globals.preset's check earlier in
-// this function), the arm pairing must make sense for this scope (only
-// removeSegment/insertSegment address a tree — a `to`/`from`/cycle/bounded
-// literal has no meaning as "a tree"), and every segment name
-// the op names must be declared.
+// [LAW:no-silent-failure] Preset must exist, arm must suit the scope, segments must be declared.
 const TREE_OP_ARMS = [
   "removeSegment",
   "insertSegment",
@@ -579,17 +396,11 @@ function checkPresetRootTarget(
     });
     return;
   }
-  // [LAW:one-source-of-truth] `reset` has no value-source arm to check — its
-  // shape is a bare `{ reset: key }` — so the arm-pairing/segment checks
-  // below are `persist`-only, exactly as the "reset" action's clean-slate
-  // undo is meant to be: it deletes the whole authored root regardless of
-  // what wrote it.
+  // [LAW:one-source-of-truth] `reset` is a bare `{ reset: key }`, so what follows is persist-only.
   if (discriminator === "reset") return;
   const hasRemove = "removeSegment" in a;
   const hasInsert = "insertSegment" in a;
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's domain-sourced
-  // sibling — the segment name is picked at render, so only `anchor` (still
-  // literal at author time) needs the declared-segment check below.
+  // [LAW:one-source-of-truth] Its segment name is picked at render; only `anchor` is literal.
   const hasInsertFrom = "insertSegmentFrom" in a;
   if (!hasRemove && !hasInsert && !hasInsertFrom) {
     ctx.issues.push({
@@ -633,12 +444,7 @@ function checkPresetRootTarget(
   }
 }
 
-// [LAW:one-source-of-truth] Every `state` variable a config declares, in BOTH
-// scopes — global `variables` and each segment's own `vars`. A segment-local
-// state variable is fully legitimate: src/dsl/render.ts's stateKeyToVar
-// registers them (as `<segment>.<var>`) and it is the map a dual's selector is
-// resolved through at render, so a load-time check that scanned only the
-// global scope would reject configs that work.
+// [LAW:one-source-of-truth] Both scopes: a global-only scan would reject working configs.
 function stateVars(cfg: DslConfig): VariableDecl[] {
   return [
     ...Object.values(cfg.variables),
@@ -652,18 +458,11 @@ function hasStateKind(cfg: DslConfig): boolean {
   return stateVars(cfg).length > 0;
 }
 
-// Does any declared `state` variable hold this key? The question a dual's
-// `persistWhen` selector has to answer, asked over the same two scopes.
 function declaresStateKey(cfg: DslConfig, key: string): boolean {
   return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
 }
 
-// [LAW:dataflow-not-control-flow] A config needs session.id when any declared
-// action carries it on the wire — `set` (literal/option/bounded/cycle),
-// `persist`, `reset`, `undo`/`redo`, and both `doctor` verbs — so a click
-// error (an empty history stack, nothing left to fix) surfaces on the session
-// that clicked, never as a silent no-op. copy/open write nothing and embed
-// no session.id.
+// [LAW:dataflow-not-control-flow] Needed when any declared action carries session.id on the wire.
 function hasActionSetAction(cfg: DslConfig): boolean {
   return Object.values(cfg.actions).some(
     (a) =>
@@ -676,10 +475,7 @@ function hasActionSetAction(cfg: DslConfig): boolean {
   );
 }
 
-// [LAW:one-source-of-truth] The one scope every reference surface resolves
-// against, built from the same declarations src/dsl/render.ts registers:
-// globals under their bare names, segment locals under segName.varName — and
-// which of those are documents (a json-parsed shell/file source).
+// [LAW:one-source-of-truth] The one scope every reference surface resolves against.
 function templateScopeOf(cfg: DslConfig): TemplateScope {
   const names = new Set<string>();
   const documents = new Set<string>();
@@ -735,11 +531,8 @@ function checkDependsOn(
   if (!("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i]!;
-    // [LAW:one-source-of-truth] Exact membership, not refResolves: the
-    // depends_on reaction calls store.changeKey(name) with each listed name
-    // verbatim, and the store is an exact-key map. A dotted prefix that
-    // merely navigates INTO a value (resolvable in a template) is not a
-    // store key and would throw at runtime.
+    // [LAW:one-source-of-truth] Exact membership, not refResolves: a dotted prefix
+    // resolvable in a template is not a store key and would throw at runtime.
     if (scope.names.has(target)) continue;
     const namespaced = segCtx !== undefined ? `${segCtx}.${target}` : undefined;
     const hint =
@@ -764,15 +557,9 @@ function checkTemplateRefs(
   template: string,
   scope: TemplateScope,
   opts?: {
-    // [LAW:one-source-of-truth] Callers whose `declPath` is not a literal key
-    // path into the source (a node `when`, whose canonical tree position no
-    // longer maps to a source key after the layout/root merge) pass the
-    // already-resolved line explicitly. Absent, the line is derived from the
-    // dotted declPath as before.
+    // [LAW:one-source-of-truth] Callers with no literal source key path pass the line.
     line?: number;
-    // The segment whose template is being checked — a diagnostic hint only,
-    // never a resolution rule. When a failing bare ref would resolve under
-    // this segment's namespace, the message names the namespaced form.
+    // A diagnostic hint only, never a resolution rule.
     segCtx?: string;
   },
 ): void {
@@ -792,18 +579,13 @@ function checkTemplateRefs(
   }
 }
 
-// [LAW:one-source-of-truth] The authored top-level layout surface, read from the
-// PARSED top-level keys (`root` wins; the loader already rejects authoring both).
-// A structural read — not a text search — so a nested key named `root`/`layout`
-// can never misclassify the config. Empty/unparseable source (the bundled
-// default, no file) has no surface; defaults to the historical `layout` label.
+// [LAW:one-source-of-truth] Read from parsed top-level keys, not a text search.
 function authoredLayoutKey(source: string): "root" | "layout" {
   try {
     const parsed = JSON5.parse(source);
     if (isPlainObject(parsed) && "root" in parsed) return "root";
   } catch {
-    // No source to read (default config) or unparseable — fall through. A real
-    // syntax error is already reported by parseDslConfig before cross-ref runs.
+    // A real syntax error is already reported before cross-ref runs.
   }
   return "layout";
 }

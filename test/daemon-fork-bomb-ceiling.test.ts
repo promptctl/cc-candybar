@@ -7,23 +7,11 @@ import path from "node:path";
 import { createDaemonPool } from "./helpers/daemon-pool";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
-// [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
-// circuit breaker (brandon-daemon-lifecycle-gad.2): with a real, tiny ceiling
-// and a real registry directory on disk, the (ceiling+1)th isolated daemon
-// must refuse to boot — exiting well under a Node boot, never binding its own
-// socket — and a dead sibling's stale registry entry must not permanently
-// occupy a ceiling slot. The pure decision logic (decideBoot/countLiveEntries/
-// admitDaemon) is exhaustively unit-tested in fork-bomb-breaker.test.ts; this
-// file is the wiring proof and doubles as the CI regression gate the ticket's
-// acceptance asks for ("a regression that lets the count run away fails CI").
+// [LAW:verifiable-goals] Wiring proof; the decision logic is unit-tested separately.
 
 const CEILING = 2;
 const REFUSE_BUDGET_MS = 5000;
 
-// A dedicated pool (not the suite's shared default) and a dedicated registry
-// dir (not the machine's real shared one, see daemonRegistryDir()'s
-// CC_CANDYBAR_DAEMON_REGISTRY_DIR override) so this test is fast, isolated,
-// and never contends with — or pollutes — anything else running concurrently.
 const createdDirs: string[] = [];
 function tmpDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -52,9 +40,7 @@ function makeFixture(prefix: string, registryDir: string): Fixture {
   const cacheRoot = tmpDir(`${prefix}c-`);
   const configRoot = tmpDir(`${prefix}g-`);
   const stateDir = path.join(stateRoot, "cc-candybar");
-  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe
-  // (uid==me + mode 0700); pre-creating with default umask perms would trip
-  // the daemon's bind-time refusal.
+  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe (uid + 0700).
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
   return {
@@ -98,9 +84,7 @@ async function waitUntil(
   return false;
 }
 
-// Clears its own timeout on the exit path so a resolved race never leaves a
-// live timer pinning the event loop open past the test (Promise.race alone
-// doesn't cancel the losing branch).
+// Promise.race does not cancel the losing branch, so the timer is cleared here.
 function waitForExit(
   child: ChildProcess,
   budgetMs: number,
@@ -132,10 +116,6 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
     const fx2 = makeFixture("cc-candybar-breaker-2-", registryDir);
     const fx3 = makeFixture("cc-candybar-breaker-3-", registryDir);
 
-    // [LAW:single-enforcer] One cleanup list, run in reverse in a single
-    // `finally` at the end — no individual spawn needs its own nested
-    // try/finally, and a mid-test assertion throw still tears everything
-    // down.
     const cleanups: Array<() => void> = [];
     try {
       const d1 = await spawnTestDaemon(fx1.env, pool);
@@ -156,29 +136,18 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         true,
       );
 
-      // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
-      // refuse — exiting fast, never binding its own socket.
       const d3 = await spawnTestDaemon(fx3.env, pool);
       cleanups.push(() => {
         d3.killTree();
         d3.release();
       });
-      // [LAW:verifiable-goals] The log message is a diagnostic, not part of
-      // the contract this asserts: `dlog`'s write is buffered and
-      // `shutdown()`'s `process.exit()` does not wait for it to flush (a
-      // pre-existing race shared by every shutdown path, not specific to
-      // this breaker), so the file's on-disk content right after exit is not
-      // a reliable signal. Exit code + "never bound a socket" are the
-      // load-bearing, deterministic proof that the breaker fired.
+      // [LAW:verifiable-goals] `process.exit()` does not flush `dlog`, so the exit code is the proof.
       const { code, signal } = await waitForExit(d3.child, REFUSE_BUDGET_MS);
       expect(signal).toBeNull();
       expect(code).toBe(1);
       expect(fs.existsSync(fx3.sockPath)).toBe(false);
 
-      // Kill one of the two admitted daemons WITHOUT its graceful shutdown
-      // path (SIGKILL — the runaway/OOM case this epic fights) so its
-      // registry entry is left behind as a stale file: the exact condition
-      // admitDaemon()'s sweep exists to reclaim.
+      // SIGKILL leaves the registry entry behind — what admitDaemon's sweep reclaims.
       d2.killTree();
       await waitForExit(d2.child, 5000);
 

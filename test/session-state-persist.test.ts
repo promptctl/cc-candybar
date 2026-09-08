@@ -24,9 +24,8 @@ describe("SessionState disk persistence", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  // Reader instance: load from disk, then flush so the constructor's
-  // write-back fires synchronously rather than leaving a debounced timer that
-  // could touch the filesystem after the temp dir is cleaned up.
+  // Flush so the constructor's write-back fires synchronously, leaving no
+  // debounced timer to touch the filesystem after the temp dir is cleaned up.
   const restore = () => {
     const ss = new SessionState(new FileSessionStorage(file, 0));
     ss.flush();
@@ -35,11 +34,11 @@ describe("SessionState disk persistence", () => {
 
   it("ephemeral until useStorage(): construction reads no file, then binds disk", () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
-    const ss = new SessionState(); // ephemeral default — must not touch disk
+    const ss = new SessionState();
     expect(ss.get("s1", "theme")).toBeNull();
     ss.useStorage(new FileSessionStorage(file, 0));
     ss.flush();
-    expect(ss.get("s1", "theme")).toBe("nord"); // now loaded from disk
+    expect(ss.get("s1", "theme")).toBe("nord");
   });
 
   it("survives a daemon restart: a fresh instance reads identical values", () => {
@@ -120,7 +119,7 @@ describe("SessionState disk persistence", () => {
     const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
-    ss.set("c", "theme", "3"); // pushes "a" out
+    ss.set("c", "theme", "3");
     expect(ss.get("a", "theme")).toBeNull();
     expect(ss.get("b", "theme")).toBe("2");
     expect(ss.get("c", "theme")).toBe("3");
@@ -130,8 +129,8 @@ describe("SessionState disk persistence", () => {
     const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
-    ss.get("a", "theme"); // promote "a" to most-recent
-    ss.set("c", "theme", "3"); // now "b" is oldest, not "a"
+    ss.get("a", "theme");
+    ss.set("c", "theme", "3");
     expect(ss.get("a", "theme")).toBe("1");
     expect(ss.get("b", "theme")).toBeNull();
   });
@@ -142,9 +141,7 @@ describe("SessionState disk persistence", () => {
       JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
     );
     const ss = new SessionState(new FileSessionStorage(file, 0), 2);
-    ss.flush(); // force the constructor-scheduled write-back
-    // Oldest (first-in-file) dropped; the two most-recent survive — and the
-    // bound is enforced on disk without any post-restart mutation.
+    ss.flush();
     expect(ss.get("a", "t")).toBeNull();
     const onDisk = JSON.parse(readFileSync(file, "utf8"));
     expect(Object.keys(onDisk).sort()).toEqual(["b", "c"]);
@@ -164,9 +161,9 @@ describe("SessionState disk persistence", () => {
     const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("a", "style", "x");
-    ss.set("b", "theme", "2"); // order: a, b
-    ss.clear("a", "style"); // "a" survives (still has theme) → promoted to b, a
-    ss.set("c", "theme", "3"); // evicts the now-oldest "b", not "a"
+    ss.set("b", "theme", "2");
+    ss.clear("a", "style");
+    ss.set("c", "theme", "3");
     expect(ss.get("a", "theme")).toBe("1");
     expect(ss.get("b", "theme")).toBeNull();
   });
@@ -178,9 +175,8 @@ describe("SessionState disk persistence", () => {
     const badPath = join(blocker, "session-state.json");
     const ss = new SessionState(new FileSessionStorage(badPath, 0));
     ss.set("s1", "theme", "nord");
-    ss.flush(); // write fails; snapshot must NOT be dropped
+    ss.flush();
     expect(existsSync(badPath)).toBe(false);
-    // Make the path writable, then flush again — the retained snapshot lands.
     rmSync(blocker);
     ss.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
@@ -198,9 +194,7 @@ describe("SessionState disk persistence", () => {
     const ss = new SessionState(new FileSessionStorage(file, 0));
     ss.set("__proto__", "theme", "evil");
     ss.flush();
-    // Object.prototype untouched — no pollution.
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
-    // The malicious key survives as ordinary stored data.
     const reborn = restore();
     expect(reborn.get("__proto__", "theme")).toBe("evil");
   });

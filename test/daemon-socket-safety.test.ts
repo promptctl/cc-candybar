@@ -9,9 +9,7 @@ function freshDir(): string {
 }
 
 describe("ensureSocketParentSafe", () => {
-  // [LAW:single-enforcer] The daemon refuses to bind in any directory it cannot
-  // prove is its own. These tests assert the precondition is total — every
-  // unsafe state is rejected, not just the convenient ones.
+  // [LAW:single-enforcer] The bind precondition is total: every unsafe state.
 
   it("creates the parent dir with mode 0700 when absent", () => {
     const dir = freshDir();
@@ -34,7 +32,7 @@ describe("ensureSocketParentSafe", () => {
   it("refuses a parent dir with world/group bits set", () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { mode: 0o755 });
-    fs.chmodSync(dir, 0o755); // override umask
+    fs.chmodSync(dir, 0o755);
     const sock = path.join(dir, "socket");
     expect(() => ensureSocketParentSafe(sock)).toThrow(/unsafe permissions/);
     fs.rmSync(dir, { recursive: true });
@@ -73,9 +71,6 @@ describe("ensureSocketParentSafe", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  // The lease is load-bearing (socket-ownership authority) and gets the same
-  // symlink gate as the socket — a planted `lease → …` would make readLease
-  // follow it and force a false reclaim.
   it("refuses when the lease path is a symlink", () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { mode: 0o700 });

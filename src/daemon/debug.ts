@@ -1,26 +1,5 @@
-// [LAW:single-enforcer] One module owns the projection from daemon DSL
-// state (VariableStore + SourceRegistry + DslConfig + CompiledConfig) to
-// the wire-level DebugSnapshot. buildDebugSnapshot dispatches via an
-// exhaustive switch on `what` — TypeScript enforces every DebugWhat arm
-// at compile time (the function's return-type narrowing fails if a case
-// is missing), so adding a new `what` requires one new arm here, one new
-// DEBUG_WHATS entry, and one new DebugSnapshot variant — the type system
-// keeps the three sites in lockstep.
-//
-// [LAW:one-source-of-truth] The introspector reads through the live
-// VariableStore (current values), SourceRegistry (lastErrors), VarNode
-// (lastUpdatedMs), and DslConfig (declared source kinds, segment templates).
-// There is no parallel cache, no shadow snapshot kept in sync — the daemon
-// has one DSL state and this module projects it.
-//
-// [LAW:dataflow-not-control-flow] The state slot (DaemonDslState | null) is
-// the only branch: null state → empty snapshots; populated state → real
-// snapshots. No special-case introspection paths for the "DSL not active
-// yet" case — the same code produces both outcomes from the same data.
-//
-// Today the daemon does not yet hold a DSL state (bzh.2 has not fired); all
-// snapshots are empty in production. When bzh.2 wires the store, the
-// snapshots populate without any change to this module or the protocol.
+// [LAW:one-source-of-truth] The one projection of the daemon's live DSL state onto the wire DebugSnapshot; no shadow copy.
+// [LAW:dataflow-not-control-flow] A null state yields empty snapshots through the same code.
 
 import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
@@ -36,26 +15,19 @@ import type {
   VarSnapshot,
 } from "./debug-types";
 
-// The daemon's DSL state. Bundled because the four fields are co-installed
-// by registerDslConfig — exposing them as independently-optional would let
-// callers represent illegal combinations (e.g. store with no config).
+// Bundled: separately optional, the fields could spell illegal combinations.
 export interface DaemonDslState {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly config: DslConfig;
   readonly compiled: CompiledConfig;
-  // [LAW:dataflow-not-control-flow] Per-segment last-render strings live in
-  // the same state bundle the renderer mutates. Today (legacy renderer) it
-  // is empty; bzh.2 populates it from inside renderDsl.
+  // [LAW:dataflow-not-control-flow] Mutated by the renderer, in the bundle it already holds.
   readonly lastRenderBySegment: ReadonlyMap<string, string>;
 }
 
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
-// [LAW:dataflow-not-control-flow] One arm per `what` — the discriminator is
-// data; the branch chooses the projection function, not whether projection
-// runs. Adding a new `what` is one new arm + one new projection + one new
-// DebugSnapshot variant — the type system enforces all three.
+// [LAW:dataflow-not-control-flow] The discriminator picks the projection, not whether projection runs.
 export function buildDebugSnapshot(
   what: DebugWhat,
   state: DaemonDslState | null,
@@ -72,11 +44,7 @@ export function buildDebugSnapshot(
 
 // ─── vars ────────────────────────────────────────────────────────────────────
 
-// Project every variable currently registered in the store into one
-// VarSnapshot. Names sorted for deterministic snapshot tests. Source kind
-// is looked up from the DslConfig (top-level variables + per-segment
-// `vars` blocks); a variable not found in either is reported with
-// source=null so it still appears in introspection.
+// A variable the config does not declare still appears, with source=null.
 export function introspectVars(
   state: DaemonDslState | null,
 ): readonly VarSnapshot[] {
@@ -88,27 +56,10 @@ export function introspectVars(
 
   const out: VarSnapshot[] = [];
   for (const name of names) {
-    // [LAW:single-enforcer] One requireNode lookup per row. Reading the
-    // value through node.read() instead of store.read(name) avoids a
-    // second Map.get + requireNode round-trip in the inner loop and
-    // makes the per-row data dependency obvious: every field below
-    // comes from this one node.
     const node = store.getNode(name);
     const err = registry.getLastError(name);
-    // [LAW:no-defensive-null-guards] No try/catch around node.read():
-    // every SourceRegistry-declared variable either holds a typed
-    // fallback (declareShell/declareFile/declareGit/declareInput catch
-    // internally and write a fallback) or is a computed whose deriver
-    // also catches (declareTemplate). Cycles are detected eagerly at
-    // register time (declareTemplate's force-read). So a read-throw
-    // here would be a *programming* error, not a runtime condition
-    // the snapshot should mask. Letting it propagate keeps the failure
-    // loud at the source instead of laundering it as a synthesized
-    // lastError with an unstable Date.now() timestamp.
-    //
-    // [LAW:single-enforcer] lastError is sourced from SourceRegistry
-    // only. There is no second timestamp-producer that could drift
-    // from the registry's record.
+    // [LAW:no-defensive-null-guards] Every declared variable writes a typed
+    // fallback or catches in its deriver, so a read-throw is a bug, not a state to mask.
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
@@ -123,10 +74,7 @@ export function introspectVars(
   return out;
 }
 
-// [LAW:one-type-per-behavior] One total projection of a store node onto the
-// snapshot's (type, value) pair: a scalar node reads its typed value; a
-// document reads as its JSON text, or — before its first scan / after a
-// failed one — as the state a template read of it would surface.
+// [LAW:one-type-per-behavior] An unscanned or failed document reads as what a template read of it would surface.
 function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
   if (node.kind !== "document") {
     return { type: node.type, value: node.read() };
@@ -147,10 +95,6 @@ function ageFromNode(lastUpdatedMs: number | null): number | null {
   return Math.max(0, Date.now() - lastUpdatedMs);
 }
 
-// Build a name → SourceKind index from the DslConfig. Walks top-level
-// variables and each segment's per-segment vars block; segment-local vars
-// live under the namespaced key `<segName>.<varName>` in the store (same
-// shape registerDslConfig uses to declare them).
 function buildSourceKindIndex(
   config: DslConfig,
 ): ReadonlyMap<string, SourceKind> {
@@ -180,9 +124,6 @@ export function introspectSegments(
 
   const { store, config, lastRenderBySegment } = state;
   const declaredNames = new Set(store.names());
-  // [LAW:dataflow-not-control-flow] Walk in layout order so the introspection
-  // snapshot mirrors render order — operators reading the snapshot see the
-  // same sequence the bar produces, not an alphabetical reshuffling.
   const segNames = orderedSegmentNames(config);
 
   const out: SegmentSnapshot[] = [];
@@ -199,10 +140,7 @@ export function introspectSegments(
   return out;
 }
 
-// Layout order, with any declared-but-not-laid-out segments appended in
-// declaration order so they still appear in the snapshot (an operator
-// debugging "why isn't this rendering" wants to see the segment, not have
-// it filtered out for being absent from layout).
+// Declared-but-not-laid-out segments are appended, not filtered: "why isn't this rendering" needs to see them.
 function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -222,27 +160,8 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
   return out;
 }
 
-// [LAW:single-enforcer] Static analysis of which variables a segment
-// template references. Raw candidate extraction (find dotted paths inside
-// `{{ ... }}` actions, strip string literals so `{{ printf ".foo" }}`
-// does not falsely match a declared `foo`) is delegated to
-// extractTemplateRefs in src/config/dsl-loader.ts — that helper already
-// owns the template-ref parsing rules and is exercised by the loader's
-// cycle detector. Reusing it means a future improvement to the parser
-// (e.g. supporting `$x.field` variable references) lands here for free.
-//
-// Static analysis (not runtime evaluation) is the right tool here:
-// evaluation would couple introspection to a working store and would
-// vary by current values (if/with branches taken). Static finds every
-// potentially-referenced name regardless of current state — which is
-// what an operator debugging "what does this segment depend on" needs.
-//
-// This function adds the introspection-specific layers on top of the raw
-// extraction:
-//   1. Intersect with the declared-name set (only report names that exist).
-//   2. Ancestor credit: a candidate `.session.id.extra` resolves to the
-//      declared `session.id` if `extra` is not declared.
-//   3. Sort the result for deterministic snapshots.
+// [LAW:single-enforcer] Template-ref parsing stays in extractTemplateRefs.
+// Static, not evaluated: every potentially-referenced name, whatever branches current values would take.
 export function extractReferencedVars(
   template: string,
   declared: ReadonlySet<string>,
@@ -253,9 +172,7 @@ export function extractReferencedVars(
       found.add(candidate);
       continue;
     }
-    // Drop trailing segments until we hit a declared name. Handles
-    // `.session.id.something_extra` where only `session.id` is declared —
-    // still credit it as a reference to `session.id`.
+    // Ancestor credit: `.session.id.extra` counts as a read of `session.id`.
     const parts = candidate.split(".");
     while (parts.length > 1) {
       parts.pop();
@@ -271,10 +188,7 @@ export function extractReferencedVars(
 
 // ─── config ──────────────────────────────────────────────────────────────────
 
-// [LAW:no-defensive-null-guards] No defensive copy. DslConfig is `readonly`
-// throughout and the wire-encoder JSON-serializes it; downstream callers
-// see a fresh value. Returning the live reference is the cheapest correct
-// answer.
+// [LAW:no-defensive-null-guards] No copy: DslConfig is readonly and the wire encoder serializes it.
 export function introspectConfig(
   state: DaemonDslState | null,
 ): DslConfig | null {

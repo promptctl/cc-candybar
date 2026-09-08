@@ -1,17 +1,6 @@
 // One-line styled diagnostic glyph emitted on permanent daemon failures.
-//
-// [LAW:single-enforcer] One formatter per runtime. main.rs's RenderOutcome
-// handling calls format_permanent_glyph; nothing else builds this string.
-//
-// [LAW:one-type-per-behavior] Mirrors src/render/error-glyph.ts byte-for-byte
-// for the same logical cause — both runtimes show the same diagnostic so the
-// user's experience does not depend on which client is on the hot path. The
-// unit tests below pin this against the same fixtures the Node side asserts.
-//
-// [LAW:one-source-of-truth] The style constants are a literal mirror of the
-// canonical TS leaf (src/render/diagnostic-style.ts) — Rust cannot import a
-// TS module, so scripts/check-protocol.mjs diffs the mirrored values and
-// fails prepublishOnly on drift.
+// [LAW:single-enforcer] One formatter per runtime. [LAW:one-type-per-behavior] Mirrors src/render/error-glyph.ts byte-for-byte, so the diagnostic never depends on which client ran.
+// [LAW:one-source-of-truth] The style constants mirror src/render/diagnostic-style.ts; check-protocol.mjs fails prepublishOnly on drift.
 
 use crate::PermanentCause;
 
@@ -20,9 +9,7 @@ const BG: &str = "\x1b[48;2;200;40;40m";
 const RESET: &str = "\x1b[0m";
 const PREFIX: &str = "⚠ cc-candybar: ";
 
-// Long messages from the daemon (parse errors, internal exception strings)
-// can be arbitrarily long. The glyph must fit on a single statusline row, so
-// truncate to a budget that leaves room for the prefix at typical widths.
+// The glyph must fit one statusline row, with room for the prefix at typical widths.
 const MAX_MESSAGE_LEN: usize = 60;
 
 pub fn format_permanent_glyph(cause: &PermanentCause) -> String {
@@ -51,39 +38,15 @@ fn describe(cause: &PermanentCause) -> String {
     }
 }
 
-// [LAW:single-enforcer] One sanitize-and-truncate boundary. Daemon error
-// strings can contain control characters that break either the glyph's
-// single-line property (LF/CR/FF/VT) or its ANSI envelope (ESC at U+001B,
-// 8-bit CSI at U+009B, and other Cc-class characters that terminals
-// interpret as escape introducers). With BAD_REQUEST messages echoing
-// caller-supplied data (e.g. an unknown click verb), that vector is
-// reachable without a malicious daemon. `char::is_control()` matches the
-// entire Unicode Cc set (C0: 0x00..=0x1F, DEL: 0x7F, C1: 0x80..=0x9F),
-// closing both bypass classes — including the 8-bit CSI which
-// `is_ascii_control()` would have missed.
-//
-// [LAW:one-type-per-behavior] Matches the TS source at
-// src/render/diagnostic-text.ts `sanitizeAndTruncate` byte-for-byte: its
-// `isControlChar` predicate covers the exact same code-point set as
-// `char::is_control()` (Unicode Cc), and the same collapse-whitespace-runs +
-// trim pass runs between sanitization and truncation, so a multi-control
-// input (e.g. "\r\n") yields identical output in both runtimes.
-//
-// The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
-// side collapses on JS `\s`, which is Unicode White_Space minus U+0085
-// (NEL — Cc, already sanitized to a space on both sides before collapse)
-// plus U+FEFF (ZWNBSP). With that one addition the two predicates agree on
-// every post-sanitize code point.
+// [LAW:single-enforcer] One sanitize-and-truncate boundary; `is_control()` covers the whole Cc set (C0, DEL, C1), closing the 8-bit-CSI bypass `is_ascii_control()` would miss.
+// [LAW:one-type-per-behavior] Matches src/render/diagnostic-text.ts; the collapse predicate adds U+FEFF so the two predicates agree on every post-sanitize code point.
 fn truncate(s: &str) -> String {
-    // Sanitize controls to spaces, collapse whitespace runs to one space,
-    // trim both ends — one pass, mirroring the TS sanitize + collapse + trim.
     let mut sanitized = String::new();
     let mut gap = false;
     for raw in s.chars() {
         let ch = if raw.is_control() { ' ' } else { raw };
         if ch.is_whitespace() || ch == '\u{FEFF}' {
-            // A gap only renders if visible content precedes it (leading
-            // runs trim away); a trailing gap never flushes.
+            // A gap renders only if visible content precedes it; a trailing gap never flushes.
             gap = !sanitized.is_empty();
         } else {
             if gap {
@@ -93,8 +56,7 @@ fn truncate(s: &str) -> String {
             sanitized.push(ch);
         }
     }
-    // Clip to MAX_MESSAGE_LEN visible code points, replacing the last one
-    // with an ellipsis when over budget so visible length stays at budget.
+    // Replacing the last code point with the ellipsis keeps visible length at budget.
     let mut out = String::new();
     for (count, ch) in sanitized.chars().enumerate() {
         if count == MAX_MESSAGE_LEN {
@@ -114,11 +76,7 @@ mod tests {
     const OPEN: &str = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
     const TAIL: &str = "\x1b[0m\n";
 
-    // [LAW:one-source-of-truth] Fixtures derive both versions from the
-    // canonical PROTOCOL_VERSION constant rather than embedding the current
-    // numbers as literals. Expected strings are built via format! against
-    // the same source. A PROTOCOL_VERSION bump in main.rs flows through here
-    // automatically — no test edit required.
+    // [LAW:one-source-of-truth] Derived from PROTOCOL_VERSION, so a bump needs no test edit.
     use crate::PROTOCOL_VERSION;
     const CLIENT_V: u32 = PROTOCOL_VERSION;
     const OTHER_V: u32 = PROTOCOL_VERSION + 1;
@@ -157,7 +115,6 @@ mod tests {
     fn render_failed_truncates_long_message() {
         let long = "x".repeat(200);
         let g = format_permanent_glyph(&PermanentCause::RenderFailed(long));
-        // 60 chars after the colon-space: 59 x's then an ellipsis.
         assert!(g.contains("render failed: "));
         assert!(g.contains('…'));
         let expected_tail = format!("{}…{TAIL}", "x".repeat(59));
@@ -167,24 +124,15 @@ mod tests {
         );
     }
 
-    // [LAW:one-type-per-behavior] ESC + C0 sanitization paired with the TS
-    // mirror. A crafted error message containing `\x1b[0m` would otherwise
-    // prematurely terminate the glyph's styled envelope; the entire C0
-    // range plus DEL must be neutralized at this boundary so the styling
-    // contract holds against adversarial input.
+    // [LAW:one-type-per-behavior] A crafted `\x1b[0m` would terminate the glyph's styled envelope, so the whole C0 range plus DEL is neutralized here.
     #[test]
     fn truncate_sanitizes_control_chars_c0_del_and_c1() {
-        // 0x1B = ESC (7-bit CSI introducer); 0x9B = 8-bit CSI (some
-        // terminals interpret this directly without ESC). 0x07 (BEL) and
-        // 0x7F (DEL) round out coverage across the Cc class.
+        // 0x1B ESC, 0x9B 8-bit CSI, 0x07 BEL, 0x7F DEL — coverage across the Cc class.
         let injection = "verb=danger\u{1B}[0m injected\u{1B}[31m text\u{9B}[0mbypass\u{07}\u{7F} end";
         let g = format_permanent_glyph(&PermanentCause::BadRequest(injection.to_string()));
-        // OPEN/TAIL envelope intact.
         assert!(g.starts_with(OPEN), "OPEN envelope broken: {g:?}");
         assert!(g.ends_with(TAIL), "TAIL envelope broken: {g:?}");
-        // No raw control characters in the body — Unicode Cc class is
-        // covered by `is_control()` (C0 + DEL + C1). Strip the envelope
-        // first because OPEN/TAIL legitimately contain ESC.
+        // Strip the envelope first: OPEN/TAIL legitimately contain ESC.
         let body = &g[OPEN.len()..g.len() - TAIL.len()];
         for ch in body.chars() {
             assert!(
@@ -193,18 +141,12 @@ mod tests {
                 ch as u32
             );
         }
-        // Safe parts of the message survive.
         assert!(body.contains("verb=danger"), "lost safe content: {g:?}");
         assert!(body.contains("injected"), "lost safe content: {g:?}");
         assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
     }
 
-    // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to
-    // the TS side. The single-line glyph contract requires no embedded
-    // newlines mid-string; both runtimes sanitize \n and \r to spaces at the
-    // truncate boundary and collapse the resulting whitespace runs, so a
-    // "\r\n" break yields exactly one space in both — byte-identical output,
-    // not merely "no newline leaked."
+    // [LAW:one-type-per-behavior] Both runtimes collapse a "\r\n" break to exactly one space — byte-identical output, not merely "no newline leaked".
     #[test]
     fn truncate_sanitizes_embedded_newlines() {
         let cases: [(&str, &str); 3] = [
@@ -214,7 +156,6 @@ mod tests {
         ];
         for (input, expected_substr) in cases {
             let g = format_permanent_glyph(&PermanentCause::RenderFailed(input.to_string()));
-            // Exactly one trailing newline (the ANSI reset tail).
             assert_eq!(g.matches('\n').count(), 1, "embedded \\n leaked for: {input:?}");
             assert_eq!(g.matches('\r').count(), 0, "embedded \\r leaked for: {input:?}");
             assert!(
@@ -224,31 +165,21 @@ mod tests {
         }
     }
 
-    // [LAW:one-type-per-behavior] Collapse/trim parity with the TS source —
-    // the exact fixtures test/diagnostic-text.test.ts pins for
-    // sanitizeAndTruncate, so a divergence in either runtime's
-    // collapse-whitespace-runs or trim behavior breaks its own suite
-    // instead of silently falsifying the byte-identical mirror claim.
+    // [LAW:one-type-per-behavior] The exact fixtures test/diagnostic-text.test.ts pins, so a divergence breaks its own suite.
     #[test]
     fn truncate_collapses_whitespace_runs_and_trims() {
         assert_eq!(truncate("a    b\n\n\nc"), "a b c");
         assert_eq!(truncate("  hello  "), "hello");
         assert_eq!(truncate("\n\nhello\n\n"), "hello");
-        // U+FEFF (ZWNBSP) collapses like whitespace — JS `\s` includes it,
-        // so byte parity requires the Rust predicate to as well.
+        // U+FEFF collapses like whitespace — JS `\s` includes it, so byte parity requires it here.
         assert_eq!(truncate("a\u{FEFF} b"), "a b");
     }
 
-    // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
-    // TS side. Rust's `chars().take(...)` already counts Unicode scalar values;
-    // this test pins that contract against the same input the TS test uses, so
-    // a future change that drops the `chars()` primitive on either side breaks
-    // its own suite rather than silently diverging from the mirror.
+    // [LAW:one-type-per-behavior] Pins truncation at a code-point (not byte) boundary, against the same input the TS test uses.
     #[test]
     fn render_failed_truncates_at_code_point_boundary() {
         let rockets = "🚀".repeat(100); // 100 code points, 400 UTF-8 bytes
         let g = format_permanent_glyph(&PermanentCause::RenderFailed(rockets));
-        // 59 rockets + ellipsis after the "render failed: " label.
         let expected_tail = format!("{}…{TAIL}", "🚀".repeat(59));
         assert!(
             g.ends_with(&expected_tail),
@@ -272,7 +203,6 @@ mod tests {
             client_v: CLIENT_V,
             daemon_v: OTHER_V,
         });
-        // Exactly one trailing newline; no embedded newlines mid-string.
         assert_eq!(g.matches('\n').count(), 1);
         assert!(g.ends_with('\n'));
     }

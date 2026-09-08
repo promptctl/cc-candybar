@@ -1,7 +1,4 @@
-// [LAW:dataflow-not-control-flow] buildRenderPayload's provider gating is
-// derived from the DslConfig's layout-reachable input paths. This test pins
-// the contract by counting provider invocations against two configs that
-// differ only in `layout` — same declared variables, different layouts.
+// [LAW:dataflow-not-control-flow] Gating is derived from layout-reachable input paths.
 
 import {
   buildRenderPayload,
@@ -15,8 +12,6 @@ import type {
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 
-// One vertical container holding one horizontal container of segment refs — the
-// canonical root for a single row.
 const rootOf = (...segments: string[]): Root => ({
   rows: {
     main: {
@@ -85,12 +80,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
   return { deps, counts };
 }
 
-// The daemon-resolved effective globals; the gating tests assert provider CALL
-// COUNTS, not these values, so any well-formed struct satisfies the required
-// argument.
-// No client hints: these fixtures exercise the daemon-side folds, not the wire
-// boundary. An empty object is the honest "this render carried no hints"
-// (the shape an old client produces), so `host.ssh` stays absent throughout.
+// These tests assert provider CALL COUNTS, not values, so any well-formed struct does.
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
@@ -116,7 +106,6 @@ const HOOK_DATA = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 };
 
-// Two configs sharing the same variable declarations; only `layout` differs.
 const SHARED_VARIABLES: DslConfig["variables"] = {
   current_dir: { kind: "input", path: "workspace.current_dir", default: "" },
   "git.branch": { kind: "input", path: "git.branch", default: "" },
@@ -185,8 +174,6 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       NO_HINTS,
     );
     expect(counts.git).toBe(1);
-    // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
-    // those providers are not invoked.
     expect(counts.metrics).toBe(0);
     expect(counts.tmux).toBe(0);
     expect(counts.today).toBe(0);
@@ -207,18 +194,13 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
     expect(counts.tmux).toBe(1);
-    // Still no today/context/usage/block — they have no segments in this
-    // layout either.
     expect(counts.today).toBe(0);
     expect(counts.context).toBe(0);
     expect(counts.usage).toBe(0);
   });
 
   test("namespace-only refs (e.g. {{ toJson .git }}) expand to all child paths", async () => {
-    // Layout segment references the entire `.git` namespace, not a leaf.
-    // The scope proxy treats this as iterating the namespace; the gate
-    // must pull in every git.* declared input path, not just the literal
-    // `git` ref.
+    // A namespace ref must pull in every declared git.* path, not just the ref.
     const config: DslConfig = {
       globals: {},
       variables: SHARED_VARIABLES,
@@ -237,17 +219,12 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       editGlobals: {},
     };
     const needed = buildNeededPrefixes(config);
-    // The only declared `git.*` input is `git.branch`; it must be in
-    // the closure even though the template references `.git`, not
-    // `.git.branch`.
     expect(needed.has("git.branch")).toBe(true);
   });
 
   test("a container `when` keeps its referenced input prefix reachable (no segment references it)", () => {
-    // The reachability walk seeds from EVERY node's `when`, not just cells/
-    // segments. A container gated on `.metrics.sessionDuration` whose only
-    // rendered segment is `directory` must still pull metrics into the closure —
-    // otherwise the provider gates out and the predicate can never become true.
+    // The walk seeds from EVERY node's `when`; otherwise the provider gates out
+    // and the predicate can never become true.
     const config: DslConfig = {
       globals: {},
       variables: SHARED_VARIABLES,
@@ -264,10 +241,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     };
     const needed = buildNeededPrefixes(config);
     expect(needed.has("metrics.sessionDuration")).toBe(true);
-    // `directory`'s own input is reachable too (sanity).
     expect(needed.has("workspace.current_dir")).toBe(true);
-    // `tmux`/`git` are referenced by neither the container `when` nor the one
-    // rendered segment, so they stay gated out.
     expect(needed.has("tmux.session")).toBe(false);
   });
 });

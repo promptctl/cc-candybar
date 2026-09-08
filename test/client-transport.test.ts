@@ -1,9 +1,4 @@
-// [LAW:behavior-not-structure] describeFailure is the operator-CLI rendering
-// of a failed round-trip outcome. The load-bearing contract: the "daemon may
-// not be running" spawn hint appears ONLY on transient failures — a permanent
-// failure means the daemon is demonstrably up and answering, and suggesting a
-// respawn would send the operator down the wrong path (the CLI analogue of
-// the render path's kick-vs-no-kick split).
+// [LAW:behavior-not-structure] The spawn hint is transient-only — a permanent failure means the daemon answered.
 
 import { describeFailure } from "../src/daemon/client-transport";
 import type {

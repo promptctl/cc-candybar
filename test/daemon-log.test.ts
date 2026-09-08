@@ -3,14 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { MAX_BYTES } from "../src/daemon/log";
 
-// The log sink's contract (src/daemon/log.ts): a line is on disk the moment
-// dlog returns — no stream, nothing to flush — and the file self-rotates at
-// the size boundary, shifting .1→.2→.3 and dropping the oldest.
-//
 // [LAW:locality-or-seam] logPath() reads $XDG_STATE_HOME at call time and the
-// sink's byte counter is module state, so each scenario gets a fresh tmp state
-// dir AND a fresh module instance (jest.resetModules + dynamic import). Nothing
-// here can reach the user's real daemon.log.
+// byte counter is module state, so each scenario gets a fresh dir and module.
 
 async function withFreshLog<T>(
   seed: (logFile: string) => void,
@@ -63,8 +57,6 @@ describe("dlog", () => {
     await withFreshLog(
       () => {},
       (dlog) => {
-        // With no $XDG_STATE_HOME, logPath() falls back to os.homedir(),
-        // which throws when the process has no resolvable home.
         const prevXdg = process.env.XDG_STATE_HOME;
         delete process.env.XDG_STATE_HOME;
         const home = jest.spyOn(os, "homedir").mockImplementation(() => {
@@ -112,7 +104,6 @@ describe("dlog", () => {
   test("never throws: an unwritable sink degrades to stderr, line intact", async () => {
     await withFreshLog(
       (logFile) => {
-        // Replace the state dir with a FILE so mkdir and append both fail.
         fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
         fs.writeFileSync(path.dirname(logFile), "");
       },
@@ -148,8 +139,6 @@ describe("dlog", () => {
   test("rotates at the size boundary: .1→.2→.3, oldest dropped, count reset", async () => {
     await withFreshLog(
       (logFile) => {
-        // A pre-existing log one line short of the boundary, plus three
-        // generations, so this daemon "restart" inherits the on-disk size.
         fs.writeFileSync(logFile, "x".repeat(MAX_BYTES - 16));
         fs.writeFileSync(`${logFile}.1`, "gen1");
         fs.writeFileSync(`${logFile}.2`, "gen2");
@@ -157,8 +146,7 @@ describe("dlog", () => {
       },
       (dlog, logFile) => {
         dlog("info", "tips over");
-        // The tipping line landed in the file that then became .1. Sliced,
-        // not regexed: `x+` over 5 MB overflows the regex stack on node 22.
+        // Sliced, not regexed: `x+` over 5 MB overflows the regex stack.
         const seeded = MAX_BYTES - 16;
         const gen1 = fs.readFileSync(`${logFile}.1`, "utf8");
         expect(gen1.slice(0, seeded)).toBe("x".repeat(seeded));
@@ -168,7 +156,6 @@ describe("dlog", () => {
         expect(fs.existsSync(`${logFile}.4`)).toBe(false);
         expect(fs.existsSync(logFile)).toBe(false);
 
-        // The counter reset: the next line opens a fresh generation alone.
         dlog("info", "fresh");
         const fresh = fs.readFileSync(logFile, "utf8");
         expect(fresh).toMatch(/^\d{4}-.* \[info\] fresh\n$/);

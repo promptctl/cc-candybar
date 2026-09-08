@@ -1,5 +1,4 @@
-// [LAW:behavior-not-structure] Tests assert template evaluation outcomes
-// (fragment text, error types/messages), never internal AST shapes.
+// [LAW:behavior-not-structure] Assert evaluation outcomes, never internal AST shapes.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { buildScope } from "../src/template-engine/scope";
@@ -9,30 +8,23 @@ import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
 import { toDocument } from "../src/var-system/types";
 
-// Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
   const engine = createCcCandybarEngine();
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
-// Helper: evaluate against a VariableStore scope.
 function evalStore(source: string, store: VariableStore): string {
   const engine = createCcCandybarEngine();
   const scope = buildScope(store);
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
-// Helper: make a store with one box variable.
 function oneBox(name: string, value: string | number | boolean): VariableStore {
   const store = new VariableStore();
   const type = typeof value as "string" | "number" | "boolean";
   store.defineBox(name, type, value);
   return store;
 }
-
-// ────────────────────────────────────────────────────────────────
-// 1. Text literals and basic interpolation
-// ────────────────────────────────────────────────────────────────
 
 describe("text literals", () => {
   test("plain text passes through unchanged", () => {
@@ -55,10 +47,6 @@ describe("text literals", () => {
     expect(evalText("{{ .flag }}", { flag: true })).toBe("true");
   });
 });
-
-// ────────────────────────────────────────────────────────────────
-// 2. Variable resolver (VariableStore → scope Proxy)
-// ────────────────────────────────────────────────────────────────
 
 describe("variable resolver (store scope)", () => {
   test("top-level variable reads from store", () => {
@@ -103,10 +91,6 @@ describe("variable resolver (store scope)", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 3. String filter functions (from sprigStrings)
-// ────────────────────────────────────────────────────────────────
-
 describe("string filters", () => {
   test("lower", () => {
     expect(evalText('{{ lower "HELLO" }}', {})).toBe("hello");
@@ -149,10 +133,6 @@ describe("string filters", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 4. Path functions (cc-candybar custom)
-// ────────────────────────────────────────────────────────────────
-
 describe("path functions", () => {
   test("basename extracts filename", () => {
     expect(evalText('{{ basename "/home/user/project" }}', {})).toBe("project");
@@ -167,16 +147,8 @@ describe("path functions", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 4b. URL-encoding (cc-candybar custom)
-// ────────────────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] urlEncode mirrors encodeURIComponent — the same
-// function the legacy SegmentRenderer.renderToolbar uses when constructing
-// cc-candybar:// click URLs. Templates that build URLs from path-shaped
-// values (`.cwd`, `.session.id`, etc.) need this to produce URLs that
-// byte-match the legacy form. Surfaced by the chunk-7 toolbar/tray DSL
-// migration (lit brandon-segment-dsl-protocol-vhi.3).
+// [LAW:single-enforcer] urlEncode mirrors encodeURIComponent, so a template that
+// builds a click URL byte-matches what the renderer emits.
 describe("urlEncode", () => {
   test("encodes path separators and reserved characters", () => {
     expect(evalText('{{ urlEncode "/work/acme/src" }}', {})).toBe(
@@ -194,10 +166,6 @@ describe("urlEncode", () => {
     ).toBe("%2Fhome%2Fuser%20space%2Fx");
   });
 });
-
-// ────────────────────────────────────────────────────────────────
-// 5. Cast functions (int / string / bool)
-// ────────────────────────────────────────────────────────────────
 
 describe("cast functions", () => {
   test("int converts numeric string to number", () => {
@@ -229,10 +197,6 @@ describe("cast functions", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 6. Default function and conditionals
-// ────────────────────────────────────────────────────────────────
-
 describe("default function and conditionals", () => {
   test("default returns fallback when value is empty", () => {
     expect(evalText('{{ default "n/a" .branch }}', { branch: "" })).toBe("n/a");
@@ -256,10 +220,6 @@ describe("default function and conditionals", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 7. Filter chains
-// ────────────────────────────────────────────────────────────────
-
 describe("filter chains", () => {
   test("basename | upper", () => {
     expect(evalText('{{ "/a/b/foo" | basename | upper }}', {})).toBe("FOO");
@@ -279,10 +239,6 @@ describe("filter chains", () => {
     expect(evalText('{{ printf "#%s" .id }}', { id: "abc123" })).toBe("#abc123");
   });
 });
-
-// ────────────────────────────────────────────────────────────────
-// 8. Error cases
-// ────────────────────────────────────────────────────────────────
 
 describe("error cases", () => {
   test("unbalanced action throws ParseError", () => {
@@ -305,13 +261,7 @@ describe("error cases", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 8b. Documents in scope (a `parse: { json }` source)
-// ────────────────────────────────────────────────────────────────
-
-// [LAW:behavior-not-structure] A document variable's fields are dotted reads,
-// like an input var's payload subtree; its non-value states are errors that
-// name the variable — never an empty render.
+// [LAW:behavior-not-structure] A document's non-value states are errors naming the variable, never an empty render.
 describe("documents in scope", () => {
   function docStore(outcome: Parameters<VariableStore["defineDocument"]>[1]) {
     const store = new VariableStore();
@@ -395,10 +345,6 @@ describe("documents in scope", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 9. ccCandybarFuncs shape
-// ────────────────────────────────────────────────────────────────
-
 describe("ccCandybarFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = ccCandybarFuncs();
@@ -424,18 +370,8 @@ describe("ccCandybarFuncs registry", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 10. Domain-list bindings (themes / styles)
-// ────────────────────────────────────────────────────────────────
-
-// [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
-// project the SAME canonical sources as the set-state validators
-// (listResolvablePaletteNames / STRIP_STYLES). A widget config that
-// `range`s over themes() to emit OSC-8 picker cells is iterating the
-// allow-list the validator will enforce on the resulting click — the
-// list and the gate cannot diverge. These tests pin the projection
-// shape (zero-arg, list-returning) so a refactor that changed the
-// signature would break here loudly.
+// [LAW:one-source-of-truth] These bindings project the same canonical sources as
+// the set-state validators, so the rendered list and the gate cannot diverge.
 describe("themes / styles domain-list bindings", () => {
   test("themes() returns the canonical resolvable-palette list", async () => {
     const { listResolvablePaletteNames } = await import(
@@ -460,9 +396,7 @@ describe("themes / styles domain-list bindings", () => {
   });
 
   test("themes() participates in `has` membership checks", () => {
-    // [LAW:dataflow-not-control-flow] A picker template uses `has`
-    // against themes() to mark the currently-active item. This exercises
-    // the same composition path the widget will use in chunk-11 .3.
+    // [LAW:dataflow-not-control-flow] The composition a picker uses to mark the active item.
     const result = evalText(
       '{{ if has "nord" themes }}yes{{ else }}no{{ end }}',
       {},

@@ -1,19 +1,5 @@
-// [LAW:single-enforcer] The SessionState instance of the shared keyed-
-// validator registry (validator-registry.ts): the click protocol's `set-state`
-// verb writes only what's registered here, paired with the per-key validator
-// that decides whether a raw incoming string is a legal value for that key.
-// Adding a new state-writable key is one entry in this table — no new verb,
-// no scattered string-matching, no defensive guard in the dispatcher.
-//
-// [LAW:one-source-of-truth] The registered keys ARE the schema for what
-// SessionState mutations the click protocol can perform. Unknown-key
-// rejection lists these names — operators see exactly the surface they're
-// allowed to write.
-//
-// [LAW:one-type-per-behavior] The spec algebra (DerivedValidatorSpec,
-// mergeKeySpecs, the registry's register/validate/dispose lifecycle) lives in
-// validator-registry.ts, shared verbatim with config-validators.ts (the
-// `persist` action's keyspace) — two keyspaces, one mechanism.
+// [LAW:single-enforcer] The SessionState instance of the shared keyed-validator registry:
+// the registered keys ARE the schema. [LAW:one-type-per-behavior] The spec algebra is shared with config-validators.ts.
 
 import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
 import { actionDestinations, type ActionDecl } from "../../config/action";
@@ -41,21 +27,14 @@ export type {
   RangeParams,
   ValidateResult,
 } from "./validator-registry";
-// [LAW:locality-or-seam] Re-exported for existing test/consumer imports — the
-// builder is generic (validator-registry.ts owns it), but state-validators.ts
-// stays a stable barrel so nothing outside this module needs to know the
-// factory moved.
+// [LAW:locality-or-seam] A stable barrel, so no consumer needs to know where the builders live.
 export {
   makeAllowListValidator,
   makeIntValidator,
   makeRangeValidator,
 } from "./validator-registry";
 
-// [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
-// members resolve to a concrete Palette. It deliberately excludes the "custom"
-// sentinel (which needs inline colors and is not a renderable theme name):
-// accepting "custom" here would persist an unrenderable value into SessionState
-// and break the next render.
+// [LAW:one-source-of-truth] Excludes the "custom" sentinel — it needs inline colors, so persisting it would break the next render.
 const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
 const RESOLVABLE_STYLES: ReadonlySet<string> = new Set(STRIP_STYLES);
@@ -82,10 +61,7 @@ const validateStyle: KeyValidator = (raw) => {
   return { ok: true, value: raw };
 };
 
-// [LAW:dataflow-not-control-flow] Boolean-ish accepts exactly four canonical
-// inputs and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
-// falsy ("0"/"false") → "" (empty). The empty falsy sentinel matches what
-// `toolbar-toggle` produces via `clear()` for the next render.
+// [LAW:dataflow-not-control-flow] Four canonical inputs normalize to two outputs; the falsy sentinel is "", what `clear()` leaves.
 const BOOLEAN_TRUTHY = new Set(["1", "true"]);
 const BOOLEAN_FALSY = new Set(["0", "false"]);
 const validateBoolean: KeyValidator = (raw) => {
@@ -97,10 +73,7 @@ const validateBoolean: KeyValidator = (raw) => {
   };
 };
 
-// [LAW:one-source-of-truth] THE SessionState instance of the shared registry.
-// Baseline keys (style/theme/toolbar-expanded) are legacy widget-era targets
-// that predate the action-table-driven world and stay permanent; every other
-// SessionState key is fully derived from a config's action table.
+// [LAW:one-source-of-truth] Baseline keys are permanent; every other key is derived from a config's action table.
 const registry = createValidatorRegistry({
   style: validateStyle,
   theme: validateTheme,
@@ -129,10 +102,7 @@ export function rangeParamsFor(key: string): RangeParams | null {
   return registry.rangeParamsFor(key);
 }
 
-// [LAW:one-source-of-truth] The ONE place mapping a decoupled ACTION to the
-// validator key SPEC it declares, for `set` (SessionState) actions. See
-// config-validators.ts's actionKeySpecs for the `persist` (config-file)
-// twin — same shape, different action key and target keyspace.
+// [LAW:one-source-of-truth] The ONE map from a `set` ACTION to the key SPEC it declares; config-validators.ts holds the `persist` twin.
 function actionKeySpecs(
   a: ActionDecl,
   seeds: ReadonlyMap<string, number>,
@@ -172,17 +142,7 @@ function actionKeySpecs(
   ];
 }
 
-// [LAW:single-enforcer] A STRUCTURAL spec (menu int / stepper range) is
-// always kept — even on a baseline key — so a collision throws loudly at
-// registration rather than silently shadowing the permanent gate. Only an
-// ALLOW-LIST contribution to a baseline key is dropped (the click reuses the
-// baseline gate as intended).
-//
-// [LAW:one-source-of-truth] The baseline set is read from the registry that
-// owns it (registry.listBaselineKeys()), not re-declared here — the baseline
-// keys were passed to createValidatorRegistry above; a second hardcoded list
-// could silently drift from them if a future baseline key were added there
-// and forgotten here.
+// [LAW:single-enforcer] A STRUCTURAL spec is kept even on a baseline key so a collision throws loudly; only an allow-list one is dropped.
 function dropBaselineAllowLists(
   contributions: readonly KeySpecContribution[],
 ): KeySpecContribution[] {
@@ -192,18 +152,8 @@ function dropBaselineAllowLists(
   );
 }
 
-// [LAW:one-source-of-truth] The value a bounded key renders with before any
-// click, from the two places that can define it: a `state` variable's integer
-// `default` (the only source for a key of the config's own invention), and —
-// winning for the fields it covers — what the config
-// resolves for a GLOBALS field, since a session stepper over `padding` starts
-// from the padding the bar is showing, not from a state var nobody declared.
-//
-// The globals half is the SAME function the config-file gate seeds from
-// (numericGlobalsSeeds), so a session stepper and its durable twin cannot
-// start from different numbers. Before it existed, the settings menu's session
-// padding stepper seeded from `min`: a bar reading `padding 1` answered its
-// first ◀ by wrapping to 16.
+// [LAW:one-source-of-truth] The value a bounded key renders with before any click: a
+// `state` var's integer `default`, else the GLOBALS field the config-file gate also seeds from.
 function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   const seeds = new Map<string, number>();
   const INT_RE = /^-?\d+$/;
@@ -220,18 +170,11 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   return seeds;
 }
 
-// [LAW:one-source-of-truth] The writable-key surface a config's `set` actions
-// need, DERIVED from the action table — the same declarations the
-// `{{ action }}` fn realizes a click from are the gate the wire enforces.
+// [LAW:one-source-of-truth] The declarations `{{ action }}` realizes a click from ARE the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
   const perConfigDomains = perConfigDomainsFor(config);
-  // [LAW:single-enforcer] Every action is exploded into the
-  // single-destination declarations it writes through BEFORE the fold, so a
-  // dual-destination action (candybar-settings-ui-aok.3) contributes exactly
-  // the `set` spec its session half would have contributed on its own — the
-  // gate is derived by the code that has always derived it, from the same
-  // declaration the click realizes, and a dual can widen nothing.
+  // [LAW:single-enforcer] Actions explode into single-destination declarations before the fold, so a dual can widen nothing.
   return dropBaselineAllowLists(
     Object.values(config.actions)
       .flatMap(actionDestinations)
@@ -239,9 +182,7 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   );
 }
 
-// [LAW:single-enforcer] The SOLE install-site derivation: a config's
-// SessionState-writable-key surface is the merge of every `set` ACTION it
-// declares, through ONE coherence pass.
+// [LAW:single-enforcer] The SOLE install-site derivation, through ONE coherence pass.
 export function deriveActionValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {

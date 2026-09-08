@@ -1,24 +1,6 @@
-// [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
-// persistent config writes — driven through the real spine, mirroring
-// dsl-actions.test.ts's model for `set`:
-//
-//   1. The loader proves the `persist`/`reset` ActionDecl shapes: persist
-//      mirrors set's to/from/min-max-by/cycle value sources (no `int` — a
-//      page cursor is never persisted); reset is a single slash-free key.
-//   2. deriveConfigActionValidators derives the persistent-write gate from
-//      the SAME action table the `{{ action }}` fn realizes a click from —
-//      the config-file keyspace, kept separate from SessionState's.
-//   3. A click on a compiled persist-* action fires VERB_SET_CONFIG/
-//      VERB_STEP_CONFIG through the REAL daemon leaf handlers, which
-//      validate-then-write durably INTO THE SESSION'S CONFIG FILE
-//      (candybar-config-dqe): one value span replaced, every other byte —
-//      comments included — preserved, one whole-file history entry.
-//   4. RenderCache reads the edited file back through the SAME file-watcher
-//      path a hand edit already takes (bundled default < config file <
-//      active preset < session pick) — no bespoke apply path, and the write
-//      survives a restart because the file IS the write.
-//   5. reset-config is gated by key membership and deletes the key's path
-//      from the file, so the next reload falls back to the bundled default.
+// [LAW:verifiable-goals] Acceptance for persistent config writes through the real spine:
+// gate derived from the action table a click is realized from, write into the session's
+// config file, read back through the watcher a hand edit fires.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -72,25 +54,17 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-// Every OSC-8 link URL in render order, active or not — unlike boldUrls,
-// which only reports the CURRENTLY-SELECTED region, a persist-option/reset
-// link is not always "active" (bold), so tests asserting on the click itself
-// (not the current-selection marking) need every link.
+// Every OSC-8 link URL in render order; boldUrls reports only the selected region.
 function extractUrls(rendered: string): string[] {
   // eslint-disable-next-line no-control-regex
   const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  // The global settings menu and the edit toggle it reaches are on every bar;
-  // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);
 }
 
-// [LAW:one-source-of-truth] The config FILE is the durable store a persist
-// click edits (candybar-config-dqe). One fixture for the whole file — every
-// test gets a fresh temp config root, whether or not it clicks — so there is
-// no per-describe "does this one need a file" decision to get wrong.
+// [LAW:one-source-of-truth] The config FILE is the durable store a persist click edits.
 let durable: DurableConfig;
 beforeEach(() => {
   durable = durableConfig("cc-candybar-persist-");
@@ -116,13 +90,7 @@ describe("persistValueText", () => {
     expect(persistValueText("autoWrap", "")).toBe("false");
   });
 
-  // [LAW:verifiable-goals] A `persist` boolean field's gate is an ALLOW-LIST
-  // (a `cycle`/`to` action's declared members pass through membership-checked
-  // but otherwise VERBATIM), not validateBoolean's own canonicalizing
-  // SessionState validator — so a config author writing `cycle: ["true",
-  // "false"]` or `to: "0"` reaches persistValueText with the raw member, not
-  // a pre-canonicalized "1"/"". All four canonical boolean-ish wire strings
-  // must lift, not just the canonical "1"/"" pair.
+  // [LAW:verifiable-goals] A persist gate passes members VERBATIM, so all four boolean-ish wire strings must lift.
   test("accepts every canonical boolean-ish wire string, not just 1/empty", () => {
     expect(persistValueText("autoWrap", "true")).toBe("true");
     expect(persistValueText("autoWrap", "1")).toBe("true");
@@ -149,11 +117,7 @@ describe("persistValueText", () => {
     );
   });
 
-  // [LAW:no-silent-failure] A write failure must be OBSERVABLE by the caller
-  // — the verb handler logs "set-config: ..." as a success on the line right
-  // after this call, so a swallowed failure would let that log lie. Point
-  // the write at a path whose parent cannot be a directory (a file standing
-  // where one is expected) to force a real fs failure.
+  // [LAW:no-silent-failure] A swallowed write failure would let the handler's success log lie.
   test("writeValue throws (not silently swallows) when the write fails", () => {
     const blocker = join(durable.projectDir, "blocker");
     writeFileSync(blocker, "not a directory");
@@ -208,7 +172,6 @@ describe("config-validators registry", () => {
     });
     try {
       const bad = validateConfigWrite("padding", "999");
-      // range gate CLAMPS rather than rejects, mirroring the SessionState range gate
       expect(bad.ok).toBe(true);
       if (bad.ok) expect(bad.value).toBe("16");
       const ok = validateConfigWrite("padding", "5");
@@ -228,11 +191,7 @@ describe("config-validators registry", () => {
     expect(listConfigKeys()).not.toContain("charset");
   });
 
-  // [LAW:one-type-per-behavior] The shared validator-registry algebra is one
-  // implementation instantiated twice — a rejection message from the CONFIG
-  // keyspace must say "config", never the SessionState-era "state", or an
-  // operator debugging a persist-action click is misled about which gate
-  // rejected them.
+  // [LAW:one-type-per-behavior] One algebra instantiated twice: a CONFIG rejection must say "config".
   test("an out-of-domain rejection names the config keyspace, not state", () => {
     const dispose = registerConfigValidator("charset", {
       kind: "allow-list",
@@ -250,10 +209,7 @@ describe("config-validators registry", () => {
     }
   });
 
-  // [LAW:one-source-of-truth] A slash-bearing allow-list member is rejected
-  // at REGISTRATION (config-load) time, and the thrown message must name the
-  // wire the config keyspace actually crosses (set-config), not the
-  // SessionState keyspace's set-state wire the shared factory defaults to.
+  // [LAW:one-source-of-truth] Rejected at REGISTRATION time, naming the wire this keyspace crosses.
   test("a slash-bearing config allow-list member's rejection names the set-config wire", () => {
     expect(() =>
       registerConfigValidator("look", {
@@ -355,9 +311,7 @@ describe("persist/reset action loader shape", () => {
     ).toThrow(/session\.id/);
   });
 
-  // [LAW:no-silent-failure] A typo'd persist/reset target must be a LOAD-time
-  // error naming the real field set, not a confusing click-time
-  // "registration invariant broken" message the operator can't act on.
+  // [LAW:no-silent-failure] A typo'd target is a LOAD-time error naming the real field set.
   test("persist targeting a non-Globals field is a load error naming the real fields", () => {
     expect(() =>
       parseAndValidate(
@@ -387,9 +341,7 @@ describe("persist/reset action loader shape", () => {
 
 // ─── end-to-end: click → durable write, through the real daemon handlers ─────
 
-// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
-// writes the same text as the session's config file, so the value a click
-// edits sits in the file the bar rendered from — the daemon's own situation.
+// [LAW:one-source-of-truth] A click edits the same file the bar rendered from.
 function buildPersistRuntime(src: string, sessionId = "s1") {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
@@ -431,8 +383,7 @@ describe("persist action click → the config file", () => {
   const globalsInFile = (): Record<string, unknown> =>
     (durable.parsed().globals ?? {}) as Record<string, unknown>;
 
-  // The comment beside `globals` is the canary: a click edits ONE value span
-  // and everything else in the file — this comment included — survives.
+  // The comment beside `globals` is the canary: one value span changes, the rest survives.
   const GLOBALS_COMMENT = "// the hand-authored display defaults";
   const SRC = `{
     ${GLOBALS_COMMENT}
@@ -454,12 +405,10 @@ describe("persist action click → the config file", () => {
     const original = durable.text()!;
     const out = render();
     const urls = extractUrls(out);
-    // The first link is applyTheme bound to "nord" (the display text).
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ palette: "nord" });
-    // One span changed; the rest of the file is the author's, byte for byte.
     const written = durable.text()!;
     expect(written).toContain(GLOBALS_COMMENT);
     expect(written).toContain("applyTheme: { persist: 'palette'");
@@ -482,10 +431,7 @@ describe("persist action click → the config file", () => {
     dispose();
   });
 
-  // [LAW:verifiable-goals] brandon-presets-0yk.2: `preset` reuses persist/
-  // reset's SAME click path — no bespoke "pin a preset forever" plumbing,
-  // just another globals field name (candybar-config-engine-71o.2's stated
-  // "zero engine edits" promise held for the persistence half too).
+  // [LAW:verifiable-goals] `preset` reuses the same persist/reset click path, no bespoke plumbing.
   const SRC_PRESET = `{
     globals: {},
     variables: {
@@ -522,17 +468,8 @@ describe("persist action click → the config file", () => {
     dispose();
   });
 
-  // [LAW:verifiable-goals] candybar-config-engine-71o.4 found this the hard
-  // way against a real daemon: `{{ menu }}`'s picker grid (src/render/
-  // picker.ts) hard-required a set-option apply action, so a persist-option
-  // apply (the ONLY seam charset/colorCompatibility/autoWrap/padding have —
-  // see docs/interaction-authoring.md's "Persisting the display globals",
-  // which had ALREADY documented `{{ menu "applyCharset" "▸" "▾" }}` over a persist
-  // action as the canonical pattern) threw at render the moment the menu was
-  // actually opened. `buildPersistRuntime` above only derives the CONFIG
-  // gate; a `{{ menu }}`'s own open/close disclosure is a SessionState write,
-  // so this test derives BOTH gates — the same combination a real daemon
-  // registers for any config mixing session and persist actions.
+  // [LAW:verifiable-goals] A menu's disclosure is a SessionState write while its options
+  // are persist writes, so both gates must be derived together.
   test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", () => {
     const src = `{
       globals: {},
@@ -583,14 +520,11 @@ describe("persist action click → the config file", () => {
       }
     };
     try {
-      // The disclosure toggle is the menu's OWN SessionState write — open it.
       const toggleUrl = extractUrls(render()).find(
         (u) => effectsOf(u)[0]!.verb === "set-state",
       )!;
       click(toggleUrl);
 
-      // Opened: this must not throw (the bug threw here) and must list
-      // "ascii" as a set-config-backed option, never set-state.
       const openUrls = extractUrls(render());
       const asciiUrl = openUrls.find((u) =>
         effectsOf(u).some(
@@ -615,11 +549,7 @@ describe("persist action click → the config file", () => {
     }
   });
 
-  // [LAW:verifiable-goals] The end-to-end click→durable-write path exercised
-  // above only covers persist-option and reset. persist-literal, persist-cycle,
-  // and persist-bounded (routed through the distinct stepConfig handler —
-  // read current override, clamp, wrap, write) are non-trivial code paths of
-  // their own and need the same real-daemon-handler coverage.
+  // [LAW:verifiable-goals] persist-literal/cycle/bounded need the same real-handler coverage.
   const SRC2 = `{
     globals: {},
     variables: {
@@ -650,9 +580,6 @@ describe("persist action click → the config file", () => {
     const effect = effectsOf(urls[1]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[1]!);
-    // Unset counts as the first member ("truecolor"); the click writes the
-    // successor ("256") — same "unknown current counts as first" rule the
-    // renderer's cycleIndex uses.
     expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
     dispose();
   });
@@ -662,26 +589,14 @@ describe("persist action click → the config file", () => {
     const urls = extractUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
-    // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar
-    // RENDERS with no write at all — this config declares no `globals.padding`,
-    // so that is the field's floor (DEFAULT_PADDING = 1), not `min`.
-    // candybar-settings-ui-aok.3: seeding from `min` is what made the first ◀
-    // on a bar reading `padding 1` wrap to 16, and both write gates now read
-    // the same seed source (numericGlobalsSeeds).
-    click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
-    click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
+    // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar RENDERS, never `min`.
+    click(urls[2]!);
+    click(urls[2]!);
     expect(globalsInFile()).toEqual({ padding: 3 });
     dispose();
   });
 
-  // [LAW:verifiable-goals] candybar-config-engine-71o.3: proves the NEW
-  // CONFIG_KEY_TO_EFFECTIVE_VAR entries (charset → charset.effective, …)
-  // actually drive the "current selection" bold marking — not just that the
-  // write lands (covered above), but that the render-side read-back works.
-  // Without the wiring this test would see NOTHING marked active (the stale
-  // fallback comment removed from render/action.ts): the stateVar would fall
-  // back to the bare key "charset", which no variable projects, so readVar
-  // would always see "".
+  // [LAW:verifiable-goals] Proves the render-side read-back drives the selection marking.
   test("a persist-option action over a newly-exposed field (charset) marks the matching link active via its *.effective projection", () => {
     const { render, dispose } = buildPersistRuntime(`{
       globals: {},
@@ -704,11 +619,7 @@ describe("persist action click → the config file", () => {
     dispose();
   });
 
-  // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
-  // BOOLEAN field among the newly-exposed globals — proves a persist-cycle
-  // over it round-trips through coercePersistValue's boolean branch (not
-  // just its own unit test above) and lands as a real JSON5 boolean in the
-  // file, not the string "false".
+  // [LAW:verifiable-goals] autoWrap must land as a real JSON5 boolean, not the string "false".
   test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {
     const { render, click, dispose } = buildPersistRuntime(`{
       globals: {},
@@ -718,7 +629,7 @@ describe("persist action click → the config file", () => {
       root: 'bar',
     }`);
     const urls = extractUrls(render());
-    click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
+    click(urls[0]!);
     expect(globalsInFile()).toEqual({ autoWrap: false });
     dispose();
   });
@@ -747,17 +658,10 @@ describe("persist action click → the config file", () => {
     ).toThrow();
   });
 
-  // [LAW:verifiable-goals] candybar-settings-ui-aok.3's whole reason for
-  // folding the session release INTO the durable write, rather than emitting
-  // it beside the write as its own effect, is an ORDER guarantee: the release
-  // happens only after the write landed, so a failure can never cost the user
-  // their session pick with nothing durable in its place.
-  //
-  // [LAW:no-ambient-temporal-coupling] The release KEY is checked before the
-  // write, though: an unregistered one — what a stale link carries after a
-  // reload renamed the dual's `set` half — refuses with the file untouched.
-  // The alternative (write, then refuse) is a click reported failed whose
-  // write landed, with the session pick left shadowing the new default.
+  // [LAW:verifiable-goals] The session release is folded INTO the durable write for the
+  // order guarantee: it happens only after the write landed.
+  // [LAW:no-ambient-temporal-coupling] The release KEY is checked before the write, so an
+  // unregistered one refuses with the file untouched.
   test("a bad release key fails loudly BEFORE the durable write, leaving the file untouched", () => {
     const config = parseAndValidate(
       "<test>",
@@ -822,10 +726,7 @@ function makeCache(): {
 }
 
 describe("a durable click lands in the file the next reload reads", () => {
-  // The origin's `configFile` is the explicit path server.ts composed for the
-  // session (load-config pick > `--config` > `configEnv` hint). It is the sole
-  // candidate: the click lands there — creating the file when it is `missing`
-  // — and never falls through to the project file or the XDG tail.
+  // The origin's `configFile` is the sole candidate; the click creates it when missing.
   test("an origin with an explicit path writes that path, even before it exists", () => {
     const config = parseAndValidate(
       "<test>",
@@ -861,13 +762,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     }
   });
 
-  // [LAW:one-source-of-truth] The render records the RESOLUTION INPUTS, not
-  // a resolved path, and the click re-runs the same chain over them
-  // (durableConfigPath). That is the contract, pinned here because it is
-  // easy to mis-read as "the file the last render read": a candidate that
-  // appears after the render is exactly what RenderCache re-resolves to on
-  // its watcher, so the click must land THERE — a write to the superseded
-  // file would be invisible to every render after it.
+  // [LAW:one-source-of-truth] The render records resolution INPUTS, so the click lands on the file the NEXT render reads.
   test("no file yet creates the XDG tail; a project file appearing afterwards takes the next click", () => {
     const config = parseAndValidate(
       "<test>",
@@ -897,7 +792,6 @@ describe("a durable click lands in the file the next reload reads", () => {
       expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
       expect(durable.text()).toBeNull();
 
-      // The higher-precedence candidate appears between renders.
       durable.write(`{ globals: { palette: "textual-dark" } }`);
       click("dracula");
       expect(paletteIn(durable.configPath)).toBe("dracula");
@@ -911,19 +805,8 @@ describe("a durable click lands in the file the next reload reads", () => {
 describe("RenderCache: the config file is the durable store", () => {
   const GLOBALS_COMMENT = "// the hand-authored display defaults";
 
-  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through
-  // the SAME watcher a hand edit to the file fires — there is no second
-  // "overrides changed" channel. The first application is the click itself;
-  // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
-  // the file with the bytes the click left, so every application ends in the
-  // same on-disk state and emits an event. Then a REAL restart (a brand-new
-  // RenderCache + GitDataProvider + WatcherRegistry — exactly what the daemon
-  // process rebuilds from scratch, reading nothing but the file on disk)
-  // sees the same value: the write survives because the file IS the write.
+  // [LAW:one-source-of-truth] The write reaches the live cache through the watcher a hand edit fires.
   test("a set-config click edits globals.palette in the file, the live cache reloads it, and a restart reads it back", async () => {
-    // Declares its own `pin` action so the cache's derived gate admits
-    // exactly the value the test fires — the same gate a rendered click
-    // passes through.
     durable.write(`{
   ${GLOBALS_COMMENT}
   globals: { palette: "textual-dark" },
@@ -980,16 +863,7 @@ describe("RenderCache: the config file is the durable store", () => {
     }
   });
 
-  // [LAW:verifiable-goals] brandon-presets-0yk.2 done-gate: "switching
-  // presets with pending overrides behaves as documented, asserted by a
-  // test" — the precedence chain in docs/interaction-authoring.md and
-  // src/config/presets.ts, driven through the REAL RenderCache (so the
-  // file's globals are genuinely baked into config.globals, not asserted
-  // against a hand-built fixture) and the real presetGlobals composition the
-  // daemon calls: a preset's own fields win over the file's default (a
-  // "compact" preset must actually change padding, even for a user who once
-  // persisted a padding they liked); a field the active preset says nothing
-  // about still reads the file's default underneath it.
+  // [LAW:verifiable-goals] A preset's own fields win over the file's default; the rest read the file's.
   test("an active preset's own field wins over the file's default; a field the preset doesn't touch keeps reading the file", () => {
     durable.write(
       JSON.stringify({
@@ -1007,13 +881,10 @@ describe("RenderCache: the config file is the durable store", () => {
       );
       expect(entry.lastError).toBeNull();
 
-      // No active preset (the floor): the file's globals apply as-is.
       const atFloor = presetGlobals(entry.state.config, PRESET_FLOOR);
       expect(atFloor.padding).toBe(2);
       expect(atFloor.charset).toBe("ascii");
 
-      // "roomy" declares padding — it wins over the file's 2. It says
-      // nothing about charset — the file's "ascii" survives underneath.
       const atRoomy = presetGlobals(entry.state.config, "roomy");
       expect(atRoomy.padding).toBe(4);
       expect(atRoomy.charset).toBe("ascii");
@@ -1022,11 +893,7 @@ describe("RenderCache: the config file is the durable store", () => {
     }
   });
 
-  // [LAW:verifiable-goals] The precedence chain the epic requires documented
-  // AND asserted: bundled default < config file < session pick. A `persist`
-  // write changes the DEFAULT every session reads; it must NOT override a
-  // session's own `set` pick for that session — the effective* resolution
-  // reads session state before the config default.
+  // [LAW:verifiable-goals] bundled default < config file < session pick.
   test("a session's own set-state pick still wins over the file's default", () => {
     durable.write(
       JSON.stringify({ globals: { palette: "nord" }, segments: {} }),
@@ -1038,12 +905,8 @@ describe("RenderCache: the config file is the durable store", () => {
         durable.projectDir,
         undefined,
       );
-      // The file's default is every session's starting point.
       expect(entry.state.config.globals.palette).toBe("nord");
 
-      // A session that picked its own theme via `set` still overrides it —
-      // session state is consulted BEFORE globals.palette, so the file only
-      // ever changes what a session sees when it hasn't picked anything.
       const sessionState = new SessionState();
       sessionState.set("s1", "theme", "dracula");
       expect(
@@ -1053,7 +916,6 @@ describe("RenderCache: the config file is the durable store", () => {
           entry.state.config.globals.palette,
         ),
       ).toBe("dracula");
-      // A session that never picked reads the file's default.
       expect(
         effectiveThemeName(
           undefined,

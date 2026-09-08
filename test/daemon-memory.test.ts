@@ -1,49 +1,9 @@
-// [LAW:verifiable-goals] The daemon RSS leak (epic brandon-daemon-memory-leak-gn4)
-// must have a deterministic, machine-verifiable reproduction BEFORE any fix —
-// past attempts failed by speculating. This file encodes the success/failure
-// shape and pins it so the leak cannot silently return.
-//
-// WHAT THE LEAK IS (verified via heap snapshots — see ticket 5qh)
-// --------------------------------------------------------------
-// The transcript-scanning provider path (`loadEntriesFromProjects`) fans out an
-// UNBOUNDED `Promise.all` over every transcript file on every cache-miss render.
-// At the OOM trigger ~3046 `FSReqPromise` were held DIRECTLY by libuv's pending-
-// request table — i.e. that many fs syscalls in flight at once. The JS heap was
-// 36 MB while RSS was 250 MB; the gap is native libuv request + read buffers.
-//
-// WHY WE MEASURE PEAK IN-FLIGHT, NOT A POST-SETTLE HEAP DELTA
-// ----------------------------------------------------------
-// The leak is held from the BOTTOM (pending syscalls), not retained in the JS
-// heap. Once a burst drains, the parked await-stacks are GC'd and FSReqPromise
-// returns to ~0 on BOTH leaky and fixed code — so a "warmup snapshot → renders →
-// settle → snapshot" delta is a FALSE GREEN. The only signal that distinguishes
-// leaky from fixed is the PEAK number of concurrent in-flight fs ops while the
-// burst is live. `async_hooks` observes exactly that (it tracks the same
-// FSREQPROMISE resources libuv holds), deterministically and without depending
-// on the not-yet-built concurrency gate.
-//
-// WHAT KEEPS THIS GREEN
-// ---------------------
-// gn4.2 landed the bound: a single-owner concurrency gate (src/utils/
-// transcript-fs.ts) routes every transcript readdir/stat/readFile through one
-// limiter, so peak in-flight is capped by a constant no matter how many renders
-// fan out. Removing that gate (or routing fs around it) re-admits the unbounded
-// fan-out and this assertion fails at thousands-in-flight — that is the
-// regression this gate guards against. Do NOT weaken the ceiling to "fix" a
-// failure; a failure here means the bound was lost, not that the bar is wrong.
-// The "observes real transcript fs ops" test below is a non-failing safety net:
-// it runs the same measurement path, so a broken harness (import error, no-op
-// observer) surfaces as a loud red instead of making this gate vacuously green.
+// [LAW:verifiable-goals] The leak is held from the bottom (pending syscalls), not
+// retained in the JS heap, so a post-settle heap delta is a false green: only PEAK
+// concurrent in-flight fs ops separates leaky from fixed. A failure here means the bound was lost.
 
-// [LAW:no-ambient-temporal-coupling] jest.setTimeout is FILE-scoped, so it is
-// stated here where that is visible rather than inside the one describe whose
-// cost motivates it. The heap-analysis block writes two full V8 heap snapshots
-// of the Jest worker: its duration scales with the worker's loaded heap and
-// the machine's contention, not with the code under test — ~5s locally, over
-// the 30s unit-test budget on a loaded CI runner once the repo's test corpus
-// grew. The concurrency gate below shares the budget as a consequence; its
-// assertions are unchanged and it passes in milliseconds, so the cost is a
-// slower failure there, not a weaker check.
+// [LAW:no-ambient-temporal-coupling] jest.setTimeout is FILE-scoped, so it is stated
+// here rather than inside the one describe whose heap-snapshot cost motivates it.
 jest.setTimeout(180_000);
 
 import { createHook } from "node:async_hooks";
@@ -55,26 +15,17 @@ import { join } from "node:path";
 
 import { loadEntriesFromProjects, clearParseCache } from "../src/utils/claude";
 
-// Synthetic transcript tree: K project dirs × J .jsonl files. Sized so one
-// render alone fans out to hundreds of concurrent fs ops (K readdirs + J stats
-// + J parses per project), and the bound child will cap that at a small
-// constant. Disposable tmp — never touches ~/.claude.
+// Synthetic transcript tree sized so one render fans out to hundreds of concurrent fs ops. Never touches ~/.claude.
 const PROJECTS = 16;
 const FILES_PER_PROJECT = 8;
 
-// [LAW:dataflow-not-control-flow] The bounded fix introduces a single owner of
-// the in-flight-fs budget; the strongest true theorem it restores is "peak
-// concurrent transcript fs ops is bounded by a constant, regardless of render
-// rate". UV_THREADPOOL_SIZE defaults to 4 and a sane gate caps dispatched-but-
-// incomplete ops at ~16–32. 64 is generous headroom over that, yet far below
-// the unbounded peak (render-concurrency × files × ops-per-file ≈ thousands),
-// so it cleanly separates leaky from fixed.
+// [LAW:dataflow-not-control-flow] 64 is generous headroom over a sane gate's ~16–32
+// dispatched-but-incomplete ops, yet far below the unbounded peak of thousands.
 const IN_FLIGHT_CEILING = 64;
 const RENDER_CONCURRENCY = 8;
 
 let root: string;
-// [LAW:single-enforcer] Jest workers run files sequentially in one process;
-// restore the env we borrow so the scan root can't leak into another file.
+// [LAW:single-enforcer] Jest workers share one process; restore the env we borrow.
 const savedEnv = {
   config: process.env.CLAUDE_CONFIG_DIR,
   cache: process.env.XDG_CACHE_HOME,
@@ -114,9 +65,7 @@ function restoreEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 
-// Observe libuv's pending fs-request table from outside the code under test.
-// FSREQPROMISE is the async_hooks resource type for fs/promises operations —
-// the same objects that appeared as "Node / FSReqPromise" in the OOM snapshot.
+// FSREQPROMISE is the async_hooks resource type for fs/promises operations.
 function makeFsObserver() {
   const live = new Set<number>();
   let peak = 0;
@@ -134,8 +83,6 @@ function makeFsObserver() {
   return { hook, peak: () => peak };
 }
 
-// Drive `renderConcurrency` overlapping renders to completion and return the
-// peak number of transcript fs ops in flight at any instant during the burst.
 async function measurePeakInFlight(renderConcurrency: number): Promise<number> {
   clearParseCache();
   const obs = makeFsObserver();
@@ -153,10 +100,7 @@ async function measurePeakInFlight(renderConcurrency: number): Promise<number> {
 }
 
 describe("daemon transcript-fs concurrency", () => {
-  // [LAW:single-enforcer] PINNED REGRESSION GATE. Bounded by a documented
-  // constant regardless of render rate. gn4.2 landed the single-owner gate
-  // (src/utils/transcript-fs.ts) that routes every transcript readdir/stat/
-  // readFile through one limiter, so peak in-flight is now bounded by its cap.
+  // [LAW:single-enforcer] Pinned regression gate: peak in-flight is bounded by a constant regardless of render rate.
   test(
     "peak in-flight transcript fs ops stays under the ceiling",
     async () => {
@@ -165,20 +109,14 @@ describe("daemon transcript-fs concurrency", () => {
     },
   );
 
-  // Non-failing safety net: proves the observer is live and the fan-out is real,
-  // so the `.failing` gate above can never pass vacuously (e.g. via an import
-  // error or a no-op observer). Asserts only an invariant true in BOTH phases.
+  // Non-failing safety net, so the gate above can never pass vacuously on a broken harness.
   test("the harness observes real transcript fs ops", async () => {
     const peak = await measurePeakInFlight(RENDER_CONCURRENCY);
     expect(peak).toBeGreaterThan(0);
   });
 });
 
-// Exercises the committed triage tools end-to-end as shipped CLIs (not their
-// internals — [LAW:behavior-not-structure]), against a snapshot taken WHILE an
-// fs burst is in flight. Guards the scripts from bitrot and demonstrates the
-// heap-snapshot delta gate (diff) + retainer trace the 5qh evidence was built
-// from. Always-green: the snapshots are constructed to contain the signal.
+// [LAW:behavior-not-structure] Exercises the triage tools as shipped CLIs, not their internals. Always green by construction.
 describe("heap-analysis scripts", () => {
   const scriptsDir = join(process.cwd(), "scripts");
   let before: string;
@@ -189,9 +127,7 @@ describe("heap-analysis scripts", () => {
     before = join(root, "before.heapsnapshot");
     after = join(root, "after.heapsnapshot");
     writeHeapSnapshot(before);
-    // Launch the burst, let the fan-out dispatch for a couple of event-loop
-    // turns, then snapshot WHILE ops are pending (the FSReqPromise are gone
-    // once it drains). Drain afterward so nothing bleeds into other tests.
+    // Snapshot WHILE ops are pending — the FSReqPromise are gone once the burst drains.
     const burst = Promise.all(
       Array.from({ length: RENDER_CONCURRENCY }, () =>
         loadEntriesFromProjects(undefined, undefined, true),
@@ -228,8 +164,7 @@ describe("heap-analysis scripts", () => {
     };
     expect(totalTargets).toBeGreaterThan(0);
     expect(paths.length).toBeGreaterThan(0);
-    // Root-first: the path must originate at V8's synthetic GC root and end at
-    // the matched class — i.e. an actual retaining chain, not a fragment.
+    // Root-first: the path must originate at V8's synthetic GC root, not be a fragment.
     expect(paths[0]![0]).toMatch(/synthetic/);
     expect(paths[0]![paths[0]!.length - 1]).toMatch(/FSReqPromise/);
   });

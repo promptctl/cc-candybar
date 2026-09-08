@@ -15,15 +15,7 @@ import type {
 } from "../src/daemon/client-transport";
 import { planOutcome } from "../src/render/outcome-plan";
 
-// [LAW:behavior-not-structure] These tests assert the contract — what a
-// version-mismatched client sees and how the daemon responds — not the
-// implementation. The shape of the daemon's handleRequest is free to change
-// as long as it preserves: (a) older client gets VERSION_MISMATCH with
-// daemonV present, (b) daemon does NOT initiate self-shutdown on older
-// clients, (c) the client's typed outcome carries clientV and daemonV.
-
-// --- helper: minimal daemon-like server that mirrors handleRequest's
-// version-mismatch branch ---
+// [LAW:behavior-not-structure] Assert the contract, not the daemon's shape.
 
 interface MismatchServer {
   sockPath: string;
@@ -51,9 +43,7 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
             return;
           }
           if (req.v !== daemonV) {
-            // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
-            // asymmetry: only schedule shutdown when the client is *newer* —
-            // never when it is older (that path is the spiral-breaker).
+            // [LAW:types-are-the-program] Shutdown only when the client is newer.
             if (req.v > daemonV) {
               shutdownObserved.triggered = true;
             }
@@ -139,7 +129,6 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
-      // Client claims an older protocol version (v=daemonV-1).
       const resp = await sendRequest(server.sockPath, {
         v: daemonV - 1,
         kind: "render",
@@ -149,10 +138,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(daemonV);
       }
-      // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
-      // NOT triggered when the client is stale. Triggering would respawn a
-      // daemon at the same version, which the same client would mismatch
-      // again — the 452-corpse spiral.
+      // [LAW:types-are-the-program] A stale client must never trigger shutdown.
       expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
@@ -163,8 +149,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
-      // Client claims a newer protocol version — meaning the daemon binary
-      // is stale relative to the freshly-installed client. Restart helps.
+      // A newer client means the daemon binary is stale; restart helps.
       const resp = await sendRequest(server.sockPath, {
         v: daemonV + 1,
         kind: "render",
@@ -196,12 +181,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
   });
 });
 
-// --- client.ts interpretResponse() decoding ---
-//
 // [LAW:behavior-not-structure] The client's typed outcome is the contract.
-// We exercise it via tryRenderViaDaemon against a stubbed socket. This
-// proves the wire→type translation matches the runtime: VERSION_MISMATCH
-// → `permanent`/`version_mismatch` carrying clientV and daemonV.
 
 describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   function isPermanent(
@@ -249,9 +229,7 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   });
 
   test("transient causes are recoverable; permanent causes are not — discriminator-only check", () => {
-    // [LAW:types-are-the-program] The kick-vs-not decision lives in the
-    // variant. Callers must NEVER have to inspect message text or some
-    // sibling field to decide.
+    // [LAW:types-are-the-program] The kick-vs-not decision lives in the variant.
     const kickWorthy = (o: ClientOutcome): boolean => o.kind === "transient";
     expect(
       kickWorthy({
@@ -285,17 +263,7 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   });
 });
 
-// --- wire trust boundary: unknown error codes do NOT return undefined ---
-//
-// [LAW:types-are-the-program] interpretResponse() declares it returns
-// ClientOutcome, but `resp` is `frame as Response` — an unchecked cast from
-// socket JSON. A daemon (or a stub, or a future build) that sends an error
-// code the client doesn't recognize must not cause the function to silently
-// fall off the bottom and return undefined. The default branch maps unknown
-// codes to `permanent/malformed_response` with the unknown code preserved in
-// the message — explicit failure, mirrored on the Rust side. This test
-// exercises that boundary against a stubbed daemon, since interpretResponse
-// itself is intentionally private to client.ts.
+// [LAW:types-are-the-program] An unknown wire code must never return undefined.
 
 function spinUpRawCodeSocket(
   sockPath: string,
@@ -390,25 +358,18 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(outcome.cause).toBe("malformed_response");
   });
 
-  // [LAW:types-are-the-program] The cast `frame as Response` cannot prevent a
-  // misbehaving daemon (or stub) from sending fields of the wrong runtime
-  // type. The trust boundary in interpretResponse() narrows each field
-  // explicitly; these tests pin that narrowing's behavior against adversarial
-  // shapes that would otherwise propagate `undefined` or wrong-typed values
-  // into ClientOutcome and crash downstream code (e.g. truncate() iterating
-  // a non-string message).
+  // [LAW:types-are-the-program] Wrong-typed wire fields are narrowed here.
 
   test("non-string error field is replaced with a safe fallback message", async () => {
     const outcome = await runWithStubDaemon({
       ok: false,
       code: "RENDER_FAILED",
-      error: 42, // wrong type — daemon promised a string
+      error: 42,
     });
     expect(outcome.kind).toBe("permanent");
     if (outcome.kind !== "permanent") return;
     expect(outcome.cause).toBe("render_failed");
     if (outcome.cause !== "render_failed") return;
-    // The fallback string is non-empty and safe to iterate / truncate.
     expect(typeof outcome.message).toBe("string");
     expect(outcome.message.length).toBeGreaterThan(0);
   });
@@ -418,7 +379,7 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
       ok: false,
       code: "VERSION_MISMATCH",
       error: "mismatch",
-      daemonV: "v9000", // wrong type — daemon promised a number
+      daemonV: "v9000",
     });
     expect(outcome.kind).toBe("permanent");
     if (outcome.kind !== "permanent") return;
@@ -428,13 +389,7 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(outcome.daemonV).toBe(0);
   });
 
-  // [LAW:one-type-per-behavior] Rust's serde_json `as_u64()` returns None
-  // for negative or fractional values, falling back to 0 in the Rust
-  // interpret_response. TS's asProtocolVersion narrowing must match so the
-  // two runtimes derive the same PermanentOutcome from the same wire
-  // payload. Without this, a daemon sending `daemonV: -1` or `daemonV:
-  // 3.14` would yield different ClientOutcome values across runtimes for
-  // the same input.
+  // [LAW:one-type-per-behavior] TS narrowing must match Rust's as_u64 fallback.
   test("negative daemonV is replaced with 0 (matches Rust's as_u64 fallback)", async () => {
     const outcome = await runWithStubDaemon({
       ok: false,
@@ -462,17 +417,7 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
   });
 });
 
-// --- wire trust boundary: protocol-violation exceptions are PERMANENT ---
-//
-// [LAW:one-type-per-behavior] An exception from sendOne() can mean two very
-// different things: a connection failure (daemon dead, socket vanished — a
-// kick can recover) OR a protocol violation (the daemon responded with an
-// oversized frame, or JSON the parser couldn't decode — a kick CANNOT
-// recover, because the daemon is alive and will produce the same response
-// again). The Rust mirror's classify_io_error routes InvalidData/InvalidInput
-// to Permanent(MalformedResponse); TS's interpretException must do the same
-// for "frame too large" and JSON parse errors so the recovery class agrees
-// across runtimes.
+// [LAW:one-type-per-behavior] A protocol violation is permanent, not kickable.
 
 function spinUpRawBytesSocket(
   sockPath: string,
@@ -548,7 +493,6 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
   });
 
   test("garbage JSON body from daemon produces permanent/malformed_response", async () => {
-    // Length-prefixed frame whose body is not valid JSON.
     const body = Buffer.from("definitely not json", "utf8");
     const lenPrefix = Buffer.alloc(4);
     lenPrefix.writeUInt32BE(body.length, 0);
@@ -559,21 +503,13 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
   });
 });
 
-// --- caller behavior: planOutcome decides kick vs. no-kick per variant ---
-
 describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", () => {
-  // [LAW:behavior-not-structure] Assert the contract directly on the pure
-  // function: every transient variant kicks, every permanent variant does
-  // not, every ok variant passes the daemon's output through verbatim. This
-  // is the 452-corpse-spiral invariant — permanent failures must NEVER
-  // trigger a kick, because the daemon will refuse the next request
-  // identically and the spiral repeats.
+  // [LAW:behavior-not-structure] Permanent failures must never kick.
 
   test("ok outcome returns the daemon output, no kick, no debug message", () => {
     const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" });
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
-    // The happy path carries no debug message — nothing for the caller to log.
     expect(plan.debug).toBeNull();
   });
 
@@ -590,11 +526,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
         message: "anything",
       });
       expect(plan.kick).toBe(true);
-      // Empty-line output keeps the statusline non-blank without flicker
-      // while the kick warms a fresh daemon for the next render tick.
       expect(plan.output).toBe("\n");
-      // The debug string is data, not a side effect — the caller decides
-      // whether to log it.
       expect(plan.debug).toContain(`transient: ${cause}`);
       expect(plan.debug).toContain("kicking daemon");
     }
@@ -610,10 +542,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
     for (const outcome of permanentOutcomes) {
       const plan = planOutcome(outcome);
       expect(plan.kick).toBe(false);
-      // The output carries the diagnostic glyph rather than a blank line —
-      // the user sees what went wrong directly in the statusline.
       expect(plan.output).toContain("⚠ cc-candybar:");
-      // The debug string spells out the cause and the no-kick decision.
       expect(plan.debug).toContain(`permanent: ${outcome.cause}`);
       expect(plan.debug).toContain("not kicking");
     }

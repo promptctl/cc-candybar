@@ -1,9 +1,4 @@
-// [LAW:single-enforcer] The `vars` / `segments` / `config` CLIs are ONE behavior
-// — fetch a debug snapshot from the running daemon and render it — parameterized
-// by `what`, not three commands. The daemon's `debug` protocol message is the
-// single introspection authority (src/daemon/debug.ts produces DebugSnapshot);
-// this is its client binding, the mirror of client-stats.ts. Like daemon-stats,
-// it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
+// [LAW:single-enforcer] One behavior parameterized by `what`; it never spawns a daemon.
 
 import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
@@ -16,12 +11,8 @@ import type {
 } from "./debug-types";
 import type { DslConfig } from "../config/dsl-types";
 
-// Operator-driven introspection path: legitimately slower budgets than the
-// render hot path, carried as this caller's values through the shared
-// round-trip in ./client-transport. [LAW:dataflow-not-control-flow]
 const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
-// `cc-candybar <vars|segments|config> [--json]` — `what` selects the projection.
 export async function runDebug(
   what: DebugWhat,
   args: readonly string[],
@@ -43,20 +34,13 @@ export async function runDebug(
 }
 
 function fetchDebug(what: DebugWhat): Promise<RoundTripOutcome<DebugSnapshot>> {
-  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
-  // an unchecked cast from socket JSON; the presence check is the explicit
-  // narrowing at the wire edge (an ok response without `debug` classifies as
-  // permanent/malformed_response in the transport).
+  // [LAW:no-defensive-null-guards] exception: trust boundary — unchecked socket JSON.
   return requestOutcome({ kind: "debug", what }, BUDGETS, (resp) =>
     "debug" in resp ? resp.debug : undefined,
   );
 }
 
-// [LAW:types-are-the-program] One total fold over the DebugSnapshot union; each
-// arm renders its own shape. The switch is exhaustive (the `never` default makes
-// a new `what` a compile error here), so the renderer can never fall out of
-// lockstep with the protocol's `what` set — the projection is residue of the
-// union, not a hand-maintained dispatch.
+// [LAW:types-are-the-program] Total fold: a new `what` is a compile error here.
 export function formatDebug(s: DebugSnapshot): string {
   switch (s.what) {
     case "vars":

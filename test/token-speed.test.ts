@@ -1,15 +1,4 @@
-// Token-speed segment (brandon-usage-cob). Four layers, same shape as the
-// burn-rate ticket it builds on:
-//   1. the pure projection math (projectTokensPerSecond),
-//   2. the SessionUsageStore retaining the prior (counts, time) sample — the
-//      single owner of per-session totals, no parallel counter,
-//   3. buildRenderPayload folding the prev+cur pair into speed.{in,out,total}
-//      under the closure gate,
-//   4. the speed segment formatting it — including the "—" absence path.
-//
-// [LAW:no-silent-failure] The headline assertion across all layers: idle /
-// between-turns / a too-stale baseline yields ABSENCE (missing field → -1
-// default → "—"), never a stale or divide-by-zero number.
+// [LAW:no-silent-failure] No usable baseline yields "—", never a stale number.
 
 import {
   mkdtempSync,
@@ -45,8 +34,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
-// ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
-
 describe("projectTokensPerSecond (pure)", () => {
   test("500 tokens over 1s → 500 tok/s", () => {
     expect(projectTokensPerSecond(1000, 0, 1500, 1000)).toBe(500);
@@ -68,8 +55,6 @@ describe("projectTokensPerSecond (pure)", () => {
     expect(projectTokensPerSecond(1000, 0, 1500, 30_000)).toBeUndefined();
   });
 });
-
-// ─── SessionUsageStore.observeSpeed (the prior-sample owner) ──────────────────
 
 function usageLine(
   tag: string,
@@ -108,10 +93,9 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       expect(first.kind).toBe("ok");
       if (first.kind !== "ok") return;
       expect(first.value.prev).toBeUndefined();
-      // input folds the cache lanes (here zero) onto raw input; total = in + out.
       expect(first.value.cur).toMatchObject({ input: 10, output: 5, total: 15 });
 
-      // Transcript grows by one more turn; bump mtime so the store re-parses.
+      // Transcript grows; bump mtime so the store re-parses.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
       const second = await store.observeSpeed("S", t, 2_000);
@@ -119,7 +103,6 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       if (second.kind !== "ok") return;
       expect(second.value.prev).toMatchObject({ input: 10, output: 5, atMs: 1_000 });
       expect(second.value.cur).toMatchObject({ input: 20, output: 10, atMs: 2_000 });
-      // Δoutput = 5 over Δt = 1s ⇒ 5 tok/s when projected at the boundary.
       const rate = projectTokensPerSecond(
         second.value.prev!.output,
         second.value.prev!.atMs,
@@ -138,17 +121,12 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      // Establish a baseline (output 5) at the first transcript state.
       await store.observeSpeed("C", t, 1_000);
 
-      // Output grows to 25; bump mtime to the new state.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 20));
       utimesSync(t, new Date(2000), new Date(2000));
 
-      // Two renders observe the SAME new state concurrently. Without the
-      // single-flight, the second would see the first's just-committed sample
-      // (output 25) as its prev and degrade to a zero delta. Coalesced, both
-      // share ONE observation: prev = the baseline (5), cur = the new state (25).
+      // Without single-flight, the second would take the first's sample as prev.
       const [a, b] = await Promise.all([
         store.observeSpeed("C", t, 2_000),
         store.observeSpeed("C", t, 2_000),
@@ -160,7 +138,6 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       expect(b.value.prev?.output).toBe(5);
       expect(a.value.cur.output).toBe(25);
       expect(b.value.cur.output).toBe(25);
-      // Neither render lost its delta to a clobber (prev never the new state).
       expect(a.value.prev?.output).not.toBe(25);
       expect(b.value.prev?.output).not.toBe(25);
     } finally {
@@ -186,12 +163,10 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
         if (r.kind !== "ok") return;
         results.push(r.value);
       }
-      // The ring grows by one each observation, ordered oldest→newest.
       expect(results.map((r) => r.samples.length)).toEqual([1, 2, 3]);
       const last = results[2]!;
       expect(last.samples.map((s) => s.atMs)).toEqual([1000, 2000, 3000]);
-      // [LAW:one-source-of-truth] prev is exactly the ring's penultimate sample —
-      // the tok/s baseline and the history fold read the same owned ring.
+      // [LAW:one-source-of-truth] prev is exactly the ring's penultimate sample.
       expect(last.prev).toBe(last.samples[last.samples.length - 2]);
     } finally {
       store.close();
@@ -199,38 +174,29 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
   });
 
   test("ring order follows observation time, not insertion order", async () => {
-    // [LAW:no-ambient-temporal-coupling] Regression for the concurrency hazard:
-    // two non-coalesced observes (distinct mtimes) can reach the ring mutation in
-    // ingest-completion order. Here the second observe carries an EARLIER render
-    // clock (atMs 1000) than the first (atMs 3000) — simulating that inversion —
-    // and the ring must still come back sorted oldest→newest by atMs, not by the
-    // order the samples were inserted.
+    // [LAW:no-ambient-temporal-coupling] The second observe carries an EARLIER
+    // render clock than the first; the ring must still sort by atMs.
     const t = join(dir, "O.jsonl");
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       writeFileSync(t, usageLine("a", 10, 5));
       utimesSync(t, new Date(1000), new Date(1000));
-      const first = await store.observeSpeed("O", t, 3_000); // inserted first, atMs 3000
+      const first = await store.observeSpeed("O", t, 3_000);
       expect(first.kind).toBe("ok");
 
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
-      const second = await store.observeSpeed("O", t, 1_000); // inserted second, atMs 1000
+      const second = await store.observeSpeed("O", t, 1_000);
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
 
-      // Sorted by atMs despite reverse insertion order.
       expect(second.value.samples.map((s) => s.atMs)).toEqual([1000, 3000]);
-      // No existing sample is strictly before atMs 1000, so this observe has no
-      // baseline — completion order never fabricates one.
       expect(second.value.prev).toBeUndefined();
     } finally {
       store.close();
     }
   });
 });
-
-// ─── buildRenderPayload — speed lane ──────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -262,11 +228,7 @@ const SPEED_PATHS = new Set([
   "session.tokens",
 ]);
 
-// The daemon-resolved effective globals; these speed-lane tests don't
-// exercise them, so any well-formed struct satisfies the required argument.
-// No client hints: these fixtures exercise the daemon-side folds, not the wire
-// boundary. An empty object is the honest "this render carried no hints"
-// (the shape an old client produces), so `host.ssh` stays absent throughout.
+// An empty object is the honest "no hints", so `host.ssh` stays absent.
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
@@ -304,7 +266,6 @@ describe("buildRenderPayload — speed lane", () => {
       EFFECTIVE_GLOBALS,
       NO_HINTS,
     );
-    // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
     expect(payload.speed?.total).toBe(500);
     expect(payload.speed?.input).toBeUndefined();
@@ -370,8 +331,7 @@ describe("buildRenderPayload — speed lane", () => {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
           getTodayInfo: async () => ABSENT,
           observeSpeed: async () => {
-            // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
-            // stale, out-of-window), 410@30.005s (5ms ⇒ rapid, out-of-window).
+            // total/atMs: 0@0, 100@1s (ok), 400@30s (stale), 410@30.005s (rapid).
             const samples = [
               { input: 0, output: 0, total: 0, atMs: 0 },
               { input: 0, output: 100, total: 100, atMs: 1000 },
@@ -387,8 +347,6 @@ describe("buildRenderPayload — speed lane", () => {
       EFFECTIVE_GLOBALS,
       NO_HINTS,
     );
-    // Only the single in-window pair survives; the stale and rapid gaps are
-    // dropped, never shown as 0.
     expect(payload.speed?.history).toBe("100");
   });
 
@@ -426,8 +384,6 @@ describe("buildRenderPayload — speed lane", () => {
   });
 });
 
-// ─── speed segment render ─────────────────────────────────────────────────────
-
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 function renderSpeed(payload: Record<string, unknown>): string {
@@ -439,12 +395,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
     ALLOWED,
   );
   const store = new VariableStore();
-  // The merged bundled default's `toolbar` references `edit.toggle`
-  // (brandon-layout-edit-2gc.4), so `edit.mode` — a `state` var — is now
-  // declared regardless of this file's narrowed `speed`-only root; a
-  // SessionState is required to declare it (matching every other
-  // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
-  // and speed's own `when` renders an unrelated ⚠ error cell.
+  // Without a SessionState, `edit.mode` never declares and speed's `when` errors.
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
@@ -472,9 +423,9 @@ describe("speed segment render", () => {
     const line = renderSpeed({
       ...SEG_BASE,
       session: { tokens: 1500 },
-      speed: { output: 1500, total: 1500 }, // input absent ⇒ -1 ⇒ "—"
+      speed: { output: 1500, total: 1500 },
     });
-    expect(line).toContain("1.5K/s"); // formatTokenCount K-scaling
+    expect(line).toContain("1.5K/s");
     expect(line).toContain("out");
     expect(line).toContain("in —");
     expect(line).toContain("tot");
@@ -483,14 +434,12 @@ describe("speed segment render", () => {
   test("all lanes absent render '—' (the -1 default), never a fake number", () => {
     const line = renderSpeed({ ...SEG_BASE, session: { tokens: 1500 } });
     expect(line).toContain("—");
-    expect(line).not.toMatch(/\d\/s/); // no tok/s figure anywhere
+    expect(line).not.toMatch(/\d\/s/);
   });
 
   test("hidden when the session has done no work (tokens 0)", () => {
     const line = renderSpeed({ ...SEG_BASE });
-    // The bar is never empty — every rendered bar carries the global settings
-    // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
-    // this segment's own content", not as an empty line.
+    // Every bar carries the settings menu, so hidden is not an empty line.
     expect(line).not.toContain("/s");
     expect(line).not.toContain("tot");
   });

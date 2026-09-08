@@ -1,6 +1,4 @@
-// [LAW:verifiable-goals] brandon-doctor-b6a acceptance 1: the tmux-truecolor
-// probe over fixture facts yields each verdict the ticket names — pure, no
-// mocks, because the probe is a function of a DoctorFacts record.
+// [LAW:verifiable-goals] The probe is a pure function of a DoctorFacts record, so fixtures suffice.
 
 import {
   CHECKS,
@@ -65,8 +63,6 @@ describe("tmuxTruecolor probe", () => {
     expect(v.reason).toMatch(/restart Claude Code/);
   });
 
-  // The same truthiness Claude Code applies: an empty or non-string value in
-  // settings.json is "not told", so the fix is still offered (and overwrites).
   test.each([[""], [0], [false], [null]])(
     "a settings value Claude Code would read as falsy (%p) still offers the fix",
     (staged) => {

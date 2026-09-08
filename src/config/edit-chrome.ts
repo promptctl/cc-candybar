@@ -1,24 +1,7 @@
-// [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's CHROME half — the
-// LOWERING that turns "edit mode is a session toggle" into "each row's
-// segments render interleaved with +/- affordances" without a render-walk
-// branch [LAW:dataflow-not-control-flow]. Follows the SAME move `kind:
-// "group"` sugar makes (src/config/loader/layout.ts): one pass produces a NEW
-// tree with synthesized nodes spliced in, each gated by an ordinary `when` —
-// the walk that renders it learns nothing new. The difference from group
-// sugar is WHEN this can run: a group is authored data, lowered per file
-// before merge; edit chrome is DERIVED from which segments are actually in
-// the tree, which is only known after merge and preset-root resolution. So
-// this runs from validateConfig, on the fully resolved
-// config each declared preset stages — see synthesizeEditChrome below.
-//
-// [LAW:single-enforcer] The +/- affordances reuse EXISTING primitives
-// wholesale rather than inventing parallel ones: `-` is an ordinary
-// `{ persist, removeSegment }` action behind `{{ action }}` (2gc.1); `+` is an
-// ordinary `{ persist, insertSegmentFrom }` action behind `{{ menu }}`
-// (2gc.3's new arm — see action.ts), synthesized by calling the SAME pure
-// functions `{{ menu }}`'s own load-time synthesis calls
-// (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
-// are indistinguishable at render. Nothing here is a new render concept.
+// [LAW:one-source-of-truth] The LOWERING that turns "edit mode is a session
+// toggle" into "+/- affordances interleaved with a row's segments", with no
+// render-walk branch [LAW:dataflow-not-control-flow]. It runs after merge
+// because it is DERIVED from the tree. [LAW:single-enforcer] Existing primitives.
 
 import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
 import {
@@ -61,86 +44,41 @@ import {
   disclosureTerm,
 } from "./disclosure.js";
 
-// [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate.
-// `.preset.customized` is a per-render payload fact (does the config FILE
-// author a root for whichever preset is ACTIVE — entry.state.authoredRoots),
-// not config-time knowledge, so the banner below is spliced UNCONDITIONALLY
-// for every preset — same shape, every reload — and this predicate is what
-// decides whether it's visible, never a branch in this synthesis pass.
-//
-// [LAW:one-type-per-behavior] The banner is an edit affordance of the same
-// class as `-`/`+` — one click rewrites the file's root — so it shows under
-// the same condition they do (edit mode open) AND only when it has something
-// to reset. Under candybar-config-dqe "customized" means "the file authors a
-// root", the ordinary state of every hand-written config; a banner gated on
-// that alone would sit permanently on such bars, outside edit mode, as a
-// one-click deletion of the author's own layout. The edit-mode term is
-// disclosureTerm over the SAME ref every other chrome gate derives from; the
-// customized term is the bare boolean input var, false only on the literal
-// text "false" (evaluateWhen's documented contract), and `and` yields the
-// last argument when every term is truthy — so the conjunction reads back
-// exactly as the boolean does.
-// [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
-// ensured name out of "what did the AUTHOR declare" assertions and must read the
-// same string, never a second copy that a rename here would leave behind.
+// [LAW:dataflow-not-control-flow] `.preset.customized` is a per-render fact, so
+// the banner splices UNCONDITIONALLY and this gate alone decides visibility.
+// [LAW:one-type-per-behavior] Edit mode is conjoined because "customized" is the
+// ordinary state of a hand-written config, where the banner would otherwise sit
+// permanently as a one-click deletion of the author's own layout.
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
 const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
 
-// [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
-// `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
-// removing one via `-` would strand its sibling artifacts (a toggle segment
-// with no body, a menu with no host), and offering one back via `+` would
-// insert a bare ref with none of the synthesis that made it work. Ordinary
-// content segments only.
+// [LAW:one-source-of-truth] Synthesized segments are structural: `-` strands
+// sibling artifacts, `+` re-inserts a ref with none of the synthesis.
 function isChromeExempt(name: string): boolean {
   return (
     name.startsWith(EDIT_NS) ||
     name.startsWith(MENU_NS) ||
     name.startsWith(GROUP_NS) ||
-    // The global settings menu is the entry point edit mode is REACHED from
-    // (candybar-settings-ui-aok.1) — offering a `-` beside it would let one
-    // click delete the door back in, the self-lockout the `toolbar` trigger's
-    // placement was chosen to avoid. Structural, like the three above it.
     name.startsWith(SETTINGS_NS)
   );
 }
 
-// [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
-// by its final name — one accumulator threaded through every preset's splice
-// so cross-preset names (disambiguated by `presetIdent`) can never collide.
 interface ChromeArtifacts {
   readonly variables: Record<string, VariableDecl>;
   // [LAW:no-silent-failure] Declarations this synthesis DEPENDS on rather than
-  // OWNS: merged UNDER the config so a user's own declaration of the same name
-  // wins, unlike `variables` above, which lives in a reserved namespace no user
-  // may write and therefore merges over.
+  // OWNS: merged UNDER the config, so a user's own declaration wins.
   readonly ensured: Record<string, VariableDecl>;
   readonly actions: Record<string, ActionDeclType>;
   readonly segments: Record<string, SegmentDecl>;
 }
 
-// [LAW:one-source-of-truth] The domain name a preset's `+` pickers range —
-// computed once per preset (declared segments minus the ones already present
-// in ITS current tree) and consumed two ways: here (by name, for every
-// insertSegmentFrom action this preset's splice synthesizes) and by
-// registerDslConfig/deriveConfigActionValidators (which call
-// `addableSegmentDomains` directly to populate `perConfigDomains` before
-// resolving `from`). Both read the SAME string shape so a synthesized
-// action's domain name always resolves.
 export function addableDomainName(presetName: string): string {
   return `${EDIT_NS}addable.${presetName}`;
 }
 
-// [LAW:one-source-of-truth] THE per-preset "what can `+` offer here" set:
-// every declared, non-exempt segment name minus the ones already present
-// anywhere in that preset's CURRENT (merged) tree. Exported
-// so render.ts's registerDslConfig and config-validators.ts's
-// deriveConfigActionValidators — the two sites that resolve `from` domains —
-// merge this into `perConfigDomainsFor`'s map without each re-deriving it
-// [LAW:locality-or-seam]; option-domain.ts itself stays untouched (its
-// `perConfigDomainsFor` deliberately never imports dsl-types.ts — see that
-// file's own header — so a third per-preset domain merges at the two call
-// sites instead of inside it).
+// [LAW:one-source-of-truth] THE per-preset "what can `+` offer here" set.
+// [LAW:locality-or-seam] Exported so the two sites resolving `from` domains
+// merge it rather than re-derive it; option-domain.ts stays free of dsl-types.
 export function addableSegmentDomains(
   config: DslConfig,
 ): ReadonlyMap<string, readonly string[]> {
@@ -159,8 +97,6 @@ export function addableSegmentDomains(
   return domains;
 }
 
-// Synthesize the `-` affordance for one segment instance: a literal
-// `removeSegment` action plus the segment that hosts its `{{ action }}`.
 function removeChrome(
   presetIdent: string,
   rootKey: string,
@@ -180,14 +116,8 @@ function removeChrome(
   return { kind: "segment", name: chromeSegName };
 }
 
-// Synthesize the `+` affordance for one gap: an `insertSegmentFrom` action
-// over this preset's addable domain, plus a segment hosting `{{ menu }}` over
-// it. The menu's own disclosure (open state, page cursor, toggle action) is
-// synthesized here by calling the SAME pure functions menu-synth.ts's
-// file-parse-time pass calls — this pass runs too late to piggyback on that
-// pass directly (it needs post-merge data menu-synth.ts's
-// per-file timing does not have), so parity is achieved by sharing the
-// functions, not by re-deriving the shape.
+// The disclosure is built by calling the SAME pure functions the parse-time menu
+// pass calls: too late to piggyback on it, so parity comes from sharing them.
 function insertChrome(
   presetIdent: string,
   rootKey: string,
@@ -218,19 +148,9 @@ function insertChrome(
   artifacts.actions[identity] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey] = { set: pageKey, int: true };
 
-  // The `+` IS the trigger — no appended arrow (candybar-settings-ui-aok.4).
-  // Beside a `-` that means something else entirely, a ▸ read as part of the
-  // affordance rather than as a disclosure hint, so the trigger names the ACTION
-  // its click performs instead: `+` inserts here, `✕` closes what `+` opened —
-  // the same glyph, and the same effect, as the body's own close cell.
-  //
-  // [LAW:no-silent-failure] It is deliberately NOT one static display. A preset
-  // has N insertion points whose rendered rows are byte-identical, and their
-  // dropped bodies are identical too. The open one does wear its band's state
-  // colour (node-registry picks `styles.trigger` whenever a segment has drops,
-  // authored bg or not), but colour alone is a hint the glyph should not
-  // depend on: with one static display, "which one did I open" would rest on
-  // a tint the terminal's colour depth may flatten. The `✕` names it.
+  // [LAW:no-silent-failure] Two displays, not one static glyph: a preset's N
+  // insertion points render byte-identically, and "which one did I open" must
+  // not rest on a tint the terminal's colour depth may flatten.
   artifacts.segments[chromeSegName] = {
     template: `{{ menu "${applyName}" "+" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
     when: EDIT_MODE_GATE,
@@ -238,16 +158,9 @@ function insertChrome(
   return { kind: "segment", name: chromeSegName };
 }
 
-// [LAW:dataflow-not-control-flow] One recursive splice: a container's
-// non-exempt segment children get a `+` before and a `-` after (so N
-// consecutive segments read `+ [seg1 -] + [seg2 -] + [seg3 -] +` — N+1 insert
-// points, N remove points); a container child recurses; an exempt segment
-// (a group toggle, a menu host, edit mode's own chrome) passes through
-// untouched — but the disclosure BODY a segment hangs (a group's children,
-// the settings rows) recurses like any container, so the cells inside an
-// open group keep their `+`/`-` while the toggle that opens it has none.
-// `posCounter` is threaded by reference so position identifiers stay unique
-// across the WHOLE preset tree, not just one container.
+// [LAW:dataflow-not-control-flow] An exempt segment passes through untouched,
+// but the disclosure BODY it hangs still recurses. `posCounter` is by reference,
+// so position ids stay unique across the whole preset tree.
 function spliceContainer(
   node: ContainerNode,
   presetIdent: string,
@@ -257,12 +170,8 @@ function spliceContainer(
   posCounter: { n: number },
 ): ContainerNode {
   const children: LayoutNode[] = [];
-  // [LAW:one-source-of-truth] The trailing `+`'s position is "after the last
-  // CONTENT segment", not "after the last child". Those coincided until a
-  // synthesis started appending exempt chrome (the global settings menu,
-  // candybar-settings-ui-aok.1) to a row's end, at which point reading the last
-  // child silently dropped the row's final insert point — N segments offering
-  // only N insert points instead of N+1.
+  // [LAW:one-source-of-truth] After the last CONTENT segment, not the last
+  // child: appended exempt chrome would silently eat the row's final `+`.
   const lastContent = node.children.reduce(
     (idx, child, i) =>
       child.kind === "segment" && !isChromeExempt(child.name) ? i : idx,
@@ -313,11 +222,8 @@ function spliceContainer(
           ]
         : []),
     ];
-    // [LAW:one-type-per-behavior] A segment child of a VERTICAL container is a
-    // one-cell row (presetRoot stacks every root's rows vertically, so a bare
-    // `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this way);
-    // its chrome joins that row rather than becoming three rows of its own,
-    // under the row's own gate so the chrome hides with it.
+    // [LAW:one-type-per-behavior] A VERTICAL container's segment child is a
+    // one-cell row; its chrome joins it, under the row's own gate.
     children.push(
       ...(node.direction === "vertical"
         ? [
@@ -334,20 +240,8 @@ function spliceContainer(
   return { ...node, children };
 }
 
-// brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
-// that isn't about ONE gap but about the preset's authored root as a whole —
-// synthesized the SAME way (one reset action targeting this preset's exact
-// `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
-// visibility carried entirely by CUSTOMIZED_BANNER_GATE
-// [LAW:dataflow-not-control-flow]. It gets its own ROW (not a slot in the
-// row-interleaved chrome spliceContainer builds) because it is not bound to any
-// one segment gap — it is a fact about the whole tree — visible or not by a
-// `when` that is every other synthesized affordance's edit-mode gate narrowed
-// by the one extra fact this affordance depends on.
-//
-// candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content. Its
-// body hangs on the trigger (`SegmentNode.opens`) and drops below whichever row
-// the trigger rides, so this function places ONE cell; see withTrailingCell.
+// [LAW:dataflow-not-control-flow] An affordance about the authored root as a
+// whole, so it gets its own ROW and its visibility is carried by the gate.
 function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
@@ -358,25 +252,10 @@ function wrapWithPresetRows(
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  // [LAW:no-silent-failure] `reset` deletes the root the file authors at
-  // `rootKey`'s path (candybar-config-dqe), restoring the bundled preset's
-  // own tree — or, for a preset that stages the config root, the bundled
-  // root — on the next reload. `rootKey` is gated the SAME way every other
-  // `presets.<name>.root` target is (deriveConfigActionValidators), and is
-  // ALWAYS a registered key — config-validators.ts's presetRootContributions
-  // registers it
-  // for every declared preset UNCONDITIONALLY, specifically so a preset
-  // edited down to zero non-exempt segments (no removeChrome/insertChrome
-  // persist actions left to register it) doesn't orphan this exact click.
+  // [LAW:no-silent-failure] `rootKey` is registered UNCONDITIONALLY, so a preset
+  // edited down to zero segments cannot orphan this click.
   artifacts.actions[actionName] = { reset: rootKey };
-  // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS
-  // pass is what requires that variable — not whichever config happens to
-  // declare it. The bundled default does, which is why the dependency stayed
-  // invisible until the global settings menu made edit mode reachable from
-  // configs that never declared it, and the missing field surfaced as a ⚠ on
-  // the bar. Ensured, never overridden: a user declaration of the same name
-  // wins (see the merge in synthesizeEditChrome), so this only supplies the
-  // floor the synthesis itself depends on.
+  // [LAW:one-source-of-truth] THIS pass requires it; ensured, never overridden.
   artifacts.ensured[PRESET_CUSTOMIZED_VAR] = {
     kind: "input",
     path: PRESET_CUSTOMIZED_VAR,
@@ -388,65 +267,24 @@ function wrapWithPresetRows(
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
     when: CUSTOMIZED_BANNER_GATE,
   };
-  // [LAW:no-silent-failure] A preset's root may carry its OWN top-level
-  // `when` (the A-grammar's container schemas all permit one) — an author
-  // gating the whole preset behind a condition. `spliceContainer` preserves
-  // that onto `splicedRoot` via its `{...node, children}` spread, but this
-  // new OUTER wrapper is a brand-new node with no `when` of its own; without
-  // carrying it up, the reset banner would render even when the author's
-  // own condition is false, leaking past a gate they wrote.
+  // [LAW:no-silent-failure] A preset root may carry its own top-level `when`, so
+  // this new outer wrapper must carry it up or the banner leaks past that gate.
   return {
     kind: "container",
     direction: "vertical",
     children: [
       { kind: "segment", name: chromeSegName },
-      // The `(?)`'s body drops BELOW the row the trigger rides while the
-      // disclosure is open, like every other disclosure body in this codebase.
       withTrailingCell(splicedRoot, help),
     ],
     ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
   };
 }
 
-// [LAW:one-source-of-truth] The `(?)` is a CELL, and its contract is that the
-// caller joins it to a row it ALREADY HAS — the settings menu pushes it into
-// the row holding `persist?`. Edit mode's rows are the ones spliceContainer
-// just built, so the trigger joins the last of them. Two constraints pin that
-// placement and nothing else satisfies both:
-//
-//  - Closed help must cost no LINE. A trigger given its own vertical slot is a
-//    permanent row for the whole time edit mode is on, since a trigger's `when`
-//    is its host surface's, never its own open state (a trigger you must open in
-//    order to see could never be opened).
-//  - Closed help must not MOVE the content. A cell trailing the last row sits
-//    after every existing leaf, so no authored node's address — the position
-//    its colour derives from — changes; the reset-banner row sits above the
-//    content and is ruled out on that ground.
-//
-// A THIRD requirement decides how far the descent may go, and it outranks the
-// other two: the trigger must be visible exactly when EDIT MODE is, since a
-// trigger you must already have opened something else to reach is not a trigger.
-// A container's `when` reaches every descendant, so descending into a
-// `when`-bearing container would silently make its gate the trigger's gate.
-// Pairing beside a gated SEGMENT is a different act and stays allowed:
-// `{h: [gatedSeg, cell]}` puts the cell beside the gate rather than under it.
-// A disclosure BODY is never descended into either, by shape: it hangs on its
-// trigger segment (`SegmentNode.opens`) rather than sitting in the children
-// list, so a preset root ending in a `kind: "group"` — ordinary authoring the
-// A-grammar endorses — pairs the `(?)` beside the group's toggle, never inside
-// a body most groups default closed.
-//
-// For a root whose last row is gated the three requirements are jointly
-// unsatisfiable, so the priority is stated rather than left to whichever branch
-// the recursion happens to reach: visible (always) > no move (always, since
-// appending is still after every existing leaf) > no extra line (surrendered
-// here, in exactly the configs where riding a row was never possible).
-//
-// [LAW:dataflow-not-control-flow] Total over the node shapes with no guard: a
-// segment is a row of one that cannot hold a second cell, so it pairs into one;
-// a vertical container's rows are its children, so it descends into the last one
-// it may; anything else appends. An empty container has no last child and
-// appends, which is the same answer.
+// [LAW:one-source-of-truth] The `(?)` is a CELL joined to a row the caller
+// already has. In priority order: visible exactly when EDIT MODE is — so the
+// descent never enters a `when`-bearing container, whose gate would silently
+// become the trigger's — then no moved addresses, then no extra closed line.
+// [LAW:dataflow-not-control-flow] Total over the node shapes, with no guard.
 function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return {
@@ -469,11 +307,6 @@ function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
   return { ...node, children: [...node.children, cell] };
 }
 
-// One preset's chrome-spliced root. presetRoot always yields a container —
-// the merged rows stacked vertically — so a bare-segment fragment (the
-// A-grammar's `{ seg, when }` shorthand is a legal root) arrives already
-// wrapped as its one row, its own `when` lifted to the root, and a lone
-// segment gets a `+` on each side like any other.
 function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
@@ -504,23 +337,10 @@ function spliceEditChromeForPreset(
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass. Every declared preset
-// (the floor "default" included — presetNames/presetByName/presetRoot
-// already treat it uniformly) gets an explicit `presets[name].root` carrying
-// its spliced tree; `config.root` itself is left untouched (presetRoot falls
-// back to it only when a preset declares no root of its own, and every name
-// now does). The synthesized variables/actions/segments merge additively —
-// nothing here can collide with user data, since every name it mints lives
-// under the `edit.`/`menus.` namespaces `synthesizeEditModeToggle` and
-// `synthesizeMenuDecls` already reserve unconditionally at parse time.
+// validateConfig; every minted name lives under a reserved namespace.
 export function synthesizeEditChrome(config: DslConfig): DslConfig {
-  // [LAW:carrying-cost] Demand-driven, mirroring synthesizeEditModeToggle's
-  // own gate: `edit.toggle` exists in the merged config iff SOME file's
-  // Phase A synthesis fired (iff some segment referenced it), which iff some
-  // author actually placed an edit-mode trigger. A config that never opted
-  // in gets back the identical config, untouched — no extra segments,
-  // actions, or variables, and critically no NEW `set`/`state` surface that
-  // would force session.id onto an otherwise fully static bar.
+  // [LAW:carrying-cost] Demand-driven: a config that never placed an edit-mode
+  // trigger gets the identical config back, forcing no session.id onto a static bar.
   if (!(EDIT_TOGGLE_ACTION in config.actions)) return config;
   const artifacts: ChromeArtifacts = {
     variables: {},
@@ -528,13 +348,8 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     actions: {},
     segments: {},
   };
-  // [LAW:one-source-of-truth] Edit mode's `(?)` is minted ONCE and merely
-  // REFERENCED from every preset root — the same move the settings menu makes
-  // with its anchor, and for the same reason: one disclosure means one open
-  // state, so switching presets cannot land you beside a second `(?)` that
-  // disagrees about whether help is showing. The text is identical for every
-  // preset because what `+` and `-` do is a fact about edit mode, not about a
-  // layout.
+  // [LAW:one-source-of-truth] Minted ONCE and merely REFERENCED per preset, so
+  // switching presets cannot land you beside a second, disagreeing `(?)`.
   const help = declareHelp(
     `${EDIT_NS}help`,
     EDIT_MODE_HELP,

@@ -1,19 +1,5 @@
-// [LAW:verifiable-goals] Group-sugar acceptance (2de.4), driven through the real
-// spine (registerDslConfig + renderDsl), the real loader (parse → merge →
-// validate), and the real set-state gate — never a parallel rig:
-//
-//   1. `{ kind: "group" }` lowers to canonical container/segment nodes and
-//      SYNTHESIZES its state var + cycle action + toggle segment under the
-//      reserved `groups.` namespace — one declaration, every artifact derived.
-//   2. The toggle round trip: closed renders "label ▸" and no body; the click
-//      writes the group's name; the next render shows "label ▾" + body; the
-//      second click writes "closed". The glyph TRAILS the label it gates.
-//   3. Accordion = sibling groups sharing `key`: one key holds one open name,
-//      so opening B auto-closes A — no accordion mode, just the shared value.
-//   4. Nested disclosure = nested groups with DISTINCT keys; a closed parent
-//      hides the whole subtree (child state persists invisibly).
-//   5. The loader proves the group invariants (identifier name, unique names,
-//      reserved namespace, ancestor/descendant key sharing, one open per key).
+// [LAW:verifiable-goals] Driven through the real spine — loader, render, and
+// the real set-state gate — never a parallel rig.
 
 import { ownValidators } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -60,8 +46,7 @@ function extractUrls(rendered: string): string[] {
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
-// Same real-spine harness as dsl-actions: real loader, real render, clicks
-// dispatched through the real daemon verb handlers against the derived gate.
+// Clicks dispatch through the real daemon verb handlers against the derived gate.
 function buildRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
@@ -93,8 +78,6 @@ function buildRuntime(src: string, sessionId = "s1") {
       handler(e.value, ctx);
     }
   };
-  // Click the toggle whose URL writes `value` to `key` (a group toggle's
-  // set-state), regardless of which row it rendered on.
   const clickToggle = (out: string, key: string, value: string): void => {
     const url = extractUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
@@ -105,8 +88,6 @@ function buildRuntime(src: string, sessionId = "s1") {
   const dispose = (): void => disposers.forEach((d) => d());
   return { config, store, sessionState, render, click, clickToggle, dispose };
 }
-
-// ─── The toggle round trip ───────────────────────────────────────────────────
 
 const DETAILS_SRC = `{
   globals: {},
@@ -191,8 +172,6 @@ describe("2de.4 — group sugar: toggle round trip", () => {
   });
 });
 
-// ─── Accordion: siblings sharing a key ───────────────────────────────────────
-
 const ACCORDION_SRC = `{
   globals: {},
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -221,8 +200,7 @@ describe("2de.4 — accordion (shared key)", () => {
     expect(out).toContain("FILES-BODY");
     expect(out).toContain("tools ▸");
     expect(out).not.toContain("TOOLS-BODY");
-    // B's toggle renders closed (current "files" is outside its cycle domain),
-    // so its click writes "tools" — expand B, auto-closing A on the shared key.
+    // B's cycle domain doesn't include "files", so its closed toggle writes "tools".
     clickToggle(render(), "menu", "tools");
     out = stripAnsi(render());
     expect(out).toContain("files ▸");
@@ -242,8 +220,6 @@ describe("2de.4 — accordion (shared key)", () => {
     ]);
   });
 });
-
-// ─── Nested disclosure: distinct keys ────────────────────────────────────────
 
 describe("2de.4 — nested groups (distinct keys)", () => {
   const SRC = `{
@@ -265,11 +241,9 @@ describe("2de.4 — nested groups (distinct keys)", () => {
 
   test("nested group synthesizes toggle with depth-derived indent prefix", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    // outer is depth-0: no indent
     expect(config.segments["groups.outer"]?.template).toBe(
       '{{ action "groups.outer" "outer ▸" "outer ▾" }}',
     );
-    // inner is depth-1 (one ancestor group): 2-space leading indent, glyph trails
     expect(config.segments["groups.inner"]?.template).toBe(
       '{{ action "groups.inner" "  inner ▸" "  inner ▾" }}',
     );
@@ -277,7 +251,6 @@ describe("2de.4 — nested groups (distinct keys)", () => {
 
   test("a closed parent hides the whole subtree; child state persists invisibly", () => {
     const { render, clickToggle, dispose } = buildRuntime(SRC);
-    // Closed outer: inner toggle not rendered at all.
     expect(stripAnsi(render())).not.toContain("inner");
     clickToggle(render(), "groups.outer", "outer");
     let out = stripAnsi(render());
@@ -285,7 +258,6 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     expect(out).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.inner", "inner");
     expect(stripAnsi(render())).toContain("LEAF-BODY");
-    // Close outer: everything inside vanishes; reopen: inner is STILL open.
     clickToggle(render(), "groups.outer", "closed");
     expect(stripAnsi(render())).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.outer", "outer");
@@ -293,8 +265,6 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     dispose();
   });
 });
-
-// ─── Loader invariants ───────────────────────────────────────────────────────
 
 describe("2de.4 — loader proves the group invariants", () => {
   const expectIssue = (src: string, re: RegExp) => {

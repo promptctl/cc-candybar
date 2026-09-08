@@ -1,28 +1,6 @@
-// [LAW:verifiable-goals] Byte-exact coverage of EVERY `{{ menu }}` the bundled
-// default can render — both disclosure states — so that a change to where a
-// menu's trigger glyph comes from is measured, not asserted.
-//
-// candybar-settings-ui-aok.4 moves the ▸/▾ out of the `{{ menu }}` runtime and
-// into the authored template, which is a change no existing test could have
-// caught: `test/__snapshots__/dsl-spine.test.ts.snap` holds ONE line, and the
-// only glyph in it belongs to an `{{ action }}` disclosure. This file is
-// written FIRST, against unchanged code, precisely so the committed bytes are
-// evidence rather than a description of the change — a snapshot taken after a
-// change agrees with whatever the change did.
-//
-// Coverage is DERIVED, not listed: `menuHostingSegments` reads the validated
-// bundled config and asks the template engine which segments reference the
-// helper, and the answer is itself snapshotted. A future bundled menu joins the
-// coverage by existing [LAW:dataflow-not-control-flow]; it cannot be forgotten,
-// because adding one fails the coverage snapshot until it is acknowledged.
-//
-// The two reachable families need two roots, for a structural reason:
-//   • the drawer controls (charset / colorCompatibility / directory palette)
-//     live under the bundled `settingsDrawer` group, which a user `root`
-//     deletes — so each is rooted directly, one per case;
-//   • the four settings-menu picker controls are SYNTHESIZED into every preset
-//     root, so rooting one would place it twice (a load error, by design) —
-//     they are reached the way a user reaches them, by clicking ☰ then ⚙.
+// [LAW:verifiable-goals] Byte-exact coverage of EVERY bundled menu, both states.
+// [LAW:dataflow-not-control-flow] Coverage is DERIVED and snapshotted: a new menu
+// fails it until covered, so none can be forgotten.
 
 import { createEngine } from "@promptctl/go-template-js";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -68,9 +46,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// Static effective values: this file only ever OPENS disclosures, never picks
-// an option, so the daemon-resolved labels stay fixed for the whole run and the
-// committed bytes carry no environment in them.
+// Static: this file only OPENS disclosures, so no environment reaches the bytes.
 const PAYLOAD = {
   hook_event_name: "Status",
   session_id: SID,
@@ -95,8 +71,6 @@ const PAYLOAD = {
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
-// The OSC-8 spans of a render, paired with the text each one wraps — enough to
-// click an affordance by the label a user would click.
 interface Link {
   readonly url: string;
   readonly text: string;
@@ -112,15 +86,8 @@ function links(rendered: string): Link[] {
   return out;
 }
 
-// [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own
-// click: the disclosure toggle is the coupled batch `renderMenu` emits, so its
-// 4th arg is by construction the PAGE key of its 2nd, and its 3rd is a member
-// rather than the closed sentinel. Matching that exact shape — rather than the
-// `menus.` prefix, which a page-cursor key also carries — keeps a ←/→ page
-// click (a 3-arg write, no 4th arg) from reading as an opener on a render where
-// a picker is already open. So this test needs to know no key names — the member
-// it writes IS the menu's apply-action name, which is also how each snapshot
-// below gets its label.
+// [LAW:dataflow-not-control-flow] An opener identifies itself by the SHAPE of its
+// own click, not a `menus.` prefix a page cursor also carries.
 interface Opener extends Link {
   readonly member: string;
 }
@@ -170,9 +137,7 @@ function buildRuntime(root: string) {
       handler(e.value, ctx);
     }
   };
-  // Click by the label a user clicks. Loud when absent: a silently skipped
-  // click would snapshot a closed menu under an "open" name and prove the
-  // opposite of what this file claims [LAW:no-silent-failure].
+  // [LAW:no-silent-failure] A skipped click would snapshot a closed menu as open.
   const clickLabel = (rendered: string, label: string): void => {
     const link = links(rendered).find((l) => l.text.includes(label));
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
@@ -182,9 +147,7 @@ function buildRuntime(root: string) {
   return { config, sessionState, render, click, clickLabel, dispose };
 }
 
-// [LAW:single-enforcer] "Hosts a menu" is decided by the same authority the
-// loader's synthesis pass uses — the parsed template's referenced functions —
-// not by a substring scan that a pipeline or a `.menu` field name could fool.
+// [LAW:single-enforcer] The loader's own authority, not a foolable substring scan.
 function hostsMenu(template: string): boolean {
   const engine = createEngine<string>({ fromString: (s) => s });
   try {
@@ -193,12 +156,7 @@ function hostsMenu(template: string): boolean {
     return false;
   }
 }
-// [LAW:one-type-per-behavior] Edit chrome's `+` affordances are excluded from
-// the enumerated coverage because they are not N menus to cover — they are ONE
-// synthesis site (`insertChrome`) minting an instance per insertion point, so
-// their count is a fact about the active preset's segment count rather than
-// about the menu surface. One rendered instance is the representative, and it
-// gets its own bytes below.
+// [LAW:one-type-per-behavior] Edit chrome's `+` is ONE synthesis site, not N menus.
 function menuHostingSegments(config: DslConfig): string[] {
   return Object.entries(config.segments)
     .filter(
@@ -209,17 +167,14 @@ function menuHostingSegments(config: DslConfig): string[] {
 }
 
 describe("every {{ menu }} the bundled default renders", () => {
-  // The coverage guard. A bundled menu added later lands in this list, and the
-  // failing snapshot is the reminder that it wants bytes committed below.
+  // The coverage guard: a menu added later lands here and fails until covered.
   test("coverage: the menu-hosting segments of the bundled default", () => {
     const { config, dispose } = buildRuntime(`{ h: ['model'] }`);
     expect(menuHostingSegments(config)).toMatchSnapshot();
     dispose();
   });
 
-  // The drawer controls: durable-only settings (terminal capability facts and
-  // one segment-scoped palette pin), each rooted on its own because the group
-  // that normally holds them is not in a user root.
+  // Each rooted on its own, because a user root omits the group that holds them.
   describe.each([
     ["charsetControl"],
     ["colorCompatControl"],
@@ -238,10 +193,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     });
   });
 
-  // The four settings-menu picker controls, reached the way a user reaches
-  // them. They share one accordion key, so each open state gets its own
-  // runtime — one key holds one open member, and a shared rig would only ever
-  // snapshot the last one opened.
+  // They share one accordion key, so each open state needs its own runtime.
   const openConfigMenu = () => {
     const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
     rig.clickLabel(rig.render(), "☰");
@@ -252,8 +204,6 @@ describe("every {{ menu }} the bundled default renders", () => {
   test("the config menu with all four pickers closed: exact bytes", () => {
     const rig = openConfigMenu();
     const out = rig.render();
-    // Four controls, four closed disclosures — the shape the per-picker cases
-    // below each open one of.
     expect(
       menuOpeners(out)
         .map((o) => o.member)
@@ -263,10 +213,6 @@ describe("every {{ menu }} the bundled default renders", () => {
     rig.dispose();
   });
 
-  // [LAW:verifiable-goals] The affordance the ticket is about. These bytes
-  // began as the "before" — every `+` rendered `+▸`, a `+` the template wrote
-  // beside an arrow the `{{ menu }}` runtime appended — and they are the only
-  // ones in this file the change was allowed to move.
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
       const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
@@ -277,11 +223,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     test("closed: exact bytes of the whole edit-mode bar", () => {
       const rig = editRig();
       const out = rig.render();
-      // Two segments ⇒ three insertion points, each a closed disclosure. The
-      // requirement, verbatim: "I'd also prefer the 'plus sign' menus to NOT
-      // have the arrow" — so no disclosure glyph rides beside a `+`, in either
-      // state, while the settings menu's own `{{ action }}` disclosure keeps
-      // the ▸ it has always authored.
+      // No disclosure glyph may ride beside a `+`, in either state.
       const row0 = stripAnsi(out).split("\n")[0]!;
       expect(row0).toContain("+");
       expect(row0).not.toContain(`+${DISCLOSURE_GLYPH_CLOSED}`);
@@ -305,13 +247,7 @@ describe("every {{ menu }} the bundled default renders", () => {
       rig.dispose();
     });
 
-    // [LAW:verifiable-goals] The regression removing the glyph invites, pinned
-    // so it cannot return quietly. A preset's N insertion points render
-    // byte-identical rows and drop byte-identical bodies, so if the open one
-    // does not LOOK different on row 0, the bar has stopped answering "which
-    // `+` did I open" — and it answers only because the trigger binds a display
-    // per state. A static display would pass every snapshot above and fail
-    // here, which is the point.
+    // [LAW:verifiable-goals] Only a per-state display answers "which `+` is open".
     test("an opened + is distinguishable from its unopened siblings", () => {
       const rig = editRig();
       const openers = menuOpeners(rig.render()).filter((o) =>

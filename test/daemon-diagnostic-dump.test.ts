@@ -1,7 +1,5 @@
-// [LAW:behavior-not-structure] The dump owner's contract: a session's file
-// mirrors the diagnostic text its last render carried — present with that
-// exact content, absent when there is none — and the disk is touched only
-// when the desired state changes.
+// [LAW:behavior-not-structure] A session's file mirrors the diagnostic text its
+// last render carried, and the disk is touched only when that changes.
 
 import {
   chmodSync,
@@ -46,17 +44,15 @@ describe("DiagnosticDump", () => {
 
     dump.sync("sid", null);
     expect(existsSync(p)).toBe(false);
-    // Absent stays absent without a directory ever being created for it.
     dump.sync("other", null);
     expect(existsSync(path.join(root, "diagnostics"))).toBe(true);
   });
 
   test("a write the filesystem refuses is reported as a reason, not thrown, and is retried", () => {
-    // A file where the directory should be: mkdir -p fails with ENOTDIR/EEXIST.
+    // A file where the directory should be: mkdir -p fails.
     writeFileSync(path.join(root, "diagnostics"), "");
     expect(dump.sync("sid", "ERROR\nboom\n")).toMatch(/sid\.txt: /);
     rmSync(path.join(root, "diagnostics"));
-    // Nothing was recorded, so the same text is written on the next render.
     expect(dump.sync("sid", "ERROR\nboom\n")).toBeNull();
     expect(readFileSync(dump.pathFor("sid"), "utf8")).toBe("ERROR\nboom\n");
   });
@@ -80,7 +76,6 @@ describe("DiagnosticDump", () => {
       chmodSync(root, 0o700);
     }
     rmSync(path.join(root, "diagnostics"), { recursive: true, force: true });
-    // Forgotten regardless: the next sync writes, it does not skip.
     expect(dump.sync("a", "x")).toBeNull();
     expect(readFileSync(dump.pathFor("a"), "utf8")).toBe("x");
   });

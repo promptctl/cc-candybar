@@ -8,8 +8,6 @@ import {
 } from "../src/daemon/process-fingerprint";
 import { type LaunchResult } from "../src/proc/launch";
 
-// A fake launcher yielding a fixed LaunchResult, so readStartTime's parse/branch
-// logic is exercised without a real `ps`.
 const launcher = (res: LaunchResult): Launcher => () => res;
 const okStdout = (stdout: string): LaunchResult => ({
   ok: true,
@@ -18,13 +16,7 @@ const okStdout = (stdout: string): LaunchResult => ({
   exitCode: 0,
 });
 
-// ─── readStartTime: real `ps`, injected fakes for the unavailable branches ────
-//
-// [LAW:behavior-not-structure] The live/dead cases run against the REAL `ps` so
-// the test proves the actual interface (a live pid lists; a dead pid does not),
-// not a mocked stand-in. The `unavailable` branch (no `ps`, ambiguous failure)
-// is deterministically driven by an injected exec — there is no portable way to
-// make the real `ps` vanish mid-test.
+// [LAW:behavior-not-structure] The live/dead cases run against the REAL `ps`; only the unavailable branch is injected.
 
 describe("readStartTime (real ps)", () => {
   test("our own live pid → start with a non-empty token", () => {
@@ -33,8 +25,7 @@ describe("readStartTime (real ps)", () => {
     if (r.kind === "start") expect(r.token.length).toBeGreaterThan(0);
   });
 
-  // A dead pid yields no start-time row → `unavailable` (NOT a `gone` claim `ps`
-  // cannot soundly make); sameLiveProcess then defers to kill(pid,0).
+  // A dead pid yields no start-time row → `unavailable`, not a `gone` claim ps cannot make.
   test("a dead pid → unavailable (ps reports no start-time)", async () => {
     const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
     const deadPid: number = await new Promise((resolve) => {
@@ -58,9 +49,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     signal: null,
   });
 
-  // [FRAMING:representation] The token is only sound as an opaque equality key if
-  // `ps` renders it deterministically — so the subprocess must pin BOTH the
-  // locale (strftime format) and the timezone (localtime rendering).
+  // [FRAMING:representation] The token is a sound equality key only if ps renders it deterministically.
   test("pins LC_ALL=C and TZ=UTC on the ps subprocess (locale- and tz-independent token)", () => {
     let seenEnv: NodeJS.ProcessEnv | undefined;
     const capture: Launcher = (opts) => {
@@ -78,11 +67,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     ).toBe("unavailable");
   });
 
-  // A non-zero exit CANNOT soundly distinguish "no such process" from "cannot
-  // read a live process" (hardened /proc, permission-denied) — so it is always
-  // `unavailable` and the alive/dead call defers to kill(pid,0). This is the
-  // edge the code-review flagged: never false-dead a live owner from a `ps`
-  // exit code.
+  // A non-zero exit cannot distinguish "no such process" from "cannot read it", so never false-dead.
   test("non-zero exit + empty stdout → unavailable (could be an access failure, not death)", () => {
     expect(readStartTime(123, launcher(fail("non-zero", ""))).kind).toBe(
       "unavailable",
@@ -102,16 +87,12 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     );
   });
 
-  // Exit 0 with empty output is anomalous — don't mint an empty-string
-  // fingerprint that would spuriously match another empty read; defer to kill.
   test("exit 0 + empty stdout → unavailable (no empty-string fingerprint)", () => {
     expect(readStartTime(123, launcher(okStdout("  \n"))).kind).toBe(
       "unavailable",
     );
   });
 });
-
-// ─── sameLiveProcess: the pure liveness fold ──────────────────────────────────
 
 describe("sameLiveProcess (pure fold over injected reads)", () => {
   const deps = (
@@ -154,9 +135,6 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
     ).toBe(false);
   });
 
-  // A null lease token (the writer could not fingerprint) must NOT consult the
-  // start-time at all — fall straight back to kill(pid,0), preserving .1's
-  // theft protection on a host without `ps`.
   test("null lease token → kill(pid,0) fallback without reading start-time", () => {
     const read = jest.fn<StartTimeRead, [number]>(() => ({
       kind: "unavailable",

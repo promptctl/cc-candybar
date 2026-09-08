@@ -1,6 +1,4 @@
-// [LAW:verifiable-goals] `cc-candybar doctor`'s contract, read off the plan
-// the argv binding performs: the exit code and the streams for an unreadable
-// settings file, a clean setup, and a failed check carrying a fix.
+// [LAW:verifiable-goals] `cc-candybar doctor`'s contract: exit code and streams.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -36,8 +34,6 @@ describe("doctorPlan", () => {
     });
   });
 
-  // Claude Code parses settings.json strictly; a file it would refuse is not
-  // readable, whatever a looser parser makes of it.
   test("a settings.json that is JSON5 but not JSON is exit 2 naming the file", () => {
     const e = edge();
     fs.writeFileSync(e.claudeSettingsPath, '{ "env": { "A": "1", }, }');

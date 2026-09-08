@@ -71,12 +71,6 @@ describe("launch (async)", () => {
   });
 
   it("escalates to SIGKILL and waits for death when the child ignores SIGTERM", async () => {
-    // A single process (no child to orphan) that ignores SIGTERM, so a bare
-    // SIGTERM leaves it running and the launcher must escalate to SIGKILL. The
-    // promise must still resolve (not hang) and only after the child is reaped
-    // — proving the timeout path upholds the "no helper outlives its frame"
-    // invariant. Timeout is generous so node registers the handler before we
-    // signal; otherwise default SIGTERM termination would race the handler.
     const r = await launch({
       bin: process.execPath,
       args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
@@ -91,10 +85,7 @@ describe("launch (async)", () => {
   });
 
   it("aborting the signal terminates the child's whole group and reports \"aborted\" once it is reaped", async () => {
-    // `sh` stays the parent of a two-statement command, so the `sleep` is a
-    // grandchild: only a process-group signal reaches it. The marker names
-    // the sh; the per-run duration names the sleep (both computed here, so
-    // no enclosing shell's argv can ever match them).
+    // `sh` stays the parent, so the `sleep` is a grandchild only a group signal reaches.
     const stamp = `${process.pid}${Date.now()}`;
     const marker = `ccb-launch-abort-${stamp}`;
     const nap = `sleep 5.${stamp}`;
@@ -121,10 +112,7 @@ describe("launch (async)", () => {
   });
 
   it("with both triggers armed, the timeout that fired first owns the cause; an abort during escalation is inert", async () => {
-    // The child ignores SIGTERM, so the timeout's termination is still in
-    // its SIGKILL grace window when the abort lands (100 ms timeout, abort at
-    // 150 ms, grace 250 ms). One termination per child: the reason stays
-    // "timeout" and the escalation still reaps the child.
+    // 100 ms timeout, abort at 150 ms, grace 250 ms: the abort lands inside the SIGKILL grace window.
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 150);
     const r = await launch({
@@ -153,8 +141,6 @@ describe("launch (async)", () => {
   });
 
   it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
-    // process.kill refuses the group (EPERM: a child that changed its real
-    // uid). The child ends on its own soon after, so nothing is orphaned.
     const realKill = process.kill.bind(process);
     const spy = jest.spyOn(process, "kill").mockImplementation((pid, sig) => {
       if (typeof pid === "number" && pid < 0) {
@@ -196,8 +182,6 @@ describe("launch (async)", () => {
   });
 
   it("reports signal (not timeout) when external SIGTERM kills a no-timeout child", async () => {
-    // Child kills itself with SIGTERM; no timeout was set, so the close
-    // must surface as "signal", not "timeout".
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "kill -TERM $$; sleep 1"],
@@ -298,10 +282,8 @@ describe("launchDetachedSync", () => {
   });
 });
 
-// [LAW:single-enforcer] Per-category rate-limit lives at the launch primitive;
-// these tests pin the behavior at that boundary so callers can rely on it.
-// [LAW:dataflow-not-control-flow] Rejection is a typed LaunchResult variant,
-// not an exception, so callers stay on the same code path as other failures.
+// [LAW:single-enforcer] The per-category rate-limit lives at the launch primitive.
+// [LAW:dataflow-not-control-flow] Rejection is a typed LaunchResult, not an exception.
 describe("launch — per-category rate-limit", () => {
   it("rejects a second click.pbcopy spawn inside the min interval", () => {
     const first = launchSync({
@@ -376,17 +358,12 @@ describe("launch — per-category rate-limit", () => {
     setLaunchStats(handle);
     launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
     launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
-    // Only the first spawn went through onStart/onEnd. The second is data,
-    // not a process, and must not pollute the histograms or per-category
-    // counts.
     expect(starts).toEqual(["click.pbcopy"]);
     expect(ends).toHaveLength(1);
   });
 
   it("rate-limited rejection happens BEFORE the binary is invoked", () => {
-    // First call against a missing binary records a normal spawn-error and
-    // arms the rate-limit timer. Second call must short-circuit with
-    // "rate-limited" — proving the gate runs before spawn-error attribution.
+    // The gate must run before spawn-error attribution.
     const first = launchSync({
       bin: "/nonexistent/binary-rate-x9k7",
       category: "click.pbcopy",

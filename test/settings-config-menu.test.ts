@@ -1,25 +1,5 @@
-// [LAW:verifiable-goals] Acceptance for candybar-settings-ui-aok.3 — ONE
-// control per setting, with a `persist?` checkbox that chooses where the click
-// lands — measured the way the epic demands: from a user config whose `root`
-// is a single row of two segments, which is the shape that broke every
-// interactive surface in the first place.
-//
-//   1. The loader proves the DUAL ActionDecl arm: both destination keys plus
-//      the selector key, one shared value source, rejecting the sources that
-//      have no second destination to choose between (`int`, the layout ops).
-//   2. A dual derives EXACTLY the gates its two single-destination halves
-//      would have derived — asserted by deriving both and comparing, so the
-//      claim "this adds no gate surface" is checked against the real
-//      derivations rather than restated.
-//   3. The rendered click's DESTINATION follows the checkbox: unchecked ⇒
-//      set-state on the session key and NO durable link anywhere in the bar;
-//      checked ⇒ set-config on the config key and no session link. Same
-//      config, same segments, same template — a value chose the store.
-//   4. Nothing branches on the checkbox but the checkbox: the two renders are
-//      identical text apart from the ☐/☑ glyph, so the layout the walk
-//      produces is provably independent of persist state.
-//   5. The controls are REACHABLE from that two-segment root: the menu the
-//      user cannot delete carries them.
+// [LAW:verifiable-goals] ONE control per setting; a `persist?` checkbox picks
+// where the click lands.
 
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -54,10 +34,8 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
 
-// The config that motivated the whole epic: a `root` naming two segments and
-// nothing else. It declares no actions, no menu, no drawer — every control
-// this file asserts on arrives because the settings menu is synthesized into
-// EVERY root, which is precisely the claim under test.
+// Every control asserted on below arrives only because the settings menu is
+// synthesized into EVERY root, including this bare two-segment one.
 const TWO_SEGMENT_ROOT = `{
   globals: {},
   root: { h: ['directory', 'model'] },
@@ -74,14 +52,7 @@ function opts() {
   };
 }
 
-// [LAW:one-source-of-truth] One rig: parse the user file through the real
-// cascade (merged on the bundled default, validated — which is where the
-// settings menu is synthesized), install the derived gates the daemon
-// installs, and expose render/click over the real handlers. Every assertion
-// below reads the same bar a running daemon would produce.
-// `durable`, when given, is the session's config file: the rig writes `source`
-// there and records the render origin a durable click resolves it from — the
-// same two facts a real render leaves behind for a real click.
+// [LAW:one-source-of-truth] One rig over the real cascade and click handlers.
 function rig(
   source: string,
   durable?: DurableConfig,
@@ -130,11 +101,7 @@ function rig(
             project_dir: "/tmp",
             added_dirs: [],
           },
-          // [LAW:one-source-of-truth] The daemon resolves these per render
-          // from SessionState over the config's globals (server.ts's
-          // EffectiveGlobals); mirroring that here — through the same policy
-          // functions, not a restated rule — is what lets an assertion read
-          // the LABEL after a click instead of only the click's URL.
+          // [LAW:one-source-of-truth] Through the daemon's own policy functions.
           theme: {
             effective: effectiveThemeName(undefined, 
               sessionState.get(SID, "theme"),
@@ -186,9 +153,7 @@ function urlsOf(rendered: string): string[] {
   return urls;
 }
 
-// The affordances that write `key`, whatever verb carries them — the question
-// every assertion here asks is "does any click in this bar write X", never
-// "which link is at position N".
+// "Does any click in this bar write X", never "which link is at position N".
 function writesTo(rendered: string, key: string): string[] {
   return urlsOf(rendered).filter((u) => {
     try {
@@ -199,13 +164,10 @@ function writesTo(rendered: string, key: string): string[] {
   });
 }
 
-// What a reader SEES: the styling and the OSC-8 link envelopes removed, so an
-// assertion about the panel's text cannot pass on bytes hidden inside a URL.
+// What a reader SEES: no assertion can pass on bytes hidden inside a URL.
 function plain(rendered: string): string {
   return stripAnsi(rendered);
 }
-
-// ─── 1. The dual ActionDecl arm ──────────────────────────────────────────────
 
 describe("the dual-destination action arm", () => {
   const base = (actions: string) => `{
@@ -283,11 +245,8 @@ describe("the dual-destination action arm", () => {
     ).toThrow(ConfigError);
   });
 
-  // [LAW:no-silent-failure] A selector naming nothing loads cleanly and then
-  // does nothing FOREVER: the compiled action falls back to the raw key name,
-  // reads it, finds nothing, and an unreadable selector parses as "session".
-  // The checkbox flips a value no control reads and the destination never
-  // moves, with no error anywhere — working software, permanently wrong.
+  // [LAW:no-silent-failure] An unreadable selector parses as "session", so a typo
+  // would silently pin every control to one destination forever.
   test("persistWhen naming an undeclared state key is a load error", () => {
     expect(() =>
       parseAndValidate(
@@ -300,10 +259,7 @@ describe("the dual-destination action arm", () => {
     ).toThrow(/is not a declared state key/);
   });
 
-  // A segment-local state variable is a legitimate selector: render.ts's
-  // stateKeyToVar registers segment `vars` alongside global ones, and that map
-  // is what a dual's selector resolves through at click time. A load check
-  // that only saw the global scope would reject configs that work.
+  // Segment `vars` count too: a global-only check would reject working configs.
   test("a segment-local state variable is a legal selector", () => {
     const config = parseAndValidate(
       "<test>",
@@ -336,8 +292,6 @@ describe("the dual-destination action arm", () => {
   });
 });
 
-// ─── 2. The derived gate is the union of the two halves ──────────────────────
-
 describe("a dual derives exactly what its two halves derive", () => {
   const withActions = (actions: string) =>
     parseAndValidate(
@@ -354,10 +308,8 @@ describe("a dual derives exactly what its two halves derive", () => {
       ALLOWED,
     );
 
-  // [LAW:single-enforcer] The claim is that a dual widens nothing: the pair of
-  // specs it derives is the pair two ordinary actions would derive. Comparing
-  // the two derivations directly is what makes that a checked fact rather than
-  // a comment — a dual that smuggled a wider allow-list would fail here.
+  // [LAW:single-enforcer] Comparing derivations makes "a dual widens no gate" a
+  // checked fact rather than a claim.
   test("session and config gates match the equivalent single-destination pair", () => {
     const dual = withActions(
       `{ t: { set: 'look', persist: 'look', persistWhen: 'persist', from: 'looks' } }`,
@@ -387,21 +339,14 @@ describe("a dual derives exactly what its two halves derive", () => {
   });
 });
 
-// ─── 3–5. The menu, from a two-segment root ──────────────────────────────────
-
 describe("the config menu, reached from a user config whose root is one row", () => {
   let r: ReturnType<typeof rig>;
-  // A durable click edits the session's config file for real, so this suite
-  // hands the rig a temp file (and a temp edit history) for the duration —
-  // never the developer's own config.
   let durable: DurableConfig;
 
   beforeEach(() => {
     durable = durableConfig("cc-candybar-settings-menu-");
     r = rig(TWO_SEGMENT_ROOT, durable);
-    // Open the menu and its config row — the two clicks a "☰ ▸" then
-    // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
-    // bytes, never constructed, so this also proves they are REACHABLE.
+    // Found in the rendered bytes, never constructed, so also REACHABLE.
     const menuToggle = writesTo(r.render(), "settings.menu")[0];
     expect(menuToggle).toBeDefined();
     r.click(menuToggle!);
@@ -416,19 +361,17 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
   test("every setting the menu owns is one control, reachable from that root", () => {
     const out = plain(r.render());
-    // One labelled control each, showing the value the bar actually rendered.
-    expect(out).toContain("▦ default"); // preset
-    expect(out).toContain("🎨 tokyo-night"); // theme
-    expect(out).toContain("◐ none"); // look
-    expect(out).toContain("✦ powerline"); // style
-    expect(out).toContain("wrap: on"); // autoWrap
-    expect(out).toContain("padding 1"); // padding
-    expect(out).toContain("☐ persist?"); // the destination selector
+    expect(out).toContain("▦ default");
+    expect(out).toContain("🎨 tokyo-night");
+    expect(out).toContain("◐ none");
+    expect(out).toContain("✦ powerline");
+    expect(out).toContain("wrap: on");
+    expect(out).toContain("padding 1");
+    expect(out).toContain("☐ persist?");
   });
 
   test("unchecked: the theme control writes the SESSION key and nothing durable", () => {
     const before = r.render();
-    // Open the theme picker so its option cells render.
     const themeMenu = writesTo(before, "menus.settings_pickers").find((u) =>
       effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
     );
@@ -453,11 +396,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
     const open = r.render();
     expect(writesTo(open, "palette").some((u) => !isReset(u))).toBe(true);
-    // The session key appears only as the RELEASE segment of the durable write
-    // — never as a write of its own. That release is what keeps a durable
-    // write visible to the session that made it (a session pick outranks a
-    // durable default), and riding the write means a rejected write cannot
-    // drop the pick.
+    // The session key rides the durable write as its RELEASE segment only.
     const applyEffects = effectsOf(
       writesTo(open, "palette").find((u) => !isReset(u))!,
     );
@@ -471,23 +410,15 @@ describe("the config menu, reached from a user config whose root is one row", ()
     ).toBe(false);
   });
 
-  // [LAW:verifiable-goals] The workflow this menu invites, end to end: try a
-  // value in the session, tick persist?, commit it. Before the session clear
-  // rode along with the durable write, this sequence left the durable default
-  // invisible and the control dead — every further click recomputed the same
-  // successor and changed nothing on screen.
+  // [LAW:verifiable-goals] The workflow the menu invites: try, tick, commit.
   test("try-then-commit leaves the control live and the bar showing the committed value", () => {
     const wrapUrl = (): string =>
       writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
     expect(plain(r.render())).toContain("wrap: on");
 
-    // Try it: session-only, the bar follows.
     r.click(wrapUrl());
     expect(plain(r.render())).toContain("wrap: off");
 
-    // Commit it: the durable write lands AND the session override is dropped,
-    // so the bar keeps showing what was committed rather than freezing on the
-    // session value that would otherwise outrank it.
     r.click(writesTo(r.render(), "settings.persist")[0]!);
     r.click(wrapUrl());
     const committed = r.render();
@@ -497,24 +428,15 @@ describe("the config menu, reached from a user config whose root is one row", ()
       ),
     ).toBe(true);
 
-    // …and the session override is GONE, which is the half of the fix this rig
-    // can see: the label falls back to the value the config resolves, the slot
-    // the durable write now fills. (That the durable value then shows through
-    // needs the config-file reload this rig has no RenderCache for — the
-    // real-daemon e2e covers it, with a cold restart on top.) The write itself
-    // landed in the file: the cycle's successor of the tried-out "off" is
-    // "on", so that is the durable default now.
+    // The label falls back to the config-resolved value; the reload itself is
+    // covered by the real-daemon e2e.
     expect(plain(committed)).toContain("wrap: on");
     expect((durable.parsed().globals as { autoWrap?: boolean }).autoWrap).toBe(
       true,
     );
   });
 
-  // The bounded arm is a genuinely different code path from the pickers': a
-  // stepper carries no stateVar and emits a RELATIVE nudge, so it skips the
-  // readback compileDual does for the cycle and option arms. Both destinations
-  // are therefore asserted at each state — an incomplete switch that left the
-  // session step live beside the durable one would pass a "contains" check.
+  // A stepper emits a RELATIVE nudge and skips the readback the other arms do.
   test("the padding stepper follows the checkbox, and only one destination at a time", () => {
     const stepVerbs = (rendered: string): string[] =>
       writesTo(rendered, "padding")
@@ -533,28 +455,18 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(checked).not.toContain("step-state");
   });
 
-  // [LAW:dataflow-not-control-flow] The epic's own guardrail, as a test: no
-  // render-walk branch on persist state. If the walk branched — a different
-  // segment, a different row, a hidden control — the two renders would differ
-  // by more than the glyph the checkbox itself owns. They differ by exactly
-  // that one character, so the destination is carried by the click, not by a
-  // different bar being drawn.
+  // [LAW:dataflow-not-control-flow] No render-walk branch on persist state.
   test("checking persist? changes the checkbox glyph and nothing else on screen", () => {
     const unchecked = plain(r.render());
     r.click(writesTo(r.render(), "settings.persist")[0]!);
     const checked = plain(r.render());
-    // Every visible cell is byte-identical but the checkbox itself: same
-    // segments, same order, same labels, same values. The destination moved;
-    // the bar did not.
     expect(checked).toContain("☑ persist?");
     expect(unchecked).toContain("☐ persist?");
     expect(checked.replace("☑ persist?", "☐ persist?")).toBe(unchecked);
   });
 });
 
-// A `↺` reset link is the one legitimate durable write on an unchecked bar:
-// it forgets a durable default rather than setting one, so it is not the
-// control's own apply.
+// A `↺` reset forgets a durable default rather than setting one.
 function isReset(url: string): boolean {
   return effectsOf(url).every((e) => e.verb === "reset-config");
 }

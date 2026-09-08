@@ -1,10 +1,5 @@
 #!/usr/bin/env tsx
-// [LAW:single-enforcer] Guard: the committed schema artifact must equal what the
-// config loader schemas currently emit. Regenerates in-memory and byte-diffs
-// against the checked-in file. Wired into `prepublishOnly` so a forgotten
-// `gen:schema` (after a grammar change) fails the publish, not an editor
-// downstream serving a stale contract. Mirrors `check:protocol`. The fix is
-// always `pnpm gen:schema`, never editing the JSON by hand [LAW:one-source-of-truth].
+// [LAW:single-enforcer] The committed schema must equal what the loader emits.
 
 import { readFileSync } from "node:fs";
 import { serializeConfigSchema } from "../src/config/loader/emit-schema.js";

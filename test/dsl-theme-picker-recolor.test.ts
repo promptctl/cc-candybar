@@ -1,16 +1,5 @@
-// [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
-// recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
-// prove the click writes SessionState and the active-marking moves, but they
-// pass a STATIC basePalette into renderDsl — so they never exercise the
-// recolor. The recolor lives in the daemon's PER-RENDER basePalette resolution
-// (effectiveThemeName -> paletteForThemeName), OUTSIDE renderDsl. This test
-// replicates that resolution exactly as src/daemon/server.ts does, so it proves
-// the end-to-end loop: a set-state `theme` click changes the bytes a
-// non-picker segment renders.
-//
-// [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
-// for rendering, parseHandlerUrl + VERBS for the click, and the same
-// effectiveThemeName/paletteForThemeName the daemon calls. No parallel rig.
+// [LAW:verifiable-goals] A theme click recolors the WHOLE bar. The recolor lives in the
+// daemon's PER-RENDER basePalette resolution, outside renderDsl, so this replicates it.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -31,10 +20,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// This mirrors the user's live config slice (a colored text segment + a theme
-// picker bound to the `theme` state key, defaulted to the config palette). No
-// per-segment `palette:` override — both segments resolve against the live
-// basePalette, so they follow the session pick.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
@@ -60,12 +45,7 @@ function buildRuntime() {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
 
-  // [LAW:one-source-of-truth] Resolve basePalette per render the SAME way the
-  // daemon does — the session's chosen theme over the config default. This is
-  // the line that makes a click recolor the bar; freezing it would silently
-  // pass while the real daemon recolors. (server.ts: basePalette =
-  // paletteForThemeName(effectiveThemeName(undefined, sessionState.get(sid,'theme'),
-  // globals.palette))).
+  // [LAW:one-source-of-truth] Resolved per render the SAME way the daemon does; freezing it would pass while the real daemon recolors.
   const render = (): string => {
     const basePalette = paletteForThemeName(
       effectiveThemeName(undefined, 
@@ -86,8 +66,7 @@ function buildRuntime() {
   return { sessionState, render };
 }
 
-// Every truecolor background SGR in a rendered line — `48;2;r;g;b`. The set of
-// these is the bar's palette footprint; a recolor changes it.
+// Every truecolor background SGR — the bar's palette footprint.
 function bgColors(rendered: string): Set<string> {
   const re = /48;2;(\d+;\d+;\d+)/g;
   const out = new Set<string>();
@@ -97,8 +76,6 @@ function bgColors(rendered: string): Set<string> {
 }
 
 function clickTheme(sessionState: SessionState, theme: string): void {
-  // Drive the real wire end-to-end: emit the click URL the picker would, then
-  // dispatch it exactly as the daemon does (parse → dispatch → set-state).
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
   ]);
@@ -118,9 +95,7 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
     const after = render();
     const afterBgs = bgColors(after);
 
-    // [LAW:verifiable-goals] The whole-bar recolor IS the contract: the set of
-    // background colors the bar paints with must change. dark↔light themes
-    // share no surface color, so the two footprints are disjoint.
+    // [LAW:verifiable-goals] dark↔light share no surface colour, so the footprints are disjoint.
     expect(afterBgs).not.toEqual(beforeBgs);
     for (const c of afterBgs) expect(beforeBgs.has(c)).toBe(false);
   });
@@ -128,8 +103,6 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   test("the non-picker `plain` segment itself recolors (not just the picker)", () => {
     const { sessionState, render } = buildRuntime();
 
-    // Isolate the `plain` segment's bg by rendering ONLY its known glyph run.
-    // It's the first row, so its bg SGR precedes the "◆ here" text.
     const bgOf = (rendered: string): string => {
       const m = rendered.match(/48;2;(\d+;\d+;\d+)[^]*?◆ here/);
       expect(m).not.toBeNull();
@@ -146,8 +119,6 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   test("active marking tracks the rendered theme: default marked, then the pick", () => {
     const { sessionState, render } = buildRuntime();
 
-    // Before any click, the state var defaults to the config palette, so the
-    // base theme option is the single bold (active) region.
     const before = render();
     expect(boldUrls(before).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: [SID, "theme", BASE_THEME] }],

@@ -39,7 +39,7 @@ describe("findAgentTranscripts", () => {
 
   it("returns [] when session has no subagents directory", async () => {
     const sessionId = "abc123";
-    mkdirSync(join(tempDir, sessionId)); // session dir exists, but no subagents/ inside
+    mkdirSync(join(tempDir, sessionId));
 
     const result = await findAgentTranscripts(sessionId, tempDir);
 

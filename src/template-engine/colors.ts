@@ -1,21 +1,7 @@
-// [LAW:single-enforcer] All per-segment bg/fg resolution flows through
-// resolveSegmentColors. No second path; a second path would silently drift
-// from the ordered pipeline this function owns.
-//
-// [LAW:no-ambient-temporal-coupling] That ordering — publish the segment's
-// palette, resolve bg, publish bg, resolve fg, then hand the body its turn —
-// is not incidental execution order that happens to work. It is the phase
-// structure of a segment's color resolution, and this function is its one
-// owner. Each phase's output is *published* into the active-segment record
-// before the next phase runs, so a later template can read an earlier
-// phase's result (`fg: '{{ contrastOn (bgOf) }}'`) and an earlier one
-// cannot read a later one — it gets a message naming the phase instead.
-//
-// [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
-// values (undefined template = no spec) are what decides the output, not
-// whether steps run. An absent bg spec resolves to the region's tint; an
-// absent fg resolves to the region's text floor on the background the cell
-// resolved to (unset on the bar, so cells keep their own).
+// [LAW:single-enforcer] All per-segment bg/fg resolution flows through resolveSegmentColors.
+// [LAW:no-ambient-temporal-coupling] Each phase's output is published before the next runs,
+// so a later template can read an earlier phase's result and an earlier one cannot.
+// [LAW:dataflow-not-control-flow] Steps run unconditionally; the values decide the output.
 
 import {
   Style,
@@ -37,37 +23,10 @@ export class ColorSpecError extends Error {
 }
 
 /**
- * Resolve a segment's `bg:` and `fg:` templates into the Style that becomes
- * its baseStyle, publishing each phase's result into `ref` as it goes.
- *
- * A `bg:`/`fg:` field is a template evaluated to a **color reference** — a
- * palette variable name (`"surface-active"`) or a `#RRGGBB` literal. Since
- * rich-js's `resolveColorRef` accepts both and is idempotent, the plain
- * authoring form and a computed one take the identical path:
- *
- * ```json5
- * bg: "surface-active"                             // a name, evaluated as itself
- * bg: '{{ darken (color "surface-active") 1 }}'    // a computed literal
- * ```
- *
- * There is no "is this a name or a color" branch anywhere — one total
- * function over both. [LAW:dataflow-not-control-flow]
- *
- * A segment always has a background. `tint` is the decorative one its region
- * dealt it — a vocabulary entry on the bar, a band item under a trigger — the
- * floor every segment wears; an authored `bg:` states MEANING (a threshold's
- * `error`, a context's `surface-active`) and paints over it.
- * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
- * segment type is the discriminator: no segment is asked whether it "looks
- * decorative", the absence of an authored spec IS the decorated case. `text`
- * is the same floor for the foreground: what an unauthored `fg:` defaults to
- * on the background phase 1 resolved — nothing on the bar (cells keep their
- * own), the pole that reads on THAT background on a band, where a fixed
- * foreground measurably fails (design doc, Decisions).
- *
- * Looks are not this function's concern: they live upstream as WHICH palette
- * it is handed, so bg, fg, and the body all resolve from one palette and their
- * theme-designed relationships are preserved.
+ * Resolve a segment's `bg:`/`fg:` templates into its baseStyle, publishing each phase's
+ * result into `ref` as it goes. A name and a computed `#RRGGBB` take one total path.
+ * [LAW:dataflow-not-control-flow] `bg?:` optionality is the discriminator: an absent spec
+ * IS the decorated case, wearing the region's tint; `text` is the same floor for `fg:`.
  */
 export function resolveSegmentColors(
   ref: ActiveSegmentRef,
@@ -80,10 +39,6 @@ export function resolveSegmentColors(
   fgTemplate: Template<RichText> | undefined,
   scope: object,
 ): Style {
-  // Phase 0 — the palette (and the disclosure a `{{ menu }}` body colours its
-  // items by) are live from here until the walk clears them, so
-  // `{{ color … }}` in the bg template, the fg template, and the body all read
-  // this one palette. `bg` starts undefined: it is what phase 1 computes.
   const active = {
     segName,
     palette,
@@ -92,12 +47,10 @@ export function resolveSegmentColors(
   };
   ref.current = active;
 
-  // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const bgColor =
     bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : tint;
 
-  // Phase 2 — publish it, then foreground, which may now ask about it.
   active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
   const fgColor =
@@ -109,8 +62,6 @@ export function resolveSegmentColors(
   });
 }
 
-// Evaluate a template against scope and flatten all fragments to plain text.
-// Returns undefined when no template is configured (no bg/fg override).
 function evalToPlainText(
   template: Template<RichText> | undefined,
   scope: object,
@@ -122,12 +73,8 @@ function evalToPlainText(
     .join("");
 }
 
-// [LAW:one-source-of-truth] The same rich-js checkpoint the `{{ color }}`
-// template function crosses, so a reference that works in a body works in a
-// `bg:` field and vice versa. Re-thrown with the field's role attached —
-// rich-js knows the reference failed, only cc-candybar knows it came from a
-// `fg:`. [LAW:no-silent-failure] never a substituted default: a broken color
-// reference is a config bug, and the fix is the config.
+// [LAW:one-source-of-truth] The same rich-js checkpoint `{{ color }}` crosses, re-thrown with
+// the field's role attached. [LAW:no-silent-failure] Never a substituted default.
 function resolveRef(
   palette: Palette,
   ref: string,

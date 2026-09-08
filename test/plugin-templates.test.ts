@@ -1,22 +1,7 @@
-// [LAW:verifiable-goals] The Claude Code plugin (plugin/) ships a config
-// template the `/candybar` wizard fills and installs, a preview script that
-// renders the same template, and the wizard prompt that names the placeholders
-// and drives the script. Three files in three media — JSON, bash, markdown —
-// cannot share a type, so this suite is the enforcer that keeps them one
-// system: every config the wizard can produce loads under `cc-candybar check`,
-// every option name the preview offers is one the daemon accepts, and all
-// three files agree on the placeholder set. Before it existed, every shipped
-// template had silently rotted to a config model the loader retired
-// (brandon-plugin-templates-irq).
-//
-// [LAW:single-enforcer] The pipeline driven here IS `cc-candybar check` — the
-// same entry function the CLI runs and the daemon's own load+render path — so
-// "the wizard's config passes check" and "the bar renders it" are one fact.
-//
-// [LAW:one-source-of-truth] The value domains come from the SOURCE the loader
-// validates against (palette registry, STRIP_STYLES, CHARSETS, the bundled
-// presets), never from a list restated here. The template directory is
-// globbed, so a template added later is covered on arrival.
+// [LAW:single-enforcer] The plugin's template, preview script and wizard prompt
+// are three media that cannot share a type; this suite keeps them one system.
+// [LAW:one-source-of-truth] Value domains come from the SOURCE the loader
+// validates against, never from a list restated here.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -41,7 +26,6 @@ const wizardDoc = fs.readFileSync(
   "utf8",
 );
 
-// Placeholder name → every value the wizard may put there.
 const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   THEME: listResolvablePaletteNames(),
   STYLE: STRIP_STYLES,
@@ -49,9 +33,7 @@ const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   PRESET: presetNames(DEFAULT_DSL_CONFIG.presets),
 };
 
-// [LAW:parse-dont-validate] The one crossing from a placeholder name to its
-// domain. A placeholder the template introduces without a row above is an
-// untested claim, and fails the suite here, by name, as it is collected.
+// [LAW:parse-dont-validate] A placeholder with no domain row above is an untested claim, and fails here by name.
 function domainOf(name: string): readonly string[] {
   const domain = DOMAINS[name];
   if (domain === undefined) {
@@ -60,17 +42,14 @@ function domainOf(name: string): readonly string[] {
   return domain;
 }
 
-// The wizard's own placeholder spelling, `replace:NAME`, wherever it appears.
 function placeholdersIn(text: string): string[] {
   return [...new Set([...text.matchAll(/replace:([A-Z_]+)/g)].map((m) => m[1]!))].sort();
 }
 
-// The wizard's substitution: every placeholder replaced by its chosen value.
 function fill(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/replace:([A-Z_]+)/g, (_, name: string) => values[name]!);
 }
 
-// A bash `readonly NAME=(a b c)` line's members.
 function previewArray(name: string): string[] {
   const line = previewScript.match(new RegExp(`^readonly ${name}=\\((.*)\\)$`, "m"));
   if (line === null) {
@@ -91,8 +70,7 @@ const templatePlaceholders = placeholdersIn(
 );
 
 describe("plugin config templates (plugin/templates/*.json)", () => {
-  // Guard against the glob matching nothing (a moved directory would make
-  // every describe.each below vanish and the suite pass vacuously).
+  // A moved directory would make every describe.each vanish and the suite pass vacuously.
   test("the wizard's template is present", () => {
     expect(templateFiles).toContain("config.json");
   });
@@ -101,10 +79,6 @@ describe("plugin config templates (plugin/templates/*.json)", () => {
     const template = fs.readFileSync(path.join(templatesDir, file), "utf8");
     const names = placeholdersIn(template);
 
-    // One fill per (placeholder, value): the first member of every domain as
-    // the base, with one placeholder swept over its whole domain at a time.
-    // Every value the wizard can offer is exercised; the loader's per-key
-    // validation is what makes the axes independent.
     const base = Object.fromEntries(names.map((n) => [n, domainOf(n)[0]!]));
     const fills = names.flatMap((n) =>
       domainOf(n).map((v): [string, Record<string, string>] => [
@@ -125,15 +99,11 @@ describe("plugin config templates (plugin/templates/*.json)", () => {
 });
 
 describe("plugin/bin/preview.sh renders the same template it offers", () => {
-  // The script fills the template with sed; the tokens it substitutes must be
-  // exactly the template's, else the preview renders a config the wizard
-  // never writes, or leaves a placeholder the loader rejects.
   test("substitutes exactly the template's placeholders", () => {
     expect(placeholdersIn(previewScript)).toEqual(templatePlaceholders);
   });
 
-  // The curated theme shortlist may be a subset of the registry; the other
-  // three lists are closed vocabularies the wizard should offer in full.
+  // The theme shortlist may be a subset; the other three are closed vocabularies offered in full.
   test("THEMES names only palettes the daemon resolves", () => {
     const themes = previewArray("THEMES");
     expect(themes.length).toBeGreaterThan(0);

@@ -1,17 +1,5 @@
-// [LAW:verifiable-goals] check's contract is its OUTCOME, discriminated by kind
-// — clean / fatal / unreadable. `checkConfig` is the pure decision (a function
-// of the target file's contents on the daemon's own pipeline); `checkPlan`
-// projects it onto the streams + exit-code contract. We drive the same entry
-// functions `cc-candybar check` runs (the ticket's "drives the same entry
-// function" form), so the exit-code contract is verifiable without spawning a
-// process or stubbing process.exit.
-//
-// The fixture vocabulary below is the bn5.6 load-error surface the command
-// exists to expose to a blind authoring agent: JSON5 parse errors, undeclared
-// action refs, reserved-namespace squatting, the removed {{ menu }} positional
-// tail, mistyped menu dict options — plus the render-stage failures the old
-// shallow `lint` could never see (template parse errors, missing payload
-// fields).
+// [LAW:verifiable-goals] These drive the same entry functions `cc-candybar check` runs,
+// so the exit-code contract is verifiable without spawning a process or stubbing process.exit.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -33,9 +21,7 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// Default-path resolution reads $XDG_CONFIG_HOME (dslConfigCandidatePaths);
-// pin it per test so the developer's real config can never leak into a
-// verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it.
+// Pin $XDG_CONFIG_HOME and $CC_CANDYBAR_CONFIG per test so the developer's real config can never leak into a verdict.
 const SAVED_ENV = {
   CC_CANDYBAR_CONFIG: process.env.CC_CANDYBAR_CONFIG,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
@@ -137,14 +123,12 @@ describe("checkConfig — explicit target", () => {
     expect(checkPlan(outcome).code).toBe(2);
   });
 
-  // Acceptance (a): a JSON5 syntax error is fatal and names the file.
   it("reports a JSON5 parse error naming the config path", async () => {
     const p = write("syntax.json5", `{ segments: { a: `);
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain("syntax.json5");
   });
 
-  // Acceptance (b): a template referencing an undeclared action is fatal.
   it("reports a template referencing an undeclared action", async () => {
     const p = write(
       "undeclared-action.json5",
@@ -156,7 +140,6 @@ describe("checkConfig — explicit target", () => {
     expect(expectFatal(await checkConfig(p, dir))).toContain('"nope"');
   });
 
-  // Acceptance (c): a user name squatting the reserved namespaces is fatal.
   it("reports a user action squatting the reserved menus. namespace", async () => {
     const p = write(
       "squat-menus.json5",
@@ -183,9 +166,6 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('reserved "groups."');
   });
 
-  // aok.4 vocabulary: a menu's trigger text is authored, so the display-less
-  // form is a migration-pointing load error reachable from the CLI, not a
-  // silent ▸ the author never wrote.
   it("reports a {{ menu }} with no trigger display with the migration pointer", async () => {
     const p = write(
       "menu-nodisplay.json5",
@@ -211,9 +191,6 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('unknown {{ menu }} option "closeOnPik"');
   });
 
-  // The standalone {{ picker }} form (explicit page action + page=-1 close —
-  // {{ menu }}'s documented desugaring, live in examples/demo-actions.json5)
-  // is valid and must NOT be flagged.
   it("does not flag the standalone {{ picker }} form", async () => {
     const p = write(
       "standalone-picker.json5",
@@ -237,9 +214,7 @@ describe("checkConfig — explicit target", () => {
     expect((await checkConfig(p, dir)).kind).toBe("clean");
   });
 
-  // The stage the old `lint` could not reach: register + render. A mistyped
-  // payload field path parses and validates fine but throws MissingFieldError
-  // against the rich representative payload.
+  // A mistyped payload field path parses and validates fine, then throws at render.
   it("reports a render-stage failure (mistyped payload field path)", async () => {
     const p = write(
       "render-fail.json5",
@@ -254,11 +229,8 @@ describe("checkConfig — explicit target", () => {
     expect((await checkConfig(p, dir)).kind).toBe("fatal");
   });
 
-  // [LAW:no-silent-failure] An evaluation-stage author error (here: a cycle
-  // action bound to the wrong number of displays) renders as a visible ⚠ error
-  // cell in the daemon — partial rendering for a human looking at the bar. The
-  // blind authoring agent is NOT looking at the bar, so check must fold the
-  // same error into its text verdict: exit 1, never a blessed exit 0.
+  // [LAW:no-silent-failure] The blind authoring agent is not looking at the bar, so a
+  // visible ⚠ error cell must still fold into the text verdict: exit 1, never a blessed 0.
   it("reports a segment whose template throws at evaluation (⚠ error cell) as fatal", async () => {
     const p = write(
       "render-error-cell.json5",
@@ -275,13 +247,7 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
-  // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
-  // check's rich-but-static fixture can never drive true on its own (unlike
-  // every OTHER field a segment might gate on, which checkPayload just
-  // supplies richly) — so a segment gated on it is otherwise invisible to
-  // check no matter how broken its content is. Proves the SECOND render
-  // pass (loadRegisterRender) catches this: the same evaluation-stage error
-  // as the test above, but reachable ONLY behind `.preset.customized`.
+  // `.preset.customized` is the one field the static fixture cannot drive true, so this reaches the SECOND render pass.
   it("reports a segment error reachable only behind .preset.customized as fatal", async () => {
     const p = write(
       "customized-gate-error.json5",
@@ -302,12 +268,7 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain("(under .preset.customized = true)");
   });
 
-  // brandon-layout-edit-2gc.5 PR review: an UNCONDITIONAL segment error (no
-  // `when` at all — the SAME fixture as the "cycle action" test above)
-  // fails identically in BOTH render passes (they share config/store/
-  // registry, differing only in `presetCustomized`). Proves it's reported
-  // exactly ONCE, not double-counted with a misleading "(under
-  // .preset.customized = true)" tag implying it's specific to that gate.
+  // The same error in both render passes must be reported exactly once, not double-counted.
   it("does not double-report an unconditional segment error across both render passes", async () => {
     const p = write(
       "unconditional-error-dedup.json5",
@@ -358,11 +319,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
   });
 
-  // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
-  // read at the CLI edge (runCheck → detectConfigEnv) and passed as the
-  // explicit target — the way the statusline client sends it as a hint. So
-  // an override naming an absent file is `unreadable`, never a clean verdict
-  // about a bundled default the user did not ask for.
+  // $CC_CANDYBAR_CONFIG is read at the CLI edge and passed as the explicit target, so an absent file is `unreadable`.
   it("takes $CC_CANDYBAR_CONFIG as the explicit target, not as a resolver input", async () => {
     const p = write(
       "env-config.json5",
@@ -370,11 +327,9 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     );
     const cwd = path.join(dir, "empty-cwd");
     process.env.CC_CANDYBAR_CONFIG = p;
-    // The resolver itself is blind to the variable...
     const blind = await checkConfig(undefined, cwd);
     expect(blind.kind).toBe("clean");
     if (blind.kind === "clean") expect(blind.configPath).toBeNull();
-    // ...the CLI edge lifts it into the target.
     const viaEnv = await checkConfig(detectConfigEnv(process.env), cwd);
     expect(viaEnv.kind).toBe("clean");
     if (viaEnv.kind === "clean") expect(viaEnv.configPath).toBe(p);
@@ -452,10 +407,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   });
 });
 
-// `runCheck` is the argv edge: it owns process.exit and the streams, and it is
-// where an explicit argument and the CLI's own $CC_CANDYBAR_CONFIG meet. The
-// spies turn its exit into a thrown code so that composition is observable
-// in-process — everything below the edge is covered through checkConfig.
+// `runCheck` owns process.exit and the streams; the spies turn its exit into a thrown code.
 describe("runCheck — the argv edge", () => {
   class Exit {
     constructor(readonly code: number) {}

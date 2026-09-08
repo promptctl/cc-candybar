@@ -1,8 +1,4 @@
-// Boundary contract for the provider lanes — every lane carries a typed
-// Outcome and buildRenderPayload is the ONE log site for their failures;
-// `absent` and `failed` both project as MISSING payload fields — distinct
-// from a real 0/"" — so the DSL input fallback chain (default + last_error)
-// fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
+// [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior] `absent`/`failed` project as a MISSING payload field, distinct from a real 0/"".
 
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -38,12 +34,6 @@ function depsWith(
   } as unknown as RenderPayloadDeps;
 }
 
-// The effective globals the daemon resolves per render; these lane tests
-// don't exercise them, so any well-formed struct serves as the required
-// argument.
-// No client hints: these fixtures exercise the daemon-side folds, not the wire
-// boundary. An empty object is the honest "this render carried no hints"
-// (the shape an old client produces), so `host.ssh` stays absent throughout.
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
@@ -142,8 +132,6 @@ describe("buildRenderPayload — git outcome lane", () => {
       NO_HINTS,
     );
 
-    // ok fields project as values; the failed field is MISSING (the DSL
-    // default + last_error chain fires) — never a fabricated 0.
     expect(payload.git).toEqual({
       branch: "main",
       status: "clean",
@@ -152,8 +140,6 @@ describe("buildRenderPayload — git outcome lane", () => {
       sha: "abc1234",
     });
     expect("stash" in payload.git!).toBe(false);
-    // The absent upstream is also missing but logs nothing; only the failed
-    // stash produces a log line.
     expect(logs).toEqual([
       {
         level: "warn",
@@ -220,8 +206,6 @@ describe("buildRenderPayload — cache outcome lane", () => {
   });
 });
 
-// The five lanes migrated after PR #96 (session/today/context/metrics/tmux)
-// share the exact same contract as git/cache — one behavior, one type.
 describe("buildRenderPayload — migrated lanes share the outcome contract", () => {
   const LANE_PATHS = new Set([
     "session.cost",
@@ -325,11 +309,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   });
 });
 
-// [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/charset/
-// colorCompatibility/autoWrap/padding are theme/look's twins — this pins
-// that buildRenderPayload projects the EffectiveGlobals struct into the
-// payload verbatim (no name typo, no dropped field, unconditionally present
-// with no `wants` gate — exactly like theme/look).
+// [LAW:one-source-of-truth] buildRenderPayload projects EffectiveGlobals verbatim, unconditionally.
 describe("buildRenderPayload — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two daemon-consumed fields have none", async () => {
     const effective: EffectiveGlobals = {
@@ -362,17 +342,14 @@ describe("buildRenderPayload — effective globals projection", () => {
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });
     expect(payload.padding).toEqual({ effective: 3 });
-    // The daemon consumes these two itself — `updateNotice` gates the notice
-    // channel, `separator` feeds the joiner — and no template reads them.
+    // The daemon consumes these two itself; no template reads them.
     expect(payload).not.toHaveProperty("updateNotice");
     expect(payload).not.toHaveProperty("separator");
   });
 });
 
 describe("buildRenderPayload — git PR projection", () => {
-  // [LAW:no-silent-failure] The PR field is the one git field whose `failed`
-  // does NOT collapse to a missing key: it surfaces as `prError` (a visible
-  // render value) AND logs, so a forge outage is distinct from "no PR".
+  // [LAW:no-silent-failure] Unlike other git fields, a `failed` PR lookup surfaces as a visible `prError`, not a missing key.
   const PR_PATHS = new Set([
     "git.branch",
     "git.prNumber",

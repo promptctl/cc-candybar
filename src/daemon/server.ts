@@ -105,17 +105,8 @@ import {
 } from "../render/diagnostic-strip.js";
 import { DiagnosticDump } from "./diagnostic-dump.js";
 
-// [LAW:one-source-of-truth] one cache instance per daemon process — multiple
-// instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
-// [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
-// Installing the metering handle here makes subprocess counts visible in
-// daemon-stats.
 setLaunchStats(stats.launchStats);
-// [LAW:single-enforcer] The daemon injects `dlog` into both registries so
-// cache + watcher lifecycle events land in daemon.log at the right level.
-// Non-daemon consumers (var-system tests, future library use) take the
-// default debug-routed loggers and never write to daemon log files.
 const watcherRegistry = new WatcherRegistry({
   counters: stats,
   logger: dlog,
@@ -125,17 +116,9 @@ const gitService = new GitDataProvider({
   logger: dlog,
 });
 const usageStore = new SessionUsageStore();
-// [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
-// relay, subcommands) does no disk I/O. The daemon binds the file-backed
-// storage in runDaemon(), making it the sole reader/writer of the state file.
+// [LAW:locality-or-seam] Ephemeral, so importing this module does no disk I/O.
 const sessionState = new SessionState();
-// [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
-// free; the daemon wipes it in onListening() (reset), once the bind is
-// won, and is the only writer.
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
-// [LAW:one-source-of-truth] One provider per data shape, shared across every
-// render in this daemon. The render cache owns DSL-state-per-config; these
-// providers serve the augmented payload that flows through every render.
 const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
 const tmuxService = new TmuxService();
@@ -147,11 +130,6 @@ const renderCache = new RenderCache(
   },
   {
     observers: {
-      // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-      // daemon.log beside the "config change detected" line that preceded it
-      // — the operator's only record of whether a save was picked up cleanly,
-      // kept rendering last-known-good behind an error, or resolved to a
-      // different file. Same info level as the detection line.
       onReload: (entry) =>
         dlog(
           "info",
@@ -162,31 +140,18 @@ const renderCache = new RenderCache(
 );
 
 const REQUEST_TIMEOUT_MS = 200;
-// One cadence for "how often does the daemon look at its build on disk" —
-// the binary watch (exit on a changed bundle) and the update watch (does the
-// bundle match `src/`) both sample on it.
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
-// The registry is a network resource with releases hours apart; ask rarely.
 const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// --- binary-mtime self-restart ---
-//
-// If the daemon's compiled output changes on disk (rebuild, upgrade, edit),
-// exit at the next sample so the next client respawns from the fresh code.
-// Cheap (one statSync/min) and avoids the user having to manually kill the
-// daemon during development. unref() so this timer doesn't hold the process
-// alive. `checkNow` is the same sampler the interval runs, for the moment the
-// daemon itself changed the bundle (the update notice's rebuild) and need not
-// wait a minute to notice.
+// If the compiled output changes on disk, exit at the next sample so the next
+// client respawns from fresh code; `checkNow` skips the wait after our own build.
 function makeBinaryWatch(): { arm(): void; checkNow(): void } {
-  // Watch the resolved entry point, not the bin shim — npm run build updates
-  // dist/index.mjs but the bin/cc-candybar shim never changes.
+  // Watch the resolved entry point; the bin/cc-candybar shim never changes.
   const entryUrl = import.meta.url;
   const targets: string[] = [];
   if (entryUrl.startsWith("file://")) {
     targets.push(fileURLToPath(entryUrl));
   }
-  // Also watch argv[1] as fallback (covers global installs, symlinks, etc.)
   if (process.argv[1]) targets.push(process.argv[1]!);
 
   const originalMtimes = new Map<string, number>();
@@ -224,12 +189,7 @@ function makeBinaryWatch(): { arm(): void; checkNow(): void } {
 }
 const binaryWatch = makeBinaryWatch();
 
-// [LAW:single-enforcer] The daemon is the process that observes the bundle
-// it runs (the binary watch restarts it on rebuild), so it is the one place
-// that knows whether something newer than that bundle exists — the source
-// beside it, or a published release — and the one owner of the notice's
-// clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
-// its own, folded between the error and warning channels.
+// [LAW:single-enforcer] The daemon observes the bundle it runs, so it owns this.
 const updateWatch = makeUpdateWatch({
   entryUrl: import.meta.url,
   intervalMs: BIN_CHECK_INTERVAL_MS,
@@ -240,39 +200,17 @@ const updateWatch = makeUpdateWatch({
   log: dlog,
 });
 
-// Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
-// single-instance enforcer (two daemons cannot both bind the same path; the
-// kernel makes duplicate-daemon unrepresentable). Listens for one request per
-// connection. Any uncaught error exits non-zero; the next client obtains a
-// fresh daemon via obtainDaemonKick() (fire-and-forget caller) or
-// obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
-// [LAW:one-source-of-truth] Our own kernel start-time, read once at startup and
-// stamped into our lease so a future daemon's arbitration can prove whether our
-// pid still names THIS process or a recycled ghost (process-fingerprint.ts).
-// null when this host cannot fingerprint (no `ps`) — readers then fall back to
-// kill(pid,0), no worse than before the fingerprint existed.
+// [LAW:one-source-of-truth] Stamped into our lease so a future daemon can tell
+// us from a recycled pid; null when this host cannot fingerprint.
 let myStartTime: string | null = null;
 
-// The registry path this daemon claimed in the fork-bomb breaker's population
-// registry (fork-bomb-breaker.ts), or null when exempt (the canonical
-// production socket) or never reached (refused before claiming one). Released
-// on shutdown so a graceful exit frees its slot immediately rather than
-// waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
 
-// The parsed memory budget (bytes); set first thing in runDaemon.
 let budgetBytes = 0;
 
 export function runDaemon(): void {
-  // Catch-alls log + exit so the supervisor (the next client) can restart us.
-  // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
-  // catching all of unknown space, not skipping known optional values.
-  // [LAW:single-enforcer] Registered FIRST, before any of the startup calls
-  // below that can throw synchronously (admitDaemon's ensureDirSafe/writeEntry,
-  // ensureSocketParentSafe) — otherwise an early throw is a raw unhandled
-  // exception (stack trace to stderr, bypassing the clean shutdown(1) log +
-  // SIGKILL backstop) rather than funneling through the same death path as
-  // every other failure mode.
+  // [LAW:single-enforcer] Registered FIRST, before any startup call that can
+  // throw synchronously, so an early throw still funnels through shutdown(1).
   process.on("uncaughtException", (err) => {
     dlog("error", `uncaughtException: ${err.stack || err.message}`);
     shutdown(1);
@@ -288,15 +226,8 @@ export function runDaemon(): void {
     });
   }
 
-  // [LAW:effects-at-boundaries] The memory budget is parsed here, before any
-  // resource is committed — a malformed override is refused before the breaker
-  // registers us, before the bind, before the lease, and before a `daemon up`
-  // line could claim a boot that is about to die. Parsed once, threaded into
-  // armLimits and the boot line.
-  // [LAW:single-enforcer] Refused through the same death funnel as every other
-  // boot failure. A synchronous throw here is NOT uncaught — it lands in
-  // index.ts's catch, whose stderr the detached spawn discards — so the one
-  // line that says why the daemon never came up would go nowhere.
+  // [LAW:effects-at-boundaries] Parsed before any resource is committed, and
+  // refused through the same death funnel as every other boot failure.
   try {
     budgetBytes = rssLimitBytes(process.env);
   } catch (err) {
@@ -305,13 +236,8 @@ export function runDaemon(): void {
     return;
   }
 
-  // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
-  // resource-committing steps (no dir created, no socket touched, no session
-  // state loaded) — the whole point of a load-independent backstop is that it
-  // holds even when everything downstream of it is thrashing. Own start-time
-  // must be read first: it is both this check's identity and the lease's
-  // fingerprint later, so it is read exactly once and threaded through both
-  // (see realBreakerDeps' doc comment).
+  // [LAW:single-enforcer] The breaker runs FIRST among the resource-committing
+  // steps: a load-independent backstop must hold when downstream is thrashing.
   myStartTime = readOwnStartTime(process.pid);
   const admission = admitDaemon(realBreakerDeps(myStartTime));
   if (!admission.decision.allow) {
@@ -325,25 +251,13 @@ export function runDaemon(): void {
   breakerRegistryPath = admission.registryPath;
 
   fs.mkdirSync(daemonDir(), { recursive: true });
-  // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
-  // not a symlink before we bind. Without this check, a same-host attacker
-  // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
-  // squat the socket name. The check applies regardless of CC_CANDYBAR_SOCKET
-  // location — every bind path goes through the same trust precondition.
-  // No symmetric client-side check: the daemon is the sole creator, so a
-  // successful bind already proves the parent is trusted. Failure here surfaces
-  // as a daemon exit; the client falls back to the last cached render.
+  // [LAW:single-enforcer] Verify the socket parent before we bind, or a
+  // same-host attacker could pre-create it and squat the socket name.
   ensureSocketParentSafe(socketPath());
 
-  // Bind disk persistence now that we know we are the daemon process — load
-  // prior session state and become the sole writer of the state file.
   sessionState.useStorage(
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
-  // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
-  // the watchdog calls shutdown(0), it never exits on its own. A production
-  // daemon has no spawner to outlive (env unset) and arms an inert handle; only
-  // a test-spawned daemon is anchored, so this is invisible to the real daemon.
   armParentWatchdog({
     anchor: anchorFromEnv(process.env),
     isAlive: pidAlive,
@@ -358,27 +272,17 @@ export function runDaemon(): void {
   });
 
   // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
-  // Two daemons cannot both bind the same Unix socket path; the kernel makes
-  // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
-  // load-bearing for exclusion.
   bindOrAttachAndExit(server, socketPath(), /* retried */ false);
 }
 
-// [LAW:dataflow-not-control-flow] One operation ("bring this server up or
-// discover an existing one"). The bind result is the data that decides the
-// next step; callers do not get to choose whether to spawn.
 function bindOrAttachAndExit(
   server: net.Server,
   sockPath: string,
   retried: boolean,
 ): void {
   server.removeAllListeners("error");
-  // [LAW:no-ambient-temporal-coupling] server.listen(path, cb) registers cb as
-  // a ONE-TIME 'listening' listener. A first listen that fails EADDRINUSE never
-  // fires 'listening', so its callback stays pending; the reclaim retry adds a
-  // second. Without clearing the stale one, a successful rebind fires BOTH and
-  // onListening runs twice — double-arming the RSS backstop + watchers. Clear
-  // pending 'listening' listeners so exactly one onListening fires per bind.
+  // [LAW:no-ambient-temporal-coupling] listen's cb is a ONE-TIME listener a
+  // failed listen leaves pending; uncleared, a rebind fires onListening twice.
   server.removeAllListeners("listening");
   server.once("error", (err) => {
     const code = (err as NodeJS.ErrnoException).code;
@@ -388,8 +292,6 @@ function bindOrAttachAndExit(
       return;
     }
     if (retried) {
-      // Lost a rebind race with another duplicate. The kernel arbitrated; we
-      // are the loser. Exit cleanly so the winner serves.
       dlog("info", "lost rebind race; another daemon is alive — exiting");
       process.exit(0);
       return;
@@ -399,20 +301,10 @@ function bindOrAttachAndExit(
   server.listen(sockPath, () => onListening(sockPath));
 }
 
-// [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
-// pid lease, NEVER a connect probe. The path already exists (a live daemon, or
-// a stale file from a crashed one); the lease's owner pid + kill(pid,0) decides
-// which. This is fully synchronous — reading the lease and testing liveness are
-// both sync — so there is no await gap for a concurrent recoverer to race
-// through (the old async probe had two such gaps and a hand-rolled re-check).
-//
-// [LAW:effects-at-boundaries] The decision is the pure arbitrateSocket fold
-// over the lease read + injected pidAlive; the kill / unlink / rebind effects
-// are performed here at the edge.
+// [LAW:one-source-of-truth] Arbitration consults the pid lease, NEVER a connect
+// probe, and is synchronous — no await gap for a racing recoverer.
+// [LAW:effects-at-boundaries] arbitrateSocket decides; the effects happen here.
 function handleAddressInUse(server: net.Server, sockPath: string): void {
-  // [LAW:one-source-of-truth] Derive the lease from the SAME sockPath threaded
-  // through unlink + rebind below, not the re-derived global — one identity
-  // source for the whole arbitration.
   const decision = arbitrateSocket(
     readLease(leasePathFor(sockPath)),
     (pid, startTime) =>
@@ -421,22 +313,14 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
   if (decision.kind === "attach-and-exit") {
     dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
-    // [LAW:no-ambient-temporal-coupling] process.exit() halts synchronously, so
-    // the reclaim below is already unreachable — but the explicit return makes
-    // that structural, matching the sibling `retried` branch, so no future
-    // refactor of the exit path can accidentally fall through to unlinking a
-    // live daemon's socket.
     return;
   }
   dlog(
     "warn",
     `EADDRINUSE: ${decision.reason} — unlinking stale socket and rebinding`,
   );
-  // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
-  // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system
-  // in the worst state: no daemon + stale socket blocking future starts.
-  // Surface unrecoverable failures loudly. ENOENT is fine — the goal was
-  // "make the path bindable" and a missing path already satisfies that.
+  // [LAW:no-defensive-null-guards] A failed unlink leaves no daemon plus a stale
+  // socket blocking future starts. ENOENT already makes the path bindable.
   try {
     fs.unlinkSync(sockPath);
   } catch (e) {
@@ -453,27 +337,9 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
 }
 
 function onListening(sockPath: string): void {
-  // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
-  // identity (dev+ino) as the fingerprint the ownership self-check re-stats
-  // against, BEFORE claiming the lease. Captured from the PATH, not the bound
-  // FD: for an AF_UNIX listener, fstat(fd) reports the socket's inode in the
-  // socket namespace — not the filesystem-entry inode that stat(path) sees — so
-  // the FD yields no path-comparable identity. stat(path), taken as close to the
-  // bind as possible, is the only path-comparable truth available.
-  //
-  // [FRAMING:representation] This inode capture still cannot close the capture
-  // race on its own: if a second daemon completed its full EADDRINUSE →
-  // read-lease → unlink → rebind cycle in the single event-loop tick between
-  // bind() and this 'listening' callback, we stat the path and capture the
-  // THIEF's inode as "ours". No race-free handle on our own socket's path
-  // identity exists (an AF_UNIX listener's fstat is a different namespace's
-  // inode), so the captured inode cannot be made trustworthy. But that is no
-  // longer the immortal orphan it was (brandon-daemon-lifecycle-2b3.4 RESIDUAL
-  // 2): the ownership self-check now ALSO requires the lease to still name us,
-  // and a real thief writes its own pid into the lease — so a displaced daemon
-  // drains within a bounded number of intervals instead of reading `owned`
-  // forever (see checkOwnership). The absent/unreadable case below still exits
-  // toward the SAFE direction without writing a lease that would stomp a thief's.
+  // [LAW:no-ambient-temporal-coupling] Identity comes from the PATH: an AF_UNIX
+  // listener's fstat reports a socket-namespace inode. [FRAMING:representation]
+  // It cannot see a thief that rebound inside the bind→listening tick.
   const boundRead = readSocketIdentity(sockPath);
   if (boundRead.kind !== "present") {
     dlog(
@@ -484,14 +350,7 @@ function onListening(sockPath: string): void {
     return;
   }
 
-  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST among the post-bind
-  // effects — before chmod or any other work — so the window between winning the
-  // bind and the lease naming us is as small as possible. A second daemon that
-  // binds in that sub-ms gap reads an absent lease and reclaims (displacing us);
-  // the ownership self-check below makes that self-healing, but keeping the
-  // window minimal keeps it vanishingly rare.
-  // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
-  // matching handleAddressInUse's read — one identity source across write + read.
+  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST, minimising the gap.
   writeLeaseFile(sockPath);
   try {
     fs.chmodSync(sockPath, 0o600);
@@ -500,22 +359,13 @@ function onListening(sockPath: string): void {
   }
   dlog(
     "info",
-    // [FRAMING:representation] Report the heap cap V8 actually applied (the
-    // territory), not the flag the spawner meant to pass (the map) — the one
-    // question a silent SIGABRT crash-loop leaves open is "which cap was live".
+    // [FRAMING:representation] The cap V8 applied, not the flag it was passed.
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
       `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB ` +
       `rssLimit=${Math.round(budgetBytes / 1048576)}MB`,
   );
-  // [LAW:single-enforcer] This bind is the one process-wide fact that answers
-  // "did an outage just end" — see resetSpawnBackoff's doc comment in
-  // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
-  // longer applies once a daemon is actually serving.
+  // [LAW:single-enforcer] The one fact that answers "did an outage just end".
   resetSpawnBackoff();
-  // The dump directory is a cold-rebuilt cache like every other: whatever a
-  // previous daemon wrote there is unnamed by any strip this one renders.
-  // After the bind win, like every other "we are the daemon" effect: a
-  // process that loses the race must never touch the winner's files.
   const wipeFailure = diagnosticDump.reset();
   if (wipeFailure !== null)
     dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
@@ -525,17 +375,9 @@ function onListening(sockPath: string): void {
   armOwnershipWatch(sockPath, boundRead.identity);
 }
 
-// --- socket-ownership self-check ---
-//
 // [LAW:single-enforcer] The sole enforcer of "serving implies owning the socket
-// path over time" (brandon-daemon-lifecycle-2b3.2). Each interval it re-reads
-// BOTH representations a displacer can touch — the path's kernel identity (still
-// the inode we bound?) and the lease (still names our pid?) — and drains through
-// the SAME shutdown funnel as signals, the RSS backstop, and the watchdog on
-// either mismatch. The lease arm closes the capture race (RESIDUAL 2): a thief
-// that stole our socket inside the bind→listening tick, which the inode arm
-// cannot see because we captured the thief's inode, is caught the moment the
-// thief writes its own pid into the lease. No parallel exit path.
+// path over time": the inode and the lease's pid are both re-read, and either
+// mismatch drains through the SAME shutdown funnel.
 function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
   makeOwnershipWatch({
     bound,
@@ -547,7 +389,6 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
   }).arm();
 }
 
-// --- self-shutdown on RSS / age ---
 let limits: LimitsHandle | null = null;
 function armLimits(): void {
   limits = makeLimits(
@@ -558,20 +399,8 @@ function armLimits(): void {
   limits.arm();
 }
 
-// --- socket-ownership lease ---
-//
-// [LAW:one-source-of-truth] The lease is the authority for socket ownership —
-// its owner pid + kill(pid,0) is what the next daemon's EADDRINUSE arbitration
-// consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
-// in bindOrAttachAndExit(); the lease answers the separate question "may I
-// destroy this existing path" over time. It also carries the same diagnostic
-// fields the old pidfile did, so one file serves both roles.
-//
-// Overwrite-on-write (no EEXIST check). We only reach onListening after winning
-// the bind, so whatever stale lease a dead owner left is ours to replace. Write
-// failure is non-fatal: the lease is best-effort ownership signalling on top of
-// bind()'s hard exclusion; a missing lease degrades a future arbitration to
-// "reclaim" (unlink + rebind), never to a wrong attach.
+// [LAW:one-source-of-truth] The lease is the authority for ownership over time;
+// bind() is what excludes right now, so a failed write degrades to reclaim.
 
 function writeLeaseFile(sockPath: string): void {
   const reason = writeLease(leasePathFor(sockPath), {
@@ -585,48 +414,16 @@ function writeLeaseFile(sockPath: string): void {
 
 let inFlight = 0;
 
-// --- shutdown ---
-
 let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  // [LAW:single-enforcer] Arm the SIGKILL backstop FIRST, before any cleanup.
-  // The 452-daemon incident: shut-down daemons logged "shutting down" but
-  // held the bound socket FD 42 minutes later — process.exit() reached the
-  // call site but never completed because some active handle kept libuv's
-  // event loop alive past exit's teardown. The prior shape had `.unref()`
-  // on the SIGKILL timer, so the timer itself did NOT keep the loop alive
-  // — leaving the loop's only remaining live handles to win the race.
-  //
-  // What this timer guarantees: as long as the event loop can still run
-  // (handles that won't drop, async cleanup that schedules but never
-  // completes — the realistic failure modes for the incident class), the
-  // setTimeout callback fires within 500ms and SIGKILL terminates the
-  // process from outside the loop's bookkeeping. Critically the timer is
-  // NOT unref'd, so it is itself an active handle that keeps the loop
-  // alive long enough for itself to fire.
-  //
-  // What this timer cannot do: rescue a truly synchronous thread block
-  // (a C++ binding that never returns to JS, an infinite sync loop). No
-  // JS timer can fire while the main thread is blocked; only an external
-  // signal recovers that case. The realistic 452-corpse mode was async-
-  // handle retention, not a synchronous block, so the backstop is
-  // load-bearing for the observed failure pattern.
+  // [LAW:single-enforcer] Arm the SIGKILL backstop FIRST: an active handle can
+  // keep the loop alive past process.exit, so this timer is NOT unref'd.
   setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
-  // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
-  // ONLY mutex preventing duplicate daemons. The previous shape unlinked
-  // the socket file FIRST, then spent O(100ms) closing watchers, flushing
-  // session state, and tearing down log streams before process.exit().
-  // The unlink frees the path the instant it runs; the listening FD stays
-  // held only until process.exit. In between, Claude Code's next render
-  // tick can spawn a fresh daemon that bind()s the same path and starts
-  // serving while we are still finishing cleanup. Under OOM cycles the
-  // overlap compounds — 12 daemons stacked up in the wild was the
-  // observed symptom. Do NOT unlink here. The kernel releases the FD on
-  // process.exit; the stale path that remains is recovered by the
-  // existing handleAddressInUse logic on the next daemon's startup
-  // (probe → dead → unlink + rebind, ~50ms one-shot cost).
+  // [LAW:single-enforcer] bind() is the ONLY mutex preventing duplicate daemons.
+  // Do NOT unlink here: it frees the path instantly while the FD is held until
+  // exit, so a fresh daemon could bind and serve mid-cleanup.
   try {
     gitService.close();
   } catch (e) {
@@ -647,15 +444,8 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `sessionState flush failed: ${(e as Error).message}`);
   }
-  // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
-  // displaced daemon (socket stolen, thief wrote its own lease) must not delete
-  // the live owner's lease on its way out, or the next EADDRINUSE would read
-  // `absent` and reclaim the thief's live socket — cascading the theft.
+  // [LAW:one-source-of-truth] Only if it still names us, or the theft cascades.
   removeLeaseIfOwned(leasePath(), process.pid);
-  // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
-  // lease above, reused via releaseRegistration — a slot this daemon never
-  // claimed (exempt production, or refused before claiming one) is null and
-  // skipped.
   if (breakerRegistryPath !== null) {
     releaseRegistration(
       breakerRegistryPath,
@@ -664,34 +454,19 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  // Every dlog above was a synchronous append (log.ts), so the death line is
-  // already on disk; nothing to flush before exit.
   process.exit(code);
 }
-
-// --- per-connection handler ---
 
 function handleConnection(sock: net.Socket): void {
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
 
-  // [LAW:no-ambient-temporal-coupling] respond owns the response→exit
-  // ordering. exitAfterFlush (an exit code; null = stay up) is performed
-  // by sock.end's completion callback, which Node invokes on 'finish' OR
-  // 'error' — a total signal. A peer that vanished mid-flush still settles,
-  // so the exit wish can never be stranded on a dead socket, and a live
-  // peer always has the frame in the kernel buffer before process.exit
-  // (unix-socket data survives writer exit). No fixed sleep stands between
-  // respond and exit; the SIGKILL backstop inside shutdown() is the
-  // unrelated last-resort safety.
+  // [LAW:no-ambient-temporal-coupling] sock.end's callback fires on 'finish' OR
+  // 'error', so the exit wish can never be stranded on a dead socket.
   const respond = (resp: Response, exitAfterFlush: number | null): void => {
     if (responded) {
-      // First responder owns the flush. Reaching here with an exit wish is
-      // unreachable today (both exit-carrying arms resolve synchronously,
-      // far inside the request timeout) — but if it ever happens, say so
-      // instead of silently leaving a daemon up that was told to exit.
-      // [LAW:no-silent-failure]
+      // [LAW:no-silent-failure] A daemon told to exit must not stay up quietly.
       if (exitAfterFlush !== null) {
         dlog(
           "warn",
@@ -708,25 +483,14 @@ function handleConnection(sock: net.Socket): void {
     try {
       sock.end(encodeFrame(resp), settle);
     } catch (e) {
-      // [LAW:no-silent-failure] The response is lost (socket already torn
-      // down), but the exit wish must not be.
+      // [LAW:no-silent-failure] The response is lost, but the exit wish is not.
       dlog("warn", `response write failed: ${(e as Error).message}`);
       settle?.();
     }
   };
 
-  // Per-request timeout protects the daemon from a single slow request
-  // (e.g. a hung git call) blocking subsequent connections. It abandons the
-  // RESPONSE, not the work — the handler promise keeps running.
-  //
-  // [LAW:one-source-of-truth] That is safe for the transcript-fs path because
-  // the work is bounded + shared, not orphaned: the today aggregate and
-  // per-session usage compute behind a SingleFlight (src/utils/single-flight.ts),
-  // so a timed-out render that abandoned its await leaves behind the ONE
-  // canonical in-flight scan, which the next render coalesces onto rather than
-  // duplicating. A timeout therefore adds zero new fs work — there is never
-  // more than one scan per key to orphan. Cancellation would be both messier
-  // and wasteful here (the in-flight scan is exactly what the next tick needs).
+  // The timeout abandons the RESPONSE, not the work. [LAW:one-source-of-truth]
+  // A SingleFlight leaves one in-flight scan the next render coalesces onto.
   const timer = setTimeout(() => {
     stats.requestsTimedOut++;
     respond(
@@ -782,14 +546,8 @@ function handleConnection(sock: net.Socket): void {
   });
 }
 
-// [LAW:no-ambient-temporal-coupling] A request whose semantics include "then
-// exit" (the shutdown verb, the stale-binary version mismatch) must not exit
-// until its response has flushed — but handleRequest cannot see the socket.
-// So the exit is returned as DATA (the exit code; null = stay up) and the
-// connection boundary, which owns the flush, sequences shutdown on the write
-// completion. No timer stands between respond and exit.
-// [LAW:effects-at-boundaries] handleRequest computes the description; the
-// socket boundary performs it.
+// [LAW:no-ambient-temporal-coupling] "Then exit" is DATA; the connection
+// boundary owns the flush. [LAW:effects-at-boundaries] It performs, we describe.
 interface HandledRequest {
   resp: Response;
   exitAfterFlush: number | null;
@@ -815,14 +573,8 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
   }
 
   if (req.v !== PROTOCOL_VERSION) {
-    // [LAW:types-are-the-program] The asymmetry is data, not control flow.
-    //   client > daemon: the *binary* probably upgraded under us. Exit so the
-    //     next client respawns from the current artifact.
-    //   client < daemon: the *client* is stale. Respawning daemon does not
-    //     help (the new daemon will have the same version). Stay up and
-    //     return VERSION_MISMATCH — the client is responsible for surfacing
-    //     the diagnostic and refusing to kick. Shutting down here was the
-    //     load-bearing half of the 452-corpse spiral (kz8.5).
+    // [LAW:types-are-the-program] Client > daemon means the binary upgraded
+    // under us; client < daemon means respawning cannot help, so stay up.
     if (req.v > PROTOCOL_VERSION) {
       dlog(
         "info",
@@ -841,9 +593,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         code: "VERSION_MISMATCH",
         daemonV: PROTOCOL_VERSION,
       },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
+      // [LAW:dataflow-not-control-flow] Sequenced on the flush, never a dead socket.
       exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
     };
   }
@@ -853,8 +603,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
   }
 
   if (req.kind === "stats") {
-    // [LAW:single-enforcer] Stats requests do NOT bump request counters —
-    // observability shouldn't pollute the metric being observed.
+    // [LAW:single-enforcer] Observability must not pollute the metric observed.
     return stay({
       ok: true,
       stats: stats.snapshot({
@@ -871,12 +620,6 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
     stats.requestsTotal++;
     const t0 = Date.now();
     try {
-      // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
-      // The validator reports missing/wrong-typed required fields and unknown
-      // top-level keys. Required-field problems are *protocol* failures
-      // (Claude Code's schema guarantees these — their absence means the
-      // sender is broken or malicious); unknown fields are advisory (Anthropic
-      // may have added something).
       const { report } = validateHookData(req.hookData as unknown);
       for (const field of report.unknownTopLevelFields) {
         dlog(
@@ -884,13 +627,8 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           `schema: unknown field '${field}' — Anthropic may have added it`,
         );
       }
-      // [LAW:no-silent-fallbacks][LAW:types-are-the-program] Gate hard on
-      // schema violations. Continuing with `workspace?.project_dir` would
-      // collapse "absent" into an empty-string cache key — silently sharing
-      // one entry across every malformed request — and downstream code would
-      // have to defend against an empty projectDir forever. Reject here so
-      // the types downstream carry the strongest true theorem: by the time
-      // a cache entry is built, projectDir/cwd are real non-empty strings.
+      // [LAW:no-silent-fallbacks][LAW:types-are-the-program] Gate hard, or
+      // "absent" collapses into an empty-string cache key every request shares.
       const wireProblems: string[] = [];
       for (const path of report.missingRequired) {
         wireProblems.push(`missing required field '${path}'`);
@@ -912,43 +650,20 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         });
       }
       const projectDir = req.hookData.workspace.project_dir;
-      // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
-      // daemon's process.cwd(), so config resolution depends only on request
-      // data — the daemon's own working directory must not influence output.
+      // [LAW:dataflow-not-control-flow] The request's cwd, never the daemon's.
       const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
       const sessionId = req.hookData.session_id;
-      // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
-      // observed and the daemon cannot. Raw `req.*` hint fields are not read
-      // past this line; `hints` is the stamped type the render path consumes.
-      //
-      // [LAW:single-enforcer] Every hint is captured client-side because the
-      // daemon is detached and shared: its env answers for whichever shell
-      // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
-      // for width, and we do NOT consult SSH_* for remoteness — both would
-      // describe a different session than the one being rendered.
-      // [LAW:one-source-of-truth] Both branches feed raw cols through
-      // applyClaudeCodeReserve, so `width` always means "usable cells
-      // post-reserve" with no semantic split between wire-supplied and
-      // fallback values.
+      // [LAW:parse-dont-validate] The ONE checkpoint; raw hints stop here.
+      // [LAW:single-enforcer] The daemon's env describes a different session.
       const hints = parseClientHints(req);
-      // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
-      // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
-      // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
-      // this session's last render from here, re-parsed through the same
-      // checkpoint. Compared before writing for the same reason as the origin.
+      // [LAW:one-source-of-truth] A click carries no hints; the doctor reads these.
       const hintRecord = JSON.stringify(hints);
       if (
         sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord
       ) {
         sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
       }
-      // [LAW:effects-at-boundaries] The load-config verb writes per-session
-      // config overrides into SessionState; this is the one read point.
-      // [LAW:one-source-of-truth] The explicit config path has three
-      // spellings and ONE precedence, composed here: a load-config pick, the
-      // `--config` flag, the client's `CC_CANDYBAR_CONFIG` hint. All three are
-      // client facts; the daemon's own env is never consulted
-      // (brandon-config-5g8).
+      // [LAW:one-source-of-truth] Three spellings of a config path, ONE precedence.
       const sessionConfigFile =
         sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
         configFile ??
@@ -958,14 +673,9 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         req.cwd,
         sessionConfigFile,
       );
-      // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
-      // config from, so a durable click on this session resolves the same
-      // chain and writes the file the next reload reads (verbs/index.ts
-      // sessionConfigFile) — never a path re-derived from the daemon's own
-      // cwd. Compared before writing: every
-      // set() persists and fires the session's MobX atom, so an unconditional
-      // per-render write would invalidate every state-driven computed each
-      // render.
+      // [LAW:one-source-of-truth] The inputs THIS render resolved its config
+      // from, so a durable click resolves the same chain. Compared before
+      // writing: set() fires the session atom and invalidates every computed.
       const origin = encodeRenderOrigin({
         projectDir,
         cwd: req.cwd,
@@ -978,23 +688,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const rowCap = diagnosticRowCap(hints.termRows);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
-      // [LAW:dataflow-not-control-flow] One composition every render: the
-      // entry always holds a renderable state (the bundled default until a
-      // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
-      // and output = diagnostics + body, with no "did the config load" branch.
-      // [LAW:one-source-of-truth] Every globals field resolved ONCE per
-      // render, here — before the payload build, so the same struct feeds
-      // BOTH the payload's `*.effective` fields (what a trigger label says)
-      // AND renderOpts below (what actually renders). One resolution, two
-      // readers, so a label can never disagree with the bar. The precedence
-      // the resolver applies, and why each rung sits where it does, lives
-      // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-      // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
-      // authoredRoots — the set computed from the SAME raw parse that
-      // produced entry.state.config, on the same reload — never a fresh
-      // file read here that could race a concurrent write and disagree
-      // with the tree that actually rendered. That is why it arrives as
-      // a closure over this entry rather than a lookup inside the resolver.
+      // [LAW:dataflow-not-control-flow] The entry always holds a renderable
+      // state, so there is no "did the config load" branch.
+      // [LAW:one-source-of-truth] Globals resolved ONCE feed both the payload's
+      // `*.effective` fields and renderOpts, so a label cannot lie about the bar.
       const { authoredRoots } = entry.state;
       const effective: EffectiveGlobals = resolveEffectiveGlobals(
         entry.state.config,
@@ -1009,30 +706,17 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         effective,
         hints,
       );
-      // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
-      // is derived from the same effective theme resolved above — so a theme
-      // click recolors the whole bar on the next render. Not frozen on the
-      // cache entry (one entry serves many sessions). paletteForThemeName
-      // memoizes, so the per-render cost is one Map lookup once the theme is
-      // warm.
+      // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] Never frozen on
+      // a cache entry that serves many sessions, so a theme click recolors live.
       const basePalette = paletteForThemeName(effective.theme);
-      // [LAW:one-source-of-truth] Every renderOpts field below reuses the
-      // SAME `effective` struct the payload was just built from — no second
-      // `?? DEFAULT_X` computation to drift from it.
       renderOpts.style = effective.style;
-      // The `plain` joiner's cell separator. Assigned unconditionally like
-      // every field around it: `undefined` is a value pickJoiner already
-      // reads as "PlainJoiner's own default", not an absence to branch on.
+      // `undefined` is pickJoiner's own default, not an absence to branch on.
       renderOpts.separator = effective.separator;
       renderOpts.wrap = effective.autoWrap;
       renderOpts.padding = effective.padding;
       renderOpts.charset = effective.charset;
       renderOpts.colorCompatibility = effective.colorCompatibility;
-      // [LAW:single-enforcer] renderDsl internally calls
-      // `registry.applyInput(payload)` as its first step (see step 1 in
-      // src/dsl/render.ts). The daemon must not pre-apply — doing so
-      // would run the MobX action twice per render and clear last_error
-      // diagnostics on the round trip.
+      // [LAW:single-enforcer] renderDsl applies the input; pre-applying double-fires.
       const body = renderDsl(
         entry.state.config,
         entry.state.compiled,
@@ -1041,22 +725,14 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         payload,
         basePalette,
         renderOpts,
-        // [LAW:single-enforcer] The per-segment StripCell sink for the
-        // `debug segments` projection. Its identity stays stable for the
-        // cache entry's lifetime; renderDsl clears + repopulates it
-        // in place. Cells are cheap (already computed during the render);
-        // the per-segment ANSI serialization happens lazily inside the
-        // debug handler so normal renders pay no extra serializer cost.
         { perSegmentSink: entry.state.lastRenderCellsBySegment },
         {
           look: lookKeyByName(entry.state.config.looks, effective.look),
           preset: effective.preset,
         },
       );
-      // [LAW:one-source-of-truth] Consume the transient click error written by
-      // dispatch on partial/total effect failure, then clear it so it shows
-      // exactly once. Only called when non-null to avoid a no-op persist+MobX
-      // tick on every render.
+      // [LAW:one-source-of-truth] Cleared so it shows exactly once, and only
+      // when non-null so an idle render pays no persist and no MobX tick.
       const clickError = sessionState.get(
         req.hookData.session_id,
         "click.error",
@@ -1066,18 +742,13 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const combinedError = [unknownFlagsError, entry.lastError, clickError]
         .filter(Boolean)
         .join("\n");
-      // [LAW:one-source-of-truth] The daemon-wide update notice, read for
-      // THIS session: what it dismissed and whether its config allows the
-      // notice — both values, folded by the notice into zero or one channel.
       const updates = updateWatch.notice({
         sessionId,
         dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
         enabled: effective.updateNotice,
       });
-      // [LAW:no-silent-failure] The file whose load failed rides beside its
-      // error so the strip can offer it as a file:// link — the way back into
-      // the file when our own click path may be the thing that is broken.
-      // Null when the error is not a load error, or no file resolved.
+      // [LAW:no-silent-failure] Rides along so the strip offers a file:// link
+      // when our own click path may be the broken thing.
       const failedConfigFile =
         entry.lastError === null ? null : entry.configFilePath;
       const diagnostics = collectDiagnostics(
@@ -1085,11 +756,8 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         updates,
         entry.lastWarning ?? "",
       );
-      // [LAW:effects-at-boundaries] The one write the strip depends on, at
-      // the edge: the session's dump file mirrors this render's diagnostics
-      // (present with the full text, absent when there are none) before the
-      // strip that links it goes out — and the link is built from the
-      // write's outcome, so the trailer never names a file that is not there.
+      // [LAW:effects-at-boundaries] Written before the strip that links it, and
+      // the link comes from the outcome, so the trailer names no missing file.
       const dumpFailure = diagnosticDump.sync(
         sessionId,
         diagnostics === null ? null : formatDiagnosticDump(diagnostics),
@@ -1127,40 +795,21 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
   }
 
   if (req.kind === "debug") {
-    // [LAW:single-enforcer] One trust-boundary check at the wire edge —
-    // `what` is untrusted JSON. isDebugWhat narrows it to the discriminated
-    // union the introspector consumes; an invalid value short-circuits
-    // here, not deep inside buildDebugSnapshot.
+    // [LAW:single-enforcer] One trust-boundary check at the wire edge.
     if (!isDebugWhat(req.what)) {
       return stay({
         ok: false,
-        // [LAW:errors-context-in-errors] Include the allowed values so a
-        // CLI consumer (or operator) sees what is supported without
-        // grep — same pattern as the set-state verb's unknown-key error
-        // in src/daemon/verbs/state-validators.ts.
+        // [LAW:errors-context-in-errors] Name the allowed values, so no grep.
         error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
       });
     }
-    // [LAW:dataflow-not-control-flow] The debug projection samples whatever
-    // DSL state the cache currently holds. With cache keys scoped on
-    // (projectDir, cwd) and the debug request carrying neither, we sample
-    // the first populated existing entry — sufficient for `debug vars`,
-    // `debug segments`, `debug config` against the active workload.
-    // firstState reads existing entries only; it does NOT
-    // create a fresh one, so debug introspection never has the side effect
-    // of standing up a new (projectDir=undefined) cache entry tied to the
-    // daemon's own process.cwd(). A future debug-target selector would
-    // thread (projectDir, cwd) through the wire.
+    // [LAW:dataflow-not-control-flow] Sample an EXISTING entry; never create one
+    // keyed on the daemon's own process.cwd().
     const dbgEntry = renderCache.firstState();
-    // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
-    // cache stores StripCell arrays (cheap, written by renderDsl).
-    // The debug projection needs strings, so serialize only for the
-    // `segments` projection (`vars` and `config` don't need it) and only
-    // when this request actually fires. Normal renders pay no per-segment
-    // serializer cost — that work shifts to debug-request time, which is
-    // operator-driven and rare.
+    // [LAW:dataflow-not-control-flow] Serialize only when the request fires, so
+    // normal renders pay no per-segment serializer cost.
     const dbgState =
       dbgEntry === null
         ? null
@@ -1190,17 +839,9 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
   });
 }
 
-// [LAW:single-enforcer][LAW:no-silent-fallbacks] Parse render-path args with
-// the standard util at the trust boundary. `--config <path>` is the sole
-// valid render flag; every other flag is surfaced as a render-time
-// diagnostic icon (caller composes it alongside config errors). The
-// `--config` value crosses `sanitizeConfigPath`, the same rule as the
-// `configEnv` hint: empty is no override, `~` is expanded once, here.
-//
-// `tokens: true, strict: false, allowPositionals: true` together let the
-// parser emit a token entry for every flag (known or unknown) without
-// throwing on unknown ones, and without mis-classifying their values as
-// positionals.
+// [LAW:single-enforcer][LAW:no-silent-fallbacks] `--config <path>` is the sole
+// valid render flag; every other becomes a render-time diagnostic. The token
+// options emit an entry per flag without throwing on the unknown ones.
 function parseRenderArgs(args: string[]): {
   configFile: string | undefined;
   unknownFlagsError: string | null;
@@ -1229,14 +870,8 @@ function parseRenderArgs(args: string[]): {
   };
 }
 
-// --- click verb dispatch ---
-// [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb
-// table (src/daemon/verbs/index.ts) is the single canonical list of supported
-// verbs — handlers live there, the dispatcher only routes.
-//
-// [LAW:types-are-the-program] The error class on the throw determines the
-// response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
-// other Error (operational failure) becomes RENDER_FAILED. No string matching.
+// [LAW:dataflow-not-control-flow] The dispatcher only routes; the verb table is
+// canonical. [LAW:types-are-the-program] The error class picks the response code.
 
 const verbCtx = {
   sessionState,
@@ -1245,12 +880,6 @@ const verbCtx = {
   doctor: productionEdge(),
 };
 
-// [LAW:single-enforcer] Style + color compatibility shared by the render
-// path and the lazy debug-side per-segment serializer. Per-request `width`
-// is composed on top at the wire boundary (handleRequest("render")) and
-// passed through as renderOpts. Debug serialization composes its own
-// per-segment opts with width: Number.POSITIVE_INFINITY since each segment
-// is rendered standalone (wrap doesn't apply to a one-segment projection).
 const RENDER_OPTS_BASE = {
   style: "powerline" as const,
   colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
@@ -1263,17 +892,11 @@ const DEBUG_RENDER_OPTS: BuildLineOptions = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
-// `config` debug projections — they don't read lastRenderBySegment but
-// the DaemonDslState type requires the field.
+// [LAW:no-defensive-null-guards] Reused empty map the type still requires.
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
-// [LAW:one-source-of-truth] The joiner glyph vocabulary and the color depth
-// are serialization-time choices, and both are config-only (no SessionState
-// half) — so the faithful values are fully derivable from the sampled entry's
-// config, unlike style, whose live session-over-config resolution needs a
-// session a debug request doesn't carry. The caller threads the
-// entry-resolved values; this serializer never re-defaults them.
+// [LAW:one-source-of-truth] Config-only, so derivable from the sampled entry —
+// unlike style, whose resolution needs a session a debug request does not carry.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
   charset: Charset,
@@ -1293,19 +916,15 @@ function serializeSegmentCells(
   return out;
 }
 
-// [LAW:single-enforcer] The payload-builder dependency bundle. One value
-// passed through every render — the data the daemon brings to each tick.
+// [LAW:single-enforcer] The data the daemon brings to each render tick.
 const payloadDeps = {
   gitProvider: gitService,
   usageStore,
   contextProvider,
   metricsProvider,
   tmuxService,
-  // [LAW:single-enforcer] buildRenderPayload is the one log site for the
-  // outcome-carrying provider lanes (git, cache).
   log: dlog,
-  // [LAW:single-enforcer] The daemon's wall clock — the same instant source
-  // the rate-limit ETA projection and the template's reset countdown read.
+  // [LAW:single-enforcer] The one instant source ETA and countdown both read.
   clock: () => new Date(),
 };
 

@@ -1,18 +1,5 @@
-// [LAW:verifiable-goals] candybar-settings-ui-aok.2's done-gate: `autoWrap` and
-// `padding` gain the SessionState half `theme`/`look`/`style` already had, so a
-// click changes the clicking session's bar and nobody else's.
-//
-// The resolution lives in the daemon's per-render globals pass
-// (effectiveAutoWrap/effectivePadding -> BuildLineOptions), OUTSIDE renderDsl —
-// the exact twin of how a style click reshapes (see dsl-style-picker-reshape).
-// This test replicates that resolution as src/daemon/server.ts performs it and
-// drives the real click wire, so what it proves is the loop a user runs, not a
-// function in isolation.
-//
-// `charset` and `colorCompatibility` deliberately have NO session half — they
-// describe the terminal (glyph coverage, colour depth), not a per-session taste
-// — so there is nothing here for them, and the comment on CHARSETS in
-// themes/policy.ts is where that decision is recorded.
+// [LAW:verifiable-goals] `autoWrap` and `padding` gain the SessionState half
+// `theme`/`look`/`style` already had, resolved outside renderDsl as server.ts does.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -44,8 +31,7 @@ import {
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
 
-// Two cells in one row. Padding is applied INSIDE each cell's background fill,
-// so a padding change is visible as the rendered line's width.
+// Padding is applied INSIDE each cell's background fill, so it shows as line width.
 const src = (padding: number): string => `{
   globals: { palette: '${BASE_THEME}', padding: ${padding}, autoWrap: true },
   variables: {
@@ -73,16 +59,12 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const basePalette = paletteForThemeName(BASE_THEME);
-  // The click below goes through the real dispatch, which consults the
-  // daemon-global validator registry — so the config's derived gate has to be
-  // registered, exactly as the daemon registers it on load.
+  // The real dispatch consults the daemon-global validator registry, so the derived gate must be registered.
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
 
-  // [LAW:one-source-of-truth] Resolve both fields per render exactly as
-  // server.ts does — the session's clicked value over the config default over
-  // the floor. Freezing either would pass here while the real daemon moved.
+  // [LAW:one-source-of-truth] Resolved per render exactly as server.ts does; freezing either would pass here while the daemon moved.
   const render = (sid: string, width: number): string =>
     renderDsl(
       config,
@@ -121,7 +103,6 @@ function setState(
   key: string,
   value: string,
 ): void {
-  // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]), testVerbContext(sessionState));
 }
 
@@ -130,16 +111,12 @@ const stripAnsi = (s: string): string =>
   s.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
 
 const WIDE = 200;
-// Narrow enough that the row cannot fit on one line, so wrapping is observable
-// as extra rendered rows.
 const NARROW = 12;
 
 describe("a padding click changes one session's bar", () => {
   it("renders what the same value in the config file would, for that session only", () => {
     const clicked = buildRuntime();
-    // The oracle: a second config whose FILE says 5. A session pick of 5 has
-    // to produce those exact bytes, or the two halves resolve to different
-    // renders and `.effective` means two things.
+    // The oracle: a config whose FILE says 5 must render those exact bytes.
     const asIfConfigured = buildRuntime(5);
     try {
       const bystanderBefore = stripAnsi(clicked.render("s-bystander", WIDE));
@@ -149,7 +126,6 @@ describe("a padding click changes one session's bar", () => {
       expect(stripAnsi(clicked.render("s-clicker", WIDE))).toBe(
         stripAnsi(asIfConfigured.render("s-clicker", WIDE)),
       );
-      // The bystander never clicked, so their bar is byte-identical to before.
       expect(stripAnsi(clicked.render("s-bystander", WIDE))).toBe(
         bystanderBefore,
       );
@@ -169,9 +145,6 @@ describe("a padding click changes one session's bar", () => {
 
       sessionState.clear("s-clear", "padding");
       expect(stripAnsi(render("s-clear", WIDE))).toBe(atConfigDefault);
-      // ...which is the config file's own value, not the built-in floor — so
-      // this asserts the middle rung of the precedence chain, not just "some
-      // default".
       expect(config.globals.padding).toBe(CONFIG_PADDING);
       expect(config.globals.padding).not.toBe(DEFAULT_PADDING);
     } finally {
@@ -190,9 +163,7 @@ describe("an autoWrap click changes one session's bar", () => {
 
       setState(sessionState, "s-wrap", "autoWrap", "false");
 
-      // The regression this pins: a `false` session pick is a real answer, not
-      // a missing one. Resolving with `||` instead of `??` would fall through
-      // to the `true` config default and silently keep wrapping.
+      // A `false` session pick is a real answer: `||` would fall through to the config default.
       expect(render("s-wrap", NARROW).split("\n")).toHaveLength(1);
       expect(render("s-other", NARROW).split("\n")).toHaveLength(wrappedRows);
     } finally {
@@ -202,10 +173,7 @@ describe("an autoWrap click changes one session's bar", () => {
 });
 
 describe("a session value outside the domain is not a session value", () => {
-  // Every case here is a stale SessionState entry — written when the config's
-  // range or vocabulary was wider, or by a hand-edited state file. The contract
-  // is that it collapses to the CONFIG DEFAULT (what a session that never
-  // clicked sees), never to the floor and never to a throw.
+  // A stale entry collapses to the CONFIG DEFAULT, never to the floor and never a throw.
   it.each([
     ["above the range", String(PADDING_RANGE.max + 1)],
     ["below the range", "-1"],
@@ -224,10 +192,7 @@ describe("a session value outside the domain is not a session value", () => {
     expect(effectivePadding(undefined, String(value), CONFIG_PADDING)).toBe(value);
   });
 
-  // `configured` is FALSE throughout, which is the whole point: `DEFAULT_WRAP`
-  // is true, and so is what any mis-parse of these strings would produce, so a
-  // table run against a `true` config default cannot tell "correctly fell
-  // through" from "wrongly parsed `yes` as true" — it passes either way.
+  // `configured` is FALSE throughout: against a `true` default the table would pass either way.
   it.each([["yes"], ["1"], [""], ["TRUE"], ["on"], ["False"]])(
     "autoWrap %s falls through to the config default",
     (raw) => {
@@ -239,9 +204,6 @@ describe("a session value outside the domain is not a session value", () => {
     ["true", true],
     ["false", false],
   ])("autoWrap %s IS a session value, and wins", (raw, expected) => {
-    // The other half of the same guard: the two real members must beat a
-    // config default that disagrees, or "falls through" would be trivially
-    // satisfied by a parse that never returns anything.
     expect(effectiveAutoWrap(undefined, raw, !expected)).toBe(expected);
   });
 
@@ -251,21 +213,8 @@ describe("a session value outside the domain is not a session value", () => {
   });
 });
 
-// [LAW:behavior-not-structure] The precedence this PR's shared resolver
-// applies to EVERY pickable global, pinned on the three fields that had their
-// own spelling before it: a stale session pick is an ABSENT session pick, so it
-// falls through to the config default and reaches the floor only when there is
-// no config default either.
-//
-// This is a deliberate change. The old per-field spellings collapsed a stale
-// pick straight to the floor, skipping the user's own declared default — so a
-// config saying `style: "capsule"` rendered powerline the moment a session
-// entry went stale. Every existing regression test passed `undefined` as the
-// config default, where both rules agree, which is exactly why the change could
-// land unnoticed; these cases are the ones that can tell them apart.
+// [LAW:behavior-not-structure] A stale session pick is an ABSENT pick: it falls to the config default and reaches the floor only when there is none.
 describe("a stale session pick falls to the config default, not the floor", () => {
-  // Identity adaptations / empty fragments: these resolvers read only the KEYS
-  // (is this name declared?), so the values need to typecheck and nothing more.
   const IDENTITY: ThemeKey = {
     hueShift: 0,
     chromaScale: 1,
@@ -299,8 +248,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
   });
 
   it("a config default that is ITSELF stale still reaches the floor", () => {
-    // The per-config domains are the only ones where the loader cannot catch a
-    // stale default, so both rungs have to be parsed, not just the session's.
+    // Per-config domains are the only ones the loader cannot catch, so both rungs are parsed.
     expect(effectiveLookName(undefined, "deleted-look", "also-deleted", LOOKS)).toBe(
       "none",
     );

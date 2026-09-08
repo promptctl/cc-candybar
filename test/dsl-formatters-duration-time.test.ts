@@ -1,23 +1,4 @@
-// [LAW:verifiable-goals] bdi.4 acceptance: the duration/time-remaining
-// formatters, migrated from JS FuncMap funcs into DEFAULT_DSL_CONFIG.helpers,
-// render byte-identically to the formatters they retired.
-//
-// [LAW:behavior-not-structure] The oracles (formatTimeSince / formatDuration /
-// formatResponseTime / formatLongTimeRemaining) were DELETED in this change —
-// their outputs are pinned here as literals so the test asserts the helper's
-// contract without depending on the retired code. Each literal is the exact
-// string the JS twin produced for that input (its formula recorded in the
-// table comment).
-//
-// minutesUntilReset stays a numeric FUNC (it returns a value consumed in
-// comparisons and as a helper arg — a `{{ template }}` helper cannot return a
-// value). bdi.4 migrates it off the hidden Date.now() onto the injected clock
-// seam; a FROZEN clock here makes the minute arithmetic deterministic and pins
-// the past-expiry clamp to 0.
-//
-// These exercise the PRODUCTION helpers: the test config is merged onto
-// DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
-// helper bodies the shipped statusline uses — not a test-local copy.
+// [LAW:verifiable-goals][LAW:behavior-not-structure] The JS oracle formatters were deleted; these literals are the exact strings they produced, checked against the PRODUCTION helpers on a frozen clock.
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -40,8 +21,6 @@ const OPTS = {
 };
 const BASE_PALETTE = getThemePalette("textual-dark"!);
 
-// A whole-second-aligned frozen instant: clock().getTime() === NOW_MS exactly,
-// so minutesUntilReset's `epoch*1000 - now` arithmetic has no sub-second slack.
 const NOW_MS = Date.parse("2026-06-04T00:00:00.000Z");
 const NOW_SEC = NOW_MS / 1000;
 const FROZEN_CLOCK = () => new Date(NOW_MS);
@@ -52,9 +31,6 @@ const VARS = `{
   e: { kind: "input", path: "e", type: "number", default: 0 },
 }`;
 
-// Render one segment whose template is `call`, merged onto DEFAULT_DSL_CONFIG so
-// the production helpers are in scope, against the frozen clock. Returns the
-// plain (ANSI/OSC-8-stripped) text the segment produced.
 function render(call: string, payload: Record<string, number>): string {
   const source = `{
     variables: ${VARS},
@@ -88,8 +64,7 @@ function render(call: string, payload: Record<string, number>): string {
 }
 
 describe("bdi.4 — formatTimeSince helper (byte-parity with retired JS)", () => {
-  // <60 → "Ns" verbatim; then floor(s/60)m, floor(s/3600)h, floor(s/86400)d,
-  // floor(s/604800)w. Boundaries 60/3600/86400/604800 roll to the next unit.
+  // <60 → "Ns"; then floor(s/60)m, floor(s/3600)h, floor(s/86400)d, floor(s/604800)w.
   test.each<[number, string]>([
     [0, "0s"],
     [30, "30s"],
@@ -112,8 +87,7 @@ describe("bdi.4 — formatTimeSince helper (byte-parity with retired JS)", () =>
 });
 
 describe("bdi.4 — formatDuration helper", () => {
-  // <60 toFixed(0)+s; <3600 (/60).toFixed(0)+m; <86400 (/3600).toFixed(1)+h;
-  // else (/86400).toFixed(1)+d. toFixed rounds (90→1.5min→"2m").
+  // <60 toFixed(0)+s; <3600 (/60).toFixed(0)+m; <86400 (/3600).toFixed(1)+h; else (/86400).toFixed(1)+d, rounding.
   test.each<[number, string]>([
     [0, "0s"],
     [30, "30s"],
@@ -151,8 +125,7 @@ describe("bdi.4 — formatResponseTime helper", () => {
 });
 
 describe("bdi.4 — formatLongTimeRemaining helper (input = whole minutes)", () => {
-  // >=1440 → "Nd"/"Nd Nh" (hours appended only when >0); >=60 → "Nh"/"Nh Nm";
-  // else "Nm". Boundaries 60/1440 and the zero-lower-unit collapse covered.
+  // >=1440 → "Nd"/"Nd Nh" (hours only when >0); >=60 → "Nh"/"Nh Nm"; else "Nm".
   test.each<[number, string]>([
     [0, "0m"],
     [30, "30m"],
@@ -175,8 +148,7 @@ describe("bdi.4 — formatLongTimeRemaining helper (input = whole minutes)", () 
 });
 
 describe("bdi.4 — minutesUntilReset func against a frozen clock", () => {
-  // round(max(0, epoch*1000 - now)/60000). Future rounds to whole minutes; a
-  // 30s remainder rounds half-up to 1; a 29s remainder rounds to 0; past clamps.
+  // round(max(0, epoch*1000 - now)/60000); half-up, past clamps to 0.
   test.each<[number, string]>([
     [NOW_SEC, "0"],
     [NOW_SEC + 29, "0"],
@@ -189,9 +161,7 @@ describe("bdi.4 — minutesUntilReset func against a frozen clock", () => {
     expect(render("[{{ minutesUntilReset .e }}]", { e })).toContain(`[${want}]`);
   });
 
-  // The block/weekly composition, `formatResetCountdown`: the minute in
-  // progress counts, so a reset seconds away reads "1m" (never "0m") and the
-  // rounded whole minutes read one more than the arithmetic at every distance.
+  // `formatResetCountdown`: the minute in progress counts, so a reset seconds away reads "1m", never "0m".
   test.each<[number, string]>([
     [NOW_SEC + 10, "1m"],
     [NOW_SEC + 90 * 60, "1h 31m"],

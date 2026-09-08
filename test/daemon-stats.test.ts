@@ -4,8 +4,6 @@ import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// package.json is the version's sole authority; the tests read it the same way
-// the build does rather than restating the number.
 const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string };
 
 describe("RuntimeStats.snapshot", () => {
@@ -51,9 +49,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.rssBytes).toBeGreaterThan(0);
   });
 
-  // [LAW:one-source-of-truth] The snapshot's `version` is the daemon's package
-  // stamp (what `cc-candybar --version` prints for the same build), and the
-  // wire contract number lives under its own name — two facts, two fields.
+  // [LAW:one-source-of-truth] Version and protocol are two facts, two fields.
   test("version is the package stamp; protocolVersion is the wire contract", () => {
     const snap = new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },

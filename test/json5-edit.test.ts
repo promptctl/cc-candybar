@@ -1,8 +1,4 @@
-// candybar-config-dqe — the config file is THE durable store, so a click
-// edits the user's own file. These tests pin the writer's contract: every
-// byte outside the one edited span survives verbatim (comments, blank lines,
-// unquoted keys, trailing commas, quote style), and the layout-tree edits
-// address segments by name in the authored shape grammar.
+// The writer's contract: every byte outside the one edited span survives verbatim.
 
 import JSON5 from "json5";
 import {
@@ -23,7 +19,6 @@ import {
   textOf,
 } from "../src/config/json5-edit";
 
-// The cc-candybar config is the JSON5 consumer; every case below edits it.
 const setValue = (
   text: string,
   path: readonly string[],
@@ -63,7 +58,6 @@ const CONFIG = `{
 }
 `;
 
-/** The one span that may differ between `before` and `after`. */
 function onlySpanChanged(
   before: string,
   after: string,
@@ -99,9 +93,7 @@ describe("parseDocument", () => {
     expect(() => parseDocument("{ a: 'unterminated }")).toThrow(/unterminated/);
   });
 
-  // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate; a splice that
-  // addressed the first would leave the live value untouched, and a delete
-  // of the last would promote a value the user never chose.
+  // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate.
   test("a duplicate key is refused at parse, naming the key", () => {
     expect(() =>
       parseDocument("{ globals: { palette: 'a', palette: 'b' } }"),
@@ -142,7 +134,6 @@ describe("setValue — adding an entry matches the container's own style", () =>
     const after = setValue(CONFIG, ["segments", "directory", "bg"], '"surface"');
     expect(after).toContain(`      palette: "nord",\n      bg: "surface",\n    },`);
     expect(JSON5.parse(after).segments.directory.bg).toBe("surface");
-    // Nothing else moved.
     expect(after.replace(`      bg: "surface",\n`, "")).toBe(CONFIG);
   });
 
@@ -299,11 +290,7 @@ describe("insertSegmentRef", () => {
   });
 });
 
-// A preset root may be a bare segment ref — `root: "sidebar"` or the gated
-// `{ seg, when }` object (loader/layout.ts accepts both) — and edit chrome
-// splices `-`/`+` beside it like any other segment. The editors address it
-// as the one-child horizontal container it abbreviates, so the click lands
-// instead of failing as "stale" on a file that never changed.
+// A bare-ref root is addressed as the one-child container it abbreviates.
 describe("a bare-segment root is the one-child container it abbreviates", () => {
   const bare = `{ presets: { compact: { root: "sidebar" } } }`;
   const gated = `{ presets: { compact: { root: { seg: "sidebar", when: "{{ .x }}" } } } }`;
@@ -333,10 +320,7 @@ describe("a bare-segment root is the one-child container it abbreviates", () => 
   });
 });
 
-// [LAW:one-source-of-truth] A `{ rows }` root fragment (brandon-config-merge-uk3):
-// the edits descend into each named row, a bare-string row is the one-child
-// container it abbreviates (the same normalization a bare root gets), and
-// every sibling row stays byte-identical.
+// [LAW:one-source-of-truth] Edits descend per named row; siblings stay byte-identical.
 describe("a `{ rows }` root: edits reach the named rows", () => {
   const rows = `{ root: { rows: {
     a: { h: ["x", "y"] }, // row a
@@ -386,9 +370,6 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
   });
 });
 
-// A CRLF-authored file (core.autocrlf, an editor default) keeps its own
-// terminator: a removed member takes both bytes of its line ending, and a
-// synthesized line ends the way the file's lines do — never a mixed-EOL file.
 describe("a CRLF document keeps its own line terminator", () => {
   const CRLF = CONFIG.replace(/\n/g, "\r\n");
   const noBareLf = (text: string): void => {
@@ -443,9 +424,7 @@ describe("json5Text", () => {
   });
 });
 
-// [LAW:behavior-not-structure] The JSON dialect: what a strict-JSON consumer
-// (Claude Code's settings.json) can read back — quoted keys, no trailing comma
-// on minted containers — while an existing member's style is still mirrored.
+// [LAW:behavior-not-structure] What a strict-JSON consumer can read back.
 describe("setValue — the JSON dialect mints strict JSON", () => {
   test("an empty document", () => {
     const after = setValue("", ["env", "X"], '"1"', JSON_DIALECT);

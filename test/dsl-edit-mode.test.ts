@@ -1,33 +1,4 @@
-// [LAW:verifiable-goals] brandon-layout-edit-2gc.3 done-gates, driven through
-// the real spine (mirroring dsl-layout-edit.test.ts's / dsl-undo-redo.test.ts's
-// model one arm over):
-//
-//   1. The loader proves `insertSegmentFrom`'s ActionDecl shape: persist-only,
-//      a from-shaped domain (name or inline array) + literal anchor/relation,
-//      and it is a legal arm over a "presets.<name>.root" target alongside
-//      removeSegment/insertSegment.
-//   2. Edit mode is DEMAND-DRIVEN, not unconditional: a config that never
-//      references `{{ action "edit.toggle" … }}` gets neither the toggle nor
-//      any chrome — and critically, no new `session.id` requirement — so a
-//      fully static, non-interactive bar is untouched by this feature's mere
-//      existence.
-//   3. A config that DOES reference the toggle gets `edit.mode`/`edit.toggle`
-//      synthesized, PLUS per-segment `-`/`+` chrome spliced into every
-//      preset's resolved root, gated behind the SAME session var — a splice,
-//      never a render-walk branch.
-//   4. Toggling edit mode on/off changes what renders (chrome appears/
-//      disappears) without registerDslConfig running again — the compiled
-//      tree is fixed; only which `when` predicates pass differs.
-//   5. `-` (removeSegment) and `+` (insertSegmentFrom via `{{ menu }}`) click
-//      through to the REAL daemon handler exactly like a hand-authored
-//      layout-op action, rewriting the tree at "presets.<name>.root" IN THE
-//      SESSION'S CONFIG FILE (candybar-config-dqe) — so undo/redo (2gc.2's
-//      history of whole-file snapshots) covers an edit-mode click for free.
-//   6. Remove, then add (picked from the menu), then undo twice returns the
-//      file to its original bytes.
-//   7. Edit chrome is ordinary segment/action data — it renders through the
-//      SAME padding/charset/style pipeline as hand-authored segments, no
-//      special-cased chrome path.
+// [LAW:verifiable-goals] Edit mode through the real spine: `insertSegmentFrom`'s loader shape, demand-driven synthesis, the spliced `-`/`+` chrome, and clicks landing in the session's config file.
 
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -79,8 +50,7 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  // The global settings menu and the edit toggle it reaches are on every bar;
-  // this file's assertions are about the fixture's OWN clickable regions.
+  // The settings menu is on every bar; these assertions are about the fixture's OWN clickable regions.
   return withoutSettingsLinks(urls);
 }
 
@@ -96,10 +66,7 @@ function segmentNamesOf(root: RootFragment): string[] {
   return out;
 }
 
-// The bundled base config every test starts from: a two-segment row plus a
-// trigger segment referencing `edit.toggle` (the ONE thing that opts a
-// config into edit mode). No `presets:` block — the floor preset ("default")
-// carries the config's own root.
+// A two-segment row plus a trigger referencing `edit.toggle` — the ONE thing that opts a config into edit mode. No `presets:` block, so the floor preset carries the root.
 const BASE = `{
   globals: {},
   variables: {
@@ -119,10 +86,7 @@ const BASE = `{
   presets: {},
 }`;
 
-// [LAW:one-source-of-truth] The config FILE is the durable store a `-`/`+`
-// click edits (candybar-config-dqe). One fixture for the whole file — every
-// test gets a fresh temp config root, whether or not it clicks — so there is
-// no per-describe "does this one need a file" decision to get wrong.
+// [LAW:one-source-of-truth] The config FILE is the durable store a `-`/`+` click edits; every test gets a fresh temp config root, clicking or not.
 let durable: DurableConfig;
 beforeEach(() => {
   durable = durableConfig("cc-candybar-editmode-");
@@ -131,12 +95,7 @@ afterEach(() => {
   durable.dispose();
 });
 
-// Full real-spine harness: real loader, real render, clicks dispatched
-// through the real daemon verb handlers against BOTH derived gates (set for
-// SessionState — the toggle, the menu's own disclosure — and persist for the
-// config file — the remove/insert ops). The runtime parses `src` for the
-// render AND writes the same text as the session's config file, so the tree
-// a click edits is the tree the bar rendered — the daemon's own situation.
+// The runtime parses `src` for the render AND writes the same text as the session's config file, so the tree a click edits is the tree the bar rendered.
 function buildEditRuntime(src: string, sessionId = "s1") {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
@@ -179,8 +138,6 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   };
   return { config, store, render, click, dispose, ctx };
 }
-
-// ─── loader: insertSegmentFrom's ActionDecl shape ─────────────────────────
 
 describe("insertSegmentFrom loader shape", () => {
   const base = (actions: string, presets = "{}") => `{
@@ -240,9 +197,7 @@ describe("insertSegmentFrom loader shape", () => {
   });
 
   test("a literal insertSegment and a domain-sourced insertSegmentFrom never both match one action", () => {
-    // Both arms declared together is two value sources on one action — the
-    // ordinary "exactly one" rejection, not a spurious double-match via the
-    // anchor/relation fields the two arms share.
+    // Two value sources on one action is the ordinary "exactly one" rejection, not a double-match via the shared anchor/relation fields.
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -279,8 +234,6 @@ describe("insertSegmentFrom loader shape", () => {
   });
 });
 
-// ─── demand-driven synthesis ────────────────────────────────────────────────
-
 describe("edit mode is demand-driven, not unconditional", () => {
   test("a config never referencing edit.toggle gets no toggle, no chrome, and needs no session.id", () => {
     const config = parseAndValidate(
@@ -295,9 +248,7 @@ describe("edit mode is demand-driven, not unconditional", () => {
     );
     expect(config.actions[EDIT_TOGGLE_ACTION]).toBeUndefined();
     expect(config.variables[EDIT_MODE_KEY]).toBeUndefined();
-    // No preset declares its own root and edit chrome never ran (it's a
-    // no-op when `edit.toggle` never merged in), so `config.root` — the
-    // config's own declared tree — is untouched, byte-for-byte.
+    // Edit chrome never ran, so the config's own declared tree is untouched byte-for-byte.
     expect(segmentNamesOf(config.root)).toEqual(["directory"]);
   });
 
@@ -330,20 +281,14 @@ describe("edit mode is demand-driven, not unconditional", () => {
   });
 });
 
-// ─── chrome synthesis: what gets spliced in ────────────────────────────────
-
 describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("every ordinary segment gets a `-`, every gap gets a `+`", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const names = segmentNamesOf(config.presets.default!.root!);
-    // Original content untouched:
     expect(names).toEqual(
       expect.arrayContaining(["directory", "git", "trigger"]),
     );
-    // One `-` per content segment — directory, git, AND trigger: nothing
-    // about hosting `{{ action "edit.toggle" }}` makes a segment special to
-    // the SPLICE (it only excludes names under a reserved namespace, and
-    // "trigger" is an ordinary user-chosen name).
+    // Hosting `{{ action "edit.toggle" }}` makes a segment no less ordinary to the splice, which excludes only reserved-namespace names.
     expect(
       names.filter((n) => n.startsWith("edit.default.removeSeg.")).sort(),
     ).toEqual([
@@ -351,9 +296,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "edit.default.removeSeg.git",
       "edit.default.removeSeg.trigger",
     ]);
-    // N+1 `+` positions per row: 3 for the 2-segment row (before directory,
-    // between directory/git, after git) + 2 for the single-segment trigger
-    // row (before, after) = 5.
+    // N+1 `+` positions per row: 3 for the two-segment row + 2 for the single-segment row.
     const inserts = names.filter((n) =>
       n.startsWith("edit.default.insertSeg."),
     );
@@ -363,9 +306,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("edit-mode's OWN synthesized chrome segments are exempt from further chrome", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const names = segmentNamesOf(config.presets.default!.root!);
-    // None of the "edit.default.remove*"/"edit.default.insert*" segments
-    // themselves get a nested "-"/"+" — the splice recurses into containers
-    // only, and `isChromeExempt` excludes every "edit." name outright.
+    // The splice recurses into containers only, and `isChromeExempt` excludes every "edit." name outright.
     for (const n of names) {
       if (!n.startsWith("edit.")) continue;
       expect(names).not.toContain(`edit.default.removeSeg.${n}`);
@@ -394,15 +335,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("chrome segments are gated behind edit.mode — absent from render when closed", () => {
     const { render, dispose } = buildEditRuntime(BASE);
     const out = stripAnsi(render());
-    expect(out).not.toContain("-"); // no `-` glyph rendered while closed
+    expect(out).not.toContain("-");
     dispose();
   });
 
   test("no render-walk branch: renderDsl's own source never mentions edit mode", () => {
-    // [LAW:dataflow-not-control-flow] The chrome is spliced tree nodes with
-    // an ordinary `when`; renderDsl (the ONE render path, called verbatim by
-    // the daemon and the demo alike) needed zero edits for this feature, and
-    // this asserts that structurally rather than by promise.
+    // [LAW:dataflow-not-control-flow] The chrome is spliced tree nodes with an ordinary `when`, so renderDsl needed zero edits — asserted structurally, not by promise.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("node:fs") as typeof import("node:fs");
     const src = fs.readFileSync(
@@ -412,8 +350,6 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(src).not.toMatch(/edit\.mode|editMode|EDIT_MODE/);
   });
 });
-
-// ─── end-to-end: toggle, remove, insert-via-menu, undo twice ──────────────
 
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
   test("toggling edit mode on makes the `-` chrome render; off hides it again", () => {
@@ -446,7 +382,6 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const { render, click, dispose, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
 
-    // Open edit mode.
     const openUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
@@ -454,7 +389,6 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     )!;
     click(openUrl);
 
-    // Remove "directory" via its `-`.
     const removeUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) =>
@@ -464,16 +398,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     )!;
     expect(removeUrl).toBeDefined();
     click(removeUrl);
-    // The file's own root is the edited tree, in the authoring grammar.
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     expect(durable.history().past).toHaveLength(1);
 
-    // Open every `+` menu, then pick "gitPr" from the one anchored on "git".
-    // [LAW:no-silent-failure] This harness compiles ONE tree and never
-    // reloads it from the file, so the `+` beside "directory" is still
-    // rendered though "directory" is gone from the file — clicking THAT one
-    // is exactly the stale-bar case the store refuses loudly (see
-    // dsl-layout-edit.test.ts). Anchor on a segment the file still holds.
+    // [LAW:no-silent-failure] This harness never reloads the tree, so the `+` beside the removed "directory" is the stale-bar case the store refuses loudly; anchor on a segment the file still holds.
     for (const menuOpenUrl of extractUrls(render()).filter((u) =>
       effectsOf(u).some(
         (e) => e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
@@ -491,31 +419,21 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     )!;
     expect(pickUrl).toBeDefined();
     click(pickUrl);
-    // The insert composed onto the tree the remove left behind.
     const afterInsert = JSON.stringify(durable.parsed().root);
     expect(afterInsert).toContain('"gitPr"');
     expect(afterInsert).not.toContain('"directory"');
     expect(durable.history().past).toHaveLength(2);
 
-    // Undo the insert, undo the remove — two clicks through the REAL undo
-    // verb handler (2gc.2's history of whole-file snapshots, entirely unaware
-    // either write came from edit-mode chrome). `undo`/`redo` need no
-    // declared action to invoke — per the epic's own premise correction, edit
-    // mode wires ONE static undo/redo pair rather than synthesizing one per
-    // position, so BASE deliberately declares neither; drive the verb
-    // directly, exactly as dsl-undo-redo.test.ts does.
+    // Edit mode wires ONE static undo/redo pair rather than one per position, so BASE declares neither action and the real verb is driven directly.
     const undo = VERBS.get("undo")!;
     undo(encodeURIComponent("s1"), ctx);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     undo(encodeURIComponent("s1"), ctx);
-    // Byte-identical: the file IS the layout, so "back to the original
-    // layout" and "back to the original bytes" are one fact.
+    // The file IS the layout, so "back to the original layout" and "back to the original bytes" are one fact.
     expect(durable.text()).toBe(original);
     dispose();
   });
 });
-
-// ─── chrome respects globals like any other segment ───────────────────────
 
 describe("a segment row's chrome rides its row", () => {
   test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", () => {
@@ -555,24 +473,12 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
       );
     const padded0 = stripAnsi(renderWith(0));
     const padded2 = stripAnsi(renderWith(2));
-    // Same content, more surrounding whitespace at padding=2 — the chrome
-    // segment's `-`/`+` cells widen by the same 2×padding every other
-    // segment's cells do, since applySegmentLayout pads BEFORE sizing with
-    // no knowledge of which segments are "chrome".
+    // applySegmentLayout pads BEFORE sizing and knows nothing of "chrome", so these cells widen by the same 2×padding as every other cell.
     expect(padded2.length).toBeGreaterThan(padded0.length);
   });
 });
 
-// ─── the bundled default's own trigger — brandon-layout-edit-2gc.4 ────────
-
-// [LAW:verifiable-goals] .4's done-gate: the bundled default's `toolbar`
-// segment hosts `edit.toggle` (docs/interaction-authoring.md's "The bundled
-// default ships this on"), which resolves a self-lockout tension .3's own
-// handoff flagged — removing the trigger's own host segment via edit mode's
-// `-` doesn't strand a user OUTSIDE edit mode (recoverable via any other
-// `+`) and doesn't strand them INSIDE it either (edit.mode is untouched
-// SessionState, so the rest of the chrome stays visible). Proves the claim
-// against the REAL RAW_DEFAULT_DSL_CONFIG source, not a synthetic fixture.
+// [LAW:verifiable-goals] Removing the trigger's own host strands the user neither OUTSIDE edit mode (any other `+` recovers it) nor INSIDE it (edit.mode is untouched SessionState) — proved against the REAL RAW_DEFAULT_DSL_CONFIG.
 describe("bundled default: toolbar hosts edit.toggle — brandon-layout-edit-2gc.4", () => {
   const DEFAULT_SOURCE = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 
@@ -584,26 +490,14 @@ describe("bundled default: toolbar hosts edit.toggle — brandon-layout-edit-2gc
   });
 
   test("removing the toolbar (the trigger's own host) via `-` doesn't strand edit mode: every other segment's chrome stays live", () => {
-    // [LAW:one-source-of-truth] This lightweight harness compiles ONE tree
-    // from the source and never reloads it from the file a click edits (only
-    // the real daemon's RenderCache does — see test/dsl-layout-edit.test.ts's
-    // "toolbar removed via edit mode is offered back by every remaining `+`,
-    // and a real reload restores it" for the full round trip including the
-    // `+` picker's domain, which is recomputed fresh on EVERY reload and so
-    // cannot be proven against a tree compiled once). What this harness CAN
-    // prove directly: the click edits the file's tree, and removing the
-    // trigger's own host does not also close `edit.mode` — the rest of the
-    // bar's chrome stays live.
+    // [LAW:one-source-of-truth] This harness compiles ONE tree and never reloads it, so it proves only that the click edits the file's tree and leaves `edit.mode` open; the full round trip is dsl-layout-edit.test.ts.
     const { config, render, click, dispose } = buildEditRuntime(DEFAULT_SOURCE);
     const originalNames = segmentNamesOf(config.presets.default!.root!).filter(
       (n) => !n.startsWith(EDIT_NS),
     );
     expect(originalNames).toContain("toolbar");
 
-    // Open edit mode via toolbar's own trigger — a plain SessionState `set`,
-    // so render() reflects it immediately (unlike the layout-op write
-    // below, which lands in the config file this harness never reloads into
-    // its own compiled tree).
+    // A plain SessionState `set`, so render() reflects it immediately — unlike the layout-op write below, which lands in a file this harness never reloads.
     const openUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
@@ -613,10 +507,7 @@ describe("bundled default: toolbar hosts edit.toggle — brandon-layout-edit-2gc
     click(openUrl);
     expect(stripAnsi(render())).toContain("✎ done");
 
-    // Remove "toolbar" via its own `-` — the trigger removes itself along
-    // with the rest of the tray. The write edits the SAME
-    // "presets.default.root" tree removeSegment/insertSegment always target
-    // (2gc.1) — the file a real daemon restart reads.
+    // The trigger removes itself along with the rest of the tray, editing the same "presets.default.root" tree every layout op targets.
     expect(JSON.stringify(durable.parsed().root)).toContain('"toolbar"');
     const removeUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some(
@@ -630,10 +521,7 @@ describe("bundled default: toolbar hosts edit.toggle — brandon-layout-edit-2gc
     expect(JSON.stringify(durable.parsed().root)).not.toContain('"toolbar"');
     expect(durable.history().past).toHaveLength(1);
 
-    // `edit.mode` is untouched SessionState (a `-` click never writes it),
-    // so every OTHER segment's chrome is still compiled and gated open —
-    // there is still a `+` to click, proving the bar isn't stuck with no
-    // way to reach edit mode's own affordances again.
+    // A `-` click never writes `edit.mode`, so every other segment's chrome stays gated open — there is still a `+` to click.
     const stillOpen = stripAnsi(render());
     expect(stillOpen).toContain("-");
     expect(

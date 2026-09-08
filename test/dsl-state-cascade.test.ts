@@ -1,12 +1,5 @@
-// [LAW:verifiable-goals] vhi.1 acceptance: a click verb mutates SessionState;
-// the next DSL render reflects the change without re-reading disk. This test
-// drives the cascade end-to-end through the bzh.7 spine — registerDslConfig
-// + renderDsl — so the verification matches the live render path the
-// daemon uses, not a parallel test rig.
-//
-// [LAW:single-enforcer] The verb dispatch goes through the registry in
-// src/daemon/verbs/index.ts directly. That is the same handler the daemon
-// invokes for a wire-level click; no duplication.
+// [LAW:verifiable-goals] A click verb mutates SessionState and the next render
+// reflects it. [LAW:single-enforcer] Through the daemon's own verb registry.
 
 import { autorun } from "mobx";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -30,8 +23,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// Minimal config — one input (session.id), one state-kind var bound to
-// SessionState's "theme" key, one segment that prints the state value.
+// Minimal config: one input, one state var, one segment printing its value.
 const CONFIG_SRC = `{
   globals: {},
   variables: {
@@ -48,8 +40,7 @@ const CONFIG_SRC = `{
   root: 'themeSeg',
 }`;
 
-// Strip ANSI so assertions can pin on the rendered text alone — color codes
-// vary with palette and would obscure the dataflow assertion we care about.
+// Strip ANSI so assertions pin on text alone; colour varies with the palette.
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
 }
@@ -93,15 +84,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state theme write changes the rendered COLORS on next render (k5a.4)", () => {
-    // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
-    // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
-    // the COLOR cascade by resolving basePalette per render from the session
-    // theme exactly as the daemon does (effectiveThemeName ∘ paletteForThemeName
-    // over SessionState) — no frozen entry palette.
-    // globals.palette is SET (as in the bundled default) — the regression this
-    // pins: a config-default base theme must NOT be frozen per-segment, or the
-    // session theme could never override it. A segment with no explicit
-    // `palette:` follows the live base theme.
+    // [LAW:verifiable-goals] globals.palette is SET: a config-default theme must
+    // not freeze per-segment, or a session theme could never win.
     const config = parseAndValidate(
       "<test>",
       `{
@@ -120,7 +104,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    // Mirror the daemon's per-render base-palette derivation.
     const render = () =>
       renderDsl(
         config,
@@ -137,25 +120,20 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         OPTS,
       );
 
-    const before = render(); // effective theme = textual-dark (globals default)
+    const before = render();
     const ctx = testVerbContext(sessionState);
     VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
-    const after = render(); // effective theme = nord
+    const after = render();
 
-    // Same text, different ANSI color codes — the palette switched live.
     expect(stripAnsi(after)).toBe(stripAnsi(before));
     expect(after).not.toBe(before);
   });
 
   test("set-state click verb propagates to the next render", () => {
-    // The actual ticket verification: dispatch the verb through the same
-    // registry the daemon uses; assert the next render reflects the change.
     const { sessionState, render } = buildRuntime();
     expect(render()).toContain("theme=(unset)");
 
     const ctx = testVerbContext(sessionState);
-    // set-state value shape: "<sessionId>/<key>/<value>" — key must be
-    // a registered state key and value must satisfy its validator.
     VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
@@ -164,18 +142,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("cascade triggers a reactive observer, not just a fresh render-time read", () => {
-    // [LAW:behavior-not-structure] The "set-state click verb propagates"
-    // test above asserts the rendered string carries the new value — true
-    // whenever renderDsl sees the new value at next read, which can
-    // happen via two different mechanisms:
-    //   (a) atom.reportChanged() invalidated the computed; the next read
-    //       re-derives through the dep graph (the intended contract); or
-    //   (b) the computed's keepAlive cache was bypassed for some other
-    //       reason (e.g. an unobserved-computed re-derive on access).
-    // Wrapping store.read("theme") in an `autorun` forces (a) to be the
-    // only path that can produce a second observation: autoruns fire only
-    // when a tracked dep invalidates. If SessionState.set ever stops
-    // calling atom.reportChanged(), this test stalls at one observation.
+    // [LAW:behavior-not-structure] An autorun fires only when a tracked dep
+    // invalidates: drop the atom notification and this stalls at one observation.
     const { store, registry, sessionState } = buildRuntime();
     registry.applyInput(HOOK_DATA);
 
@@ -183,21 +151,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const dispose = autorun(() => {
       observed.push(String(store.read("theme")));
     });
-    // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
-    // the type-level guarantee that the autorun cannot outlive this test
-    // even when the assertions throw (which is the *point* of a regression
-    // test: when a fault is reintroduced, expectations fail here, and a
-    // dangling reaction in the global MobX scheduler would then leak into
-    // subsequent tests). Same shape as a using-block / RAII guard.
+    // [LAW:no-defensive-null-guards] RAII: a failing assertion must not leak a
+    // live reaction into the global MobX scheduler.
     try {
       expect(observed).toEqual(["(unset)"]);
 
       const ctx = testVerbContext(sessionState);
       VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
-      // Exactly one additional fire — proves the dep graph propagated the
-      // change rather than the autorun being scheduled for an unrelated
-      // reason or the observation count drifting.
       expect(observed).toEqual(["(unset)", "nord"]);
     } finally {
       dispose();
@@ -205,16 +166,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("two state vars: mutation propagates only to its dependent observer", () => {
-    // [LAW:behavior-not-structure] Pins both directions of the coarse-atom
-    // trade-off documented in session-state.ts:
-    //   - cascade reach: a mutation to one key must still reach computeds
-    //     that read that key (the atom can't be too narrow).
-    //   - memo suppression: a mutation to one key must NOT re-fire
-    //     observers of unrelated computeds whose derived value is unchanged
-    //     (MobX's value-equality comparer on computed results is what makes
-    //     the coarse atom acceptable in the first place).
-    // The single-segment / single-state-var fixture above can't separate
-    // those: it has no second observer to misbehave. This test adds one.
+    // [LAW:behavior-not-structure] A write must reach readers of that key and
+    // must not re-fire unrelated ones.
     const config = parseAndValidate(
       "<test>",
       `{
@@ -246,9 +199,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const disposeExp = autorun(() => {
       expandedObs.push(String(store.read("expanded")));
     });
-    // [LAW:no-defensive-null-guards] try/finally is the type-level
-    // guarantee that both autoruns are disposed even when the
-    // assertions throw — see the same note on the test above.
     try {
       expect(themeObs).toEqual(["(unset)"]);
       expect(expandedObs).toEqual([""]);
@@ -256,15 +206,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       const ctx = testVerbContext(sessionState);
       VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
-      // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
-      // Unrelated key: the atom invalidated the `expanded` computed too
-      // (coarse-grained reactivity), but it re-derived to the same fallback
-      // "" — MobX's value comparer suppresses propagation to this observer.
       expect(expandedObs).toEqual([""]);
 
-      // Sanity: a mutation to the OTHER state key fires the expanded
-      // observer (cascade is not over-suppressed).
       sessionState.set(SESSION_ID, "toolbar-expanded", "1");
       expect(expandedObs).toEqual(["", "1"]);
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -275,9 +219,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects an unknown theme value (BadVerbArgs)", () => {
-    // Pinning the [LAW:no-silent-fallbacks] contract on the verb itself.
-    // An unknown theme cannot quietly persist — the daemon's dispatcher
-    // converts BadVerbArgs into a BAD_REQUEST wire response.
+    // [LAW:no-silent-fallbacks] An unknown theme cannot quietly persist.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
@@ -286,11 +228,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test('set-state rejects the "custom" theme sentinel (not a renderable theme)', () => {
-    // [LAW:one-source-of-truth] The theme validator runs against
-    // listResolvablePaletteNames — the set of names that actually resolve
-    // to a Palette. "custom" is a sentinel that instructs the cascade to
-    // read inline colors; persisting it as a session theme would render
-    // empty/broken at the next refresh.
+    // [LAW:one-source-of-truth] "custom" is a sentinel, not a resolvable name.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
@@ -299,10 +237,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects an unknown key with the registered-key list", () => {
-    // [LAW:no-silent-fallbacks] An unknown key is the registry telling the
-    // operator "this is not a writable surface" — the BAD_REQUEST surfaces
-    // exactly which keys ARE writable, so a typo or stale wire spec is
-    // self-diagnosing.
+    // [LAW:no-silent-fallbacks] The rejection names the writable keys.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
@@ -311,8 +246,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state writes the style key when given a registered style", () => {
-    // The set-state verb covers every registered key; the style key was a
-    // separate named verb before this epic.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     VERBS.get("set-state")!(`${SESSION_ID}/style/capsule`, ctx);
@@ -328,10 +261,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state normalizes boolean-ish toolbar-expanded values", () => {
-    // [LAW:one-source-of-truth] The canonical truthy/falsy strings are
-    // owned by the boolean validator, not by each callsite. "1"/"true"
-    // collapse to "1"; "0"/"false" collapse to "" — the same sentinel
-    // the toolbar-toggle verb produces via clear() for the next render.
+    // [LAW:one-source-of-truth] The boolean validator owns the canonical forms.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
 
@@ -357,40 +287,24 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects malformed wire input (missing tail or odd count)", () => {
-    // [LAW:types-are-the-program] The wire shape after <sessionId> is a
-    // sequence of even-count <key>/<value> pairs. Each structural
-    // defect — empty tail, odd count, empty key segment — surfaces its
-    // own diagnostic so the operator sees which slash they forgot.
+    // [LAW:types-are-the-program] Each structural defect gets its own diagnostic.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
 
-    // Just the session id (no key/value).
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
       /<key>\/<value> is required/,
     );
-    // Key but no value separator (odd-count: one segment).
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
       /expected even-count.*got 1 segment/,
     );
-    // Empty key segment at pair 1 — structurally distinct from the
-    // unknown-key validator rejection.
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
       /empty key at pair 1/,
     );
   });
 
   test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", () => {
-    // [LAW:types-are-the-program] The registry is a ReadonlyMap, not a
-    // plain object — so wire-level `__proto__` / `constructor` are
-    // ordinary non-members, not truthy hits on Object.prototype. The
-    // verb's "unknown state key" path catches them; the alternative
-    // (registry as Record<string, T>) would let `validateStateWrite`
-    // return Object.prototype as a truthy "validator", which then throws
-    // a TypeError on invocation — RENDER_FAILED instead of BAD_REQUEST.
-    // [LAW:behavior-not-structure] This test asserts the rejection
-    // behavior, so a future revert from Map to a plain object regresses
-    // here loudly even though the type alone makes the bad state
-    // unrepresentable today.
+    // [LAW:types-are-the-program][LAW:behavior-not-structure] A ReadonlyMap makes
+    // `__proto__` a non-member; the rejection is asserted, not the type.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     for (const poison of ["__proto__", "constructor", "toString"]) {
@@ -403,10 +317,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state writes a multi-pair batch atomically (Menu action contract)", () => {
-    // [LAW:dataflow-not-control-flow] The N=2 batched form IS the same
-    // dispatch path as N=1 — the parser walks even-count pairs. The
-    // Menu primitive (chunk 11 .3) uses this to atomically write the
-    // chosen value AND collapse the menu in one click.
+    // [LAW:dataflow-not-control-flow] N=2 is the same dispatch path as N=1.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     VERBS.get("set-state")!(
@@ -418,18 +329,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("multi-pair batch fires reactive observers exactly once", () => {
-    // [LAW:single-enforcer] SessionState owns the reactive atomicity
-    // contract — observers see the post-batch snapshot, never an
-    // intermediate "first write applied, second pending" state. A
-    // previous shape (loop and call sessionState.set N times) fired
-    // reportChanged() per pair, scheduling autoruns between writes; an
-    // observer correlating theme and toolbar-expanded would have seen
-    // (nord, "1") momentarily before reaching (nord, ""). The setBatch
-    // seam collapses N notifications into one.
-    //
-    // [LAW:behavior-not-structure] We don't assert "setBatch was
-    // called" — we assert the user-observable contract: one autorun
-    // tick per click, regardless of pair count.
+    // [LAW:single-enforcer] SessionState owns reactive atomicity: no observer
+    // sees "first write applied, second pending".
+    // [LAW:behavior-not-structure] One autorun tick per click is asserted.
     const config = parseAndValidate(
       "<test>",
       `{
@@ -453,8 +355,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     registerDslConfig(config, registry);
     registry.applyInput(HOOK_DATA);
 
-    // Observer reads BOTH state vars in one tracked frame — the kind
-    // of cross-key correlation a Menu rendering would do.
     const snapshots: Array<{ theme: string; expanded: string }> = [];
     const dispose = autorun(() => {
       snapshots.push({
@@ -471,8 +371,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         ctx,
       );
 
-      // Exactly one new snapshot AND it shows BOTH writes applied.
-      // An intermediate fire would have inserted a `(nord, "1")` row.
       expect(snapshots).toEqual([
         { theme: "(unset)", expanded: "1" },
         { theme: "nord", expanded: "" },
@@ -483,15 +381,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects whole batch if any pair fails (no partial writes)", () => {
-    // [LAW:no-silent-fallbacks] A batch is one transactional click.
-    // First pair valid, second pair invalid — the whole batch rejects.
-    // Asserting the FIRST pair did NOT land is the load-bearing
-    // guarantee: a future widget author can write a two-pair URL
-    // without worrying that half of it might apply on failure.
+    // [LAW:no-silent-fallbacks] One transactional click: no half-applied batch.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
-    // Seed a known prior state so we can prove the failing batch did
-    // not overwrite it.
     sessionState.set(SESSION_ID, "theme", "dracula");
     expect(() =>
       VERBS.get("set-state")!(
@@ -499,15 +391,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         ctx,
       ),
     ).toThrow(/pair 2.*expected boolean-ish/);
-    // The failing batch did NOT advance the prior theme value.
     expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
   });
 
   test("set-state rejects odd-count pair tail with a localizing diagnostic", () => {
-    // [LAW:types-are-the-program] The wire shape is structurally
-    // even-count pairs after the session id. Three segments is a
-    // missing-value structural error — caught with its own message
-    // rather than routed through a validator's unknown-key path.
+    // [LAW:types-are-the-program] An odd count is structural, not a bad key.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
@@ -516,11 +404,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state names the failing pair index for batched diagnostics", () => {
-    // [LAW:errors-context-in-errors] The operator clicked a Menu URL
-    // with N pairs; the diagnostic tells them WHICH pair the validator
-    // rejected (1-based) so they can localize their config bug. A
-    // generic "set-state: unknown state key" without an index would
-    // leave them counting slashes by hand.
+    // [LAW:errors-context-in-errors] The diagnostic names WHICH pair failed.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
@@ -532,30 +416,19 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects an empty key at any pair position", () => {
-    // [LAW:types-are-the-program] An empty key segment is structurally
-    // distinct from a typo'd key — the operator's mistake is a wrong
-    // count of slashes, not a wrong key name. Catching it in the pair
-    // loop (rather than letting it fall to the validator's unknown-key
-    // path which would report `unknown state key ""`) names the
-    // structural defect at the pair index.
+    // [LAW:types-are-the-program] An empty key is a slash-count defect, not a typo.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
-    // Empty key at pair 1.
     expect(() =>
       VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx),
     ).toThrow(/empty key at pair 1/);
-    // Empty key at pair 2 (theme valid, then empty key).
     expect(() =>
       VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
     ).toThrow(/empty key at pair 2/);
   });
 
   test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {
-    // [LAW:verifiable-goals] A config that uses state-kind vars without
-    // declaring session.id has to fail at LOAD time. The runtime would
-    // otherwise throw "Unknown variable session.id" on the next render —
-    // which is observable only when a render lands, not when the file is
-    // loaded — and that violates "machine-verifiable at the earliest point."
+    // [LAW:verifiable-goals] State vars without session.id must fail at LOAD.
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -575,10 +448,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("parseDslConfig requires session.id GLOBALLY (segment-local doesn't satisfy)", () => {
-    // [LAW:types-are-the-program] declareState reads the global session.id
-    // box at runtime. A segment-local declaration named "session.id"
-    // registers as "<seg>.session.id" — same string, different box. The
-    // load-time check must reject this case, not silently accept it.
+    // [LAW:types-are-the-program] A segment-local "session.id" is a different box.
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -605,8 +475,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("toolbar-toggle click verb cascades through state binding", () => {
-    // Same pattern with a different verb / key — exercises the toggle
-    // semantics (set on first click, clear on second).
     const config = parseAndValidate(
       "<test>",
       `{

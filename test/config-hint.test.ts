@@ -1,6 +1,4 @@
-// [LAW:behavior-not-structure] The client's CC_CANDYBAR_CONFIG probe: total
-// over the environment, raw on the way out (the daemon's checkpoint expands
-// `~`), and "unset or empty" is the affirmative "no override".
+// [LAW:behavior-not-structure] Total over the environment; raw on the way out.
 import { CONFIG_ENV, detectConfigEnv } from "../src/config-hint";
 
 describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {

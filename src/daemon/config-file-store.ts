@@ -1,29 +1,6 @@
-// [LAW:one-source-of-truth] The config FILE is the one durable store
-// (candybar-config-dqe). A `persist` click, a `reset`, a `+`/`-` layout edit
-// — every durable write lands in the file the session's render actually
-// read, at the path its persist key spells (loader/persist-target.ts). There
-// is no machine-owned overrides layer beside it: two durable stores for one
-// key could disagree, and nothing could say which was lying. What remains is
-// config file < session pick, and the session pick never claims to be the
-// durable answer.
-//
-// [LAW:effects-at-boundaries] This module is the ONE edge that reads and
-// writes the config file and the edit history. Everything it computes over
-// the file's text is the pure editor in src/config/json5-edit.ts, so a
-// hand-authored file keeps its comments, key order, quoting, and trailing
-// commas: exactly one span changes per edit.
-//
-// [LAW:dataflow-not-control-flow] Every write runs the same two steps —
-// "ensure the target's declaration is authored in the file", then "splice
-// the value" — and the first step is the identity when the file already
-// authors it. `segments` and `presets` merge BY NAME, WHOLESALE (loader/
-// merge.ts), so a first-ever write under a bundled name materializes the
-// whole bundled declaration first; otherwise the one-field file would shadow
-// the bundled decl and lose its template. A follow-up ticket proposes per-
-// field merge for those decls, after which materialization collapses to the
-// one field. A root's ROWS already merge by name (src/config/root.ts), so a
-// structural edit on a row the file inherits materializes that one row —
-// `root.rows.<name>` — and never the whole tree.
+// [LAW:one-source-of-truth] The config FILE is the one durable store: every durable write lands in the file
+// the session's render actually read. What remains is config file < session pick.
+// [LAW:effects-at-boundaries] This module is the ONE edge that reads and writes the config file and the edit history.
 
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
@@ -61,13 +38,7 @@ import {
 } from "../config/loader/persist-target.js";
 import type { DaemonLogger } from "./log.js";
 
-// [LAW:types-are-the-program] Every Globals field's primitive type, keyed by
-// `keyof Globals` — TypeScript forces this map to stay total over Globals, so
-// a field added to/removed from that interface is a compile error here until
-// this table is updated. This is the ONE place a `persist` write's canonical
-// string becomes the JSON5 text the file declares the field with (padding: a
-// number, autoWrap: a boolean, everything else: a string). A segment-palette
-// target has no row: it is always a NAME.
+// [LAW:types-are-the-program] Total over `keyof Globals`, so a field added to that interface is a compile error until this table is updated.
 const GLOBALS_FIELD_KIND: Readonly<
   Record<keyof Globals, "string" | "number" | "boolean">
 > = {
@@ -87,19 +58,11 @@ const GLOBALS_FIELD_KIND: Readonly<
   colorCompatibility: "string",
 };
 
-// [LAW:one-source-of-truth] The same four boolean-ish inputs validateBoolean
-// (state-validators.ts) accepts — a `persist` action's gate is an ALLOW-LIST
-// whose members pass through verbatim, so a config author writing
-// `cycle: ["true", "false"]` or `to: "0"` reaches this boundary with the raw
-// member string, not a pre-canonicalized "1"/"".
+// [LAW:one-source-of-truth] The same four boolean-ish inputs validateBoolean accepts, arriving as the raw member string.
 const BOOLEAN_TRUTHY = new Set(["1", "true"]);
 const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 
-// [LAW:parse-dont-validate] The write gate canonicalizes to a STRING (the
-// wire currency); this is the boundary that lifts it into the JSON5 text of
-// the typed value the file declares. An out-of-range/non-numeric string for a
-// "number" field is a caller bug (the range validator already canonicalized
-// it), so it throws loudly rather than writing a wrongly-typed value.
+// [LAW:parse-dont-validate] A wrongly-typed string here is a caller bug the range validator should already have rejected, so it throws.
 export function persistValueText(key: string, raw: string): string {
   const target = requireValueTarget(key);
   const kind =
@@ -121,9 +84,6 @@ export function persistValueText(key: string, raw: string): string {
   );
 }
 
-// ─── The file ────────────────────────────────────────────────────────────────
-
-/** The file's text, or null when it does not exist. */
 export function readConfigText(file: string): string | null {
   try {
     return fs.readFileSync(file, "utf8");
@@ -133,12 +93,7 @@ export function readConfigText(file: string): string | null {
   }
 }
 
-// [LAW:no-silent-failure] The existing file's mode survives (a hand-authored
-// file keeps whatever the user gave it) and a first-ever file takes the
-// process umask like any file the user would create. `null` text is the
-// absent file — undo of a first-ever write removes what that write created.
-// Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the click
-// fails loudly instead of claiming a success that didn't happen.
+// [LAW:no-silent-failure] Logs the breadcrumb, then RETHROWS so the click fails loudly instead of claiming a success that didn't happen.
 function writeConfigText(
   file: string,
   text: string | null,
@@ -166,28 +121,13 @@ function has(doc: Node | null, p: ConfigPath): boolean {
   return doc !== null && nodeAt(doc, p) !== undefined;
 }
 
-// ─── Where a target lives, and what authors it ──────────────────────────────
-
-// [LAW:types-are-the-program] A target's placement in THIS file: the path the
-// value is spliced at, and the by-name declaration that must be authored for
-// that path to mean what it means today (`null` when the path's parent merges
-// per field, as `globals` does). `value` is what the merged config holds
-// there now — the bundled declaration — or undefined when nothing does, which
-// `ensureAuthored` turns into a loud error rather than a hollow decl.
-// [LAW:types-are-the-program] `path` is the value span the key names; `unit`
-// is the by-name declaration the file must hold before that path exists —
-// the bundled declaration to materialize — or null when the file already
-// authors it (globals always; a segment/preset the file declares). There is
-// no "declared nowhere" placement: placementOf refuses instead.
+// [LAW:types-are-the-program] `path` is the value span the key names; `unit` is the by-name declaration the file must hold first, or null when it already does.
 interface Placement {
   readonly path: ConfigPath;
   readonly unit: { readonly path: ConfigPath; readonly value: unknown } | null;
 }
 
-// [LAW:one-source-of-truth] The A-grammar spelling of a canonical tree, so a
-// materialized root reads like a root the user would write (`{ h: [...] }`,
-// bare segment names) rather than the loader's lowered form. A node that is
-// already authoring grammar (the raw default's group sugar) passes through.
+// [LAW:one-source-of-truth] The A-grammar spelling, so a materialized root reads like a root the user would write.
 function authoredLayout(node: LayoutNode): unknown {
   if (node.kind === "segment") {
     return node.when === undefined
@@ -204,9 +144,6 @@ function authoredLayout(node: LayoutNode): unknown {
   return node;
 }
 
-// A root fragment as authored: a `{ rows }` map spells each row, a tree
-// spells itself. Lossless: the loader reads the spelling back to the same
-// canonical fragment, own fields included (pinned in test/dsl-layout-edit).
 export function authoredFragment(fragment: RootFragment): unknown {
   if (!isRowsFragment(fragment)) return authoredLayout(fragment);
   const { rows, ...own } = fragment;
@@ -230,15 +167,8 @@ const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
 const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
 const RAW_ROOT: Root = RAW.root;
 
-// [LAW:parse-dont-validate] The ONE place "who declares this unit" is
-// decided, by mergeWithDefault's own rule: the file's declaration wins by
-// name (nothing to materialize), else the bundled one is what a first write
-// materializes, else there is no declaration. That last arm is the stale
-// click: the gate admitted a key from a config this file no longer holds (a
-// custom preset deleted by hand since the render, another session's file).
-// It must refuse, never fall through — for a preset, "not declared" once
-// read as "declares no root" and redirected the write onto the file's own
-// top-level `root`.
+// [LAW:parse-dont-validate] The ONE place "who declares this unit" is decided, by mergeWithDefault's own rule.
+// The last arm is the stale click — a key from a config this file no longer holds — and it must refuse, never fall through.
 type Declaration<T> =
   | { readonly source: "file" }
   | { readonly source: "bundled"; readonly decl: T };
@@ -268,8 +198,7 @@ function unitOf<T>(
     : { path: unitPath, value: spell(declaration.decl) };
 }
 
-// [LAW:types-are-the-program] A target that names a VALUE — every scope but
-// the preset root, whose edits are structural (a row, not a scalar).
+// [LAW:types-are-the-program] A target that names a VALUE — every scope but the preset root, whose edits are structural.
 type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 
 function valuePlacementOf(doc: Node | null, target: ValueTarget): Placement {
@@ -288,17 +217,8 @@ function valuePlacementOf(doc: Node | null, target: ValueTarget): Placement {
   };
 }
 
-// ─── The root cascade, as the file spells it ────────────────────────────────
-
-// [LAW:one-type-per-behavior] One layer of the root cascade a preset renders
-// (bundled root rows < file root < the preset's fragment — the order
-// mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
-// grammar, the config-file path a structural edit to it lands at, and what
-// the file must author first for that path to hold it — null for a layer the
-// file already authors. Every layer is spelled the way it would sit in the
-// file (a bundled one as the very text `ensureAuthored` would materialize),
-// so one grammar reader (json5-edit) answers "does this layer hold the
-// segment" for all of them [LAW:one-source-of-truth].
+// [LAW:one-type-per-behavior] One layer of the root cascade a preset renders, spelled the way it would sit in the
+// file, so one grammar reader answers "does this layer hold the segment" for all of them [LAW:one-source-of-truth].
 interface RootLayer {
   readonly path: ConfigPath;
   readonly fragment: Node;
@@ -309,9 +229,6 @@ function bundledDoc(value: unknown): Node {
   return parseDocument(json5Text(value));
 }
 
-// The bundled default's root, one layer PER ROW: a first edit on an inherited
-// row materializes `root.rows.<name>` alone, the by-name cascade's own unit,
-// never the whole tree.
 function bundledRowLayers(): readonly RootLayer[] {
   return Object.entries(RAW_ROOT.rows).map(([name, row]) => {
     const authored = authoredLayout(row);
@@ -328,15 +245,8 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
   return fragment === undefined ? null : { path, fragment, unit: null };
 }
 
-// [LAW:parse-dont-validate] The preset's fragment, by mergeWithDefault's own
-// rule: the file's declaration wins by name (its `root`, if any), else the
-// bundled one (materialized whole, `globals` included — presets still merge
-// wholesale by name), else the click is stale: the gate admitted a key from a
-// config this file no longer holds, and it must refuse, never fall through.
-// [LAW:one-source-of-truth] A declared fragment that is the merge identity
-// stages the config's own root, exactly as presetRoot classifies it
-// (root.ts's `restages`), so every path this module names agrees with the
-// one the renderer reports.
+// [LAW:parse-dont-validate] The preset's fragment by mergeWithDefault's own rule; the last arm is a stale click and must refuse.
+// [LAW:one-source-of-truth] A fragment that is the merge identity stages the config's own root, as presetRoot classifies it.
 function presetLayer(doc: Node | null, preset: string): RootLayer | null {
   const own: ConfigPath = ["presets", preset];
   const path: ConfigPath = [...own, "root"];
@@ -361,17 +271,8 @@ function presetLayer(doc: Node | null, preset: string): RootLayer | null {
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 
-// [LAW:one-source-of-truth] The merged rows with their PROVENANCE, folded by
-// the same algebra mergeRoot uses: a `{ rows }` layer spreads over the base
-// by name (a replaced row keeps its place, a new one appends), a whole tree
-// replaces the base outright. A tree is one block under an unauthorable key
-// — its positional rows can never be replaced individually (root.ts's
-// ROW_NAME_RE), so they are searched as the contiguous front they always
-// form, in the pre-order the bar renders. Each entry carries the exact
-// config-file address a structural edit to it lands at — the row's own
-// `rows.<name>` member, or the whole tree — stamped here, where the layer's
-// shape is known, so the splice edits the row the cascade chose and never
-// re-searches the fragment in file order [LAW:parse-dont-validate].
+// [LAW:one-source-of-truth] The merged rows with their PROVENANCE, folded by the same algebra mergeRoot uses.
+// [LAW:parse-dont-validate] Each entry carries the config-file address an edit lands at, stamped where the layer's shape is known.
 type Cascade = ReadonlyMap<string, Placement & { readonly node: Node }>;
 const TREE_BLOCK = "#";
 
@@ -409,10 +310,8 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
   return layers.reduce(applyLayer, new Map());
 }
 
-// [LAW:single-enforcer] THE answer to "which row does this click edit": the
-// first merged row holding the segment, at the address the cascade stamped.
-// [LAW:no-silent-failure] No row holds it ⇒ the bar clicked rendered before
-// the row changed under it — loud, never a write somewhere plausible.
+// [LAW:single-enforcer] THE answer to "which row does this click edit": the first merged row holding the segment.
+// [LAW:no-silent-failure] No row holds it ⇒ the bar clicked rendered before the row changed — loud, never a plausible write.
 function layoutPlacementOf(
   doc: Node | null,
   preset: string,
@@ -426,9 +325,6 @@ function layoutPlacementOf(
   );
 }
 
-// The path a preset's layout is authored at: the fragment it stages (the
-// file's, or the bundled one's place in the file), else the config's own
-// `root` — the same fact presetRoot's reported path projects.
 function stagedPathOf(doc: Node | null, preset: string): ConfigPath {
   return presetLayer(doc, preset)?.path ?? ["root"];
 }
@@ -439,8 +335,7 @@ function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
     : persistPath(target);
 }
 
-// [LAW:dataflow-not-control-flow] Always runs; identity when the file already
-// authors the unit (the placement resolved it to null).
+// [LAW:dataflow-not-control-flow] Always runs; identity when the file already authors the unit.
 function ensureAuthored(text: string, { unit }: Placement): string {
   return unit === null
     ? text
@@ -463,14 +358,11 @@ function requireValueTarget(key: string): ValueTarget {
   return target;
 }
 
-// ─── Tracked edits ───────────────────────────────────────────────────────────
-
 export interface EditStore {
   readonly historyPath: string;
   readonly logger: DaemonLogger;
 }
 
-/** The scalar the file declares at a value target, or undefined. */
 export function readValue(
   file: string,
   key: string,
@@ -481,7 +373,6 @@ export function readValue(
   return node !== undefined && "value" in node ? node.value : undefined;
 }
 
-/** `persist`'s write: set the value the key names, tracked in history. */
 export function writeValue(
   store: EditStore,
   file: string,
@@ -501,11 +392,7 @@ export function writeValue(
   commit(store, file, { before, after });
 }
 
-/**
- * `reset`'s write: delete the path the key names, so the next reload falls
- * back to the bundled default (or, for a preset root, the config's own root).
- * A path the file never authored changes nothing and records nothing.
- */
+/** `reset`'s write: delete the path the key names. A path the file never authored changes nothing. */
 export function deleteValue(store: EditStore, file: string, key: string): void {
   const target = requireTarget(key);
   const before = readConfigText(file);
@@ -515,13 +402,7 @@ export function deleteValue(store: EditStore, file: string, key: string): void {
   commit(store, file, { before, after });
 }
 
-/**
- * A structural edit to the layout a preset-root key names, applied to the ROW
- * of the cascade that holds the segment (the op's target, or the anchor it
- * inserts beside), in the authored (A-grammar) text so its comments survive.
- * [LAW:no-silent-failure] A target/anchor no row holds is a loud error — the
- * click came from a bar rendered before the row changed.
- */
+/** A structural edit applied to the cascade row holding the segment, in authored grammar so its comments survive. [LAW:no-silent-failure] A target no row holds is a loud error. */
 export function applyLayoutOp(
   store: EditStore,
   file: string,
@@ -558,13 +439,7 @@ export function applyLayoutOp(
   commit(store, file, { before, after });
 }
 
-// ─── History: whole-file snapshots, one stack per file ──────────────────────
-
-// [LAW:types-are-the-program] ONE snapshot shape covers every edit kind — a
-// globals value, a palette pin, a layout op, a reset — because at this layer
-// each is "the file went from `before` to `after`". `before: null` is the
-// absent file (a first-ever write created it), so undoing that write removes
-// the file rather than leaving an empty one the loader rejects.
+// [LAW:types-are-the-program] ONE snapshot shape for every edit kind; `before: null` is the absent file, so undo removes it.
 export interface Snapshot {
   readonly before: string | null;
   readonly after: string;
@@ -575,16 +450,12 @@ export interface FileHistory {
   readonly future: readonly Snapshot[];
 }
 
-// [LAW:types-are-the-program] Keyed by config file: a snapshot sits in the
-// stack of the one file it belongs to, so a session whose render resolved
-// file A steps A's stack and cannot pop an edit made to file B.
+// [LAW:types-are-the-program] Keyed by config file, so a session stepping file A's stack cannot pop an edit made to file B.
 type HistoryState = Readonly<Record<string, FileHistory>>;
 
 const EMPTY_FILE_HISTORY: FileHistory = { past: [], future: [] };
 
-// [LAW:carrying-cost] Bounded per file so a long-running daemon's history
-// cannot grow without limit — a whole-file snapshot per entry is why the
-// bound is what makes this safe, not a nicety. Oldest entries fall off first.
+// [LAW:carrying-cost] Bounded per file: a whole-file snapshot per entry is why the bound is what makes this safe.
 const MAX_HISTORY_DEPTH = 50;
 
 function isSnapshot(v: unknown): v is Snapshot {
@@ -607,10 +478,7 @@ function isFileHistory(v: unknown): v is FileHistory {
   );
 }
 
-// [LAW:no-silent-failure] Missing/corrupt/wrong-shape file → the empty
-// history is the DEFINED recovery (a first-ever boot), logged; a single
-// malformed entry drops the WHOLE history rather than guessing which entries
-// to salvage.
+// [LAW:no-silent-failure] Missing/corrupt/wrong-shape → the empty history is the DEFINED recovery, logged; one bad entry drops the whole history.
 function loadHistory(store: EditStore): HistoryState {
   let raw: string;
   try {
@@ -663,11 +531,8 @@ function capPush<T>(arr: readonly T[], entry: T): readonly T[] {
     : next;
 }
 
-// [LAW:one-source-of-truth] Every tracked write lands here — the file write
-// and the history record in one place, so recording cannot drift from
-// mutation. The file is the truth and the history derives from it, so the
-// file goes first; [LAW:no-silent-failure] a record that fails after the
-// file landed says so — the edit is real, it is just not undoable.
+// [LAW:one-source-of-truth] Every tracked write lands here, so recording cannot drift from mutation; the file goes first.
+// [LAW:no-silent-failure] A record that fails after the file landed says so — the edit is real, it is just not undoable.
 function record(
   store: EditStore,
   file: string,
@@ -685,8 +550,7 @@ function record(
   }
 }
 
-// A fresh edit TRUNCATES `future`: doing something new abandons whatever was
-// undone.
+// A fresh edit TRUNCATES `future`: doing something new abandons whatever was undone.
 function commit(store: EditStore, file: string, snapshot: Snapshot): void {
   const state = loadHistory(store);
   const { past } = state[file] ?? EMPTY_FILE_HISTORY;
@@ -699,12 +563,8 @@ function commit(store: EditStore, file: string, snapshot: Snapshot): void {
   );
 }
 
-// [LAW:no-silent-failure] Undo restores `before` only while the file still
-// reads as `after` — the state the entry promised to revert from. A file
-// edited by hand (or by another daemon) since then is not that state, and
-// silently overwriting it would destroy work the history never saw. The
-// refusal names the file so the user knows what to look at. Returns `null`
-// at the bottom of the stack; the verb turns that into a loud BadVerbArgs.
+// [LAW:no-silent-failure] Undo restores `before` only while the file still reads as `after`; a file edited since is not that
+// state, and the refusal names it. Returns `null` at the bottom of the stack, which the verb turns into a loud BadVerbArgs.
 export function undoEdit(store: EditStore, file: string): Snapshot | null {
   const state = loadHistory(store);
   const { past, future } = state[file] ?? EMPTY_FILE_HISTORY;

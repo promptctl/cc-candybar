@@ -15,8 +15,6 @@ import {
   type ParsedEntry,
   type TranscriptCursor,
 } from "../../utils/claude";
-// [LAW:single-enforcer] The once-per-day seed's directory walk shares the same
-// in-flight-I/O budget (gn4.2) as every other transcript scan.
 import {
   readdir as gatedReaddir,
   stat as gatedStat,
@@ -26,23 +24,11 @@ import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { dlog } from "../log";
 
-// [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
-// Per-session records are canonical; the `session` projection (whole-session
-// totals) and the `today` projection (cross-session sum of today's per-day
-// buckets) are BOTH folds over this one store. There is no second usage cache
-// and no per-render whole-tree scan: a render observes the active session's
-// change through the single mtime stat it already does, re-parses only that one
-// session, and folds in-memory records for everything else.
-//
-// [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
-// (where the staleness probe — a whole-tree mtime sweep — cost as much as the
-// recompute it guarded). The aggregate is derived state maintained
-// incrementally: the whole transcript tree is scanned EXACTLY ONCE, lazily, to
-// seed records for sessions that did work before this daemon saw them; every
-// render after that is a single-file stat plus a fold.
+// [LAW:one-source-of-truth] The single owner of per-session usage: `session` and
+// `today` are folds over this store. [LAW:dataflow-not-control-flow] The tree is
+// scanned whole exactly once, lazily; every render after is a stat plus a fold.
 
-// [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
-// "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
+// [LAW:types-are-the-program] "No usage today" is the `absent` arm, not null fields.
 export interface TodayInfo {
   cost: number;
   tokens: number;
@@ -50,13 +36,7 @@ export interface TodayInfo {
   date: string;
 }
 
-// [LAW:one-source-of-truth] One observation of the active session's cumulative
-// token counts at a single instant. tok/s is the delta between two of these —
-// the prior sample lives in this store (the single owner of per-session token
-// totals), never in a parallel counter. `input` folds the cache lanes into the
-// prompt-side total so `total === input + output`. `atMs` is the render's clock
-// instant (the daemon's single-enforcer clock), so a frozen test clock makes
-// the rate deterministic.
+// [LAW:one-source-of-truth] tok/s is the delta between two of these; `atMs` is the caller's clock.
 export interface SpeedSample {
   readonly input: number;
   readonly output: number;
@@ -64,31 +44,19 @@ export interface SpeedSample {
   readonly atMs: number;
 }
 
-// The prior observation (absent on the very first render of a session), the one
-// just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
-// projections live at the render-payload boundary; this store only remembers and
-// reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
-// tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
-// parallel stores. tok/s reads the last pair; the sparkline reads every pair.
+// [LAW:one-source-of-truth] tok/s and the burn-rate history fold from ONE owned ring.
 export interface SpeedObservation {
   readonly prev?: SpeedSample;
   readonly cur: SpeedSample;
   readonly samples: readonly SpeedSample[];
 }
 
-// How many recent samples the burn-rate ring retains per session. A render-cadence
-// trend, not an archive: enough to fill a wide sparkline cell, capped so an
-// idle-but-alive session can't grow it without bound. The window the sparkline
-// draws is a tail slice of this (the `width` arg), so this only sets the ceiling.
 const SPEED_RING_CAPACITY = 64;
 
 function speedSampleOf(
   breakdown: TokenBreakdown | null,
   atMs: number,
 ): SpeedSample {
-  // Prompt-side = raw input plus both cache lanes (all tokens fed to the model);
-  // output = generated. total = the same sum the store's `tokens` projection
-  // uses, so `total === input + output`. [LAW:one-source-of-truth]
   const input = breakdown
     ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead
     : 0;
@@ -96,9 +64,7 @@ function speedSampleOf(
   return { input, output, total: input + output, atMs };
 }
 
-// Per-(session, day) scalar contribution — the only granularity the today fold
-// needs. Raw entries are discarded after bucketing, so per-session retained
-// memory is O(retained-days), not O(entries).
+// Raw entries are discarded after bucketing: memory is O(days), not O(entries).
 interface DayUsage {
   cost: number;
   input: number;
@@ -108,9 +74,7 @@ interface DayUsage {
 }
 
 interface SessionRecord {
-  // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
-  // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
-  // derived from mergeFolds and re-synced on every ingest — the single writer.
+  // [LAW:one-source-of-truth] `files` is canonical; the rest is derived by mergeFolds.
   files: Map<string, FileFold>;
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
@@ -122,9 +86,7 @@ interface SessionRecord {
 const DEFAULT_MAX_ENTRIES = 256;
 const DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
-// Mirrors the transcript-fs gate width: the seed's parse fan-out is bounded by
-// the same constant as the I/O it drives, so the once-a-day scan can never
-// re-create the unbounded burst gn4 exists to kill.
+// Bounds the seed's parse fan-out by the same constant as the I/O it drives.
 const SEED_CONCURRENCY = 8;
 
 const EMPTY_DAY: DayUsage = {
@@ -150,8 +112,7 @@ function dayKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Files modified before this can hold no entry that lands in "today", so the
-// seed never parses them. A full day of slack absorbs timezone/rollover skew.
+// Files older than this hold no "today" entry; a day of slack absorbs rollover skew.
 function seedCutoffMs(): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -163,11 +124,7 @@ function emptyBreakdown(): TokenBreakdown {
   return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
 
-// [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
-// file (a session's main transcript or one agent sidechain). `cursor` marks the
-// bytes already folded; the sums run over every usage-bearing entry seen so far.
-// The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
-// rewritten by /compact re-folds in isolation without disturbing the others.
+// [LAW:one-source-of-truth] `cursor` marks bytes already folded; a session is the MERGE of its files' folds.
 interface FileFold {
   cursor: TranscriptCursor;
   entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
@@ -176,24 +133,15 @@ interface FileFold {
   days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
 }
 
-// [LAW:effects-at-boundaries] Pure fold of NEW entries onto a prior file fold.
-// Returns a FRESH FileFold (prior is never mutated) so two concurrent refolds
-// sharing one prior snapshot can't corrupt each other. `reset` (file rewritten)
-// discards the prior sums and folds `entries` — the whole new file — from zero.
-//
-// [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
-// an entry lacking costUSD is priced once (PricingService) and that figure feeds
-// BOTH the session total and its day bucket. This matches the old path exactly —
-// it mutated entry.costUSD to the priced cost before bucketByDay read it — so
-// `today` is not silently under-counted for un-costed entries.
+// [LAW:effects-at-boundaries] Pure fold onto a prior fold, returning a FRESH FileFold.
+// [LAW:one-source-of-truth] One priced value feeds both the session total and its day bucket.
 async function foldFile(
   prior: FileFold | undefined,
   reset: boolean,
   entries: readonly ParsedEntry[],
   cursor: TranscriptCursor,
 ): Promise<FileFold> {
-  // dayKey strings sort lexically == chronologically, so "keep recent" is a
-  // string comparison against yesterday's key.
+  // dayKey strings sort lexically == chronologically.
   const keep = dayKey(new Date(seedCutoffMs()));
   const base = prior && !reset ? prior : undefined;
   let count = base?.entries ?? 0;
@@ -217,10 +165,6 @@ async function foldFile(
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
     const d = days.get(key) ?? { ...EMPTY_DAY };
-    // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
-    // cost — the old path mutated entry.costUSD to the priced cost before
-    // bucketByDay read it, so an un-costed entry contributed its priced value to
-    // `today`, not 0. Using `priced` here preserves that (session and day agree).
     d.cost += priced;
     d.input += u.input_tokens || 0;
     d.output += u.output_tokens || 0;
@@ -231,10 +175,6 @@ async function foldFile(
   return { cursor, entries: count, cost, breakdown, days };
 }
 
-// [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
-// derived record shape the read path serves. `entries === 0` across all files is
-// the empty session (all-null SessionInfo, whose fields the payload drops) — the
-// same distinction the old `entries.length === 0` arm carried.
 function mergeFolds(files: ReadonlyMap<string, FileFold>): {
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
@@ -274,7 +214,6 @@ function mergeFolds(files: ReadonlyMap<string, FileFold>): {
   };
 }
 
-// Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
 async function mapPool<T>(
   items: readonly T[],
   limit: number,
@@ -282,8 +221,6 @@ async function mapPool<T>(
 ): Promise<void> {
   let cursor = 0;
   const worker = async (): Promise<void> => {
-    // The while-guard proves the index is in range; the `!` discharges
-    // noUncheckedIndexedAccess, it is not a defensive guard.
     while (cursor < items.length) {
       const item = items[cursor++]!;
       await fn(item);
@@ -295,27 +232,11 @@ async function mapPool<T>(
 
 export class SessionUsageStore {
   private readonly entries = new Map<string, SessionRecord>();
-  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
-  // (session, observed mtime) onto one parse; cleared on settle (a coalescer,
-  // not a cache — the records map IS the cache).
+  // [LAW:one-source-of-truth] A coalescer, not a cache — the records map IS the cache.
   private readonly flight = new SingleFlight();
-  // [LAW:dataflow-not-control-flow] Per-day memo of the one seed scan. Unlike
-  // SingleFlight this RETAINS the resolved promise for the day, so after the
-  // first seed completes every later read awaits an already-settled promise —
-  // zero rescan. A rejected seed is dropped so the next read retries.
+  // [LAW:dataflow-not-control-flow] Per-day memo that RETAINS the resolved promise.
   private readonly seeded = new Map<string, Promise<void>>();
-  // [LAW:one-source-of-truth] The recent tok/s observations per session, a
-  // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
-  // the records map already owns; the baseline (prior counts + time) is the ring's
-  // last element, not a parallel counter. The burn-rate sparkline folds over the
-  // whole ring; tok/s folds over its final pair. One call to observeSpeed appends;
-  // the pure delta math is render-payload's.
   private readonly speedRings = new Map<string, SpeedSample[]>();
-  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
-  // for the speed sample. Concurrent renders observing the SAME transcript state
-  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
-  // exactly once — so they return the same prev+cur and render identical,
-  // deterministic throughput instead of the second clobbering the first.
   private readonly speedFlight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
@@ -357,12 +278,7 @@ export class SessionUsageStore {
     };
   }
 
-  // The `session` projection: whole-session totals for the active session.
-  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
-  // (the payload boundary logs it); an unknown/empty session is the all-null
-  // SessionInfo whose fields the boundary drops per-field — top-level
-  // `absent` is reserved for ingest, since the native officialCost overlay
-  // applies even with no record.
+  // [LAW:no-silent-failure] An empty session is the all-null SessionInfo; top-level `absent` is ingest's.
   async getUsageInfo(
     sessionId: string,
     hookData?: ClaudeHookData,
@@ -371,25 +287,16 @@ export class SessionUsageStore {
     if (record.kind === "failed") return record;
     const base =
       record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO;
-    // [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
-    // authoritative cost of the active session. base.cost (transcript entries
-    // priced by PricingService against a hand-maintained rate table) is a
-    // reimplementation — kept ONLY as a fallback for clients that omit cost,
-    // and to feed the cross-session `today` total, which has no native source
-    // (past sessions expose only their transcripts, not a live cost figure).
-    // The native cost is overlaid at READ time, not frozen into the mtime-keyed
-    // record, because it changes every render while the transcript total moves
-    // only when the file does.
+    // [LAW:one-source-of-truth] Claude's total_cost_usd is authoritative; base.cost is
+    // the fallback and the only source for `today`. Overlaid at READ time because it
+    // changes every render while the transcript total moves only with the file.
     const officialCost = hookData?.cost?.total_cost_usd ?? null;
     return ok({
       session: { ...base, cost: officialCost ?? base.cost, officialCost },
     });
   }
 
-  // The `today` projection: cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed seed or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
+  // [LAW:no-silent-failure] A failed seed or active ingest fails the whole projection.
   async getTodayInfo(hookData?: ClaudeHookData): Promise<Outcome<TodayInfo>> {
     const today = dayKey(new Date());
     try {
@@ -399,9 +306,6 @@ export class SessionUsageStore {
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    // Keep the active session fresh: the seed runs once per day, so after it
-    // every render's freshness for the active session comes from here (a hit
-    // when its transcript is unchanged). Empty sessionId no-ops in ingest.
     const active = await this.ingest(
       hookData?.session_id ?? "",
       hookData?.transcript_path,
@@ -435,24 +339,13 @@ export class SessionUsageStore {
     });
   }
 
-  // Take one tok/s observation of the active session: ingest its current
-  // cumulative counts, return the prior sample alongside, and record this one as
-  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
-  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
-  // session yields a zero-count sample, so a first-ever render establishes a
-  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
-  // clock instant — the store never reads the clock for tok/s timing itself.
+  // [LAW:no-silent-failure] An unknown session yields a zero-count sample, so a first render invents no rate.
   async observeSpeed(
     sessionId: string,
     transcriptPath: string | undefined,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
-    // [LAW:no-ambient-temporal-coupling] Key the observation by the same
-    // (session, mtime) tuple ingest uses, so concurrent renders at one transcript
-    // state coalesce onto a single observe-and-commit — the read of `prev` and
-    // the write of `cur` happen exactly once for that state, with the flight as
-    // the sole owner of ordering. A distinct mtime is a genuinely new sample and
-    // gets its own key.
+    // [LAW:no-ambient-temporal-coupling] Keyed like ingest, so `prev` is read and `cur` written once per state.
     const mtime = statMtimeMs(transcriptPath);
     return this.speedFlight.run(`${sessionId}:${mtime}`, async () => {
       const record = await this.ingest(sessionId, transcriptPath, mtime);
@@ -461,15 +354,8 @@ export class SessionUsageStore {
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
       const ring = this.speedRings.get(sessionId) ?? [];
-      // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
-      // clock) owns ring order — NOT ingest-completion order. Two concurrent
-      // observes with different mtimes don't coalesce in speedFlight and each
-      // awaits ingest before this mutation, so a plain append would record
-      // samples in whichever-ingest-settled-first order and invert oldest→newest.
-      // prev is the latest sample strictly before this observation; the post-
-      // insert sort by atMs makes the ring's order independent of completion
-      // order. (get→insert→set is synchronous after the await, so each resumed
-      // continuation mutates atomically — no lost update.)
+      // [LAW:no-ambient-temporal-coupling] Observation time owns ring order, not
+      // ingest-completion order; the post-insert sort keeps the ring oldest→newest.
       let prev: SpeedSample | undefined;
       for (const s of ring) {
         if (s.atMs < cur.atMs && (prev === undefined || s.atMs > prev.atMs)) {
@@ -478,8 +364,6 @@ export class SessionUsageStore {
       }
       ring.push(cur);
       ring.sort((a, b) => a.atMs - b.atMs);
-      // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
-      // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
       this.speedRings.set(sessionId, ring);
       return ok({
@@ -490,11 +374,7 @@ export class SessionUsageStore {
     });
   }
 
-  // mtime-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is an unknown empty session (or no sessionId), `failed` is a
-  // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records enter the map; the next render retries, same rule as the git
-  // cache). This is the single write-path into the records map.
+  // mtime-gated, coalesced re-parse of ONE session; `failed` is NOT cached, so the next render retries.
   private async ingest(
     sessionId: string,
     transcriptPath: string | undefined,
@@ -511,33 +391,14 @@ export class SessionUsageStore {
       this.hits++;
       return ok(existing);
     }
-    // No path to read fresh content — preserve the last-known record rather
-    // than blank it. (The session will refresh when its transcript reappears.)
+    // No path to read fresh content — preserve the last-known record, don't blank it.
     if (!transcriptPath) return existing ? ok(existing) : ABSENT;
 
     this.misses++;
-    // [LAW:no-ambient-temporal-coupling] The flight thunk snapshots the prior
-    // record when it RUNS (first caller); coalesced callers share that one
-    // refold. Two concurrent DIFFERENT-mtime refolds each read the same prior and
-    // last-writer-wins. This is safe — and specifically NOT a double-count —
-    // because `refold` writes the byte cursor and the fold as ONE atomic pair
-    // (both from a single refold result), and the fold always covers exactly
-    // [0, cursor). A losing writer's fold is discarded WITH its cursor, not left
-    // beside a stale one. So even when last-writer-wins rewinds the stored cursor,
-    // it rewinds the paired fold with it; the next refold folds [cursor, end) onto
-    // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
-    // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
-    // Pinned by the concurrency test in test/transcript-incremental.test.ts.
-    // The prior is read when the thunk RUNS. If evictIfNeeded dropped this
-    // session between thunk creation and run, prior is undefined and refold does
-    // one whole-file re-fold — still correct, just non-incremental that once.
-    // (Eviction only fires after a successful write, so this can bite only on a
-    // first miss under cap pressure.)
-    // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
-    // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
-    // throwing on a bad rate table or network hiccup inside foldFile) would
-    // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
-    // wrapped this; keep that guarantee by mapping any throw to `failed`.
+    // [LAW:no-ambient-temporal-coupling] Concurrent different-mtime refolds are
+    // last-writer-wins and cannot double-count: `refold` writes the byte cursor and
+    // its fold as ONE atomic pair always covering [0, cursor).
+    // [LAW:no-silent-failure] ingest stays total — any throw maps to `failed`.
     let outcome: Outcome<{
       files: Map<string, FileFold>;
       sessionInfo: SessionInfo;
@@ -568,13 +429,7 @@ export class SessionUsageStore {
     return ok(record);
   }
 
-  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
-  // prior record — the transcript (and each agent sidechain) is append-only, so
-  // per-render work is O(new bytes), not O(file). The whole-file case (cold
-  // record, or a first-ever read) is the same path with an empty prior: the
-  // reader yields the whole file from offset 0. A `failed` read on any file
-  // fails the fold (the boundary logs it); an `absent` file (not yet written /
-  // agent removed) keeps its prior fold and contributes nothing new.
+  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the prior record.
   private async refold(
     sessionId: string,
     transcriptPath: string,
@@ -587,11 +442,7 @@ export class SessionUsageStore {
       mainMtime: number;
     }>
   > {
-    // File set for this fold: the main transcript plus the session's current
-    // agent sidechains. Files no longer in the set (a removed sidechain) drop
-    // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
-    // Pass the prior file set so already-verified agent sidechains skip their
-    // first-line re-read — per-render agent discovery is O(new sidechains).
+    // Files no longer in the set drop out, so a renamed file cannot linger in the merge.
     const agentPaths = await findAgentTranscripts(
       sessionId,
       dirname(transcriptPath),
@@ -604,10 +455,7 @@ export class SessionUsageStore {
       const read = await readAppendedEntries(filePath, priorFold?.cursor);
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
-        // The file has no bytes yet (fresh main) or vanished (removed agent
-        // sidechain). Carry a prior fold forward; otherwise it contributes
-        // nothing. The main transcript's absence leaves mainMtime 0, so the next
-        // render's mtime gate re-attempts rather than caching an empty read.
+        // An absent main transcript leaves mainMtime 0, so the next render re-attempts.
         if (priorFold) newFiles.set(filePath, priorFold);
         continue;
       }
@@ -621,7 +469,6 @@ export class SessionUsageStore {
   private ensureSeeded(day: string): Promise<void> {
     const existing = this.seeded.get(day);
     if (existing) return existing;
-    // Drop other days' memos so the map holds at most the current day.
     this.seeded.clear();
     const promise = this.seed(day);
     this.seeded.set(day, promise);
@@ -631,8 +478,7 @@ export class SessionUsageStore {
     return promise;
   }
 
-  // The one and only whole-tree scan: lazily, once per day, ingest every
-  // session whose transcript was touched recently enough to hold a today entry.
+  // The one whole-tree scan: lazily, once per day, over recently-touched transcripts.
   private async seed(_day: string): Promise<void> {
     const cutoff = seedCutoffMs();
     const projectPaths = await findProjectPaths(getClaudePaths());
@@ -667,9 +513,7 @@ export class SessionUsageStore {
       }
     }
 
-    // [LAW:no-silent-failure] The seed is its own effect edge (timer/lazy
-    // driven, no render boundary to carry the outcome to), so its per-session
-    // parse failures are logged here.
+    // [LAW:no-silent-failure] The seed is its own effect edge, so failures log here.
     await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
       const outcome = await this.ingest(c.sessionId, c.path, c.mtime);
       if (outcome.kind === "failed") {
@@ -680,7 +524,6 @@ export class SessionUsageStore {
     dlog("info", `usageStore seed sessions=${candidates.length}`);
   }
 
-  // Public for tests; called periodically from the timer.
   sweepStale(): number {
     const now = Date.now();
     let dropped = 0;

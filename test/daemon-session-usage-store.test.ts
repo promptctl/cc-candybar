@@ -1,19 +1,5 @@
-// [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
-// the `today` aggregate is a fold over daemon-owned per-session records, NOT a
-// per-render whole-tree scan. These tests pin that contract.
-//
-// WHY CUMULATIVE FS OPS, NOT PEAK
-// -------------------------------
-// gn4.2's gate bounds PEAK in-flight fs ops at a constant whether there is 1
-// scan or 50 — so peak is structurally blind to "did we rescan." The signal
-// that the per-render scan is GONE is the CUMULATIVE count of fs ops: the whole
-// tree is read exactly ONCE (the lazy seed), and every render after that costs
-// zero transcript fs work while the active session is unchanged. async_hooks
-// counts FSREQPROMISE inits deterministically.
-//
-// (statMtimeMs on the hot path is fs.statSync — synchronous, so it inits no
-// FSREQPROMISE. That is the point: the per-render freshness check is a sync
-// single-file stat, not an async whole-tree sweep.)
+// [LAW:verifiable-goals] `today` is a fold over per-session records, not a per-render whole-tree
+// scan. CUMULATIVE FSREQPROMISE inits are the signal: a peak-bounded count is blind to a rescan.
 
 import { createHook } from "node:async_hooks";
 import {
@@ -30,7 +16,6 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 
-// Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
   let total = 0;
   const hook = createHook({
@@ -47,8 +32,7 @@ async function countFsOps(body: () => Promise<unknown>): Promise<number> {
   return total;
 }
 
-// One JSONL line of usage for `day` with the given cost. Unique requestId/msgId
-// so the dedup in the parser keeps every line.
+// Unique requestId/msgId so the parser's dedup keeps every line.
 function usageLine(tag: string, day: Date, cost: number): string {
   return (
     JSON.stringify({
@@ -70,8 +54,6 @@ function hook(sessionId: string, transcriptPath: string): ClaudeHookData {
     transcript_path: transcriptPath,
   } as ClaudeHookData;
 }
-
-// ─── Session projection: cache hit / miss / eviction / sweep ──────────────────
 
 describe("SessionUsageStore — session projection", () => {
   let dir: string;
@@ -110,8 +92,7 @@ describe("SessionUsageStore — session projection", () => {
     );
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      // hook() carries no cost block → officialCost null → display the
-      // transcript total.
+      // No cost block → officialCost null → display the transcript total.
       const info = await store.getUsageInfo("A", hook("A", t));
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
@@ -143,8 +124,6 @@ describe("SessionUsageStore — session projection", () => {
       const info = await store.getUsageInfo("A", hd);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
-      // Displayed cost is the native number; the priced sum is retained
-      // separately (it still feeds the cross-session `today` total).
       expect(info.value.session.cost).toBeCloseTo(0.99, 5);
       expect(info.value.session.officialCost).toBeCloseTo(0.99, 5);
       expect(info.value.session.calculatedCost).toBeCloseTo(0.03, 5);
@@ -161,7 +140,6 @@ describe("SessionUsageStore — session projection", () => {
         writeFileSync(t, usageLine(sid, new Date(), 0.01));
         await store.getUsageInfo(sid, hook(sid, t));
       }
-      // Cap is 2; oldest (`a`) was evicted → asking again must miss+recompute.
       const before = store.getStats().misses;
       await store.getUsageInfo("a", hook("a", join(dir, "a.jsonl")));
       expect(store.getStats().misses).toBe(before + 1);
@@ -206,8 +184,7 @@ describe("SessionUsageStore — session projection", () => {
       clearParseCache();
       const oneParse = await countFsOps(() => store.getUsageInfo("A", hd));
 
-      // Fresh store + cold parse cache: K concurrent first-reads coalesce onto
-      // one flight, so cumulative fs ops stay near a single parse, not K×.
+      // K concurrent first-reads coalesce onto one flight, so cost stays near 1 parse.
       const store2 = new SessionUsageStore({ sweepIntervalMs: 0 });
       clearParseCache();
       const kConcurrent = await countFsOps(() =>
@@ -223,8 +200,6 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 });
-
-// ─── Today projection: seed once, then fold (no per-render scan) ──────────────
 
 describe("SessionUsageStore — today projection (off the hot path)", () => {
   const PROJECTS = 12;
@@ -242,8 +217,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const pdir = join(projectsDir, `proj-${p}`);
       mkdirSync(pdir, { recursive: true });
       for (let f = 0; f < FILES_PER_PROJECT; f++) {
-        // Globally-unique sessionId per file (real session UUIDs never collide
-        // across projects); cost present so the today path skips pricing I/O.
+        // Cost present so the today path skips pricing I/O.
         const sid = `sess-${p}-${f}`;
         writeFileSync(join(pdir, `${sid}.jsonl`), usageLine(sid, today, COST_PER_FILE));
       }
@@ -281,15 +255,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     try {
       const hd = hook("sess-0-0", activePath);
       const seedOps = await countFsOps(() => store.getTodayInfo(hd));
-      expect(seedOps).toBeGreaterThan(0); // the one whole-tree scan
+      expect(seedOps).toBeGreaterThan(0);
 
-      // 20 further renders: seed is memoized, active mtime unchanged → the only
-      // freshness check is a sync statSync. No async fs ops at all.
       const steadyOps = await countFsOps(async () => {
         for (let i = 0; i < 20; i++) await store.getTodayInfo(hd);
       });
       expect(steadyOps).toBe(0);
-      expect(store.getStats().seeds).toBe(1); // never re-seeded
+      expect(store.getStats().seeds).toBe(1);
     } finally {
       store.close();
     }
@@ -302,14 +274,11 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const hd = hook("sess-0-0", activePath);
       const seedOps = await countFsOps(() => store.getTodayInfo(hd));
 
-      // Advance only the active session's mtime, then render once.
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(activePath, future, future);
       clearParseCache();
       const reparseOps = await countFsOps(() => store.getTodayInfo(hd));
 
-      // One session's re-parse is a tiny fraction of a whole-tree scan, and the
-      // seed never runs again.
       expect(reparseOps).toBeGreaterThan(0);
       expect(reparseOps).toBeLessThan(seedOps / 2);
       expect(store.getStats().seeds).toBe(1);

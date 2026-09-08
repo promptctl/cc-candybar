@@ -1,23 +1,5 @@
 #!/usr/bin/env node
-// Per-platform package publish + main-package optionalDependencies rewrite.
-//
-// Invoked from semantic-release's `prepareCmd` (see .releaserc.json) with
-// the next release version as argv[2]. Runs AFTER version analysis and
-// BEFORE `@semantic-release/npm` publishes the main package, so changes
-// here are picked up by the main publish.
-//
-// Preconditions:
-//   - npm/<platform>/bin/cc-candybar exists for every platform (CI
-//     downloads matrix-build artifacts before invoking semantic-release).
-//   - NODE_AUTH_TOKEN / NPM_TOKEN env var is set so `npm publish` can auth.
-//
-// Steps:
-//   1. Verify all four platform binaries are in place.
-//   2. Update each npm/<platform>/package.json with the release version.
-//   3. `npm publish` each platform package (--access public).
-//   4. Rewrite root package.json's optionalDependencies to the release
-//      version. semantic-release/npm publishes the main package next, with
-//      the rewritten manifest.
+// Invoked from semantic-release's `prepareCmd` with the next version as argv[2], before the main publish.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -46,7 +28,6 @@ if (!version || !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
 
 console.log(`release.mjs: preparing per-platform packages for version ${version}`);
 
-// 1. Verify every platform binary exists.
 for (const p of PLATFORMS) {
   const binPath = resolve(ROOT, "npm", `cc-candybar-${p}`, "bin", "cc-candybar");
   if (!existsSync(binPath)) {
@@ -54,7 +35,6 @@ for (const p of PLATFORMS) {
   }
 }
 
-// 2. Bump each platform package version.
 for (const p of PLATFORMS) {
   const pkgPath = resolve(ROOT, "npm", `cc-candybar-${p}`, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
@@ -63,9 +43,8 @@ for (const p of PLATFORMS) {
   console.log(`  set ${pkg.name}@${version}`);
 }
 
-// 3. Publish platform packages first so the main package's optionalDependencies
-// resolve when users install it. Skip packages already at this version so
-// reruns after a partial failure don't abort on 403.
+// Platform packages publish first so the main package's optionalDependencies
+// resolve; skip ones already at this version so a rerun doesn't abort on 403.
 import { execSync } from "node:child_process";
 for (const p of PLATFORMS) {
   const pkgName = `@promptctl/cc-candybar-${p}`;
@@ -86,8 +65,7 @@ for (const p of PLATFORMS) {
   });
 }
 
-// 4. Rewrite root package.json optionalDependencies to the new version. The
-// version field itself is bumped by @semantic-release/npm right after this.
+// The `version` field itself is bumped by @semantic-release/npm right after this.
 const rootPkgPath = resolve(ROOT, "package.json");
 const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
 rootPkg.optionalDependencies = rootPkg.optionalDependencies ?? {};
@@ -97,24 +75,10 @@ for (const p of PLATFORMS) {
 writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);
 console.log(`release.mjs: optionalDependencies pinned to ${version}`);
 
-// 5. Regenerate pnpm-lock.yaml to match the optionalDependencies just written.
-// [LAW:one-source-of-truth] The lockfile mirrors package.json's dependency
-// specifiers; rewriting optionalDependencies (step 4) without re-syncing the
-// lockfile leaves them disagreeing, and @semantic-release/git commits the
-// manifest back to main. CI's first step is `pnpm install --frozen-lockfile`,
-// which then fails ERR_PNPM_OUTDATED_LOCKFILE on every branch cut after the
-// release. Re-sync here, at the single site that mutates the specifiers, and
-// commit the lockfile via .releaserc's git `assets`. package.json's
-// pnpm.supportedArchitectures makes the regen lock all four os/cpu variants
-// regardless of this runner's platform. --ignore-scripts: metadata-only
-// refresh; postinstall must not run.
-//
-// [LAW:no-silent-failure] The four platform packages were published in step 3,
-// but npm registry propagation is NOT instant. A regen run immediately resolves
-// only the subset already live and SILENTLY DROPS the rest (they are optional),
-// shipping a lockfile missing architectures — which is exactly the recurring
-// breakage. So retry the regen until all four are present, and FAIL the release
-// (never ship a partial lockfile) if propagation hasn't completed in time.
+// [LAW:one-source-of-truth] Re-sync the lockfile here, at the single site that
+// mutates the specifiers, or CI's --frozen-lockfile fails on the next branch cut.
+// [LAW:no-silent-failure] A regen resolves only the subset the registry has
+// propagated, silently dropping the rest (they are optional) — so retry, never ship partial.
 function lockfileSpecifier(platform) {
   const lock = readFileSync(resolve(ROOT, "pnpm-lock.yaml"), "utf8");
   const m = lock.match(

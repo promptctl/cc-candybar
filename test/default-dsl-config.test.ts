@@ -1,12 +1,5 @@
-// [LAW:single-enforcer] The bundled default DslConfig is the production
-// statusline when no user file is present. The loader and the renderer must
-// agree it is valid, otherwise the daemon's startup path crashes for every
-// new user. This test pins that invariant.
-//
-// [LAW:types-are-the-program] If a future change to dsl-types tightens a
-// constraint and DEFAULT_DSL_CONFIG no longer satisfies it, this test fails
-// at compile time (via the `satisfies` on the constant) AND at runtime here
-// (via parseDslConfig). Two boundaries, one truth.
+// [LAW:single-enforcer] The bundled default is the production statusline when no user file is present, so a loader/renderer disagreement about it crashes every new user's startup path.
+// [LAW:types-are-the-program] A tightened constraint fails at compile time (the `satisfies`) AND at runtime here (parseDslConfig) — two boundaries, one truth.
 
 import {
   DEFAULT_DSL_CONFIG,
@@ -47,11 +40,7 @@ import {
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
 
-// [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
-// mirrors what a user gets by copy-pasting the bundled default into their own
-// file, driven through the real per-file parse (which freshly synthesizes
-// `menus.*`). Reparsing DEFAULT_DSL_CONFIG itself (already-synthesized) would
-// trip the reserved-namespace guard on its own synthesized entries.
+// [LAW:one-source-of-truth] The AUTHORED literal, pre-synthesis: reparsing DEFAULT_DSL_CONFIG itself would trip the reserved-namespace guard on its own synthesized entries.
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 describe("DEFAULT_DSL_CONFIG", () => {
@@ -59,47 +48,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     expect(Object.keys(parsed.variables).length).toBeGreaterThan(0);
     expect(Object.keys(parsed.segments).length).toBeGreaterThan(0);
-    // The two named rows ARE the merge keys a user file restates one of.
     expect(Object.keys(parsed.root.rows)).toEqual(["identity", "status"]);
   });
 
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind !== "segment") continue;
-      // Array form: a synthesized group toggle's name (e.g. "groups.settings")
-      // contains a literal dot, which toHaveProperty's default dotted-path
-      // string form would otherwise misread as nested access.
+      // Array form: a synthesized toggle's name contains a literal dot, which toHaveProperty's string form would read as nested access.
       expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([node.name]);
     }
   });
 
-  // The bundled default is the maintainer's two always-visible rows — an
-  // identity+actions row (directory, the verbose gitaculous line, the
-  // quick-action tray: copy session id, open project / transcript in the
-  // editor, and the settingsDrawer toggle) over a status row (model, context,
-  // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
-  // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
-  // toggle segment and gated body are part of the static layout tree
-  // regardless of the toggle's current open/closed value (walkNodes visits
-  // unconditionally; only the render-time `when` hides the body while
-  // closed). This pins the chosen segment set — which segments graduated into
-  // the default bar and which stay declared-but-opt-in — so a future layout
-  // edit is a deliberate, reviewed change rather than an accidental drift.
-  // block/weekly are IN (their when-gates hide them when no rate-limit window
-  // is active); toolbar is IN (the default's interactivity).
-  //
-  // The drawer holds THREE controls, not nine: candybar-settings-ui-aok.3
-  // moved every setting with both a session and a durable half
-  // (theme/style/look/preset/autoWrap/padding) into the synthesized settings
-  // menu, where each is ONE control whose destination a `persist?` checkbox
-  // chooses. What is left here is durable-only by nature — charset and
-  // colorCompatibility describe the terminal, and directoryPaletteControl is
-  // a per-segment pin. Those `settings.*` segments are NOT in this list
-  // because this walks DEFAULT_DSL_CONFIG.root, the AUTHORED tree, and the
-  // menu is spliced in later by validateConfig (see the settings-menu tests).
-  //
-  // The cost segments (session/today) and the speed/sparkline/burnrate
-  // telemetry stay opt-in.
+  // Pins which segments graduated into the default bar and which stay declared-but-opt-in, so a layout edit is a reviewed change rather than drift. The drawer's gated body is part of the static tree whatever the toggle holds.
+  // `settings.*` is absent because this walks the AUTHORED tree, and validateConfig splices the menu in later.
   test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
@@ -107,9 +68,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
     expect([...laidOut].sort()).toEqual(
       [
-        // Leads the identity row and is when-gated on `.host.ssh`, so it is
-        // invisible on every local session — the row still opens with
-        // `directory` unless you are SSH'd in (candybar-segments-e7u).
         "host",
         "directory",
         "gitaculous",
@@ -125,8 +83,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "directoryPaletteControl",
       ].sort(),
     );
-    // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
-    // deliberately absent from the default `root`.
     for (const optIn of [
       "git",
       "session",
@@ -144,8 +100,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("registerDslConfig + renderDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
-    // The default now carries `kind: "state"` vars (the style picker); a
-    // SessionState is required to declare them, exactly as the daemon supplies.
+    // The default carries `kind: "state"` vars, which need a SessionState to declare, exactly as the daemon supplies.
     const registry = new SourceRegistry(
       store,
       "",
@@ -186,22 +141,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
           width: Number.POSITIVE_INFINITY,
         },
       );
-      // Hidden segments (no git repo, no usage data) drop out; the
-      // directory and model segments remain, so the line is non-empty.
       expect(line.length).toBeGreaterThan(0);
     } finally {
       registry.dispose();
     }
   });
 
-  // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
-  // ships a clickable theme/look picker, not just documentation describing how
-  // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
-  // own applyTheme/applyLook actions (deriveActionValidators →
-  // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
-  // then re-renders with theme.effective/look.effective recomputed exactly as
-  // server.ts does (effectiveThemeName/effectiveLookName over SessionState) —
-  // mirroring the daemon's real click → next-render loop, not a synthetic rig.
+  // [LAW:verifiable-goals] Drives the REAL click wire against the default's own applyTheme/applyLook, then re-renders with the effective names recomputed exactly as server.ts does — the daemon's click → next-render loop, not a synthetic rig.
   test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
@@ -209,9 +155,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
-    // The daemon's cache installs the derived click gate at config load
-    // (cache/render.ts); mirror it so the click below passes through the same
-    // validator applyTheme/applyLook would in production.
+    // The daemon's cache installs the derived click gate at config load; mirror it so the click passes the same validator it would in production.
     const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
       registerStateValidator(key, spec),
     );
@@ -260,10 +204,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     };
     try {
-      // The theme and look controls live in the synthesized settings menu's
-      // config row (candybar-settings-ui-aok.3), behind two nested
-      // disclosures — open both with the same clicks a "☰ ▸" then "⚙ config ▸"
-      // tap would dispatch, so the controls this test exercises render.
+      // The controls sit behind two nested disclosures; open both with the same clicks a "☰ ▸" then "⚙ config ▸" tap would dispatch.
       clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
@@ -317,10 +258,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  // brandon-display-dam.2: templates author content; the intra-cell padding is
-  // structural (globals.padding → BuildLineOptions.padding). With the bundled
-  // default, padding 0 renders visibly tighter than 1, and 2 wider — the value
-  // genuinely drives the chrome instead of spaces baked into templates.
+  // Templates author content; the intra-cell padding is structural, so the value drives the chrome rather than spaces baked into templates.
   test("padding 0 / 1 / 2 render strictly increasing visible widths", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const payload = {
@@ -358,17 +296,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const [w0, w1, w2] = [render(0).length, render(1).length, render(2).length];
     expect(w0).toBeLessThan(w1);
     expect(w1).toBeLessThan(w2);
-    // One space per visible segment per side: the deltas are equal and
-    // positive — padding scales linearly, not incidentally.
     expect(w1 - w0).toBe(w2 - w1);
   });
 
-  // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
-  // default's two informational rows (identity row, status row) plus the
-  // settingsDrawer group sugar must lower to a root producing byte-identical
-  // ANSI to DEFAULT_DSL_CONFIG.root (the canonical container tree, hand-lowered
-  // via `settingsDrawer`'s `kind: "group"` sugar — see its own comment for why
-  // it can't be authored in canonical form). Spelling differs; render does not.
+  // [LAW:one-source-of-truth] The terse A-grammar spelling must lower to a root producing byte-identical ANSI: spelling differs, render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
@@ -421,9 +352,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     expect(render(configA)).toBe(render(configDefault));
   });
 
-  // [LAW:one-source-of-truth] Deep-nesting equivalence: { v: [{ h: [a, b] }, { h: [c, d] }] }
-  // and { kind: 'container', direction: 'vertical', children: [...] } must render identically —
-  // both are spellings of the same canonical tree.
   test("A-grammar terse form { v:[{ h:[...] }] } is render-equivalent to verbose kind+direction form", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const SEGMENTS = `{
@@ -481,11 +409,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     expect(render(configA)).toBe(render(configVerbose));
   });
 
-  // brandon-segments-e99: the quick-action tray's fourth glyph opens the repo's
-  // web page. The daemon has already transposed the remote into an https URL by
-  // the time it reaches the template, so `↗ repo` is a plain `{{ link }}` — the
-  // terminal/OS owns the click, no cc-candybar:// verb. Gated on the VALUE: a
-  // repo with no browsable remote supplies "" and the glyph is simply absent.
+  // The daemon transposes the remote into an https URL before the template, so `↗ repo` is a plain `{{ link }}` the terminal owns — gated on the VALUE, so no browsable remote means no glyph.
   describe("toolbar repo link", () => {
     function renderToolbar(git: Record<string, unknown>): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
@@ -543,8 +467,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         repoUrl: "https://github.com/promptctl/cc-candybar",
       });
       expect(line).toContain("↗ repo");
-      // The URL rides an OSC-8 hyperlink, not the visible text — a click
-      // target, not a printed URL cluttering the bar.
       expect(line).toContain(
         "\x1b]8;;https://github.com/promptctl/cc-candybar\x1b\\",
       );
@@ -558,10 +480,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
-  // [LAW:verifiable-goals] The directory segment's template has boundary
-  // cases that round-9 fixed: project root collapse, subdir relative path,
-  // home boundary safety. Each case sets up a focused single-segment
-  // runtime, renders, and strips ANSI for assertion against visible text.
   describe("DIR_TEMPLATE", () => {
     function renderDirectoryText(opts: {
       home: string;
@@ -569,10 +487,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       current_dir: string;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      // Narrow the layout to `directory` so the rendered line is exactly
-      // that segment's text. `home` flows through the augmented payload
-      // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
-      // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
       const registry = new SourceRegistry(
@@ -617,9 +531,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             width: Number.POSITIVE_INFINITY,
           },
         );
-        // Strip ANSI escapes AND the Powerline joiner glyphs
-        // (U+E0B0..U+E0BC range) so assertions can probe visible
-        // segment text only.
         return line.replace(
           // eslint-disable-next-line no-control-regex
           /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu,
@@ -641,8 +552,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("subdir of project renders as project-relative path (fish-abbreviated)", () => {
-      // brandon-directory-781: the project-relative collapse still holds; the
-      // survivor is then fish-abbreviated (`src/foo` → `s/foo`), the leaf full.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/Users/alice/code/myproject",
@@ -653,10 +562,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("hasPrefix boundary safety: /home/al is NOT a prefix of /home/alice", () => {
-      // If hasPrefix were used naively, `/home/alice/work` would falsely
-      // match `/home/al` and try to render relative to it. The path falls
-      // through to absolute, then fish-abbreviates to `/h/a/work` (leaf full) —
-      // a relative match would have produced a different, non-slash-led string.
+      // A naive hasPrefix would match `/home/alice/work` against `/home/al` and render relative to it; the path must fall through to absolute instead.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/home/al",
@@ -684,13 +590,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
-  // brandon-segments-3eo.1: the `git` and `gitaculous` segment templates each
-  // render every git fact (branch, staged/unstaged/untracked/conflicts,
-  // ahead/behind) in its own semantic palette color instead of one uniform
-  // segment fg, p10k-style. Feeding a payload where every fact is nonzero and
-  // counting DISTINCT truecolor foregrounds in the rendered line is the
-  // acceptance check — a regression back to one uniform fg would collapse
-  // the count to 1.
+  // Every git fact renders in its own semantic palette colour, so counting DISTINCT truecolor foregrounds is the acceptance check: one uniform fg collapses the count to 1.
   describe("git segment per-fact coloring", () => {
     const GIT_PAYLOAD = {
       hook_event_name: "Status",
@@ -717,19 +617,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       },
     };
 
-    // Every SGR run across the rendered line, in order, with the escape's
-    // start offset and its truecolor fg (if any) — the ONE parser every
-    // helper below builds on. [LAW:one-source-of-truth] this used to be two
-    // independently-typed copies (distinctForegrounds here, a narrower
-    // fgBeforeText added by brandon-segments-3eo.1.1) that had already begun
-    // to drift on the exact bug this comment describes; one parser closes
-    // that gap for good instead of patching the newer copy to match the
-    // older one. Walks params sequentially (not `indexOf`) and SKIPS a
-    // recognized `48;2;r;g;b` background run's components before looking for
-    // `38` — otherwise a bg color component that happens to equal 38 could be
-    // misread as the fg introducer, or (mirror bug) mask a real one that
-    // follows it. Same class of collision
-    // test/segment-interior-color.test.ts's skipTruecolorRun fixes.
+    // [LAW:one-source-of-truth] The ONE SGR parser every helper below builds on. It walks params
+    // sequentially and SKIPS a `48;2;r;g;b` run's components, so a bg component equal to 38 is never misread as the fg introducer.
     interface SgrRun {
       offset: number;
       fg?: string;
@@ -756,25 +645,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
       return runs;
     }
 
-    // An SGR triplet back to a color, so a contrast assertion can be a
-    // measurement rather than a hardcoded hex. rich-js owns the arithmetic.
     function sgrToRgba(triplet: string): ColorRgba {
       const [r, g, b] = triplet.split(";").map(Number);
       return new ColorRgba(r!, g!, b!);
     }
 
-    // Distinct truecolor foregrounds across the rendered line — one per
-    // SGR-introduced run, deduped. A basic-code fg would also count but
-    // every semantic palette function here resolves to truecolor.
     function distinctForegrounds(line: string): Set<string> {
       const fgs = new Set<string>();
       for (const r of sgrRuns(line)) if (r.fg !== undefined) fgs.add(r.fg);
       return fgs;
     }
 
-    // `theme` defaults to the config's own palette; passing one renders the
-    // same segment under a different theme, which is how the contrast floor
-    // below is checked across the whole registry rather than on one theme.
     function renderSegment(segment: string, theme?: string): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const cfg = narrowToSegment(parsed, segment);
@@ -821,13 +702,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(distinct.size).toBeGreaterThan(1);
     });
 
-    // GIT_WORKTREE's `$first` separator var is declared inside the outer
-    // `{{ if or ... }}` gate, not at the template's top level like
-    // DIR_TEMPLATE's `$dir` — a real structural difference a reviewer flagged.
-    // Reassignment via `=` (not `:=`) still walks up to the declaring frame
-    // regardless of nesting depth, so this asserts the actual observable
-    // behavior (single-space-separated counts, never concatenated) rather
-    // than trusting the analogy in the comment above GIT_WORKTREE.
+    // GIT_WORKTREE declares its `$first` separator inside a gate, not at top level; `=` reassignment still walks up to the declaring frame, and this asserts that observably.
     test("worktree counts render single-space-separated, never concatenated", () => {
       const ANSI =
         /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
@@ -836,20 +711,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
     });
 
-    // brandon-segments-3eo.1.1: `git` and `gitaculous` independently typed
-    // the same fact's color and drifted (branch accent-vs-primary, stash
-    // colored-vs-not) — caught by live testing, fixed by routing both
-    // templates through the shared GIT_COLOR table. These assert the two
-    // segments now agree, not just that gitaculous has "more than one color".
-    //
-    // The truecolor fg immediately preceding `text`'s first occurrence — every
-    // colored token here is wrapped by exactly one palette function, which
-    // opens its SGR run directly before the token, so the last run starting
-    // before the match IS that token's color.
-    // [LAW:one-source-of-truth] fg and bg are the same lookup over the same
-    // parser differing only in WHICH slot is read — the slot is a parameter,
-    // not a second copy of the walk. (Two copies of exactly this helper are
-    // what drifted in brandon-segments-3eo.1.1; see the sgrRuns comment.)
+    // Every coloured token is wrapped by exactly one palette function, which opens its SGR run directly before the token, so the last run starting before the match IS that token's colour.
+    // [LAW:one-source-of-truth] fg and bg are one lookup over one parser; the slot is a parameter, not a second copy of the walk.
     function colorBeforeText(
       line: string,
       text: string,
@@ -890,16 +753,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(stashFg).not.toBe(plainFg);
     });
 
-    // brandon-segments-3eo.1.1.1. The reported symptom was that the git line
-    // read as one flat color when only a couple of facts happened to be
-    // present — the structural text (labels, punctuation, sha, upstream) sat
-    // at full foreground strength and competed with the facts. The fix is the
-    // segments' computed `fg:`: quiet is the DEFAULT, and only operative facts
-    // name a color.
-    //
-    // These pin the two halves of that contract as observable output.
+    // The segments' computed `fg:` makes quiet the DEFAULT, so only operative facts name a colour; these pin both halves of that as observable output.
     describe("structural text recedes behind the operative facts", () => {
-      // Text that carries no git fact — it only frames one.
       const STRUCTURAL = ["abc1234", "origin/main"];
 
       test.each(["git", "gitaculous"])(
@@ -908,26 +763,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
           const line = renderSegment(segment);
           const quiet = fgBeforeText(line, STRUCTURAL[0]!);
           expect(quiet).toBeDefined();
-          // Every other structural token shares that one color...
           for (const text of STRUCTURAL.slice(1)) {
             expect(fgBeforeText(line, text)).toBe(quiet);
           }
-          // ...and it is distinct from the facts, which is the whole point:
-          // more than one color on the line, with the quiet one not among the
-          // painted ones.
           const distinct = distinctForegrounds(line);
           expect(distinct.size).toBeGreaterThan(2);
           expect(distinct.has(quiet!)).toBe(true);
         },
       );
 
-      // [LAW:verifiable-goals] The quiet color is a *computed* blend toward the
-      // segment's own background, so how legible it ends up is a property of
-      // each theme's foreground/surface distance — not something one eyeballed
-      // screenshot can settle. Measured bare, the 60% blend ranges 1.93–3.10
-      // across these themes; the `readableOn` floor in GIT_QUIET_FG is what
-      // makes the result uniform. This asserts the floor holds everywhere,
-      // which is the claim the config comment makes.
+      // [LAW:verifiable-goals] The quiet colour is a computed blend, so its legibility is a property of each theme's foreground/surface distance; this asserts GIT_QUIET_FG's `readableOn` floor holds on every one.
       test.each(listResolvablePaletteNames())(
         "quiet structural text clears WCAG large-text contrast under theme %s",
         (theme) => {
@@ -936,8 +781,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           expect(quiet).toBeDefined();
           const bg = bgBeforeText(line, "abc1234");
           expect(bg).toBeDefined();
-          // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
-          // quantization of the result can land a hair under the exact target.
+          // 2.99 not 3: ensureContrast bisects to the threshold, and 8-bit quantization can land a hair under it.
           expect(
             contrastRatio(sgrToRgba(quiet!), sgrToRgba(bg!)),
           ).toBeGreaterThan(2.99);
@@ -946,13 +790,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
-  // [LAW:dataflow-not-control-flow] The metrics segment renders parts
-  // independently — each `if .metrics.<field>` guard fires off its own
-  // value. Absent fields project through pickNonNull as missing keys and
-  // resolve via the var-system fallback to 0 (falsy), so the part is
-  // hidden without any per-field show-flag plumbing. The segment-level
-  // `when` is a weak any-present check that suppresses the whole cell
-  // when no metric has data.
+  // [LAW:dataflow-not-control-flow] An absent metric resolves through the var-system fallback to 0, so its part hides with no per-field show-flag plumbing.
   describe("metrics per-part gating", () => {
     function renderMetricsText(metrics: {
       lastResponseTime?: number;
@@ -1025,7 +863,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).toContain("1.5s");
       expect(visible).toContain("◆");
       expect(visible).toContain("3");
-      // Absent dimensions: their part glyphs must NOT appear.
       expect(visible).not.toContain("⧖");
       expect(visible).not.toContain("⧗");
       expect(visible).not.toContain("+");
@@ -1050,12 +887,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("config override of block.budget.warningThreshold flows through to bg classification", () => {
-      // [LAW:one-source-of-truth] The threshold lives in one place — the
-      // variable declaration — and a user file's override flows through
-      // mergeWithDefault's variables-by-name spread. Same percentage,
-      // different threshold → different bg classification → different
-      // ANSI bytes. If the template were still reading a literal 80
-      // these two renders would be byte-identical.
+      // [LAW:one-source-of-truth] The threshold lives in the variable declaration alone: were the template reading a literal 80, these two renders would be byte-identical.
       const renderBlock = (warningThreshold: number, util: number): string => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = {
@@ -1126,18 +958,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     test("no metrics fields renders no cell", () => {
       const visible = renderMetricsText({});
-      // Empty when-suppressed segment → line is empty (no glyphs, no labels).
       expect(visible).not.toContain("Δ");
       expect(visible).not.toContain("◆");
     });
   });
 
-  // brandon-budget-kry: session-level budget warning — the session segment is
-  // the second instance of the shared budgetStatus helper (today is the first).
+  // The session segment is the second instance of the shared budgetStatus helper.
   describe("session budget warning", () => {
-    // Render ONLY the session segment, with optional user-file overrides
-    // merged through the real mergeWithDefault path — the same cascade a
-    // user's config file flows through.
+    // Overrides merge through the real mergeWithDefault path — the same cascade a user's config file flows through.
     const renderSession = (
       payload: Record<string, unknown>,
       userSource?: string,
@@ -1146,9 +974,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         parseDslConfig("<user>", userSource ?? "{}"),
         DEFAULT_DSL_CONFIG,
       );
-      // [FRAMING:representation] `source` is the text validation errors quote
-      // from — it must be the config actually being validated (`merged`), not
-      // the bundled default's serialization.
+      // [FRAMING:representation] `source` is what validation errors quote from, so it must be the config being validated, not the default's serialization.
       const config = validateConfig(
         merged,
         "<merged>",
@@ -1156,12 +982,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       const sessionOnly = narrowToSegment(config, "session");
       const store = new VariableStore();
-      // The merged bundled default declares `activeStyle`/`stylePage` as state
-      // vars; SessionState is required to declare them, exactly as the daemon
-      // supplies (matching the other full-default render helpers above). Without
-      // it those two vars silently fail to declare into loadWarnings — harmless
-      // for the session segment here, but the fixture should exercise the
-      // genuinely-complete default config, not a partially-registered one.
+      // Without a SessionState the merged default's `state` vars fail to declare into loadWarnings, leaving the fixture partially registered.
       const registry = new SourceRegistry(
         store,
         "",
@@ -1210,10 +1031,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const PAYLOAD = { session: { cost: 8.5, tokens: 1000 } };
 
     test("absent session-budget config renders byte-identically to the pre-budget template", () => {
-      // [LAW:dataflow-not-control-flow] The default amount is 0 — the
-      // budgetStatus helper's non-displayable value — so the suffix
-      // contributes zero bytes through the same unconditional template.
-      // Oracle: the same segment with the retired (suffix-less) template.
+      // [LAW:dataflow-not-control-flow] The default amount 0 is budgetStatus's non-displayable value, so the suffix contributes zero bytes through the same unconditional template.
       const preBudget = renderSession(
         PAYLOAD,
         JSON.stringify({
@@ -1230,9 +1048,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("user override of session.budget.amount surfaces the budgetStatus suffix", () => {
-      // [LAW:one-source-of-truth] The knob lives in one variable declaration;
-      // the user file's override flows through mergeWithDefault's
-      // variables-by-name spread. cost 8.5 / amount 10 = 85% ≥ warn 80 → " !85%".
+      // [LAW:one-source-of-truth] One variable declaration holds the knob: cost 8.5 / amount 10 = 85% ≥ warn 80 → " !85%".
       const line = renderSession(
         PAYLOAD,
         JSON.stringify({
@@ -1245,10 +1061,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("user override of session.budget.warningThreshold reclassifies the suffix", () => {
-      // cost 6 / amount 10 = 60%: below the default warn 80 → " +60%";
-      // with warn 50 the same spend reads " !60%". Same cost, different
-      // threshold → different bytes, proving the template reads the variable,
-      // not a baked-in literal.
+      // cost 6 / amount 10 = 60% reads " +60%" under the default warn 80 and " !60%" under warn 50 — same cost, different bytes.
       const spend = { session: { cost: 6, tokens: 1000 } };
       const defaultWarn = renderSession(
         spend,
@@ -1273,30 +1086,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 });
 
-// [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "every bundled
-// preset renders without error cells at 80, 120, and 200 columns" — the
-// compact one is pointless if it does not actually fit. Drives the exact
-// pipeline the daemon and `cc-candybar check` drive (registerDslConfig +
-// renderDsl, onSegmentError as the observer seam check.ts uses) against the
-// SAME rich fixture payload check.ts ships (checkPayload) — a minimal payload
-// would let a field-name typo in a gated branch (git worktree counts, the
-// burnrate/speed telemetry verbose surfaces) slip through untested, because
-// those branches only run when their data is present.
-//
-// [LAW:single-enforcer] Resolves through resolveEffectiveGlobals — the one
-// function server.ts and check.ts both call — so EffectiveGlobals here cannot
-// diverge from what a real render would compute for that preset.
+// [LAW:verifiable-goals] Every bundled preset must render without error cells at 80/120/200 columns, through the exact pipeline the daemon and `check` drive, against the SAME rich fixture payload — a minimal one would let a typo in a gated branch slip through.
+// [LAW:single-enforcer] Resolved through resolveEffectiveGlobals, the one function server.ts and check.ts both call, so this cannot diverge from a real render.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];
-  // [LAW:single-enforcer] The real validated shape registerDslConfig/renderDsl
-  // require (the `ValidatedConfig` brand `validateConfig` stamps) — the same
-  // gate every production caller (daemon, check.ts) passes through, run once
-  // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
+  // [LAW:single-enforcer] The `ValidatedConfig` brand every production caller passes through; DEFAULT_DSL_CONFIG is validated but not re-branded.
   const VALIDATED = validateConfig(DEFAULT_DSL_CONFIG);
 
-  // The one place "which session am I" varies across this suite: the preset
-  // pick, plus (for the edit-mode sweep) the edit-mode key. Every other key is
-  // unclicked — a fresh session [LAW:dataflow-not-control-flow].
   const freshSession = (key: string, preset: string): string | null =>
     key === "preset" ? preset : null;
   const editingSession = (key: string, preset: string): string | null =>
@@ -1305,34 +1101,20 @@ describe("bundled preset library renders clean at every width — brandon-preset
   function renderPreset(
     name: string,
     width: number,
-    // A transform over checkPayload's own fixture — an escape hatch for the
-    // one test below that needs gitPr/tokenSparkline's gated content to
-    // actually appear, without mutating the shared production fixture every
-    // other suite (test/example-configs.test.ts included) asserts literal
-    // values against. Identity by default.
+    // A transform over checkPayload's fixture, so a test needing gated content need not mutate the shared fixture other suites assert literal values against.
     withPayload: (base: Record<string, unknown>) => Record<string, unknown> = (
       base,
     ) => base,
     sessionPick: (key: string, preset: string) => string | null = freshSession,
   ): { rendered: string; segmentErrors: string[] } {
-    // [LAW:one-source-of-truth] THE daemon's resolution, driven by a session
-    // that has picked exactly this preset (and, for the edit-mode sweep below,
-    // has edit mode open). Restating the chain here as a struct literal is what
-    // would let this harness drift from the daemon.
+    // [LAW:one-source-of-truth] THE daemon's resolution; restating the chain here as a struct literal is what would let this harness drift.
     const effective: EffectiveGlobals = resolveEffectiveGlobals(
       DEFAULT_DSL_CONFIG,
       (key) => sessionPick(key, name),
-      // A fresh install has no config file authoring any preset's root, so no
-      // preset is customized by default — the realistic baseline for the
-      // "renders clean" sweep below. The dedicated "customized" test further
-      // down overrides `.preset.customized` via `withPayload` instead.
       () => false,
     );
     const store = new VariableStore();
-    // [LAW:one-source-of-truth] The registry's session reader IS sessionPick:
-    // the `state` vars the templates read (edit.mode gating the chrome, the
-    // ↺ banner) and the globals resolved above answer from one session, not
-    // from a fresh SessionState that disagrees with it about edit mode.
+    // [LAW:one-source-of-truth] The registry's session reader IS sessionPick, so the `state` vars and the globals above answer from one session.
     const registry = new SourceRegistry(store, "", undefined, {
       get: (_sessionId, key) => sessionPick(key, name),
     });
@@ -1372,8 +1154,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     }
   }
 
-  // Guard against the domain silently shrinking to just the floor — a preset
-  // this suite never iterates would be a preset never render-tested.
+  // A preset this suite never iterates would be a preset never render-tested.
   test("the bundled library declares more than just the floor", () => {
     expect(presetNames(DEFAULT_DSL_CONFIG.presets).length).toBeGreaterThan(1);
   });
@@ -1389,12 +1170,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     },
   );
 
-  // [LAW:verifiable-goals] candybar-settings-ui-aok.5's width gate: edit mode
-  // restyles the whole bar (the staged globals.style), and the picker reserves
-  // its pagination seam from stripChromeCols(runtime.stripStyle). A staged
-  // style that did not reach that reserve would give wrong page widths in
-  // exactly the mode where menus are most used — so the sweep runs again with
-  // edit mode open, at the same widths, over every preset.
+  // [LAW:verifiable-goals] Edit mode restyles the whole bar, and the picker reserves its pagination seam from that style — a staged style that missed the reserve would give wrong page widths exactly where menus are most used.
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     'preset "%s" renders clean at 80/120/200 columns with edit mode open',
     (name) => {
@@ -1412,8 +1188,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
   );
 
   test("edit mode stages its separator over every preset's own style", () => {
-    // The staged fragment is the rightmost rung: a preset declaring its own
-    // `style` still renders with edit mode's joiner while the mode is on.
     for (const name of presetNames(DEFAULT_DSL_CONFIG.presets)) {
       const editing = renderPreset(name, 120, undefined, editingSession);
       expect(editing.segmentErrors).toEqual([]);
@@ -1423,9 +1197,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     }
   });
 
-  // [LAW:carrying-cost] The compact preset's whole reason to exist is fitting
-  // where the default doesn't — pin that it actually renders NARROWER than
-  // the floor at the same width, not merely that it renders.
+  // [LAW:carrying-cost] compact exists to fit where the default doesn't, so pin that it renders NARROWER, not merely that it renders.
   test("compact renders a shorter visible line than the default floor", () => {
     // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
@@ -1435,13 +1207,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(compactLine.length).toBeLessThan(defaultLine.length);
   });
 
-  // [LAW:carrying-cost] The verbose preset's whole reason to exist is
-  // surfacing the segments the default deliberately leaves opt-in — pin that
-  // each one's own content actually appears, not merely that no segment threw.
-  // gitPr and tokenSparkline both gate on data checkPayload's bundled fixture
-  // doesn't carry (no live PR, no speed history yet), so this test supplies
-  // both via `withPayload` rather than either skipping the assertion or
-  // mutating the shared fixture other suites assert literal values against.
+  // [LAW:carrying-cost] verbose exists to surface the opt-in segments, so pin that each one's content appears; gitPr and tokenSparkline gate on data the shared fixture doesn't carry, supplied here via `withPayload`.
   test("verbose surfaces every opt-in segment's own content", () => {
     // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
@@ -1460,12 +1226,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline's own block glyphs
   });
 
-  // brandon-layout-edit-2gc.5 — the visible diagnostic for a preset whose
-  // root the config file authors (candybar-config-dqe's `customized`):
-  // edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY
-  // ([LAW:dataflow-not-control-flow]) and is edit chrome, so it shows only
-  // with edit mode open AND the preset customized. This pins all three
-  // cells that matter: both terms true, and each term alone.
+  // [LAW:dataflow-not-control-flow] The reset banner is spliced unconditionally and is edit chrome, so it shows only with edit mode open AND the preset customized — pinned here at both terms true and each term alone.
   test("customized preset shows the reset banner in edit mode; not outside it, nor when clean", () => {
     // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
@@ -1481,8 +1242,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     ).rendered.replace(ANSI, "");
     expect(editing).toContain("↺ default customized");
 
-    // A hand-authored root is "customized" from its first render; outside
-    // edit mode that must not put a one-click reset of it on the bar.
+    // A hand-authored root is "customized" from its first render, which outside edit mode must not put a one-click reset on the bar.
     const viewing = renderPreset(
       "default",
       200,

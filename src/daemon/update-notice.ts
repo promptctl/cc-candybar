@@ -1,22 +1,7 @@
-// The update notice: something newer exists than the code rendering the bar,
-// and here is what to do about it (brandon-build-notice-5d6). Two facts feed
-// it — a source checkout whose `src/` digest no longer matches the bundle
-// (src/daemon/build-currency.ts) and a published install behind the
-// registry's latest release (src/install/currency.ts) — and they are ONE
-// statement to the reader: what is newer, what is running, and three clicks:
-// act (rebuild / upgrade), dismiss (this session, this identity), disable
-// (the config file, durably).
-//
-// [LAW:one-type-per-behavior] Both facts render through one `Update` and one
-// sentence shape; what differs is a table of words and a command. The old
-// design gave the checkout its own vocabulary ("stale build: dist/index.mjs
-// <date> < src/x.ts <date>", a hint naming `just deploy`) that the user read
-// as a puzzle — the ticket's verbatim verdict.
-//
-// [LAW:effects-at-boundaries] `updateOf` / `updateNotice` are pure: (facts,
-// act state, session context) → diagnostic channels. The watch below is the
-// edge: the clocks, the registry fetch, the subprocess, the validator
-// registrations.
+// [LAW:one-type-per-behavior] A stale source checkout and an install behind the
+// registry are ONE statement — what is newer, what is running, three clicks —
+// through one `Update` and one sentence; only a table of words and a command differ.
+// [LAW:effects-at-boundaries] `updateOf`/`updateNotice` are pure; the watch is the edge.
 
 import type { Globals } from "../config/dsl-types";
 import {
@@ -54,10 +39,6 @@ import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
 
-// [LAW:types-are-the-program] What is newer than the running code. `source`
-// is a checkout whose tree no longer matches the bundle; `release` is an
-// install behind the registry. Each carries both sides of the comparison
-// under one name pair, so the sentence reads the same fields off either.
 export type Update =
   | {
       readonly kind: "source";
@@ -71,28 +52,19 @@ export type Update =
       readonly running: Version;
     };
 
-// [LAW:one-source-of-truth] The session key a dismissal writes and the
-// config field a disable writes, spelled once. The field is checked against
-// Globals so a rename there fails here at compile time.
 export const UPDATE_DISMISSED_KEY = "update.dismissed";
 export const UPDATE_NOTICE_FIELD = "updateNotice" satisfies keyof Globals;
 
-// What a dismissal names: the newer thing's identity, so a dismissal lapses
-// the moment something newer again appears — the digest for source (the
-// version alone would miss every uncommitted edit), the version for a release.
 export function updateIdentity(update: Update): string {
   return update.kind === "source"
     ? update.newer.digest
     : formatVersion(update.newer);
 }
 
-// How a stamp reads to a person: the version it reports and the short digest
-// that tells two builds of one version apart.
 export const describeStamp = (s: SourceStamp): string =>
   `${s.version} [${shortDigest(s.digest)}]`;
 
-// [LAW:dataflow-not-control-flow] The words and the command, as one table
-// the notice and the act both read. Nothing downstream asks which kind it is.
+// [LAW:dataflow-not-control-flow] The words and the command as one table; nothing downstream asks which kind it is.
 interface UpdateFacts {
   readonly headline: string;
   readonly newer: string;
@@ -132,11 +104,7 @@ export function factsOf(update: Update): UpdateFacts {
   }
 }
 
-// [LAW:types-are-the-program] The act's lifecycle as a value: idle, running
-// (one child at a time — a second click is refused, not queued), or failed
-// with the reason, named against the identity it was attempted on: the
-// notice for a DIFFERENT newer thing owes the reader no line about a build
-// it never tried.
+// [LAW:types-are-the-program] One child at a time — a second click is refused, not queued — and a failure names the identity it was tried on.
 export type ActState =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }
@@ -148,20 +116,13 @@ export type ActState =
 const IDLE: ActState = { kind: "idle" };
 const RUNNING: ActState = { kind: "running" };
 
-// The per-session facts the notice reads: whose clicks these are, what this
-// session dismissed (the identity it wrote, or nothing), and whether the
-// session's config allows the notice at all (Globals.updateNotice).
 export interface NoticeContext {
   readonly sessionId: string;
   readonly dismissed: string | null;
   readonly enabled: boolean;
 }
 
-// [LAW:dataflow-not-control-flow] One update becomes zero or one channel —
-// the list IS the answer, so the strip composer folds it beside the error
-// and warning channels with no "is there a notice" branch. Line one is the
-// sentence and the three affordances; a failed act adds a second line naming
-// the failure, and while the act runs its affordance is a busy label.
+// [LAW:dataflow-not-control-flow] Zero or one channel — the list IS the answer, so the composer needs no "is there a notice" branch.
 export function updateNotice(
   update: Update | null,
   act: ActState,
@@ -177,8 +138,6 @@ export function updateNotice(
       ? [`${facts.act} failed: ${act.reason}`]
       : [];
   const message = [sentence, ...failure].join("\n");
-  // The sentence copies itself (the warning verb's clipboard), like every
-  // other diagnostic row; the affordances each carry their own effect.
   const copy = effectsUrl([
     { verb: VERB_SHOW_CONFIG_WARNING, args: [message] },
   ]);
@@ -215,11 +174,8 @@ export function updateNotice(
   return [{ severity: UPDATE_SEVERITY, message, lines: [first, ...rest] }];
 }
 
-// [LAW:dataflow-not-control-flow] The two currency facts folded into one
-// Update. A checkout answers with its build; the release check only means
-// something for a published install (a checkout's package.json version is
-// whatever `main` says, not what is running), so `release` is consulted only
-// under the not-source-checkout arm — that discriminator is the domain's own.
+// [LAW:dataflow-not-control-flow] `release` is consulted only under not-source-checkout:
+// a checkout's package.json version is whatever `main` says, not what is running.
 export function updateOf(
   build: BuildCurrency,
   release: Currency | null,
@@ -247,16 +203,12 @@ export function updateOf(
 }
 
 export interface UpdateWatchOptions {
-  // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
-  // How often the source tree is re-digested.
   readonly intervalMs: number;
-  // How often the registry is asked for `latest` (published installs only).
   readonly releaseIntervalMs: number;
   readonly registryUrl: string;
   readonly fetchImpl: typeof fetch;
-  // Runs after a successful act: the bundle on disk has changed, and the
-  // binary watch should notice now rather than at its next tick.
+  // Runs after a successful act, so the binary watch notices now, not at its next tick.
   readonly onApplied: () => void;
   readonly log: (level: LogLevel, msg: string) => void;
 }
@@ -264,13 +216,9 @@ export interface UpdateWatchOptions {
 export interface UpdateWatch {
   arm(): void;
   notice(ctx: NoticeContext): DiagnosticChannel[];
-  // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
-  // to apply or an act is already running.
   act(): void;
 }
 
-// A build or an install is a long child; ten minutes is generous for either
-// and bounds a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
@@ -308,8 +256,6 @@ function describeRelease(c: Currency): [LogLevel, string] {
   }
 }
 
-// [LAW:one-type-per-behavior] A log line that repeats only on change, one
-// per channel — the steady state of a one-minute clock is silence.
 function changeLogger(
   log: UpdateWatchOptions["log"],
 ): (entry: [LogLevel, string]) => void {
@@ -321,7 +267,6 @@ function changeLogger(
   };
 }
 
-// The last non-empty line of a stream — where a build tool puts its verdict.
 const lastLine = (text: string): string | undefined =>
   text
     .split(/\r?\n/)
@@ -329,9 +274,6 @@ const lastLine = (text: string): string | undefined =>
     .filter((s) => s !== "")
     .at(-1);
 
-// Why the act failed, for the notice's second line: the launch's own
-// classification, the exit code when there is one, and the most specific
-// text the child left behind.
 function failureReason(r: Extract<LaunchResult, { ok: false }>): string {
   const exit = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
   const detail =
@@ -339,13 +281,9 @@ function failureReason(r: Extract<LaunchResult, { ok: false }>): string {
   return `${r.reason}${exit}: ${detail}`;
 }
 
-// [LAW:single-enforcer] The daemon's one owner of "what is newer than me":
-// it samples the build on a clock, polls the registry on a slower one when
-// the layout is a published install, keeps the act's state, and owns the two
-// click gates — the dismiss allow-list (re-registered to the current
-// identity whenever it changes, so a stale dismissal simply stops matching)
-// and the disable allow-list (registered once; `false` is the only value a
-// click writes).
+// [LAW:single-enforcer] The daemon's one owner of "what is newer than me", and of the
+// two click gates: dismiss (re-registered per identity, so a stale one stops matching)
+// and disable (registered once; `false` is the only value a click writes).
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     entryUrl,
@@ -356,8 +294,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     onApplied,
     log,
   } = opts;
-  // [LAW:no-ambient-temporal-coupling] Before the first sample the build is
-  // honestly unchecked — a notice asked for before arm() renders nothing.
+  // [LAW:no-ambient-temporal-coupling] Before the first sample the build is honestly unchecked.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
   let act: ActState = IDLE;
@@ -368,8 +305,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   const current = (): Update | null => updateOf(build, release);
 
-  // The dismiss gate follows the identity: dispose the old allow-list, register
-  // the new one, none when nothing is newer.
   function syncGate(): void {
     const update = current();
     const identity = update === null ? null : updateIdentity(update);
@@ -406,16 +341,13 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   return {
     arm() {
-      // Daemon-lifetime registration: the disposer would only matter to a
-      // watch that is torn down, and the daemon exits instead.
+      // Daemon-lifetime registration: the disposer matters only to a watch that is torn down.
       registerConfigValidator(UPDATE_NOTICE_FIELD, {
         kind: "allow-list",
         allowed: ["false"],
       });
       sampleBuild();
       setInterval(sampleBuild, intervalMs).unref();
-      // The registry is a question only a published install asks: a checkout
-      // rebuilds from the source beside it, whatever npm has.
       if (build.kind === "not-source-checkout") {
         void pollRelease();
         setInterval(() => void pollRelease(), releaseIntervalMs).unref();
@@ -436,8 +368,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         "info",
         `apply-update: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
       );
-      // The child inherits the daemon's environment (PATH included): no env
-      // is passed, so nothing about the command is composed from data.
+      // The child inherits the daemon's env; nothing about the command is composed from data.
       void launch({
         ...facts.command,
         category: "update.apply",

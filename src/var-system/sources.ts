@@ -1,12 +1,5 @@
-// [LAW:one-source-of-truth] Source kinds are the bridge between external
-// data (render payload, environment, static config) and the VariableStore.
-// All payload ingestion goes through applyInput — there is no other path
-// that writes input-kind boxes during a render.
-//
-// Two concerns deliberately separated:
-// - VariableStore: reactivity primitives (boxes, computeds, MobX scheduling)
-// - SourceRegistry: source-kind semantics (path resolution, fallback chain,
-//   last_error tracking)
+// [LAW:one-source-of-truth] All payload ingestion goes through applyInput — no other path
+// writes input-kind boxes. VariableStore owns reactivity; SourceRegistry owns source kinds.
 
 import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
@@ -38,11 +31,7 @@ import {
 import type { JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 
-// ─── CachePolicy ─────────────────────────────────────────────────────────────
-
-// [LAW:one-type-per-behavior] One discriminated union covers all cache policies.
-// The config layer normalises external string representations (e.g. ttl:"5s")
-// before calling declareShell / declareFile.
+// [LAW:one-type-per-behavior] One union covers every cache policy; the config layer normalises strings (ttl:"5s") before declare*.
 export type CachePolicy =
   | { readonly kind: "ttl"; readonly durationMs: number }
   | { readonly kind: "watch_file"; readonly path: string }
@@ -50,19 +39,11 @@ export type CachePolicy =
   | { readonly kind: "depends_on"; readonly varNames: readonly string[] }
   | { readonly kind: "never" };
 
-// [LAW:single-enforcer] Minimum allowed TTL for user-shell sources. User
-// config can request shorter values; declareShell clamps to this floor and
-// emits a debug warning. The floor exists to prevent unbounded subprocess
-// churn from a misconfigured `ttl: 50ms` against a 200ms command (which would
-// silently overlap and stack up). [LAW:no-mode-explosion] not a config knob.
+// [LAW:single-enforcer] Without this floor a `ttl: 50ms` against a 200ms command would
+// silently overlap and stack up subprocesses. [LAW:no-mode-explosion] Not a config knob.
 export const MIN_SHELL_TTL_MS = 500;
 
-// [LAW:single-enforcer] Apply the shell-source TTL floor at declare-time.
-// If the policy is anything other than `ttl`, the input is returned unchanged
-// — the floor only applies to time-driven shell refresh. If `ttl.durationMs`
-// is already at or above MIN_SHELL_TTL_MS, the input is returned unchanged.
-// [LAW:dataflow-not-control-flow] Same code path every call; the result is a
-// function of the input policy + floor constant.
+// [LAW:dataflow-not-control-flow] The floor applies only to `ttl`; the result is a function of the input policy and the constant.
 function clampShellCache(name: string, policy: CachePolicy): CachePolicy {
   if (policy.kind !== "ttl") return policy;
   if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
@@ -72,7 +53,6 @@ function clampShellCache(name: string, policy: CachePolicy): CachePolicy {
   return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
 }
 
-// Parse a duration string to milliseconds.  Accepted units: ms, s, m, h.
 export function parseDuration(s: string): number {
   const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
   if (!m) throw new RangeError(`Invalid duration: "${s}"`);
@@ -91,14 +71,8 @@ export function parseDuration(s: string): number {
   }
 }
 
-// ─── Source-kind option bags ──────────────────────────────────────────────────
-
-// [LAW:decomposition] A user source is a READER (what text arrives: a
-// command's stdout, a file's content or first line) and a PARSER (what value
-// that text becomes — see parse.ts). The two are orthogonal data: shell and
-// file differ only in reader; text/regex/json differ only in parser; every
-// combination means what it says. The fallback lives in the parser arm, in
-// that arm's output domain.
+// [LAW:decomposition] A user source is a READER (what text arrives) and a PARSER (what value
+// it becomes) — orthogonal data. The fallback lives in the parser arm's output domain.
 export interface ShellOptions {
   readonly cache: CachePolicy;
   readonly parse: SourceParse;
@@ -107,8 +81,6 @@ export interface ShellOptions {
 export type ReadMode = "whole" | "first-line";
 
 export interface FileOptions {
-  // What text the file yields to the parser: its whole content (default) or
-  // its first line.
   readonly readMode?: ReadMode;
   readonly cache: CachePolicy;
   readonly parse: SourceParse;
@@ -119,16 +91,12 @@ export interface TemplateOptions {
 }
 
 export interface TimeOptions {
-  // Go reference-time layout string (e.g. "15:04:05", "2006-01-02").
-  // Reference time: Mon Jan 2 15:04:05 MST 2006
+  // Go reference-time layout. Reference time: Mon Jan 2 15:04:05 MST 2006
   readonly format: string;
-  // Refresh interval.  Defaults to 1 000 ms.
   readonly ttlMs?: number;
   readonly varDefault?: string;
 }
 
-// [LAW:one-type-per-behavior] Six git fields — each has a fixed inferred type.
-// branch/sha are strings; dirty is boolean; ahead/behind/stash are numbers.
 export type GitField =
   | "branch"
   | "sha"
@@ -139,36 +107,22 @@ export type GitField =
 
 export interface GitOptions {
   readonly field: GitField;
-  // Working directory whose git repo to query.  Resolved at declaration time.
   readonly cwd: string;
   readonly varDefault?: VarValue;
 }
 
-// [LAW:one-source-of-truth] state vars read through to SessionState; the
-// reactive contract is owned by SessionState's internal atom. The computed
-// reads the canonical session-id variable (SESSION_ID_VAR_NAME) and
-// dispatches through SessionStateReader.get.
+// [LAW:one-source-of-truth] state vars read through to SessionState, whose internal atom owns the reactive contract.
 export interface StateOptions {
   readonly key: string;
   readonly varDefault?: string;
 }
 
-// [LAW:one-source-of-truth] The conventional name DSL configs use for the
-// hook payload's session_id input variable. State-kind variables resolve
-// "which session am I in" from this name — no per-decl override.
-// [LAW:no-mode-explosion] One axis of variability less; configs cannot
-// drift on which variable carries the session id.
+// [LAW:one-source-of-truth] The name a config gives the hook payload's session_id; state
+// vars resolve "which session am I in" from it. [LAW:no-mode-explosion] No per-decl override.
 export const SESSION_ID_VAR_NAME = "session.id";
 
-// ─── Private infrastructure ───────────────────────────────────────────────────
-
-// [LAW:effects-at-boundaries] A reader is the effect half of a source: it
-// performs the read and classifies its own failure (a non-zero exit, an
-// unreadable file) as a value. `where` names the text's origin for the
-// parser's failure message ("regex no-match in output of \"uptime\"").
-// A read the registry cancelled (`signal`, fired by dispose) is not a value
-// the source yielded: it rejects with the signal's reason, which is the one
-// rejection the pipeline expects.
+// [LAW:effects-at-boundaries] A reader classifies its own failure as a value, and `where` names
+// the text's origin. A cancelled read rejects with the signal's reason — the one expected rejection.
 interface SourceReader {
   readonly where: string;
   read(): Promise<Outcome<string>>;
@@ -216,8 +170,6 @@ function fileReader(
   };
 }
 
-// The parse step over a read's outcome: a failed read passes through
-// untouched (it already names its origin); a failed parse gains the origin.
 function parsed<V>(
   read: Outcome<string>,
   parser: Parser<V>,
@@ -228,11 +180,7 @@ function parsed<V>(
   return out.kind === "failed" ? failed(`${out.reason} in ${where}`) : out;
 }
 
-// The publish half of a source, closed over its store node: takes what the
-// reader yielded, parses it, and writes the node — value or fallback.
 type Publish = (read: Outcome<string>) => void;
-
-// ─── Go reference-time formatter ─────────────────────────────────────────────
 
 const MONTHS_FULL = [
   "January",
@@ -281,19 +229,8 @@ const WEEKDAYS_SHORT = [
   "Sat",
 ] as const;
 
-// [LAW:single-enforcer] One Go-reference-time formatter shared by all time
-// source kinds.  Tokens are matched longest-first in a single left-to-right
-// pass so overlapping prefixes ("January" before "Jan") never conflict.
-//
-// Reference time components:
-//   2006 → 4-digit year       06 → 2-digit year
-//   January / Jan → month     01 → 2-digit month   1 → 1/2-digit month
-//   Monday / Mon → weekday
-//   02 → 2-digit day          2 → 1/2-digit day
-//   15 → 24h hour (00-23)     3 → 12h hour (1-12)
-//   04 → 2-digit minute       4 → minute
-//   05 → 2-digit second       5 → second
-//   PM / pm → AM/PM marker
+// [LAW:single-enforcer] One Go-reference-time formatter for every time source. Tokens match
+// longest-first in one left-to-right pass, so "January" never conflicts with "Jan".
 export function formatGoTime(layout: string, d: Date): string {
   type Token = readonly [string, (d: Date) => string];
   const tokens: readonly Token[] = [
@@ -337,10 +274,6 @@ export function formatGoTime(layout: string, d: Date): string {
   return result;
 }
 
-// ─── Git helpers ─────────────────────────────────────────────────────────────
-
-// [LAW:one-source-of-truth] One type map; the field discriminator determines
-// the box type at declaration time — no runtime coercion needed.
 const GIT_FIELD_TYPE: Readonly<Record<GitField, VarType>> = {
   branch: "string",
   sha: "string",
@@ -350,15 +283,8 @@ const GIT_FIELD_TYPE: Readonly<Record<GitField, VarType>> = {
   stash: "number",
 };
 
-// [LAW:one-source-of-truth] Git data flows through GitDataProvider. The
-// projection below is the only mapping from GitInfo (segments' shape) to
-// var-system's six-field model. Pre-kz8.3 var-system maintained its own
-// parallel fleet (execGit + fetchGitSnapshot + GitPoller + WatchManager
-// subscriptions); the provider now owns the cache, the watcher, and the
-// single launch category "git".
+// [LAW:one-source-of-truth] The only mapping from GitInfo to var-system's six-field model; the provider owns the cache, the watcher and the launch category.
 
-// Project a GitInfo snapshot down to a single var-system GitField value.
-// Returns the typed fallback when info is null (not a repo or unresolved).
 function projectGitField(
   info: GitInfo | null,
   field: GitField,
@@ -376,15 +302,9 @@ function projectGitField(
   }
   switch (field) {
     case "branch":
-      // GitService emits the literal "detached" when HEAD is not on a
-      // branch; var-system's prior contract was empty string in that case.
-      // (Caveat: a branch literally named "detached" would also map to "" —
-      // preserving the pre-kz8.3 behavior, which had the same ambiguity in
-      // a different shape.)
+      // GitService emits the literal "detached" off-branch and var-system's contract is "" — a branch actually named "detached" is the same old ambiguity.
       return info.branch === "detached" ? "" : info.branch;
-    // [LAW:dataflow-not-control-flow] Outcome fields fold via orElse: this
-    // surface only renders values, so absent and failed both collapse to the
-    // typed zero (the provider's delivery edge already logged any failure).
+    // [LAW:dataflow-not-control-flow] This surface renders only values, so absent and failed both collapse to the typed zero.
     case "sha":
       return orElse(info.sha, "");
     case "dirty":
@@ -398,10 +318,7 @@ function projectGitField(
   }
 }
 
-// ─── WatchManager ─────────────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
-// count.  Multiple shell/file variables can share one watcher on the same path.
+// [LAW:single-enforcer] One fs.watch handle per path, however many subscribers share it.
 class WatchManager {
   private readonly watchers = new Map<
     string,
@@ -448,11 +365,7 @@ class WatchManager {
   }
 }
 
-// ─── TtlBucketManager ────────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] One setInterval per unique TTL duration, shared by all
-// variables with that TTL.  Multiple variables at the same interval fire on
-// one timer tick rather than N separate timers.
+// [LAW:single-enforcer] One setInterval per unique TTL duration, shared by every variable at that interval.
 class TtlBucketManager {
   private readonly buckets = new Map<
     number,
@@ -493,10 +406,8 @@ class TtlBucketManager {
   }
 }
 
-// ─── Shared metadata ──────────────────────────────────────────────────────────
-
 export interface LastError {
-  readonly timestamp: number; // Date.now() epoch ms
+  readonly timestamp: number;
   readonly message: string;
 }
 
@@ -505,10 +416,6 @@ interface InputMeta {
   readonly varDefault: VarValue | undefined;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// Recursively resolves a dotted path through a plain object.
-// Returns undefined if any segment is absent or the traversed value is not an object.
 function resolvePath(obj: unknown, path: string): unknown {
   let cur: unknown = obj;
   for (const part of path.split(".")) {
@@ -518,11 +425,8 @@ function resolvePath(obj: unknown, path: string): unknown {
   return cur;
 }
 
-// Coerces an external primitive to a typed VarValue using the cast helpers
-// from types.ts. Throws for non-primitive runtypes or impossible casts.
 function coerceToType(raw: unknown, type: VarType): VarValue {
-  // [LAW:no-defensive-null-guards] Trust-boundary check: payload values must be
-  // primitives. Non-primitive means malformed input — fail loudly.
+  // [LAW:no-defensive-null-guards] Trust boundary: a non-primitive payload value is malformed input — fail loudly.
   if (
     typeof raw !== "string" &&
     typeof raw !== "number" &&
@@ -537,31 +441,21 @@ function coerceToType(raw: unknown, type: VarType): VarValue {
   return toBool(raw);
 }
 
-// Type-appropriate zero used as the final backstop in the fallback chain when
-// neither per-variable default nor defaultEmptyValue can be coerced.
 function zeroValue(type: VarType): VarValue {
   if (type === "number") return 0;
   if (type === "boolean") return false;
   return "";
 }
 
-// ─── SourceRegistry ───────────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] One SourceRegistry per daemon, sharing one
-// VariableStore. Multiple registries on the same store would produce
-// duplicate box definitions for input-kind variables.
+// [LAW:single-enforcer] One SourceRegistry per daemon: two on one store would duplicate input-box definitions.
 
 export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
 
-  // Infrastructure for shell/file/git source kinds:
   private readonly watchMgr = new WatchManager();
   private readonly ttlMgr = new TtlBucketManager();
-  // [LAW:single-enforcer] One subscription per cwd — every git variable
-  // pointing at the same working directory shares one GitDataProvider
-  // subscription, and the provider in turn shares one watcher + one cache
-  // entry across N subscribers in the same repo.
+  // [LAW:single-enforcer] One subscription per cwd; the provider shares one watcher and cache entry across N subscribers in a repo.
   private readonly gitSubscriptions = new Map<
     string,
     {
@@ -572,44 +466,21 @@ export class SourceRegistry {
       unsubscribe: () => void;
     }
   >();
-  // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
-  // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:no-ambient-temporal-coupling] The in-flight run of each async
-  // source, by name: one run per source at a time (a refresh that fires
-  // while the previous run is still out is dropped), and `settled()` is the
-  // explicit "every source has completed its current run" state a caller
-  // (`cc-candybar check`) awaits instead of guessing a delay.
+  // [LAW:no-ambient-temporal-coupling] One run per source at a time (a refresh firing mid-run
+  // is dropped); `settled()` is the explicit "every run completed" state a caller awaits.
   private readonly inFlight = new Map<string, Promise<void>>();
-  // [LAW:single-enforcer] The registry owns every async handle its sources
-  // hold — timers, watchers, reactions, and the child processes and file
-  // reads in flight. This is their cancellation: dispose() aborts it, so a
-  // run cannot outlive the registry that started it (RenderCache's
-  // dispose-before-swap contract reaches the children too).
+  // [LAW:single-enforcer] The registry owns every async handle its sources hold, the children
+  // included: dispose() aborts them, so no run outlives the registry that started it.
   private readonly abort = new AbortController();
-  // Shared engine instance — parse() is expensive; the engine is reused for
-  // all key: template compilations.
-  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine();
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
-  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
-  // so tests can substitute a fake and the daemon shares its singleton.
-  // Absent in non-daemon contexts; declareState() rejects loudly in that case
-  // rather than silently returning empty strings.
+  // [LAW:locality-or-seam] Injected so tests can fake it; absent outside the daemon, where declareState() rejects loudly.
   private readonly sessionState: SessionStateReader | undefined;
 
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
-  //
-  // gitProvider lets the daemon inject its shared instance; when omitted (e.g.
-  // in tests, or pre-daemon-wired runtimes), a private one is constructed so
-  // the registry remains self-contained.
-  //
-  // sessionState lets the daemon inject its singleton so state-kind variables
-  // share one MobX atom and one disk-persistence layer with the click verbs.
-  // Omitted in tests that don't exercise state vars.
+  // gitProvider and sessionState let the daemon inject its shared instances; omitted, a private provider is built. defaultEmptyValue is the last-resort fallback.
   constructor(
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
@@ -626,47 +497,33 @@ export class SourceRegistry {
     this.sessionState = sessionState;
   }
 
-  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
-  // variable it declares lives there, and the renderer reads back through it.
-  // Exposing it read-only lets a caller that already holds the registry obtain
-  // the one store without threading a second reference that could diverge (the
-  // action runtime reads session.id/current values from this exact store).
   get variableStore(): VariableStore {
     return this.store;
   }
 
-  // ─── Synchronous source kinds ─────────────────────────────────────────────
-
-  // literal: type inferred from value; box written once at declaration and never again.
   declareLiteral(name: string, value: VarValue): void {
     this.store.defineBox(name, typeOf(value), value);
   }
 
-  // input: per-render box; initial value from fallback chain (path not yet resolved).
-  // At each render, applyInput resolves path against the payload and updates the box.
   declareInput(
     name: string,
     path: string,
     type: VarType,
     varDefault?: VarValue,
   ): void {
-    // [LAW:dataflow-not-control-flow] Initialize to the fallback value so the
-    // box always holds a valid typed value — even before the first render push.
+    // [LAW:dataflow-not-control-flow] Initialize to the fallback so the box always holds a valid typed value.
     const initial =
       varDefault !== undefined ? varDefault : this.defaultFor(type);
     this.store.defineBox(name, type, initial);
     this.inputMetas.set(name, { path, varDefault });
   }
 
-  // env: resolved once at declaration from process.env; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
   declareEnv(name: string, envVar: string, varDefault?: string): void {
     const raw = process.env[envVar];
     if (raw !== undefined) {
       this.store.defineBox(name, "string", raw);
       return;
     }
-    // Env var absent: apply fallback chain, record last_error.
     const fallback =
       varDefault !== undefined
         ? varDefault
@@ -677,9 +534,6 @@ export class SourceRegistry {
     this.recordError(name, `env var "${envVar}" is not set`);
   }
 
-  // ─── Async source kinds ───────────────────────────────────────────────────
-
-  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
@@ -689,8 +543,6 @@ export class SourceRegistry {
     );
   }
 
-  // file: read the file at path (whole, or its first line) as the text the
-  // parser sees.
   declareFile(name: string, filePath: string, opts: FileOptions): void {
     this.declareSource(
       name,
@@ -700,13 +552,8 @@ export class SourceRegistry {
     );
   }
 
-  // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish,
-  // once at declaration and again whenever the cache policy fires. Shell and
-  // file are two readers through this one function; text/regex/json are
-  // three parsers through it. The node always holds a valid value from
-  // declaration on (the fallback until the first run completes) — the cache
-  // policy drives WHEN it is refreshed, never whether the node exists
-  // [LAW:dataflow-not-control-flow].
+  // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish; shell/file are two readers
+  // through it, text/regex/json three parsers. The policy drives WHEN it refreshes, never whether it exists.
   private declareSource(
     name: string,
     reader: SourceReader,
@@ -715,13 +562,11 @@ export class SourceRegistry {
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
     const update = () => this.runSource(name, reader, publish);
-    update(); // initial run
+    update();
     this.registerCachePolicy(name, cache, update);
   }
 
-  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
-  // the node it publishes: the text arms publish a string box, the json arm a
-  // document. Selected once, at declaration — the pipeline never asks again.
+  // [LAW:one-type-per-behavior] One total projection of the parser arm onto the node it publishes, selected once at declaration.
   private publisherFor(
     name: string,
     parse: SourceParse,
@@ -757,11 +602,8 @@ export class SourceRegistry {
     };
   }
 
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node holds the failure itself (absent until the first scan,
-  // failed with its reason after a bad one), which the scope proxy surfaces
-  // as an error naming the variable [LAW:no-silent-failure] — a document has
-  // no honest empty value the way a string has "".
+  // Without a default the node holds the failure itself, which the scope proxy surfaces as an
+  // error naming the variable [LAW:no-silent-failure] — a document has no honest empty value.
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
@@ -786,9 +628,7 @@ export class SourceRegistry {
     publish: Publish,
   ): void {
     if (this.inFlight.has(name)) return;
-    // [LAW:no-silent-failure] A cancelled read publishes nothing; the
-    // registry's own abort is the one rejection a run may end in. Any other
-    // rejection is a bug and stays unhandled — loud.
+    // [LAW:no-silent-failure] The registry's own abort is the one rejection a run may end in; any other stays unhandled and loud.
     const run = reader
       .read()
       .then(publish, (err: unknown) => {
@@ -798,14 +638,8 @@ export class SourceRegistry {
     this.inFlight.set(name, run);
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every shell/file run
-  // in flight — and every run one of them triggered (a `depends_on`
-  // reaction fires inside a publish) — has completed, or at the deadline.
-  // The value is the names still in flight: empty when all settled. This is
-  // the state a one-shot render (`cc-candybar check`) awaits so it renders
-  // what those sources yielded, never a guessed delay; the registry owns the
-  // timer, so no caller races one of its own. A git subscription's first
-  // delivery is not a run here: `check` renders a git box as declared.
+  // [LAW:no-ambient-temporal-coupling] Resolves when every shell/file run in flight — and every run
+  // one triggered — completes, or at the deadline. A git subscription's first delivery is not a run.
   async settled(withinMs: number): Promise<readonly string[]> {
     const deadline = Date.now() + withinMs;
     while (this.inFlight.size > 0) {
@@ -824,19 +658,13 @@ export class SourceRegistry {
     return [...this.inFlight.keys()];
   }
 
-  // template: a variable whose value is derived by evaluating a go-template
-  // against the current variable store.  MobX auto-tracks every store.read()
-  // made during evaluation — no explicit dep declarations needed.
-  // [LAW:dataflow-not-control-flow] defineComputed registers a MobX computed;
-  // the invalidation graph builds itself from the template's read pattern.
+  // [LAW:dataflow-not-control-flow] MobX auto-tracks every store.read() the template makes, so the invalidation graph builds itself.
   declareTemplate(
     name: string,
     template: string,
     opts: TemplateOptions = {},
   ): void {
-    // Parse once at declaration time — parse() is expensive; evaluate() is cheap.
-    // A ParseError propagates here so invalid templates fail at config load, not
-    // at the first render.
+    // Parse once at declaration, so an invalid template fails at config load, not at first render.
     const parsedTpl = this.engine.parse(template);
     this.store.defineComputed(name, "string", (_read) => {
       const scope = buildScope(this.store);
@@ -848,22 +676,16 @@ export class SourceRegistry {
         this.lastErrors.delete(name);
         return result;
       } catch (e) {
-        // [LAW:no-defensive-null-guards] Template eval failures (including
-        // MobX cycle detection) surface as last_error; the box still holds
-        // a safe fallback rather than propagating the throw to the renderer.
+        // [LAW:no-defensive-null-guards] Eval failures (MobX cycle detection included) surface as last_error; the box keeps a safe fallback.
         this.recordError(name, e instanceof Error ? e.message : String(e));
         return this.stringInitial(opts.varDefault);
       }
     });
-    // Force eager evaluation so any cycle is detected here (at config load)
-    // rather than silently at the first render.  MobX keepAlive computeds are
-    // otherwise lazy.
+    // Force eager evaluation so a cycle is caught at config load; keepAlive computeds are otherwise lazy.
     this.store.read(name);
   }
 
-  // time: current wall-clock time formatted with a Go reference-time layout.
-  // Box initialises to the current time; the TTL timer refreshes it.
-  // [LAW:dataflow-not-control-flow] Box always holds a valid formatted string.
+  // [LAW:dataflow-not-control-flow] The box always holds a valid formatted string; the TTL timer refreshes it.
   declareTime(name: string, opts: TimeOptions): void {
     const ttlMs = opts.ttlMs ?? 1_000;
     const format = (d: Date): string => {
@@ -891,21 +713,11 @@ export class SourceRegistry {
     this.cleanups.push(unsub);
   }
 
-  // git: first-class git fields delivered by the shared GitDataProvider.
-  // All git boxes for the same cwd ride one provider subscription; the
-  // provider in turn collapses N subscribers in the same repo onto one
-  // watcher + one cache entry.
-  // [LAW:dataflow-not-control-flow] Box always holds a valid typed value;
-  // the provider's watcher (HEAD + index under the resolved gitDir, plus
-  // refs/heads/ when it exists — see src/daemon/cache/git.ts:watcherTargets)
-  // drives when the snapshot is refreshed.
+  // git: all boxes for one cwd ride one provider subscription, which collapses N subscribers in
+  // a repo onto one watcher + cache entry that drives when the snapshot is refreshed.
   declareGit(name: string, opts: GitOptions): void {
     const type = GIT_FIELD_TYPE[opts.field];
-    // [LAW:single-enforcer] Coerce the user-supplied default to the field's
-    // native type — same logic projectGitField already applies to the
-    // defaultEmptyValue fallback. The schema constrains `default` to string,
-    // so `"0"` is the only legal form for number fields; coerce it here so
-    // defineBox receives a type-correct initial value.
+    // [LAW:single-enforcer] The schema constrains `default` to string, so coerce it to the field's native type before defineBox sees it.
     const initial =
       opts.varDefault !== undefined
         ? coerceToType(opts.varDefault, type)
@@ -919,8 +731,6 @@ export class SourceRegistry {
         Array<{ name: string; varDefault: VarValue | undefined }>
       >();
       const unsubscribe = this.gitProvider.subscribe(opts.cwd, (info) => {
-        // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
-        // snapshot value decides each box's content, not whether code runs.
         this.store.runInAction(() => {
           for (const [field, subs] of fieldSubs) {
             for (const { name: subName, varDefault } of subs) {
@@ -949,15 +759,7 @@ export class SourceRegistry {
     fieldList.push({ name, varDefault: opts.varDefault });
   }
 
-  // state: read-through to SessionState. The computed reads two deps — the
-  // canonical session-id input variable (SESSION_ID_VAR_NAME, refreshed per
-  // render from input) and SessionState itself (MobX-tracked via its
-  // internal atom). A click verb that mutates SessionState invalidates this
-  // computed; a sessionId change (per-render) also invalidates it.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
-  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
-  // determine the result, never whether code runs.
+  // state: the computed reads two deps — the canonical session-id input var and SessionState's own atom — so a click verb and a per-render id change both invalidate it.
   declareState(name: string, opts: StateOptions): void {
     if (!this.sessionState) {
       throw new Error(
@@ -968,12 +770,7 @@ export class SourceRegistry {
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(undefined);
     this.store.defineComputed(name, "string", (read) => {
-      // [LAW:types-are-the-program] By convention session.id is declared as
-      // a string-typed input variable. The var-system's type discipline
-      // (assertType in store.ts) enforces that at declaration; we read its
-      // value as a string here. A user who redeclares session.id as a
-      // non-string variable receives empty state lookups — the failure
-      // mode is loud-by-absence rather than silently coerced.
+      // [LAW:types-are-the-program] Redeclaring session.id as a non-string variable yields empty state lookups — loud by absence, never silently coerced.
       const sessionId = read(SESSION_ID_VAR_NAME);
       if (typeof sessionId !== "string" || !sessionId) return fallback;
       const value = sessionState.get(sessionId, opts.key);
@@ -981,12 +778,7 @@ export class SourceRegistry {
     });
   }
 
-  // ─── Render-cycle driver ──────────────────────────────────────────────────
-
-  // Called at the start of each render request. Pushes all input-kind boxes in
-  // a single runInAction so their dependents invalidate exactly once.
-  // [LAW:dataflow-not-control-flow] Variability lives in the payload values,
-  // not in whether the update runs — every input box is refreshed every render.
+  // [LAW:dataflow-not-control-flow] One runInAction so dependents invalidate exactly once, and every input box is refreshed every render.
   applyInput(payload: unknown): void {
     this.store.runInAction(() => {
       for (const [name, meta] of this.inputMetas) {
@@ -1016,20 +808,10 @@ export class SourceRegistry {
     });
   }
 
-  // ─── Diagnostics ─────────────────────────────────────────────────────────
-
-  // Returns the recorded error for a variable, or undefined if the last
-  // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
     return this.lastErrors.get(name);
   }
 
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
-
-  // Tear down all TTL timers, fs watchers, MobX reactions, git
-  // subscriptions, and in-flight reads registered by async source kinds.
-  // Call when the registry is no longer needed (e.g. on daemon shutdown or
-  // config hot-reload).
   dispose(): void {
     this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
@@ -1041,10 +823,7 @@ export class SourceRegistry {
     if (this.ownsGitProvider) this.gitProvider.close();
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to its
-  // trigger mechanism.  Adding a new policy kind means adding one case here.
+  // [LAW:single-enforcer] One place mapping every CachePolicy kind to its trigger mechanism.
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
@@ -1052,7 +831,6 @@ export class SourceRegistry {
   ): void {
     switch (policy.kind) {
       case "never":
-        // Initial run in declare* is the only execution.
         break;
 
       case "ttl": {
@@ -1068,11 +846,7 @@ export class SourceRegistry {
       }
 
       case "key": {
-        // Parse template once; reaction re-evaluates it whenever any
-        // variable it reads changes.  If the rendered key string changes,
-        // the source is recomputed.
-        // [LAW:dataflow-not-control-flow] The key template is the sole
-        // selector — no manual dep declarations, no conditional checks.
+        // [LAW:dataflow-not-control-flow] The rendered key template is the sole selector: the source recomputes whenever it changes.
         const parsedKey = this.engine.parse(policy.template);
         const disposer: IReactionDisposer = reaction(() => {
           const scope = buildScope(this.store);
@@ -1090,10 +864,6 @@ export class SourceRegistry {
       }
 
       case "depends_on": {
-        // [LAW:dataflow-not-control-flow] reaction re-runs update whenever
-        // any named variable changes.  Variability lives in the dep values,
-        // not in whether the update executes — the update always runs when
-        // the joined snapshot changes.
         const disposer: IReactionDisposer = reaction(
           () => policy.varNames.map((n) => this.store.changeKey(n)).join(","),
           update,
@@ -1104,10 +874,7 @@ export class SourceRegistry {
     }
   }
 
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
+  // [LAW:no-defensive-null-guards] Failure chain: per-variable default → defaultEmptyValue coerced → zero, whose backstop is deliberate — the caller already recorded the error.
   private applyFallback(
     name: string,
     type: VarType,
@@ -1126,7 +893,6 @@ export class SourceRegistry {
     }
   }
 
-  // Initial value for an input box before the first render push.
   private defaultFor(type: VarType): VarValue {
     try {
       return coerceToType(this.defaultEmptyValue, type);
@@ -1135,7 +901,6 @@ export class SourceRegistry {
     }
   }
 
-  // Initial string value for shell/file boxes before the first async run.
   private stringInitial(varDefault: string | undefined): string {
     if (varDefault !== undefined) return varDefault;
     if (typeof this.defaultEmptyValue === "string")
@@ -1147,8 +912,6 @@ export class SourceRegistry {
     this.lastErrors.set(name, { timestamp: Date.now(), message });
   }
 
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
   private noteOutcome(name: string, outcome: Outcome<unknown>): void {
     if (outcome.kind === "ok") this.lastErrors.delete(name);
     else

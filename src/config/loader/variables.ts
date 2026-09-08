@@ -1,10 +1,4 @@
-// [LAW:types-are-the-program] The variable schema: a VariableDecl is discriminated
-// by `kind` (literal / input / env / file / shell / template / time / git / state),
-// declared as DATA (VARIABLE_SCHEMA) and interpreted by the tag-by-field-value
-// engine (taggedUnion). Each arm is a `fields` schema over its member's non-`kind`
-// fields, except `input`, whose `default` must match its `type` — a genuine
-// cross-field invariant carried as a closure. This file changes when a source
-// kind's shape changes; adding a kind is one new arm here plus its runtime impl.
+// [LAW:types-are-the-program] Adding a source kind is one new arm here plus its runtime impl.
 
 import {
   GIT_FIELDS,
@@ -83,9 +77,7 @@ export function validateVariables(
   return out;
 }
 
-// [LAW:types-are-the-program] `value` is a required union literal with a bespoke
-// message whose line points at the variable (not `.value`) — a custom spec, since
-// the generic string/enum specs encode different line behavior.
+// [LAW:types-are-the-program] A bespoke message whose line points at the variable, not `.value`.
 function literalValueSpec(): FieldSpec<string | number | boolean> {
   return {
     required: true,
@@ -109,8 +101,7 @@ function literalValueSpec(): FieldSpec<string | number | boolean> {
   };
 }
 
-// [LAW:types-are-the-program] `field` is a required member of the closed GitField
-// set with a bespoke one-of message — a custom spec for the same reason.
+// [LAW:types-are-the-program] A bespoke one-of message, for the same reason.
 function gitFieldSpec(): FieldSpec<GitField> {
   return {
     required: true,
@@ -133,14 +124,7 @@ function gitFieldSpec(): FieldSpec<GitField> {
   };
 }
 
-// [LAW:types-are-the-program] `input`'s `default` carries the cross-field
-// invariant — it must match the declared `type` (an absent or invalid `type`
-// defaults the check to "string"). A field spec receives the WHOLE record, so it
-// reads its sibling `raw.type` to pick the expected type WITHOUT re-reporting a
-// bad type (the `type` field spec owns that error — reading raw here avoids the
-// duplicate issue). This is what lets `input` derive BOTH `parse` and `json` from
-// one field map via `arm()`, like every other arm — closing the last spot where
-// the two interpreters were authored independently [LAW:one-source-of-truth].
+// [LAW:types-are-the-program] A spec receives the WHOLE record, so this reads sibling `raw.type`.
 function inputDefaultSpec(): FieldSpec<string | number | boolean> {
   return {
     required: false,
@@ -154,14 +138,7 @@ function inputDefaultSpec(): FieldSpec<string | number | boolean> {
   };
 }
 
-// [LAW:types-are-the-program] The parse-step schema as DATA, through the same
-// tag-by-present-key engine `cache:` runs through: text/json are flags whose
-// value is the literal true (like cache.never); regex is a pattern string. The
-// pattern is proven here — it compiles, and it has the capture group the
-// runtime reads (group 1 IS the value, so a groupless pattern could only ever
-// "not match") — while the decl keeps the SOURCE string: DslConfig is
-// serializable data, and declareOne (src/dsl/render.ts) compiles the RegExp the
-// runtime runs. Past this point a pattern is one `new RegExp` cannot throw on.
+// [LAW:types-are-the-program] A pattern is proven here, but the decl keeps the SOURCE string.
 const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
   noun: "parse",
   arms: {
@@ -208,10 +185,8 @@ function capturingPattern(
 ): { regex: string } | null {
   let groups: number;
   try {
-    // The compile proof is the pattern ALONE (`(a)\\` does not compile, but
-    // `(a)\\|` does — the backslash would escape the alternation). Then the
-    // standard group count: a compiling pattern alternated with the empty
-    // pattern always matches, and every group is a (non-participating) slot.
+    // Compile the pattern ALONE, then count groups: alternated with empty it always
+    // matches, and every group is a non-participating slot.
     new RegExp(pattern);
     groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
   } catch (e) {
@@ -230,12 +205,7 @@ function capturingPattern(
       );
 }
 
-// [LAW:one-source-of-truth] The `parse` field: absent means the text arm, and
-// that default is spelled ONCE, in declareOne's lowering — the decl records
-// what the author wrote. The retired top-level `regex:` is reported HERE
-// because a variable arm's field map ignores keys it does not declare: an old
-// config would otherwise load with its regex silently dropped
-// [LAW:no-silent-failure].
+// [LAW:no-silent-failure] The retired top-level `regex:` is reported here because an arm's field map ignores undeclared keys.
 function parseSpec(): FieldSpec<ParseDecl> {
   return {
     required: false,
@@ -256,15 +226,7 @@ function parseSpec(): FieldSpec<ParseDecl> {
   };
 }
 
-// [LAW:types-are-the-program] A source's `default` lives in its parser's
-// OUTPUT domain — a string for the text/regex arms, any JSON value for the
-// json arm — so this spec reads its sibling `raw.parse` to pick the domain,
-// the way inputDefaultSpec reads `raw.type`. This is THE enforcer of the
-// arm↔default pairing: FileVarDecl/ShellVarDecl type `default` as the union
-// of both domains and declareOne's lowering trusts the stamp. The sibling's
-// own errors are parseSpec's to report: the json domain is the json key
-// PRESENT on the raw `parse:` — the tag of that present-key union — never a
-// fallthrough over keys it does not recognise.
+// [LAW:types-are-the-program] THE enforcer of the arm↔default pairing: a `default` lives in its parser's OUTPUT domain.
 function sourceDefaultSpec(): FieldSpec<SourceDefault> {
   return {
     required: false,
@@ -295,9 +257,7 @@ function jsonDefault(
       ) ?? undefined);
 }
 
-// [LAW:parse-dont-validate] The stamp for the json arm's default: a config
-// file's values are JSON-shaped by construction (JSON5 admits Infinity/NaN,
-// which JSON does not), a programmatic config's are whatever TS let through.
+// [LAW:parse-dont-validate] JSON5 admits Infinity/NaN, which JSON does not.
 function isSourceDefault(value: unknown): value is SourceDefault {
   return value !== null && isJsonValue(value);
 }
@@ -323,10 +283,7 @@ function isJsonValue(value: unknown): value is JsonValue {
   }
 }
 
-// [LAW:dataflow-not-control-flow] Each arm's field set is DATA over the member's
-// non-`kind` fields; the engine supplies the discriminator. `fields` runs every
-// spec (reporting all issues) and fails the arm when a required field is absent
-// or invalid — the conditional-spread + result-threading the old switch hand-rolled.
+// [LAW:dataflow-not-control-flow] Each arm's field set is DATA; the engine supplies the tag.
 const LITERAL_FIELDS: FieldSpecMap<Omit<LiteralVarDecl, "kind">> = {
   value: literalValueSpec(),
   default: optionalStringSpec(),
@@ -360,9 +317,7 @@ const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
 };
 const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
   layout: requireStringSpec(),
-  // [LAW:no-silent-failure] ttl-only: the runtime honors no other invalidation
-  // on a clock-driven var, so the loader rejects what it would otherwise have
-  // had to silently coerce.
+  // [LAW:no-silent-failure] ttl-only: a clock-driven var honors no other invalidation.
   cache: ttlOnlyCacheSpec(),
   default: optionalStringSpec(),
 };
@@ -376,8 +331,6 @@ const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
   default: optionalStringSpec(),
 };
 
-// [LAW:decomposition] A regular arm parses its non-`kind` fields via `fields` and
-// re-attaches the tag the engine already validated; null threading is preserved.
 function arm<
   K extends VariableDecl["kind"],
   M extends Omit<Extract<VariableDecl, { kind: K }>, "kind">,
@@ -386,17 +339,10 @@ function arm<
   fieldMap: FieldSpecMap<M>,
 ): TaggedArm<Extract<VariableDecl, { kind: K }>> {
   return {
-    // [LAW:one-source-of-truth] The arm's emit facet: the member object schema
-    // with its `kind` discriminator baked in — `objectJson` over the SAME field
-    // map `fields` validates, plus `{ kind: { const } }`. taggedUnionJson collects
-    // these verbatim into the union's anyOf.
     json: withConst(objectJson(fieldMap), "kind", kind),
     parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
       const body = fields(ctx, fieldMap, path, raw);
-      // [LAW:types-are-the-program] `fieldMap: FieldSpecMap<M>` is checked against
-      // the member's non-`kind` fields at each call site, so {kind, ...body} IS the
-      // member; TS can't relate the reconstruction to the distributed Extract for a
-      // generic K, hence the cast — the call-site check carries the real guarantee.
+      // [LAW:types-are-the-program] The call-site FieldSpecMap<M> check carries the guarantee TS cannot relate through a generic K, hence the cast.
       return body === null
         ? null
         : ({ kind, ...body } as unknown as Extract<VariableDecl, { kind: K }>);
@@ -409,10 +355,6 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
   noun: "source kind",
   arms: {
     literal: arm("literal", LITERAL_FIELDS),
-    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
-    // lives in `inputDefaultSpec` (a field spec reading its sibling), so `input`
-    // is one field map like every other arm — `arm()` derives both `parse` and
-    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
     input: arm("input", INPUT_FIELDS),
     env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
@@ -424,15 +366,11 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
   },
 };
 
-// [LAW:one-source-of-truth] One VariableDecl's schema, derived from the SAME
-// VARIABLE_SCHEMA the validator interprets — the tag-by-kind anyOf.
+// [LAW:one-source-of-truth] Derived from the SAME VARIABLE_SCHEMA the validator interprets.
 export function variableDeclJson(): JsonNode {
   return taggedUnionJson(VARIABLE_SCHEMA);
 }
 
-// [LAW:one-source-of-truth] The `variables` block (and a segment's nested `vars`)
-// is a name → VariableDecl map; both surfaces emit this one shape, symmetric to
-// both calling `validateVariables`.
 export function variablesMapJson(): JsonNode {
   return { type: "object", additionalProperties: variableDeclJson() };
 }

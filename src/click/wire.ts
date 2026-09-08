@@ -1,138 +1,58 @@
-// [LAW:single-enforcer] THE click-wire codec. A click is an ordered list of
-// effects; this module is the one place that serializes that list to a URL and
-// parses it back. The renderer (every click emitter) calls effectsUrl; the
-// daemon's `dispatch` verb calls parseEffects. Encode and decode live together
-// so the format cannot drift between the two halves [LAW:one-source-of-truth].
-//
-// [LAW:dataflow-not-control-flow] N effects ride one URL the SAME way for N=1 and
-// N=100 — a lone click is the degenerate one-element list. There is no
-// plain-vs-compound mode: every URL effectsUrl emits is `dispatch/e=…`, and the
-// effect COUNT is data the dispatcher folds over, never a branch that selects a
-// wire. (The wire still ACCEPTS direct `cc-candybar://<verb>/…` URLs — old
-// scrollback links, a hand-authored `link` template — so a direct verb is the
-// degenerate one-effect case on the parse side; only emission is unified here.)
-//
-// Why query params (not slashes, not base64): the value handed to the daemon is
-// passed RAW (parseHandlerUrl decodes only the verb), so each `e` param survives
-// exactly one URLSearchParams decode and an effect's own slash-bearing value
-// (a path, a set-state key/value tail) round-trips untouched. base64 was
-// rejected as opaque; a slash-nested payload is unsafe under any single
-// whole-value decode (a `%2F` would un-escape into a structural separator). The
-// `e=…&e=…` payload follows the verb after a `/` (`dispatch/e=…`), NOT a `?`, so
-// `/` stays the one verb delimiter and `?` remains ordinary data in a bare-copy
-// value (`cc-candybar://hello?world`).
+// [LAW:single-enforcer][LAW:one-source-of-truth] Encode and decode live together.
+// [LAW:dataflow-not-control-flow] The effect count is data, never a mode; a direct
+// `cc-candybar://<verb>/…` URL is still ACCEPTED. Query params after `dispatch/`,
+// not `?`, so each `e` survives one decode and `/` stays the one verb delimiter.
 
 import { URLSearchParams } from "node:url";
 
-// [LAW:one-source-of-truth] The scheme string lives here, with the codec that
-// emits it; install/ (Launch Services registration) imports it.
 export const URL_SCHEME = "cc-candybar";
 
-// [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
-// keys off these and every emitter builds effects with them, so the emitted
-// verb and the dispatched handler cannot name-drift.
+// [LAW:one-source-of-truth] Emitter and handler cannot name-drift.
 export const VERB_DISPATCH = "dispatch";
 export const VERB_SET_STATE = "set-state";
-// [LAW:types-are-the-program] A RELATIVE state nudge: its args are
-// `[sessionId, key, by]` where `by` is the signed integer delta. Distinct from
-// set-state because the click intent is "step from whatever the value IS now",
-// not "set to this fixed value" — the absolute target is computed at APPLY time
-// from live state, so the link carries no `current` snapshot and N rapid clicks
-// each re-read-and-write. Additive: old set-state links still resolve.
+// [LAW:types-are-the-program] `[sessionId, key, by]`: RELATIVE, resolved at apply.
 export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
 export const VERB_SHOW_CONFIG_ERROR = "show-config-error";
 export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
-// [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
-// the override path (or clears it with an empty value); the render pipeline
-// reads it at the cache-lookup boundary. Clicking a different config is a
-// side-effect isolated to the verb handler; the renderer only sees the result.
+// [LAW:effects-at-boundaries] The daemon-global override path; empty clears it.
 export const VERB_LOAD_CONFIG = "load-config";
-// [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
-// land in the session's config FILE (candybar-config-dqe — the one durable
-// store), spliced in place so comments survive, and reach the bar through
-// the SAME file-watcher path a hand edit already takes. Args: `[sessionId, key, value]` — the
-// sessionId is carried only for click.error surfacing, exactly like
-// set-state; the write itself is daemon-global, not session-scoped.
-// A durable write takes an OPTIONAL trailing segment: the SessionState key to
-// RELEASE once the write has succeeded. A dual-destination control
-// (candybar-settings-ui-aok.3) commits "make this the durable default AND stop
-// overriding it in this session" — one intent, whose session half must not
-// happen if the durable half failed. Carried as one more segment on the write
-// itself rather than as a second effect beside it, because `dispatch` runs
-// every effect in a click by design; a pair would let a rejected write still
-// wipe the user's pick. Args: `[sessionId, key, value, releaseKey?]`.
+// [LAW:one-source-of-truth] `[sessionId, key, value, releaseKey?]`: spliced into the
+// config FILE, read back through the SAME watcher a hand edit trips. `releaseKey`
+// rides the write, never a second effect a rejected write could leave applied.
 export const VERB_SET_CONFIG = "set-config";
-// [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-file
-// key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by, releaseKey?]` — the same optional release segment
-// set-config takes, for the same reason.
+// [LAW:types-are-the-program] `[sessionId, key, by, releaseKey?]`.
 export const VERB_STEP_CONFIG = "step-config";
-// [LAW:one-source-of-truth] The gated undo for `persist`: deletes one key's
-// path from the config file, restoring the bundled-default value on the next
-// reload. Args: `[sessionId, key]`.
+// [LAW:one-source-of-truth] `[sessionId, key]`: deletes it, restoring the default.
 export const VERB_RESET_CONFIG = "reset-config";
-// [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
-// verb — a THIRD write semantic beside set-config's plain overwrite and
-// step-config's numeric read-modify-write: apply one tree op to the layout
-// the config file authors at `key` (a "presets.<name>.root" target). Args:
-// `[sessionId, key, op]` — `op` is one opaque token from
-// src/config/layout-ops.ts's codec, the SAME shape a `persist … to` literal's
-// value would be, gated the SAME way (validateConfigWrite) — only the write's
-// SHAPE (a tree edit vs. a value) differs, which is exactly why this is its
-// own verb rather than another VERB_SET_CONFIG value.
+// [LAW:one-type-per-behavior] `[sessionId, key, op]`: a tree edit, not a value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
-// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
-// the session's config file — the fine-grained sibling of VERB_RESET_CONFIG's
-// coarse "delete one key". Args: `[sessionId]` — there is no key: a file's
-// history is one stack of whole-file snapshots over every persist/reset/
-// layout write made to it (config-file-store.ts), not a per-key log. An empty
-// stack, or a file edited by hand since the snapshot, is a loud BAD_REQUEST
-// surfaced through click.error like any other verb failure, never a silent
-// no-op.
+// [LAW:one-source-of-truth] `[sessionId]`: whole-file snapshots; an empty stack or
+// a hand-edited file is a loud BAD_REQUEST.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
-// [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
-// 5d6): rebuild a source checkout, or stage the newer release over an
-// install. Args: `[sessionId]` — carried for click.error surfacing only. The
-// verb takes NO command and NO version: the daemon runs the act its own
-// provenance implies (src/daemon/update-notice.ts), so nothing a URL carries
-// ever reaches a shell.
+// [LAW:effects-at-boundaries] `[sessionId]` only: nothing a URL carries hits a shell.
 export const VERB_APPLY_UPDATE = "apply-update";
 
-// [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a). `doctor-run`
-// args: `[sessionId]` — runs every check over the session's RECORDED client
-// hints and writes the report into that session's state. `doctor-fix` args:
-// `[sessionId, checkName]` — re-probes that one check and performs the fix its
-// verdict carries, then re-runs. The check name is gated by membership in
-// `CHECKS` (src/doctor/checks.ts); no command, path, or value ever rides the
-// URL — the fix is whatever the check's own verdict describes.
+// [LAW:effects-at-boundaries] `[sessionId, checkName?]` gated by `CHECKS`; no command in the URL.
 export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
 
-// [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
-// positional args. The wire owns all encoding — callers never percent-encode.
-// set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.
+// [LAW:types-are-the-program] Raw args: the wire owns all encoding.
 export interface Effect {
   readonly verb: string;
   readonly args: readonly string[];
 }
 
-// [LAW:types-are-the-program] A parsed effect as the dispatcher sees it: the verb
-// and the still-encoded segment tail. The tail stays encoded because the target
-// verb's handler decodes its own segments at its boundary (single-enforcer per
-// verb) — the same contract a direct (non-dispatch) click URL hands a handler.
+// [LAW:types-are-the-program] The tail stays encoded; each handler decodes its own.
 export interface ParsedEffect {
   readonly verb: string;
   readonly value: string;
 }
 
-// [LAW:single-enforcer] The segment codec. A verb's args serialize to a
-// slash-joined run of percent-encoded segments; the handler decodes the inverse.
-// Encoding each segment means a segment's own `/` becomes `%2F` and never reads
-// as a separator — the slash-safety the old whole-value decode could not give.
+// [LAW:single-enforcer] Per-segment, so a segment's own `/` never separates.
 export function encodeSegments(parts: readonly string[]): string {
   return parts.map(encodeURIComponent).join("/");
 }
@@ -141,10 +61,6 @@ export function decodeSegments(value: string): string[] {
   return value.length === 0 ? [] : value.split("/").map(decodeURIComponent);
 }
 
-// Serialize an effect list to its dispatch URL. Each effect becomes one ordered
-// `e` query param carrying `verb/<encoded-args>`, percent-encoded whole so its
-// internal `/`, `&`, `=` survive as data. The payload follows `dispatch/` (not
-// `dispatch?`) so `/` is the only verb delimiter parseHandlerUrl needs.
 export function effectsUrl(effects: readonly Effect[]): string {
   const qs = effects
     .map(
@@ -154,18 +70,12 @@ export function effectsUrl(effects: readonly Effect[]): string {
   return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
 }
 
-// [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an
-// `e=…&e=…` query string) into the ordered effect list. URLSearchParams decodes
-// each param exactly once and preserves insertion order; splitting each on the
-// FIRST `/` recovers (verb, still-encoded tail) — the same split parseHandlerUrl
-// applies at the top level, one level down.
+// [LAW:dataflow-not-control-flow] Decodes once, preserving insertion order.
 export function parseEffects(rawValue: string): ParsedEffect[] {
   return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 
-// [LAW:types-are-the-program] Split a `verb/tail` string at the first `/`. A
-// verb with no args (no slash) yields an empty tail — the degenerate case, not a
-// guard. The tail keeps its slashes (further segments) for the handler to decode.
+// [LAW:types-are-the-program] No args is an empty tail — degenerate, not a guard.
 export function splitVerb(s: string): ParsedEffect {
   const i = s.indexOf("/");
   return i === -1

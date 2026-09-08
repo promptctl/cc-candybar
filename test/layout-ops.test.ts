@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] brandon-layout-edit-2gc.1's op vocabulary: the codec
-// round-trips every legal op and rejects anything a name with `:`/`/` could
-// produce ambiguously. The ops themselves are applied to the authored tree in
-// the config file (candybar-config-dqe) — test/json5-edit.test.ts proves
-// removeSegmentRef/insertSegmentRef, and test/dsl-layout-edit.test.ts drives
-// them through the click.
+// [LAW:verifiable-goals] Round-trips every legal op; rejects what a `:`/`/` name makes ambiguous.
 
 import {
   decodeLayoutOp,

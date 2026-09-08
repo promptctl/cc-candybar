@@ -1,7 +1,4 @@
-// [LAW:behavior-not-structure] Contract of the in-flight coalescer: while a key
-// is computing, concurrent callers share ONE promise; once it settles the entry
-// is gone (coalescer, never a cache); distinct keys never interfere; a rejection
-// is shared by every waiter and clears the slot so the next call retries.
+// [LAW:behavior-not-structure] A coalescer, never a cache: the slot clears once the run settles.
 
 import { SingleFlight } from "../src/utils/single-flight";
 
@@ -47,7 +44,6 @@ describe("SingleFlight", () => {
 
     expect(await flight.run("k", factory)).toBe(1);
     expect(flight.size).toBe(0);
-    // Settled → not cached → fresh computation.
     expect(await flight.run("k", factory)).toBe(2);
     expect(runs).toBe(2);
   });
@@ -69,8 +65,6 @@ describe("SingleFlight", () => {
     await expect(a).rejects.toThrow("boom");
     await expect(b).rejects.toThrow("boom");
 
-    // Slot cleared on rejection → a fresh call retries rather than re-throwing
-    // the stale failure.
     expect(flight.size).toBe(0);
     const ok = await flight.run("k", () => Promise.resolve(7));
     expect(ok).toBe(7);

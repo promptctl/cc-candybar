@@ -1,24 +1,16 @@
-// [LAW:single-enforcer] All hookData schema validation flows through
-// validateHookData. One trust boundary, one check.
-//
-// [LAW:dataflow-not-control-flow] Every check runs unconditionally. Results
-// accumulate into a ValidationReport — callers decide what to do with them.
-// No early exits, no control-flow branches that skip checks.
+// [LAW:single-enforcer] One trust boundary: all hookData validation flows here.
+// [LAW:dataflow-not-control-flow] Every check runs; results accumulate in a report.
 
 import type { ClaudeHookData } from "./claude";
 
 export interface ValidationReport {
-  // Required fields that were absent or had wrong types.
   missingRequired: string[];
   typeMismatches: Array<{ path: string; expected: string; got: string }>;
-  // Top-level keys not in the known schema — Anthropic may have added new fields.
   unknownTopLevelFields: string[];
 }
 
-// Top-level keys Anthropic sends (plus hook_event_name, which cc-candybar adds).
-// Adding a new Anthropic field here suppresses the "unknown field" log for it.
 const KNOWN_TOP_LEVEL = new Set([
-  "hook_event_name", // cc-candybar internal
+  "hook_event_name",
   "session_id",
   "session_name",
   "transcript_path",
@@ -38,8 +30,6 @@ const KNOWN_TOP_LEVEL = new Set([
   "worktree",
 ]);
 
-// Required fields: [dot-separated path, expected typeof result]
-// "object" means non-null, non-array object. Checked in declaration order.
 const REQUIRED_FIELDS: Array<
   [string, "string" | "number" | "boolean" | "object"]
 > = [
@@ -55,15 +45,7 @@ const REQUIRED_FIELDS: Array<
 ];
 
 /**
- * Validate raw hookData received over the wire against the known Anthropic schema.
- *
- * Returns the data typed as ClaudeHookData alongside a ValidationReport.
- * Never throws — divergences are reported, not thrown. The daemon decides
- * how to surface them (dlog warn/info).
- *
- * [LAW:no-defensive-null-guards] Validation at the trust boundary is correct.
- * Everywhere else in the codebase, hookData fields are used without guards
- * because this boundary guarantees their presence.
+ * [LAW:no-defensive-null-guards] Never throws; nothing inland guards a hookData field.
  */
 export function validateHookData(raw: unknown): {
   data: ClaudeHookData;
@@ -101,10 +83,7 @@ export function validateHookData(raw: unknown): {
   return { data: raw as ClaudeHookData, report };
 }
 
-// [LAW:parse-dont-validate] A value's kind in REQUIRED_FIELDS' vocabulary.
-// A string counts only when well-formed: past this border, hook strings are
-// safe to encode into paths and URLs (a lone surrogate would make
-// encodeURIComponent throw inland), and their encodings are injective.
+// [LAW:parse-dont-validate] Well-formed only: a lone surrogate must not pass here.
 function kindOf(value: unknown): string {
   if (Array.isArray(value)) return "array";
   if (typeof value === "string" && !value.isWellFormed())

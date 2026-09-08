@@ -22,15 +22,9 @@ import {
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
-// [LAW:one-source-of-truth] `install` writes no renderer flags into
-// ~/.claude/settings.json. All authoring lives in `.cc-candybar.json5` or
-// `.cc-candybar.json` (see resolveDslConfig — both extensions accepted,
-// .json5 preferred); the install command's job is staging the runtime,
-// wiring the URL handler, and pointing settings at the staged entry.
+// [LAW:one-source-of-truth] Install writes no renderer flags to settings.json.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [];
 
-// [LAW:one-type-per-behavior] One platform → one package name; the render
-// entry is the same contract everywhere, only the artifact differs.
 const PLATFORM_PACKAGES: Record<string, string> = {
   "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
   "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
@@ -63,9 +57,7 @@ function ensureMacOS(): void {
   }
 }
 
-// [LAW:one-source-of-truth] The staged runtime lives at ONE stable path per
-// platform, outside any package manager's store — pnpm cache pruning or a
-// version bump can never yank the files the statusline and daemon run from.
+// [LAW:one-source-of-truth] ONE stable path per platform, outside any store.
 function supportDir(): string {
   if (process.platform === "darwin") {
     return path.join(
@@ -89,9 +81,7 @@ function stagedDistPath(): string {
 }
 
 function appleScriptSource(nodePath: string, scriptPath: string): string {
-  // Bake absolute paths into the AppleScript so click-time invocation doesn't
-  // depend on PATH or install-time cache state. The dist bundle is fully
-  // self-contained (tsdown noExternal), so no NODE_PATH is needed.
+  // Bake absolute paths in so click-time invocation does not depend on PATH.
   const escNode = nodePath.replace(/"/g, '\\"');
   const escScript = scriptPath.replace(/"/g, '\\"');
   return [
@@ -101,11 +91,7 @@ function appleScriptSource(nodePath: string, scriptPath: string): string {
   ].join("\n");
 }
 
-// [LAW:one-source-of-truth] The bundle that contains *this* function is
-// the thing we need to stage. Two invocation paths reach us:
-//   - via the bin shim: process.argv[1] = ".../bin/cc-candybar" which
-//     dynamically imports ../dist/index.mjs — resolve the sibling dist.
-//   - direct node:      process.argv[1] = ".../dist/index.mjs". Use as-is.
+// [LAW:one-source-of-truth] The bundle containing THIS function is what stages.
 export function locateBundledDist(argv1: string | undefined): string {
   if (!argv1) {
     throw new Error("install: process.argv[1] not set");
@@ -113,14 +99,10 @@ export function locateBundledDist(argv1: string | undefined): string {
   if (argv1.endsWith(".mjs") || argv1.endsWith(".js")) {
     return argv1;
   }
-  // Treat argv[1] as a bin shim and assume sibling dist/index.mjs.
   return path.resolve(path.dirname(argv1), "..", "dist", "index.mjs");
 }
 
-// The staged render entry: the prebuilt native binary when this platform has
-// one, else the node bin shim. Same contract either way — read hookData on
-// stdin, resolve ../dist/index.mjs by adjacency — so downstream code never
-// cares which flavor was staged. [LAW:one-type-per-behavior]
+// [LAW:one-type-per-behavior] Same contract either way; only the artifact differs.
 type RenderEntry =
   | { kind: "native"; sourcePath: string }
   | { kind: "node-shim"; sourcePath: string };
@@ -129,9 +111,7 @@ function resolveRenderEntry(sourceDist: string): RenderEntry {
   const key = `${process.platform}-${process.arch}`;
   const pkgName = PLATFORM_PACKAGES[key];
   if (pkgName) {
-    // Anchored to the bundle's real location, not this module's compiled
-    // form (which ts-jest loads as CJS where import.meta is illegal) — the
-    // platform package lives in node_modules beside the installed dist.
+    // Anchored to the bundle's real location, not this module's compiled form.
     const require = createRequire(sourceDist);
     try {
       return {
@@ -139,9 +119,7 @@ function resolveRenderEntry(sourceDist: string): RenderEntry {
         sourcePath: require.resolve(`${pkgName}/bin/cc-candybar`),
       };
     } catch {
-      // Optional dependency absent (unsupported install, pruned optionals).
-      // Falls through to the node shim — announced by the caller, never
-      // silent. [LAW:no-silent-failure]
+      // [LAW:no-silent-failure] Optional dep absent; the caller announces it.
     }
   }
   return {
@@ -156,28 +134,18 @@ function resolveRenderEntry(sourceDist: string): RenderEntry {
 }
 
 function stageFile(source: string, dest: string): void {
-  // Re-running install FROM the staged runtime makes source === dest;
-  // copyFileSync would truncate the file onto itself. Identity is "already
-  // staged", not an error.
+  // Identity is "already staged": copyFileSync would truncate onto itself.
   if (path.resolve(source) === path.resolve(dest)) return;
   fs.copyFileSync(source, dest);
 }
 
-// [LAW:one-source-of-truth] The staged file is the authority on what got
-// staged. resolveRenderEntry's kind describes the *source lookup*, and on a
-// re-run from the staged runtime that lookup resolves the identity path
-// (source === dest), preserving whatever is on disk — possibly a native
-// binary from a prior install that the lookup couldn't see. So the announced
-// kind derives from the artifact itself: both flavors are ours, and the node
-// shim is a "#!" script while the native binary is Mach-O/ELF.
+// [LAW:one-source-of-truth] The staged file is the authority: a re-run's
+// identity path can preserve a native binary the source lookup cannot see.
 function stagedEntryKind(binPath: string): RenderEntry["kind"] {
   const fd = fs.openSync(binPath, "r");
   try {
     const magic = Buffer.alloc(2);
     const bytesRead = fs.readSync(fd, magic, 0, 2, 0);
-    // [LAW:no-silent-failure] Under 2 bytes neither flavor exists — the file
-    // is a corrupt artifact (a crashed prior copy preserved by the identity
-    // path), not a native binary.
     if (bytesRead < 2) {
       throw new Error(
         `install: staged render entry at ${binPath} is truncated ` +
@@ -196,9 +164,7 @@ export interface StagedRuntime {
   entryKind: RenderEntry["kind"];
 }
 
-// Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
-// bundle) and bin/cc-candybar (render entry) as adjacent files. Adjacency IS
-// the contract — every entry flavor locates the bundle via ../dist/index.mjs.
+// Adjacency IS the contract: every entry flavor locates ../dist/index.mjs.
 export function runStageRuntime(): StagedRuntime {
   const sourceDist = locateBundledDist(process.argv[1]);
   if (!fs.existsSync(sourceDist)) {
@@ -220,9 +186,6 @@ export function runStageRuntime(): StagedRuntime {
   stageFile(entry.sourcePath, stagedBinPath());
   fs.chmodSync(stagedBinPath(), 0o755);
 
-  // The pre-1.21 layout kept a second copy of the bundle as url-handler.mjs;
-  // dist/index.mjs is the one staged bundle now. Remove the stale copy so it
-  // can't drift. [LAW:one-source-of-truth]
   fs.rmSync(path.join(supportDir(), "url-handler.mjs"), { force: true });
 
   const stagedKind = stagedEntryKind(stagedBinPath());
@@ -263,14 +226,10 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
   ];
 }
 
-// Callers establish the macOS precondition ([LAW:single-enforcer] — the
-// subcommand entry checks before any side effect; runInstall reaches here
-// only through its darwin dispatch).
 function installUrlHandlerFrom(stagedDist: string): void {
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
-  // If a previous handler exists, remove it so osacompile can write fresh.
   if (fs.existsSync(bundle)) {
     fs.rmSync(bundle, { recursive: true, force: true });
   }
@@ -289,8 +248,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   const plistPath = path.join(bundle, "Contents", "Info.plist");
 
   for (const { key } of infoPlistPatch()) {
-    // plutil errors if the key already exists; pre-delete so the operation is
-    // idempotent. Ignore failures (key may not exist on a fresh build).
+    // plutil errors if the key exists; pre-delete so this is idempotent.
     launchSync({
       bin: "/usr/bin/plutil",
       args: ["-remove", key, plistPath],
@@ -328,8 +286,6 @@ function installUrlHandlerFrom(stagedDist: string): void {
 }
 
 export function runInstallUrlHandler(): void {
-  // Precondition before any side effect: on a non-mac this fails with zero
-  // files written, not after staging the runtime.
   ensureMacOS();
   const staged = runStageRuntime();
   installUrlHandlerFrom(staged.distPath);
@@ -340,19 +296,8 @@ interface ParsedUrl {
   value: string;
 }
 
-// [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
-// without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
-// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
-// value. The dispatch effect list rides as `dispatch/e=…&e=…`, so its query-
-// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
-// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
-//
-// [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
-// to the daemon; each verb's handler decodes its own value at its boundary (the
-// verb that owns the structure owns its decode). A whole-value decode here would
-// un-escape structural separators inside a nested value — the exact hazard that
-// made compound clicks unrepresentable — so it is deliberately absent.
+// [LAW:dataflow-not-control-flow] Parsed without `new URL`, which lowercases
+// hosts. [LAW:single-enforcer] Only the VERB is decoded; verbs decode values.
 export function parseHandlerUrl(
   rawUrl: string,
   scheme: string = URL_SCHEME,
@@ -372,17 +317,8 @@ export function parseHandlerUrl(
   };
 }
 
-// [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
-// the click request to the daemon, exit. There is NO in-process verb
-// dispatch and NO direct disk mutation. The daemon is the only writer of
-// click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
-// daemon on a transient failure is the only recovery, and it's
-// fire-and-forget so the next click hits a warm daemon.
-//
-// A `permanent` daemon outcome (BAD_REQUEST for an unknown verb,
-// VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
-// error message so the failure is visible — never silently swallowed by a
-// local fallback that would diverge from the daemon's truth.
+// [LAW:single-enforcer] A thin IPC shim: the daemon is the only writer of click
+// state, so a permanent outcome exits non-zero, never a local fallback.
 export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   if (!rawUrl) {
     process.stderr.write("url-handle: missing URL argument.\n");
@@ -405,9 +341,6 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   }
 
   if (outcome.kind === "transient") {
-    // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
-    // is lost (the daemon couldn't service it), but the next click hits a
-    // warm daemon. Mirrors the render-path's transient recovery.
     obtainDaemonKick();
     process.stderr.write(
       `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
@@ -415,18 +348,10 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(1);
   }
 
-  // [LAW:dataflow-not-control-flow] Format each permanent cause from its
-  // own typed payload, not by probing for "message" on a generic outcome.
-  // The PermanentOutcome union already discriminates by `cause`; the switch
-  // mirrors that discriminator one-to-one and pulls the right fields.
   process.stderr.write(formatPermanent(outcome) + "\n");
   process.exit(1);
 }
 
-// [LAW:single-enforcer] One place that turns a PermanentOutcome into a
-// human-readable diagnostic. Each cause carries its own payload (version
-// mismatch carries the protocol numbers; everything else carries a
-// message); the formatter consumes exactly the fields the cause defines.
 function formatPermanent(outcome: PermanentOutcome): string {
   switch (outcome.cause) {
     case "version_mismatch":
@@ -440,12 +365,6 @@ function formatPermanent(outcome: PermanentOutcome): string {
   }
 }
 
-// [LAW:effects-at-boundaries] Pure string builder — runInstall performs the
-// actual write. Kept separate so the message content is testable without
-// driving the full (fs + Launch Services) install side effects.
-// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts,
-// the same constant the theme/look picker itself renders with, so this tip
-// can't drift from what the bundled default bar actually shows.
 function installSuccessMessage(): string {
   return (
     `✓ install complete.\n` +
@@ -476,12 +395,8 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
 
   process.stdout.write(installSuccessMessage());
 
-  // Last: a stale-version warning is the final thing on screen, and the
-  // lookup starts only after the synchronous work above — spawnSync blocks
-  // the event loop, so a fetch started earlier could not progress and would
-  // burn its timeout budget idle. [LAW:no-ambient-temporal-coupling] The
-  // staged runtime works either way; the verdict informs, it never fails the
-  // install. [LAW:no-silent-failure]
+  // [LAW:no-ambient-temporal-coupling] Last: the synchronous work above blocks
+  // the event loop, so a fetch started earlier would burn its budget idle.
   const report = currencyReport(
     PACKAGE_NAME,
     assessCurrency(
@@ -514,13 +429,8 @@ function updateClaudeSettings(
   }
 
   const existing = settings.statusLine?.command as string | undefined;
-  // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
-  // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
-  // a version suffix follows) or has the staged bin path — quoted or bare —
-  // as its entire first token. Any other value is a user customization we
-  // must not silently destroy.
-  // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
-  // would also claim `<binPath>-backup …` as ours and overwrite it.
+  // [LAW:one-source-of-truth] Anything not ours is the user's, and stays.
+  // [LAW:types-are-the-program] Token, not prefix: `<binPath>-backup` is not us.
   const managedTokens = [binPath, shellEscape(binPath)];
   const isOurs =
     typeof existing === "string" &&
@@ -547,7 +457,6 @@ function updateClaudeSettings(
   process.stdout.write(`Updated ${target}\n`);
 }
 
-// Exports for testing
 export const __test__ = {
   shellEscape,
   buildStatusLineCommand,

@@ -1,18 +1,11 @@
-// [LAW:single-enforcer] One home for config-error reporting: the public issue/
-// error types, the best-effort source-line lookup every validator calls, and the
-// human-readable formatter ConfigError renders. Changes here are display/source-
-// mapping changes; the schema validators never touch this file.
-
-// ─── Public types ────────────────────────────────────────────────────────────
+// [LAW:single-enforcer] One home for config-error reporting: display only.
 
 export interface ConfigIssue {
-  /** Dotted logical path inside the config (e.g., "variables.foo.cache"). */
   readonly path: string;
-  /** Short, actionable description of the problem. */
   readonly message: string;
-  /** Source line (1-based). For semantic errors, best-effort from the path. */
+  /** 1-based; for semantic errors, best-effort from the path. */
   readonly line?: number;
-  /** Source column (1-based). Present only for parse errors. */
+  /** 1-based. Present only for parse errors. */
   readonly col?: number;
 }
 
@@ -28,15 +21,7 @@ export class ConfigError extends Error {
   }
 }
 
-// ─── Best-effort source-line lookup ──────────────────────────────────────────
-
-// Walk source forward, finding each path component as a JSON5 key in turn.
-// JSON5 keys are unquoted identifiers (`foo:`), double-quoted strings, or
-// single-quoted strings. Numeric path parts (e.g., layout indices) are
-// skipped — they point inside arrays where line lookup is less useful.
-//
-// This is "good enough" navigation, not a guarantee. Returns undefined if a
-// path part can't be located — the caller falls back to the logical path.
+// Good-enough navigation: undefined when a path part cannot be located.
 export function findKeyLine(
   source: string,
   pathParts: readonly string[],
@@ -60,8 +45,6 @@ export function findKeyLine(
 }
 
 function findKeyOccurrence(source: string, from: number, key: string): number {
-  // Match `<key>:` or `"<key>":` or `'<key>':` — any whitespace before the colon
-  // is allowed by JSON5. Escape regex specials in key.
   const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
   const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
   re.lastIndex = from;
@@ -76,8 +59,6 @@ function lineFromOffset(source: string, offset: number): number {
   }
   return line;
 }
-
-// ─── Error formatting ────────────────────────────────────────────────────────
 
 function formatIssues(file: string, issues: readonly ConfigIssue[]): string {
   if (issues.length === 0) return `${file}: invalid config (no details)`;

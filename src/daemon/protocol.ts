@@ -5,29 +5,8 @@ import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
 import { expandHome } from "../config/dsl-loader";
 
-// [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
-// "old-client × new-daemon (or vice versa) cannot communicate." It moves on
-// BREAKING changes only — never on additive ones. The two cases are
-// genuinely different theorems and the version field carries the stronger:
-// incompatibility, not growth.
-//
-// **Additive** (no bump):
-//   - Adding a new request `kind`. Old daemons reject the unknown kind via
-//     the existing BAD_REQUEST fallthrough; old clients never send it.
-//   - Adding a new optional field that older parsers ignore safely.
-//   - Adding a new response variant produced only in response to a new kind.
-//
-// **Breaking** (bump):
-//   - Changing the semantics or required shape of an existing kind.
-//   - Removing a kind or field old clients depend on.
-//   - Renaming a wire field.
-//
-// The 452-corpse precedent (kz8.5) makes this discipline load-bearing: every
-// bump forces every running statusbar through VERSION_MISMATCH until its
-// session restarts, because the spiral-breaker contract refuses to kick on a
-// permanent error. A bump for an additive change taxes every user with
-// blank-statusbar minutes for a feature their session doesn't even use.
-// Don't bump for growth.
+// [LAW:types-are-the-program] Bump on BREAKING wire changes only: a bump forces
+// every running statusbar through VERSION_MISMATCH until its session restarts.
 export const PROTOCOL_VERSION = 3;
 
 export interface RenderRequest {
@@ -36,14 +15,8 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   args: string[];
   cwd: string;
-  // ─── Client hints ────────────────────────────────────────────────────────
-  // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
-  // the trust boundary and trusted by the daemon. The daemon is detached and
-  // one-per-user, so its own env answers for whichever shell spawned it —
-  // possibly a different session, possibly hours ago. Every field below is
-  // typed here but arrives as untrusted JSON: callers MUST route the request
-  // through parseClientHints at the receive boundary, never read these
-  // directly. See the ClientHints doc block for the absence semantics.
+  // [LAW:single-enforcer] Untrusted JSON — route through parseClientHints at
+  // the receive boundary, never read these directly.
   termCols?: number;
   termRows?: number;
   ssh?: boolean;
@@ -51,48 +24,12 @@ export interface RenderRequest {
   configEnv?: string;
 }
 
-// [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
-// the session it is rendering for". `termCols` established the pattern; `ssh`
-// and `termRows` (the diagnostic strip's row cap) followed it, and the
-// documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the
-// next. Naming the set as ONE type is what keeps each addition a field
-// rather than another sanitizer, another wire read, and another parameter
-// threaded through the render path.
-//
-// [LAW:parse-dont-validate] This is the stamped type. `RenderRequest`'s
-// same-named fields are raw JSON of unknown provenance; a `ClientHints` has
-// crossed the checkpoint, so nothing downstream re-checks them.
-//
-// [LAW:types-are-the-program] Both fields are optional, but they mean
-// DIFFERENT things by absence, and each is the strongest true theorem for its
-// own fact:
-//   • `termCols` / `termRows` absent — the client tried and could not
-//     determine that extent (no COLUMNS/LINES, no TTY on stderr). A genuine
-//     "unknown", reachable from any client version — and for `termRows` also
-//     the old-client case, which reads the same way: no row cap from the
-//     client, so the daemon's own ceiling applies.
-//   • `ssh` absent — the client did not REPORT. A current client always knows
-//     (its own env is total on this question) and so always sends `true` or
-//     `false`; absence therefore means one thing only: a client too old to
-//     carry the field — a real case, because `cc-candybar install` stages a
-//     native binary that does not turn over with the npm package. Collapsing
-//     that to `false` here would fuse "we know it's local" with "we don't
-//     know" ([LAW:no-silent-failure]); instead it travels onward as an absent
-//     payload field, where the DSL input-fallback chain emits the declared
-//     default AND records a `last_error` that `cc-candybar debug vars`
-//     surfaces.
-//   • `tmux` has THREE states, and they are never collapsed: absent — the
-//     client did not report (too old, same as `ssh`); `null` — the client
-//     reported "not in tmux" (total, like `ssh: false`); an object — the tmux
-//     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
-//     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
-//     so a click, which carries no hints of its own, can read them.
-//   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
-//     (or the client is too old to report one; both read the same way: no
-//     override from the client, the precedence chain applies). Present, it is
-//     the `~`-expanded path the client named; server.ts composes it beneath
-//     a load-config pick and `--config`, never with the daemon's own env —
-//     the override that ticket brandon-config-5g8 measured going nowhere.
+// [LAW:locality-or-seam] The seam for facts the daemon cannot observe about the
+// session it renders for; ONE type keeps each addition a field, not another
+// sanitizer and wire read. [LAW:parse-dont-validate] Stamped: nothing
+// downstream re-checks. [LAW:types-are-the-program] Absence differs per field —
+// an extent the client could not determine, versus `ssh`/`tmux`/`configEnv`
+// unreported, never collapsed to `false` / "not in tmux" / "no override".
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
@@ -101,13 +38,9 @@ export interface ClientHints {
   readonly configEnv?: string;
 }
 
-// [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
-// become trusted values. Per-field sanitizers stay separate (each fact has its
-// own validity rule) but every hint crosses HERE, so a new hint cannot reach
-// the render path un-sanitized. The parameter is the hint
-// field-set over `unknown` rather than `RenderRequest`, so the daemon can push a
-// RECORDED hint (JSON it wrote itself, read back from SessionState) through the
-// same checkpoint a live frame crosses — one stamp, two provenances.
+// [LAW:single-enforcer] The ONE checkpoint where wire hints become trusted, so
+// a new hint cannot reach the render path un-sanitized. Typed over `unknown`,
+// so a hint the daemon recorded itself crosses the same stamp.
 export function parseClientHints(
   req: Partial<Record<keyof ClientHints, unknown>>,
 ): ClientHints {
@@ -125,20 +58,14 @@ export function parseClientHints(
   };
 }
 
-// [LAW:single-enforcer] The one rule for a client-supplied explicit config
-// path, whichever spelling carried it — the `configEnv` hint here, the
-// `--config` flag in server.ts's parseRenderArgs. A non-string or empty value
-// is "no override" (`undefined`), never an empty path; `~` is expanded, so the
-// resolver only ever sees a literal path.
+// [LAW:single-enforcer] The one rule for a client-supplied config path,
+// whichever spelling carried it: empty is "no override", `~` is expanded.
 export function sanitizeConfigPath(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? expandHome(v) : undefined;
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeSsh. `null` is the client's affirmative "not in tmux" and passes
-// through as `null`; an object must carry exactly the TmuxHint fields with
-// their types, or the hint is treated as unreported (`undefined`) — a
-// malformed frame never becomes a half-true set of tmux facts.
+// [LAW:no-defensive-null-guards] exception: trust boundary. `null` is the
+// client's affirmative "not in tmux"; a malformed object is unreported.
 export function sanitizeTmux(v: unknown): TmuxHint | null | undefined {
   if (v === null) return null;
   if (typeof v !== "object") return undefined;
@@ -151,15 +78,8 @@ export function sanitizeTmux(v: unknown): TmuxHint | null | undefined {
   return { socket, pane, truecolor };
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary. The wire is
-// untrusted JSON; downstream code treats a terminal extent (cols or rows) as
-// an integer in a sane range. Validate once here so the type's promise is
-// true. [LAW:one-type-per-behavior] Columns and rows are the same fact about
-// two axes — one sanitizer, two call sites.
-//
-// Pathologically large values are capped (not rejected) so a future
-// genuinely-huge terminal still renders — 10000 is two orders of magnitude
-// above the largest plausible real terminal on either axis.
+// [LAW:no-defensive-null-guards] exception: trust boundary.
+// [LAW:one-type-per-behavior] Columns and rows are one fact on two axes.
 const MAX_TERM_EXTENT = 10000;
 export function sanitizeTermExtent(v: unknown): number | undefined {
   if (typeof v !== "number") return undefined;
@@ -169,10 +89,8 @@ export function sanitizeTermExtent(v: unknown): number | undefined {
   return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeTermExtent. A non-boolean (absent, or a malformed/hostile frame) is
-// NOT coerced to `false` — the three wire states stay three
-// ([LAW:no-silent-failure]): true, false, and "no answer from this client".
+// [LAW:no-defensive-null-guards] exception: trust boundary. A non-boolean is
+// NOT coerced to `false` — the three wire states stay three.
 export function sanitizeSsh(v: unknown): boolean | undefined {
   return typeof v === "boolean" ? v : undefined;
 }
@@ -194,10 +112,6 @@ export interface StatsRequest {
   kind: "stats";
 }
 
-// [LAW:types-are-the-program] The `what` discriminator carries the response
-// shape forward — a client requesting "vars" gets vars data, "segments" gets
-// segments data, "config" gets config data. No string-keyed lookup on the
-// client side; route by structure. See DebugSnapshot in ./debug-types.
 export interface DebugRequest {
   v: number;
   kind: "debug";
@@ -214,41 +128,20 @@ export type Request =
 export type Response =
   | { ok: true; output: string }
   | { ok: true; stats: StatsSnapshot }
-  // [LAW:types-are-the-program] DebugSnapshot is itself a discriminated union
-  // on `what`, so the response type carries the requested kind through to the
-  // client. A `{ ok: true; debug: { what: "vars"; vars: [...] } }` shape is
-  // self-describing — the client doesn't need to remember which `what` it sent.
   | { ok: true; debug: DebugSnapshot }
-  // [LAW:types-are-the-program] `daemonV` is the daemon's own
-  // PROTOCOL_VERSION, echoed on every error response so the client can render
-  // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
-  // message. Optional for back-compat: older daemons (or test stubs) that
-  // omit it are still parseable by current clients.
+  // [LAW:types-are-the-program] `daemonV` echoes the daemon's own PROTOCOL_VERSION.
   | { ok: false; error: string; code: ErrorCode; daemonV?: number };
 
-// [LAW:types-are-the-program] The wire-level discriminator splits failures
-// into two recovery classes: TIMEOUT is transient — the daemon is alive but
-// slow, so a respawn or retry has a real chance of recovering. Every other
-// code is permanent — respawning would hit the same response identically
-// (the daemon refuses the request for VERSION_MISMATCH or BAD_REQUEST, or
-// fails internally for RENDER_FAILED in a way the spawn loop cannot cure),
-// so the spiral-breaker contract requires the client NOT to kick. The
-// kick-vs-no-kick decision is encoded off this code, not off the error
-// string.
+// [LAW:types-are-the-program] Two recovery classes: TIMEOUT is transient, every
+// other code permanent — the client must NOT kick on the permanent ones.
 export type ErrorCode =
   | "VERSION_MISMATCH"
   | "TIMEOUT"
   | "RENDER_FAILED"
   | "BAD_REQUEST";
 
-// [LAW:types-are-the-program] A typed error class for failures that originate
-// inside the wire-protocol layer (oversized frame, JSON decode failure).
-// Callers in src/daemon/client-transport.ts branch on `e instanceof ProtocolError`
-// to classify these as `permanent/malformed_response` — far more robust than
-// substring-matching against the message, which would silently drift if
-// Node's JSON.parse error wording changes. The class is small but
-// load-bearing: it makes the kick-vs-show-error decision a structural
-// property of the thrown value, not a property of its english string.
+// [LAW:types-are-the-program] Makes the kick-vs-show-error decision structural
+// (`instanceof`) instead of a substring match on Node's wording.
 export class ProtocolError extends Error {
   constructor(message: string) {
     super(message);
@@ -256,13 +149,9 @@ export class ProtocolError extends Error {
   }
 }
 
-// 4-byte big-endian length prefix + UTF-8 JSON body. Length-prefix beats
-// newline-delimited because error messages may contain embedded newlines and
-// we'd rather not parse them out of-band.
-//
-// [LAW:one-source-of-truth] FRAME_HEADER_BYTES and MAX_FRAME_BYTES are part
-// of the wire contract the Rust client mirrors (rust-client/src/main.rs);
-// scripts/check-protocol.mjs diffs them, so they must stay named consts.
+// 4-byte big-endian length prefix + UTF-8 JSON body; error messages may embed
+// newlines. [LAW:one-source-of-truth] Mirrored by the Rust client and diffed by
+// scripts/check-protocol.mjs — keep them named consts.
 export const FRAME_HEADER_BYTES = 4;
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
@@ -273,8 +162,6 @@ export function encodeFrame(value: unknown): Buffer {
   return Buffer.concat([header, body]);
 }
 
-// Streaming frame reader. Calls `onFrame` for each complete frame. Caller
-// owns lifecycle — call `feed` with each chunk; reader keeps a buffer.
 export function makeFrameReader(
   onFrame: (frame: unknown) => void,
   onError: (err: Error) => void,
@@ -284,10 +171,6 @@ export function makeFrameReader(
     buf = Buffer.concat([buf, chunk]);
     while (buf.length >= FRAME_HEADER_BYTES) {
       const len = buf.readUInt32BE(0);
-      // Hard cap to defend against a runaway sender allocating gigabytes.
-      // [LAW:types-are-the-program] ProtocolError carries the discriminator
-      // structurally — interpretException routes on `instanceof`, not on a
-      // brittle string match against the message body.
       if (len > MAX_FRAME_BYTES) {
         onError(new ProtocolError(`frame too large: ${len}`));
         return;
@@ -298,9 +181,7 @@ export function makeFrameReader(
       try {
         onFrame(JSON.parse(body.toString("utf8")));
       } catch (e) {
-        // JSON.parse throws SyntaxError; wrap as ProtocolError so the
-        // recovery class is structurally typed (not message-matched).
-        // Preserve the original cause for diagnostic logging.
+        // Wrap SyntaxError so the recovery class is structurally typed.
         const wrapped = new ProtocolError(
           e instanceof Error ? e.message : String(e),
         );
@@ -314,8 +195,6 @@ export function makeFrameReader(
   };
 }
 
-// Send one frame and await one response, with a hard total budget. Resolves
-// to the parsed response or rejects on timeout / parse error / socket error.
 export function sendOne(
   sock: Socket,
   req: Request,

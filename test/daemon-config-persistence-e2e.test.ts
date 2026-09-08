@@ -1,29 +1,6 @@
-// [LAW:verifiable-goals] candybar-config-engine-71o.5's headline acceptance:
-// the epic's claim ("mutate the configuration via the menu system,
-// durably") is a COMPOSITION property — click, gate, persistent write,
-// watcher reload, re-render, daemon restart, fresh session — and every
-// sibling ticket (.1-.4) proved its own slice against an in-process rig,
-// never the composition against a REAL daemon over a REAL socket. This file
-// drives the actual `cc-candybar daemon` subprocess exactly as a real
-// client would: render → extract the rendered OSC-8 URLs → parseHandlerUrl
-// (the same decode `cc-candybar url-handle` runs) → send verb+value as a
-// "click" wire request → render again.
-//
-// Uses the BUNDLED DEFAULT (DEFAULT_DSL_CONFIG) with no hand-authored
-// actions — the epic's own acceptance bullet is specifically "a user
-// running the bundled default... can change (at least) default theme...
-// and padding... each change survives daemon restart" — plus one minimal
-// hand-authored user config file, which IS the durable store
-// (candybar-config-dqe): a persist click edits exactly one value span in it
-// and every other byte — comments, blank lines, key style — survives.
-//
-// [LAW:verifiable-goals] candybar-settings-ui-aok.3 folded the two controls
-// per setting into ONE whose destination the `persist?` checkbox chooses, so
-// this test now drives that choice over the real socket: the SAME rendered
-// theme control emits a session `set-state` write with persist? unchecked and
-// a durable `set-config` write with it checked. That contrast is the ticket's
-// headline claim, and asserting it on the wire — not on the compiled action —
-// is what proves the destination really rides the click.
+// [LAW:verifiable-goals] Durable mutation is a COMPOSITION property, so this drives the real `cc-candybar daemon` over a real socket: render → extract the OSC-8 URLs → decode → click → render again, across a cold restart.
+// The bundled default plus one hand-authored config file, which IS the durable store: a persist click edits exactly one value span in it and every other byte survives.
+// The SAME rendered theme control emits a session write with persist? unchecked and a durable one with it checked; asserting that on the wire is what proves the destination rides the click.
 
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -57,11 +34,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       path.join(os.tmpdir(), "cc-candybar-config-e2e-project-"),
     );
     const userConfigPath = path.join(projectDir, ".cc-candybar.json5");
-    // No hand-authored actions — proves the epic acceptance bullet against
-    // the BUNDLED DEFAULT, not a config built to exercise the mechanism. The
-    // two fields the clicks below write are authored explicitly, at the
-    // bundled default's own values, so each durable write is a SPAN
-    // REPLACEMENT whose expected bytes this test can spell exactly.
+    // No hand-authored actions: the acceptance is against the BUNDLED DEFAULT,
+    // with both fields authored so each durable write is one span replacement.
     const userConfigBody = `// hand-authored — a persist click edits one value span here, nothing else
 {
   globals: {
@@ -78,18 +52,9 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       daemon = await spawnDaemonWithEnv(env);
       const SID = "e2e-session-1";
 
-      // A render warms the daemon's per-(projectDir,cwd) cache entry, which
-      // is what derives and registers the click gates (deriveActionValidators
-      // / deriveConfigActionValidators) — a click before the first render
-      // for this project has no gate to pass yet.
       await render(sockPath, SID, projectDir);
 
-      // The settings menu and its config row are collapsed by default — open
-      // both, the same two clicks a "☰ ▸" then "⚙ config ▸" tap dispatches.
-      // The disclosure contract (write the disclosure's own name to its own
-      // key) is stable synthesis, not render output, so constructing it
-      // directly matches test/default-dsl-config.test.ts's own precedent
-      // rather than depending on extracting it.
+      // Open both disclosures directly: the contract (write a disclosure's own name to its own key) is stable synthesis, not render output.
       await click(
         sockPath,
         effectsUrl([
@@ -100,11 +65,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
       const menuOpen = await render(sockPath, SID, projectDir);
 
-      // The config row reveals the theme control's TRIGGER (▸), not the
-      // picker body — {{ menu }} is its own nested disclosure. Click ITS
-      // toggle (a set-state write under the reserved menus.* namespace, whose
-      // member is the apply action's name) before any per-theme option link
-      // exists to click.
       const themeMenuToggleUrl = findUrl(extractUrls(menuOpen), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
@@ -113,12 +73,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       expect(themeMenuToggleUrl).toBeDefined();
       await click(sockPath, themeMenuToggleUrl!);
 
-      // TWO themes, deliberately: one tried in-session and one committed
-      // durably. Using the same name for both would let the session pick
-      // satisfy the durability assertions below (a session value wins for its
-      // own session), so the test would pass with the durable write missing.
+      // TWO themes, deliberately: one tried in-session, one committed durably —
+      // one name for both would let the session pick satisfy the durability asserts.
       const [sessionTheme, targetTheme] = listResolvablePaletteNames().filter(
-        (name) => name !== "tokyo-night", // the bundled default's globals.palette
+        (name) => name !== "tokyo-night",
       );
       if (sessionTheme === undefined || targetTheme === undefined) {
         throw new Error(
@@ -128,8 +86,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       }
 
       // ── persist? UNCHECKED: the one theme control writes the SESSION key.
-      // The checkbox starts unchecked (its state var's default), so this is
-      // the state a user arrives in — experimentation, costing nothing.
       const sessionOnly = await render(sockPath, SID, projectDir);
       const sessionThemeUrl = findUrl(extractUrls(sessionOnly), (effects) =>
         effects[0]!.verb === "set-state" &&
@@ -137,27 +93,19 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         effects[0]!.args[2] === sessionTheme,
       );
       expect(sessionThemeUrl).toBeDefined();
-      // …and emits NO durable write at all while unchecked: not a second
-      // effect on the same link, and not a second link elsewhere in the row.
       expect(
         findUrl(extractUrls(sessionOnly), (effects) =>
           effects.some((e) => e.verb === "set-config" && e.args[1] === "palette"),
         ),
       ).toBeUndefined();
 
-      // Take the unchecked click, then read a CONCURRENT session over the same
-      // socket: the picker changed this conversation and left the other one
-      // alone. That contrast is what "only this session" means, and only a
-      // second live session can show it — the config file being unchanged
-      // proves nothing about what another session renders.
+      // A CONCURRENT session over the same socket is the only thing that can show
+      // "only this session"; an unchanged file proves nothing about what it renders.
       await click(sockPath, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
       expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
-      // Open the other session's menu to the same depth BEFORE asserting it
-      // does not show the pick. A closed menu renders no theme name at all, so
-      // asserting on a collapsed bar would pass whether or not the pick
-      // leaked — the string simply is not reachable output. Opening it first
-      // is what makes the absence evidence.
+      // Open the other session's menu to the same depth FIRST: a collapsed bar
+      // renders no theme name at all, so the absence would pass either way.
       await click(
         sockPath,
         effectsUrl([
@@ -166,14 +114,11 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ]),
       );
       const otherBar = await render(sockPath, OTHER_SID, projectDir);
-      expect(otherBar).toContain("🎨 tokyo-night"); // its own default, shown
+      expect(otherBar).toContain("🎨 tokyo-night");
       expect(otherBar).not.toContain(sessionTheme);
 
-      // Re-open the theme picker: the pick above closed it (closeOnPick).
       await click(sockPath, themeMenuToggleUrl!);
 
-      // ── Check persist?. One click on the checkbox, nothing else about the
-      // control changes — same segment, same picker, same options.
       const persistToggleUrl = findUrl(extractUrls(await render(sockPath, SID, projectDir)), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
@@ -187,8 +132,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       const openedUrls = extractUrls(opened);
 
       // ── persist? CHECKED: the SAME control now writes the durable key.
-      // (set-config on the globals field `palette`, not set-state on the
-      // session key `theme` — one control, the destination chosen by a value.)
       const themeForeverUrl = findUrl(openedUrls, (effects) =>
         effects[0]!.verb === "set-config" &&
         effects[0]!.args[1] === "palette" &&
@@ -201,16 +144,9 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ),
       ).toBeUndefined();
 
-      // The session pick from before is untouched by checking the box —
-      // toggling persist? moves where the NEXT write goes, never values
-      // already written.
       expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
 
-      // The padding stepper's ▶ is a bounded step over the same durable
-      // field while persist? is checked (render/action.ts's persist-bounded
-      // arm: args = [sessionId, key, String(by)]) — find the one whose `by`
-      // is positive, so the assertion below is pinned to the actual
-      // increment, not whichever stepper happens to render first.
+      // Pin to the stepper whose `by` is positive, not whichever renders first.
       const paddingUpUrl = findUrl(openedUrls, (effects) =>
         effects.some(
           (e) =>
@@ -221,14 +157,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(paddingUpUrl).toBeDefined();
 
-      // [LAW:no-silent-failure] A durable write carries the session key to
-      // RELEASE as a trailing segment on the write itself, so the daemon drops
-      // the session pick only after the durable value landed. Without the
-      // release the write would be invisible to the session that made it — a
-      // session pick outranks a durable default — so "commit what I'm looking
-      // at" would leave the bar unchanged and the control dead. Each control
-      // is pinned to ITS OWN key: an OR over both would pass even if the
-      // padding stepper released "theme".
+      // [LAW:no-silent-failure] A durable write carries the session key to RELEASE, or the commit is invisible to the session that made it and the control goes dead.
+      // Each control is pinned to ITS OWN key: an OR over both would pass on the wrong release.
       expect(
         effectsOf(themeForeverUrl!).some(
           (e) => e.verb === "set-config" && e.args[3] === "theme",
@@ -243,16 +173,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(sockPath, themeForeverUrl!);
       await click(sockPath, paddingUpUrl!);
 
-      // Live, no daemon restart: the persisted write rides the config file's
-      // own watcher (RenderCache), so it is visible to a running daemon before
-      // any restart. Read it on the CONCURRENT session, which never picked a
-      // theme — the clicking session cannot show this, because its own session
-      // pick outranks a durable default for its own render (bundled default <
-      // config file < preset < session pick). Asserting
-      // durability there would conflate the two layers and pass on the session
-      // value alone.
-      // Read it on that same concurrent session, whose menu is already open
-      // from the isolation check above.
+      // Live, no restart: the durable write rides the config file's own watcher.
+      // Read it on the CONCURRENT session — the clicking session's own pick outranks a durable default, so asserting there would conflate the two layers.
       const afterClicks = await renderUntil(
         sockPath,
         OTHER_SID,
@@ -262,11 +184,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(afterClicks).toContain(targetTheme);
 
-      // …and the COMMITTING session shows the committed value too, because the
-      // durable click cleared the session pick that would otherwise outrank it
-      // forever. Before that clear rode along, this session kept rendering
-      // `sessionTheme` and every further click changed nothing on screen — the
-      // durable default was real but invisible to the person who set it.
       const committing = await renderUntil(
         sockPath,
         SID,
@@ -276,33 +193,17 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(committing).not.toContain(sessionTheme);
 
-      // [LAW:verifiable-goals] The ticket's acceptance: the hand-authored file
-      // is byte-identical OUTSIDE the two value spans the clicks replaced —
-      // the leading comment, the trailing comment on the palette line, the
-      // blank structure, the unquoted keys, the trailing commas all survive.
-      // [LAW:one-source-of-truth] A stepper starts from what the bar SHOWS:
-      // the file's own `padding: 1`, so the first ▶ writes 2.
+      // [LAW:verifiable-goals] Byte-identical OUTSIDE the two replaced spans.
+      // [LAW:one-source-of-truth] The stepper starts from the file's `padding: 1`.
       const expectedBody = userConfigBody
         .replace('palette: "tokyo-night"', `palette: "${targetTheme}"`)
         .replace("padding: 1", "padding: 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
 
-      // Kill this daemon and start a FRESH one against the SAME config file
-      // — a real cold restart, not an in-process cache rebuild.
       await killAndWait(daemon);
       daemon = await spawnDaemonWithEnv(env);
 
-      // A brand-new session that never clicked anything. The persisted
-      // theme is now every session's baseline PALETTE (colors the fresh
-      // render already carries), but the THEME NAME text only appears in the
-      // settings menu's config row — collapsed by default per-session, since
-      // both disclosure keys are SessionState, not something a config write
-      // touches. Open them for this fresh session (a pure UI affordance, not
-      // a config mutation) to assert the persisted name shows up with zero
-      // prior clicks by THIS session, i.e. it came from the config default,
-      // not a picked-and-remembered value. Note this fresh session's own
-      // persist? checkbox is UNCHECKED — a checkbox armed in one session
-      // never carries into another.
+      // A brand-new session that never clicked: the theme NAME only appears in the config row, so open it (a UI affordance, not a config mutation) to read it.
       const FRESH_SID = "e2e-session-2-fresh";
       await render(sockPath, FRESH_SID, projectDir);
       await click(
@@ -321,8 +222,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(freshOut).toContain(targetTheme);
 
-      // The file is STILL exactly the two-span edit after the restart — a
-      // restart reads it, never rewrites it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
     } finally {
       if (daemon) daemon.killTree();

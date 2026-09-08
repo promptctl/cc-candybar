@@ -1,13 +1,6 @@
 #!/usr/bin/env node
-// Soak analyzer. Reads soak.csv (ts_unix,pid,rss_kb), segments samples by PID
-// (so a daemon self-restart at age=24h doesn't pollute slope), runs ordinary
-// least-squares regression on each segment, and asserts:
-//
-//   - final RSS  < 100 MB    (well under the 200MB self-shutdown trigger)
-//   - peak slope < 1 MB/hr   (per-segment, ignoring segments with <10 samples)
-//
-// Exit code 0 on pass, 1 on fail. Output is plaintext suitable for tee to
-// summary.txt.
+// Asserts final RSS < 100 MB and peak per-segment slope < 1 MB/hr; exits 1 on
+// failure.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -41,8 +34,6 @@ if (rows.length === 0) {
   process.exit(1);
 }
 
-// Segment by PID. Daemon may self-restart mid-soak; each segment is its own
-// regression target.
 const segments = [];
 let cur = null;
 for (const r of rows) {
@@ -53,7 +44,6 @@ for (const r of rows) {
   cur.samples.push(r);
 }
 
-// y = a + b*x  with x = (ts - first_ts)/3600  (hours), y = rss_mb
 function regress(samples) {
   const x0 = samples[0].ts;
   const n = samples.length;

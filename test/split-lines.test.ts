@@ -1,13 +1,9 @@
-// [LAW:behavior-not-structure] Unit tests for the cell→line primitive. The
-// contract: partition a cell stream into per-line cell groups on the "\n"
-// sentinel, consume the sentinel (never emit it), preserve spans, pass a
-// newline-free cell through BY REFERENCE, and yield one (empty) line for an
-// empty input.
+// [LAW:behavior-not-structure] The contract: split on the "\n" sentinel, consume
+// it, preserve spans, and pass a newline-free cell through BY REFERENCE.
 
 import { RichText, Style } from "@promptctl/rich-js";
 import { splitCellsIntoLines } from "../src/render/split-lines";
 
-// Join a line group's cell texts so assertions read in terms of content.
 const text = (group: RichText[]): string => group.map((c) => c.plain).join("");
 
 describe("splitCellsIntoLines", () => {
@@ -16,7 +12,6 @@ describe("splitCellsIntoLines", () => {
     const b = new RichText("b");
     const lines = splitCellsIntoLines([a, b]);
     expect(lines).toHaveLength(1);
-    // Same references — the common path allocates nothing new.
     expect(lines[0]![0]).toBe(a);
     expect(lines[0]![1]).toBe(b);
   });
@@ -26,13 +21,11 @@ describe("splitCellsIntoLines", () => {
     expect(lines).toHaveLength(2);
     expect(text(lines[0]!)).toBe("TOP");
     expect(text(lines[1]!)).toBe("BOT");
-    // The sentinel never survives into a line's text.
     expect(text(lines[0]!)).not.toContain("\n");
     expect(text(lines[1]!)).not.toContain("\n");
   });
 
   test("interior \\n closes the current line and the rest starts the next", () => {
-    // [A]["B\nC"][D] → line0 = A,B ; line1 = C,D
     const lines = splitCellsIntoLines([
       new RichText("A"),
       new RichText("B\nC"),
@@ -74,7 +67,6 @@ describe("splitCellsIntoLines", () => {
     expect(lines).toHaveLength(2);
     expect(text(lines[0]!)).toBe("up");
     expect(text(lines[1]!)).toBe("dn");
-    // Both pieces retain the base color (carried through slice).
     expect(lines[0]![0]!.style.color).toBeDefined();
     expect(lines[1]![0]!.style.color).toBeDefined();
   });

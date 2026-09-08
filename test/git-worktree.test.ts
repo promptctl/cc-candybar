@@ -4,12 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitService } from "../src/segments/git";
 
-// [LAW:behavior-not-structure] Real repos + a real `git worktree add`, not a
-// child_process mock. The previous mock targeted `exec`, which the launch
-// seam stopped using — git failed for real against a dangling .git pointer
-// and the assertions only passed through the old swallow-to-fallback path.
-// With outcomes, a failing git is a `failed` outcome, so the fixture must be
-// a genuinely working worktree.
+// [LAW:behavior-not-structure] Real repos, not a mock: the fixture must genuinely work.
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
 }

@@ -1,8 +1,3 @@
-// Contract tests for ContextProvider's window-size sourcing. The window size
-// is authoritatively Claude Code's `context_window.context_window_size` — never
-// guessed from the model name. These lock that in, including the 1M-context
-// variants where a hardcoded 200k would report wildly wrong "left" percentages.
-
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,8 +39,6 @@ describe("ContextProvider window-size sourcing", () => {
     const outcome = await provider.getContextInfo(hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
-    // 168,912 of a 1M window is ~17% used → ~83% left. A 200k limit would have
-    // reported 0% left (the bug).
     expect(outcome.value.maxTokens).toBe(1_000_000);
     expect(outcome.value.contextLeftPercentage).toBeGreaterThan(80);
   });
@@ -56,9 +49,6 @@ describe("ContextProvider window-size sourcing", () => {
         total_input_tokens: 0,
         total_output_tokens: 0,
         context_window_size: 1_000_000,
-        // Deliberately NOT 100 - used: proves we pass Claude's numbers through
-        // rather than deriving "left" from a (size - 33k) computation, which
-        // would yield a different value.
         used_percentage: 42,
         remaining_percentage: 58,
         current_usage: {
@@ -95,14 +85,12 @@ describe("ContextProvider window-size sourcing", () => {
     const outcome = await provider.getContextInfo(hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
-    // 200k / 1M = 20% used → 80% left, with NO 33k buffer skew.
     expect(outcome.value.percentage).toBe(20);
     expect(outcome.value.contextLeftPercentage).toBe(80);
   });
 
   it("falls back to context_window_size even when current_usage is null", async () => {
-    // current_usage null ⇒ native path returns null ⇒ transcript fallback,
-    // which must still source the size from the hook data, not the floor.
+    // current_usage null ⇒ transcript fallback, which must still source the size from the hook data.
     const dir = mkdtempSync(join(tmpdir(), "cc-ctx-"));
     const transcript = join(dir, "t.jsonl");
     writeFileSync(

@@ -46,7 +46,7 @@ describe("WatcherRegistry", () => {
     const h2 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     h1.release();
-    expect(reg.size()).toBe(1); // refcount still > 0
+    expect(reg.size()).toBe(1);
     h2.release();
     expect(reg.size()).toBe(0);
     rmrf(repo);
@@ -125,14 +125,11 @@ describe("GitDataProvider + watchers integration", () => {
     await svc.getGitInfo(repo, {});
     expect(svc.getStats().size).toBe(1);
 
-    // Bypass watchers entirely: change HEAD mtime without going through
-    // the events path. The sanity check must still detect this.
     const headPath = path.join(repo, ".git/HEAD");
     const future = new Date(Date.now() + 60_000);
     fs.utimesSync(headPath, future, future);
 
     svc.runSanityCheckNow();
-    // Allow the debounced watcher (which may also fire) plus sanity drop.
     await new Promise((r) => setTimeout(r, 100));
 
     expect(svc.getStats().size).toBe(0);

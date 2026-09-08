@@ -1,18 +1,4 @@
-// [LAW:verifiable-goals] 2de.13 acceptance for the picker helper, driven through
-// the real spine (registerDslConfig + renderDsl), the real loader
-// (parseAndValidate), and the real set-state gate (deriveActionValidators +
-// registerStateValidator + validateStateWrite) — never a parallel rig:
-//
-//   1. `{{ picker "apply" "page" closeOnPick paged }}` renders a width-fit run of
-//      option cells over named actions, with ✕/←/→ navigating the page cursor.
-//   2. paged=true slices to term.cols with ←/→; paged=false emits one page (wrap).
-//   3. closeOnPick=true makes an option click apply AND reset the page key in ONE
-//      atomic set-state; closeOnPick=false (and the OMITTED default) applies only
-//      — the menu stays open so themes can be tried in a row.
-//   4. The page key gates as an unbounded int DERIVED from the `int` action arm;
-//      the apply key gates as the resolved option allow-list.
-//   5. The active option (current value) renders bold.
-//   6. The loader rejects a picker referencing an undeclared action.
+// [LAW:verifiable-goals] Driven through the real spine, loader, and set-state gate — never a parallel rig.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -54,8 +40,6 @@ function extractUrls(rendered: string): string[] {
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
-// The standard theme picker: a trigger that opens the menu (literal 0 on the
-// int-gated page key), and a width-gated menu segment. closeOnPick/paged vary.
 function pickerConfig(closeOnPick: boolean, paged: boolean): string {
   return `{
     globals: {},
@@ -122,12 +106,10 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const { render, click, sessionState, dispose } = buildRuntime(
       pickerConfig(true, true),
     );
-    // Closed: the when-gate (page>=0) drops the row entirely — only the trigger.
     const closed = stripAnsi(render(80));
     expect(closed).toContain("▸");
     expect(closed).not.toContain("✕");
 
-    // Open via the trigger (writes theme-page=0 through the int gate).
     const triggerUrl = extractUrls(render(80)).find((u) =>
       effectsOf(u).some((e) =>
         e.args.includes("theme-page") && e.args.includes("0"),
@@ -139,7 +121,6 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
 
     const open = render(80);
     expect(stripAnsi(open)).toContain("✕");
-    // The default theme (current) renders bold (active).
     expect(boldUrls(open).join(" ")).toContain(THEMES[0]!);
     dispose();
   });
@@ -159,13 +140,12 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       );
     });
     expect(themeUrl).toBeDefined();
-    // ONE set-state effect writing BOTH keys (apply + close), atomically.
     const eff = effectsOf(themeUrl!);
     expect(eff).toHaveLength(1);
     expect(eff[0]!.verb).toBe("set-state");
     expect(eff[0]!.args.slice(-2)).toEqual(["theme-page", "-1"]);
     click(themeUrl!);
-    expect(sessionState.get("s1", "theme-page")).toBe("-1"); // closed
+    expect(sessionState.get("s1", "theme-page")).toBe("-1");
     dispose();
   });
 
@@ -179,14 +159,12 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       return e.verb === "set-state" && e.args.includes("theme-pick");
     });
     expect(themeUrl).toBeDefined();
-    // Apply only: the page key is NOT in the write.
     expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
     dispose();
   });
 
   test("default (closeOnPick omitted) is stay-open: a theme click applies only, menu still renders", () => {
-    // The trailing bools are optional; omitting closeOnPick must default to
-    // false (stay-open), NOT silently close. The picker still renders open.
+    // Omitting closeOnPick must default to false (stay-open), NOT silently close.
     const src = pickerConfig(true, true).replace(
       '{{ picker "applyTheme" "themePage" true true }}',
       '{{ picker "applyTheme" "themePage" }}',
@@ -194,13 +172,12 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const { render, sessionState, dispose } = buildRuntime(src);
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
-    expect(stripAnsi(open)).toContain("✕"); // open: the close affordance is present
+    expect(stripAnsi(open)).toContain("✕");
     const themeUrl = extractUrls(open).find((u) => {
       const e = effectsOf(u)[0]!;
       return e.verb === "set-state" && e.args.includes("theme-pick");
     });
     expect(themeUrl).toBeDefined();
-    // Default closeOnPick=false ⇒ the page key is NOT written (menu stays open).
     expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
     dispose();
   });
@@ -210,13 +187,11 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
-    const open = render(30); // narrow → forces multiple pages
+    const open = render(30);
     const plain = stripAnsi(open);
     expect(plain).toContain("→");
-    // Not every theme fits on the first narrow page.
     const shown = THEMES.filter((t) => plain.includes(t));
     expect(shown.length).toBeLessThan(THEMES.length);
-    // The → click advances the page cursor by one.
     const nextUrl = extractUrls(open).find((u) =>
       effectsOf(u).some(
         (e) => e.args.includes("theme-page") && e.args.includes("1"),
@@ -237,7 +212,6 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(plain).toContain("✕");
     expect(plain).not.toContain("→");
     expect(plain).not.toContain("←");
-    // Every theme is present (the long line wraps via FlexStrip, none dropped).
     for (const t of THEMES) expect(plain).toContain(t);
     dispose();
   });
@@ -252,8 +226,7 @@ describe("2de.13 — picker gate derivation (int arm)", () => {
       kind: "allow-list",
       allowed: THEMES,
     });
-    // openMenu's literal "0" (allow-list) MERGES into themePage's int spec —
-    // an integer member is absorbed; the gate is int.
+    // openMenu's literal "0" merges into themePage's int spec — the gate stays int.
     expect(byKey.get("theme-page")).toEqual({ kind: "int" });
   });
 

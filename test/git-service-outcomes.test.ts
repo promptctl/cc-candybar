@@ -1,9 +1,4 @@
-// Classification contract for GitService against real git: a non-zero exit
-// that is the domain answering "there is none" (no upstream, no tags, no
-// remote) is `absent`; a real value — including 0 stashes — is `ok`; only a
-// transport failure is `failed` (covered at the boundary by stub tests).
-// [LAW:types-are-the-program] These assert the states the old
-// catch-and-substitute blocks made unrepresentable.
+// [LAW:types-are-the-program] A domain "there is none" is `absent`; a real value is `ok`; only a transport failure is `failed`.
 
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -114,10 +109,7 @@ describe("GitService outcome classification", () => {
     expect(info.value.repoUrl).toEqual(ABSENT);
   });
 
-  // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
-  // remotes read, so they cannot disagree about which remote is origin. This is
-  // the contract that replaced two independent `config --get remote.origin.url`
-  // spawns; asserting them TOGETHER is what pins it.
+  // [LAW:one-source-of-truth] repoName and repoUrl project ONE remotes read; asserting them together is what pins it.
   test("repoName and repoUrl agree, read together", async () => {
     run("git remote add origin https://gitlab.com/group/sub/proj.git", repo);
     const info = await svc.getGitInfo(repo, {
@@ -141,11 +133,7 @@ describe("GitService outcome classification", () => {
     expect(info.value.repoUrl).toEqual(ok("https://github.com/me/proj"));
   });
 
-  // [LAW:no-silent-failure] `git config --get-regexp` exits 1 for "no matches"
-  // and 128 for a config it cannot read. Folding both into an empty remotes list
-  // would render a broken repo as a remote-less one — repoName quietly becoming
-  // the basename, repoUrl and the PR origin reporting "none", nothing logged.
-  // These two assert the split, since only the exit code tells them apart.
+  // [LAW:no-silent-failure] Exit 1 is "no matches", 128 is a config it cannot read; only the exit code tells them apart.
   test("a repo with no remotes is an empty list, not a failure", async () => {
     const remotes = await svc.getRemotesAsync(repo);
     expect(remotes).toEqual(ok([]));
@@ -155,9 +143,6 @@ describe("GitService outcome classification", () => {
     const broken = join(root, "broken");
     mkdirSync(broken);
     run("git init -q -b main", broken);
-    // No commit and no identity: reading `.git/config` needs neither, and a
-    // repo fixture that depends on an ambient global git identity passes on a
-    // developer machine and fails on a runner that has none.
     writeFileSync(join(broken, ".git", "config"), '[remote "origin"\n  url = x\n');
 
     const remotes = await svc.getRemotesAsync(broken);
@@ -166,11 +151,7 @@ describe("GitService outcome classification", () => {
     expect(remotes.reason).toContain("git config --get-regexp");
   });
 
-  // [LAW:one-source-of-truth] The read is `--local`. An unscoped read merges
-  // system → global → local, listing the LEAST specific first, so a stray
-  // `remote.origin.url` in ~/.gitconfig would hijack repoUrl, repoName and the
-  // PR cache key for every repo on the machine. Only a fake global config makes
-  // that visible, which is why this test builds one.
+  // [LAW:one-source-of-truth] The read is `--local`: unscoped, a stray ~/.gitconfig remote would hijack every repo on the machine.
   test("a global remote.origin.url never shadows this repo's own", async () => {
     run("git remote add origin git@github.com:me/LOCAL.git", repo);
     const fakeGlobal = join(root, "fakeglobal");

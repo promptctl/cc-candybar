@@ -12,8 +12,6 @@ import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
 
-// --- SessionState unit tests ---
-
 describe("SessionState", () => {
   test("get returns null for unknown session/key", () => {
     const state = new SessionState();
@@ -70,10 +68,6 @@ describe("SessionState", () => {
   });
 });
 
-// --- Protocol-level click tests ---
-// These test the daemon handles click requests over the wire. We spin up a
-// minimal daemon echo server that mimics the daemon's click dispatch.
-
 describe("click protocol", () => {
   test("ClickRequest serializes with correct kind", () => {
     const req = {
@@ -105,28 +99,16 @@ describe("click protocol", () => {
   });
 
   test("VERBS lookup is prototype-pollution-safe", () => {
-    // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
-    // object — wire-level untrusted verb names like `__proto__` and
-    // `constructor` are non-members, not truthy hits on Object.prototype.
-    // A future revert to `Readonly<Record<string, VerbHandler>>` would
-    // let those names return prototype functions, bypass the `!handler`
-    // check in handleClick, then crash on `handler(value, ctx)` as
-    // RENDER_FAILED instead of the intended BAD_REQUEST.
-    // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
-    // so the regression reads as "verb table leaks Object.prototype"
-    // rather than as a type-only diff a reviewer might wave through.
+    // [LAW:types-are-the-program][LAW:behavior-not-structure] A ReadonlyMap makes
+    // `__proto__` a non-member; the lookup guarantee is pinned, not the type.
     for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
       expect(VERBS.get(poison)).toBeUndefined();
     }
   });
 
   test("malformed wire encoding is a BadVerbArgs (→ BAD_REQUEST), not an operational failure", () => {
-    // [LAW:behavior-not-structure] A bad percent-escape on the wire is an
-    // argument-shape failure; the dispatcher routes BadVerbArgs to BAD_REQUEST
-    // and any other Error to RENDER_FAILED. A lone `%` makes decodeURIComponent
-    // throw a raw URIError — without reclassification it would surface as an
-    // operational RENDER_FAILED. Pins the single-arg (copy) and multi-seg
-    // (set-state) codecs at their shared decode boundary.
+    // [LAW:behavior-not-structure] A raw URIError must be reclassified as
+    // BadVerbArgs, or a bad escape surfaces as an operational RENDER_FAILED.
     const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
       const handler = VERBS.get(verb)!;
@@ -136,8 +118,6 @@ describe("click protocol", () => {
 });
 
 describe("apply-update verb", () => {
-  // [LAW:effects-at-boundaries] The wire carries only the session id; the
-  // handler's whole job is reaching the daemon's update watch through ctx.
   test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", () => {
     let calls = 0;
     const ctx: VerbContext = {
@@ -155,8 +135,6 @@ describe("apply-update verb", () => {
   });
 });
 
-// --- Test that statusline binary has no in-process render path ---
-
 describe("statusline binary render isolation", () => {
   test("index.ts does not import PowerlineRenderer", () => {
     const indexSrc = fs.readFileSync(
@@ -173,51 +151,36 @@ describe("statusline binary render isolation", () => {
       path.join(__dirname, "../src/index.ts"),
       "utf8",
     );
-    // The only render attempt is via tryRenderViaDaemon.
     expect(indexSrc).toContain("tryRenderViaDaemon");
-    // No fallback to in-process rendering.
     expect(indexSrc).not.toContain("generateStatusline");
     expect(indexSrc).not.toContain("new PowerlineRenderer");
   });
 });
 
-// --- Toolbar toggle dataflow ---
-// Verify the dataflow: toolbar-toggle click updates daemon state, next render
-// sees the change without re-reading from disk.
-
 describe("toolbar toggle dataflow", () => {
   test("toggle via SessionState reflects in get without disk I/O", () => {
-    // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
-    // source of truth. No file reads needed.
+    // [LAW:one-source-of-truth] SessionState is the daemon's in-memory truth.
     const state = new SessionState();
     const sessionId = "toggle-test-session";
 
-    // Initially not expanded.
     expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
 
-    // Set → expanded.
     state.set(sessionId, "toolbar-expanded", "1");
     expect(state.get(sessionId, "toolbar-expanded")).toBe("1");
 
-    // Clear → collapsed.
     state.clear(sessionId, "toolbar-expanded");
     expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
   });
 });
 
-// --- step-state handler (relative nudge) ---
-// [LAW:behavior-not-structure] The handler IS the bug fix: it reads LIVE state
-// per click and re-computes the absolute target, so the value moves once per
-// CLICK regardless of render cadence (the prior absolute-target write moved once
-// per RENDER). These exercise the real handler at the daemon boundary, against a
-// real SessionState and the real range registry.
+// [LAW:behavior-not-structure] The handler reads LIVE state per click, so the
+// value moves once per CLICK regardless of render cadence.
 
 describe("step-state handler", () => {
   const KEY = "step-test-hue";
   function setup() {
     const sessionState = new SessionState();
     const ctx: VerbContext = testVerbContext(sessionState);
-    // The range registry is the single source of bounds + the unset seed.
     const dispose = registerStateValidator(KEY, {
       kind: "range",
       min: 0,
@@ -234,7 +197,7 @@ describe("step-state handler", () => {
     const { sessionState, click, dispose } = setup();
     expect(sessionState.get("s1", KEY)).toBeNull();
     click(2);
-    expect(sessionState.get("s1", KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
+    expect(sessionState.get("s1", KEY)).toBe("16");
     dispose();
   });
 
@@ -243,15 +206,15 @@ describe("step-state handler", () => {
     click(2);
     click(2);
     click(2);
-    expect(sessionState.get("s1", KEY)).toBe("20"); // 14 → 16 → 18 → 20
+    expect(sessionState.get("s1", KEY)).toBe("20");
     dispose();
   });
 
   test("stepping past a bound WRAPS to the other end", () => {
     const { sessionState, click, dispose } = setup();
-    sessionState.set("s1", KEY, "60"); // max
+    sessionState.set("s1", KEY, "60");
     click(2);
-    expect(sessionState.get("s1", KEY)).toBe("0"); // wrapped, not clamped to 60
+    expect(sessionState.get("s1", KEY)).toBe("0");
     dispose();
   });
 
@@ -286,18 +249,14 @@ describe("step-state handler", () => {
   });
 });
 
-// --- Helper: minimal daemon-like server for protocol tests ---
-
 function sendToTestServer(req: unknown): Promise<Response> {
   return new Promise((resolve, reject) => {
     const server = net.createServer((sock) => {
       const reader = makeFrameReader(
         (frame) => {
           const parsed = frame as { kind: string; verb?: string; v: number };
-          // Mimic daemon's click dispatch logic for test purposes.
           if (parsed.kind === "click") {
-            // [LAW:one-source-of-truth] Use the registry directly so the test
-            // and the daemon cannot disagree about which verbs are valid.
+            // [LAW:one-source-of-truth] The registry, so the test cannot drift.
             if (!VERB_NAMES.includes(parsed.verb ?? "")) {
               sock.write(
                 encodeFrame({

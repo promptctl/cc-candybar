@@ -1,19 +1,5 @@
-// [LAW:one-source-of-truth] The config FILE is the durable store for every
-// value a click can persist (candybar-config-dqe) — there is no second
-// machine-written file. That makes the file a document the daemon edits, not
-// a value it serializes: JSON5.stringify would drop every comment, reorder
-// keys, and requote strings in a format chosen FOR its comments. This module
-// treats the source as text with a span map over it and rewrites exactly one
-// span per edit; every byte outside that span survives verbatim.
-//
-// [LAW:effects-at-boundaries] Pure: text in, text out. No fs, no clock. The
-// daemon's config-file store (src/daemon/config-file-store.ts) is the one
-// edge that reads and writes the file.
-//
-// [LAW:single-enforcer] The scanner finds token BOUNDARIES only; every leaf
-// (string, number, identifier word) is decoded by JSON5.parse over its own
-// slice, so a string escape or number form this scanner never considered is
-// still decoded exactly as the loader decodes it — one decoder, no drift.
+// [LAW:one-source-of-truth] The config file is the durable store, so it is a document
+// this module edits: exactly one span is rewritten, every other byte survives verbatim.
 
 import JSON5 from "json5";
 
@@ -42,9 +28,6 @@ export interface ArrayNode {
   readonly elements: readonly Node[];
 }
 
-// [LAW:types-are-the-program] The document model: only the shapes an edit
-// needs to navigate (objects by key, arrays by position) carry structure;
-// every scalar is a decoded value plus its span.
 export type Node =
   | ObjectNode
   | ArrayNode
@@ -62,8 +45,6 @@ export class Json5EditError extends Error {
     this.name = "Json5EditError";
   }
 }
-
-// ─── Scanner ─────────────────────────────────────────────────────────────────
 
 const IDENT_START = /[A-Za-z_$\p{L}]/u;
 const IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
@@ -150,8 +131,7 @@ class Scanner {
       const c = this.peek();
       if (c === "") this.fail("unterminated string");
       if (c === "\\") {
-        // A line continuation may be CRLF: skip the backslash and the whole
-        // terminator so the LF is not mistaken for an unterminated string.
+        // A line continuation may be CRLF: skip the whole terminator.
         const crlf = this.text.startsWith("\r\n", this.pos + 1);
         this.pos += crlf ? 3 : 2;
         continue;
@@ -187,8 +167,7 @@ class Scanner {
       this.skipTrivia();
       if (this.peek() === "}") break;
       const { key, span: keySpan } = this.key();
-      // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate; an edit
-      // here would address one and leave the other live.
+      // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate; an edit would address one.
       if (entries.some((e) => e.key === key)) {
         throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
       }
@@ -232,11 +211,6 @@ class Scanner {
   }
 }
 
-/**
- * Parse a whole JSON5 document into a span-carrying node tree. Throws
- * Json5EditError on any syntax error — the loader already accepted this text,
- * so a failure here means the file changed underneath the daemon.
- */
 export function parseDocument(text: string): Node {
   const s = new Scanner(text);
   const root = s.value();
@@ -245,15 +219,12 @@ export function parseDocument(text: string): Node {
   return root;
 }
 
-// ─── Reading ─────────────────────────────────────────────────────────────────
-
 export function entryOf(node: Node, key: string): Entry | undefined {
   return node.kind === "object"
     ? node.entries.find((e) => e.key === key)
     : undefined;
 }
 
-/** The node at an object path, or undefined where any step is absent. */
 export function nodeAt(root: Node, path: readonly string[]): Node | undefined {
   let node: Node | undefined = root;
   for (const key of path) {
@@ -266,31 +237,14 @@ export function textOf(text: string, node: Node): string {
   return text.slice(node.span.start, node.span.end);
 }
 
-// ─── Text generation ─────────────────────────────────────────────────────────
-
 const IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 export function keyText(key: string): string {
   return IDENT_KEY.test(key) ? key : JSON.stringify(key);
 }
 
-/**
- * The dialect SYNTHESIZED text is written in — a fact about the file's
- * consumer, which neither the text nor its path can tell the splicer: the
- * cc-candybar loader reads `.json` and `.json5` alike through the JSON5 parser,
- * so bare keys and trailing commas are legal in either; Claude Code reads its
- * settings.json strictly, so there they are corruption. Edits that mirror an
- * existing member's style (insertLineAfter) need no dialect — a JSON file has
- * no trailing comma to mirror — so the dialect reaches only the text minted
- * with no neighbour to copy: a key, and the comma after a container's last
- * member. [LAW:one-type-per-behavior] One splicer, two values.
- * [LAW:dataflow-not-control-flow] The same synthesis runs for both; the
- * dialect is data it reads, never a branch it takes.
- *
- * `parse` is the same fact read in the other direction: a reader that accepts
- * more than the file's consumer does would call a file readable that the
- * consumer refuses, and then splice into it [LAW:one-source-of-truth].
- */
+/** The dialect SYNTHESIZED text is written in: JSON5 for cc-candybar's own config,
+ * strict JSON for settings.json. [LAW:one-type-per-behavior] One splicer, two values. */
 export interface Dialect {
   readonly key: (key: string) => string;
   readonly trailingComma: "," | "";
@@ -308,12 +262,7 @@ export const JSON_DIALECT: Dialect = {
   parse: (text) => JSON.parse(text),
 };
 
-/**
- * A JSON value as JSON5 text — identifier keys unquoted, one member per line,
- * two-space indent — so materialized text (a bundled segment decl, a layout
- * tree) reads like the authored surface rather than JSON.stringify output.
- * The result is indented from column zero; nest it with `reindent`.
- */
+/** A JSON value as JSON5 text — unquoted identifier keys, one member per line. */
 export function json5Text(value: unknown): string {
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
@@ -338,11 +287,7 @@ function eolOf(text: string): string {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }
 
-/**
- * Indent every line after the first by `indent` (nesting a multi-line value)
- * and end each on `eol`. [LAW:single-enforcer] Synthesized text is built on
- * LF; this is the one place it takes the document's own terminator.
- */
+/** [LAW:single-enforcer] The one place synthesized LF text takes the document's terminator. */
 export function reindent(
   valueText: string,
   indent: string,
@@ -365,8 +310,6 @@ function entryText(
   return `${dialect.key(head)}: ${inner}`;
 }
 
-// ─── Splicing ────────────────────────────────────────────────────────────────
-
 function splice(
   text: string,
   start: number,
@@ -384,13 +327,11 @@ function isBlank(s: string): boolean {
   return /^[ \t]*$/.test(s);
 }
 
-/** Leading whitespace of the line containing `offset`. */
 function indentOfLine(text: string, offset: number): string {
   const ls = lineStartOf(text, offset);
   return /^[ \t]*/.exec(text.slice(ls))![0];
 }
 
-/** True when nothing but whitespace precedes `offset` on its line. */
 function startsLine(text: string, offset: number): boolean {
   return isBlank(text.slice(lineStartOf(text, offset), offset));
 }
@@ -398,17 +339,12 @@ function startsLine(text: string, offset: number): boolean {
 /** An optional line comment, then the line's terminator (CRLF, LF, or the text's end). */
 const LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
 
-/** Where a line ends: its terminator's start, and the next line's start (both EOF at the text's end). */
 interface LineEnd {
   readonly at: number;
   readonly next: number;
 }
 
-/**
- * The bytes right after a member span: an optional comma, then the line's
- * end when the rest of the line holds nothing but an optional line comment,
- * else null.
- */
+/** After a member span: an optional comma, then the line's end when only a comment follows. */
 function trailerAfter(
   text: string,
   end: number,
@@ -425,13 +361,7 @@ function trailerAfter(
   return { commaEnd, line: { at: next - m[1]!.length, next } };
 }
 
-/**
- * Remove a member span (an object entry or an array element) together with
- * its separator. A member alone on its line(s) — nothing but whitespace
- * before it, nothing but an optional comma and line comment after it — takes
- * its whole lines with it, so no blank line is left behind; an inline member
- * takes one adjacent comma and the spaces beside it.
- */
+/** Remove a member span with its separator; a member alone on its line takes its lines. */
 function removeMember(text: string, span: Span): string {
   const { commaEnd, line } = trailerAfter(text, span.end);
   if (startsLine(text, span.start) && line !== null) {
@@ -450,12 +380,7 @@ function removeMember(text: string, span: Span): string {
   return splice(text, span.start, span.end, "");
 }
 
-/**
- * Insert `memberText` as its own line after the member at `span`, whose
- * trailer ends its line. The new line goes AFTER any trailing line comment —
- * that comment belongs to the existing member and stays on its line — and
- * mirrors the member's trailing-comma style.
- */
+/** Insert `memberText` as its own line, AFTER any trailing comment on the member's line. */
 function insertLineAfter(
   text: string,
   span: Span,
@@ -471,11 +396,7 @@ function insertLineAfter(
   return splice(withComma, at, at, line);
 }
 
-/**
- * Add a member after the last existing one, matching the container's own
- * style: its indentation, one-member-per-line versus inline, and whether it
- * uses trailing commas. An empty container opens onto a new indented line.
- */
+/** Add a member after the last, matching the container's indentation and comma style. */
 function appendMember(
   text: string,
   container: ObjectNode | ArrayNode,
@@ -516,12 +437,7 @@ function appendMember(
   return splice(text, at, at, `${sep}${memberText}${tail}`);
 }
 
-/**
- * Set the value at an object path, creating every missing object along the
- * way. An existing value is replaced within its own span; a new entry is
- * appended to the deepest existing object. An empty document becomes a
- * one-entry object.
- */
+/** Set the value at an object path, creating missing objects; an empty doc becomes one entry. */
 export function setValue(
   text: string,
   path: readonly string[],
@@ -578,15 +494,7 @@ export function deleteValue(text: string, path: readonly string[]): string {
   return entry === undefined ? text : removeMember(text, entry.span);
 }
 
-// ─── Layout tree edits on the authored (shape-grammar) tree ─────────────────
-
-// [LAW:one-source-of-truth] The raw layout grammar the loader accepts
-// (src/config/loader/layout.ts): a bare string names a segment; `{ seg }` and
-// `{ kind: "segment", name }` name one with options; `h`/`v`/`children`
-// arrays hold the children of a container or group; a root's `rows` object
-// holds its named rows, each any layout node. Edits address a segment by
-// NAME, in the same pre-order the lowered-tree walk uses, so an op that
-// removes the first `weekly` removes the one the bar shows first.
+// [LAW:one-source-of-truth] Edits address a segment by NAME, in the loader's own pre-order.
 const CHILD_KEYS = ["h", "v", "children"] as const;
 
 function segmentNameOf(node: Node): string | undefined {
@@ -610,24 +518,13 @@ function childArraysOf(node: Node): readonly ArrayNode[] {
   );
 }
 
-/**
- * The named rows of a `{ rows }` root fragment, or null when the node is a
- * whole tree — the same discriminator the loader reads (`"rows" in fragment`,
- * src/config/root.ts), on the document.
- */
+/** The named rows of a `{ rows }` root fragment, or null when the node is a whole tree. */
 export function rowEntriesOf(node: Node): readonly Entry[] | null {
   const rows = entryOf(node, "rows")?.value;
   return rows?.kind === "object" ? rows.entries : null;
 }
 
-/**
- * Whether a root fragment restages anything — false exactly for the merge's
- * identity, an empty rows map carrying no own field — root.ts's `restages`
- * read off the document, so the file store and the loader classify one
- * fragment alike: a tree restages, and so does any entry beside `rows`,
- * exactly as any own field beside `rows` does there. [LAW:one-source-of-truth]
- * the two are one predicate on two substrates; change them together.
- */
+/** [LAW:one-source-of-truth] root.ts's `restages` read off the document; change them together. */
 export function restagesFragment(node: Node): boolean {
   if (node.kind !== "object") return true;
   const rows = rowEntriesOf(node);
@@ -638,13 +535,7 @@ export function restagesFragment(node: Node): boolean {
   );
 }
 
-// [LAW:types-are-the-program] Every node of a layout fragment in pre-order,
-// each with the config-file path it can be REWRITTEN at when it is a bare
-// segment ref — the fragment itself, or one member of its `rows` map — and
-// null for an array element, which is spliced in place. A bare ref IS the
-// one-child horizontal container it abbreviates; the walk carries the
-// address so `refAt` can normalize exactly that one ref and nothing beside
-// it.
+// [LAW:types-are-the-program] Pre-order nodes, each with the path a bare ref is rewritten at.
 function* nodesIn(
   node: Node,
   bareAt: readonly string[] | null,
@@ -661,7 +552,6 @@ function* nodesIn(
   }
 }
 
-/** Whether the fragment holds a segment ref named `name`, anywhere. */
 export function hasSegmentRef(root: Node, name: string): boolean {
   for (const { node } of nodesIn(root, null)) {
     if (segmentNameOf(node) === name) return true;
@@ -669,15 +559,7 @@ export function hasSegmentRef(root: Node, name: string): boolean {
   return false;
 }
 
-// [LAW:one-source-of-truth] The first segment ref named `name` under the
-// fragment at `rootPath`, as an array element — normalized once, here, so the
-// splices below are total over every legal shape. A ref that is the whole
-// fragment (`root: "directory"`) or a whole row (`rows: { sys: "demo" }`)
-// is rewritten as the one-child container it abbreviates — the original text
-// kept verbatim as the sole child, its own `when` included — and found again
-// inside it; every other byte, every other row, stays untouched. The rewrite
-// is only committed by an edit that then finds its target, so a miss leaves
-// the file as it was.
+// [LAW:one-source-of-truth] Normalized to an array element so the splices below are total.
 function refAt(
   text: string,
   rootPath: readonly string[],
@@ -699,11 +581,7 @@ function refAt(
   return null;
 }
 
-/**
- * Remove the first segment ref named `target` from the layout tree rooted at
- * `rootPath`. Returns the edited text, or null when the tree holds no such
- * ref — the caller decides whether that is an error.
- */
+/** Remove the first segment ref named `target`; null when the tree holds no such ref. */
 export function removeSegmentRef(
   text: string,
   rootPath: readonly string[],
@@ -713,12 +591,7 @@ export function removeSegmentRef(
   return hit === null ? null : removeMember(hit.text, hit.ref.span);
 }
 
-/**
- * Insert a bare-string segment ref named `segment` immediately before or
- * after the first ref named `anchor`. A ref alone on its line gets its own
- * line at the same indentation; an inline ref gets an inline sibling.
- * Returns null when the anchor is absent.
- */
+/** Insert a bare-string ref before/after the first ref named `anchor`; null when absent. */
 export function insertSegmentRef(
   text: string,
   rootPath: readonly string[],

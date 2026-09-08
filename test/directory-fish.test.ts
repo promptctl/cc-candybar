@@ -1,11 +1,3 @@
-// [LAW:verifiable-goals] brandon-directory-781 makes fish-style path
-// abbreviation the DEFAULT directory rendering. This pins the exact composition
-// rule the ticket asked us to define: the directory template COLLAPSES first
-// (~-relative → project-relative → absolute), then ABBREVIATES the survivor
-// (every segment but the leaf → its leading char). Rendered through the real
-// spine (registerDslConfig + renderDsl), the same two functions the daemon and
-// demo call — not a synthetic in-process transform.
-
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -16,14 +8,10 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { EDIT_NS } from "../src/config/loader/edit-mode";
 
-// Reparse the AUTHORED literal (pre-synthesis) — see
-// test/default-dsl-config.test.ts for why this must be the raw form, not the
-// already-synthesized DEFAULT_DSL_CONFIG.
+// Reparse the AUTHORED literal, not the already-synthesized DEFAULT_DSL_CONFIG.
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
-// Narrow the root to just the directory segment so the rendered line is exactly
-// that segment's text. Plain style + ascii + padding 0 strips all chrome, so
-// after removing ANSI/OSC-8 escapes what remains IS the directory string.
+// Narrowed root, plus plain/ascii/padding-0 below: the de-escaped line IS the path.
 const dirOnlyRoot = {
   rows: {
     main: {
@@ -37,16 +25,8 @@ const dirOnlyRoot = {
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 
-// [LAW:locality-or-seam] `toolbar` references `edit.toggle`
-// (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
-// `parseAndValidate`, before any call site here narrows the layout) has
-// already baked a spliced copy of the full root into `presets.default.root`
-// — `registerDslConfig`'s per-preset compile prefers that over a plain
-// top-level `root:` override (`presetRoot`/`presets.ts`). Every narrowing
-// below must also reset `presets` and drop the synthesized `edit.*` entries
-// (`directory`'s own template never references `edit.toggle`, so none of
-// that machinery is needed in this file) or the baked-in full root shadows
-// the narrowed one.
+// [LAW:locality-or-seam] Edit-chrome synthesis bakes a full root into
+// `presets.default.root`, which shadows a narrowed top-level `root:`.
 const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
   Object.fromEntries(
     Object.entries(rec).filter(([name]) => !name.startsWith(EDIT_NS)),
@@ -106,8 +86,8 @@ describe("abbreviatePath (pure helper)", () => {
     ["~", "~"],
     ["src/deep/leaf", "s/d/leaf"],
     ["my-app", "my-app"],
-    ["/var/log/nginx", "/v/l/nginx"], // leading slash preserved
-    ["~/.config/nvim", "~/.c/nvim"], // dotfile keeps its dot
+    ["/var/log/nginx", "/v/l/nginx"],
+    ["~/.config/nvim", "~/.c/nvim"],
     ["", ""],
   ])("%s → %s", (input, expected) => {
     expect(abbreviatePath(input)).toBe(expected);
@@ -167,10 +147,7 @@ describe("default directory segment renders fish-abbreviated", () => {
 });
 
 describe("configurability seam: user template override restores full path", () => {
-  // [LAW:no-mode-explosion] There is no `style` enum — the full path is the
-  // existing merge-by-name seam: a user config redefines segments.directory
-  // and it wins per-name over the bundled default. Here we render that override
-  // through the same spine and confirm the full, unabbreviated path comes back.
+  // [LAW:no-mode-explosion] No `style` enum — the full path is the merge-by-name seam.
   test("overriding segments.directory.template yields the unabbreviated path", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const overridden = {

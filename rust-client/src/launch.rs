@@ -1,34 +1,7 @@
-// Single process-launch boundary for the Rust client (kz8.2).
-//
-// [LAW:single-enforcer] One file owns `std::process::Command` in the Rust
-// runtime. Two operations live here because they are different acts, not
-// flags on one act:
-//
-//   - `exec_node_replace(argv)` — execvp(2)-style: the current process image
-//     is replaced by node. Returns only on error.
-//   - `spawn_node_detached_daemon(script)` — fork(2) + setsid(2) detached
-//     child that outlives the parent. Caller does not wait.
-//
-// [LAW:one-type-per-behavior] Detaching is its own behavior (different
-// post-conditions, different fd handling, different lifetime), not a flag
-// on "run a command." Two functions, not one with a `detached: bool`.
-//
-// [LAW:types-are-the-program] (kz8.6) This closed two-operation surface *is*
-// the "no helper outlives a render frame" guarantee. The client's third
-// constraint — a stale child must never survive the frame that spawned it —
-// holds by construction, not by review vigilance: there is deliberately NO
-// general spawn-and-continue operation here. `exec_node_replace` consumes the
-// process image (nothing survives the frame; the frame becomes node), and
-// `spawn_node_detached_daemon` is the single sanctioned orphan (the
-// daemon-handoff escape hatch, the *only* spawn permitted to outlive its
-// caller). A future regression that wanted to spawn an unwaited helper would
-// have to add a third operation — which the guard test below forbids by
-// asserting no Command construction (a `Command::new(` call or a
-// `process::Command` import under any alias) appears outside this file.
-// [LAW:single-enforcer]
-//
-// No metering: the client process is single-frame and short-lived. Daemon
-// metering of subprocess churn lives in the Node runtime.
+// [LAW:single-enforcer] One file owns `std::process::Command` in the Rust runtime.
+// [LAW:one-type-per-behavior] Detaching is its own behavior, not a flag on "run a
+// command". [LAW:types-are-the-program] There is deliberately NO general
+// spawn-and-continue operation, so no helper can outlive a render frame.
 
 use std::ffi::OsString;
 use std::fs::File;
@@ -43,31 +16,16 @@ pub fn exec_node_replace(node_script: &Path, argv_tail: &[String]) -> io::Error 
     for a in argv_tail.iter() {
         cmd.arg(a);
     }
-    // execvp replaces the current process image. Returns only on error.
     cmd.exec()
 }
 
-// [LAW:one-source-of-truth] Mirror of src/daemon/limits.ts — the daemon's ONE
-// memory budget, from which both its RSS backstop (daemon-side, graceful) and
-// the V8 old-space cap this spawner passes (hard: SIGABRT below every JS
-// handler, no log line) derive. The cap is HEAP_CAP_OVER_RSS × the budget so
-// the graceful path always fires first. scripts/check-protocol.mjs fails the
-// build if these three drift from the TS side.
+// [LAW:one-source-of-truth] Mirror of src/daemon/limits.ts; cap above the RSS budget.
 const RSS_LIMIT_ENV: &str = "CC_CANDYBAR_RSS_LIMIT_MB";
 const DEFAULT_RSS_LIMIT_MB: u64 = 512;
 const HEAP_CAP_OVER_RSS: u64 = 2;
 
-// [LAW:parse-dont-validate] Mirror of limits.ts rssLimitMb/heapCapMb: absent →
-// default; a positive integer → that; malformed → Err. The daemon itself would
-// refuse to boot on the same malformed value, so spawning it would only add a
-// crash-loop on top of the operator error. [LAW:no-silent-failure]
-//
-// [LAW:one-source-of-truth] The grammar is the TS grammar verbatim — ASCII
-// digits only, > 0, within JS's safe-integer range (2^53 − 1, the bound
-// `Number.isSafeInteger` applies on the daemon side) — so the spawner and the
-// daemon it spawns accept and reject the same values. `str::parse::<u64>`
-// alone would admit a leading `+` the daemon refuses, and a `u64` upper bound
-// would admit a value the daemon refuses as unsafe.
+// [LAW:parse-dont-validate][LAW:no-silent-failure][LAW:one-source-of-truth] The TS
+// grammar verbatim — ASCII digits, > 0, within JS's safe-integer range.
 const JS_MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
 
 pub fn heap_cap_mb(raw: Option<&str>) -> Result<u64, String> {
@@ -86,18 +44,9 @@ pub fn heap_cap_mb(raw: Option<&str>) -> Result<u64, String> {
     Ok(mb * HEAP_CAP_OVER_RSS)
 }
 
-// Spawn a detached `node --max-old-space-size=<heap_cap_mb> <script> daemon`.
-// fds 0/1/2 are routed to /dev/null. The child is placed in its own session
-// via setsid so it isn't reaped when the parent statusline shell exits.
-//
-// Returns true on successful spawn, false on any setup error (no script, no
-// /dev/null, fd clone failure, malformed memory budget). The caller treats
-// false as "could not kick"; the bind() exclusion inside the daemon is the
-// actual singleton invariant.
+// False means "could not kick"; the daemon's own bind() exclusion is the singleton.
 pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
-    // [LAW:no-silent-failure] `var` distinguishes absent from present-but-not-
-    // UTF-8; `.ok()` would have collapsed a non-UTF-8 value into "unset" and
-    // spawned a daemon at the default budget the operator did not ask for.
+    // [LAW:no-silent-failure] `var` distinguishes absent from present-but-not-UTF-8.
     let raw = match std::env::var(RSS_LIMIT_ENV) {
         Ok(s) => Some(s),
         Err(std::env::VarError::NotPresent) => None,
@@ -136,8 +85,6 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
         .stderr(stderr_fd);
     unsafe {
         cmd.pre_exec(|| {
-            // New session — detach from this process group so the daemon
-            // outlives us and isn't reaped when statusline shells exit.
             if libc::setsid() == -1 {
                 return Err(io::Error::last_os_error());
             }
@@ -153,14 +100,8 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    // [LAW:behavior-not-structure] The contract: the cap is twice the budget,
-    // the budget defaults when unset, and garbage is refused rather than
-    // silently defaulted. The exact numbers are pinned TS↔Rust by
-    // scripts/check-protocol.mjs, not here.
-    //
-    // ACCEPT and REJECT are the SAME tables test/daemon-limits.test.ts runs
-    // against rssLimitMb/heapCapMb — one grammar, pinned from both sides by
-    // scripts/check-protocol.mjs, which diffs the two lists.
+    // [LAW:behavior-not-structure] The same tables test/daemon-limits.test.ts runs
+    // against rssLimitMb/heapCapMb; scripts/check-protocol.mjs diffs the two lists.
     const ACCEPT: &[(&str, u64)] = &[("1024", 1024), ("007", 7)];
     const REJECT: &[&str] = &[
         "",
@@ -200,18 +141,12 @@ mod tests {
         }
     }
 
-    // [LAW:single-enforcer] (kz8.6) The Rust mirror of the ESLint
-    // no-restricted-imports guard that pins child_process to src/proc/launch.ts.
-    // `std::process::Command` may be constructed only in launch.rs; any other
-    // file growing a Command construction is a new unaudited spawn site, and —
-    // since this module is the only place that knows the two sanctioned
-    // lifetimes — a likely frame-outliving helper. Reading the real source
-    // keeps the guard from drifting from reality.
+    // [LAW:single-enforcer] Rust mirror of the ESLint no-restricted-imports guard:
+    // `std::process::Command` may be constructed only in launch.rs.
     #[test]
     fn command_construction_lives_only_in_launch_rs() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        // Exact path, not basename: a future `src/foo/launch.rs` must NOT be
-        // exempt — only *this* file owns Command construction.
+        // Exact path, not basename: a future `src/foo/launch.rs` must NOT be exempt.
         let this_file = src_dir.join("launch.rs");
         let mut files = Vec::new();
         rs_files(&src_dir, &mut files);
@@ -220,19 +155,11 @@ mod tests {
             .filter(|p| **p != this_file)
             .filter(|p| {
                 let body = fs::read_to_string(p).expect("read source");
-                // `Command::new(` catches every direct construction: the
-                // qualified spellings (`std::process::Command::new(`,
-                // `process::Command::new(`) all *end in* this substring, so an
-                // unanchored match covers them.
+                // Qualified spellings all end in this substring; unanchored match covers them.
                 if body.contains("Command::new(") {
                     return true;
                 }
-                // `process::Command` additionally catches a `use` that pulls the
-                // type into scope under any alias (`use std::process::Command as
-                // Cmd;` then `Cmd::new(`) — the one construction route the
-                // call-site match alone would miss. Require a non-identifier
-                // char right after `Command` so this does NOT match the
-                // unrelated `std::os::unix::process::CommandExt`.
+                // Also catches an aliased `use`; the trailing char excludes `CommandExt`.
                 let needle = "process::Command";
                 body.match_indices(needle).any(|(i, _)| {
                     let next = body[i + needle.len()..].chars().next();

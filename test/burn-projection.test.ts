@@ -1,11 +1,5 @@
-// Burn-rate + cap-projection segment (brandon-usage-4be). Three layers:
-//   1. the pure projection math (projectEtaMinutes / projectCostPerHour),
-//   2. buildRenderPayload folding it into the payload under the closure gate,
-//   3. the burnrate segment formatting it — including the "—" absence path.
-//
-// [LAW:no-silent-failure] The headline assertion across all three: a window or
-// session too young to project yields ABSENCE (a missing field → the -1 default
-// → "—"), never a fabricated number.
+// [LAW:no-silent-failure] A window too young to project yields ABSENCE (a
+// missing field → the -1 default → "—"), never a fabricated number.
 
 import {
   buildRenderPayload,
@@ -31,23 +25,22 @@ import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
-const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
+const NOW_MS = 1_700_000_000_000;
 const NOW_SEC = NOW_MS / 1000;
 
 describe("projectEtaMinutes (pure)", () => {
   test("linear extrapolation: 20% used, 1h elapsed of a 5h window → 4h to cap", () => {
-    // Resets in 4h ⇒ 1h elapsed ⇒ 20%/h ⇒ 80% headroom ⇒ 240 minutes.
     const resetsAt = NOW_SEC + 4 * 3600;
     expect(projectEtaMinutes(20, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBe(240);
   });
 
   test("too young to project (under the 5-minute floor) → undefined", () => {
-    const resetsAt = NOW_SEC + (5 * 3600 - 120); // 2 minutes elapsed
+    const resetsAt = NOW_SEC + (5 * 3600 - 120);
     expect(projectEtaMinutes(5, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBeUndefined();
   });
 
   test("no usage yet (0%) → undefined (cannot divide by a zero rate)", () => {
-    const resetsAt = NOW_SEC + 1 * 3600; // 4h elapsed, plenty of time
+    const resetsAt = NOW_SEC + 1 * 3600;
     expect(projectEtaMinutes(0, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBeUndefined();
   });
 
@@ -70,8 +63,6 @@ describe("projectCostPerHour (pure)", () => {
     expect(projectCostPerHour(0, 3600)).toBe(0);
   });
 });
-
-// ─── buildRenderPayload integration ────────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -127,11 +118,7 @@ const BURN_PATHS = new Set([
   "weekly.etaMinutes",
 ]);
 
-// The daemon-resolved effective globals; these burn-lane tests don't exercise
-// them, so any well-formed struct satisfies the required argument.
-// No client hints: these fixtures exercise the daemon-side folds, not the wire
-// boundary. An empty object is the honest "this render carried no hints"
-// (the shape an old client produces), so `host.ssh` stays absent throughout.
+// No client hints: an empty object is the honest "this render carried none".
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
@@ -165,7 +152,6 @@ describe("buildRenderPayload — burn projection lane", () => {
 
   test("young window: block keeps its util/reset but ETA is ABSENT, not 0", async () => {
     const hook = hookWithWindows();
-    // 2 minutes into the 5h window — under the projection floor.
     hook.rate_limits.five_hour.resets_at = NOW_SEC + (5 * 3600 - 120);
     const payload = await buildRenderPayload(
       hook,
@@ -192,8 +178,6 @@ describe("buildRenderPayload — burn projection lane", () => {
   });
 });
 
-// ─── burnrate segment render ────────────────────────────────────────────────────
-
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 function renderBurnrate(payload: Record<string, unknown>): string {
@@ -209,12 +193,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
     ALLOWED,
   );
   const store = new VariableStore();
-  // The merged bundled default's `toolbar` references `edit.toggle`
-  // (brandon-layout-edit-2gc.4), so `edit.mode` — a `state` var — is now
-  // declared regardless of this file's narrowed `burnrate`-only root; a
-  // SessionState is required to declare it (matching every other
-  // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
-  // and burnrate's own `when` renders an unrelated ⚠ error cell.
+  // A SessionState is required to declare `edit.mode`, or `when` renders ⚠.
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
@@ -252,8 +231,6 @@ describe("burnrate segment render", () => {
   });
 
   test("absent projections render '—' (the -1 default), never a fake number", () => {
-    // Window active (so the segment shows) but nothing projectable: burn,
-    // block.eta and weekly.eta fall to their -1 default.
     const line = renderBurnrate({
       ...SEG_BASE,
       block: { nativeUtilization: 2, resetsAt: NOW_SEC + 4 * 3600 },
@@ -261,14 +238,12 @@ describe("burnrate segment render", () => {
     });
     expect(line).toContain("—/hr");
     expect(line).toContain("—");
-    expect(line).not.toMatch(/\$\d/); // no dollar figure
+    expect(line).not.toMatch(/\$\d/);
   });
 
   test("hidden when no rate-limit window is active", () => {
     const line = renderBurnrate({ ...SEG_BASE });
-    // The bar is never empty — every rendered bar carries the global settings
-    // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
-    // this segment's own content", not as an empty line.
+    // Every bar carries the settings menu, so hidden is "no own content".
     expect(line).not.toContain("/hr");
     expect(line).not.toMatch(/\$\d/);
   });

@@ -1,48 +1,19 @@
-// Prompt-cache warmth provider.
-//
-// Anthropic's prompt cache has a fixed TTL (1h): each turn that reads or
-// creates cache entries refreshes it, and after the TTL the next turn pays
-// full cache-creation cost again. This provider answers one question — when
-// does the current session's cache go cold? — by tail-reading the transcript
-// for the most recent entry that touched the cache and projecting its
-// timestamp forward by the TTL.
-//
-// [LAW:dataflow-not-control-flow] The datum is a single epoch instant, not a
-// rendered string. Whether the timer shows "12m", "cold", or hides entirely,
-// and what color it takes, are all functions of this one number evaluated in
-// the DSL template — the same shape block/weekly use with `resetsAt`. The
-// provider carries no display policy.
-//
-// [LAW:types-are-the-program] The return is `Outcome<number>`: a known expiry
-// instant (`ok`), "no cache activity found" (`absent` — no transcript yet, or
-// no cache-bearing entry), or a real read failure (`failed` — the transcript
-// exists but couldn't be read). Absent becomes a missing payload field, which
-// the segment's `when` predicate reads as hidden; failed reaches the payload
-// boundary, the one place that logs it — there is no "0 means hidden"
-// ambiguity to defend against downstream, and no failure dressed as absence.
+// [LAW:dataflow-not-control-flow] The datum is one epoch instant; no display policy.
+// [LAW:types-are-the-program] `absent` and `failed` stay distinct.
 
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import { readTail } from "../utils/transcript-fs.js";
 
-// Anthropic prompt cache TTL. A const, not a knob: it is a property of the
-// upstream cache, not of this renderer. If a future cache tier ships a
-// different TTL, that is a new arm here, not a user config field.
+// A property of the upstream cache, not of this renderer, so not a user knob.
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const TAIL_CHUNK = 64 * 1024;
 const TAIL_MAX = 1 * 1024 * 1024;
 
-// [LAW:types-are-the-program] A cheap CANDIDATE filter, not the authority. It
-// matches any line mentioning a non-zero cache-token field, which includes a
-// line whose *message content* merely quotes the string (a pasted JSON snippet,
-// a transcript of a review discussing these very fields). The authoritative
-// check is the parsed `message.usage` value — the regex only avoids JSON.parsing
-// every line; a match is verified before its timestamp is trusted. The `[1-9]`
-// rejects the `":0` common case so most non-cache lines never reach the parser.
+// [LAW:types-are-the-program] A CANDIDATE filter: a line merely quoting these
+// fields matches, so the parsed `message.usage` is the authority.
 const CACHE_HIT_RE =
   /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
 
-// The transcript-line shape this provider reads. Untrusted JSON — every field is
-// optional and narrowed at use; only positive `message.usage` cache tokens count.
 interface UsageLine {
   readonly timestamp?: string;
   readonly message?: {
@@ -53,10 +24,7 @@ interface UsageLine {
   };
 }
 
-// Parse a candidate line and return its millisecond timestamp ONLY if its
-// `message.usage` actually records positive cache activity. A content-only
-// mention (or unparseable line) yields null, so a false-positive regex match
-// can never set the timer warm.
+// Null for a content-only mention, so a false match never warms the timer.
 function cacheActivityTs(line: string): number | null {
   let parsed: UsageLine;
   try {
@@ -74,11 +42,7 @@ function cacheActivityTs(line: string): number | null {
 }
 
 /**
- * Epoch *seconds* at which the session's prompt cache expires; `absent` when
- * no cache-bearing transcript entry can be found; `failed` when the
- * transcript exists but couldn't be read. Seconds (not millis) to match the
- * unit of block/weekly `resetsAt`, so the DSL composes
- * `minutesUntilReset .cache.expiresAt` with no unit translation.
+ * Epoch *seconds*, matching block/weekly `resetsAt` so the DSL needs no unit swap.
  */
 export async function cacheExpiresAt(
   transcriptPath: string,
@@ -88,25 +52,16 @@ export async function cacheExpiresAt(
   return ok(Math.floor((lastCacheMs.value + CACHE_TTL_MS) / 1000));
 }
 
-// Tail-read the JSONL transcript and return the millisecond timestamp of the
-// last entry with cache activity. The relevant entry is almost always within
-// the final few KB, so the common case reads one TAIL_CHUNK; only a transcript
-// whose last cache hit is deeper grows to TAIL_MAX. [LAW:single-enforcer] both
-// reads go through the gated transcript-fs seam (readTail), so this scanner is
-// bounded with every other transcript read instead of blocking the event loop
-// on synchronous fs.
+// [LAW:single-enforcer] Both reads go through the gated transcript-fs seam.
 async function findLastCacheActivityTs(
   transcriptPath: string,
 ): Promise<Outcome<number>> {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
     const tail = await readTail(transcriptPath, maxBytes);
-    // absent (no transcript yet) and failed (unreadable) both end the scan;
-    // the outcome carries which one happened to the payload boundary.
     if (tail.kind !== "ok") return tail;
     const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
     if (ts != null) return ok(ts);
-    // The window reached the file start: the whole transcript is scanned, no
-    // hit exists — growing further would re-read the same bytes.
+    // The window reached the file start, so growing would re-read the same bytes.
     if (tail.value.fromStart) return ABSENT;
   }
   return ABSENT;
@@ -118,13 +73,12 @@ function scanBufferForLastCacheTs(
 ): number | null {
   const text = buf.toString("utf8");
   const lines = text.split("\n");
-  // When the window doesn't start at the file beginning, the first line is
-  // likely a partial JSON object — skip it so we never mis-parse a fragment.
+  // A window that isn't at the file start opens on a partial JSON object.
   const start = bufStartsAtFileBeginning ? 0 : 1;
   for (let i = lines.length - 1; i >= start; i--) {
     const line = lines[i];
-    if (!line || !CACHE_HIT_RE.test(line)) continue; // cheap candidate filter
-    const ts = cacheActivityTs(line); // authoritative: parsed usage must be > 0
+    if (!line || !CACHE_HIT_RE.test(line)) continue;
+    const ts = cacheActivityTs(line);
     if (ts != null) return ts;
   }
   return null;

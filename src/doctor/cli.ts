@@ -1,15 +1,4 @@
-// [LAW:verifiable-goals] `cc-candybar doctor` — the doctor's second surface,
-// and the agent-runnable one: the SAME `runDoctor` fold the bar's 🩺 click
-// runs, over facts gathered from THIS process's environment (Claude Code's own
-// when run from a Claude Code shell, so `TMUX`/`TMUX_PANE`/the truecolor
-// switch are what Claude Code sees), projected onto text + an exit code:
-//   0 — every check ok
-//   1 — at least one check failed (its reason on the line)
-//   2 — usage error, or ~/.claude/settings.json unreadable
-//
-// [LAW:single-enforcer] No parallel check logic: the CLI differs from the click
-// only in WHERE its tmux facts come from — its own env here, the session's
-// recorded client hint there — and the fold is one function either way.
+// [LAW:single-enforcer] The same `runDoctor` fold the bar's click runs, over facts from this process's own env.
 
 import process from "node:process";
 import type { CliPlan } from "../check.js";
@@ -30,8 +19,7 @@ function reportLine({ check, verdict }: CheckReport): string {
     : `✗ ${check.label} — ${verdict.reason}${verdict.fix === undefined ? "" : FIX_HINT}\n`;
 }
 
-// [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
-// exit code) out. `runDoctorCli` performs it; a test reads it.
+// [LAW:effects-at-boundaries] The CLI as data: facts in, (streams, code) out.
 export function doctorPlan(
   edge: DoctorEdge,
   env: Readonly<Record<string, string | undefined>>,

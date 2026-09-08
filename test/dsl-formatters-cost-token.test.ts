@@ -1,17 +1,5 @@
-// [LAW:verifiable-goals] bdi.3 acceptance: the cost/token/budget formatters,
-// migrated from JS FuncMap funcs into DEFAULT_DSL_CONFIG.helpers, render
-// byte-identically to the formatters they retired.
-//
-// [LAW:behavior-not-structure] The oracle (formatCost / formatTokens /
-// formatTokenCount / formatTokenBreakdown / getBudgetStatus) was DELETED in this
-// change — its outputs are pinned here as literals so the test asserts the
-// helper's contract without depending on the retired code. Each literal is the
-// exact string the JS twin produced for that input (verified against the JS
-// before deletion); the comment on each table records the rule.
-//
-// These exercise the PRODUCTION helpers: the test config is merged onto
-// DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
-// helper bodies the shipped statusline uses — not a test-local copy.
+// [LAW:behavior-not-structure] The JS oracle these helpers replaced is deleted;
+// each literal is the exact string it produced for that input.
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -34,8 +22,7 @@ const OPTS = {
 };
 const BASE_PALETTE = getThemePalette("textual-dark"!);
 
-// Input vars the test segment reads; all numeric, default 0 so an absent payload
-// key exercises the var-system default (the DSL's representation of "missing").
+// All numeric, default 0, so an absent payload key exercises the var default.
 const VARS = `{
   v:   { kind: "input", path: "v",   type: "number", default: 0 },
   c:   { kind: "input", path: "c",   type: "number", default: 0 },
@@ -47,9 +34,6 @@ const VARS = `{
   cr:  { kind: "input", path: "cr",  type: "number", default: 0 },
 }`;
 
-// Render one segment whose template is `call`, merged onto DEFAULT_DSL_CONFIG so
-// the production helpers are in scope. Returns the plain (ANSI/OSC-8-stripped)
-// text the segment produced.
 function render(call: string, payload: Record<string, number>): string {
   const source = `{
     variables: ${VARS},
@@ -80,7 +64,6 @@ function render(call: string, payload: Record<string, number>): string {
 }
 
 describe("bdi.3 — formatCost helper (byte-parity with retired JS)", () => {
-  // formatCost: <0.01 → "<$0.01"; else "$" + toFixed(2). No thousands grouping.
   test.each<[number, string]>([
     [0, "<$0.01"],
     [0.004, "<$0.01"],
@@ -98,8 +81,6 @@ describe("bdi.3 — formatCost helper (byte-parity with retired JS)", () => {
 });
 
 describe("bdi.3 — formatTokens / formatTokenCount helpers", () => {
-  // formatTokens: >=1e6 → "X.YM tokens"; >=1e3 → "X.YK tokens"; else "<n> tokens".
-  // 0/negatives/fractions fall through to the verbatim arm (as the JS did).
   test.each<[number, string]>([
     [0, "0 tokens"],
     [0.004, "0.004 tokens"],
@@ -114,7 +95,6 @@ describe("bdi.3 — formatTokens / formatTokenCount helpers", () => {
     expect(render('{{ template "formatTokens" .v }}', { v })).toContain(want);
   });
 
-  // formatTokenCount: formatTokens minus the " tokens" suffix — same scale rule.
   test.each<[number, string]>([
     [0, "0"],
     [999, "999"],
@@ -134,8 +114,6 @@ describe("bdi.3 — formatTokens / formatTokenCount helpers", () => {
 describe("bdi.3 — formatTokenBreakdown helper (dict of 4)", () => {
   const call =
     '{{ template "formatTokenBreakdown" (dict "input" .in "output" .out "cacheCreation" .cc "cacheRead" .cr) }}';
-  // Each present part formatted by the shared formatTokenCount, joined " + ";
-  // cacheCreation+cacheRead sum into one "cached" part; all-zero → "0 tokens".
   test.each<[Record<string, number>, string]>([
     [{ in: 0, out: 0, cc: 0, cr: 0 }, "0 tokens"],
     [{ in: 1500, out: 0, cc: 0, cr: 0 }, "1.5K in"],
@@ -154,14 +132,12 @@ describe("bdi.3 — formatTokenBreakdown helper (dict of 4)", () => {
 describe("bdi.3 — budgetStatus helper (dict {cost, budget, warn})", () => {
   const call =
     '{{ template "budgetStatus" (dict "cost" .c "budget" .b "warn" .w) }}';
-  // pct = min(100, cost/budget*100). " !N%" at/above warn, " +N%" at/above 50,
-  // " N%" below. Non-displayable (budget<=0 or cost<0) → "".
   test.each<[Record<string, number>, string]>([
     [{ c: 0, b: 50, w: 80 }, " 0%"],
     [{ c: 4.56, b: 50, w: 80 }, " 9%"],
-    [{ c: 25, b: 50, w: 80 }, " +50%"], // boundary: pct >= 50
+    [{ c: 25, b: 50, w: 80 }, " +50%"],
     [{ c: 30, b: 50, w: 80 }, " +60%"],
-    [{ c: 40, b: 50, w: 80 }, " !80%"], // boundary: pct >= warn
+    [{ c: 40, b: 50, w: 80 }, " !80%"],
     [{ c: 45, b: 50, w: 80 }, " !90%"],
     [{ c: 50, b: 50, w: 80 }, " !100%"],
     [{ c: 100, b: 50, w: 80 }, " !100%"], // capped at 100
@@ -169,8 +145,6 @@ describe("bdi.3 — budgetStatus helper (dict {cost, budget, warn})", () => {
     expect(render(call, payload)).toContain(want);
   });
 
-  // The non-display cases produce NO suffix: the probe segment renders only its
-  // surrounding delimiters.
   test.each<[Record<string, number>, string]>([
     [{ c: 1.23, b: 0, w: 80 }, "budget<=0"],
     [{ c: -1, b: 50, w: 80 }, "cost<0"],
@@ -180,10 +154,8 @@ describe("bdi.3 — budgetStatus helper (dict {cost, budget, warn})", () => {
 });
 
 describe("bdi.3 — null is owned upstream by the var default, not the helper", () => {
-  // [LAW:types-are-the-program] VarValue is string|number|boolean — null is
-  // unrepresentable through the var-system. "Missing" data resolves to the var's
-  // numeric default (0 here) BEFORE the helper sees it, so the helper's domain is
-  // exactly `number`. Rendering with no payload key exercises that default.
+  // [LAW:types-are-the-program] VarValue has no null: "missing" resolves to the
+  // var's numeric default before the helper sees it, so its domain is `number`.
   test("absent cost → default 0 → formatCost renders the 0 branch", () => {
     expect(render('{{ template "formatCost" .v }}', {})).toContain("<$0.01");
   });

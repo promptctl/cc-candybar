@@ -1,10 +1,5 @@
-// The doctor's edge: where the facts are GATHERED and a fix is PERFORMED.
-//
-// [LAW:effects-at-boundaries] Every effect the doctor has — the tmux query,
-// the settings.json read, the settings.json write — lives in this module,
-// behind one `DoctorEdge` record the daemon and the CLI both construct with
-// `productionEdge()` and a test constructs with fakes. checks.ts never sees an
-// effect; this file never decides a verdict.
+// [LAW:effects-at-boundaries] Every effect the doctor has lives behind one
+// DoctorEdge: checks.ts never sees one, and this file never decides a verdict.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -17,15 +12,11 @@ import type { TmuxHint } from "../tmux-hint.js";
 import type { DoctorFacts, Fix, TermFeatures, TmuxFacts } from "./checks.js";
 
 export interface DoctorEdge {
-  // tmux's own verdict on the attached client's terminal, asked of THE server
-  // the hint names — `-S socket` and `-t pane` are why the hint carries them.
   readonly probeTmux: (hint: TmuxHint) => TermFeatures;
   readonly claudeSettingsPath: string;
 }
 
-// `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
-// the client attached to the pane — `RGB` in it is tmux saying both it and the
-// outer terminal do truecolor (verified on tmux 3.6a: `…,osc7,RGB,sixel,…`).
+// `RGB` in client_termfeatures is tmux saying it and the outer terminal do truecolor.
 function probeTmux(hint: TmuxHint): TermFeatures {
   const result = launchSync({
     bin: "tmux",
@@ -42,8 +33,6 @@ function probeTmux(hint: TmuxHint): TermFeatures {
     category: "doctor.tmux",
   });
   if (!result.ok) {
-    // `error` is a whole sentence when present (rate-limited, timeout, spawn);
-    // a non-zero exit has only its stderr to say.
     const detail =
       result.error ??
       [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
@@ -62,10 +51,7 @@ export function productionEdge(): DoctorEdge {
   return { probeTmux, claudeSettingsPath: claudeSettingsPath() };
 }
 
-// [LAW:no-silent-failure] A missing settings file is the one absence with a
-// meaning ("Claude Code has written nothing yet" — an empty env); an
-// unparseable one is thrown, never read as empty, because the fix would then
-// splice into a file it cannot parse either.
+// [LAW:no-silent-failure] A missing file is an empty env; an unparseable one throws.
 function readSettingsText(edge: DoctorEdge): string {
   return fs.existsSync(edge.claudeSettingsPath)
     ? fs.readFileSync(edge.claudeSettingsPath, "utf8")
@@ -86,19 +72,13 @@ function settingsEnv(text: string): Readonly<Record<string, unknown>> {
   return env as Record<string, unknown>;
 }
 
-// [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
-// become the three arms of TmuxFacts — a total projection, and the ONLY place
-// the tmux query runs: once, exactly when there is a server to ask.
+// [LAW:dataflow-not-control-flow] The hint's three wire states become three arms.
 function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   if (hint === undefined) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
-// The one place that names the file: every failure — a JSON parse error,
-// a non-object document, a non-object `env` — surfaces as "cannot read <the
-// path this edge was built with>", so a test's temp path and the real
-// ~/.claude/settings.json are reported the same way.
 function readClaudeSettingsEnv(
   edge: DoctorEdge,
 ): DoctorFacts["claudeSettingsEnv"] {
@@ -122,16 +102,8 @@ export function gatherFacts(
   };
 }
 
-// [LAW:one-source-of-truth] The fix is a SPLICE, not a rewrite: the same
-// span-tracking editor the cc-candybar config uses (JSON ⊂ JSON5) replaces one
-// value span or appends one entry, creating `env` only when absent, and every
-// other byte of the user's file survives — comments, ordering, indentation.
-// In the JSON dialect: Claude Code parses settings.json strictly, so a bare
-// key or a trailing comma here would break every Claude Code launch.
-//
-// Returns the facts with the one this fix changed re-read — the performer of
-// an effect is the one place that knows what it touched, so a post-fix report
-// cannot reuse a stale fact or re-probe an unchanged one.
+// [LAW:one-source-of-truth] A SPLICE, not a rewrite, in the JSON dialect — Claude
+// Code parses settings.json strictly. Returns the facts with the changed one re-read.
 export function applyFix(
   edge: DoctorEdge,
   fix: Fix,

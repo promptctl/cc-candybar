@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] The vars/segments/config CLI's own logic is the renderer
-// (the socket round-trip is the shared client-transport primitive, exercised by
-// the debug protocol's own tests). `formatDebug` is a pure total fold over the
-// DebugSnapshot union; we assert its behavior per arm — populated and empty —
-// with constructed snapshots, the same way daemon-debug.test.ts drives the
-// introspector.
+// [LAW:verifiable-goals] `formatDebug` is a pure total fold; asserted per arm.
 
 import { formatDebug } from "../src/daemon/client-debug";
 import type { DebugSnapshot, VarSnapshot } from "../src/daemon/debug-types";

@@ -13,18 +13,11 @@ import {
 import { SessionState } from "../src/daemon/session-state";
 import { buildScope } from "../src/template-engine/scope";
 
-// [LAW:one-source-of-truth] Tests pin to the production constant so a future
-// MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
-//
-// [LAW:dataflow-not-control-flow] Real subprocess timing can't be advanced
-// by fake timers (the OS does the spawning, not the test runner), so these
-// TTL tests are unavoidably real-time. The buffer accounts for setInterval
-// drift + the cat-subprocess round trip.
+// [LAW:one-source-of-truth] Pinned to the production constant so a MIN_SHELL_TTL_MS bump can't silently desync test timings.
+// [LAW:dataflow-not-control-flow] Real subprocess timing can't be advanced by fake timers, so these TTL tests are unavoidably real-time.
 const TTL_TICK_BUFFER_MS = 200;
 const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
 
-// The parse step every shell/file declaration names: the identity, the
-// identity with a fallback, or a group-1 slice (with an optional fallback).
 const TEXT: SourceParse = { kind: "text", default: undefined };
 const text = (dflt: string): SourceParse => ({ kind: "text", default: dflt });
 const regex = (pattern: string, dflt?: string): SourceParse => ({
@@ -33,14 +26,11 @@ const regex = (pattern: string, dflt?: string): SourceParse => ({
   default: dflt,
 });
 
-// Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, defaultEmptyValue);
   return { store, registry };
 }
-
-// ─── literal ─────────────────────────────────────────────────────────────────
 
 describe("SourceRegistry — literal", () => {
   it("round-trips a string literal", () => {
@@ -81,8 +71,6 @@ describe("SourceRegistry — literal", () => {
   });
 });
 
-// ─── env ─────────────────────────────────────────────────────────────────────
-
 describe("SourceRegistry — env", () => {
   const VAR = "CC_TEST_VAR_SOURCES";
 
@@ -103,7 +91,7 @@ describe("SourceRegistry — env", () => {
     const { store, registry } = make();
     registry.declareEnv("myvar", VAR);
     expect(store.getType("myvar")).toBe("string");
-    expect(store.read("myvar")).toBe("42"); // raw string, not coerced to number
+    expect(store.read("myvar")).toBe("42");
   });
 
   it("falls back to varDefault when env var is absent", () => {
@@ -141,8 +129,6 @@ describe("SourceRegistry — env", () => {
     expect(registry.getLastError("myvar")).toBeUndefined();
   });
 });
-
-// ─── input ───────────────────────────────────────────────────────────────────
 
 describe("SourceRegistry — input: initialization", () => {
   it("initializes to varDefault before first applyInput", () => {
@@ -209,10 +195,8 @@ describe("SourceRegistry — input: round-trip", () => {
   it("clears last_error on successful resolution", () => {
     const { registry } = make();
     registry.declareInput("cwd", "cwd", "string");
-    // First push fails
     registry.applyInput({});
     expect(registry.getLastError("cwd")).toBeDefined();
-    // Second push succeeds — error cleared
     registry.applyInput({ cwd: "/now/present" });
     expect(registry.getLastError("cwd")).toBeUndefined();
   });
@@ -275,22 +259,18 @@ describe("SourceRegistry — input: runInAction batching", () => {
     registry.declareInput("a", "a", "string");
     registry.declareInput("b", "b", "string");
 
-    // computed that reads both input boxes
     store.defineComputed("combined", "string", (read) => {
       evalCount++;
       return `${read("a")}:${read("b")}`;
     });
 
-    // warm the computed
     expect(store.read("combined")).toBe(":");
-    evalCount = 0; // reset after warmup
+    evalCount = 0;
 
-    // Apply both inputs together — computed should re-evaluate at most once
     registry.applyInput({ a: "hello", b: "world" });
     expect(store.read("combined")).toBe("hello:world");
 
-    // MobX batching: keepAlive computed re-runs on first access after invalidation,
-    // not during the action. Eval count should be exactly 1.
+    // MobX batching: a keepAlive computed re-runs on first access after invalidation, not during the action.
     expect(evalCount).toBe(1);
   });
 
@@ -305,8 +285,6 @@ describe("SourceRegistry — input: runInAction batching", () => {
     expect(store.read("cwd")).toBe("/second");
   });
 });
-
-// ─── interaction with VariableStore computeds ─────────────────────────────────
 
 describe("SourceRegistry — input boxes as computed dependencies", () => {
   it("invalidates computeds when input boxes update", () => {
@@ -334,8 +312,6 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
   });
 });
 
-// ─── parseDuration ────────────────────────────────────────────────────────────
-
 describe("parseDuration", () => {
   it.each([
     ["100ms", 100],
@@ -356,20 +332,15 @@ describe("parseDuration", () => {
   });
 });
 
-// ─── Shared temp-dir helper ───────────────────────────────────────────────────
-
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-test-"));
   return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
-// Wait for all microtasks + a small wall-clock window so async shell/file
-// operations have time to settle before asserting.
+// Microtasks plus a wall-clock window, so async shell/file operations settle before asserting.
 function settle(ms = 150): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-
-// ─── shell — basic ────────────────────────────────────────────────────────────
 
 describe("SourceRegistry — shell: basic", () => {
   it("populates box with command stdout (never policy)", async () => {
@@ -475,7 +446,6 @@ describe("SourceRegistry — shell: basic", () => {
     try {
       fs.writeFileSync(dataFile, "bad");
       const { store, registry } = make();
-      // First: failing command
       registry.declareShell("val", `grep nonexistent ${dataFile}`, {
         parse: TEXT,
         cache: { kind: "never" },
@@ -485,7 +455,6 @@ describe("SourceRegistry — shell: basic", () => {
 
       // Can't re-run on "never" — use a separate variable to test error-clearing
       const { store: store2, registry: registry2 } = make();
-      // Command that succeeds
       registry2.declareShell("val", `echo "ok"`, { parse: TEXT, cache: { kind: "never" } });
       await settle();
       expect(registry2.getLastError("val")).toBeUndefined();
@@ -498,10 +467,7 @@ describe("SourceRegistry — shell: basic", () => {
   });
 });
 
-// ─── shell — TTL floor ───────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] declareShell clamps user-requested TTLs at the floor
-// to prevent unbounded subprocess churn from a misconfigured `ttl: 50ms`.
+// [LAW:single-enforcer] declareShell clamps user TTLs at the floor, so a misconfigured `ttl: 50ms` cannot churn subprocesses.
 describe("SourceRegistry — shell: TTL floor", () => {
   it("TTL below floor is clamped (no refresh within sub-floor window)", async () => {
     const { dir, cleanup } = makeTmpDir();
@@ -509,8 +475,7 @@ describe("SourceRegistry — shell: TTL floor", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      // Request 50ms — well below the floor. The floor must clamp the
-      // effective TTL, so a sub-floor settle window must NOT see the refresh.
+      // 50ms is below the floor, so a sub-floor settle window must NOT see the refresh.
       registry.declareShell("val", `cat ${f}`, {
         parse: TEXT,
         cache: { kind: "ttl", durationMs: 50 },
@@ -520,12 +485,9 @@ describe("SourceRegistry — shell: TTL floor", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      // Sleep less than MIN_SHELL_TTL_MS — refresh has NOT fired yet even
-      // though the user's requested 50ms has elapsed many times over.
       await settle(Math.max(50, MIN_SHELL_TTL_MS - 250));
       expect(store.read("val")).toBe("v1");
 
-      // Sleep enough to cross the floor (plus buffer) — refresh now fires.
       await settle(TTL_TICK_WAIT_MS);
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -535,8 +497,6 @@ describe("SourceRegistry — shell: TTL floor", () => {
   });
 });
 
-// ─── shell — TTL cache policy ────────────────────────────────────────────────
-
 describe("SourceRegistry — shell: ttl cache policy", () => {
   it("TTL fires and refreshes box with new command output", async () => {
     const { dir, cleanup } = makeTmpDir();
@@ -544,8 +504,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS.
-      // Tests use that exact value and wait MIN_SHELL_TTL_MS+buffer for a tick.
+      // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS; the wait is that plus a buffer.
       registry.declareShell("val", `cat ${f}`, {
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
@@ -555,7 +514,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await settle(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
+      await settle(TTL_TICK_WAIT_MS);
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -614,16 +573,14 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(TTL_TICK_WAIT_MS); // timer should NOT fire after dispose
+      await settle(TTL_TICK_WAIT_MS);
 
-      expect(store.read("val")).toBe("v1"); // unchanged
+      expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();
     }
   });
 });
-
-// ─── shell — watch_file cache policy ─────────────────────────────────────────
 
 describe("SourceRegistry — shell: watch_file cache policy", () => {
   it("file modification triggers box update", async () => {
@@ -643,7 +600,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
-      fs.writeFileSync(watchedFile, "x"); // trigger the watcher
+      fs.writeFileSync(watchedFile, "x");
       await settle(250);
 
       expect(store.read("val")).toBe("v2");
@@ -690,8 +647,6 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
   });
 });
 
-// ─── shell — key: cache policy ────────────────────────────────────────────────
-
 describe("SourceRegistry — shell: key: cache policy", () => {
   it("re-runs shell when key template result changes", async () => {
     const { dir, cleanup } = makeTmpDir();
@@ -701,7 +656,6 @@ describe("SourceRegistry — shell: key: cache policy", () => {
 
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
-      // Put a box directly in the store — the key template will read it.
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         parse: TEXT,
@@ -711,7 +665,6 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       await settle(150);
       expect(store.read("val")).toBe("v1");
 
-      // Mutate the data and change the key — reaction fires, shell re-runs.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
       await settle(250);
@@ -740,9 +693,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       await settle(150);
       expect(store.read("val")).toBe("v1");
 
-      // Change data file, but do NOT change the key.
       fs.writeFileSync(dataFile, "v2");
-      // trigger stays "a" — key template still produces "a" — no re-run.
+      // The key template still produces "a", so no re-run.
       await settle(250);
 
       expect(store.read("val")).toBe("v1");
@@ -752,8 +704,6 @@ describe("SourceRegistry — shell: key: cache policy", () => {
     }
   });
 });
-
-// ─── file — basic ─────────────────────────────────────────────────────────────
 
 describe("SourceRegistry — file: basic", () => {
   it("whole mode: reads entire file, newlines→spaces", async () => {
@@ -862,8 +812,6 @@ describe("SourceRegistry — file: basic", () => {
   });
 });
 
-// ─── file — watch_file cache policy (file watch trigger → invalidation) ───────
-
 describe("SourceRegistry — file: watch_file cache policy", () => {
   it("file change triggers box update", async () => {
     const { dir, cleanup } = makeTmpDir();
@@ -896,7 +844,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(f1, "a1");
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
-      // Both variables watch the same path (different source files)
       registry.declareFile("v1", f1, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
       registry.declareFile("v2", f2, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
 
@@ -906,7 +853,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      fs.writeFileSync(watchedFile, "v2"); // trigger both watchers
+      fs.writeFileSync(watchedFile, "v2");
       await settle(350);
 
       expect(store.read("v1")).toBe("a2");
@@ -917,8 +864,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     }
   });
 });
-
-// ─── dispose ──────────────────────────────────────────────────────────────────
 
 describe("SourceRegistry — dispose", () => {
   it("dispose stops TTL updates", async () => {
@@ -937,7 +882,6 @@ describe("SourceRegistry — dispose", () => {
 
       fs.writeFileSync(f, "v2");
       await settle(TTL_TICK_WAIT_MS);
-      // Timer was cleared — box stays at last value before dispose.
       expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();
@@ -963,8 +907,6 @@ describe("SourceRegistry — dispose", () => {
     }
   });
 });
-
-// ─── formatGoTime ─────────────────────────────────────────────────────────────
 
 describe("formatGoTime", () => {
   // Fixed reference date: 2024-03-15 09:07:05 (Friday)
@@ -1000,8 +942,6 @@ describe("formatGoTime", () => {
     expect(formatGoTime("3:04 PM", midnight)).toBe("12:00 AM");
   });
 });
-
-// ─── template source kind ─────────────────────────────────────────────────────
 
 describe("SourceRegistry — template: basic", () => {
   it("evaluates a static template literal", () => {
@@ -1092,8 +1032,6 @@ describe("SourceRegistry — template: cycle detection", () => {
   });
 });
 
-// ─── time source kind ─────────────────────────────────────────────────────────
-
 describe("SourceRegistry — time: basic", () => {
   it("initialises box with a formatted time string", () => {
     const { store, registry } = make();
@@ -1133,14 +1071,10 @@ describe("SourceRegistry — time: basic", () => {
     await settle(100);
     const snapshot = store.read("t");
     registry.dispose();
-    // After dispose the timer must stop; no unhandled timer callbacks.
     await settle(200);
-    // Value in the store stays at whatever it was when disposed.
     expect(store.read("t")).toBe(snapshot);
   });
 });
-
-// ─── depends_on cache policy ──────────────────────────────────────────────────
 
 describe("SourceRegistry — depends_on cache policy", () => {
   it("triggers shell re-run when a named dependency changes", async () => {
@@ -1189,7 +1123,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
-      store.setBox("trigger", "a"); // same value — reaction data unchanged → no re-run
+      store.setBox("trigger", "a"); // same value, so the reaction data is unchanged
       await settle(250);
 
       expect(store.read("val")).toBe("v1");
@@ -1218,7 +1152,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
-      store.setBox("b", "z"); // only "b" changes
+      store.setBox("b", "z");
       await settle(250);
 
       expect(store.read("val")).toBe("v2");
@@ -1246,7 +1180,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       registry.dispose();
 
       fs.writeFileSync(dataFile, "v2");
-      store.setBox("trigger", "b"); // reaction must NOT fire after dispose
+      store.setBox("trigger", "b");
       await settle(250);
 
       expect(store.read("val")).toBe("v1");
@@ -1256,9 +1190,6 @@ describe("SourceRegistry — depends_on cache policy", () => {
   });
 });
 
-// ─── git source kind ──────────────────────────────────────────────────────────
-
-// Set up a minimal real git repo for git-source-kind tests.
 async function makeGitRepo(): Promise<{ dir: string; cleanup: () => void }> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-git-test-"));
   const run = (cmd: string): void => {
@@ -1517,7 +1448,6 @@ describe("SourceRegistry — git: shared poller per cwd", () => {
       expect(store.read("dirty")).toBe(false);
       expect(sha1).toMatch(/^[0-9a-f]{7}$/);
 
-      // New commit updates .git/HEAD — all fields should refresh together.
       fs.writeFileSync(path.join(dir, "second.txt"), "second\n");
       execSync("git add second.txt", { cwd: dir, stdio: "pipe" });
       execSync('git commit -m "second"', { cwd: dir, stdio: "pipe" });
@@ -1550,16 +1480,12 @@ describe("SourceRegistry — git: shared poller per cwd", () => {
 });
 
 describe("SourceRegistry — state: read-through to SessionState", () => {
-  // Build a registry with a real SessionState injected. The state-kind
-  // variable reads SessionState[session.id][key]; the cascade through the
-  // MobX dep graph is what bzh.7 + vhi.1 rely on for verb→render reactivity.
+  // The state-kind variable reads SessionState[session.id][key]; the cascade through the MobX dep graph is what verb→render reactivity relies on.
 
   function makeWithState() {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    // session.id is the conventional source for "which session am I in" —
-    // input boxes refresh per render via applyInput.
     registry.declareInput("session.id", "session_id", "string");
     return { store, registry, sessionState };
   }
@@ -1587,9 +1513,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   });
 
   test("set() on SessionState invalidates the computed (verb → render cascade)", () => {
-    // This is the cascade the click-verb path relies on: a verb writes
-    // SessionState; the next render reads through the same MobX graph and
-    // sees the new value without re-reading disk.
+    // The cascade the click-verb path relies on: a verb writes SessionState, the next render sees it through the MobX graph without re-reading disk.
     const { store, registry, sessionState } = makeWithState();
     registry.declareState("theme", { key: "theme" });
     registry.applyInput({ session_id: "s1" });
@@ -1616,10 +1540,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   });
 
   test("declareState without SessionState injection fails loudly", () => {
-    // [LAW:no-silent-fallbacks] If the registry was constructed without a
-    // SessionState, declareState refuses rather than silently returning
-    // empty — that would be a footgun where renders look fine until a
-    // verb fires and "nothing happens."
+    // [LAW:no-silent-fallbacks] Without a SessionState, declareState refuses rather than silently returning empty.
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     expect(() =>
@@ -1628,21 +1549,13 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   });
 });
 
-// ─── parse seam: read → parse → publish ──────────────────────────────────────
-
-// [LAW:behavior-not-structure] The ticket's done-when, as behavior: one scan
-// yields a document whose fields are dotted reads (spawn count asserted, not
-// output); a bad scan is a loud error naming the variable, or the declared
-// default document with the error recorded; the same parsers apply to a file's
-// text, after readMode picked it.
+// [LAW:behavior-not-structure] One scan yields a document read by dotted fields; a bad scan is a loud error naming the variable, or the declared default with the error recorded.
 describe("SourceRegistry — parse seam", () => {
   const json = (dflt?: Record<string, unknown>): SourceParse => ({
     kind: "json",
     default: dflt as SourceParse extends { default: infer D } ? D : never,
   });
-  // The scope proxy is untyped by design (it is what `.` is in a template). A read
-  // of a declared document returns its fields or throws naming the variable — never
-  // undefined — so the test reads one named document as the field record it presents.
+  // The scope proxy is untyped by design; a read of a declared document returns its fields or throws naming the variable, never undefined.
   const doc = (store: VariableStore, name: string) =>
     Reflect.get(buildScope(store), name) as Record<string, unknown>;
   const readDoc = (store: VariableStore, name: string) => {
@@ -1670,7 +1583,6 @@ describe("SourceRegistry — parse seam", () => {
       expect(readDoc(store, "doc")).toEqual({ a: 1, b: "x", c: true, nest: { d: [1, 2] } });
       expect(store.read("t")).toBe("1-x-true-2");
       expect(doc(store, "doc").b).toBe("x");
-      // Three fields, one template, a direct scope read: still ONE spawn.
       expect(fs.readFileSync(counter, "utf8").split("\n").length - 1).toBe(1);
       registry.dispose();
     } finally {
@@ -1828,18 +1740,13 @@ describe("SourceRegistry — parse seam", () => {
   });
 });
 
-// ─── in-flight runs are the registry's ────────────────────────────────────────
-
 describe("SourceRegistry — in-flight runs", () => {
   it("settled() waits for the run a publish triggered: a depends_on re-run fired inside the wait", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const spawns = path.join(dir, "spawns");
       const { store, registry } = make();
-      // A is the slow one: its first publish lands while settled() is
-      // waiting, and that publish is what re-runs B. B's own first run is
-      // long done by then, so the re-run is a new in-flight entry that only
-      // a re-snapshot of inFlight after A's publish can await.
+      // A's first publish lands while settled() waits and is what re-runs B, so only a re-snapshot of inFlight after that publish awaits B's second run.
       registry.declareShell("A", "sleep 0.5; echo a", { parse: TEXT, cache: { kind: "never" } });
       registry.declareShell("B", `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`, {
         parse: TEXT,
@@ -1866,8 +1773,7 @@ describe("SourceRegistry — in-flight runs", () => {
     });
     expect(alive(marker)).toBe(true);
     registry.dispose();
-    // The run completes (the child is reaped) — the launcher resolves only
-    // on the actual exit, so an empty settled() is the proof of death.
+    // The launcher resolves only on the actual exit, so an empty settled() is the proof of death.
     expect(await registry.settled(3000)).toEqual([]);
     expect(alive(marker)).toBe(false);
     expect(alive(nap)).toBe(false);

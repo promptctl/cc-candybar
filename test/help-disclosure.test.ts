@@ -1,22 +1,3 @@
-// [LAW:verifiable-goals] candybar-settings-ui-aok.6 acceptance — the reusable
-// `(?)`, driven through the real loader (parse → merge → validate), the real
-// spine (registerDslConfig + renderDsl), the real click wire, and the daemon's
-// own `resolveEffectiveGlobals`. No parallel rig: a test that restated any of
-// those would pass while the bar diverged.
-//
-// The measuring stick is the epic's, unchanged: a USER config whose `root` is a
-// single row of two segments. Both `(?)` use sites are reached from that shape,
-// because a help affordance that only appears under the bundled default helps
-// nobody who wrote a config.
-//
-//   1. Identity, not similarity — the strings the bar renders ARE the values
-//      `src/help-text.ts` exports, and `--help` prints those same values.
-//   2. Edit mode explains `+`, `-` and the `↺ customized` banner.
-//   3. The config menu explains `persist?`.
-//   4. Both are declared the same way: one `declareHelp` call, differing only
-//      in the text and the position.
-//   5. Width, mechanically, at 80 and 120 columns.
-
 import { RichText } from "@promptctl/rich-js";
 import { paletteForThemeName } from "../src/themes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -46,10 +27,8 @@ import type { DslConfig } from "../src/config/dsl-types";
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-// [LAW:no-ambient-temporal-coupling] STATE_VALIDATORS is a daemon-GLOBAL,
-// ref-counted registry, so a runtime that fails an assertion before disposing
-// leaks its entries into every later test in the file. Cleanup is owned by the
-// harness, not by each test remembering to call it.
+// [LAW:no-ambient-temporal-coupling] STATE_VALIDATORS is a daemon-global,
+// ref-counted registry; a failed test must not leak entries into later ones.
 const openRuntimes: Array<{ dispose: () => void }> = [];
 afterEach(() => {
   while (openRuntimes.length > 0) openRuntimes.pop()!.dispose();
@@ -59,9 +38,8 @@ afterEach(() => {
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
-// [LAW:single-enforcer] The codebase's one display-width measure, the same one
-// `src/render/picker.ts` reserves its pagination seam with. Counting code
-// points would pass on a line of wide glyphs that visibly overflows.
+// [LAW:single-enforcer] The codebase's one display-width measure — counting
+// code points would pass on a line of wide glyphs that visibly overflows.
 const cols = (s: string): number => new RichText(s).cellLength;
 
 function extractUrls(rendered: string): string[] {
@@ -73,8 +51,6 @@ function extractUrls(rendered: string): string[] {
   return urls;
 }
 
-// The acceptance shape, verbatim — a user file declaring its own `root` of one
-// row of two segments, merged over the BUNDLED default (production's cascade).
 const twoSegmentRoot = (padding = 1): string => `{
   globals: { padding: ${padding} },
   root: { h: ['directory', 'model'] },
@@ -98,11 +74,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
-
-  // [LAW:one-source-of-truth] The daemon's own globals resolution, called the
-  // way the daemon calls it — so edit mode's staged look (plain joiner, " | "
-  // separator) reaches this render exactly as it reaches the bar. A hand-built
-  // opts literal would measure a width the user never sees.
+  // [LAW:one-source-of-truth] The daemon's own globals resolution, as it calls it.
   const render = (width: number): string => {
     const effective = resolveEffectiveGlobals(
       config,
@@ -131,16 +103,13 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const click = (url: string): void =>
     clickUrl(url, testVerbContext(sessionState));
 
-  // [LAW:behavior-not-structure] Which segments are `(?)` triggers is read off
-  // what they RENDER — the help glyph — so the assertions survive any renaming
-  // of the reserved namespaces they happen to be minted under.
+  // [LAW:behavior-not-structure] Triggers are found by what they RENDER.
   const helpKeys = new Set(
     Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name),
   );
 
-  // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
     const url = extractUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
@@ -149,11 +118,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
     click(url);
   };
 
-  // Toggle the `(?)`, whichever way it currently points. Deliberately NOT
-  // matched on the value written: a disclosure trigger writes the SUCCESSOR of
-  // its current state, so an open help offers "closed" and a closed one offers
-  // "open". A helper that only found one of those would silently stop being
-  // able to close what it opened.
+  // Not matched on the value written: a disclosure writes the SUCCESSOR of its state.
   const toggleHelp = (out: string): void => {
     const url = extractUrls(out).find((u) =>
       effectsOf(u).some((e) => helpKeys.has(e.args[1] ?? "")),
@@ -188,34 +153,23 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
   rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "open");
 }
 
-// The real route into edit mode from a minimal user config: the `✎ edit` control
-// lives in the settings menu's body, which is the whole point of
-// candybar-settings-ui-aok.1 — a user root deletes every other trigger. The menu
-// is closed again afterwards so what is measured is the edit-mode bar itself,
-// not the bar with a panel hanging open over it.
+// The menu is closed again so what is measured is the edit-mode bar itself.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
   rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_OPEN);
   rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "closed");
 }
 
-// ─── 1. Identity with the corpus, not similarity ─────────────────────────────
-
 describe("in-bar help IS src/help-text.ts, not a second copy", () => {
-  // The ticket's own words: "assert the in-bar help strings ARE the exported
-  // values from src/help-text.ts — identity, not similarity. If the test needs
-  // fuzzy string comparison, the derivation rule has been violated somewhere."
   test("every synthesized help segment's template is an exported help line", () => {
     const { config } = buildRuntime();
     const helpTemplates = Object.entries(config.segments)
       .filter(([name]) => /\.help(\.|$)/.test(name) && /\.\d+$/.test(name))
       .map(([, seg]) => seg.template);
 
-    // Every bundled help line appears as some segment's WHOLE template.
     for (const line of [...EDIT_MODE_HELP, ...PERSIST_HELP]) {
       expect(helpTemplates).toContain(line);
     }
-    // And nothing else does — no segment carries prose the corpus never saw.
     const corpus = new Set<string>([...EDIT_MODE_HELP, ...PERSIST_HELP]);
     for (const t of helpTemplates) expect(corpus.has(t)).toBe(true);
   });
@@ -227,8 +181,6 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
   });
 });
 
-// ─── 2. Edit mode explains itself ────────────────────────────────────────────
-
 describe("edit mode's (?)", () => {
   test("renders closed, opens on click, and closes again", () => {
     const rt = buildRuntime();
@@ -236,16 +188,11 @@ describe("edit mode's (?)", () => {
 
     const closed = stripAnsi(rt.render(200));
     expect(closed).toContain(HELP_GLYPH_CLOSED);
-    // Closed help costs no content: none of its lines are on the bar.
     for (const line of EDIT_MODE_HELP) expect(closed).not.toContain(line);
 
     rt.toggleHelp(rt.render(200));
     const open = stripAnsi(rt.render(200));
-    // The trigger now wears ✕ instead of (?) — the open state is readable in
-    // plain text, which matters to a colourless client (colorCompatibility
-    // "none", `cc-candybar check`) that never sees the band's state colour.
-    // Asserted as the ABSENCE of the unique "(?)": edit mode's insert chrome
-    // wears ✕ too, so its presence alone identifies nothing.
+    // Asserted as the ABSENCE of "(?)": edit mode's insert chrome wears ✕ too.
     expect(open).not.toContain(HELP_GLYPH_CLOSED);
     expect(open).toContain(DISCLOSURE_GLYPH_CLOSE);
     for (const line of EDIT_MODE_HELP) expect(open).toContain(line);
@@ -256,8 +203,6 @@ describe("edit mode's (?)", () => {
   });
 
   test("covers +, - and the ↺ customized banner", () => {
-    // Coverage is the checkable criterion the ticket names: each affordance
-    // edit mode shows gets a line naming what clicking it does.
     const glyphs = ["+", "-", "↺"];
     for (const g of glyphs) {
       expect(EDIT_MODE_HELP.some((l) => l.startsWith(g))).toBe(true);
@@ -270,8 +215,6 @@ describe("edit mode's (?)", () => {
     expect(out).not.toContain(HELP_GLYPH_CLOSED);
   });
 });
-
-// ─── 3. The config menu explains persist? ────────────────────────────────────
 
 describe("the config menu's (?)", () => {
   test("opens onto what persist? actually does", () => {
@@ -289,9 +232,6 @@ describe("the config menu's (?)", () => {
   });
 
   test("closing the menu takes the open help with it", () => {
-    // A nested disclosure's body hangs on its trigger, and the trigger sits
-    // inside the enclosing body, so an open `(?)` cannot outlive the panel it
-    // explains.
     const rt = buildRuntime();
     openSettingsMenu(rt);
     rt.toggleHelp(rt.render(200));
@@ -303,16 +243,12 @@ describe("the config menu's (?)", () => {
   });
 });
 
-// ─── 4. One declaration shape, two sites ─────────────────────────────────────
-
 describe("both (?) sites are the same declaration", () => {
   test("each mints a state var, a cycle action and a trigger segment", () => {
     const { config } = buildRuntime();
     const helpNames = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name);
-    // Two use sites, "unrelated" on any reading: different namespaces,
-    // different synthesis passes, different tickets.
     expect(helpNames).toHaveLength(2);
     expect(helpNames.some((n) => n.startsWith("edit."))).toBe(true);
     expect(helpNames.some((n) => n.startsWith("settings."))).toBe(true);
@@ -320,16 +256,14 @@ describe("both (?) sites are the same declaration", () => {
     for (const name of helpNames) {
       expect(config.variables[name]).toMatchObject({ kind: "state" });
       expect(config.actions[name]).toMatchObject({ set: name });
-      // The trigger binds its own text — the runtime appends no glyph.
       expect(config.segments[name]!.template).toContain(HELP_GLYPH_CLOSED);
       expect(config.segments[name]!.template).toContain(DISCLOSURE_GLYPH_CLOSE);
     }
   });
 
   test("a (?) toggle declares no new gate surface", () => {
-    // [LAW:single-enforcer] It writes session state through the existing
-    // `cycle` arm, so its validator is an ordinary allow-list of the two
-    // members — nothing bespoke reaches the wire gate.
+    // [LAW:single-enforcer] It writes through the existing `cycle` arm, so
+    // nothing bespoke reaches the wire gate.
     const { config } = buildRuntime();
     const helpKeys = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
@@ -339,8 +273,6 @@ describe("both (?) sites are the same declaration", () => {
     );
     expect(helpGates).toHaveLength(2);
     for (const { spec } of helpGates) {
-      // The ordinary binary-cycle allow-list every disclosure toggle derives —
-      // no bespoke spec kind reaches the wire gate.
       expect(spec).toMatchObject({
         kind: "allow-list",
         allowed: ["closed", "open"],
@@ -349,15 +281,8 @@ describe("both (?) sites are the same declaration", () => {
   });
 });
 
-// ─── 5. Width, mechanically ──────────────────────────────────────────────────
-
-// [LAW:verifiable-goals] The ticket asks for 80 and 120 columns. Padding is in
-// the matrix too because it is a USER setting (0-16) that multiplies across
-// every cell, and the first draft of these sentences landed at EXACTLY 80
-// columns at the default padding — passing the width assertion with zero margin
-// and wrapping into a second row the moment anyone nudged padding to 2. One
-// step above the default is the bar this holds to; beyond that the whole bar
-// reflows and one row was never a promise worth making.
+// [LAW:verifiable-goals] Padding rides the matrix because it multiplies across
+// every cell; one step above the default is the bar this holds to.
 describe.each([
   [80, 1],
   [80, 2],
@@ -385,10 +310,7 @@ describe.each([
     expect(after.length - before.length).toBe(1);
   });
 
-  // "Help must not widen the bar while closed." The earlier version of this
-  // test opened neither surface, so no `(?)` was on the bar at all and it
-  // passed identically with `src/config/help.ts` deleted — hence the presence
-  // assertion, which is what makes the width one about help.
+  // The presence assertion is what makes the width assertion about help at all.
   test.each([
     ["edit mode", enterEditMode],
     ["the config menu", openSettingsMenu],
@@ -402,27 +324,11 @@ describe.each([
   });
 });
 
-// ─── 6. A closed trigger costs no row ────────────────────────────────────────
-
-// "Help must not add a row on its own." The `(?)` cell is the asked-for cost;
-// its BODY is free until clicked.
-//
-// [LAW:verifiable-goals] Stated as the criterion itself — a closed trigger is
-// never ALONE on its line — rather than as a line count, because a count would
-// need a no-help baseline that production never renders. Strip the glyph from
-// the line it landed on: a trigger riding a row leaves that row's other cells
-// behind, a trigger that minted its own row leaves whitespace.
-//
-// [LAW:behavior-not-structure] Measured wide, deliberately. This asserts a fact
-// about the LAYOUT TREE, and FlexStrip's width-based auto-wrap is a separate
-// mechanism that can push any trailing cell onto its own visual line — at 80
-// columns and padding 2 it does exactly that to a correctly-placed `(?)`. A
-// width narrow enough to wrap would make this test fail for a reason that has
-// nothing to do with what it is measuring; the overflow behaviour has its own
-// tests above.
+// [LAW:verifiable-goals] Stated as "never ALONE on its line" — a row count
+// would need a no-help baseline production never renders.
+// [LAW:behavior-not-structure] Measured wide: auto-wrap can strand the `(?)`.
 const WIDE = 200;
 
-// The one line of every assertion below: where did the closed `(?)` land?
 const triggerLines = (rt: ReturnType<typeof buildRuntime>): string[] =>
   rt.lines(WIDE).filter((l) => l.includes(HELP_GLYPH_CLOSED));
 
@@ -440,20 +346,8 @@ describe("a closed (?) rides a row rather than adding one", () => {
   });
 });
 
-// ─── 7. The placement walk, over root SHAPES ─────────────────────────────────
-
-// [LAW:behavior-not-structure] Edit mode's trigger is placed by a walk that has
-// to find the last row of whatever root the user wrote, and every fixture above
-// bottoms out in ONE horizontal row — so the walk's other cases had no coverage
-// at all, and a version of it that tunnelled into a `kind: "group"` body shipped
-// through a full round of review. These are the shapes, not the branches: a
-// rewrite that finds the last row some other way must still pass.
-//
-// The group case is the regression test: its body hangs on the toggle, not in
-// the children list, so the `(?)` pairs beside the toggle and never lands in a
-// body most groups default closed. The gated-row case pins the priority the walk
-// encodes — a trigger you can see, in a config where riding the last row would
-// gate it, beats a trigger that costs no line.
+// [LAW:behavior-not-structure] These are root SHAPES, not the walk's branches;
+// a gated last row cannot host the trigger, so there it mints its own line.
 describe("edit mode's (?) survives any root shape", () => {
   const shapes: Array<[string, string, boolean]> = [
     ["one row", `{ root: { h: ['directory', 'model'] } }`, true],

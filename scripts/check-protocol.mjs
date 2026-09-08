@@ -1,20 +1,6 @@
 #!/usr/bin/env node
-// Guard: every wire-affecting constant the Rust client mirrors from the TS
-// source must agree. The wire contract is one source of truth
-// (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
-// src/render/diagnostic-style.ts);
-// the Rust binary embeds each value as a literal const because mirroring is
-// cheaper than codegen at this scale. This script diffs the entire mirrored
-// set — protocol version, frame cap and header, timeout budgets, error-code
-// vocabulary, and the diagnostic glyph styling — so a drift in ANY of them
-// fails `prepublishOnly`, not production.
-//
-// [LAW:one-source-of-truth] The mirror is legal only because this file
-// proves synchronization. Adding a new mirrored constant without adding a
-// row to CHECKS reopens the drift hole — add both in the same commit.
-// Escalation path (recorded in ticket brandon-protocol-d55): if the mirrored
-// set outgrows a handful, replace mirror+check with a wire-spec data file
-// both runtimes embed.
+// [LAW:one-source-of-truth] The Rust client mirrors the wire contract as literal consts;
+// that mirror is legal only because this file proves it. A new one needs a new CHECKS row.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -31,27 +17,20 @@ function read(relPath) {
   return sources.get(relPath);
 }
 
-// --- extractors -----------------------------------------------------------
-// Each extractor returns the canonical string for one side, or null when the
-// anchor is missing. [LAW:no-silent-failure] null is a loud failure below —
-// a vanished anchor means the mirror became unverifiable, which is the same
-// defect as a drift.
+// [LAW:no-silent-failure] A missing anchor is null, and an unverifiable mirror fails as drift does.
 
-// Integer constant, allowing a product expression like `16 * 1024 * 1024`.
 function num(relPath, regex) {
   return () => {
     const m = read(relPath).match(regex);
     if (!m) return null;
-    // Strip digit-group separators (`3_000`) so both runtimes' idiomatic
-    // spellings compare by value, not by punctuation.
+    // Compare by value, not by punctuation.
     const factors = m[1].split("*").map((s) => s.trim().replace(/_/g, ""));
     if (!factors.every((f) => /^\d+$/.test(f))) return null;
     return String(factors.reduce((acc, f) => acc * Number(f), 1));
   };
 }
 
-// String-literal constant. Decodes \xNN, \uNNNN (TS) and \u{...} (Rust)
-// escapes so the comparison is on the actual bytes, not the spelling.
+// Decodes escapes so the comparison is on the actual bytes, not the spelling.
 function lit(relPath, regex) {
   return () => {
     const m = read(relPath).match(regex);
@@ -70,10 +49,7 @@ function lit(relPath, regex) {
   };
 }
 
-// Set of string members: collect every capture of a global regex within the
-// slice matched by blockRegex, canonicalized as a sorted joined list. A member
-// is its capture groups joined by a fixed separator, so a multi-group regex
-// compares values, never the formatting between them.
+// A member is its capture groups joined, so a multi-group regex compares values.
 function memberSet(relPath, blockRegex, memberRegex) {
   return () => {
     const block = read(relPath).match(blockRegex);
@@ -86,14 +62,11 @@ function memberSet(relPath, blockRegex, memberRegex) {
   };
 }
 
-// Structural marker: every pattern must appear; the canonical value is the
-// shared description, so both sides agree iff both still use the primitive.
+// Both sides agree iff both still use the primitive.
 function markers(relPath, patterns, description) {
   return () =>
     patterns.every((p) => p.test(read(relPath))) ? description : null;
 }
-
-// --- the mirrored set -----------------------------------------------------
 
 const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
@@ -161,10 +134,7 @@ const CHECKS = [
     ),
     rust: memberSet(RS_MAIN, /match code \{[\s\S]+?\n {4}\}/, /"([A-Z_]+)" =>/g),
   },
-  // The client-hint wire keys. Unlike the rows above these are field NAMES, not
-  // constants — but they drift the same way and break louder: a hint the Rust
-  // client stops sending does not fail, it silently degrades to the daemon's
-  // absent-field default on the ONLY client path that actually ships.
+  // Field NAMES, not constants: a hint the Rust client stops sending degrades silently.
   {
     label: "client-hint wire keys",
     ts: memberSet(
@@ -178,9 +148,6 @@ const CHECKS = [
       /request\["(\w+)"\]/g,
     ),
   },
-  // What "this session is over SSH" MEANS. Both runtimes answer the same
-  // question for the same session; disagreeing on the vocabulary would make the
-  // native fast path and the node fallback report a session differently.
   {
     label: "SSH env vocabulary",
     ts: memberSet(
@@ -194,11 +161,7 @@ const CHECKS = [
       /"(SSH_\w+)"/g,
     ),
   },
-  // What "this session is in tmux" MEANS, and which env var Claude Code's own
-  // truecolor switch lives in. Same drift hazard as the SSH row: the doctor's
-  // tmux-truecolor check reasons over whichever client rendered last. Both
-  // sides are named roles, so the member is `role=VAR` — a swapped pair is
-  // drift even when the set of names is unchanged.
+  // Members are `role=VAR`, so a swapped pair is drift even when the names are unchanged.
   {
     label: "tmux hint env vocabulary",
     ts: memberSet(
@@ -212,9 +175,6 @@ const CHECKS = [
       /(\w+): "([A-Z_]+)"/g,
     ),
   },
-  // Which env var names the client's explicit config. Same drift hazard as
-  // the tmux row: a renamed variable would not fail — the native client would
-  // silently stop reporting the override the node fallback still reports.
   {
     label: "config hint env var",
     ts: memberSet(
@@ -228,10 +188,6 @@ const CHECKS = [
       /"([A-Z_]+)"/g,
     ),
   },
-  // The tmux hint's own wire shape: the field names the Rust client builds
-  // into the object against the TS type the daemon sanitizes it into. A
-  // renamed field would not fail — sanitizeTmux would read every native
-  // hint as "unreported".
   {
     label: "tmux hint wire keys",
     ts: memberSet(
@@ -245,8 +201,6 @@ const CHECKS = [
       /"(\w+)":/g,
     ),
   },
-  // Which bare flags Node answers. The Rust client must route every spelling
-  // to Node, or the shipped binary treats it as a render and fails on stdin.
   {
     label: "Node-answered flag vocabulary",
     ts: memberSet(
@@ -285,8 +239,7 @@ const CHECKS = [
     ts: num(TS_GLYPH, /const MAX_MESSAGE_LEN = ([\d\s*]+);/),
     rust: num(RS_GLYPH, /const MAX_MESSAGE_LEN: usize = ([\d\s*]+);/),
   },
-  // The budget grammar's test vectors: each side's test drives its own parser
-  // from its own list, so the lists themselves are the mirrored fact.
+  // Each side's test drives its own parser from its own list; the lists are the fact.
   {
     label: "budget grammar: accepted vectors",
     ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
@@ -308,10 +261,7 @@ const CHECKS = [
     rust: lit(RS_MAIN, /const SPAWN_COOLDOWN_FILE: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
-    // The left boundary of the shared cooldown window [-STALE_LOCK_MS,
-    // SPAWN_COOLDOWN_MS): both runtimes read the SAME spawn.cooldown file's
-    // mtime and use this to decide future-mtime garbage. A drift would make
-    // them disagree on whether to spawn given identical on-disk state.
+    // The left boundary of the shared cooldown window; both runtimes read one file's mtime.
     label: "stale-lock window (ms)",
     ts: num(TS_ACQUIRE, /const STALE_LOCK_MS = ([\d\s*_]+);/),
     rust: num(RS_MAIN, /const STALE_LOCK_MS: u64 = ([\d\s*_]+);/),
@@ -331,10 +281,7 @@ const CHECKS = [
     ts: lit(TS_PATHS, /const SPAWN_BACKOFF_FILE = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const SPAWN_BACKOFF_FILE: &str = "((?:[^"\\]|\\.)*)";/),
   },
-  // The daemon's memory budget: both spawners derive node's --max-old-space-size
-  // from it, the daemon derives its RSS backstop from it, and the cap must stay
-  // above the backstop (limits.ts). All three pieces must agree or one runtime
-  // spawns a daemon whose hard cap sits below its graceful one.
+  // The heap cap must stay above the RSS backstop, or the hard cap sits below the graceful one.
   {
     label: "rss-limit env var",
     ts: lit(TS_LIMITS, /export const RSS_LIMIT_ENV = "((?:[^"\\]|\\.)*)";/),
@@ -351,8 +298,6 @@ const CHECKS = [
     rust: num(RS_LAUNCH, /const HEAP_CAP_OVER_RSS: u64 = ([\d\s*_]+);/),
   },
 ];
-
-// --- runner ----------------------------------------------------------------
 
 const failures = [];
 for (const { label, ts, rust } of CHECKS) {

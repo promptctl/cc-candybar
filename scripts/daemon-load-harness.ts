@@ -1,40 +1,6 @@
-// Daemon render-latency load harness (brandon-daemon-perf-bb9).
-//
-// [LAW:verifiable-goals] The reproducible gate the ticket asks for: drive N
-// synthetic Claude sessions at a fixed tick rate against an ISOLATED daemon
-// (its own CC_CANDYBAR_SOCKET + XDG dirs, never the developer's real daemon),
-// measure the per-render round-trip distribution the way the *client* sees it,
-// and report p50/p95/p99/max plus a classified error count. The pass bar is the
-// Rust client's own budget, not the daemon's looser internal timeout:
-//   - TOTAL_BUDGET = 150ms round-trip (rust-client TOTAL_BUDGET)
-//   - CONNECT_TIMEOUT = 50ms connect (rust-client CONNECT_TIMEOUT)
-// A render slower than 150ms is a client give-up → stale bar → respawn, even
-// though the daemon (200ms REQUEST_TIMEOUT_MS) still thinks it answered. So the
-// harness gates on 150ms and reports connect-phase latency separately.
-//
-// [LAW:effects-at-boundaries] The harness is the world edge: it owns process
-// spawn, sockets, fs, and the clock. The measured subject (the daemon) is a
-// black box driven only over its wire — no in-process shortcuts, so the numbers
-// mean what production means.
-//
-// Faithful to production in the ways that matter for this bug:
-//   - ONE fresh connection per render (the Rust client connects, sends, prints,
-//     exits every tick) — this is what exercises the accept backlog where the
-//     storm's ECONNREFUSED/EPIPE originated.
-//   - The DEFAULT bundled config (no config file) drives the real provider mix:
-//     git (subprocess), session+today (transcript fold), context (transcript
-//     read) — the exact per-render fs/spawn work the ticket suspects.
-//   - project_dir points at a REAL git repo so git actually runs; each session
-//     gets its own synthetic JSONL transcript so the usage folds do real work.
-//
-// Run: pnpm build && node --import tsx scripts/daemon-load-harness.ts --sessions 25
-// Flags: --sessions N --interval MS --duration S --transcript-lines N
-//        --churn (append a transcript line each tick → transcript-fold bursts)
-//        --git-churn (rewrite the fixture repo's .git/HEAD each tick → git
-//                     cache-invalidation bursts, the fan-out stressor)
-//        --daemon dist|tsx (which daemon artifact; default dist)
-//        --profile (spawn daemon under --cpu-prof; writes .cpuprofile on exit)
-//        --json (emit the summary as one JSON line for regression gating)
+// Daemon render-latency load harness.
+// [LAW:verifiable-goals] N synthetic sessions at a fixed tick rate against an ISOLATED daemon, gated on the Rust client's budget (150ms round-trip, 50ms connect) rather than the daemon's looser internal timeout.
+// [LAW:effects-at-boundaries] The daemon is a black box driven only over its wire.
 
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -50,18 +16,10 @@ import {
   makeFrameReader,
 } from "../src/daemon/protocol.js";
 
-// ─── Client budget (mirror of rust-client/src/main.rs) ──────────────────────
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
 
-// git-churn fires one HEAD rewrite per this interval — derived from the
-// daemon's invalidation-debounce floor ([LAW:one-source-of-truth] — the sole
-// DEBOUNCE_MS lives in the watcher registry) so each write deterministically
-// lands in its own debounce window and fires an invalidation. Churning faster
-// than the floor is wasted (the daemon collapses sub-window bursts); churning
-// AT the floor would race the leading-edge timer at the boundary. The +10
-// keeps a clear gap, making the stressor's every-write-invalidates behavior
-// explicit rather than timing-dependent, and tracks the floor if it ever moves.
+// [LAW:one-source-of-truth] Derived from the watcher registry's sole DEBOUNCE_MS so each write lands in its own debounce window.
 const GIT_CHURN_INTERVAL_MS = DEBOUNCE_MS + 10;
 
 const REPO_ROOT = path.resolve(
@@ -69,7 +27,6 @@ const REPO_ROOT = path.resolve(
   "..",
 );
 
-// ─── CLI ────────────────────────────────────────────────────────────────────
 const { values } = parseArgs({
   options: {
     sessions: { type: "string", default: "25" },
@@ -81,17 +38,11 @@ const { values } = parseArgs({
     daemon: { type: "string", default: "dist" },
     profile: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
-    // A config.json5 to drop into the isolated XDG_CONFIG_HOME (else the daemon
-    // falls back to DEFAULT_DSL_CONFIG). Use to exercise provider mixes the
-    // default layout doesn't — e.g. a metrics/burn segment.
     config: { type: "string" },
   },
 });
 
-// [LAW:no-silent-failure] Validate each numeric arg. `Number("abc")` is NaN and
-// `Array.from({length: NaN})` silently yields [] — the harness would "pass" a
-// load test that ran zero sessions. A gate that lies about not running is worse
-// than a crash; reject non-finite / non-positive values loudly.
+// [LAW:no-silent-failure] NaN would silently yield zero sessions — a gate that lies about not running. Reject non-finite / non-positive values loudly.
 function posInt(name: string, raw: string | undefined): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
@@ -107,36 +58,25 @@ const INTERVAL_MS = posInt("interval", values.interval);
 const DURATION_MS = posInt("duration", values.duration) * 1000;
 const TRANSCRIPT_LINES = posInt("transcript-lines", values["transcript-lines"]);
 
-// ─── Outcome classification ─────────────────────────────────────────────────
-// [LAW:types-are-the-program] Every render lands in exactly one bucket. The
-// classes mirror the failures the storm logs showed, so the report answers
-// "which failure mode" not just "how many failed".
 interface Sample {
   totalMs: number;
   connectMs: number;
-  // [LAW:types-are-the-program] connect_timeout (couldn't accept within 50ms —
-  // daemon alive but its accept backlog is saturated) is a DISTINCT failure from
-  // econnrefused (kernel refused — daemon not listening at all). Conflating them
-  // would recreate the exact misdiagnosis that drove the storm, so the harness
-  // that exists to tell failure modes apart must keep them apart.
+  // [LAW:types-are-the-program] A saturated accept backlog is a DISTINCT failure from a kernel refusal; conflating them recreates the original misdiagnosis.
   outcome:
     | "ok"
-    | "render_error" // daemon answered with {ok:false} — a fast failure, not health
+    | "render_error"
     | "budget_exceeded"
     | "connect_timeout"
     | "econnrefused"
     | "epipe"
     | "other";
-  atMs: number; // elapsed since measurement start, for cold-start vs steady-state
+  atMs: number;
 }
 
 const samples: Sample[] = [];
 let runStart = 0;
 
-// ─── One faithful render round-trip ─────────────────────────────────────────
-// Mirrors the Rust client's phase budget: 50ms connect, 150ms total. Fresh
-// connection per call. Resolves to a Sample; never rejects (a failure is a
-// classified Sample, not an exception — the loop must not stop on one bad tick).
+// Never rejects — a failure is a classified Sample, so one bad tick cannot stop the loop.
 function oneRender(
   sockPath: string,
   hookData: unknown,
@@ -174,9 +114,7 @@ function oneRender(
       connectMs = performance.now() - t0;
       clearTimeout(connectTimer);
       const reader = makeFrameReader(
-        // [LAW:no-silent-failure] Inspect the frame — a daemon that fast-fails
-        // ({ ok:false }) returns quickly, so counting it "ok" would report
-        // misleadingly healthy latency under a failure storm. Classify it apart.
+        // [LAW:no-silent-failure] A fast {ok:false} would report misleadingly healthy latency; classify it apart.
         (frame) =>
           finish(
             frame &&
@@ -208,10 +146,7 @@ function oneRender(
   });
 }
 
-// ─── Synthetic transcript ────────────────────────────────────────────────────
-// [LAW:one-source-of-truth] The usage fold reads message.usage.* and costUSD;
-// the size drives cold-parse cost. Realistic shape so the fold does real work,
-// not a no-op over an empty file.
+// [LAW:one-source-of-truth] Realistic shape so the usage fold does real work.
 function writeTranscript(file: string, lines: number): void {
   const rows: string[] = [];
   const base = Date.parse("2026-07-09T09:00:00.000Z");
@@ -234,15 +169,7 @@ function writeTranscript(file: string, lines: number): void {
   fs.writeFileSync(file, rows.join("\n") + "\n");
 }
 
-// ─── Disposable git fixture ───────────────────────────────────────────────────
-// [LAW:effects-at-boundaries] The harness owns the world edge, so it owns a
-// THROWAWAY repo rather than pointing sessions at the developer's live checkout.
-// Two reasons this matters for a git-churn gate: (1) mutating a real .git/HEAD
-// to force invalidation would corrupt the working tree; (2) measuring git cost
-// against the checkout makes the number depend on the dev's uncommitted state —
-// non-hermetic for a regression gate. A fresh repo with a commit + a pushed
-// upstream exercises the git provider identically (same spawn fan-out) while
-// being safe to churn and reproducible run to run.
+// [LAW:effects-at-boundaries] A THROWAWAY repo: churning a real .git/HEAD would corrupt the working tree, and the checkout is non-hermetic.
 interface GitFixture {
   repoDir: string;
   headPath: string;
@@ -258,12 +185,7 @@ function setupGitFixture(): GitFixture {
     execFileSync("git", args, {
       cwd,
       stdio: "pipe",
-      // [LAW:effects-at-boundaries] Deterministic identity + a hermetic git:
-      // GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM neutralize the
-      // dev's ~/.gitconfig and system config, so a non-standard global
-      // core.hooksPath or a failing user commit hook can't leak in and crash
-      // the gate with an opaque trace. Identity overrides alone control only
-      // the commit author; the config env vars are what actually seal the box.
+      // [LAW:effects-at-boundaries] GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM seal the box; identity overrides control only the commit author.
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -275,20 +197,13 @@ function setupGitFixture(): GitFixture {
       },
     });
   };
-  // [LAW:effects-at-boundaries] `root` exists the moment mkdtempSync returns, so
-  // any git command throwing mid-setup (git absent, disk full, permissions)
-  // would exit before returning a GitFixture — leaving main's cleanup a no-op
-  // and the temp dir leaked. Reap `root` on any partial-init failure before
-  // rethrowing, the same guard the harness applies around spawnDaemon.
+  // [LAW:effects-at-boundaries] `root` exists the moment mkdtempSync returns, so reap it on any partial-init failure or the temp dir leaks.
   try {
     git(["init", "-q", "-b", "main"], repoDir);
     git(["commit", "-q", "--allow-empty", "-m", "base"], repoDir);
-    // A bare upstream + push -u so the default subscribe/render path resolves
-    // upstream and ahead/behind for real (the folded porcelain-v2 fields).
     git(["init", "-q", "--bare", upstream], root);
     git(["remote", "add", "origin", upstream], repoDir);
     git(["push", "-q", "-u", "origin", "main"], repoDir);
-    // One commit ahead of upstream so `# branch.ab` is a non-trivial "+1 -0".
     git(["commit", "-q", "--allow-empty", "-m", "ahead"], repoDir);
   } catch (e) {
     try {
@@ -303,8 +218,6 @@ function setupGitFixture(): GitFixture {
       try {
         fs.rmSync(root, { recursive: true, force: true });
       } catch (e) {
-        // [LAW:no-silent-failure] Best-effort temp cleanup, but a failure still
-        // leaves a signal (a leaked cbh-gitfix- dir) rather than vanishing.
         // eslint-disable-next-line no-console
         console.error(`gitFixture cleanup failed (${root}): ${String(e)}`);
       }
@@ -354,7 +267,6 @@ function makeHookData(
   };
 }
 
-// ─── Daemon lifecycle ─────────────────────────────────────────────────────────
 interface DaemonHandle {
   child: ChildProcess;
   sockPath: string;
@@ -366,8 +278,7 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
   const stateDir = path.join(stateRoot, "cc-candybar");
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
-  // [LAW:locality-or-seam] cpuprof dir lives OUTSIDE stateRoot so the run's
-  // stateRoot cleanup doesn't delete the profile the operator wants to inspect.
+  // [LAW:locality-or-seam] Outside stateRoot so cleanup doesn't delete the profile.
   const profileDir = values.profile
     ? fs.mkdtempSync(path.join(os.tmpdir(), "cbh-cpuprof-"))
     : null;
@@ -377,7 +288,6 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
     CC_CANDYBAR_SOCKET: sockPath,
     XDG_STATE_HOME: stateRoot,
     XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), "cbh-cache-")),
-    // Empty config dir → falls back to DEFAULT_DSL_CONFIG (the realistic mix).
     XDG_CONFIG_HOME: fs.mkdtempSync(path.join(os.tmpdir(), "cbh-config-")),
     // src/version.ts refuses to load unstamped; `--daemon tsx` runs raw source.
     NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
@@ -408,9 +318,6 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
           [...nodeFlags, path.join(REPO_ROOT, "dist", "index.mjs"), "daemon"],
         ];
 
-  // [LAW:effects-at-boundaries] The XDG temp dirs already exist (created in `env`
-  // above); if spawn itself throws (EMFILE/ENOMEM) we're before the cleanup
-  // closure, so reap them here or they leak in /tmp.
   let child;
   try {
     child = spawn(cmd, args, {
@@ -444,9 +351,6 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
           fs.rmSync(d, { recursive: true, force: true });
         } catch {}
     }
-    // Remove profileDir only when it holds no .cpuprofile — a failed --profile
-    // run leaves an empty dir to reap; a successful run preserves the profiles
-    // for the operator to inspect.
     if (profileDir)
       try {
         if (fs.readdirSync(profileDir).length === 0)
@@ -476,7 +380,6 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
   return { child, sockPath, profileDir, cleanup };
 }
 
-// Request the daemon's own stats snapshot (its view of the run).
 function fetchStats(sockPath: string): Promise<unknown> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
@@ -523,10 +426,7 @@ function shutdownDaemon(sockPath: string): Promise<void> {
   });
 }
 
-// ─── Percentiles ──────────────────────────────────────────────────────────────
-// Standard nearest-rank: the p-th percentile is the ceil((p/100)·N)-th value
-// (1-based). floor(...) mis-assigns the max to p99 for small N; nearest-rank
-// makes p100 the only index that is the max.
+// Nearest-rank: floor() mis-assigns the max to p99 for small N.
 function pct(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
   const rank = Math.ceil((p / 100) * sorted.length) - 1;
@@ -534,29 +434,19 @@ function pct(sorted: number[], p: number): number {
   return sorted[idx]!;
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cbh-state-"));
   const transcriptDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "cbh-transcripts-"),
   );
-  // [LAW:effects-at-boundaries] The caller owns these temp dirs and the daemon
-  // handle; ANY throw between spawn and the end (a failing warmup render, a
-  // fetchStats error, a rejected measurement promise) must not orphan the daemon
-  // child or leak temp dirs. The finally kills the daemon (handle.cleanup, which
-  // also removes its XDG cache/config dirs) and removes the caller-owned
-  // stateRoot + transcriptDir on every exit path.
+  // [LAW:effects-at-boundaries] ANY throw between spawn and the end must not orphan the daemon child or leak temp dirs; the finally covers every path.
   let exitCode = 1;
   let handle: DaemonHandle | null = null;
   let gitFixture: GitFixture | null = null;
   try {
-    // A hermetic throwaway repo is the git target for every session — safe to
-    // churn, and independent of the developer's checkout state.
     gitFixture = setupGitFixture();
     const gitTarget = gitFixture.repoDir;
 
-    // Each synthetic session: distinct id + transcript; cwd/project_dir = the
-    // fixture repo so git actually runs against real (churnable) state.
     const sessions = Array.from({ length: SESSIONS }, (_, i) => {
       const id = `load-sess-${i}-${process.pid}`;
       const transcriptPath = path.join(transcriptDir, `${id}.jsonl`);
@@ -577,11 +467,7 @@ async function main(): Promise<void> {
         `${values["git-churn"] ? " (git-churn)" : ""}`,
     );
 
-    // Warm-up: establish every session's byte cursor and let the one-time cold
-    // full-read (O(transcript length), once per session per daemon lifetime) plus
-    // its GC settle BEFORE measurement. Steady state — incremental O(new bytes) —
-    // is what production renders are and what this gate measures; the cold read is
-    // amortized over a session's hundreds of renders and must not dominate p99.
+    // Warm-up: let the one-time cold full read and its GC settle BEFORE measurement — steady state is what this gate scores.
     for (let round = 0; round < 3; round++) {
       await Promise.all(
         sessions.map((s) => oneRender(handle.sockPath, s.hookData, gitTarget)),
@@ -596,14 +482,7 @@ async function main(): Promise<void> {
     let gitChurnCounter = 0;
     const headContent = fs.readFileSync(gitFixture.headPath);
     await new Promise<void>((resolveRun) => {
-      // [LAW:decomposition] git-churn is a REPO-level stressor, not a session
-      // one: one HEAD rewrite invalidates the shared git-cache entry for every
-      // session at once. Driving it from a single interval (rather than inside
-      // each session's tick) keeps gitChurnWrites an honest count of file ops
-      // and keeps the redundant writes the daemon would just debounce away off
-      // the per-render hot path. Content-identical rewrite → fs.watch fires →
-      // the cache drops its entry (debounced) → the next render misses and pays
-      // the full subprocess fan-out. Safe: HEAD stays a valid ref.
+      // [LAW:decomposition] git-churn is a REPO-level stressor: one HEAD rewrite invalidates the shared cache entry for every session, so it runs on its own interval.
       if (values["git-churn"]) {
         const gitChurn = setInterval(() => {
           gitChurnCounter++;
@@ -614,7 +493,6 @@ async function main(): Promise<void> {
       for (const s of sessions) {
         const tick = setInterval(() => {
           if (values.churn) {
-            // Append a line → transcript mtime bumps → next fold re-parses.
             churnCounter++;
             fs.appendFileSync(
               s.transcriptPath,
@@ -644,19 +522,11 @@ async function main(): Promise<void> {
       }, DURATION_MS);
     });
     const elapsedS = (performance.now() - start) / 1000;
-    // Let any in-flight renders settle.
     await new Promise((r) => setTimeout(r, TOTAL_BUDGET_MS + 50));
 
     const stats = await fetchStats(handle.sockPath);
 
-    // ─── Report ─────────────────────────────────────────────────────────────
-    // [LAW:verifiable-goals] The ticket's bar is "under SUSTAINED load". A daemon's
-    // first seconds pay a one-time O(transcript length) cold read per session per
-    // provider (plus the GC of those transient parses) — real, but amortized over a
-    // session's hundreds of renders, NOT a sustained stall. So the gate scores
-    // STEADY-STATE (renders after the cold-start ramp); the ramp is reported
-    // separately, never hidden. A regression that slows steady renders still trips
-    // the gate; a slow cold start shows up as a large ramp count for the operator.
+    // [LAW:verifiable-goals] The gate scores STEADY-STATE renders; the cold-start ramp is reported separately, never hidden.
     const RAMP_MS = 3000;
     const steady = samples.filter((s) => s.atMs >= RAMP_MS);
     const ramp = samples.filter((s) => s.atMs < RAMP_MS);
@@ -681,8 +551,6 @@ async function main(): Promise<void> {
       elapsedS: Number(elapsedS.toFixed(1)),
       renders: samples.length,
       achievedRatePerSec: Number((samples.length / elapsedS).toFixed(1)),
-      // Steady-state (post-ramp) round-trip — the sustained-load figure the gate
-      // scores against the Rust client's 150ms TOTAL_BUDGET.
       steadyLatencyMs: {
         p50: Number(pct(totals, 50).toFixed(1)),
         p95: Number(pct(totals, 95).toFixed(1)),
@@ -704,30 +572,20 @@ async function main(): Promise<void> {
         epipe: byOutcome("epipe"),
         other: byOutcome("other"),
       },
-      // The one-time startup ramp (first RAMP_MS): its render count and how many of
-      // those exceeded budget. Large numbers here mean slow cold reads, not a
-      // sustained-load regression.
       coldStart: {
         rampMs: RAMP_MS,
         renders: ramp.length,
         overBudget: ramp.filter((s) => s.outcome === "budget_exceeded").length,
       },
-      // Timestamps (ms since measurement start) of any STEADY over-budget render —
-      // spread ⇒ a real periodic stall to chase; isolated/absent ⇒ scheduler noise.
       steadyOverAtMs: steady
         .filter((s) => s.outcome === "budget_exceeded")
         .map((s) => Math.round(s.atMs)),
       churnAppends: churnCounter,
       gitChurnWrites: gitChurnCounter,
       budgetMs: TOTAL_BUDGET_MS,
-      // Pass = the ticket's acceptance under SUSTAINED load: steady p99 within the
-      // client budget, zero steady over-budget, and zero connection failures at any
-      // point — a saturated backlog (connect_timeout), a refused socket, or a
-      // broken pipe are each unacceptable, ramp or not.
+      // Pass = steady p99 within budget, zero steady over-budget, zero connection failures.
       pass:
-        // [LAW:no-silent-failure] Never a vacuous pass: a run with no steady
-        // samples (e.g. interval > duration) measured nothing and cannot pass a
-        // sustained-load gate.
+        // [LAW:no-silent-failure] Never a vacuous pass: no steady samples measured nothing.
         steady.length > 0 &&
         pct(totals, 99) <= TOTAL_BUDGET_MS &&
         steadyOver === 0 &&
@@ -735,8 +593,6 @@ async function main(): Promise<void> {
         byOutcome("epipe") === 0 &&
         byOutcome("connect_timeout") === 0 &&
         byOutcome("econnrefused") === 0 &&
-        // `other` = framing errors or unexpected socket codes (EMFILE, EACCES…);
-        // a daemon sending garbage or hitting an fd limit must fail the gate.
         byOutcome("other") === 0,
     };
 
@@ -776,10 +632,7 @@ async function main(): Promise<void> {
   process.exit(exitCode);
 }
 
-// [LAW:no-silent-failure] main() exits explicitly on its own paths, but an
-// unexpected throw would skip process.exit and leave the exit code to Node's
-// default. Force a loud non-zero exit so a crashed harness can never look like a
-// pass to a CI gate reading the exit code.
+// [LAW:no-silent-failure] Force a loud non-zero exit so a crashed harness can never look like a pass to a CI gate.
 main().catch((e: unknown) => {
   // eslint-disable-next-line no-console
   console.error("harness crashed:", e);

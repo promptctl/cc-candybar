@@ -1,54 +1,20 @@
-// [LAW:single-enforcer] Every subprocess in the Node runtime goes through one
-// boundary. The primitive owns the import of `node:child_process`; every other
-// module imports `launch`/`launchSync` from here. The ESLint config (and the
-// kz8.2 DoD grep) enforces this.
-//
-// [LAW:one-type-per-behavior] `exec`/`execFile`/`spawn` and their sync twins
-// are seven names for one act. `LaunchOpts` is the single shape; sync vs async
-// is a separate function pair, not a config flag.
-//
-// [LAW:dataflow-not-control-flow] Categories flow through one boundary as
-// data; the body is the same code path for every category. The metering layer
-// reads the category off the request, not off the call site.
-//
-// [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
-// operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
-// reaped before the caller resumes, so it cannot outlive its frame (the one
-// exception is a group the launcher was refused to signal: `signal-refused`).
-// `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
-// outliving its caller — the daemon-handoff escape hatch, used only by the
-// daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
-// ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
-// return contracts, so an unwaited helper that survives a render frame is
-// unrepresentable here rather than forbidden by convention.
-//
-// A `launch` child leads its own process group, so terminating it (the timeout,
-// or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
-// echo x"` keeps `sh` as the parent and `sleep` as a grandchild, and signalling
-// `sh` alone would orphan the `sleep`. The price is that a terminal's SIGINT
-// no longer reaches a foreground CLI's children through the tty: a child ends
-// by its timeout, its caller's `signal`, or its own exit.
+// [LAW:single-enforcer] Every subprocess in the Node runtime goes through this one
+// boundary. [LAW:types-are-the-program] Lifetime is the OPERATION, never a flag: the
+// waited pair reaps before the caller resumes, `launchDetachedSync` is the one orphan.
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 
 import type { LaunchStatsHandle } from "./stats-handle";
 
-// Closed list of subprocess categories. Adding a new spawn site requires
-// adding its category here, which forces a code review of the new launch
-// pattern. [LAW:no-mode-explosion]: no per-site escape hatch.
+// [LAW:no-mode-explosion] Closed list: a new spawn site must add its category here.
 export const LAUNCH_CATEGORIES = [
   "git",
-  // Forge CLIs (gh / glab) for the PR/MR lookup. A network-bound spawn,
-  // separate from "git" so daemon-stats attributes it independently and a
-  // future rate limit can target it without throttling local git.
   "forge",
   "user-shell",
   "tmux",
   "click.pbcopy",
   "click.open",
-  // The doctor's tmux query — click-driven like the verbs above, and its own
-  // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",
   "install.plutil",
   "install.osacompile",
@@ -56,45 +22,22 @@ export const LAUNCH_CATEGORIES = [
   "install.pbcopy",
   "install.open",
   "daemon-spawn",
-  // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
-  // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
-  // arbitration — never per render — so it needs no rate limit.
   "process-fingerprint",
-  // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
-  // over a published install). One click, one long-running child; the
-  // notice's own running/failed state serialises clicks, so no rate limit.
   "update.apply",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
 
-// [LAW:single-enforcer] Per-category minimum interval between spawn attempts
-// (start timestamps). The limiter records on attempt, not on success — a
-// failed spawn still arms the timer so a broken binary can't be retried in a
-// tight loop. Sparse map: categories without entries have no rate limit.
-// [LAW:no-mode-explosion] Bounds are constants here, not config knobs — the
-// caps protect the host from misbehaving renderers/templates and don't need
-// user tuning. Bump these if a legitimate workload starts hitting them.
+// [LAW:single-enforcer] Armed on ATTEMPT, so a broken binary cannot be retry-looped.
 const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
-  // Click verbs: a misbehaving template emitting many clickable links + a
-  // user rapid-clicking = unbounded helpers. One spawn per second is enough
-  // for any human click cadence.
   "click.pbcopy": 1000,
   "click.open": 1000,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
   "doctor.tmux": 1000,
 };
 
-// [LAW:one-source-of-truth] Last-attempt timestamp per category — the data
-// the rate-limit decision reads. Recorded for every attempted spawn (success
-// or spawn-error); rate-limit rejections do NOT update this, because no
-// spawn was attempted. Module-scope state is acceptable here because
-// `launch.ts` is itself the single enforcer; nothing else mutates this.
+// [LAW:one-source-of-truth] A rate-limit rejection does NOT record: no spawn happened.
 const lastStartAt = new Map<LaunchCategory, number>();
 
-// [LAW:dataflow-not-control-flow] The rate-limit decision is a pure function
-// of (category, now, last-start, policy). Same code path every call; the
-// result type carries which branch fired.
 function checkRateLimit(
   category: LaunchCategory,
 ):
@@ -113,18 +56,12 @@ function recordStart(category: LaunchCategory): void {
   lastStartAt.set(category, Date.now());
 }
 
-// Exposed for tests only — resets the rate-limit tracker so each test starts
-// from a clean state.
 export function __resetRateLimitsForTest(): void {
   lastStartAt.clear();
 }
 
-// [LAW:one-source-of-truth] The environment a child inherits is THIS module's
-// `process.env`, resolved here for every spawn site. Passing `undefined` lets
-// node read the host process's environment directly, which is a second clock:
-// under a realm boundary (Jest's sandbox copies `process.env` per test file)
-// the two diverge, and a PATH the test set for a `shell` source never reached
-// the shell it spawned (brandon-custom-segments-g5z.3's doc stubs ran as 127).
+// [LAW:one-source-of-truth] Resolve the child's env HERE. Passing `undefined` lets
+// node read the host env — a second clock that diverges under Jest's per-file copy.
 function childEnv(opts: LaunchOpts): NodeJS.ProcessEnv {
   return opts.env ?? process.env;
 }
@@ -139,12 +76,8 @@ export interface LaunchOpts {
   category: LaunchCategory;
 }
 
-// [LAW:types-are-the-program] Cancellation exists only where a frame is
-// alive to observe it: `launch`. A sync launcher cannot read a signal while
-// it blocks, so the option is unrepresentable there rather than ignored.
+// [LAW:types-are-the-program] Cancellation exists only where a frame is alive to see it.
 export interface AsyncLaunchOpts extends LaunchOpts {
-  // The caller's cancellation: aborting it terminates the child (and its
-  // group); the result is `reason: "aborted"` once the child is reaped.
   signal?: AbortSignal;
 }
 
@@ -152,17 +85,8 @@ export type LaunchResult =
   | { ok: true; stdout: string; stderr: string; exitCode: number | null }
   | {
       ok: false;
-      // [LAW:one-type-per-behavior] Distinct termination causes get distinct
-      // tags so callers + stats can attribute correctly. "timeout" means the
-      // local timer fired; "aborted" means the caller's `signal` fired;
-      // "signal" means the OS or external killer ended the child for some
-      // other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...); "non-zero" is a
-      // clean exit with a non-zero code; "spawn-error" is a failure before
-      // the child started; "rate-limited" means the primitive refused to
-      // spawn because the per-category minimum interval was not yet elapsed
-      // — no child process was launched. "signal-refused" means the OS
-      // refused the termination signal (EPERM: the child changed its real
-      // uid), so the child is NOT reaped; `error` carries the errno.
+      // [LAW:one-type-per-behavior] "signal" is any killer OTHER than our timeout or
+      // abort; "rate-limited" launched no child; "signal-refused" leaves it unreaped.
       reason:
         | "timeout"
         | "aborted"
@@ -196,26 +120,18 @@ function rateLimitedResult(
 
 let statsHandle: LaunchStatsHandle | null = null;
 
-// Install the stats handle once, at daemon startup. Other runtimes (Node
-// fallback, install path) leave it null and pay no metering cost.
 export function setLaunchStats(handle: LaunchStatsHandle | null): void {
   statsHandle = handle;
 }
 
-// [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
-// path. The lifetime invariant ("waited — child reaped before the caller
-// resumes") requires that a child which ignores SIGTERM is still gone before we
-// resolve. SIGTERM lets well-behaved children flush/clean up; SIGKILL is the
-// backstop so the promise cannot resolve while the child is still alive.
+// [LAW:types-are-the-program] SIGKILL after this grace keeps "reaped before the
+// caller resumes" true for a child that ignores SIGTERM.
 const TIMEOUT_KILL_GRACE_MS = 250;
 
-// A termination the launcher itself initiated — carried as data because the
-// OS reports only the signal, never why it was sent.
 type Terminated = "timeout" | "aborted";
 
-// Signal a waited child's whole process group (it leads its own; see the
-// header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
-// — the state this call exists to reach; any other failure propagates.
+// [LAW:no-silent-failure] exception: ESRCH is the group already gone, the state this
+// call exists to reach; any other failure propagates.
 function signalGroup(pid: number, sig: NodeJS.Signals): void {
   try {
     process.kill(-pid, sig);
@@ -275,11 +191,8 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
-    // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
-    // termination — and which — is data we have to carry. The OS doesn't tell
-    // us why a child was signalled — without it, SIGKILL from the OOM killer,
-    // SIGINT propagated through the tty, SIGPIPE on a closed pipe, etc. would
-    // all be misreported as "timeout" or "aborted".
+    // [LAW:dataflow-not-control-flow] The OS never says WHY a child was signalled, so
+    // without carrying this an OOM kill or a tty SIGINT would read as "timeout".
     let terminated: Terminated | null = null;
 
     const onAbort = () => terminate("aborted");
@@ -294,10 +207,8 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
-    // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
-    // the child changed its real uid) is this run's result like any other
-    // failure — a `LaunchResult` arm, never a rejection or a throw out of a
-    // timer callback, so the single-enforcer primitive stays total.
+    // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM) is this
+    // run's RESULT, never a throw out of a timer, so the primitive stays total.
     const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
         signalGroup(pid, sig);
@@ -314,17 +225,9 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       }
     };
 
-    // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
-    // `close` handler resolve once the child is actually gone, so the promise
-    // never resolves while the child is still alive. SIGTERM first; SIGKILL
-    // after a grace period if the child ignores it. One termination per
-    // child: the other trigger is disarmed so the cause cannot be rewritten.
-    //
-    // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the spawn
-    // failed asynchronously (ENOENT) — there is no process to signal and the
-    // `error` event settles that case. kill() on a pid-less child signals the
-    // wrong target (verified: it can terminate the caller), so escalation is
-    // gated on the pid actually existing.
+    // [LAW:types-are-the-program] Do NOT settle here: let `close` resolve once the
+    // child is gone. `child.pid` is undefined after an async spawn failure, and kill()
+    // would then signal the wrong target. [LAW:dataflow-not-control-flow]
     const terminate = (cause: Terminated) => {
       terminated = cause;
       if (timer) clearTimeout(timer);
@@ -360,10 +263,6 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     });
 
     child.on("close", (code, signal) => {
-      // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
-      // including the termination paths. Once `terminated` is set the cause
-      // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
-      // ended the child.
       if (terminated !== null) {
         settle({
           ok: false,
@@ -403,8 +302,6 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
   });
 }
 
-// Sync variant. For callers that genuinely cannot be async — the spawn
-// outcome must be settled before the function returns.
 export function launchSync(opts: LaunchOpts): LaunchResult {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
@@ -455,12 +352,8 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       return { ok: true, stdout, stderr, exitCode: result.status };
     }
 
-    // [LAW:dataflow-not-control-flow] The reason data lives in the
-    // spawnSync result, not in the surrounding control flow. Node sets
-    // `result.signal` whenever the child died from a signal — including but
-    // not limited to the timeout's SIGTERM. We can only attribute "timeout"
-    // when a timeout was actually requested; otherwise the signal came from
-    // somewhere else (OOM killer, ctrl-C through the tty group, etc.).
+    // [LAW:dataflow-not-control-flow] "timeout" is only attributable when a timeout
+    // was requested; any other signal came from elsewhere (OOM killer, tty ctrl-C).
     const hasTimeout = opts.timeoutMs !== undefined && opts.timeoutMs > 0;
     const reason: "timeout" | "signal" | "non-zero" = result.signal
       ? hasTimeout && result.signal === "SIGTERM"
@@ -489,12 +382,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   }
 }
 
-// [LAW:single-enforcer] The one orphan operation: a detached, unref'd,
-// fire-and-forget launch that deliberately outlives its caller. This is the
-// only Node-side launch with that lifetime; everything else waits. It returns
-// the typed spawn outcome synchronously (so a failed spawn surfaces as
-// `ok: false` rather than a discarded Promise reporting success), and meters
-// through the stats handle so orphan spawns still show up in daemon-stats.
+// [LAW:single-enforcer] The one orphan operation, deliberately outliving its caller.
 export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
@@ -522,8 +410,6 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
       stdio: "ignore",
     });
   } catch (err) {
-    // spawn throws synchronously on some failure modes (invalid options,
-    // EACCES on some platforms).
     return {
       ok: false,
       reason: "spawn-error",
@@ -534,13 +420,8 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
       error: err instanceof Error ? err.message : String(err),
     };
   }
-  // [LAW:no-silent-fallbacks] spawn() with ENOENT (e.g. missing binary) does
-  // *not* throw — it returns a ChildProcess with pid=undefined that emits
-  // 'error' asynchronously. Two things matter here:
-  //   1. The 'error' must have a listener or Node crashes the process.
-  //   2. The synchronous return must reflect that the spawn failed.
-  // We attach a no-op listener and use the synchronously-observable absence
-  // of a pid as the spawn-failure signal.
+  // [LAW:no-silent-fallbacks] spawn() with ENOENT does NOT throw: an unlistened
+  // 'error' crashes the process, and the absent pid is the observable failure.
   child.once("error", () => {});
   if (child.pid === undefined) {
     return {

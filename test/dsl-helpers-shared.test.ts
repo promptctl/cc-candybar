@@ -7,13 +7,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { SessionState } from "../src/daemon/session-state";
 
-// [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
-// re-parsed into every template cost ~30 MB per registered config; the daemon
-// holds one per (projectDir, cwd) and sat at 600+ MB with twenty. Helpers are
-// now one shared Defines (src/dsl/render.ts compileHelpers), which brings a
-// stdlib config to ~1.2 MB. This pins the order of magnitude, not the exact
-// figure: a regression back to per-template copies overshoots the bound by
-// ten times; ordinary growth of the stdlib does not.
+// [LAW:verifiable-goals] An order-of-magnitude bound: per-template helper copies overshoot it tenfold.
 const PER_CONFIG_BOUND_BYTES = 4 * 1024 * 1024;
 
 v8.setFlagsFromString("--expose_gc");

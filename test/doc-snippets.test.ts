@@ -1,35 +1,6 @@
-// [LAW:one-source-of-truth] The docs teach by example: the interaction
-// authoring reference (docs/interaction-authoring.md) shows an AGENT author
-// canonical configs that must load and mistakes paired with the loader's ACTUAL
-// error text; the segment authoring reference (docs/segment-authoring.md)
-// does the same for a data-backed segment — a peer script, a shell source,
-// dotted reads, a ramp; the README shows a human the merge model with one
-// config. Every such snippet rots silently if untested — a drifted example
-// teaches the next reader a stale spelling (the README's example once used a
-// deleted `layout:` sugar for a release cycle, brandon-docs-3vl), and a
-// drifted error quote teaches it to expect text the loader no longer prints.
-// This suite extracts every annotated snippet from every listed doc and
-// drives it through checkConfig — the same entry function `cc-candybar check`
-// runs — so the docs, the CLI, and the daemon cannot disagree about what loads
-// or what an error says.
-//
-// [LAW:one-type-per-behavior] One snippet contract, N docs: a doc is a row in
-// DOCS carrying only what differs — its path and the floor each snippet family
-// must clear, which guards the extractor against a format drift that matches
-// nothing and lets the suite pass vacuously.
-//
-// Snippet contract (stated in each doc's header comment):
-//   ```json5 check:pass  — a complete config; must be clean (exit 0, no warnings)
-//   ```json5 check:fail  — a complete config; must be fatal (exit 1), and the
-//                          IMMEDIATELY FOLLOWING fenced block, tagged `error`,
-//                          must quote a substring of the actual fatal message.
-//   ```sh stub:<name>    — an executable the doc's `shell` snippets may run:
-//                          its body is written verbatim as `<name>` onto a PATH
-//                          prefix before any snippet runs, so a `shell` source
-//                          in a doc depends on the doc, never on the CI box's
-//                          tools (brandon-custom-segments-g5z.3).
-// Every ```json5 block must carry one of the two annotations — an unannotated
-// config snippet is an untested claim, which this suite rejects.
+// [LAW:one-source-of-truth] Every annotated snippet runs through checkConfig,
+// the entry `cc-candybar check` uses, so a doc and the CLI cannot disagree.
+// [LAW:one-type-per-behavior] A doc is a row in DOCS: its path and its floors.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -38,10 +9,8 @@ import { checkConfig, checkPlan } from "../src/check";
 
 const ROOT = path.join(__dirname, "..");
 
-// [LAW:parse-dont-validate] A fence's info string is parsed ONCE, here, into
-// the family it belongs to; every test below switches on `kind`, never on the
-// raw string. `other` is every fence the contract does not govern (a bare
-// ``` block, a ```ts example) — a real member, so the parse is total.
+// [LAW:parse-dont-validate] An info string is parsed ONCE, here; every test
+// switches on `kind`. `other` is a real member, so the parse is total.
 type Snippet =
   | { readonly kind: "pass" }
   | { readonly kind: "fail" }
@@ -49,8 +18,6 @@ type Snippet =
   | { readonly kind: "stub"; readonly name: string }
   | { readonly kind: "other" };
 
-// A stub's name is a bare executable name: what `command: "budget-status"`
-// spells, and nothing a shell would interpret.
 const STUB_INFO = /^sh stub:([a-z][a-z0-9-]*)$/;
 
 function parseInfo(info: string): Snippet {
@@ -62,8 +29,6 @@ function parseInfo(info: string): Snippet {
   return { kind: "other" };
 }
 
-// The floors a doc's families must clear. Zero is a real floor (the README
-// has no fail snippets and no stubs), not an absence.
 type Family = Exclude<Snippet["kind"], "error" | "other">;
 const FAMILIES = ["pass", "fail", "stub"] as const satisfies readonly Family[];
 
@@ -92,8 +57,6 @@ interface Fence {
   readonly line: number;
 }
 
-// One pass over a doc: every fenced block, in document order, with its info
-// string and 1-based opening line (for failure messages that point at the doc).
 function extractFences(doc: string): Fence[] {
   const lines = fs.readFileSync(path.join(ROOT, doc), "utf8").split("\n");
   const fences: Fence[] = [];
@@ -117,8 +80,7 @@ function extractFences(doc: string): Fence[] {
     }
     if (open !== null) open.body.push(line);
   }
-  // An unclosed fence means the doc itself is malformed — surface it rather
-  // than silently dropping the tail.
+  // An unclosed fence means the doc is malformed; never drop the tail silently.
   expect(open).toBeNull();
   return fences;
 }
@@ -126,12 +88,8 @@ function extractFences(doc: string): Fence[] {
 const fencesByDoc = new Map(DOCS.map((d) => [d.path, extractFences(d.path)]));
 const fences = [...fencesByDoc.values()].flat();
 
-// [LAW:one-source-of-truth] One bin directory serves every doc, so a stub
-// name is one executable: two docs (or one doc twice) spelling the same name
-// with different bodies would leave whichever was written last on PATH, and
-// a snippet reading the other's shape would fail pointing at the wrong doc.
-// [LAW:no-silent-failure] A duplicate throws at module load, before any
-// stub is written.
+// [LAW:one-source-of-truth][LAW:no-silent-failure] One bin directory serves
+// every doc, so a duplicate name must throw before any stub is written.
 const stubs = new Map<string, Fence>();
 for (const f of fences) {
   if (f.snippet.kind !== "stub") continue;
@@ -152,9 +110,7 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// checkConfig's collision scan reads the cwd/XDG candidate paths; pin XDG so a
-// developer's real ~/.config/cc-candybar can never leak a warning into a
-// pass-snippet assertion.
+// Pin XDG so a developer's real config cannot leak a warning into an assertion.
 const SAVED_XDG = process.env.XDG_CONFIG_HOME;
 beforeAll(() => {
   process.env.XDG_CONFIG_HOME = path.join(os.tmpdir(), "cc-doc-xdg-empty");
@@ -164,11 +120,8 @@ afterAll(() => {
   else process.env.XDG_CONFIG_HOME = SAVED_XDG;
 });
 
-// [LAW:effects-at-boundaries] The stubs reach a `shell` source through the
-// one seam it already has: the reader spawns `/bin/sh -c <command>` with the
-// process environment (src/proc/launch.ts inherits it when no env is given),
-// so a PATH prefix set here is the whole mechanism — no test-only hook in the
-// source pipeline.
+// [LAW:effects-at-boundaries] A PATH prefix is the whole mechanism: the stubs
+// reach a `shell` source through the seam it already has, with no test-only hook.
 const SAVED_PATH = process.env.PATH;
 beforeAll(() => {
   const bin = path.join(dir, "bin");
@@ -195,9 +148,7 @@ const ofKind =
     f.snippet.kind === kind;
 
 const passSnippets = fences.filter(ofKind("pass"));
-// A fail snippet's quoted error is the fence that follows it IN ITS OWN DOC —
-// pair within each doc, so a doc's last fence can never borrow the next doc's
-// first as its quote.
+// Paired within each doc, so a last fence cannot borrow the next doc's first.
 const failSnippets = [...fencesByDoc.values()].flatMap((docFences) =>
   docFences
     .map((f, i) => ({ f, next: docFences[i + 1] }))
@@ -205,8 +156,7 @@ const failSnippets = [...fencesByDoc.values()].flatMap((docFences) =>
 );
 
 describe("doc snippet contract", () => {
-  // Guard the extractor: a format drift that matches nothing must fail loudly,
-  // not let the whole suite pass vacuously.
+  // Guard the extractor: a drift that matches nothing must not pass vacuously.
   test.each(DOCS)("$path contains the expected snippet families", (doc) => {
     const own = fencesByDoc.get(doc.path)!;
     const short = FAMILIES.map((family) => ({
@@ -250,9 +200,6 @@ describe("doc snippet contract", () => {
   )(
     "fail snippet at %s line %d is fatal and prints its quoted error",
     async (_doc, _line, f, next) => {
-      // The block immediately after a check:fail snippet is its quoted error —
-      // the doc's contract, enforced here so a snippet can never drift away
-      // from its quote.
       if (next === undefined || next.snippet.kind !== "error") {
         throw new Error(
           `${f.doc} line ${f.line}: a check:fail snippet must be immediately followed by an \`\`\`error block quoting the real message`,
@@ -268,10 +215,7 @@ describe("doc snippet contract", () => {
       }
       const plan = checkPlan(outcome);
       expect(plan.code).toBe(1);
-      // [LAW:one-source-of-truth] The doc's stated contract is "a substring of
-      // check's actual stderr" — assert against exactly that surface (the full
-      // fatal stderr checkPlan emits, which carries the message), so the doc's
-      // sentence and this assertion are one contract, not a stricter shadow.
+      // [LAW:one-source-of-truth] Asserted against the surface the doc names.
       if (!plan.stderr.includes(quoted)) {
         throw new Error(
           `${f.doc} line ${next.line}: quoted error text does not match check's actual stderr.\n` +

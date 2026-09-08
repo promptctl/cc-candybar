@@ -1,45 +1,11 @@
 #!/usr/bin/env node
 // heap-analyze.mjs — V8 heap-snapshot histogram + cross-snapshot diff.
-//
-// WHY THIS EXISTS
-// ---------------
-// The daemon RSS leak (epic brandon-daemon-memory-leak-gn4) was diagnosed
-// not by speculation but by reading the heap snapshots written by limits.ts
-// at the RSS-limit trigger. This script is the reproducible form of that
-// triage: open a snapshot, see what's growing. It produced the evidence on
-// ticket brandon-daemon-memory-leak-5qh ("+3046 Node/FSReqPromise,
-// +15253 Promise, +15207 PromiseReaction ..."). Committed so the next
-// triage is `node scripts/heap-analyze.mjs a.heapsnapshot b.heapsnapshot`,
-// not "reinvent a snapshot parser under deadline".
-//
-// USAGE
-//   node scripts/heap-analyze.mjs <snapshot.heapsnapshot> [--top N] [--match RE]
-//       Histogram of node count + retained self_size by "<type> / <name>",
-//       most-numerous first.
-//
-//   node scripts/heap-analyze.mjs <before.heapsnapshot> <after.heapsnapshot> [--top N] [--match RE]
-//       Cross-snapshot diff: Δcount per class, largest growth first. This is
-//       the view that surfaces a leak — run a warmup snapshot, do work, take a
-//       second snapshot, diff. (For the transcript-fs leak specifically the
-//       second snapshot must be taken WHILE the fs burst is in flight — the
-//       FSReqPromise are held by libuv's pending-request table and vanish once
-//       the ops drain. See 5qh.)
-//
-//   Flags:
-//     --top N      limit output rows (default 40)
-//     --match RE   only rows whose "<type> / <name>" matches the JS regexp RE
-//     --json       emit machine-readable JSON instead of a table
-//
-// The .heapsnapshot format is V8's: flat `nodes`/`edges` integer arrays
-// described by `snapshot.meta.{node_fields,node_types,edge_fields,edge_types}`,
-// plus a `strings` table. node[name] indexes `strings`; node[type] indexes the
-// `node_types[0]` enum.
+// Usage: node scripts/heap-analyze.mjs <snapshot> [<after>] [--top N] [--match RE] [--json]
+// The .heapsnapshot format is V8's flat `nodes`/`edges` arrays described by `snapshot.meta`.
 
 import { readFileSync } from "node:fs";
 
-// [LAW:one-source-of-truth] The single snapshot parser. heap-retainers.mjs
-// imports this rather than re-deriving the field offsets — the two tools
-// cannot disagree about how to read a snapshot.
+// [LAW:one-source-of-truth] The single snapshot parser; heap-retainers.mjs imports it.
 export function parseSnapshot(path) {
   const raw = JSON.parse(readFileSync(path, "utf8"));
   const meta = raw.snapshot.meta;
@@ -65,7 +31,6 @@ export function parseSnapshot(path) {
   return s;
 }
 
-// "<type> / <name>" label for node ordinal i — the unit a histogram counts.
 export function nodeLabel(s, i) {
   const off = i * s.nodeStride;
   return `${s.nodeTypes[s.nodes[off + s.typeIdx]]} / ${s.strings[s.nodes[off + s.nameIdx]]}`;
@@ -84,8 +49,6 @@ export function histogram(s) {
   return h;
 }
 
-// Total node count whose label matches a regexp — the scalar a regression
-// gate asserts on (e.g. count of "FSReqPromise" classes).
 export function countMatching(s, re) {
   let n = 0;
   for (let i = 0; i < s.nodeCount; i++) {
@@ -163,8 +126,7 @@ function main() {
   }
 }
 
-// Run as CLI only when invoked directly (not when imported by heap-retainers
-// or a test). `import.meta.url` vs argv[1] is the standard ESM main-guard.
+// ESM main-guard: run as CLI only when invoked directly.
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   main();
 }

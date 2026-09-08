@@ -12,12 +12,10 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         width: 200,
       });
       expect(out.split("\n")).toHaveLength(1);
-      // PlainJoiner default separator is " | ".
       expect(out).toBe(" alpha  |  beta  |  gamma ");
     });
 
     it("exact-fit width keeps everything on one row", () => {
-      // " alpha " (7) + " | " (3) + " beta " (6) + " | " (3) + " gamma " (7) = 26
       const oneLine = " alpha  |  beta  |  gamma ";
       expect(oneLine.length).toBe(26);
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
@@ -31,7 +29,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
 
     it("narrow width forces multi-row wrapping", () => {
-      // 16 cells fits two segments + sep + leading/trailing pad but not all three.
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
@@ -45,8 +42,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       }
     });
 
-    // brandon-display-dam.2: intra-cell padding derives from the one resolved
-    // globals.padding on BuildLineOptions — 0 renders flush, N widens N per side.
     it("padding: 0 renders cells flush (no synthesized spaces)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta")], {
         style: "plain",
@@ -72,8 +67,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
 
     it("wrap:false keeps a too-wide row on one unbounded line", () => {
-      // Same narrow width that forces wrapping above; disabling wrap must
-      // render one line with overflow allowed, NOT clip or break.
+      // Disabling wrap must allow overflow, NOT clip or break.
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
@@ -85,8 +79,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
 
     it("wrap:false at a finite width is byte-equivalent to infinite width", () => {
-      // The no-wrap render is the SAME unbounded line the legacy
-      // width=Infinity path produced — wrap:false must not clip to width.
       const segments = [seg("alpha"), seg("beta"), seg("gamma")];
       const base = {
         style: "plain" as const,
@@ -150,9 +142,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
   describe("powerline style", () => {
     it("narrow width breaks across rows with arrow caps on every row", () => {
-      // The powerline cap is painted in the segment's bg (the colour bleeding
-      // out), so the segments must carry a bg for a cap to exist \u2014 a fg-only
-      // segment has no colour to paint and correctly gets no arrow.
+      // A cap is painted in the segment's bg, so a fg-only segment gets no arrow.
       const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
       const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
         style: "powerline",
@@ -162,19 +152,16 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // PowerlineJoiner end-cap: every row ends with the arrow glyph U+E0B0.
       for (const row of rows) {
         expect(row.endsWith("\uE0B0")).toBe(true);
       }
     });
   });
 
-  // brandon-display-dam.3: globals.charset swaps the joiner glyph vocabulary.
-  // Style picks the joiner SHAPE, charset the glyph VALUES \u2014 orthogonal axes.
+  // Style picks the joiner SHAPE, charset the glyph VALUES: orthogonal axes.
   describe("charset", () => {
     const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
-    // Any powerline private-use glyph is mojibake on a non-Nerd-Font terminal;
-    // the ascii renders must contain NONE, not merely different caps.
+    // The ascii renders must contain NO private-use glyph, not merely other caps.
     const PUA = /[\u{E000}-\u{F8FF}]/u;
 
     it("powerline + ascii joins and caps with '>' and emits no private-use glyphs", () => {
@@ -237,9 +224,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
   });
 
-  // brandon-display-dam.4: globals.colorCompatibility picks the depth rich-js
-  // downsamples to. One truecolor-authored segment, four depths — the SGR
-  // vocabulary in the output is the observable contract, not rich-js internals.
   describe("colorCompatibility", () => {
     const colored = [{ type: "x", text: "aaa", bgHex: "#445566" }];
     const at = (colorCompatibility: "truecolor" | "256" | "ansi" | "none") =>

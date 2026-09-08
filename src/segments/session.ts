@@ -1,7 +1,4 @@
-// [LAW:decomposition] The session usage CONTRACT — the shapes the daemon's
-// SessionUsageStore produces and the render payload reads. The transcript fold
-// that produces them is incremental and lives in the store (its single owner);
-// this module is the type seam both sides agree on.
+// [LAW:decomposition] The type seam between the daemon's usage store and the payload.
 
 export interface TokenBreakdown {
   input: number;

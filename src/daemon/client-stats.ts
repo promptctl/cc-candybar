@@ -3,13 +3,9 @@ import { describeFailure, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { StatsSnapshot } from "./stats";
 
-// Operator-driven introspection path: legitimately slower budgets than the
-// render hot path, carried as this caller's values through the shared
-// round-trip in ./client-transport. [LAW:dataflow-not-control-flow]
+// [LAW:dataflow-not-control-flow] Operator introspection: deliberately slower budgets than the render hot path.
 const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
-// Query the running daemon for stats. Does NOT spawn a daemon — stats on a
-// dead daemon is meaningless. Exits non-zero on failure with a clear message.
 export async function runDaemonStats(args: readonly string[]): Promise<void> {
   const wantJson = args.includes("--json");
 
@@ -28,10 +24,7 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
 }
 
 function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
-  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
-  // an unchecked cast from socket JSON; the presence check is the explicit
-  // narrowing at the wire edge (an ok response without `stats` classifies as
-  // permanent/malformed_response in the transport).
+  // [LAW:no-defensive-null-guards] exception: trust boundary — an unchecked cast from socket JSON.
   return requestOutcome({ kind: "stats" }, BUDGETS, (resp) =>
     "stats" in resp ? resp.stats : undefined,
   );
@@ -105,13 +98,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  total         ${s.subprocesses.total}`);
   lines.push(`  inFlight      ${s.subprocesses.inFlight}`);
   lines.push(`  lastMinute    ${s.subprocesses.lastMinute}`);
-  // Snapshot already includes only executed categories (stats.ts:
-  // snapshotSubprocesses keeps byCategory and the histograms symmetric).
   const activeCats = Object.entries(s.subprocesses.byCategory);
-  // [LAW:dataflow-not-control-flow] Column width is a function of the data,
-  // not a hardcoded constant that drifts when new categories are added. The
-  // padEnd(13) baseline matches the "  pid           " etc. columns above so
-  // short categories still line up; longer ones expand the column.
+  // [LAW:dataflow-not-control-flow] Column width follows the data; 13 matches the fixed columns above.
   const colWidth = activeCats.reduce((w, [cat]) => Math.max(w, cat.length), 13);
   for (const [cat, n] of activeCats) {
     const p50 = s.subprocesses.p50DurationMs[cat];

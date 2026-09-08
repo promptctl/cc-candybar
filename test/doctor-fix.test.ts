@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] brandon-doctor-b6a acceptance 2: the fix over a
-// settings.json WITH an existing `env` block and WITHOUT one changes exactly
-// the one key, and every other byte of the user's file survives. The edge is
-// driven with a fake DoctorEdge whose tmux probe throws, so the settings.json
-// side of the edge is exercised alone — and the gatherFacts cases pin that
-// the probe is only ever asked when there is a server to ask.
+// [LAW:verifiable-goals] The fix changes exactly one key; every other byte of the user's file survives.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -39,9 +34,6 @@ function writeSettings(file: string, text: string): DoctorEdge {
   return edge;
 }
 
-// The splice contract, asserted as bytes: the output minus the inserted
-// entry IS the input. Splitting on the entry and gluing the halves back
-// together must reproduce the original text exactly.
 function assertOnlyInserted(before: string, after: string, entry: RegExp): void {
   const m = entry.exec(after);
   expect(m).not.toBeNull();
@@ -137,8 +129,7 @@ describe("gatherFacts", () => {
     expect(gatherFacts(edge, null).claudeSettingsEnv).toEqual({});
   });
 
-  // [LAW:no-silent-failure] Unparseable is thrown, never read as empty — the
-  // fix would otherwise splice into a file it cannot parse either.
+  // [LAW:no-silent-failure] Unparseable throws: the fix must not splice into a file it cannot parse.
   test("an unparseable settings file throws", () => {
     const edge = writeSettings("settings.json", `{ "env": `);
     expect(() => gatherFacts(edge, null)).toThrow();

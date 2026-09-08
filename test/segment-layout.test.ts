@@ -1,18 +1,12 @@
-// [LAW:behavior-not-structure] Tests assert observable output (visible
-// text, total width, style fields at the boundaries) — never the internal
-// shape of how the layout result was assembled.
+// [LAW:behavior-not-structure] Asserts observable output, never how the layout
+// result was assembled.
 //
 // [LAW:types-are-the-program] applySegmentLayout returns the ONE strip item a
-// segment line contributes (0 cells for an empty line, 1 otherwise). For
-// "auto" width it collapses the cells with no resize; for fixed width it sizes
-// that one cell exactly to `width`, with truncation/padding applied.
-// Span-preserving across every op (OSC-8 links survive as interior spans).
+// segment line contributes: 0 cells for an empty line, 1 otherwise.
 
 import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function cell(text: string, style?: Style | string): RichText {
   return new RichText(text, { style, end: "", noWrap: true });
@@ -32,10 +26,6 @@ const autoOptions = {
   padding: 0,
   truncate: "right" as const,
 };
-
-// ────────────────────────────────────────────────────────────────────────────
-// 1. evaluateWhen
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("evaluateWhen", () => {
   const engine = createCcCandybarEngine();
@@ -76,10 +66,6 @@ describe("evaluateWhen", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 2. Auto width — cells collapse into one strip item (no resize)
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("auto width — collapse to one cell, no width constraint", () => {
   test("collapses the segment's cells into one strip item", () => {
     const cells = [cell("hello"), cell(" world")];
@@ -92,10 +78,6 @@ describe("auto width — collapse to one cell, no width constraint", () => {
     expect(applySegmentLayout([], autoOptions)).toHaveLength(0);
   });
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// 2b. Padding — brandon-display-dam.2: intra-cell spaces from globals.padding
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("padding — synthesized inside the collapsed cell, before sizing", () => {
   test("pads the collapsed cell on both sides", () => {
@@ -124,10 +106,6 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 3. Fixed width — exact fit
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("fixed width — exact fit", () => {
   test("content already fills the width", () => {
     const result = applySegmentLayout([cell("hello")], {
@@ -140,10 +118,6 @@ describe("fixed width — exact fit", () => {
     expect(result.map((c) => c.plain).join("")).toBe("hello");
   });
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// 4. Justify
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("justify — left", () => {
   test("pads on the right to reach width", () => {
@@ -195,10 +169,6 @@ describe("justify — center", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 5. Truncate — right (default marker "…")
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("truncate — right", () => {
   test("keeps left, marker on right", () => {
     const result = applySegmentLayout([cell("hello world")], {
@@ -238,10 +208,6 @@ describe("truncate — middle", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 6. Multi-cell truncation
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("multi-cell truncation", () => {
   test("cells are concatenated before layout; result is one cell", () => {
     const cells = [cell("hello"), cell(" world"), cell("!!")];
@@ -257,10 +223,6 @@ describe("multi-cell truncation", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 7. Custom marker
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("custom truncate marker", () => {
   test("two-char marker on right", () => {
     const result = applySegmentLayout([cell("hello world")], {
@@ -274,10 +236,6 @@ describe("custom truncate marker", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 8. baseStyle on the merged cell
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("baseStyle on the merged cell", () => {
   test("padding inherits the cell's wrapping style (segment bg+fg continuous)", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
@@ -290,13 +248,9 @@ describe("baseStyle on the merged cell", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0]!.plain).toBe("hi   ");
-    // The cell-level style is the baseStyle, so padding chars (which have
-    // no span overlay) render with that style — making the segment bg+fg
-    // continuous across the padded gap.
+    // Padding chars carry the cell-level baseStyle, so bg+fg stay continuous.
     expect(result[0]!.style.bgcolor?.name).toBe("blue");
     expect(result[0]!.style.color?.name).toBe("white");
-    // Edges report the same baseStyle since the kept text fragment carries
-    // the same merged style.
     expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
     expect(result[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
   });
@@ -315,13 +269,8 @@ describe("baseStyle on the merged cell", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 9. Truncation through heterogeneous-fg interior — bzh.9 limitation is gone
-// ────────────────────────────────────────────────────────────────────────────
 // [LAW:types-are-the-program] With RichText as the cell type, truncation
-// preserves spans by construction. The bzh.9 "parts-based cell loses per-
-// part fg through a cut" limitation cannot be expressed in this shape —
-// the slice path is RichText.truncate, which clips spans through the cut.
+// preserves spans by construction.
 
 describe("truncation preserves per-character styling through the cut", () => {
   function heterogeneousCell(): RichText {
@@ -343,10 +292,7 @@ describe("truncation preserves per-character styling through the cut", () => {
       truncate: "right",
     });
     expect(result[0]!.plain).toBe("hello…");
-    // The "world" span was at chars 6..11; after truncation to width 6
-    // (keeping 5 chars + marker), all of "world" is dropped, so no red
-    // span survives — but the kept text retains its base styling. Assert the
-    // rendered edge colour (what the joiner reads), not where it is stored:
+    // The red span is cut away entirely; assert the rendered edge colour, since
     // the collapsed cell carries the base bg as a span, not as wrapping style.
     expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
   });
@@ -360,7 +306,6 @@ describe("truncation preserves per-character styling through the cut", () => {
       truncate: "left",
     });
     expect(result[0]!.plain).toBe("…world");
-    // The "world" span survives intact on the right.
     const spans = result[0]!.spans;
     const redSpan = spans.find((s) =>
       typeof s.style === "string"

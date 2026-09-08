@@ -1,22 +1,5 @@
-// [LAW:types-are-the-program] The action-table schema. An ActionDecl is
-// discriminated by exactly-one-of set/persist/copy/open/reset; a `set` or
-// `persist` adds exactly-one value SOURCE (to/from/min-max-by/int — `persist`
-// excludes `int`). The proof here is what lets every downstream consumer
-// (renderAction, deriveActionValidators, deriveConfigActionValidators) match
-// on the present key with no fallthrough. Whether a `{{ action "name" }}`
-// reference resolves is a cross-ref concern. This file changes when the
-// action vocabulary changes.
-//
-// [LAW:no-mode-explosion] Unlike cache (single-key value-arms → oneOfPresent) and
-// variables (tag-by-field-value → taggedUnion), an action's arms are multi-key
-// RECORDS: a `set`/`persist` carries the discriminator plus a value-source group
-// (`to` | `from` | `min`/`max`/`by` | `int`). A single key never selects an arm, so
-// the shared present-key engine doesn't fit — bending it to would mean per-arm
-// sibling allow-lists and bespoke unknown-key messages bolted on as modes. Instead
-// the leaf machinery is shared (`fields` + `refine` + field specs carry every arm's
-// shape and cross-field invariant as DATA, parameterized by discriminator name so
-// `set` and `persist` share one field-map definition) and this file owns only the
-// thin total present-key dispatch — the irreducible union eliminator.
+// [LAW:types-are-the-program] Exactly-one-of set/persist/copy/open/reset + one SOURCE.
+// [LAW:no-mode-explosion] Arms are multi-key RECORDS; this file owns only the dispatch.
 
 import {
   ACTION_KEYS,
@@ -43,12 +26,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:locality-or-seam] Structural validation of the `actions` block: each
-// action is discriminated by which of set/copy/open is present, a `set` further
-// by its value SOURCE (to | from | min/max/by | int). Whether a `{{ action
-// "name" }}` reference resolves is a cross-ref concern (validateCrossReferences),
-// which runs on the MERGED config so a segment can reference a default-provided
-// action.
+// [LAW:locality-or-seam] Shape only; whether a ref resolves is a cross-ref concern.
 export function validateActions(
   ctx: ValidateCtx,
   raw: unknown,
@@ -62,9 +40,7 @@ export function validateActions(
     );
     return {};
   }
-  // [LAW:types-are-the-program] Null-prototype record for user-keyed data, so an
-  // action named "__proto__"/"constructor" is an ordinary own property, never a
-  // prototype-chain mutation — matching the widgets block and the compiled maps.
+  // [LAW:types-are-the-program] Null-prototype: "__proto__" is an own property.
   const out: Record<string, ActionDecl> = Object.create(null) as Record<
     string,
     ActionDecl
@@ -76,8 +52,7 @@ export function validateActions(
   return out;
 }
 
-// [LAW:single-enforcer] One place pushes an issue with the resolved source line —
-// the line derivation is mechanical from the path, so no callsite restates it.
+// [LAW:single-enforcer] The one place that resolves a path to a source line.
 function issue(ctx: ValidateCtx, path: string, message: string): void {
   ctx.issues.push({
     path,
@@ -86,12 +61,7 @@ function issue(ctx: ValidateCtx, path: string, message: string): void {
   });
 }
 
-// [LAW:dataflow-not-control-flow] The top-level union eliminator: exactly one of
-// set/copy/open is present, then dispatch the whole record to that arm via the
-// arm table. The dispatch is a total projection over the present key (no
-// fallthrough) — the only branch is the presence-count, which every union must
-// discriminate somewhere. The set arm owns its own siblings (the value source),
-// so this level rejects no keys generically.
+// [LAW:dataflow-not-control-flow] Each arm owns its siblings; this level rejects none.
 function validateActionDecl(
   ctx: ValidateCtx,
   path: string,
@@ -105,13 +75,7 @@ function validateActionDecl(
     );
     return null;
   }
-  // [LAW:dataflow-not-control-flow] A dual-destination action
-  // (candybar-settings-ui-aok.3) carries BOTH `set` and `persist`, so it
-  // cannot be reached through the exactly-one-of eliminator below —
-  // `persistWhen` is its own discriminator, and its presence selects the arm
-  // exactly as the presence of `set` selects that one. The dual arm owns its
-  // own siblings (the two destination keys plus its value source), like every
-  // other arm here.
+  // [LAW:dataflow-not-control-flow] `persistWhen` is a dual's own discriminator.
   if (PERSIST_WHEN in raw) {
     return valueSourceAction(ctx, path, raw, "dual", DUAL_ARMS);
   }
@@ -129,12 +93,7 @@ function validateActionDecl(
   return ACTION_ARMS[present[0] as ActionKey](ctx, path, raw);
 }
 
-// [LAW:dataflow-not-control-flow] The top-level arm table as DATA: copy/open share
-// one template-arm shape (their key names the only difference); set/persist
-// delegate to their value-source sub-union (the SAME field shapes, a different
-// discriminator key — see valueSourceAction); reset is copy/open's plain-string
-// sibling. The present key indexes this map — the eliminator never branches on
-// the key name.
+// [LAW:dataflow-not-control-flow] The arm table as DATA, indexed by present key.
 const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   set: (ctx, path, raw) => valueSourceAction(ctx, path, raw, "set", SET_ARMS),
   persist: (ctx, path, raw) =>
@@ -147,8 +106,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   doctor: doctorArm,
 };
 
-// [LAW:one-source-of-truth] A copy/open action emits the closed single-key
-// object its arm validates — symmetric to `templateArm(key)`'s parse.
+// [LAW:one-source-of-truth] Emits the closed object `templateArm(key)` validates.
 function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
   return {
     type: "object",
@@ -158,10 +116,7 @@ function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
   };
 }
 
-// [LAW:one-source-of-truth] One ActionDecl's schema: the set/persist sub-unions
-// (each arm's `json`, derived from SET_ARMS/PERSIST_ARMS) joined with
-// copy/open/reset — the SAME members `validateActionDecl` dispatches over. The
-// `actions` block is a name → ActionDecl map, symmetric to `validateActions`.
+// [LAW:one-source-of-truth] The SAME members `validateActionDecl` dispatches over.
 function actionDeclJson(): JsonNode {
   return {
     anyOf: [
@@ -182,10 +137,7 @@ export function actionsJson(): JsonNode {
   return { type: "object", additionalProperties: actionDeclJson() };
 }
 
-// [LAW:one-type-per-behavior] copy and open are one behavior — a single required
-// template string, no other keys — parameterized by the key. Both reject every
-// sibling key (the arm's only legal key is its own) with the bespoke per-key
-// message, then read the template.
+// [LAW:one-type-per-behavior] copy and open are one behavior parameterized by key.
 function templateArm(key: "copy" | "open"): ArmParse<ActionDecl> {
   return (ctx, path, raw) => {
     for (const k of Object.keys(raw)) {
@@ -201,13 +153,7 @@ function templateArm(key: "copy" | "open"): ArmParse<ActionDecl> {
   };
 }
 
-// [LAW:one-type-per-behavior] `reset` is copy/open's shape (a single required
-// string, no other keys) but the string is a KEY (a config globals field name),
-// not a template — no Go-template parsing happens for it, so it reuses the
-// slash-free/non-empty shape `set`/`persist` keys share rather than
-// requireString's bare-presence check. A `function` declaration (not a const
-// arrow) so it is hoisted — ACTION_ARMS above references it directly, not
-// through a deferred closure.
+// [LAW:one-type-per-behavior] A config globals KEY, not a template; hoisted for ACTION_ARMS.
 function resetArm(
   ctx: ValidateCtx,
   path: string,
@@ -232,13 +178,7 @@ function resetArm(
   return key === null ? null : { reset: key };
 }
 
-// [LAW:one-type-per-behavior] `undo`/`redo` are copy/open/reset's shape one
-// step further reduced: a single required key whose only legal VALUE is the
-// literal `true` (mirrors intMarkerSpec — a marker, not data), because there
-// is no key to name: the history they step is one stack per config file,
-// not a per-target write. `function`, not a const
-// arrow, so ACTION_ARMS above (built before this declaration in source
-// order) can reference it directly via hoisting.
+// [LAW:one-type-per-behavior] A marker: the history is one stack per config file.
 function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
   return (ctx, path, raw) => {
     for (const k of Object.keys(raw)) {
@@ -261,9 +201,7 @@ function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
   };
 }
 
-// [LAW:one-source-of-truth] Mirrors templateArmJson's shape one level
-// narrower: the value schema is `const: true`, not `type: string` — a
-// marker action carries no data, on the wire or in the schema.
+// [LAW:one-source-of-truth] A marker action carries no data, on the wire or here.
 function markerArmJson(key: "undo" | "redo"): JsonNode {
   return {
     type: "object",
@@ -273,21 +211,13 @@ function markerArmJson(key: "undo" | "redo"): JsonNode {
   };
 }
 
-// [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a two-member
-// enum on its own key — `"run"` alone, or `"fix"` with the `check` it repairs.
-// The check name is gated HERE against `CHECKS` (src/doctor/checks.ts), the
-// same list the daemon's doctor-fix verb gates the wire against, so an authored
-// `[fix]` over a check that does not exist is a load error naming the ones
-// that do, never a click-time BAD_REQUEST. `function`, not a const arrow, so
-// ACTION_ARMS above can reference it directly via hoisting.
+// [LAW:types-are-the-program] Gated against the CHECKS the wire uses: unknown = load error.
 function doctorArm(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
 ): ActionDecl | null {
   const verb = raw.doctor;
-  // Every failing key is reported before returning, like the sibling arms: a
-  // run takes no check; any other verb may carry one.
   const allowed = verb === "run" ? ["doctor"] : ["doctor", "check"];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k))
@@ -318,8 +248,7 @@ function doctorArm(
   return { doctor: "fix", check };
 }
 
-// [LAW:one-source-of-truth] Two schema members for the two arms `doctorArm`
-// parses, the check enum drawn from the same CHECKS list.
+// [LAW:one-source-of-truth] The two arms `doctorArm` parses, over the same CHECKS.
 function doctorArmJson(): readonly JsonNode[] {
   return [
     {
@@ -342,14 +271,7 @@ function doctorArmJson(): readonly JsonNode[] {
 
 // ─── The `set` value-source sub-union ────────────────────────────────────────
 
-// [LAW:single-enforcer] A set-state URL path segment must be a non-empty,
-// slash-free string — the set-state value is a slash-delimited
-// <session>/<key>/<value> run, so an empty or slash-bearing segment is
-// undeliverable. One validator, two callers (the `set` key and a literal `to`
-// value), each supplying its bespoke message — the shape is enforced once, the
-// wording stays per-use DATA. The codec itself is slash-safe; this is a
-// deliberate upstream restriction so a slash-bearing key/value never reaches the
-// wire, surfaced at load rather than thrown when validators register.
+// [LAW:single-enforcer] The wire is a slash-delimited run, so either is undeliverable.
 function slashFreeString(
   ctx: ValidateCtx,
   path: string,
@@ -372,14 +294,8 @@ function slashFreeString(
   return v;
 }
 
-// [LAW:types-are-the-program] Which KEYS a value-source action carries beside
-// its value source, as data — one for a single-destination `set`/`persist`,
-// three for a `dual` (both destination keys plus the selector naming which is
-// written). Every consumer below (the key validation, the unknown-key
-// allow-list, the emitted JSON schema, the reconstructed member) reads this
-// one table, so adding the dual arm never meant a second dispatcher: the
-// discriminator stopped being ONE key and became a LIST of them, and the
-// existing machinery folds over the list [LAW:dataflow-not-control-flow].
+// [LAW:types-are-the-program] Which KEYS an action carries beside its value source.
+// [LAW:dataflow-not-control-flow] A discriminator is a LIST of keys, folded over.
 type Discriminator = "set" | "persist" | "dual";
 
 const DISCRIMINATOR_KEYS: Readonly<
@@ -397,17 +313,8 @@ const DISCRIMINATOR_KEYS: Readonly<
   ],
 };
 
-// [LAW:dataflow-not-control-flow] The discriminator keys are validated once
-// for every value source (they are shared across all arms of that
-// discriminator), before the source is detected — so a bad key and an
-// ambiguous source both surface in one pass. They are therefore NOT fields of
-// any arm's `fields` map; the arm parses only the value-source payload, and
-// the dispatcher re-attaches them.
-//
-// [LAW:no-silent-failure] Returns null when ANY key fails, after reporting
-// every one of them — the caller threads that null exactly as it threads a
-// failed payload, so a partly-valid dual never reconstructs into a member
-// missing a destination.
+// [LAW:dataflow-not-control-flow] Before the source is detected, so both surface at once.
+// [LAW:no-silent-failure] Null when ANY key fails, so a partly-valid dual never lands.
 function validateDiscriminatorKeys(
   ctx: ValidateCtx,
   path: string,
@@ -418,12 +325,7 @@ function validateDiscriminatorKeys(
   const keys = DISCRIMINATOR_KEYS[discriminator];
   let ok = true;
   for (const [key, noun] of keys) {
-    // [LAW:no-silent-failure] An ABSENT key gets the shape, not a type
-    // mismatch. A single-destination arm cannot reach this (its key is the
-    // discriminator that selected the arm), so this only ever fires on a dual
-    // that named one destination and not the other — where "persist must be a
-    // string, got undefined" describes the symptom and teaches nothing, and
-    // the author needs to be told the three keys travel together.
+    // [LAW:no-silent-failure] Only a half-declared dual reaches here: give it the shape.
     if (!(key in raw)) {
       issue(
         ctx,
@@ -449,32 +351,16 @@ function validateDiscriminatorKeys(
     }
     out[key] = value;
   }
-  // [LAW:no-silent-failure] Every failing key is reported before returning, so
-  // an author who omits two of a dual's three keys sees both in one pass —
-  // matching every other multi-issue check in this file, and matching what the
-  // comment above promises.
   return ok ? out : null;
 }
 
-// [LAW:one-source-of-truth] The wire verb name a discriminator's writes
-// travel over — `set-state` for `set` (SessionState), `set-config` for
-// `persist` (the config file), and BOTH for a dual, whose one
-// value crosses whichever wire the selector names. Threaded into the shared
-// field specs below so their "cannot be delivered on the X wire" messages
-// name the wire the value actually crosses, and the field/value noun ("set
-// value" / "persist value") names the actual action kind, not always `set`.
+// [LAW:one-source-of-truth] Threaded into the shared specs so messages name the wire.
 function wireName(discriminator: Discriminator): string {
   if (discriminator === "set") return "set-state";
   return discriminator === "persist" ? "set-config" : "set-state/set-config";
 }
 
-// [LAW:types-are-the-program] Each value source's payload as a field map — the
-// non-discriminator keys that source carries. `fields` runs every spec
-// (reporting all issues) and fails the arm when a required field is absent or
-// invalid; `refine` adds the cross-field invariants `fields` cannot express.
-// The reconstructed payload IS the member minus the discriminator, which the
-// dispatcher re-attaches. Built once per discriminator (`set`/`persist` share
-// field SHAPE but not error WORDING — see setLiteralSpec/fromSpec/cycleSpec).
+// [LAW:types-are-the-program] The member minus the discriminator the dispatcher re-attaches.
 const TO_FIELDS_SET: FieldSpecMap<{ to: string }> = {
   to: setLiteralSpec("set"),
 };
@@ -508,13 +394,7 @@ const CYCLE_FIELDS_DUAL: FieldSpecMap<{ cycle: readonly string[] }> = {
 const CYCLE_FIELDS_PERSIST: FieldSpecMap<{ cycle: readonly string[] }> = {
   cycle: cycleSpec("persist"),
 };
-// [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's two structural-edit
-// arms — PERSIST-only (see action.ts's ActionDecl doc comment for why there
-// is no `set` twin). Each field reuses layoutNameSpec: a segment/anchor name
-// must be non-empty and free of both `/` (the click wire's own segment
-// delimiter) and `:` (layout-ops.ts's op-token delimiter) — the SAME
-// wire-safety diligence slashFreeString already applies to `to`/`cycle`
-// members, one forbidden character wider.
+// [LAW:one-type-per-behavior] The structural-edit arms are PERSIST-only.
 const REMOVE_SEGMENT_FIELDS: FieldSpecMap<{ removeSegment: string }> = {
   removeSegment: layoutNameSpec("removeSegment"),
 };
@@ -527,11 +407,7 @@ const INSERT_SEGMENT_FIELDS: FieldSpecMap<{
   anchor: layoutNameSpec("anchor"),
   relation: relationSpec(),
 };
-// [LAW:one-type-per-behavior] `insertSegmentFrom`'s payload mirrors
-// `insertSegment`'s verbatim except the segment name is a `from`-shaped
-// OptionDomain (fromSpec, the SAME field `set`/`persist … from` already
-// validate) instead of a literal layout name — the "to" vs "from" split every
-// other value source already draws, one arm over.
+// [LAW:one-type-per-behavior] `insertSegment`'s payload, segment name as a `from` domain.
 const INSERT_SEGMENT_FROM_FIELDS: FieldSpecMap<{
   insertSegmentFrom: OptionDomain;
   anchor: string;
@@ -542,14 +418,7 @@ const INSERT_SEGMENT_FROM_FIELDS: FieldSpecMap<{
   relation: relationSpec(),
 };
 
-// [LAW:types-are-the-program] A bounded step is fully described by an integer
-// domain (min < max) and a non-zero integer increment (`by`; negative for a
-// down-step). The validator derives the range [min,max] (the wire gate); the
-// renderer wraps current ± by inside it. These two cross-field invariants are the
-// refinements `fields` cannot express — relating two fields, not one — carried as
-// DATA whose messages interpolate the assembled value. Unlike a stepper widget's
-// positive `step`, `by` may be negative (the down affordance), so the check is
-// non-zero, not positive.
+// [LAW:types-are-the-program] The cross-field invariants `fields` cannot express.
 interface BoundedPayload {
   min: number;
   max: number;
@@ -570,40 +439,17 @@ const byNonZero: Refinement<BoundedPayload> = {
   }),
 };
 
-// [LAW:types-are-the-program] A value-source arm is its payload field map plus
-// its refinements; `detect` (the non-discriminator keys whose presence
-// selects it), `allowed` (those keys plus the discriminator, the unknown-key
-// allow-list), and `label` (the source name in the exactly-one message — the
-// detect keys joined by "/") all DERIVE from the field map, so the field set
-// is the single source for what the arm parses, permits, and is named by.
-// Parameterized by `discriminator` ("set" | "persist") so `set` and `persist`
-// share the identical to/from/min-max-by/cycle shapes without duplicating
-// their field maps — only the discriminator's NAME differs in the emitted
-// object shape and the reconstructed member.
+// [LAW:types-are-the-program] `detect`/`allowed`/`label` all DERIVE from the field map.
 interface ValueSourceArm {
   readonly detect: readonly string[];
   readonly allowed: readonly string[];
   readonly label: string;
-  // [LAW:one-source-of-truth] The arm's emit facet: the closed object schema
-  // for this discriminator's value source — the discriminator key plus the
-  // source's own fields, derived from the SAME field map `fields` validates.
-  // Cross-field refinements (min<max, by≠0) are unexpressible in JSON Schema,
-  // so only the structural shape is emitted.
+  // [LAW:one-source-of-truth] The SAME field map `fields` validates, shape only.
   readonly json: JsonNode;
   readonly parse: ArmParse<Partial<ActionDecl>>;
 }
 
-// [LAW:no-mode-explosion] `detectKeys` narrows WHICH of an arm's fields the
-// present-count dispatch keys off, independent of `allowed`/`label` (still
-// the full field set — what the arm PERMITS and is NAMED by never changes).
-// Every arm before insertSegmentFrom had a field set disjoint from every
-// other arm's, so `Object.keys(fieldMap)` was a safe default for both jobs
-// at once. insertSegmentFrom breaks that: it shares `anchor`/`relation` with
-// insertSegment (same POSITION shape, different segment-name SOURCE), so
-// dispatching on the full set would make an ordinary `insertSegment` action
-// spuriously match both arms via those shared keys. Pass the true
-// discriminator (the field no sibling arm carries) here; omit it when the
-// field set already is disjoint from every sibling, as it is everywhere else.
+// [LAW:no-mode-explosion] Pass `detectKeys` only when an arm shares fields with a sibling.
 function valueSourceArm<P extends object>(
   discriminator: Discriminator,
   fieldMap: FieldSpecMap<P>,
@@ -638,10 +484,7 @@ function valueSourceArm<P extends object>(
   };
 }
 
-// [LAW:dataflow-not-control-flow] The value-source arms in the order their
-// labels appear in the exactly-one message. A `set` declares exactly one of
-// these; the dispatcher counts presence over `detect` and reconstructs
-// `{ set, ...payload }`.
+// [LAW:dataflow-not-control-flow] Ordered as their labels appear in the message.
 const SET_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("set", TO_FIELDS_SET),
   valueSourceArm("set", FROM_FIELDS_SET),
@@ -650,21 +493,14 @@ const SET_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("set", CYCLE_FIELDS_SET),
 ];
 
-// [LAW:one-type-per-behavior] `persist` mirrors `set` minus the `int` arm — a
-// page cursor is a UI-only paging concept with no meaning as a persisted
-// config default (see action.ts's ActionDecl comment). `removeSegment`/
-// `insertSegment` are ADDITIONAL persist-only arms with no `set` counterpart.
+// [LAW:one-type-per-behavior] `set` minus `int`, plus the persist-only structural edits.
 const PERSIST_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("persist", TO_FIELDS_PERSIST),
   valueSourceArm("persist", FROM_FIELDS_PERSIST),
   valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
   valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
   valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
-  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
-  // their own discriminating field — see valueSourceArm's own comment. They
-  // share "anchor"/"relation" (same position shape, different segment-name
-  // source), so dispatching on the full field set would make EITHER arm
-  // spuriously match an action declaring the other.
+  // [LAW:no-mode-explosion] They share "anchor"/"relation", so each must narrow detect.
   valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
   valueSourceArm(
     "persist",
@@ -674,12 +510,7 @@ const PERSIST_ARMS: readonly ValueSourceArm[] = [
   ),
 ];
 
-// [LAW:one-type-per-behavior] A dual declares any value source BOTH
-// destinations share — `set` minus `int` (a page cursor has no durable
-// meaning), which is also `persist` minus its structural-edit arms (those are
-// persist-only by design, so they have no destination to choose between).
-// The field maps are the SET ones with dual wording, so a dual's value obeys
-// exactly the shape a `set` and a `persist` of that source each obey.
+// [LAW:one-type-per-behavior] Only value sources BOTH destinations share.
 const DUAL_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("dual", TO_FIELDS_DUAL),
   valueSourceArm("dual", FROM_FIELDS_DUAL),
@@ -687,11 +518,7 @@ const DUAL_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("dual", CYCLE_FIELDS_DUAL),
 ];
 
-// [LAW:one-source-of-truth] The clause list, not the joined string, is the
-// data that varies per discriminator — the "or" belongs on the LAST clause
-// only, and which clause is last differs between `set` (ends at cycle) and
-// `persist` (ends at insertSegment), so building a list and joining it is
-// what keeps that placement correct without a second copy of the sentence.
+// [LAW:one-source-of-truth] The clause LIST varies; the "or" rides on whichever is last.
 function valueSourceClauses(discriminator: Discriminator): string[] {
   const clauses = [
     `"to" (a literal value)`,
@@ -721,13 +548,7 @@ function VALUE_SOURCE_MESSAGE(discriminator: Discriminator): string {
   return `a ${discriminator} action declares exactly one value source: ${list}`;
 }
 
-// [LAW:dataflow-not-control-flow] The set/persist sub-union eliminator:
-// validate the shared discriminator key, count which value sources are
-// present, require exactly one, reject keys outside that arm's allow-list,
-// parse the payload, reconstruct the member. The variability (which arms,
-// each arm's fields/refinements/allow-list) is the `arms` data; the only
-// branches are the presence-count and the null-threading both the key and
-// the payload share.
+// [LAW:dataflow-not-control-flow] Variability lives in the `arms` data, not in branches.
 function valueSourceAction(
   ctx: ValidateCtx,
   path: string,
@@ -767,12 +588,7 @@ function valueSourceAction(
     : ({ ...keys, ...payload } as unknown as ActionDecl);
 }
 
-// [LAW:no-silent-fallbacks] A literal `to` and the discriminator key share
-// the non-empty/slash-free shape — the wire rejects empty values and splits
-// on "/", so either is undeliverable. The empty/slash messages are this
-// arm's, the shape is the shared enforcer's. Built once per discriminator
-// (see TO_FIELDS_SET/TO_FIELDS_PERSIST) so a `persist` action's message names
-// "persist value" and the set-config wire, never `set`'s wording.
+// [LAW:no-silent-fallbacks] The wire rejects empty values and splits on "/".
 function setLiteralSpec(discriminator: Discriminator): FieldSpec<string> {
   const wire = wireName(discriminator);
   return {
@@ -791,18 +607,7 @@ function setLiteralSpec(discriminator: Discriminator): FieldSpec<string> {
   };
 }
 
-// [LAW:types-are-the-program] `from` is either a NAME (a non-empty string,
-// resolved against the option-domain registry) or an INLINE literal domain (a
-// non-empty array of deliverable wire values — the same non-empty/
-// slash-free wire shape `to` and `cycle` members enforce, plus the same
-// uniqueness `cycleSpec` requires: a duplicate has no successor-ambiguity
-// concern here, but it would render the same picker cell twice for no
-// benefit). This arm proves only the SHAPE; whether a named domain actually
-// resolves needs the merged config's per-config domains (e.g. "looks"), so
-// that check is a cross-reference concern (validateCrossReferences) —
-// symmetric to how a layout node's segment ref or a `{{ action }}` ref
-// resolves post-merge. Built once per discriminator, same reason as
-// setLiteralSpec.
+// [LAW:types-are-the-program] A domain NAME or an INLINE array; shape, not resolution.
 function fromSpec(discriminator: Discriminator): FieldSpec<OptionDomain> {
   const wire = wireName(discriminator);
   return {
@@ -875,13 +680,7 @@ function fromSpec(discriminator: Discriminator): FieldSpec<OptionDomain> {
   };
 }
 
-// [LAW:types-are-the-program] `cycle` is the enumerated domain a click steps
-// through: at least two members (one member has no successor to step to — that
-// is a literal `to`), each a deliverable wire value (non-empty, slash-free
-// — the same wire shape `to` enforces), no duplicates (the successor of a
-// duplicated member is ambiguous). Members double as the derived allow-list
-// gate, so a member this spec admits is a value the wire delivers, by
-// construction. Built once per discriminator, same reason as setLiteralSpec.
+// [LAW:types-are-the-program] Two or more, unique; these members ARE the derived gate.
 function cycleSpec(discriminator: Discriminator): FieldSpec<readonly string[]> {
   const wire = wireName(discriminator);
   return {
@@ -943,9 +742,7 @@ function cycleSpec(discriminator: Discriminator): FieldSpec<readonly string[]> {
   };
 }
 
-// [LAW:no-silent-fallbacks] `int` is a marker, not a value — it declares the key
-// an unbounded-integer cursor. Only the literal `true` is meaningful; anything
-// else is a typo to surface, not silently coerce.
+// [LAW:no-silent-fallbacks] A marker, not a value; anything else is a typo.
 function intMarkerSpec(): FieldSpec<true> {
   return {
     required: true,
@@ -964,13 +761,7 @@ function intMarkerSpec(): FieldSpec<true> {
   };
 }
 
-// [LAW:one-source-of-truth] A layout op's segment-name field (removeSegment /
-// insertSegment / anchor) is non-empty and free of BOTH wire-structural
-// characters: `/` (the click wire's own multi-arg segment delimiter, the
-// same restriction slashFreeString already enforces for `to`/`cycle`) and
-// `:` (layout-ops.ts's op-token delimiter — a name containing it would make
-// encodeLayoutOp's output ambiguous to decode). One spec, three callsites,
-// so the two-character restriction can't drift between them.
+// [LAW:one-source-of-truth] Free of `/` (click wire) and `:` (layout-ops); one spec.
 function layoutNameSpec(field: string): FieldSpec<string> {
   return {
     required: true,
@@ -996,10 +787,7 @@ function layoutNameSpec(field: string): FieldSpec<string> {
   };
 }
 
-// [LAW:types-are-the-program] `relation` is a closed two-value enum, not a
-// free string — a typo (`"befor"`) is a load error, never a click-time
-// surprise. Mirrors intMarkerSpec's "one legal literal" shape, widened to
-// two.
+// [LAW:types-are-the-program] A closed enum, so a typo is a load error.
 function relationSpec(): FieldSpec<"before" | "after"> {
   return {
     required: true,
@@ -1019,9 +807,7 @@ function relationSpec(): FieldSpec<"before" | "after"> {
   };
 }
 
-// [LAW:types-are-the-program] A required integer field — the field key (min / max
-// / by) comes from the map, the message names it. A non-integer or absent value
-// reports and fails the arm.
+// [LAW:types-are-the-program] A required integer field; the key comes from the map.
 function requireIntSpec(): FieldSpec<number> {
   return {
     required: true,

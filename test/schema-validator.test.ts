@@ -1,6 +1,4 @@
-// [LAW:behavior-not-structure] Tests assert on the ValidationReport values —
-// never on internal sets or arrays. A missing field produces a report entry;
-// an unknown field produces a report entry. That's the observable contract.
+// [LAW:behavior-not-structure] Assert on ValidationReport values, never on internals.
 
 import { validateHookData } from "../src/utils/schema-validator";
 
@@ -12,8 +10,6 @@ const VALID_HOOK = {
   model: { id: "claude-sonnet-4-6", display_name: "Claude Sonnet" },
   workspace: { current_dir: "/home/user/project", project_dir: "/home/user/project", added_dirs: [] },
 };
-
-// ─── Happy path ───────────────────────────────────────────────────────────────
 
 describe("validateHookData — happy path", () => {
   test("valid minimal hook produces a clean report", () => {
@@ -40,9 +36,9 @@ describe("validateHookData — happy path", () => {
         total_input_tokens: 8500,
         total_output_tokens: 1200,
         context_window_size: 200000,
-        used_percentage: null,       // nullable per schema
-        remaining_percentage: null,  // nullable per schema
-        current_usage: null,         // nullable per schema
+        used_percentage: null,
+        remaining_percentage: null,
+        current_usage: null,
       },
       exceeds_200k_tokens: false,
       effort: { level: "high" },
@@ -61,8 +57,6 @@ describe("validateHookData — happy path", () => {
     expect(report.unknownTopLevelFields).toHaveLength(0);
   });
 });
-
-// ─── Required fields — all 9 must be enforced ─────────────────────────────────
 
 describe("validateHookData — required fields", () => {
   test("empty object reports all 9 required fields as missing", () => {
@@ -134,8 +128,6 @@ describe("validateHookData — required fields", () => {
   });
 });
 
-// ─── Type mismatches ──────────────────────────────────────────────────────────
-
 describe("validateHookData — type mismatches", () => {
   test("session_id as number", () => {
     const hook = { ...VALID_HOOK, session_id: 42 };
@@ -193,8 +185,6 @@ describe("validateHookData — type mismatches", () => {
   });
 });
 
-// ─── Unknown top-level fields ─────────────────────────────────────────────────
-
 describe("validateHookData — unknown fields", () => {
   test("a single unknown field is reported", () => {
     const hook = { ...VALID_HOOK, some_new_field: "surprise" };
@@ -209,8 +199,7 @@ describe("validateHookData — unknown fields", () => {
   });
 
   test("all schema-defined optional fields are not flagged", () => {
-    // Exhaustive list — if Anthropic adds something and we forget to add it to
-    // KNOWN_TOP_LEVEL, this test fails and reminds us to add a handler.
+    // Exhaustive by intent: a new upstream field must fail this test.
     const hook = {
       ...VALID_HOOK,
       session_name: "x",
@@ -229,8 +218,6 @@ describe("validateHookData — unknown fields", () => {
     expect(validateHookData(hook).report.unknownTopLevelFields).toHaveLength(0);
   });
 });
-
-// ─── Data pass-through and edge cases ────────────────────────────────────────
 
 describe("validateHookData — data pass-through and edge cases", () => {
   test("data carries the original value regardless of report state", () => {

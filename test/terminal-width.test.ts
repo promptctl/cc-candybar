@@ -1,8 +1,4 @@
-// [LAW:behavior-not-structure] These tests assert the post-kz8.4 contract:
-// getTerminalWidth is a pure resolver — no subprocess, no shell-out. The hint
-// from the wire boundary wins over ambient state; ambient state wins over
-// nothing. The reserve for Claude Code's statusline left gutter applies
-// uniformly (its value is verified empirically in src/utils/terminal-width.ts).
+// [LAW:behavior-not-structure] A pure resolver: the wire hint wins over ambient state.
 
 import { getTerminalWidth } from "../src/utils/terminal-width";
 
@@ -55,8 +51,7 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   });
 
   it("falls back to process.stderr.columns when env is absent", () => {
-    // stderr is the right TTY-side fallback in a Claude hook flow: stdout is
-    // the captured statusline pipe; stderr stays attached to the terminal.
+    // stdout is the captured statusline pipe; stderr stays attached to the terminal.
     Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
@@ -76,8 +71,6 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   });
 
   it("clamps reserved width to a minimum of 1", () => {
-    // A raw width at or below the reserve would go non-positive; the floor
-    // keeps it at 1 rather than 0/negative.
     expect(getTerminalWidth(2)).toBe(1);
     expect(getTerminalWidth(1)).toBe(1);
   });

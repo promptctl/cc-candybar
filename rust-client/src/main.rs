@@ -1,25 +1,4 @@
-// Native render-path client for cc-candybar.
-//
-// Replaces `node dist/index.mjs` on the statusline hot path. Subcommands
-// (install, daemon, daemon-stats, url-handle, install-url-handler, --help)
-// transparently exec the Node fallback so this binary stays minimal.
-//
-// Wire format mirrors src/daemon/protocol.ts:
-//   - 4-byte big-endian length prefix
-//   - UTF-8 JSON body
-//   - 16 MiB cap
-// Every mirrored const (protocol version, frame cap/header, timeouts) is
-// kept in lockstep with the TS sources via scripts/check-protocol.mjs.
-//
-// Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
-//
-// On any daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
-// gated by an existence-as-lock spawn.lock file (open with O_CREAT | O_EXCL,
-// release by unlink — same primitive the Node runtime uses so the two
-// interoperate). The actual one-daemon invariant is enforced by atomic
-// bind() inside the daemon itself; the spawn.lock is the thundering-herd
-// optimization that prevents N clients from each forking a Node process
-// when one suffices.
+// The render hot path; subcommands exec Node. bind() is the one-daemon invariant.
 
 mod error_glyph;
 mod launch;
@@ -37,9 +16,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-// [LAW:one-source-of-truth] Every const below mirrors the TS wire contract
-// (src/daemon/protocol.ts, src/daemon/client.ts); scripts/check-protocol.mjs
-// diffs each one, so a drift fails prepublishOnly instead of shipping.
+// [LAW:one-source-of-truth] Diffed against the TS wire contract by check-protocol.
 pub(crate) const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
@@ -55,8 +32,6 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Parse stdin once up-front. We need session_id for the per-session
-    // last-render cache (daemon-miss fallback shows stale data, not blank).
     let parsed = match parse_stdin() {
         Ok(p) => p,
         Err(BadInput::Msg(msg)) => {
@@ -65,20 +40,10 @@ fn main() {
         }
     };
 
-    // [LAW:types-are-the-program] The render outcome carries its own
-    // recovery semantics. Three branches:
-    //   Ok        — print and persist for stale-fallback.
-    //   Transient — kick a fresh daemon, emit stale frame or "\n".
-    //   Permanent — daemon refused our request; respawning will not help.
-    //               Emit a diagnostic and do NOT kick. Mirrors the Node
-    //               caller in src/index.ts. Kicking on every failure was
-    //               the load-bearing half of the 452-corpse spiral (kz8.5).
+    // [LAW:types-are-the-program] Only Transient warrants a kick; Permanent loops.
     match render(&argv, &parsed.hook_data) {
         RenderOutcome::Ok(output) => {
             let _ = io::stdout().write_all(output.as_bytes());
-            // Persist for the next daemon-miss. Best-effort: if disk is
-            // full or perms are wrong, the user just gets a blink later
-            // instead of a stale frame — same as today's behavior.
             if let Some(sid) = parsed.session_id.as_deref() {
                 let _ = write_last_render(sid, &output);
             }
@@ -95,10 +60,7 @@ fn main() {
             std::process::exit(0);
         }
         RenderOutcome::Permanent(cause) => {
-            // [LAW:single-enforcer] Glyph formatting lives in error_glyph.rs
-            // for both runtimes — main.rs never builds this string inline.
-            // No obtain_daemon_kick() — kicking on permanent causes is what
-            // loops on VERSION_MISMATCH (the 452-corpse spiral).
+            // [LAW:single-enforcer] Glyph formatting lives in error_glyph.rs.
             let glyph = error_glyph::format_permanent_glyph(&cause);
             let _ = io::stdout().write_all(glyph.as_bytes());
             std::process::exit(0);
@@ -133,37 +95,20 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
     })
 }
 
-// --- argv dispatch -------------------------------------------------------
-
-// [LAW:one-source-of-truth] The Rust client is a fast relay for the render hot
-// path and delegates EVERY subcommand to Node — Node is the single authority on
-// what subcommands exist. A subcommand is structurally a positional first arg (a
-// word, not a flag); the render path is invoked with flags only (`--style=…`) or
-// no args, so it never has one. Discriminating on that shape — rather than a
-// hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
-// works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
-// is injected so this is a pure, testable function.
-//
-// Bare flags that are questions for a human, not render options: they are the
-// one non-structural case, so they are named here — and the test
-// `dispatch_routes_every_node_flag_to_node` enumerates the contract so a
-// spelling dropped from this list fails loudly rather than silently falling
-// through to "no input on stdin".
+// [LAW:one-source-of-truth] A subcommand is a positional first arg; matching that
+// SHAPE means one Node adds needs no Rust mirror. Bare flags are the exception.
 const NODE_FLAGS: [&str; 4] = ["--help", "-h", "--version", "-V"];
 
 fn should_dispatch_to_node(argv: &[String], stdin_is_tty: bool) -> bool {
-    // --help / -h / --version / -V anywhere → Node answers.
     if argv.iter().any(|a| NODE_FLAGS.contains(&a.as_str())) {
         return true;
     }
-    // A positional first arg (not a flag) is a subcommand → Node owns it.
     if let Some(first) = argv.get(1) {
         if !first.starts_with('-') {
             return true;
         }
     }
-    // No subcommand, but stdin is a TTY → Node prints the "needs input from
-    // Claude Code" error. We mirror the check rather than reproducing the message.
+    // Mirror the TTY check rather than reproducing Node's needs-input message.
     stdin_is_tty
 }
 
@@ -182,21 +127,13 @@ fn exec_node_fallback(argv: &[String]) {
 }
 
 fn dist_index_path() -> Option<PathBuf> {
-    // <binary_dir>/../dist/index.mjs — works for both the in-package layout
-    // (bin/cc-candybar → ../dist/index.mjs) and the platform-package layout
-    // since the binary placed by postinstall lives at the same relative path.
+    // <binary_dir>/../dist/index.mjs — the same relative path in both layouts.
     let exe = env::current_exe().ok()?;
     let dir = exe.parent()?;
     Some(dir.join("..").join("dist").join("index.mjs"))
 }
 
-// --- render path ---------------------------------------------------------
-
-// [LAW:types-are-the-program] Mirrors ClientOutcome in src/daemon/client.ts.
-// The variant *is* the recovery decision: Transient warrants a kick;
-// Permanent does not. Conflating them — which is what the previous shape
-// did, returning Result<String, _> with everything bucketed into a single
-// failure tag — was the load-bearing half of the 452-corpse spiral (kz8.5).
+// [LAW:types-are-the-program] The variant *is* the recovery decision.
 #[derive(Debug)]
 #[allow(dead_code)] // payload fields read only via Debug
 pub enum RenderOutcome {
@@ -221,8 +158,7 @@ pub enum PermanentCause {
     MalformedResponse(String),
 }
 
-// BadInput is a startup-time parse failure on stdin — it is *not* a render
-// outcome. It exits 1 in main() before any wire activity happens.
+// A startup-time stdin failure, NOT a render outcome: it exits before the wire.
 #[derive(Debug)]
 enum BadInput {
     Msg(String),
@@ -234,10 +170,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     };
-    // [LAW:single-enforcer] Client hints are captured here, in the client's
-    // live shell context, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it — not the active terminal, and not
-    // whether THIS session arrived over SSH.
+    // [LAW:single-enforcer] Only the client sees the live shell context.
     let (term_cols, term_rows) = detect_term_extents();
     let ssh = detect_ssh();
     let tmux = detect_tmux();
@@ -251,13 +184,8 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         "cwd": cwd,
     });
     // --- client hints (mirrors ClientHints in src/daemon/protocol.ts) ---
-    // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
-    // this block against that interface — add a hint in both runtimes at once.
-    //
-    // termCols / termRows are CONDITIONAL: absence is the honest "could not
-    // determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
-    // always state it, which reserves absence to mean "client too old to
-    // report" and keeps that distinguishable from a genuine local session.
+    // [LAW:one-source-of-truth] check-protocol diffs this key set. ssh and tmux are
+    // UNCONDITIONAL, which reserves absence for "client too old to report".
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
     }
@@ -265,20 +193,14 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         request["termRows"] = serde_json::Value::from(rows);
     }
     request["ssh"] = serde_json::Value::from(ssh);
-    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
-    // object is the tmux facts — absence stays "client too old to report".
     request["tmux"] = tmux;
-    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
-    // the affirmative "no override", spelled as an absent field.
     if let Some(path) = config_env {
         request["configEnv"] = serde_json::Value::from(path);
     }
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
-        // Encoding our own request failed — this is a programming error
-        // (non-serializable hook_data), not a daemon problem. Treat as
-        // Permanent so we don't loop on it.
+        // Our own request failed to encode: not a daemon problem, so Permanent.
         Err(e) => {
             return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
                 "encode request: {e}"
@@ -319,10 +241,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     interpret_response(resp)
 }
 
-// [LAW:types-are-the-program] One place that turns a wire-level response
-// into a typed outcome — mirrors interpretResponse() in src/daemon/client-transport.ts.
-// Every non-ok wire code maps to exactly one variant; TIMEOUT is the only
-// one that becomes Transient because it is the only one a respawn can cure.
+// [LAW:types-are-the-program] TIMEOUT alone is Transient; a respawn cures no other.
 fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
     let ok = resp.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
@@ -344,9 +263,7 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
         .to_string();
     match code {
         "VERSION_MISMATCH" => {
-            // Older daemons may not echo daemonV; fall back to 0 so the
-            // glyph (chunk 2) can render "client v3 ≠ daemon v?" rather
-            // than parse the human error string.
+            // Older daemons may not echo daemonV; 0 lets the glyph say "v?".
             let daemon_v = resp
                 .get("daemonV")
                 .and_then(|v| v.as_u64())
@@ -366,17 +283,8 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
     }
 }
 
-// [LAW:no-defensive-null-guards] Connect/read/write errors come from the
-// trust boundary with the kernel. Each known errno kind maps to a typed
-// cause; unknown kinds fall through to Io. We never silently bucket
-// these into a stringified failure that loses the recovery signal.
-//
-// [LAW:one-type-per-behavior] InvalidData/InvalidInput come from
-// write_frame/read_frame when the protocol layer detects an oversized
-// frame — that is a protocol violation, not a connection failure. The
-// daemon is alive and produced garbage; respawning would hit the same
-// response. Route to MalformedResponse so the recovery class matches the
-// TS mirror's `interpretException` for the equivalent protocol error.
+// [LAW:no-defensive-null-guards] Each errno maps to a typed cause, not a string.
+// [LAW:one-type-per-behavior] A protocol violation is not a connection failure.
 fn classify_io_error(e: io::Error) -> RenderOutcome {
     use io::ErrorKind::*;
     match e.kind() {
@@ -391,25 +299,15 @@ fn classify_io_error(e: io::Error) -> RenderOutcome {
     }
 }
 
-// Returns the remaining time before the deadline as a Duration, or an
-// io::Error with kind TimedOut so the caller's classify_io_error converts
-// it correctly. Replaces the old `remaining()` which used a custom error
-// type; this shape lets the deadline check share the IO error path.
+// TimedOut, so the deadline check shares classify_io_error's path.
 fn remaining_or_io(deadline: Instant) -> io::Result<Duration> {
     deadline
         .checked_duration_since(Instant::now())
         .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "deadline exceeded"))
 }
 
-// Pure terminal-geometry capture — no subprocess, no shell-out. Mirrors
-// detectTermExtent in src/term-extent.ts: the env var first (COLUMNS / LINES, set
-// by Bash/Zsh and propagated to hook commands by Claude Code), then
-// TIOCGWINSZ on stderr (typically a TTY when run as a Claude hook — stdin is
-// the hook JSON pipe). Each axis is None when neither source has a usable
-// value; the daemon treats absence as "unknown" and applies its own default.
+// TIOCGWINSZ goes to STDERR because stdin is the hook JSON pipe.
 fn detect_term_extents() -> (Option<u32>, Option<u32>) {
-    // One ioctl answers both axes; a failed call leaves both zero, which the
-    // per-axis fold below reads as "no TTY answer" the same as an env miss.
     let mut ws = libc::winsize {
         ws_row: 0,
         ws_col: 0,
@@ -428,10 +326,7 @@ fn detect_term_extents() -> (Option<u32>, Option<u32>) {
     )
 }
 
-// [LAW:one-type-per-behavior] Columns and rows are the same fact about two
-// axes: env var, then the TTY's answer, then None. Zero is "no answer" on
-// both sources. `parse::<u32>` is what the TS client's detectTermExtent
-// mirrors (src/term-extent.ts) — both suites pin the same table.
+// [LAW:one-type-per-behavior] One fact about two axes; both suites pin one table.
 fn detect_term_extent(env_value: Option<String>, tty_extent: u32) -> Option<u32> {
     if let Some(s) = env_value {
         if let Ok(n) = s.parse::<u32>() {
@@ -446,28 +341,17 @@ fn detect_term_extent(env_value: Option<String>, tty_extent: u32) -> Option<u32>
     None
 }
 
-// The env vars an SSH login shell inherits from sshd — mirrors SSH_ENV_VARS in
-// src/index.ts, diffed by scripts/check-protocol.mjs. Both runtimes must agree
-// on what "SSH" means, or the native fast path and the node fallback would
-// report the same session differently.
+// Diffed by check-protocol: both runtimes must agree on what "SSH" means.
 const SSH_ENV_VARS: [&str; 3] = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
 
-// [LAW:dataflow-not-control-flow] A fold over the vocabulary above. Total by
-// construction: reading our own env always yields an answer, so "no var set"
-// is the affirmative "local", never a failed detection.
+// [LAW:dataflow-not-control-flow] Total: "no var set" affirmatively means local.
 fn detect_ssh() -> bool {
     SSH_ENV_VARS
         .iter()
         .any(|name| env::var(name).is_ok_and(|v| !v.is_empty()))
 }
 
-// The tmux facts the doctor's tmux-truecolor check reasons over — mirrors
-// TMUX_ENV in src/tmux-hint.ts (socket var, pane var, Claude Code's truecolor
-// switch), diffed by scripts/check-protocol.mjs. Both runtimes must agree on
-// what "in tmux" means, or the native fast path and the node fallback would
-// report the same session differently.
-// Named roles, read by name: a reordering cannot change which variable plays
-// which part, and the check diffs `role=VAR` pairs against the TS object.
+// Diffed by check-protocol as `role=VAR`, so a reordering is drift too.
 struct TmuxEnv {
     socket: &'static str,
     pane: &'static str,
@@ -479,15 +363,10 @@ const TMUX_ENV: TmuxEnv = TmuxEnv {
     truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR",
 };
 
-// The explicit config path the session's shell carries — mirrors CONFIG_ENV
-// in src/config-hint.ts, diffed by scripts/check-protocol.mjs. The daemon is
-// detached and reads no CC_CANDYBAR_CONFIG of its own (brandon-config-5g8:
-// an override set on the client never reached a running daemon), so only the
-// client can report it. Raw here; `~` is expanded where the daemon stamps it.
+// The detached daemon reads no CC_CANDYBAR_CONFIG, so only the client reports it.
 const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
 
-// [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
-// unset-or-empty is the affirmative "no override" (`None`), never a failure.
+// [LAW:dataflow-not-control-flow] Total: unset-or-empty means "no override".
 fn detect_config_env() -> Option<String> {
     env::var(CONFIG_ENV).ok().filter(|v| !v.is_empty())
 }
@@ -497,13 +376,7 @@ fn detect_tmux() -> serde_json::Value {
     tmux_hint(raw(TMUX_ENV.socket), raw(TMUX_ENV.pane), raw(TMUX_ENV.truecolor))
 }
 
-// [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
-// `Null` is the affirmative "not in tmux" (TMUX or TMUX_PANE unset-or-empty),
-// an object is the facts. `socket` is the part of TMUX before its first comma
-// (the value is `socket,server-pid,session-id`); `truecolor` is the switch's
-// value, or `null` for unset-or-empty — both falsy to Claude Code's own
-// truthiness test. Pure over the three raw env values so the table in
-// test/doctor-checks.test.ts can be run against it.
+// [LAW:dataflow-not-control-flow] Total: `Null` affirmatively means "not in tmux".
 fn tmux_hint(
     tmux: Option<String>,
     pane: Option<String>,
@@ -520,15 +393,7 @@ fn tmux_hint(
     }
 }
 
-// Path families — must agree with src/daemon/paths.ts or the client can't
-// find the daemon's socket.
-//
-// The socket path is independent of XDG_STATE_HOME (see socket_path()).
-// State files (spawn.lock) and caches (last-render) still use XDG roots.
-
-// [LAW:one-source-of-truth] Mirrors tmux's /tmp/tmux-<uid>/default model.
-// UID is kernel identity — not overridable by any env var. CC_CANDYBAR_SOCKET
-// is the only explicit override for intentional multi-instance use.
+// [LAW:one-source-of-truth] UID is kernel identity; the path ignores XDG_STATE_HOME.
 fn socket_path() -> PathBuf {
     if let Some(s) = env::var_os("CC_CANDYBAR_SOCKET").filter(|s| !s.is_empty()) {
         return PathBuf::from(s);
@@ -548,20 +413,7 @@ fn state_dir() -> PathBuf {
         .join("cc-candybar")
 }
 
-// --- per-session last-render cache ---------------------------------------
-//
-// On every successful render we drop the output bytes at
-// $XDG_CACHE_HOME/cc-candybar/last-render/<sid> (default ~/.cache/cc-candybar/...).
-// On a daemon-miss, we read it back and emit it instead of a blank "\n".
-// A stale frame for ~1s during a daemon restart is dramatically better UX
-// than the statusline blanking.
-//
-// Per XDG Base Directory spec, regenerable caches live under
-// $XDG_CACHE_HOME, separate from the daemon's runtime state (socket,
-// pidfile, log) which stays at ~/.claude/powerline/.
-//
-// Atomicity: write to a sibling tmp file then rename. A torn cache file
-// would render as garbled ANSI for one frame; rename is cheap insurance.
+// A daemon-miss emits this instead of blanking; tmp-then-rename, or it tears.
 
 fn last_render_dir() -> PathBuf {
     cache_dir().join("last-render")
@@ -575,9 +427,7 @@ fn cache_dir() -> PathBuf {
     Path::new(&home).join(".cache").join("cc-candybar")
 }
 
-// Allow only [a-zA-Z0-9_-]. Claude session IDs are UUIDs, so this is the
-// identity function in practice; the sanitizer exists so a malformed
-// session_id can't traverse out of the cache directory.
+// Exists so a malformed session_id cannot traverse out of the cache directory.
 fn safe_session_id(sid: &str) -> Option<String> {
     if sid.is_empty() || sid.len() > 128 {
         return None;
@@ -612,8 +462,6 @@ fn read_last_render(sid: &str) -> Option<String> {
     std::fs::read_to_string(&path).ok()
 }
 
-// --- framing -------------------------------------------------------------
-
 fn write_frame<W: Write>(w: &mut W, body: &[u8]) -> io::Result<()> {
     let len = body.len();
     if len > MAX_FRAME_BYTES as usize {
@@ -644,13 +492,7 @@ fn read_frame<R: Read>(r: &mut R) -> io::Result<Vec<u8>> {
     Ok(body)
 }
 
-// --- connect with timeout ------------------------------------------------
-
-// std::os::unix::net::UnixStream has no connect_timeout. Roll our own:
-// spawn a thread that does the blocking connect, recv with timeout. On
-// timeout the thread is left to finish naturally (it'll get
-// ECONNREFUSED/connect quickly and exit). For a 50ms budget this is
-// cheaper than nonblocking + poll bookkeeping.
+// UnixStream has no connect_timeout; the thread is left to finish on timeout.
 fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream> {
     let (tx, rx) = mpsc::channel();
     let p = path.to_path_buf();
@@ -665,76 +507,30 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
     }
 }
 
-// --- obtain-daemon primitive --------------------------------------------
-//
-// [LAW:single-enforcer] One entry point on the Rust side for "obtain a
-// daemon." The atomic bind() inside the daemon is the load-bearing exclusion;
-// the existence-as-lock spawn.lock (open with O_CREAT | O_EXCL, release by
-// unlink) is a thundering-herd optimization that prevents N concurrent
-// clients from each forking a Node process when one would do.
-//
-// [LAW:dataflow-not-control-flow] The caller does not get to choose whether
-// to spawn — it asks for a daemon, this function decides. The bind() inside
-// the daemon ensures that even if this function spawns "redundantly" the
-// duplicate daemon exits immediately at bind().
-//
-// Fire-and-forget shape: the current render is already lost (we hit
-// obtain_daemon_kick on a render failure); we just want a daemon to be alive
-// for the next refresh. The lock is released by explicit remove_file at the
-// end of obtain_daemon_kick; if the client crashes mid-window, the time-based
-// staleness reclaim in try_acquire_spawn_lock unlinks files older than 10s.
-// Total work inside this fn is bounded by a few syscalls plus an optional
-// fork+execve.
+// [LAW:single-enforcer] One Rust entry point for "obtain a daemon".
+// [LAW:dataflow-not-control-flow] The caller does not choose; bind() arbitrates.
 
-// Mirrors src/daemon/acquire.ts KICK_CONTENDED_OVERRIDE_MS. If the spawn.lock
-// has existed longer than this, the kick path assumes the holder crashed
-// mid-spawn and overrides — bind() inside the daemon arbitrates duplicates.
+// Past this age the kick assumes the lock holder crashed mid-spawn.
 const KICK_CONTENDED_OVERRIDE_MS: u128 = 2_000;
 
-// [LAW:one-source-of-truth] The spawn-RATE bound. spawn.lock dedups spawns at one
-// INSTANT; this bounds them over TIME. The kick releases spawn.lock milliseconds
-// after forking, before the 0.5-3s Node boot window, so during an outage every
-// render tick re-spawns (spawn rate ≈ tick rate → process-table exhaustion). One
-// file's mtime (SPAWN_COOLDOWN_FILE) records the last spawn ATTEMPT; both runtimes
-// consult it. Mirrors src/daemon/acquire.ts SPAWN_COOLDOWN_MS — check-protocol
-// diffs this value so a drift fails prepublishOnly.
+// [LAW:one-source-of-truth] The spawn-RATE bound: spawn.lock dedups at one INSTANT,
+// this over TIME, because the lock releases before the Node boot window closes.
 const SPAWN_COOLDOWN_MS: u128 = 3_000;
 
-// Mirrors src/daemon/paths.ts SPAWN_COOLDOWN_FILE (diffed by check-protocol).
-// The cooldown file lives beside spawn.lock in the daemon state dir; both
-// runtimes must name the SAME file or the rate bound splits in two.
+// Both runtimes must name the SAME file or the rate bound splits in two.
 const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
 
-// [LAW:one-source-of-truth] Sibling of spawn.cooldown: that file's mtime
-// answers "when was a spawn last attempted"; this file's content answers
-// "how many attempts in a row have failed to converge on a live daemon" — the
-// consecutive-non-convergence streak that widens the cooldown window (see
-// effective_cooldown_ms below). Mirrors src/daemon/paths.ts SPAWN_BACKOFF_FILE,
-// diffed by check-protocol. Only the Node daemon ever resets it (it's the only
-// process that knows "a daemon just bound the socket"); the Rust client only
-// reads and increments it.
+// [LAW:one-source-of-truth] Only the Node daemon resets this streak.
 const SPAWN_BACKOFF_FILE: &str = "spawn.backoff";
 
-// Mirrors src/daemon/acquire.ts SPAWN_BACKOFF_CAP_MS / SPAWN_BACKOFF_MAX_STREAK
-// (diffed by check-protocol). 3_000ms << 5 = 96_000ms, already past the 60s
-// cap, so 5 is sufficient — not tuned to any particular outage length, just
-// enough to saturate before the shift could ever overflow u128.
+// A max streak of 5 saturates the cap well before the shift could overflow.
 const SPAWN_BACKOFF_CAP_MS: u128 = 60_000;
 const SPAWN_BACKOFF_MAX_STREAK: u32 = 5;
 
-// [LAW:one-source-of-truth] The staleness window shared by two spawn-side
-// policies: try_acquire_spawn_lock reclaims a spawn.lock older than this, and
-// claim_spawn_cooldown treats a spawn.cooldown mtime more than this in the
-// future as garbage. One fact, one constant (mirrors Node's module-level
-// STALE_LOCK_MS in src/daemon/acquire.ts). Mirrored TS↔Rust and diffed by
-// check-protocol: claim_spawn_cooldown applies it to the SAME shared
-// spawn.cooldown file both runtimes read, so a drift would make them disagree
-// on whether to spawn given identical on-disk state.
+// [LAW:one-source-of-truth] One window for two policies, over a shared file.
 const STALE_LOCK_MS: u64 = 10_000;
 
-// [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes
-// distinguish "held / contended / error" so a Rust kick and a Node kick
-// recover from the same failure modes at the same rates.
+// [LAW:one-type-per-behavior] Both runtimes recover at the same rates.
 enum LockOutcome {
     Held(PathBuf),
     Contended,
@@ -742,29 +538,20 @@ enum LockOutcome {
 }
 
 fn obtain_daemon_kick() {
-    // Re-check first: a daemon may have come up between our render failure
-    // and now. Cheap probe — if it's listening we have nothing to do.
     if can_connect(&socket_path(), Duration::from_millis(20)) {
         return;
     }
 
     match try_acquire_spawn_lock() {
         LockOutcome::Held(lock_path) => {
-            // Re-check connect — a daemon may have come up between our
-            // first probe and our lock acquisition.
             if !can_connect(&socket_path(), Duration::from_millis(20)) {
                 spawn_daemon_rate_limited();
             }
-            // [LAW:one-type-per-behavior] Release by unlinking — Node uses
-            // the same semantics so a Rust kick and a Node kick agree on
-            // lock state.
+            // [LAW:one-type-per-behavior] Release by unlinking, as Node does.
             let _ = std::fs::remove_file(&lock_path);
         }
         LockOutcome::Contended => {
-            // [LAW:dataflow-not-control-flow] Typical contention means
-            // another caller is in the spawn window — trust them. BUT: if
-            // the lock has been held suspiciously long (crashed holder), the
-            // bind() inside the daemon can still arbitrate, so override.
+            // [LAW:dataflow-not-control-flow] Override an old lock; bind() wins.
             if let Some(age_ms) = spawn_lock_age_ms() {
                 if age_ms > KICK_CONTENDED_OVERRIDE_MS {
                     eprintln!(
@@ -775,20 +562,14 @@ fn obtain_daemon_kick() {
             }
         }
         LockOutcome::Error(reason) => {
-            // [LAW:dataflow-not-control-flow] Lock error must not be a hard
-            // stop on availability — spawn.lock is an optimization, bind()
-            // is load-bearing. Mirror Node's obtainDaemonKick behavior.
+            // [LAW:dataflow-not-control-flow] An optimization must not gate this.
             eprintln!("cc-candybar: spawn-lock unavailable ({reason}) — spawning unlocked");
             spawn_daemon_rate_limited();
         }
     }
 }
 
-// [LAW:single-enforcer] Every Rust spawn site routes through here so the
-// spawn-rate bound is applied at exactly one boundary — mirror of Node's
-// cooldownGatedSpawn in src/daemon/acquire.ts. On cooldown we do nothing: a
-// spawn was attempted within SPAWN_COOLDOWN_MS and is likely still booting, and
-// the kick is fire-and-forget so "already in flight" is a complete answer.
+// [LAW:single-enforcer] Every Rust spawn site routes through here.
 fn spawn_daemon_rate_limited() {
     if !claim_spawn_cooldown() {
         return;
@@ -796,23 +577,8 @@ fn spawn_daemon_rate_limited() {
     spawn_daemon_detached();
 }
 
-// [LAW:one-source-of-truth] Mirror of Node's claimSpawnCooldown. Returns true —
-// and RECORDS the attempt (updating spawn.cooldown's mtime to now, advancing
-// spawn.backoff's streak) — when a spawn is permitted; false when an attempt
-// was recorded within the EFFECTIVE cooldown window (SPAWN_COOLDOWN_MS,
-// widened by effective_cooldown_ms(streak) once consecutive attempts have
-// failed to converge — see brandon-daemon-lifecycle-gad.3). Recording-on-grant
-// (BEFORE the fork) means a failed fork still counts, so a broken binary is
-// not retried in a tight loop.
-//
-// [LAW:no-silent-failure] A record whose mtime is more than the stale-lock
-// window (10s, matching try_acquire_spawn_lock) in the future is garbage (clock
-// skew, a touched file); it would otherwise read as "cooldown active forever"
-// and wedge the spawn path. We warn and fail toward ALLOWING the spawn. A small
-// negative age is just precision skew between the wall clock and the fs mtime —
-// that still counts as a just-recorded attempt, so the cooldown window is
-// [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). The mtime IS the timestamp, so there is
-// no content to misparse.
+// Records BEFORE the fork, so a broken binary is not retried in a tight loop.
+// [LAW:no-silent-failure] A far-future mtime would wedge the path; it warns, allows.
 fn claim_spawn_cooldown() -> bool {
     let cooldown_path = spawn_cooldown_path();
     let backoff_path = spawn_backoff_path();
@@ -821,9 +587,7 @@ fn claim_spawn_cooldown() -> bool {
         cooldown_age_ms(&cooldown_path),
         effective_cooldown_ms(streak),
     );
-    // [LAW:types-are-the-program] Exhaustive match, not `if let` + `matches!` —
-    // a fourth CooldownDecision variant must fail to compile here, not
-    // silently fall through to "allow spawn".
+    // [LAW:types-are-the-program] Exhaustive: a fourth variant must not compile.
     match decision {
         CooldownDecision::Deny => return false,
         CooldownDecision::AllowFutureGarbage(future_ms) => {
@@ -834,20 +598,12 @@ fn claim_spawn_cooldown() -> bool {
         CooldownDecision::Allow => {}
     }
     record_spawn_attempt(&cooldown_path);
-    // [LAW:dataflow-not-control-flow] Every granted spawn advances the streak
-    // by exactly one, unconditionally — the cap lives in the read side
-    // (effective_cooldown_ms) and in this min(), never as a skip.
+    // [LAW:dataflow-not-control-flow] The cap is a min(), never a skip.
     write_backoff_streak(&backoff_path, (streak + 1).min(SPAWN_BACKOFF_MAX_STREAK));
     true
 }
 
-// [LAW:effects-at-boundaries] The window arithmetic — the subtle part: a
-// future-mtime garbage record (beyond the stale-lock window) must not pin the
-// cooldown forever, while a small negative age is just precision skew between
-// the wall clock and the fs mtime and still counts as a just-recorded attempt —
-// is a pure function of the record's age, extracted from the fs read so it is
-// unit-tested without touching the filesystem. AllowFutureGarbage carries the
-// forward delta so the caller can warn loudly.
+// [LAW:effects-at-boundaries] Pure over the age; the delta rides AllowFutureGarbage.
 #[derive(Debug)]
 enum CooldownDecision {
     Allow,
@@ -855,10 +611,7 @@ enum CooldownDecision {
     Deny,
 }
 
-// [LAW:types-are-the-program] `cooldown_ms` is the required window, not a
-// captured constant — mirrors the TS generalization in acquire.ts. The same
-// pure fold serves both the base-rate check and a backed-off window from
-// effective_cooldown_ms below.
+// [LAW:types-are-the-program] A parameter, so one fold serves both windows.
 fn cooldown_decision(age_ms: Option<i128>, cooldown_ms: u128) -> CooldownDecision {
     match age_ms {
         Some(age) if age < -(STALE_LOCK_MS as i128) => CooldownDecision::AllowFutureGarbage(-age),
@@ -867,12 +620,7 @@ fn cooldown_decision(age_ms: Option<i128>, cooldown_ms: u128) -> CooldownDecisio
     }
 }
 
-// ─── Spawn backoff (consecutive non-convergence widens the cooldown) ──────
-//
-// [LAW:behavior-not-structure] Pure over the streak; no filesystem. Mirrors
-// TS's effectiveCooldownMs exactly (diffed by check-protocol for the two
-// constants; the arithmetic is pinned by the boundary unit tests on both
-// sides, matching cooldown_decision's existing pattern).
+// [LAW:behavior-not-structure] Pure over the streak; no filesystem.
 fn effective_cooldown_ms(streak: u32) -> u128 {
     let capped = streak.min(SPAWN_BACKOFF_MAX_STREAK);
     (SPAWN_COOLDOWN_MS << capped).min(SPAWN_BACKOFF_CAP_MS)
@@ -882,18 +630,8 @@ fn spawn_backoff_path() -> PathBuf {
     state_dir().join(SPAWN_BACKOFF_FILE)
 }
 
-// [LAW:no-silent-failure] A missing or garbage streak file fails toward 0 —
-// the same safe direction as a missing cooldown mtime (spawn permitted at the
-// base rate, never wedged). Never loud here; the failure mode is "one extra
-// spawn," which bind() already arbitrates.
-//
-// [LAW:no-defensive-null-guards] Every value this function can return is
-// clamped to SPAWN_BACKOFF_MAX_STREAK before it ever reaches a caller, so
-// `streak + 1` in claim_spawn_cooldown can never approach u32::MAX and
-// overflow — a spawn.backoff file containing a huge-but-parseable value
-// (corruption, a future writer bug) is treated the same as any other
-// out-of-range input, not specially. Mirrors TS's readBackoffStreak, which
-// clamps at the identical boundary for the identical reason.
+// [LAW:no-silent-failure] A bad streak file fails toward 0, never wedged.
+// [LAW:no-defensive-null-guards] Clamped, so `streak + 1` can never overflow.
 fn read_backoff_streak(path: &Path) -> u32 {
     let streak = std::fs::read_to_string(path)
         .ok()
@@ -902,25 +640,12 @@ fn read_backoff_streak(path: &Path) -> u32 {
     streak.min(SPAWN_BACKOFF_MAX_STREAK)
 }
 
-// [LAW:no-ambient-temporal-coupling] The read-then-write here (and in
-// claim_spawn_cooldown above) is not atomic across process boundaries — two
-// client processes racing through a daemon-miss window can both read the
-// same streak and both write the same increment, undercounting by one. This
-// is an accepted, bounded trade, not an oversight: the ONLY failure
-// direction is undercounting (the streak can never advance faster than
-// reality), so a race just means backoff ramps a little slower than ideal —
-// it can never permit MORE spawning than a race-free count would. The hard
-// rate ceiling remains spawn.cooldown's mtime gate, which spawn.lock already
-// serializes for the common case; this file, like spawn.lock's own
-// documented thundering-herd tolerance, is a best-effort optimization on top
-// of that, not a second load-bearing lock.
+// [LAW:no-ambient-temporal-coupling] Not atomic, but a race can only undercount.
 fn write_backoff_streak(path: &Path, streak: u32) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    // Mirrors TS's writeBackoffStreak, which sets the same 0o600 mode — kept
-    // in lockstep so the file's permissions don't depend on which runtime
-    // happens to create it first.
+    // 0o600 in both runtimes, so permissions do not depend on which created it.
     let result = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -937,8 +662,7 @@ fn spawn_cooldown_path() -> PathBuf {
     state_dir().join(SPAWN_COOLDOWN_FILE)
 }
 
-// now - mtime, in ms. Positive when the file is in the past; negative for a
-// future mtime (SystemTimeError carries the forward delta).
+// now - mtime, in ms; negative for a future mtime.
 fn cooldown_age_ms(path: &Path) -> Option<i128> {
     let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
     match modified.elapsed() {
@@ -951,9 +675,7 @@ fn record_spawn_attempt(path: &Path) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    // Content is human-diagnostic; the mtime is the authority. A write failure
-    // means no cooldown recorded — worst case one extra spawn, which bind()
-    // arbitrates — but surface it loudly rather than silently un-bound the rate.
+    // The mtime is the authority; a write failure is loud, not silent.
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -969,16 +691,10 @@ fn spawn_lock_age_ms() -> Option<u128> {
     modified.elapsed().ok().map(|d| d.as_millis())
 }
 
-// [LAW:one-type-per-behavior] Existence-as-lock semantics matching the Node
-// mirror in src/daemon/acquire.ts: open(path, O_CREAT | O_EXCL) atomically
-// fails if the file already exists. Release by unlinking. Time-based
-// staleness reclaim covers the case where a holder crashed before unlink.
-//
-// Staleness window matches Node's STALE_LOCK_MS (10s).
+// [LAW:one-type-per-behavior] Existence-as-lock with a staleness reclaim, as Node.
 fn try_acquire_spawn_lock() -> LockOutcome {
     const STALE_LOCK: Duration = Duration::from_millis(STALE_LOCK_MS);
     let path = state_dir().join("spawn.lock");
-    // Ensure state_dir exists; mkdir is idempotent.
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
             return LockOutcome::Error(format!("create_dir_all: {e}"));
@@ -990,7 +706,6 @@ fn try_acquire_spawn_lock() -> LockOutcome {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return LockOutcome::Error(format!("open spawn.lock: {e}")),
         }
-        // File already exists. Check staleness; if stale, unlink and retry.
         let stale = std::fs::metadata(&path)
             .and_then(|m| m.modified())
             .map(|t| t.elapsed().map(|d| d > STALE_LOCK).unwrap_or(false))
@@ -999,8 +714,7 @@ fn try_acquire_spawn_lock() -> LockOutcome {
             return LockOutcome::Contended;
         }
         if let Err(e) = std::fs::remove_file(&path) {
-            // ENOENT means a racer already reclaimed; that's the desired
-            // post-condition, so retry the openSync. Anything else is real.
+            // ENOENT is the desired post-condition; anything else is real.
             if e.kind() != io::ErrorKind::NotFound {
                 return LockOutcome::Error(format!("unlink stale spawn.lock: {e}"));
             }
@@ -1027,8 +741,7 @@ mod tests {
     use super::*;
     use std::io;
 
-    // The same table as test/term-extent.test.ts: both runtimes must read
-    // the same COLUMNS/LINES value from the same shell, or neither.
+    // The same table as test/term-extent.test.ts.
     #[test]
     fn detect_term_extent_parses_exactly_what_the_ts_client_parses() {
         let env = |s: &str| detect_term_extent(Some(s.to_string()), 0);
@@ -1044,9 +757,7 @@ mod tests {
         assert_eq!(detect_term_extent(None, 0), None);
     }
 
-    // The same table as test/doctor-checks.test.ts (detectTmuxHint): in tmux
-    // iff TMUX and TMUX_PANE are both non-empty; socket is TMUX up to its
-    // first comma; truecolor is the raw value or null.
+    // The same table as test/doctor-checks.test.ts (detectTmuxHint).
     #[test]
     fn tmux_hint_reads_exactly_what_the_ts_client_reads() {
         let s = |v: &str| Some(v.to_string());
@@ -1069,11 +780,7 @@ mod tests {
         );
     }
 
-    // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
-    // layer (write_frame/read_frame emit them for oversized frames) are
-    // protocol violations, not connection failures. Pinning this mapping
-    // here keeps the recovery class aligned with the TS mirror's
-    // interpretException — a kick won't fix garbage on the wire.
+    // [LAW:one-type-per-behavior] A kick will not fix garbage on the wire.
     #[test]
     fn classify_io_error_routes_invalid_data_to_permanent() {
         for kind in [io::ErrorKind::InvalidData, io::ErrorKind::InvalidInput] {
@@ -1122,11 +829,7 @@ mod tests {
         parts.iter().map(|s| s.to_string()).collect()
     }
 
-    // [LAW:one-source-of-truth] Every Node subcommand — including the ones added
-    // long after this client was written — must route to Node from the shipped
-    // binary, regardless of whether stdin is a TTY. This is the regression that
-    // a hand-maintained name list silently broke for lint/schema/vars/segments/
-    // config: they failed with "no input on stdin" under redirected stdin.
+    // [LAW:one-source-of-truth] A name list fails silently on an unknown subcommand.
     #[test]
     fn dispatch_routes_every_subcommand_to_node() {
         for cmd in [
@@ -1148,7 +851,6 @@ mod tests {
         }
     }
 
-    // The render hot path (flags only, or no args) stays on the Rust render path.
     #[test]
     fn dispatch_keeps_render_invocation_local() {
         assert!(!should_dispatch_to_node(
@@ -1158,10 +860,7 @@ mod tests {
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));
     }
 
-    // [LAW:behavior-not-structure] Pin the cooldown window arithmetic — the
-    // boundary between "just-recorded attempt" (Deny) and "future-mtime garbage
-    // that must not wedge the spawn path" (AllowFutureGarbage) — matching the TS
-    // mirror's dedicated cooldown tests. Pure over the age; no filesystem.
+    // [LAW:behavior-not-structure] Pins the just-recorded/garbage boundary.
     #[test]
     fn cooldown_absent_record_allows() {
         assert!(matches!(
@@ -1172,8 +871,6 @@ mod tests {
 
     #[test]
     fn cooldown_within_window_denies() {
-        // 0 and anything up to (but not including) SPAWN_COOLDOWN_MS is a recent
-        // attempt — deny.
         assert!(matches!(
             cooldown_decision(Some(0), SPAWN_COOLDOWN_MS),
             CooldownDecision::Deny
@@ -1199,8 +896,7 @@ mod tests {
 
     #[test]
     fn cooldown_small_future_is_precision_skew_denies() {
-        // A slightly-future mtime (wall clock vs fs precision) is NOT garbage —
-        // it is a just-recorded attempt. Deny, do not treat as garbage.
+        // A slightly-future mtime is precision skew, not garbage.
         assert!(matches!(
             cooldown_decision(Some(-1), SPAWN_COOLDOWN_MS),
             CooldownDecision::Deny
@@ -1213,8 +909,6 @@ mod tests {
 
     #[test]
     fn cooldown_far_future_is_garbage_allows_loudly() {
-        // Beyond the stale-lock window in the future = clock skew / touched file.
-        // Allow the spawn, carrying the forward delta for the warning.
         match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1), SPAWN_COOLDOWN_MS) {
             CooldownDecision::AllowFutureGarbage(ms) => {
                 assert_eq!(ms, STALE_LOCK_MS as i128 + 1)
@@ -1227,11 +921,7 @@ mod tests {
         ));
     }
 
-    // The future-garbage boundary is anchored to STALE_LOCK_MS, NOT the
-    // cooldown window — it must stay fixed even when the caller passes a
-    // backed-off window far wider than STALE_LOCK_MS, so a genuinely stale
-    // clock-skewed mtime is never mistaken for "still cooling down." Mirrors
-    // the TS regression test of the same name.
+    // Anchored to STALE_LOCK_MS, so a backed-off window cannot swallow clock skew.
     #[test]
     fn cooldown_future_garbage_boundary_independent_of_cooldown_window() {
         match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1), SPAWN_BACKOFF_CAP_MS) {
@@ -1242,9 +932,7 @@ mod tests {
         }
     }
 
-    // [LAW:behavior-not-structure] Pin the backoff arithmetic — the streak-to-
-    // window mapping and its cap — matching the TS mirror's dedicated tests.
-    // Pure over the streak; no filesystem.
+    // [LAW:behavior-not-structure] Pins the streak-to-window mapping and its cap.
     #[test]
     fn effective_cooldown_streak_zero_is_base_rate() {
         assert_eq!(effective_cooldown_ms(0), SPAWN_COOLDOWN_MS);
@@ -1271,12 +959,7 @@ mod tests {
         assert_eq!(effective_cooldown_ms(1_000_000), SPAWN_BACKOFF_CAP_MS);
     }
 
-    // [LAW:one-source-of-truth] Every bare flag Node answers — help and version,
-    // both spellings — must route to Node from the shipped binary whether stdin
-    // is redirected or a TTY. The list is spelled here on purpose, not read from
-    // NODE_FLAGS: the test pins the contract, so a spelling dropped from the
-    // routing list fails here instead of degrading to "no input on stdin" (the
-    // same silent-fallthrough defect the subcommand test above was written for).
+    // [LAW:one-source-of-truth] Spelled out, not read from NODE_FLAGS: a pin.
     #[test]
     fn dispatch_routes_every_node_flag_to_node() {
         for flag in ["--help", "-h", "--version", "-V"] {
@@ -1291,8 +974,6 @@ mod tests {
 
     #[test]
     fn dispatch_tty_without_subcommand_to_node() {
-        // No positional subcommand, but an interactive TTY → Node prints the
-        // needs-input error.
         assert!(should_dispatch_to_node(&argv(&["cc-candybar"]), true));
     }
 }

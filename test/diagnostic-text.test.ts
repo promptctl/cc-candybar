@@ -1,10 +1,3 @@
-// [LAW:one-source-of-truth] Tests for the shared sanitize-and-truncate
-// primitive used by BOTH src/render/error-glyph.ts (permanent client glyph)
-// AND src/daemon/server.ts composeWithDiagnostics (per-render diagnostic
-// strip). Behavior asserted here is the contract — caller-side tests
-// (error-glyph.test.ts) verify the contract is *applied* in their context;
-// this file pins what the contract IS.
-
 import {
   sanitizeAndTruncate,
   isControlChar,
@@ -25,11 +18,11 @@ describe("isControlChar", () => {
   });
 
   test("classifies printable ASCII and astral chars as non-control", () => {
-    expect(isControlChar(0x20)).toBe(false); // space
-    expect(isControlChar(0x41)).toBe(false); // 'A'
-    expect(isControlChar(0x7e)).toBe(false); // '~'
-    expect(isControlChar(0xa0)).toBe(false); // non-breaking space (above C1)
-    expect(isControlChar(0x1f680)).toBe(false); // rocket emoji
+    expect(isControlChar(0x20)).toBe(false);
+    expect(isControlChar(0x41)).toBe(false);
+    expect(isControlChar(0x7e)).toBe(false);
+    expect(isControlChar(0xa0)).toBe(false);
+    expect(isControlChar(0x1f680)).toBe(false);
   });
 });
 
@@ -52,15 +45,12 @@ describe("sanitizeAndTruncate", () => {
   });
 
   test("neutralizes ESC and 8-bit CSI (the ANSI-injection bypasses)", () => {
-    // ESC[31m would otherwise re-style the surrounding envelope; U+009B
-    // is the 8-bit CSI form (interpreted as `ESC [` by some terminals
-    // in 8-bit mode). Both must become spaces to keep the styled
-    // diagnostic cell immune to crafted message content.
+    // U+009B is the 8-bit CSI form; both it and ESC must go, or crafted
+    // message content re-styles the surrounding cell.
     const input = "before\x1b[31m middle\x9b[0m after";
     const out = sanitizeAndTruncate(input, 100);
     expect(out).not.toMatch(/\x1b/);
     expect(out).not.toMatch(/\x9b/);
-    // The surrounding text survives.
     expect(out).toContain("before");
     expect(out).toContain("middle");
     expect(out).toContain("after");
@@ -69,7 +59,7 @@ describe("sanitizeAndTruncate", () => {
   test("truncates with ellipsis when input exceeds maxLen", () => {
     const input = "x".repeat(200);
     const out = sanitizeAndTruncate(input, 60);
-    expect([...out].length).toBe(60); // visible length budget honored
+    expect([...out].length).toBe(60);
     expect(out.endsWith("…")).toBe(true);
   });
 
@@ -78,8 +68,7 @@ describe("sanitizeAndTruncate", () => {
   });
 
   test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
-    // 100 rockets = 100 code points but 200 UTF-16 units. A UTF-16-based
-    // truncate would split a surrogate pair; this must count code points.
+    // 100 rockets = 100 code points but 200 UTF-16 units.
     const input = "🚀".repeat(100);
     const out = sanitizeAndTruncate(input, 60);
     expect([...out].length).toBe(60);
@@ -87,15 +76,14 @@ describe("sanitizeAndTruncate", () => {
   });
 
   test("handles a realistic config-error message (newlines + indentation)", () => {
-    // Mirrors the actual error daemon emits when a legacy config doesn't
-    // validate. The displayed line must be readable as one tight string.
+    // Mirrors the daemon's real config-error output.
     const input =
       "Invalid config in /Users/bmf/.config/cc-candybar/config.json (2 issues):\n" +
       '  [line 2 • display] Unknown top-level key "display"\n' +
       '  [line 124 • budget] Unknown top-level key "budget"';
     const out = sanitizeAndTruncate(input, 200);
     expect(out).not.toMatch(/[\n\r\t]/);
-    expect(out).not.toMatch(/  /); // no double spaces
+    expect(out).not.toMatch(/  /);
     expect(out).toContain("Invalid config in");
     expect(out).toContain('[line 2 • display] Unknown top-level key "display"');
     expect(out).toContain('[line 124 • budget]');

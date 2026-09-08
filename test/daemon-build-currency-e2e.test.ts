@@ -1,11 +1,4 @@
-// [LAW:verifiable-goals] brandon-build-notice-5d6's done-when against the REAL
-// bundle: a daemon spawned from `<checkout>/dist/index.mjs` reads its own
-// `import.meta.url` and the digest baked into it, so only the built artifact
-// in a checkout-shaped directory can exercise the notice — the tsx harness
-// runs `src/index.ts`, whose entry resolves to `src/src` and is always
-// `not-source-checkout`. Each case copies the bundle into a scratch checkout
-// and reads the rendered rows over the socket; every click is the affordance
-// the bar rendered, found by what it does and dispatched through the wire.
+// [LAW:verifiable-goals] Only the built bundle in a checkout-shaped directory exercises the notice.
 
 import fs from "node:fs";
 import http from "node:http";
@@ -44,16 +37,12 @@ const RELEASE_ROW = new RegExp(
   `⬆ Newer release: 99\\.0\\.0\\. You're on ${V}\\. \\[upgrade\\] \\[dismiss\\] \\[disable\\]`,
 );
 
-// The strip wraps at the render width; a notice is one sentence however many
-// rows it took, so assertions read the strip as flowed text.
 const flowed = (raw: string): string =>
   stripAnsi(raw).split("\n").join(" ").replace(/\s+/g, " ");
 const rowsOf = (raw: string): string[] => stripAnsi(raw).split("\n");
 const hasNotice = (raw: string): boolean => stripAnsi(raw).includes("⬆");
 
-// [LAW:no-silent-failure] The feature checks its own test's precondition: a
-// bundle not built from the current `src/` carries another digest, and every
-// verdict below would be about that build. CI builds before `pnpm test`.
+// [LAW:no-silent-failure] A bundle not built from current `src/` makes every verdict below another build's.
 beforeAll(() => {
   const digest = sourceDigest(REPO_SRC);
   if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(digest)) {
@@ -81,10 +70,6 @@ function bumpMtimes(dir: string): void {
   }
 }
 
-// A checkout-shaped directory holding a copy of the built bundle and a
-// package.json naming the source's version, plus a project dir whose
-// `.json5`/`.json` pair trips the collision detector so the render carries a
-// per-config warning to order against.
 function scratchLayout(source: Source): Scratch {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-"));
   fs.mkdirSync(path.join(root, "dist"));
@@ -156,8 +141,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     });
   });
 
-  // The ticket's criterion: mtime churn from a checkout or rebase over
-  // identical bytes must not cry wolf.
+  // mtime churn over identical bytes must not cry wolf.
   test("the real source with every mtime bumped renders no notice; the config warning leads", async () => {
     const s = scratchLayout("real-with-bumped-mtimes");
     await withDaemon(s, {}, async (sock) => {
@@ -216,9 +200,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
 
   test("[rebuild] success: pnpm build ran in the checkout root, and the daemon restarted itself on the rebuilt bundle", async () => {
     const s = scratchLayout("edited");
-    // A build tool stand-in, first on the daemon's PATH: records where and how
-    // it was run, then does the one thing a build does to a running daemon —
-    // replaces the bundle it watches.
+    // A build-tool stand-in, first on the daemon's PATH; it replaces the bundle being watched.
     const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
     const record = path.join(binDir, "invocation.json");
     fs.writeFileSync(
@@ -230,9 +212,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       await withDaemon(s, { PATH: `${binDir}:${process.env.PATH}` }, async (sock, daemon) => {
         const before = await render(sock, "bc-rebuilt", s.projectDir);
         await click(sock, affordance(before, "apply-update"));
-        // The rebuilt bundle is the binary watch's restart signal: `onApplied`
-        // samples it at once and the daemon exits 0 for the next client to
-        // respawn from the fresh code — no minute-long wait, no failure line.
+        // The rebuilt bundle is the restart signal: the daemon exits 0 for the next client.
         const exited = await Promise.race([
           waitForExit(daemon.child),
           new Promise<"timeout">((resolve) => setTimeout(resolve, 20_000, "timeout").unref()),

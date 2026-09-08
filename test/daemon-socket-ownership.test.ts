@@ -13,13 +13,10 @@ import { type LeaseRead } from "../src/daemon/socket-lease";
 
 const BOUND: SocketIdentity = { dev: 1, ino: 100 };
 const MY_PID = 4242;
-// The socket identity + lease state that PROVE ownership: still our inode, lease
-// still names us.
 const HELD: IdentityRead = { kind: "present", identity: { dev: 1, ino: 100 } };
 const MINE: LeaseRead = { kind: "owned", pid: MY_PID, startTime: "st" };
 
-// The full input enumeration of the pure fold: ownership is the CONJUNCTION of
-// "still my inode" AND "lease still names me"; either failing → displaced.
+// Ownership is the CONJUNCTION of "still my inode" AND "lease still names me".
 describe("checkOwnership (pure fold)", () => {
   test("held inode + lease names me → owned", () => {
     expect(checkOwnership(BOUND, HELD, MY_PID, MINE)).toEqual({ kind: "owned" });
@@ -63,10 +60,7 @@ describe("checkOwnership (pure fold)", () => {
     expect(d.kind === "displaced" && d.reason).toContain("EIO boom");
   });
 
-  // RESIDUAL 2 (brandon-daemon-lifecycle-2b3.4): the inode still matches (we
-  // captured a thief's inode inside the bind→listening tick), but a real thief
-  // wrote its own pid into the lease. The lease arm catches what the inode arm
-  // cannot — draining the orphan.
+  // The lease arm catches what the inode arm cannot: a thief that kept our inode.
   test("held inode BUT lease reassigned to another pid → displaced", () => {
     const d = checkOwnership(BOUND, HELD, MY_PID, {
       kind: "owned",
@@ -118,12 +112,8 @@ describe("readSocketIdentity (fs boundary)", () => {
   });
 
   test("non-ENOENT stat error → unreadable (ENOENT is NOT the catch-all)", () => {
-    // A path whose parent component is a regular file makes statSync throw
-    // ENOTDIR — a real, deterministic non-ENOENT error. This guards the ENOENT
-    // discriminator in the catch: drop it and every error would collapse to
-    // `absent`, which checkOwnership treats identically here (both → displaced)
-    // but which would misreport WHY, and mask a genuinely unreadable path as a
-    // benign miss. [LAW:no-silent-failure]
+    // ENOTDIR is a real non-ENOENT error. Without the discriminator every error
+    // collapses to `absent`, masking an unreadable path. [LAW:no-silent-failure]
     const file = path.join(dir, "afile");
     fs.writeFileSync(file, "");
     const r = readSocketIdentity(path.join(file, "under-a-file"));
@@ -134,10 +124,7 @@ describe("readSocketIdentity (fs boundary)", () => {
   });
 
   test("path replaced by a distinct fs entry → checkOwnership sees displaced", () => {
-    // A regular file suffices: readSocketIdentity reads (dev, ino), the identity
-    // of a filesystem entry regardless of its type. Replacing via a coexisting
-    // sibling + rename guarantees a distinct inode (no reuse-of-freed-inode
-    // flakiness) — exactly what a reclaimer's unlink + fresh bind does.
+    // Rename over the path guarantees a distinct inode, with no reuse flakiness.
     const p = path.join(dir, "socket");
     fs.writeFileSync(p, "a");
     const bound = readSocketIdentity(p);
@@ -166,8 +153,6 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
       deps: {
         bound: BOUND,
         myPid: MY_PID,
-        // Default: the lease still names us (isolates the inode arm unless a
-        // test overrides readLease to exercise the lease arm).
         readLease: () => MINE,
         shutdown: (code) => shutdownCalls.push(code),
         log: () => {},
@@ -204,16 +189,15 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
     makeOwnershipWatch(deps).arm();
 
     jest.advanceTimersByTime(1000);
-    expect(shutdownCalls).toEqual([]); // still owning
-    const readsWhileOwning = reads; // 1
+    expect(shutdownCalls).toEqual([]);
+    const readsWhileOwning = reads;
 
-    current = { kind: "present", identity: { dev: 1, ino: 999 } }; // displaced
-    jest.advanceTimersByTime(1000); // one interval
+    current = { kind: "present", identity: { dev: 1, ino: 999 } };
+    jest.advanceTimersByTime(1000);
     expect(shutdownCalls).toEqual([0]);
     const readsAtDisplacement = reads;
 
-    // Self-disarmed: the timer stops after firing its one shutdown, so no more
-    // reads (no zombie statSync) and no re-funnel across many further intervals.
+    // Self-disarmed: no zombie statSync and no re-funnel across later intervals.
     jest.advanceTimersByTime(1000 * 5);
     expect(shutdownCalls).toEqual([0]);
     expect(reads).toBe(readsAtDisplacement);
@@ -231,29 +215,23 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
     expect(shutdownCalls).toEqual([0]);
   });
 
-  // RESIDUAL 2 armed behavior: the inode still matches (we captured a thief's
-  // inode), so only the lease arm can drain us. A thief writing its own pid into
-  // the lease fires shutdown within one interval.
   test("lease reassigned under an armed watch (inode unchanged) → exits within one interval", () => {
     jest.useFakeTimers();
     let lease: LeaseRead = MINE;
     const { deps, shutdownCalls } = watchDeps({
-      readIdentity: () => HELD, // inode never changes — the thief kept our inode
+      readIdentity: () => HELD,
       readLease: () => lease,
     });
     makeOwnershipWatch(deps).arm();
 
     jest.advanceTimersByTime(1000 * 3);
-    expect(shutdownCalls).toEqual([]); // lease still names us
+    expect(shutdownCalls).toEqual([]);
 
-    lease = { kind: "owned", pid: 9999, startTime: "thief" }; // thief overwrote
+    lease = { kind: "owned", pid: 9999, startTime: "thief" };
     jest.advanceTimersByTime(1000);
     expect(shutdownCalls).toEqual([0]);
   });
 
-  // The ticket's worded acceptance, in-process against real fs + real timer:
-  // swap the socket path's inode under a running watch → shutdown(0) within one
-  // interval; an untouched path never exits.
   test("real fs: swapping the path's inode under an armed watch exits within one interval", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-own-armed-"));
     try {
@@ -270,15 +248,14 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
       });
       makeOwnershipWatch(deps).arm();
 
-      jest.advanceTimersByTime(1000 * 3); // untouched across many intervals
+      jest.advanceTimersByTime(1000 * 3);
       expect(shutdownCalls).toEqual([]);
 
-      // Reclaimer displaces us: a coexisting sibling renamed over the path.
       const sibling = path.join(dir, "other");
       fs.writeFileSync(sibling, "");
       fs.renameSync(sibling, p);
 
-      jest.advanceTimersByTime(1000); // within one interval
+      jest.advanceTimersByTime(1000);
       expect(shutdownCalls).toEqual([0]);
     } finally {
       jest.useRealTimers();

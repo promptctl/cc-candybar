@@ -1,26 +1,6 @@
-// [LAW:single-enforcer] THE node-type registry: the one place each layout node
-// kind's render-time behavior (compile + render) is defined, dispatched through a
-// single typed lookup. The walk is ONE uniform dispatch:
-// nodeType(node.kind).render(node, ctx).
-//
-// [LAW:one-type-per-behavior] The layout is exactly two kinds — `container`
-// (arranges children) and `segment` (THE unit of rendering: one ref into the
-// named segments map, rendered to ONE strip item). Interaction, state-driven
-// display, and multi-region clickability all live in a segment's TEMPLATE, not
-// in extra node kinds — so there is no inline/stepper/picker node arm to add.
-// A horizontal run of segments is spelled `{ h: ["seg1", "seg2"] }` in the
-// A-grammar (the `cells` form and `layout` rows were deleted in 2de.19).
-//
-// [LAW:one-way-deps] This module sits BELOW render.ts (the driver): it imports
-// the leaf render/template helpers directly and receives the two recursive
-// capabilities (compileChild, renderChild) from the driver. It must NOT import
-// render.ts — that would invert the layering. render.ts imports the compiled
-// types + nodeType() from here, one-way.
-//
-// Colour is DECORATIVE only: a segment's tint derives from its address (where
-// it sits in the tree) and carries NO structural meaning — unit cohesion is
-// structural (one segment = one strip item), not a function of matching
-// backgrounds.
+// [LAW:single-enforcer] THE node-type registry: each layout node kind's compile +
+// render behind one typed lookup. [LAW:one-type-per-behavior] Two kinds only —
+// `container` arranges, `segment` renders. [LAW:one-way-deps] Never import render.ts.
 
 import { RichText } from "@promptctl/rich-js";
 import type { Palette, Style } from "@promptctl/rich-js";
@@ -45,19 +25,12 @@ import {
   applySegmentLayout,
 } from "../template-engine/index.js";
 
-// ─── Compiled node shapes ──────────────────────────────────────────────────────
-
-// [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode: the same
-// recursive shape with every `when` parsed ONCE at registration. renderDsl walks
-// this compiled tree — never the raw config — so the parse-once guarantee covers
-// every node.
+// [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode, every `when` parsed ONCE.
 export interface CompiledSegmentNode {
   readonly kind: "segment";
   readonly when?: Template<RichText>;
   readonly name: string;
-  // The disclosure body this segment opens (SegmentNode.opens), with its
-  // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
-  // gate is derived from the same pair the trigger's cycle writes.
+  // [LAW:one-source-of-truth] Openness parsed once from the ref the trigger's cycle writes.
   readonly opens?: CompiledOpens;
 }
 export interface CompiledOpens {
@@ -69,24 +42,17 @@ export interface CompiledContainerNode {
   readonly direction: Direction;
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
-  // [LAW:parse-dont-validate] The authored NAME (or its absence) resolved ONCE
-  // to the function this container places its children by — every child's
-  // address step carries it, so the walk never re-reads the config.
+  // [LAW:parse-dont-validate] The authored name resolved ONCE to a placement function.
   readonly distribution: Distribution;
 }
 export type CompiledNode = CompiledSegmentNode | CompiledContainerNode;
 
-// [LAW:types-are-the-program] The compiled arm of a raw node kind: a
-// ContainerNode compiles to a CompiledContainerNode, never to the union, so a
-// disclosure body — a container by type — stays a container once compiled.
+// [LAW:types-are-the-program] A ContainerNode compiles to CompiledContainerNode, not the union.
 export type Compiled<N extends LayoutNode> = Extract<
   CompiledNode,
   { kind: N["kind"] }
 >;
 
-// Pre-parsed templates and pre-resolved palette for one segment, built once at
-// registration. A `segment` node names one; render looks it up via
-// ctx.lookupSegment.
 export interface CompiledSegment {
   readonly when?: Template<RichText>;
   readonly template: Template<RichText>;
@@ -96,77 +62,33 @@ export interface CompiledSegment {
 }
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
-// A rendered node is a LIST OF LINES, each line a list of cells — NOT yet
-// serialized. [LAW:types-are-the-program] Cells (not ANSI bytes) are the
-// composition substrate: the powerline joiner caps between adjacent cells, so
-// serializing a node before composition would freeze its last cell's edge and
-// make a cap across a sibling seam unrecoverable. Serialization (the single
-// joiner pass) runs exactly once, at the root, after the whole tree composes.
+// [LAW:types-are-the-program] Cells, not ANSI bytes: serializing before composition
+// would freeze a cell's edge against the joiner. One joiner pass runs, at the root.
 export type RenderedLines = ReadonlyArray<readonly RichText[]>;
 
-// ─── Compile / render contexts (the injected capabilities) ──────────────────────
-
-// [LAW:locality-or-seam] The compile-time context the driver hands each node
-// type. `when` is PRE-COMPILED by the driver (walk-owned, uniform across kinds);
-// the type only assembles it in. compileChild is the recursion, injected so this
-// module needn't import the driver.
+// [LAW:locality-or-seam] compileChild is injected so this module needn't import the driver.
 export interface NodeCompileCtx {
   readonly path: string;
-  // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
-  // Parse one more template field of THIS node through the driver's one
-  // parse site, so its error names `path.field` like a `when` does.
   parse(src: string, field: string): Template<RichText>;
-  // Compile a child node (the recursion, injected so this module needn't import
-  // the driver). Generic so a container child compiles to a container.
   compileChild<N extends LayoutNode>(node: N, path: string): Compiled<N>;
 }
 
-// [LAW:single-enforcer] The render-time context. `visible` is THIS node's
-// computed visibility (the driver ANDs node.when with the parent's).
-// renderChild continues the walk.
+// [LAW:single-enforcer] `visible` is THIS node's visibility — the driver ANDs it with the parent's.
 export interface NodeRenderCtx {
   readonly scope: object;
-  // [LAW:one-source-of-truth] The render's palette: the base theme (session
-  // choice over config default) under the render's look, transposed ONCE by
-  // the driver — every unpinned segment colours from this one object.
+  // [LAW:one-source-of-truth] Transposed ONCE by the driver; every unpinned segment colours from it.
   readonly palette: Palette;
   readonly visible: boolean;
-  // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
-  // globals.padding), threaded by the driver from BuildLineOptions into every
-  // segment's layout — one value per render, never re-defaulted per node.
+  // [LAW:one-source-of-truth] One value per render, never re-defaulted per node.
   readonly padding: number;
-  // [LAW:effects-at-boundaries] THIS node's region: the bar with the
-  // (index, count) steps from the root, or the band a disclosure body hangs
-  // on with the steps since that body — extended by one step per container
-  // level by the driver, re-rooted onto a band by `renderBody`. A pure fact
-  // about position — unchanged by any node being hidden — that the segment
-  // hands to `enterSegment` so its colours derive from where it sits, with no
-  // walk state read.
+  // [LAW:effects-at-boundaries] A pure fact about position, unchanged by any node being hidden.
   readonly region: Region;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
-  // [LAW:no-silent-failure] Optional observer for the per-segment render catch
-  // below: a caught evaluation error renders as a visible ⚠ error cell (partial
-  // rendering — the daemon's channel), AND is reported here so a headless caller
-  // (`cc-candybar check`, a blind authoring agent's eyes) can turn it into a
-  // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
-  // (the registry-dispose contract) — see RenderObservers.onSegmentError.
+  // [LAW:no-silent-failure] Reported so a headless caller gets a text verdict. Trusted non-throwing.
   readonly onSegmentError?: (segName: string, message: string) => void;
-  // [LAW:locality-or-seam] The segment seam, injected as a capability pair so
-  // this module never imports the menu or color features — it only says when a
-  // segment starts and stops.
-  //
-  // `enterSegment` runs BEFORE any of the segment's templates evaluate. It
-  // publishes what the segment's own templates may ask about themselves — the
-  // name a `{{ menu }}` derives its identity from, the palette `{{ color }}`
-  // resolves against, the background `{{ bgOf }}` returns — and resolves the
-  // segment's `bg:`/`fg:` into its base Style along the way. The bg/fg
-  // resolution HAS to happen here rather than after the body: a body asking for
-  // its own background can only be answered once the background exists.
-  //
-  // `exitSegment` runs AFTER eval: it reads the open menu bodies the menus
-  // carried as metadata on the evaluated fragments (template order) for the
-  // boundary to stack below the row, and tears the published record down.
+  // [LAW:locality-or-seam] The segment seam, so this module never imports the menu or
+  // colour features. bg/fg resolve at entry — a body asking for its own bg needs it first.
   enterSegment(
     segName: string,
     palette: Palette,
@@ -175,23 +97,16 @@ export interface NodeRenderCtx {
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles;
   exitSegment(fragments: readonly RichText[]): readonly RichText[];
-  // Resolve a segment name to its decl + compiled form (the driver closes over
-  // config.segments + the compiled segments).
   lookupSegment(
     name: string,
   ):
     | { readonly seg: SegmentDecl; readonly compiled: CompiledSegment }
     | undefined;
-  // Continue the walk into a child node (parentVisible = this node's
-  // visibility; step = which child of how many, extending the address).
   renderChild(
     node: CompiledNode,
     parentVisible: boolean,
     step: AddressStep,
   ): RenderedLines;
-  // Continue the walk into the body a segment opens: rendered at the root of
-  // the band `band` (the disclosure the trigger computed at entry), visible
-  // exactly when the trigger is and `open` holds.
   renderBody(
     body: CompiledContainerNode,
     open: boolean,
@@ -199,14 +114,8 @@ export interface NodeRenderCtx {
   ): RenderedLines;
 }
 
-// [LAW:types-are-the-program] Every Style a segment can wear, resolved at
-// entry as one value. `closed` is its authored `bg:`/`fg:`; `trigger` is the
-// state colour of the band it opens — what it wears while that band is dropped
-// below it; `band` is that band's plane, the floor its dropped lines sit on.
-// Which one a line wears is a VALUE the walk selects by the drop's presence,
-// never a transform applied after the fact. `disclosure` is the band those
-// two were drawn from, returned so the body the segment opens is rendered on
-// the SAME band its trigger wears — one read, no second derivation.
+// [LAW:types-are-the-program] Every Style a segment can wear, resolved at entry as one
+// value the walk selects between; `disclosure` is the band `trigger`/`band` came from.
 export interface SegmentStyles {
   readonly closed: Style;
   readonly trigger: Style;
@@ -214,22 +123,9 @@ export interface SegmentStyles {
   readonly disclosure: Disclosure;
 }
 
-// ─── Composition ───────────────────────────────────────────────────────────────
-
-// [LAW:dataflow-not-control-flow] A container's `direction` is the projection it
-// applies to its already-rendered child blocks — DATA selecting a fold, not a
-// branch that skips work. `vertical` STACKS (concatenate the children's line-
-// lists). The switch is exhaustive over `Direction`; adding `outline` to
-// DIRECTIONS forces a new arm here.
-//
-// [LAW:decomposition] `horizontal` composes ONLY row 0 across the seam — row 0 is
-// every child's FIRST line zipped (the inline powerline run, so the joiner caps
-// across the seam, no abut). Every line BELOW row 0 is a child's DROP (a menu body
-// dropping below its trigger, a genuinely multi-line segment): drops STACK full-
-// width in child order, never zipped. Multi-line side-by-side column alignment is
-// explicitly UNSUPPORTED — aligning two children's row-i cells would require
-// background-as-structure, and bg is never structural. For an all-single-line row
-// (no child has a drop) this is byte-identical to a plain per-row zip.
+// [LAW:dataflow-not-control-flow] `direction` is DATA selecting a fold, and the switch
+// is exhaustive over Direction. [LAW:decomposition] `horizontal` zips ONLY row 0 so the
+// joiner caps across the seam; drops stack full-width. Column alignment is UNSUPPORTED.
 function composeBlocks(
   direction: Direction,
   blocks: readonly RenderedLines[],
@@ -238,10 +134,7 @@ function composeBlocks(
     case "vertical":
       return blocks.flatMap((b) => b);
     case "horizontal": {
-      // [LAW:dataflow-not-control-flow] height 0 (every child hidden/empty) ⇒ the
-      // container contributes NO line — not one empty row. This is the value-driven
-      // identity of the fold, preserved from the per-row zip it replaces; a stray
-      // [[]] here would render as a spurious blank line.
+      // [LAW:dataflow-not-control-flow] height 0 ⇒ NO line; a stray [[]] would be a blank row.
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
       if (height === 0) return [];
       const row0 = blocks.flatMap((b) => b[0] ?? []);
@@ -251,14 +144,9 @@ function composeBlocks(
   }
 }
 
-// ─── The node-type contract + registry ──────────────────────────────────────────
-
 type NodeKind = LayoutNode["kind"];
 
-// [LAW:types-are-the-program] One contract per node kind, generic over the kind so
-// each entry's compile/render see their OWN narrowed node arm — never the union,
-// so no internal re-narrow guard. compile (registration: LayoutNode → compiled,
-// parse-once) and render (per-render: compiled → lines) are co-located per kind.
+// [LAW:types-are-the-program] Generic over the kind so each entry sees its OWN narrowed arm.
 export interface NodeType<K extends NodeKind> {
   compile(
     node: Extract<LayoutNode, { kind: K }>,
@@ -283,10 +171,7 @@ const containerType: NodeType<"container"> = {
     };
   },
   render(node, ctx) {
-    // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
-    // visibility is a value `parentVisible` threads, never a skipped call, and a
-    // child's address step is its (index, count) here, placed by THIS
-    // container's distribution — unchanged by any sibling's `when`.
+    // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not: visibility is a value.
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
@@ -306,8 +191,7 @@ const segmentType: NodeType<"segment"> = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
-      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
-      // predicate by the one `disclosureGate` every disclosure reads through.
+      // [LAW:one-source-of-truth] Openness is the ref, through the one `disclosureGate`.
       ...(node.opens !== undefined && {
         opens: {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
@@ -318,39 +202,21 @@ const segmentType: NodeType<"segment"> = {
   },
   render(node, ctx) {
     const found = ctx.lookupSegment(node.name);
-    // [LAW:no-defensive-null-guards] The loader validates every segment ref
-    // against the segments map and registerDslConfig compiles every declared
-    // segment; a miss is a caller bug (renderDsl given a mismatched compiled
-    // object).
+    // [LAW:no-defensive-null-guards] The loader validates every segment ref; a miss is a caller bug.
     if (!found) {
       throw new Error(`Layout segment "${node.name}" has no matching segment`);
     }
     const { seg, compiled: segCompiled } = found;
     if (!ctx.visible) return [];
 
-    // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
-    // partial-load consequence (e.g. a variable that failed to declare, leaving a
-    // MissingFieldError when the template or when-predicate accesses it) surfaces
-    // as a visible error cell rather than crashing the whole bar. The remaining
-    // segments render normally. This is the render-time complement to the per-
-    // variable catch in registerDslConfig — together they implement option-2
-    // partial rendering: the new config stays active, working segments render, and
-    // broken segments show an error cell.
+    // [LAW:no-silent-failure] A broken segment shows an error cell; the rest still render.
     try {
       if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
-      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette: an explicit `palette:` pin, or the render's palette (the base
-      // theme under the look). A pin IGNORES the look exactly as it ignores the
-      // session theme — the pin's presence is the discriminator.
+      // [LAW:dataflow-not-control-flow] A pin ignores the look as it ignores the session theme.
       const palette = segCompiled.palette ?? ctx.palette;
 
-      // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
-      // `fg:`, and every `{{ color }}` in its body resolve from this same
-      // object. That is the whole reason the segment is entered before its body
-      // evaluates rather than after — a body coloured from a palette resolved
-      // independently of the cell it sits in is two palettes in one segment,
-      // and they diverge the moment a theme or look moves.
+      // [LAW:one-source-of-truth] ONE palette per segment — why entry precedes body evaluation.
       const styles = ctx.enterSegment(
         node.name,
         palette,
@@ -359,27 +225,15 @@ const segmentType: NodeType<"segment"> = {
         segCompiled.fg,
       );
       const fragments = segCompiled.template.evaluate(ctx.scope);
-      // [LAW:decomposition] The open menu bodies, carried as out-of-band metadata
-      // on the evaluated fragments — invisible to the inline render, so a menu can
-      // sit anywhere in the template and content after it stays inline. Each
-      // becomes one full-width line stacked below the segment's row.
+      // [LAW:decomposition] Open menu bodies ride as out-of-band metadata on the fragments.
       const drops = ctx.exitSegment(fragments);
-      // The disclosure body this segment opens (a group's, the settings menu's,
-      // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
-      // each entering the seam in turn — on the band this trigger computed.
-      // Walked open or closed, like every child: visibility is a value.
       const bodyOpen =
         node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
       const bodyLines =
         node.opens === undefined
           ? []
           : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
-      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of something
-      // under the segment: a dropped menu body, or an open disclosure body.
-      // Either way the segment is the TRIGGER of the band below it and wears
-      // that band's state colour — drawn from what it opens, not from where
-      // it sits. No state re-read beyond the body's own gate; the drop list
-      // IS the open-menu signal, and every Style was resolved at entry.
+      // [LAW:dataflow-not-control-flow] The drop list IS the open-menu signal.
       const open = drops.length > 0 || bodyOpen;
       const baseStyle = open ? styles.trigger : styles.closed;
       const layout = {
@@ -387,26 +241,14 @@ const segmentType: NodeType<"segment"> = {
         justify: seg.justify ?? "left",
         truncate: seg.truncate ?? "right",
         baseStyle,
-        // [LAW:dataflow-not-control-flow] Padding is uniform across every line
-        // a segment contributes — inline rows AND dropped menu bands — one
-        // value, no per-line-kind branch. The picker reserves 2×padding at its
-        // pagination seam so a padded band still fits the width budget.
+        // [LAW:dataflow-not-control-flow] One value for inline rows AND dropped bands.
         padding: ctx.padding,
       } as const;
 
-      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
-      // lines BEFORE per-segment layout — width/justify/truncate then measure each
-      // line cleanly. A newline-free segment is the degenerate one-line case. Each
-      // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
-      // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
-      // at the segment's edges, never inside it.
+      // [LAW:single-enforcer] Each laid line is ONE strip item, so the joiner caps only at its edges.
       const inlineLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
       ).map((line) => applySegmentLayout(line, layout));
-      // Each open menu body is one full-width dropped line on the band's
-      // PLANE — the recessed floor its items are placed above — stacked after
-      // the inline row(s). composeBlocks then drops every line below row 0
-      // below the enclosing horizontal row.
       const dropLines = drops.map((body) =>
         applySegmentLayout(fragmentsToCells([body], styles.band), {
           ...layout,
@@ -415,14 +257,9 @@ const segmentType: NodeType<"segment"> = {
       );
       const laidLines = [...inlineLines, ...dropLines];
 
-      // The sink holds THIS segment's cells — its inline row(s) and the menu
-      // bands it dropped. A disclosure body's cells belong to the segments in
-      // it, each of which sinks its own.
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(node.name, laidLines.flat());
       }
-      // Below row 0 every line is a drop: menu bands first (template order),
-      // then the disclosure body, in the order they hang under the trigger.
       return [...laidLines, ...bodyLines];
     } catch (err) {
       const message = (err as Error).message ?? String(err);
@@ -432,19 +269,13 @@ const segmentType: NodeType<"segment"> = {
   },
 };
 
-// [LAW:single-enforcer] THE registry. `satisfies` forces an entry for every
-// LayoutNode kind — adding a kind to the union breaks compilation here until its
-// behavior is registered, so "register a type" is one mechanically-enforced act.
+// [LAW:single-enforcer] THE registry: `satisfies` forces an entry for every node kind.
 const REGISTRY = {
   container: containerType,
   segment: segmentType,
 } satisfies { [K in NodeKind]: NodeType<K> };
 
-// [LAW:types-are-the-program] The one dispatch primitive. Indexing by a node's OWN
-// kind returns the entry built FOR that kind, so the pairing is sound by
-// construction; the cast only widens the static K to the union (TS cannot prove
-// the index/arm link across a heterogeneous registry). Every consumer calls
-// nodeType(node.kind).method(node) — no consumer re-switches on kind.
+// [LAW:types-are-the-program] Indexing by a node's OWN kind returns the entry built for it.
 export function nodeType(kind: NodeKind): NodeType<NodeKind> {
   return REGISTRY[kind] as unknown as NodeType<NodeKind>;
 }

@@ -1,10 +1,4 @@
-// The remote → browsable-page contract. `remoteWebUrl` is a parse boundary:
-// a string it returns has already been through the URL parser, carries an
-// http(s) scheme, has had any credentials stripped, and names a repo path — so
-// the render boundary links it without re-checking. These tests are that
-// promise, stated as the accept/reject table.
-// [LAW:behavior-not-structure] Every case asserts the URL a browser would be
-// handed, never how the transposition is spelled internally.
+// [LAW:behavior-not-structure] `remoteWebUrl` is a parse boundary: what it returns has an http(s) scheme, no credentials, and a repo path.
 
 import {
   detectForge,
@@ -22,15 +16,11 @@ describe("remoteWebUrl — http(s) remotes are already the page", () => {
   test.each([
     ["https://github.com/promptctl/cc-candybar.git", "https://github.com/promptctl/cc-candybar"],
     ["https://github.com/promptctl/cc-candybar", "https://github.com/promptctl/cc-candybar"],
-    // A trailing slash is chrome, not path.
     ["https://gitlab.com/group/proj/", "https://gitlab.com/group/proj"],
-    // Nested groups (GitLab) and tildes (sr.ht) are ordinary path, untouched.
     ["https://gitlab.com/group/sub/proj.git", "https://gitlab.com/group/sub/proj"],
     ["https://git.sr.ht/~user/repo", "https://git.sr.ht/~user/repo"],
-    // A self-hosted forge's web port IS part of its address — keep it.
     ["http://gitea.lan:3000/me/notes.git", "http://gitea.lan:3000/me/notes"],
     ["https://codeberg.org/me/notes.git", "https://codeberg.org/me/notes"],
-    // Host case is not meaningful; the parser normalizes it.
     ["https://GitHub.com/Me/Repo.git", "https://github.com/Me/Repo"],
   ])("%s → %s", (remote, expected) => {
     expect(remoteWebUrl(remote)).toBe(expected);
@@ -38,16 +28,7 @@ describe("remoteWebUrl — http(s) remotes are already the page", () => {
 });
 
 describe("remoteWebUrl — nothing raw reaches the OSC-8 sink", () => {
-  // A git remote is attacker-influenced in any repo you clone, and `git.repoUrl`
-  // feeds `{{ link }}`, which emits an OSC-8 hyperlink. That sequence is
-  // delimited by BEL (0x07) and ST (ESC \), so a raw control character in a repo
-  // path could terminate it early and inject terminal escapes.
-  //
-  // It cannot: the reassembly reads `parseRemoteRef`'s path, which the URL
-  // parser has already run through the path percent-encode set (C0 controls and
-  // space included, for non-special schemes like `ssh:` too). This asserts that
-  // property rather than trusting it — a future change to the reassembly that
-  // starts emitting raw bytes has to fail here.
+  // A remote is attacker-influenced and feeds an OSC-8 link, so a raw control byte could terminate the sequence early.
   test.each([
     ["git@example.com:My Repo.git", "https://example.com/My%20Repo"],
     ["ssh://git@example.com/My Repo.git", "https://example.com/My%20Repo"],
@@ -67,10 +48,7 @@ describe("remoteWebUrl — nothing raw reaches the OSC-8 sink", () => {
 });
 
 describe("remoteWebUrl — credentials never reach a clickable link", () => {
-  // [LAW:no-silent-failure] A CI-style remote carries a token. Rendering it
-  // into an OSC-8 link would publish the secret into the terminal and into
-  // whatever the click opens. The host forms exclude userinfo by construction,
-  // and these cases are the proof of that, not a reminder to be careful.
+  // [LAW:no-silent-failure] The host forms exclude userinfo by construction; these are the proof.
   test.each([
     ["https://user@github.com/o/r.git", "https://github.com/o/r"],
     ["https://x-access-token:ghp_SECRET@github.com/o/r.git", "https://github.com/o/r"],
@@ -84,21 +62,16 @@ describe("remoteWebUrl — credentials never reach a clickable link", () => {
 
 describe("remoteWebUrl — ssh transposes to the same host and path", () => {
   test.each([
-    // scp shorthand, the form every forge prints in its clone box.
     ["git@github.com:promptctl/cc-candybar.git", "https://github.com/promptctl/cc-candybar"],
     ["git@gitlab.com:group/sub/proj.git", "https://gitlab.com/group/sub/proj"],
     ["git@bitbucket.org:team/repo.git", "https://bitbucket.org/team/repo"],
-    // Self-hosted Gitea/Forgejo — the case a hostname allow-list could never
-    // recognize, and the reason the discriminator is URL SHAPE, not host name.
+    // The case a hostname allow-list could never recognize: the discriminator is URL SHAPE.
     ["git@code.homelab:brandon/notes.git", "https://code.homelab/brandon/notes"],
     ["forgejo@git.example.org:team/thing.git", "https://git.example.org/team/thing"],
-    // Explicit ssh:// form, with and without a port. An ssh port says nothing
-    // about the web port, so it is DROPPED rather than carried over.
+    // An ssh port says nothing about the web port, so it is DROPPED.
     ["ssh://git@gitea.lan:2222/me/notes.git", "https://gitea.lan/me/notes"],
     ["ssh://git@gitlab.example.com:22/group/proj.git", "https://gitlab.example.com/group/proj"],
-    // The (unauthenticated, deprecated) git:// protocol transposes the same way.
     ["git://github.com/o/r.git", "https://github.com/o/r"],
-    // An absolute scp path is still a path on that host.
     ["git@git.example.org:/team/thing.git", "https://git.example.org/team/thing"],
   ])("%s → %s", (remote, expected) => {
     expect(remoteWebUrl(remote)).toBe(expected);
@@ -106,8 +79,7 @@ describe("remoteWebUrl — ssh transposes to the same host and path", () => {
 });
 
 describe("remoteWebUrl — remotes with no page yield nothing", () => {
-  // [LAW:parse-dont-validate] null is the typed absence, and it is the ONLY
-  // rejection channel: nothing here degrades into a plausible-looking URL.
+  // [LAW:parse-dont-validate] null is the typed absence and the ONLY rejection channel.
   test.each([
     ["", "empty remote"],
     ["   ", "blank remote"],
@@ -125,8 +97,6 @@ describe("remoteWebUrl — remotes with no page yield nothing", () => {
 });
 
 describe("remoteWebUrl — a drive path is a local path, not host:path", () => {
-  // A DOS drive prefix once slipped through the scp arm and made the drive
-  // letter a hostname: `C:/repo.git` linked to a host named `c`.
   test.each([
     ["C:/repo.git", "forward-slash drive path"],
     ["C:\\repo.git", "backslash drive path"],
@@ -135,8 +105,7 @@ describe("remoteWebUrl — a drive path is a local path, not host:path", () => {
     expect(remoteWebUrl(remote)).toBeNull();
   });
 
-  // The rejection requires the separator on purpose. A single-letter host is a
-  // real ssh-config alias, and `^[A-Za-z]:` alone would have taken it out.
+  // A single-letter host is a real ssh-config alias, so the separator is required.
   test("a single-letter ssh alias is still a host", () => {
     expect(remoteWebUrl("h:repo.git")).toBe("https://h/repo");
     expect(remoteWebUrl("git@h:team/repo.git")).toBe("https://h/team/repo");
@@ -144,9 +113,7 @@ describe("remoteWebUrl — a drive path is a local path, not host:path", () => {
 });
 
 describe("remoteWebUrl — host case does not change the answer", () => {
-  // The ssh arm used to emit a mixed-case host while `detectForge` lowercased:
-  // WHATWG normalizes host case for "special" schemes only, so `https:` was
-  // folded and `ssh:` was not. One parser, one normalization, both readers.
+  // WHATWG normalizes host case for "special" schemes only, so ssh must be folded too.
   test.each([
     ["git@GitHub.com:Me/Repo.git", "https://github.com/Me/Repo"],
     ["ssh://git@GitLab.COM/g/p.git", "https://gitlab.com/g/p"],
@@ -155,16 +122,13 @@ describe("remoteWebUrl — host case does not change the answer", () => {
     expect(remoteWebUrl(remote)).toBe(expected);
   });
 
-  // Path case is user data and survives untouched — only the host is normalized.
   test("the repo path keeps its case", () => {
     expect(remoteWebUrl("git@github.com:Me/MyRepo.git")).toContain("/Me/MyRepo");
   });
 });
 
 describe("remoteWebUrl — one host classification, shared with detectForge", () => {
-  // [LAW:single-enforcer] The two questions asked of a remote must classify the
-  // same string the same way. A forge this recognizes must also yield a page on
-  // that same host; a shape one rejects the other cannot silently accept.
+  // [LAW:single-enforcer] Both questions must classify the same string the same way.
   test.each([
     "git@GitHub.com:o/r.git",
     "https://gitlab.example.com/g/p.git",
@@ -195,10 +159,7 @@ describe("parseRemoteRef — git's two spellings decode to one shape", () => {
   });
 
   test("a single-slash scheme is an ssh host, matching git itself", () => {
-    // `git ls-remote "file:/tmp/x"` → "Could not resolve hostname file". Per
-    // `git help clone` the scp form is recognized when no slash precedes the
-    // first colon, which this satisfies. Disagreeing with git about what a
-    // repo's own remote means would be the worse answer.
+    // git itself reads a slashless single-colon form as scp; disagreeing would be worse.
     expect(parseRemoteRef("file:/srv/git/notes.git")).toMatchObject({
       scheme: "ssh",
       host: "file",
@@ -254,9 +215,6 @@ describe("parseRemotes", () => {
   });
 
   test("every URL of a multi-URL remote is kept, in config order", () => {
-    // Dropping the later URLs lost the only one naming a forge when a repo
-    // fetches from a mirror and pushes to GitHub — costing both the link and
-    // the PR lookup. Which URL identifies the repo is decided downstream.
     const stdout = [
       "remote.origin.url /srv/mirror/r.git",
       "remote.origin.url git@github.com:me/r.git",
@@ -309,9 +267,7 @@ describe("the repo's identity — one selection, shared by name and link", () =>
     ).toBe("https://github.com/me/r");
   });
 
-  // [LAW:one-source-of-truth] The selection ignores browsability, so the NAME
-  // and the LINK always describe the same repository. Falling through to
-  // another remote's page rendered `backup` beside a link to `realname`.
+  // [LAW:one-source-of-truth] The selection ignores browsability, so name and link agree.
   test("an unbrowsable origin means no link, not another repo's page", () => {
     const rs = remotes(
       one("origin", "/srv/mirrors/backup.git"),
@@ -321,9 +277,6 @@ describe("the repo's identity — one selection, shared by name and link", () =>
     expect(repoRemoteUrl(rs)).toBe("/srv/mirrors/backup.git");
   });
 
-  // Within the picked remote, the URL that can identify a repo wins — so a
-  // fetch-from-mirror / push-to-forge remote keeps its forge identity, and
-  // detectForge (which gates the whole PR lookup) sees a URL it recognizes.
   test("a remote's forge URL wins over its local mirror URL", () => {
     const rs = remotes({
       name: "origin",
@@ -345,11 +298,7 @@ describe("the repo's identity — one selection, shared by name and link", () =>
 });
 
 describe("the repo's name and its link never disagree", () => {
-  // [LAW:one-source-of-truth] Both project the PARSED path. A raw-string regex
-  // disagreed with the link for a slashless scp remote and for a trailing
-  // slash, silently falling through to the directory basename while the link
-  // resolved fine. Each case asserts name and link TOGETHER — asserting either
-  // alone is exactly what let that survive.
+  // [LAW:one-source-of-truth] Both project the PARSED path; asserting either alone hid a bug.
   const nameOf = repoNameFromUrl;
 
   test.each([
@@ -363,9 +312,6 @@ describe("the repo's name and its link never disagree", () => {
     expect(remoteWebUrl(url)).toBe(link);
   });
 
-  // A local-path remote has no parsed path but does have a last segment, so it
-  // keeps naming itself. The directory basename stays reserved for its
-  // documented case: a repo with no remote at all.
   test.each(["/srv/mirrors/backup.git", "/srv/mirrors/backup.git/"])(
     "a local-path remote (%s) names itself, with no link",
     (url) => {
@@ -373,15 +319,10 @@ describe("the repo's name and its link never disagree", () => {
       expect(remoteWebUrl(url)).toBeNull();
     },
   );
-
-  // The no-remote case is the directory-basename policy, asserted against real
-  // git in test/git-service-outcomes.test.ts where the working dir is real.
 });
 
 describe("forgeRemoteUrl — identity and forge dispatch are different questions", () => {
-  // detectForge gates the whole PR lookup before gh/glab spawns, so a
-  // browsable-but-unrecognized mirror listed first must not shadow a recognized
-  // forge behind it. Identity still points at the first browsable url.
+  // detectForge gates the PR lookup before gh/glab spawns; identity takes the first browsable url.
   test("a recognized forge is not shadowed by a browsable non-forge url", () => {
     const remotes = [
       {
@@ -406,9 +347,7 @@ describe("forgeRemoteUrl — identity and forge dispatch are different questions
 });
 
 describe("remoteWebUrl — IPv6 literals, in both of git's spellings", () => {
-  // git accepts `git@[2001:db8::1]:repo.git` (confirmed via `git remote -v`).
-  // The generic scp arm stopped at the first colon inside the brackets and
-  // took `[2001` as the host, so the URL parse threw and the link vanished.
+  // git accepts the bracketed scp form; the first colon inside the brackets is not the separator.
   test("the bracketed scp form and its ssh:// equivalent agree", () => {
     expect(parseRemoteRef("git@[2001:db8::1]:repo.git")).toEqual(
       parseRemoteRef("ssh://git@[2001:db8::1]/repo.git"),

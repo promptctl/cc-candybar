@@ -5,10 +5,8 @@ import path from "node:path";
 
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
-// Each test creates its own isolated state root. CC_CANDYBAR_SOCKET isolates
-// the socket so concurrent tests don't race on the same bind path; XDG_STATE_HOME
-// isolates spawn.lock. Both are needed; setting only XDG would leave the socket
-// pointed at the user's live daemon since socketPath() ignores XDG_STATE_HOME.
+// CC_CANDYBAR_SOCKET isolates the socket and XDG_STATE_HOME isolates spawn.lock.
+// Both are needed: socketPath() ignores XDG_STATE_HOME.
 
 async function withTempState<T>(
   fn: (stateDir: string) => Promise<T> | T,
@@ -19,9 +17,7 @@ async function withTempState<T>(
   const prevSock = process.env.CC_CANDYBAR_SOCKET;
   process.env.XDG_STATE_HOME = root;
   process.env.CC_CANDYBAR_SOCKET = sockPath;
-  // async/try-finally — not Promise.resolve(fn()).finally(...) — because a
-  // synchronous throw from fn happens *before* Promise.resolve wraps it,
-  // bypassing the finally and leaking temp dirs + env state.
+  // async/try-finally, not Promise.resolve(fn()).finally: a synchronous throw from fn would bypass the finally and leak temp dirs + env.
   try {
     return await fn(path.join(root, "cc-candybar"));
   } finally {
@@ -52,10 +48,7 @@ function closeServer(server: net.Server): Promise<void> {
   });
 }
 
-// [LAW:behavior-not-structure] Pin the cooldown window arithmetic at its exact
-// boundaries — the same conditions the Rust unit tests pin — so a TS↔Rust
-// decision divergence at a threshold is caught even though check-protocol only
-// diffs the constants' values. Pure over the age; no filesystem.
+// [LAW:behavior-not-structure] Pin the cooldown arithmetic at its exact boundaries — check-protocol diffs constant values, not decisions.
 describe("cooldownDecision (pure window arithmetic)", () => {
   test("absent record allows (first spawn)", async () => {
     const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
@@ -112,10 +105,7 @@ describe("cooldownDecision (pure window arithmetic)", () => {
     });
   });
 
-  // The future-garbage boundary is anchored to STALE_LOCK_MS, NOT the
-  // cooldown window — it must stay fixed even when the caller passes a
-  // backed-off window far wider than STALE_LOCK_MS, so a genuinely stale
-  // clock-skewed mtime is never mistaken for "still cooling down."
+  // The future-garbage boundary is anchored to STALE_LOCK_MS, not the cooldown window, so a wide backed-off window never hides a skewed mtime.
   test("future-garbage boundary is independent of the cooldown window", async () => {
     const { cooldownDecision, STALE_LOCK_MS, SPAWN_BACKOFF_CAP_MS } =
       await import("../src/daemon/acquire");
@@ -128,9 +118,7 @@ describe("cooldownDecision (pure window arithmetic)", () => {
   });
 });
 
-// [LAW:behavior-not-structure] Pin the backoff arithmetic — the streak-to-
-// window mapping and its cap — matching the Rust mirror's dedicated tests.
-// Pure over the streak; no filesystem.
+// [LAW:behavior-not-structure] Pin the streak-to-window mapping and its cap; pure over the streak.
 describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
   test("streak zero is the base rate", async () => {
     const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
@@ -168,12 +156,7 @@ describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
   });
 });
 
-// [LAW:behavior-not-structure] Tests the parsing-strictness contract directly
-// against planted file content, independent of any caller — the acceptance
-// test's own writes are always a clean integer, so a regression back to
-// parseInt (which truncates "5abc" to 5 instead of rejecting it) would not
-// fail that test. Matches the fork-bomb-breaker.ts precedent this function's
-// doc comment cites.
+// [LAW:behavior-not-structure] Pinned against planted content: a regression back to parseInt (which truncates "5abc" to 5) would not fail the acceptance test.
 describe("readBackoffStreak (parsing-strictness contract)", () => {
   function withPlantedFile<T>(content: string | null, fn: (path: string) => T): T {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-backoff-"));
@@ -195,8 +178,7 @@ describe("readBackoffStreak (parsing-strictness contract)", () => {
 
   test("non-numeric content fails closed to 0 (the parseInt-truncation regression)", async () => {
     const { readBackoffStreak } = await import("../src/daemon/acquire");
-    // parseInt("5abc", 10) === 5 — the exact silent-truncation bug this
-    // function's Number(raw) is written to avoid.
+    // parseInt("5abc", 10) === 5 — the silent truncation Number(raw) avoids.
     withPlantedFile("5abc", (filePath) => {
       expect(readBackoffStreak(filePath)).toBe(0);
     });
@@ -258,7 +240,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
         });
         expect(result).toEqual({ kind: "attached" });
         expect(spawned).toBe(0);
-        // sanity: stateDir actually got created under our temp root
         expect(stateDir).toContain("cc-candybar");
       } finally {
         await closeServer(server);
@@ -277,8 +258,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
 
       const fakeSpawn = (): boolean => {
         spawnCount++;
-        // Simulate the daemon coming up after a short delay — mirror the
-        // bind() that the real daemon does on startup.
         setTimeout(() => {
           if (fakeServer) return;
           startFakeDaemon(socketPath())
@@ -290,8 +269,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
         return true;
       };
 
-      // Fire 5 concurrent obtain calls — the spawn-lock should let exactly
-      // one of them trigger the spawn fn; the rest attach.
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
           obtainDaemon({
@@ -305,7 +282,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
       try {
         expect(spawnCount).toBe(1);
         const kinds = results.map((r) => r.kind).sort();
-        // One started, the rest attached. None failed.
         expect(kinds.filter((k) => k === "started").length).toBe(1);
         expect(kinds.filter((k) => k === "attached").length).toBe(4);
         expect(kinds.filter((k) => k === "failed").length).toBe(0);
@@ -323,7 +299,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
 
       fs.mkdirSync(daemonDir(), { recursive: true });
 
-      // Plant a lock file that looks stale (mtime backdated 30s).
       fs.writeFileSync(
         spawnLockPath(),
         JSON.stringify({ pid: 999999, ts: Date.now() - 30_000 }),
@@ -364,10 +339,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
         "../src/daemon/paths"
       );
 
-      // Plant a fresh (non-stale) spawn.lock to simulate a crashed/stuck
-      // holder. The staleness reclaim won't fire because the file's mtime
-      // is current. Without the lock-fallback path, obtainDaemon would spin
-      // until totalTimeoutMs and return "timeout obtaining daemon".
+      // A fresh lock simulates a stuck holder: staleness reclaim never fires, so without the fallback path obtainDaemon spins to the deadline.
       fs.mkdirSync(daemonDir(), { recursive: true });
       fs.writeFileSync(
         spawnLockPath(),
@@ -379,7 +351,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
       const result = await obtainDaemon({
         spawn: () => {
           spawned++;
-          // Simulate a daemon coming up.
           startFakeDaemon(socketPath())
             .then((s) => {
               server = s;
@@ -388,12 +359,11 @@ describe("obtainDaemon (bind-based singleton)", () => {
           return true;
         },
         totalTimeoutMs: 1500,
-        lockFallbackMs: 200, // give up on lock after 200ms
+        lockFallbackMs: 200,
         spawnReadyTimeoutMs: 1000,
       });
 
       try {
-        // The fallback path bypassed the stuck lock and spawned anyway.
         expect(spawned).toBe(1);
         expect(result.kind).toBe("started");
       } finally {
@@ -441,9 +411,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
 
-      // Plant a *file* at the state-dir path. mkdirSync recursively will
-      // succeed for the parent but fail to make `cc-candybar` a directory.
-      // Forces the typed-failure path instead of propagating a throw.
+      // A *file* at the state-dir path forces the typed-failure path instead of a throw.
       const parent = path.dirname(stateDir);
       fs.mkdirSync(parent, { recursive: true });
       fs.writeFileSync(stateDir, "");
@@ -466,12 +434,9 @@ describe("obtainDaemon (bind-based singleton)", () => {
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { daemonDir } = await import("../src/daemon/paths");
 
-      // Create the state dir, then make it read-only so openSync("wx") on
-      // any file inside returns EACCES. This is the unrecoverable-error
-      // path: we must NOT treat it as contention and spin until the deadline.
+      // A read-only dir makes openSync("wx") return EACCES: the unrecoverable path, which must NOT spin until the deadline.
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Mask off file-type bits; stat.mode includes them and chmodSync
-      // accepts permission bits only on some platforms.
+      // Mask off file-type bits; chmodSync takes permission bits only on some platforms.
       const originalMode = fs.statSync(daemonDir()).mode & 0o7777;
       fs.chmodSync(daemonDir(), 0o555);
       try {
@@ -486,7 +451,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
         if (result.kind === "failed") {
           expect(result.reason).toMatch(/spawn-lock/);
         }
-        // Should return promptly, not spin until totalTimeoutMs.
         expect(elapsed).toBeLessThan(500);
       } finally {
         fs.chmodSync(daemonDir(), originalMode);
@@ -494,10 +458,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
     });
   });
 
-  // ─── spawn cooldown on the async path (ticket 2b3.3) ───────────────────────
-  // obtainDaemon respects the same global rate bound as the kick: when a spawn
-  // was recorded within SPAWN_COOLDOWN_MS, it must NOT add another process — it
-  // waits for the in-flight boot instead.
+  // obtainDaemon respects the same rate bound as the kick: a recent spawn record means wait for the in-flight boot, never add a process.
 
   test("on cooldown, does not spawn — fails when no daemon binds in the window", async () => {
     await withTempState(async () => {
@@ -508,7 +469,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
       );
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // A spawn was recorded moments ago (fresh mtime) — an attempt is in flight.
       fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
 
       let spawned = 0;
@@ -520,8 +480,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
         spawnReadyTimeoutMs: 200,
         totalTimeoutMs: 400,
       });
-      // The rate bound blocked the spawn; no daemon came up, so we time out the
-      // poll and report it as a cooldown failure (not a spawn failure).
       expect(spawned).toBe(0);
       expect(result.kind).toBe("failed");
       if (result.kind === "failed") {
@@ -541,12 +499,8 @@ describe("obtainDaemon (bind-based singleton)", () => {
       fs.mkdirSync(daemonDir(), { recursive: true });
       fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
 
-      // The daemon someone else spawned finishes booting during our poll. It
-      // must appear AFTER obtainDaemon's initial fast-path probe AND its
-      // post-lock re-check (acquire.ts) — otherwise the test would attach at the
-      // top level instead of exercising the cooldown-poll branch. Those two
-      // checks are ~2 microtask ticks apart with no I/O between them (sub-ms), so
-      // a 150ms appearance lands deterministically in the cooldown-poll phase.
+      // The daemon must appear AFTER obtainDaemon's fast-path probe and its post-lock
+      // re-check — ~2 microtask ticks apart — so 150ms lands in the cooldown-poll phase.
       let server: net.Server | null = null;
       setTimeout(() => {
         startFakeDaemon(socketPath())
@@ -566,7 +520,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
         totalTimeoutMs: 800,
       });
       try {
-        // We did NOT add a process — the in-flight daemon was attached to.
         expect(spawned).toBe(0);
         expect(result.kind).toBe("attached");
       } finally {
@@ -584,13 +537,10 @@ describe("obtainDaemon (bind-based singleton)", () => {
       );
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // A fresh foreign spawn.lock we can't acquire → forces the lock-fallback
-      // path once contention exceeds lockFallbackMs.
       fs.writeFileSync(
         spawnLockPath(),
         JSON.stringify({ pid: 999999, ts: Date.now() }),
       );
-      // And a fresh spawn-attempt record → the cooldown gate is active.
       fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
 
       let spawned = 0;
@@ -603,12 +553,10 @@ describe("obtainDaemon (bind-based singleton)", () => {
         spawnReadyTimeoutMs: 150,
         totalTimeoutMs: 600,
       });
-      // The cooldown gate applies on the lock-fallback path too — no spawn.
       expect(spawned).toBe(0);
       expect(result.kind).toBe("failed");
       if (result.kind === "failed") {
         expect(result.reason).toMatch(/cooldown/);
-        // The failure names the cooldown cause, not the lock provenance.
         expect(result.reason).not.toMatch(/lock-fallback/);
       }
     });
@@ -623,8 +571,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
       );
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // A garbage record whose mtime is far in the future must NOT wedge the
-      // async path — the spawn is ALLOWED (the opposite of a fresh record).
       fs.writeFileSync(spawnCooldownPath(), "garbage\n");
       const future = new Date(Date.now() + 3_600_000);
       fs.utimesSync(spawnCooldownPath(), future, future);
@@ -649,7 +595,6 @@ describe("obtainDaemon (bind-based singleton)", () => {
           totalTimeoutMs: 800,
         });
         try {
-          // Garbage cooldown ⇒ the spawn proceeded and the daemon came up.
           expect(spawned).toBe(1);
           expect(result.kind).toBe("started");
           const warned = stderrSpy.mock.calls
@@ -680,9 +625,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
           return true;
         },
       });
-      // Spawn ran in the same synchronous turn.
       expect(spawned).toBe(1);
-      // Lock was released by the time kick returned.
       expect(fs.existsSync(spawnLockPath())).toBe(false);
     });
   });
@@ -694,8 +637,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Plant a fresh lock (not stale) to simulate another caller in the
-      // spawn window.
       fs.writeFileSync(
         spawnLockPath(),
         JSON.stringify({ pid: 999999, ts: Date.now() }),
@@ -718,20 +659,11 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
       const { daemonDir } = await import("../src/daemon/paths");
 
-      // Make daemonDir() read-only so openSync("wx") on spawn.lock fails
-      // with EACCES (not EEXIST). The kick must NOT treat this as a hard
-      // stop — bind() arbitrates, so we spawn anyway.
+      // EACCES (not EEXIST) on spawn.lock must not be a hard stop — bind() arbitrates, so spawn anyway.
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Mask off file-type bits; stat.mode includes them and chmodSync
-      // accepts permission bits only on some platforms.
       const originalMode = fs.statSync(daemonDir()).mode & 0o7777;
       fs.chmodSync(daemonDir(), 0o555);
 
-      // Suppress the expected stderr "spawn-lock unavailable" warning
-      // during this test to keep test output clean. mockRestore() (in
-      // the finally) restores the original; no manual capture/reassignment
-      // needed (and reassigning a bound copy would replace the restored
-      // original with a wrapper, affecting later tests).
       const stderrSpy = jest
         .spyOn(process.stderr, "write")
         .mockImplementation((_b: unknown) => true);
@@ -744,9 +676,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
             return true;
           },
         });
-        // Spawn fired despite lock-error — bind() will arbitrate.
         expect(spawned).toBe(1);
-        // The stderr warning was emitted with the reason.
         expect(stderrSpy).toHaveBeenCalled();
         const warned = String(stderrSpy.mock.calls[0]?.[0]);
         expect(warned).toMatch(/spawn-lock unavailable/);
@@ -764,8 +694,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Plant a lock file that looks like a crashed holder: file exists,
-      // mtime backdated 3s (past the 2s override threshold).
+      // A crashed holder: the file exists, with its mtime backdated 3s past the override threshold.
       fs.writeFileSync(
         spawnLockPath(),
         JSON.stringify({ pid: 999999, ts: Date.now() - 3000 }),
@@ -784,8 +713,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
             return true;
           },
         });
-        // The kick saw "contended" (file exists, mkdir-flag wx fails) but
-        // the file's age exceeded the override threshold → spawn anyway.
         expect(spawned).toBe(1);
         const warned = String(stderrSpy.mock.calls[0]?.[0] ?? "");
         expect(warned).toMatch(/likely crashed holder/);
@@ -802,7 +729,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Fresh lock — current mtime.
       fs.writeFileSync(
         spawnLockPath(),
         JSON.stringify({ pid: 999999, ts: Date.now() }),
@@ -815,7 +741,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
           return true;
         },
       });
-      // Fresh lock = legitimate contention with another caller. Do not spawn.
       expect(spawned).toBe(0);
     });
   });
@@ -829,15 +754,12 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       void Promise.resolve().then(() => {
         asyncRan = true;
       });
-      // Kick must complete fully before any microtask gets a turn — this is
-      // the load-bearing property: it's called immediately before
-      // process.exit(0), so an async chain inside would never run.
+      // Kick must complete before any microtask runs: it is called immediately before process.exit(0).
       obtainDaemonKick({ spawn: () => true });
       expect(asyncRan).toBe(false);
     });
   });
 
-  // ─── spawn cooldown (shared spawn-RATE bound, ticket 2b3.3) ────────────────
 
   test("second kick within the cooldown does not spawn again", async () => {
     await withTempState(async () => {
@@ -849,11 +771,8 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
         spawned++;
         return true;
       };
-      // First kick: no prior attempt → spawns and records the cooldown.
       obtainDaemonKick({ spawn });
       expect(spawned).toBe(1);
-      // Second kick, immediately after: an attempt was recorded well within
-      // SPAWN_COOLDOWN_MS → the herd is damped, no second spawn.
       obtainDaemonKick({ spawn });
       expect(spawned).toBe(1);
     });
@@ -873,13 +792,8 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       obtainDaemonKick({ spawn });
       expect(spawned).toBe(1);
 
-      // Simulate the cooldown window elapsing by backdating the record's mtime.
-      // The first granted spawn advanced the backoff streak to 1
-      // (brandon-daemon-lifecycle-gad.3), so the REQUIRED window for the next
-      // spawn is effectiveCooldownMs(1), not the base SPAWN_COOLDOWN_MS —
-      // computed here (not hardcoded) so this test doesn't silently go stale
-      // if the backoff multiplier or base rate ever changes. +1s of margin,
-      // the same technique the stale-lock tests use.
+      // The first granted spawn advanced the streak to 1, so the required window is
+      // effectiveCooldownMs(1) — computed, not hardcoded, so this test cannot go stale.
       const { effectiveCooldownMs } = await import("../src/daemon/acquire");
       const old = new Date(Date.now() - effectiveCooldownMs(1) - 1_000);
       fs.utimesSync(spawnCooldownPath(), old, old);
@@ -895,15 +809,11 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
       const { spawnCooldownPath } = await import("../src/daemon/paths");
 
-      // Suppress the expected "daemon spawn failed" stderr from the throwing
-      // spawn so the test output stays clean.
       const stderrSpy = jest
         .spyOn(process.stderr, "write")
         .mockImplementation(() => true);
       try {
-        // A broken binary: the spawn throws every time. The cooldown must be
-        // recorded BEFORE the spawn runs, so a broken binary is not retried in
-        // a tight loop.
+        // The cooldown must be recorded BEFORE the spawn runs, so a broken binary is not retried in a tight loop.
         obtainDaemonKick({
           spawn: () => {
             throw new Error("simulated ENOENT for node binary");
@@ -911,8 +821,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
         });
         expect(fs.existsSync(spawnCooldownPath())).toBe(true);
 
-        // A second kick with a would-succeed spawn is still rate-limited by the
-        // record the throwing attempt left behind.
         let spawned = 0;
         obtainDaemonKick({
           spawn: () => {
@@ -936,9 +844,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       );
 
       fs.mkdirSync(daemonDir(), { recursive: true });
-      // Plant a cooldown record with an mtime far in the future (clock skew or a
-      // touched file). A naive `now - mtime < COOLDOWN` test would read this as
-      // "cooldown active" forever and wedge the spawn path — availability lost.
+      // A naive `now - mtime < COOLDOWN` test would read a future-dated record as "cooldown active" forever and wedge the spawn path.
       fs.writeFileSync(spawnCooldownPath(), "garbage\n");
       const future = new Date(Date.now() + 3_600_000);
       fs.utimesSync(spawnCooldownPath(), future, future);
@@ -954,9 +860,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
             return true;
           },
         });
-        // Availability over strictness: a garbage timestamp must not block.
         expect(spawned).toBe(1);
-        // ...and it must be loud, not silent.
         const warned = stderrSpy.mock.calls
           .map((c) => String(c[0]))
           .join("");
@@ -969,9 +873,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
 });
 
 describe("daemon startup (bind-based singleton)", () => {
-  // We don't boot the full daemon here (too much surface) — we verify the
-  // load-bearing bind() invariant directly: a second listener on the same
-  // socket path gets EADDRINUSE.
 
   test("second bind on the same socket path receives EADDRINUSE", async () => {
     await withTempState(async () => {
@@ -999,13 +900,8 @@ describe("daemon startup (bind-based singleton)", () => {
       const { socketPath } = await import("../src/daemon/paths");
       fs.mkdirSync(path.dirname(socketPath()), { recursive: true });
 
-      // Plant a stale socket file (just a plain file, no listener). This test
-      // pins the kernel MECHANICS the daemon's recovery relies on: a plain file
-      // at the socket path makes bind() fail EADDRINUSE and connect() fail
-      // ENOTSOCK/ECONNREFUSED. The daemon's actual arbitration no longer
-      // consults connect() at all (it reads the socket-derived pid lease — see
-      // daemon-socket-lease.test.ts); this only verifies the unlink+rebind
-      // recovery still binds a working socket.
+      // A plain file at the socket path makes bind() fail EADDRINUSE and connect() fail
+      // ENOTSOCK/ECONNREFUSED; this pins that the unlink+rebind recovery still binds.
       fs.writeFileSync(socketPath(), "");
 
       const connectErr: NodeJS.ErrnoException = await new Promise(
@@ -1020,7 +916,6 @@ describe("daemon startup (bind-based singleton)", () => {
       );
       expect(["ENOTSOCK", "ECONNREFUSED", "ENOENT"]).toContain(connectErr.code);
 
-      // First bind attempt fails (EADDRINUSE).
       await expect(
         new Promise((_, reject) => {
           const s = net.createServer();
@@ -1029,7 +924,6 @@ describe("daemon startup (bind-based singleton)", () => {
         }),
       ).rejects.toMatchObject({ code: "EADDRINUSE" });
 
-      // Unlink and rebind — this is what handleAddressInUse does.
       fs.unlinkSync(socketPath());
       const server = await startFakeDaemon(socketPath());
       try {
@@ -1041,22 +935,8 @@ describe("daemon startup (bind-based singleton)", () => {
   });
 });
 
-// [LAW:verifiable-goals] Acceptance criterion for brandon-daemon-lifecycle-gad.3:
-// "A multi-window production-daemon outage under rapid statusline invocation
-// stays under the documented global spawn-rate bound (no fork drip beyond
-// ~20/min), ideally with backoff." The fixed-rate cooldown alone already
-// bounds the rate at ~20/min forever; these tests demonstrate the backoff
-// makes a SUSTAINED outage strictly better than that floor — the rate decays
-// toward ~1/min — and that a single successful bind (resetSpawnBackoff, wired
-// into server.ts onListening) restores the base rate immediately.
-//
-// The sibling acceptance criterion ("A demonstrated stale-bin / version-skew
-// scenario does not produce repeated daemon spawns") is already covered by
-// the kz8.5 work this ticket builds on: `test/daemon-version-mismatch.test.ts`
-// pins that every Permanent outcome — including version_mismatch — never
-// calls kick, at both the pure-decision level (planOutcome) and the live-daemon
-// level (shutdownObserved). No new production code was needed for that half;
-// this file adds nothing that duplicates it.
+// [LAW:verifiable-goals] The fixed-rate cooldown alone bounds the spawn rate at ~20/min;
+// these tests show backoff makes a SUSTAINED outage strictly better, and that one bind restores the base rate.
 describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycle-gad.3)", () => {
   test("consecutive kicks that never converge widen the cooldown and cap it — never worse than the fixed 3s floor, decaying toward 1/min", async () => {
     await withTempState(async () => {
@@ -1064,9 +944,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
       const { spawnCooldownPath } = await import("../src/daemon/paths");
 
-      // A spawn that "succeeds" (a process forked) but the daemon never binds
-      // — the fork-exhaustion scenario from the epic's incident report, where
-      // recovery itself is expensive and nothing ever converges.
+      // A spawn that forks but never binds — the fork-exhaustion scenario.
       let spawned = 0;
       const spawn = (): boolean => {
         spawned++;
@@ -1075,35 +953,26 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
 
       const grantedAtSimulatedMs: number[] = [];
       let simulatedElapsedMs = 0;
-      // Simulate 10 minutes of continuous statusline-tick pressure, probing
-      // once per simulated second (the natural render cadence).
       for (let tick = 0; tick < 600; tick++) {
         obtainDaemonKick({ spawn });
         if (spawned > grantedAtSimulatedMs.length) {
           grantedAtSimulatedMs.push(simulatedElapsedMs);
         }
         simulatedElapsedMs += 1_000;
-        // Advance the cooldown file's mtime into the past by the same amount
-        // real wall-clock time would have — the file's age is the only clock
-        // claimSpawnCooldown reads.
+        // The file's age is the only clock claimSpawnCooldown reads.
         try {
           const st = fs.statSync(spawnCooldownPath());
           const backdated = new Date(st.mtimeMs - 1_000);
           fs.utimesSync(spawnCooldownPath(), backdated, backdated);
         } catch {
-          // No cooldown file yet on the very first iteration before any grant.
         }
       }
 
-      // Fixed-rate floor: one spawn every 3s for 600s ≈ 200 spawns. The
-      // backoff must never exceed that — it can only make a sustained,
-      // non-converging outage LESS aggressive, never more.
+      // Fixed-rate floor: one spawn per 3s over 600s ≈ 200. Backoff may only reduce it.
       const FIXED_RATE_SPAWNS_OVER_10_MIN = 600_000 / 3_000;
       expect(spawned).toBeLessThan(FIXED_RATE_SPAWNS_OVER_10_MIN);
 
-      // The gaps between grants must grow monotonically until they saturate
-      // at the 60s cap (SPAWN_BACKOFF_CAP_MS) — this is the actual backoff
-      // behavior, not just "fewer spawns" by coincidence.
+      // Gaps must grow monotonically until they saturate at SPAWN_BACKOFF_CAP_MS.
       const gaps: number[] = [];
       for (let i = 1; i < grantedAtSimulatedMs.length; i++) {
         gaps.push(grantedAtSimulatedMs[i]! - grantedAtSimulatedMs[i - 1]!);
@@ -1131,8 +1000,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
         return true;
       };
 
-      // Three consecutive non-converging spawns — streak climbs to 3, so the
-      // required window is SPAWN_COOLDOWN_MS * 8.
+      // Streak climbs to 3, so the required window is SPAWN_COOLDOWN_MS * 8.
       for (let i = 0; i < 3; i++) {
         obtainDaemonKick({ spawn });
         const st = fs.statSync(spawnCooldownPath());
@@ -1141,11 +1009,9 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       }
       expect(spawned).toBe(3);
 
-      // The daemon FINALLY binds — server.ts's onListening calls this.
       resetSpawnBackoff();
 
-      // Backdate by just past the BASE window (not the backed-off one) —
-      // if the reset didn't take effect, this kick would still be denied.
+      // Backdate past the BASE window only — without the reset this kick would be denied.
       const st = fs.statSync(spawnCooldownPath());
       const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS - 500);
       fs.utimesSync(spawnCooldownPath(), backdated, backdated);
@@ -1156,12 +1022,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
   });
 });
 
-// [LAW:behavior-not-structure] The unit tests above call resetSpawnBackoff()
-// directly — they pin its arithmetic but not its WIRING. This spawns a real
-// daemon and drives it through an actual bind, so a regression that drops or
-// reorders the resetSpawnBackoff() call inside server.ts's onListening (or
-// drops the import) fails THIS test even though every test above would still
-// pass unmodified.
+// [LAW:behavior-not-structure] The tests above pin resetSpawnBackoff's arithmetic but not its WIRING; this drives a real daemon through an actual bind.
 describe("resetSpawnBackoff wiring into onListening (integration: real daemon)", () => {
   jest.setTimeout(30_000);
 
@@ -1179,8 +1040,6 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
       path.join(os.tmpdir(), "cc-candybar-backoff-wire-g-"),
     );
     const backoffPath = path.join(stateDir, "spawn.backoff");
-    // Plant a streak as if several prior kicks failed to converge — the exact
-    // state resetSpawnBackoff() must clear the moment this daemon binds.
     fs.writeFileSync(backoffPath, "3", { mode: 0o600 });
 
     const env: NodeJS.ProcessEnv = {
@@ -1195,12 +1054,8 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
     try {
       const connectable = await waitForBackoffWireConnectable(sockPath, 8000);
       expect(connectable).toBe(true);
-      // [LAW:no-ambient-temporal-coupling] Kernel connectability begins when
-      // listen(2) completes — BEFORE the daemon's 'listening' JS callback
-      // (where resetSpawnBackoff runs) has executed. An instant existsSync
-      // here races that callback and loses on slow CI runners. The contract
-      // is "a serving daemon promptly clears the streak", so await exactly
-      // that: the file's disappearance, within a bounded budget.
+      // [LAW:no-ambient-temporal-coupling] Kernel connectability begins at listen(2), before
+      // the 'listening' callback runs — so await the streak file's disappearance, not an instant check.
       const cleared = await waitForBackoffWireGone(backoffPath, 8000);
       expect(cleared).toBe(true);
     } finally {
@@ -1217,7 +1072,6 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
         try {
           fs.rmSync(d, { recursive: true, force: true });
         } catch {
-          // best-effort cleanup
         }
       }
     }

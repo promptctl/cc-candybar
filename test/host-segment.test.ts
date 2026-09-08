@@ -1,18 +1,5 @@
-// The host/SSH segment (candybar-segments-e7u).
-//
-// The contract under test is a provenance split, and every assertion here
-// defends one half of it [LAW:one-source-of-truth]:
-//
-//   • hostname/username are MACHINE facts. Client and daemon are the same
-//     machine by construction (UID-derived socket), so the daemon reads them
-//     directly and they are always present.
-//   • SSH-ness is a SESSION fact. One detached daemon serves a local session
-//     and an SSH session simultaneously, so it can ONLY arrive as a client
-//     hint — and a hint that never arrived must stay distinguishable from a
-//     hint that said "local" [LAW:no-silent-failure].
-//
-// [LAW:behavior-not-structure] Everything below asserts observable behavior:
-// what lands in the payload, and whether the bundled segment renders.
+// [LAW:one-source-of-truth] hostname/username are machine facts the daemon reads directly;
+// SSH-ness is a session fact that only arrives as a hint, and an absent hint stays distinguishable from "local".
 
 import os from "node:os";
 
@@ -104,18 +91,13 @@ describe("host identity in the render payload", () => {
     expect("ssh" in host).toBe(true);
   });
 
-  // The heart of it: an unreported session must NOT be laundered into a
-  // confident "local". It stays absent, which routes it through the DSL input
-  // fallback chain — declared default AND a recorded last_error.
   test("an unreported session leaves ssh ABSENT, never false", async () => {
     const { host } = await payloadWith({});
     expect("ssh" in host).toBe(false);
     expect(host.ssh).toBeUndefined();
   });
 
-  // The daemon's own SSH_* env belongs to whichever shell spawned it, which is
-  // very often NOT the session being rendered. Consulting it as a "helpful"
-  // fallback would mislabel every session that daemon serves.
+  // The daemon's own SSH_* env belongs to whichever shell spawned it, not the session.
   test("the daemon ignores its OWN SSH_* env — only the hint decides", async () => {
     const saved = process.env.SSH_CONNECTION;
     process.env.SSH_CONNECTION = "10.0.0.1 51000 10.0.0.2 22";
@@ -130,8 +112,6 @@ describe("host identity in the render payload", () => {
 });
 
 describe("the bundled host segment", () => {
-  // Through the real load pipeline, so the segment under test is the one a
-  // user actually gets — parse + merge + validate, not a hand-built object.
   const CONFIG = parseAndValidate(
     "<default>",
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2),
@@ -182,8 +162,7 @@ describe("the bundled host segment", () => {
     expect(render({ name: "bigbox", user: "brandon" })).not.toContain("bigbox");
   });
 
-  // A failed hostname/username read must still say "you are remote" rather than
-  // rendering a blank that reads as a rendering bug [LAW:no-silent-failure].
+  // [LAW:no-silent-failure] A failed hostname read must still say "remote", not blank.
   test("still marks the session remote when the identity could not be read", () => {
     expect(render({ ssh: true })).toContain("⇄ ?@?");
   });

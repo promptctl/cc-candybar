@@ -1,11 +1,4 @@
-// [LAW:verifiable-goals] candybar-diagnostics-avi's done-means, measured on the
-// pure composer: a multi-issue config error renders fully wrapped at the
-// terminal's width with nothing clipped mid-word, capped at min(20, term.rows)
-// rows, and — only when rows were dropped or a config file failed to load —
-// a last row linking the complete text and/or the failing config as plain
-// `file://` URLs (brandon-build-notice-5d6: a strip that shows everything
-// ends on its last row). Width is asserted with rich-js cellLength — the one
-// display-width measure the renderer wraps by — on text carrying wide glyphs.
+// [LAW:verifiable-goals] Width is asserted with rich-js cellLength — the one display-width measure the renderer wraps by.
 
 import { pathToFileURL } from "node:url";
 import { RichText } from "@promptctl/rich-js";
@@ -35,8 +28,6 @@ const geometry = (
   rowCap = diagnosticRowCap(undefined),
 ): DiagnosticGeometry => ({ width, rowCap, colorCompatibility: "truecolor" });
 
-// A validator-shaped error: a heading line, then one issue per line, with
-// wide glyphs (CJK, emoji) and a path wider than any row we test.
 const LONG_PATH =
   "/Users/someone/projects/日本語のディレクトリ/deeply/nested/cc-candybar/config-with-a-very-long-name.json5";
 const ISSUES = [
@@ -51,9 +42,7 @@ const ERROR = ISSUES.join("\n");
 const rowsOf = (output: string): string[] =>
   output.split("\n").map(stripAnsi);
 const cellWidth = (row: string): number => new RichText(row).cellLength;
-// Every whitespace-delimited word of the message narrower than the row
-// width must survive intact on some row (a word may be preceded/followed by
-// other words on its row, so check containment, not equality).
+// A word may share its row with others, so check containment, not equality.
 const wordsNarrowerThan = (width: number): string[] =>
   ERROR.split(/\s+/).filter((w) => w.length > 0 && cellWidth(w) < width);
 
@@ -72,8 +61,6 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       for (const word of wordsNarrowerThan(width)) {
         expect(joined).toContain(word);
       }
-      // Five issue lines, each wide enough to need more than one row at
-      // either width — the old strip clipped each to one row.
       expect(strip.length).toBeGreaterThan(ISSUES.length);
       expect(strip[0]).toMatch(/^⚠ Invalid config in /);
     },
@@ -82,9 +69,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   test("a word wider than the row folds at the width instead of overflowing", () => {
     const out = composeWithDiagnostics("", diag, LINKS, geometry(40, 100));
     for (const row of rowsOf(out)) expect(cellWidth(row)).toBeLessThanOrEqual(40);
-    // The long path is present in full across consecutive rows (a wide glyph
-    // that straddles the fold is padded to the row edge, so strip every
-    // trailing space before joining).
+    // A wide glyph straddling the fold is padded to the row edge, so strip trailing spaces before joining.
     const text = rowsOf(out)
       .map((r) => r.replace(/ +$/, ""))
       .join("");
@@ -127,7 +112,6 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     const out = composeWithDiagnostics("BODY", diag, LINKS, geometry(120));
     const urls = extractUrls(out);
     expect(urls).toContain(pathToFileURL(CONFIG).href);
-    // The message rows themselves still offer the copy-to-clipboard click.
     expect(urls.some((u) => u.startsWith("cc-candybar://"))).toBe(true);
     const last = rowsOf(out).at(-2)!;
     expect(last).toBe(`↳ open ${CONFIG}`);
@@ -190,7 +174,6 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       `↳ open ${CONFIG}`,
       "BODY",
     ]);
-    // Each span's words carry that span's click.
     expect(extractUrls(out)).toEqual(
       expect.arrayContaining(["cc-candybar://copy/x", "cc-candybar://act/y"]),
     );
@@ -201,8 +184,6 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     expect(composeWithDiagnostics("BODY", null, LINKS, geometry(80))).toBe("BODY");
   });
 
-  // A message with nothing visible in it is nothing to show — never a strip
-  // that is only a trailer. The channel that does have a line survives.
   test("a message that sanitizes to no line is no channel", () => {
     expect(collectDiagnostics("  \n\t\x1b \r\n", [], "")).toBeNull();
     const warned = collectDiagnostics("   ", [], "advisory")!;
@@ -235,9 +216,6 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     expect(rowsOf(out).at(-1)).toContain("open /a/ [31mb.json5");
   });
 
-  // The trailer's fixed text alone is wider than a very narrow terminal; the
-  // row must still fit, as every other row does, at any width that can hold
-  // one wide glyph and its trailing space.
   test.each([3, 8, 16, 24, 39])(
     "the trailer fits a %d-cell width narrower than its own fixed text",
     (width) => {
@@ -249,10 +227,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     },
   );
 
-  // The failed config path is middle-truncated into the width the fixed
-  // text leaves — a 1-cell budget at 25 — and a path of wide glyphs must
-  // fit that budget like an ASCII one, its visible part linking the whole
-  // path whatever is shown.
+  // The failed config path is middle-truncated into the width the fixed text leaves — a 1-cell budget at 25.
   test.each([25, 26, 30, 40, 60])(
     "a wide-glyph config path fits the trailer at a %d-cell width",
     (width) => {
@@ -267,9 +242,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     },
   );
 
-  // A width that cannot hold one wide glyph is still rendered (never a hang
-  // or a throw — the width is a client hint): every row is at most that
-  // glyph and its space.
+  // The width is a client hint, so a width too narrow for one wide glyph must still render.
   test.each([1, 2])("a %d-cell width renders, bounded by one wide glyph", (width) => {
     const rows = rowsOf(composeWithDiagnostics("", diag, LINKS, geometry(width, 5)));
     expect(rows).toHaveLength(5);

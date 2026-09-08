@@ -1,12 +1,5 @@
-// [LAW:behavior-not-structure] Tests assert observable output (resolved hex
-// values, Style fields, thrown errors) — never internal state.
-//
-// The seam under test: a segment's `bg:`/`fg:` fields are TEMPLATES that
-// evaluate to a **color reference** — a palette variable name, or a computed
-// `#RRGGBB` produced by rich-js's color math. `resolveSegmentColors` owns the
-// ordered phase sequence (publish palette → resolve bg → publish bg → resolve
-// fg), which is what makes `{{ bgOf }}` readable in a `fg:` template and an
-// error in a `bg:` one.
+// [LAW:behavior-not-structure] Assertions are on observable output. The ordered phase
+// sequence is what makes `{{ bgOf }}` readable in a `fg:` template and an error in `bg:`.
 
 import {
   Palette,
@@ -33,8 +26,6 @@ import {
 import type { Template } from "@promptctl/go-template-js";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
 
-// ─── Test palette ─────────────────────────────────────────────────────────────
-
 function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
   const vars = new Map<string, ColorRgba>([
     ["primary", parseRgbHex(primaryHex)],
@@ -43,19 +34,12 @@ function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
     ["success", parseRgbHex("44cc88")],
     ["surface", parseRgbHex("1a1a2e")],
     ["text", parseRgbHex("eeeeee")],
-    // transposePalette derives the dark flag from "background" (required for
-    // any non-identity key); real registry palettes always carry it.
+    // transposePalette derives the dark flag from "background".
     ["background", parseRgbHex("12121a")],
   ]);
   return new Palette(name, true, vars);
 }
 
-// ─── Harness ──────────────────────────────────────────────────────────────────
-//
-// The exact wiring renderDsl uses: ONE ActiveSegmentRef, an engine whose
-// segment-scoped funcs (`color`, `bgOf`) read through it, and
-// resolveSegmentColors publishing into it. The templates are parsed once and
-// the palette arrives per call — which is the whole point of the seam.
 
 const SEG = "demo";
 
@@ -91,19 +75,12 @@ function resolve(
   );
 }
 
-// This file is about bg/fg resolution; the disclosure only rides the record.
 const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
-// The tint the walk dealt this segment's address — a colour no palette role
-// here spells, so a background equal to it can only have come from the floor.
+// A colour no palette role here spells, so a background equal to it came from the floor.
 const TINT = parseRgbHex("102030");
-// A band's floor, standing in for `textOn`: the text IS the background it was
-// asked about, so the assertion sees which background the floor was handed.
+// The text IS the background it was asked about, so assertions see which one the floor got.
 const TEXT_IS_BG: TextFloor = (background) => background;
 
-// ────────────────────────────────────────────────────────────────────────────
-// 1. No bg template → the tint IS the background (a segment always has one);
-//    no fg template → no foreground override.
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("no bg/fg templates → the tint, and no foreground", () => {
   test("undefined bg → the address's tint; undefined fg → color unset", () => {
@@ -154,9 +131,6 @@ describe("no bg/fg templates → the tint, and no foreground", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 2. Color references: a bare palette name and a computed hex take ONE path
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("bg/fg color references", () => {
   test("bare name resolves to the palette color", () => {
@@ -167,9 +141,7 @@ describe("bg/fg color references", () => {
   });
 
   test("a computed color reference resolves through the same path as a name", () => {
-    // The name-authored form and the computed form are the identical code path
-    // (resolveColorRef is idempotent on hex), so `darken (color "primary") 1`
-    // must land exactly on rich-js's own darken of the palette's primary.
+    // The name-authored and computed forms are one code path (resolveColorRef is idempotent).
     const h = makeHarness();
     const palette = makeTestPalette();
     const style = resolve(
@@ -192,9 +164,6 @@ describe("bg/fg color references", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 3. bg template with conditional — different references based on variable state
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("conditional bg template", () => {
   const h = makeHarness();
@@ -219,14 +188,10 @@ describe("conditional bg template", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 4. The phase sequence: what a `bg:` template may read vs a `fg:` one
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("phase ordering — palette, then bg, then fg", () => {
   test("the palette is live inside the bg phase ({{ color }} resolves there)", () => {
-    // Phase 0 publishes the palette BEFORE the bg template runs, so a bg field
-    // may name a theme color through the same `{{ color }}` a body uses.
+    // Phase 0 publishes the palette BEFORE the bg template runs.
     const h = makeHarness();
     const style = resolve(
       h,
@@ -264,8 +229,7 @@ describe("phase ordering — palette, then bg, then fg", () => {
   });
 
   test("segment-scoped funcs outside any segment throw, saying so", () => {
-    // A fresh ref is never published into — the state a variable declaration or
-    // a layout-node `when` predicate evaluates in.
+    // A fresh ref is never published into: what a variable or a node `when` evaluates in.
     const h = makeHarness();
     expect(h.ref.current).toBeNull();
     expect(() => h.parse("{{ bgOf }}").evaluate({})).toThrow(
@@ -274,16 +238,13 @@ describe("phase ordering — palette, then bg, then fg", () => {
     expect(() => h.parse('{{ color "primary" }}').evaluate({})).toThrow(
       /no active segment/,
     );
-    // `ramp` shares `color`'s palette getter, so its message must name ramp too.
     expect(() =>
       h.parse('{{ ramp 50 "step" 0 "primary" 100 "error" }}').evaluate({}),
     ).toThrow(/\{\{ ramp \}\}.*no active segment/);
   });
 
   test("the published palette is the one passed in, not one captured at parse", () => {
-    // Two clocks closed: ONE parsed template, two palettes, two answers. A
-    // palette captured when the config loaded would make these identical while
-    // the rest of the render moved on (a theme click, a look, a hue shift).
+    // Two clocks closed: ONE parsed template, two palettes, two answers.
     const h = makeHarness();
     const bgTpl = h.parse('{{ color "primary" }}');
     const blue = resolve(
@@ -304,9 +265,6 @@ describe("phase ordering — palette, then bg, then fg", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 5. fg computed from the resolved bg — contrast and blending
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("fg computed from bgOf", () => {
   test("contrastOn (bgOf) over a dark bg resolves to a light color", () => {
@@ -315,13 +273,12 @@ describe("fg computed from bgOf", () => {
     const style = resolve(
       h,
       palette,
-      h.parse("surface"), // dark: #1a1a2e
+      h.parse("surface"),
       h.parse("{{ contrastOn (bgOf) }}"),
     );
     expect(style.color?.value?.hex).toBe(
       contrastFor(palette.get("surface")!).hex,
     );
-    // …and that answer is a light one on a dark background.
     const hex = style.color!.value!.hex;
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -345,9 +302,6 @@ describe("fg computed from bgOf", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 6. Invalid color reference surfaces clearly at render time
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("invalid color reference → ColorSpecError", () => {
   test("unknown bg name throws ColorSpecError", () => {
@@ -378,9 +332,6 @@ describe("invalid color reference → ColorSpecError", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 7. Segment-scoped color funcs reach a template body only via segmentColorFuncs
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("segment color functions in the engine", () => {
   test('{{ fg (color "primary") … }} paints the palette color', () => {
@@ -399,7 +350,7 @@ describe("segment color functions in the engine", () => {
   });
 
   test("an engine built without segmentColorFuncs has no `color` function", () => {
-    const engine = createCcCandybarEngine(); // no segment-scoped funcs
+    const engine = createCcCandybarEngine();
     const tpl = engine.parse('{{ color "primary" }}');
     expect(() => tpl.evaluate({})).toThrow(/"color" is not registered/);
   });
@@ -411,9 +362,6 @@ describe("segment color functions in the engine", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 8. Both bg and fg resolved — Style carries both colors
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("both bg and fg resolved", () => {
   test("Style has both bgcolor and color set", () => {
@@ -429,18 +377,10 @@ describe("both bg and fg resolved", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 9. Per-segment hue = WHICH palette (whole-theme transposition)
-//
-// [LAW:behavior-not-structure] The hue behavior is a property of the palette
-// handed to resolveSegmentColors, not an option of it. These assert the
-// observable: resolved hex through a transposed palette. The anchor rule itself
-// (error/success/warning hue-locked, info NOT) is owned + exhaustively tested in
-// rich-js (transposePalette / ANCHORED_ROOTS); here we assert only that
-// cc-candybar wires it through correctly.
-// ────────────────────────────────────────────────────────────────────────────
+// [LAW:behavior-not-structure] Hue is a property of the palette handed in, not an option
+// of resolveSegmentColors; the anchor rule itself is owned and tested in rich-js.
 
-// Per-channel max delta — sRGB↔OKLCH round-trips quantize by ±1.
+// sRGB↔OKLCH round-trips quantize by ±1.
 function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
   return Math.max(
     Math.abs(a.red - b.red),
@@ -451,8 +391,7 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 
 describe("per-segment hue via palette transposition", () => {
   const base = makeTestPalette();
-  // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
-  // look is active (the other three axes identity).
+  // A hue-only ThemeKey — the other three axes identity.
   const hueKey = (hueShift: number): ThemeKey => ({
     hueShift,
     chromaScale: 1,
@@ -476,8 +415,7 @@ describe("per-segment hue via palette transposition", () => {
 
   test("hueShift 30 → anchored names (error/success) keep their hue", () => {
     const shifted = transposedPalette(base, hueKey(30));
-    // error/success are in rich-js ANCHORED_ROOTS: hue-locked under transpose,
-    // so they survive within round-trip tolerance while primary (above) moves.
+    // error/success are hue-locked under transpose, so they survive while primary moves.
     expect(
       maxChannelDelta(shifted.get("error")!, base.get("error")!),
     ).toBeLessThanOrEqual(2);
@@ -487,8 +425,6 @@ describe("per-segment hue via palette transposition", () => {
   });
 
   test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
-    // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
-    // does not. This is the drift the reshaping removed.
     const shifted = transposedPalette(base, hueKey(30));
     expect(
       maxChannelDelta(shifted.get("info")!, base.get("info")!),
@@ -502,9 +438,7 @@ describe("per-segment hue via palette transposition", () => {
   });
 
   test("literal fg is transposed too (bg/fg pair preserved, not output-only)", () => {
-    // The key fix: transposing the whole palette means a LITERAL fg reference
-    // shifts alongside bg. The old output-only bg rotation left a literal fg
-    // un-shifted, drifting the theme-designed bg/fg relationship apart.
+    // Transposing the whole palette shifts a LITERAL fg alongside bg.
     const h = makeHarness();
     const shifted = transposedPalette(base, hueKey(60));
     const bgTpl = h.parse("surface");
@@ -515,12 +449,7 @@ describe("per-segment hue via palette transposition", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 9b. The other three ThemeKey axes — a look's chromaScale/lightnessScale/
-// lightnessShift, transposed through the same transposedPalette as hueShift
-// (brandon-themes-07p). Asserted in OKLCH terms (Oklch.fromRgba) so "the
-// saturation moved" is a checked number, not an inference from a differing hex.
-// ────────────────────────────────────────────────────────────────────────────
+// The non-hue ThemeKey axes, asserted in OKLCH terms so "the saturation moved" is a number.
 
 describe("non-hue ThemeKey axes via palette transposition", () => {
   const base = makeTestPalette();
@@ -547,15 +476,13 @@ describe("non-hue ThemeKey axes via palette transposition", () => {
     );
     const a = Oklch.fromRgba(base.get("primary")!);
     const b = Oklch.fromRgba(shifted.get("primary")!);
-    // L' = 1 - L: the inverted lightness lands near the complement, not near the original.
+    // L' = 1 - L lands near the complement, not near the original.
     expect(Math.abs(b.l - (1 - a.l))).toBeLessThan(0.05);
     expect(Math.abs(b.l - a.l)).toBeGreaterThan(0.1);
   });
 
   test("memoized: distinct chromaScale/lightnessScale values are distinct cache entries", () => {
-    // Guards transposedPalette's cache key — before it covered all four axes,
-    // two keys differing only on chroma/lightness would collide and silently
-    // share a palette.
+    // Guards transposedPalette's cache key over all four axes.
     const vivid = transposedPalette(base, key({ chromaScale: 1.5 }));
     const muted = transposedPalette(base, key({ chromaScale: 0.5 }));
     expect(vivid).not.toBe(muted);
@@ -563,9 +490,6 @@ describe("non-hue ThemeKey axes via palette transposition", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 10. paletteForThemeName — the single name -> Palette enforcer (k5a.4)
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("paletteForThemeName", () => {
   test("memoized: same name returns the same palette instance", () => {
@@ -573,8 +497,7 @@ describe("paletteForThemeName", () => {
   });
 
   test("resolves aliases to the same palette as the canonical name", () => {
-    // 'dark' is an alias of 'textual-dark' (resolvePaletteName), so both must
-    // collapse to one cached palette.
+    // 'dark' is an alias of 'textual-dark', so both must collapse to one cached palette.
     expect(paletteForThemeName("dark")).toBe(
       paletteForThemeName("textual-dark"),
     );

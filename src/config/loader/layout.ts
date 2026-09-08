@@ -1,23 +1,5 @@
-// [LAW:one-source-of-truth] The ONE layout authoring surface is the A-grammar
-// (a bare string = segment ref; { seg, when? } = segment ref with predicate;
-// { h: [...], when? } = horizontal container; { v: [...], when? } = vertical
-// container; { kind: "group", … } = collapsible group). ALL other shapes are
-// migration errors [LAW:no-silent-failure]:
-//
-//   `layout:` top-level key (removed in 2de.19) → error with A-grammar rewrite
-//   `kind: "cells"` node (removed in 2de.19)     → error with { h: […] } rewrite
-//
-// [LAW:types-are-the-program] The node grammar is DATA schemas interpreted by the
-// generic `record` engine: each arm's shape is a FieldSpecMap, each bespoke
-// message lives on its field spec as data. The two things the generic engine does
-// NOT own stay local: the kind-dispatch (a node folds object-guard / missing-kind
-// / unknown-kind into one bespoke message and pins its line to `root`, unlike the
-// generic taggedUnion's per-failure messages), and the degenerate-node recovery
-// (a node never drops to null; it recovers so traversal keeps collecting issues —
-// parseDslConfig throws once any issue exists, so the fallback never renders). The
-// recursion (a container's children are nodes) crosses through `lazy`, the engine's
-// recursion seam, so the child-list field is data that points back at the node
-// parser without a temporal-dead-zone crash at module load.
+// [LAW:one-source-of-truth][LAW:no-silent-failure] The A-grammar is the ONE authoring surface; every other shape is a migration error.
+// [LAW:types-are-the-program] DATA schemas over the generic `record` engine; only the kind-dispatch and the degenerate-node recovery stay local.
 
 import {
   DIRECTIONS,
@@ -66,49 +48,27 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:types-are-the-program] The recursion seam for EMIT: a container's children
-// are LayoutNodes, so the node schema must reference itself. JSON Schema breaks
-// the cycle with a named definition + `$ref` — the structural analogue of the
-// `lazy` thunk that breaks the parse-time cycle. The emitter publishes the node
-// schema at this path; `childrenSpec` and the top-level `root` both point here.
+// [LAW:types-are-the-program] `$ref` is emit's analogue of the `lazy` thunk that breaks the parse-time cycle.
 export const LAYOUT_NODE_REF = "#/definitions/LayoutNode";
 export const LAYOUT_NODE_DEF_NAME = "LayoutNode";
-// The definition a `root:` (top-level or a preset's) is validated against: a
-// whole tree (the node definition above) or a `{ rows }` map of named nodes.
 export const ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
 export const ROOT_FRAGMENT_DEF_NAME = "RootFragment";
 
-// ─── Root node grammar (`root`) ──────────────────────────────────────────────
-
-// [LAW:dataflow-not-control-flow] On a fundamental shape error (non-object node or
-// unknown kind) the dispatch returns a degenerate node so traversal continues
-// collecting issues — parseDslConfig throws once any issue exists, so the fallback
-// never renders. This is the recovery shape the generic `record`/union engines do
-// NOT own (they drop to null); it stays local as a separate pass over the engine.
+// [LAW:dataflow-not-control-flow] A shape error recovers here so traversal keeps collecting issues; parseDslConfig then throws.
 const EMPTY_VERTICAL_NODE: LayoutNode = {
   kind: "container",
   direction: "vertical",
   children: [],
 };
 
-// [LAW:types-are-the-program] A node's `kind` is a literal the dispatch has already
-// validated; as a record field it is included (so the unknown-key rejection allows
-// it) and yields the literal back. It can never be absent or wrong here — the
-// dispatch routes to this arm only on an exact kind match.
-// `required: true` though parse never fails — it's mandatory in the emitted
-// schema (the const discriminator), a no-op for `fields`. See `cellsSegmentsSpec`.
+// [LAW:types-are-the-program] The dispatch already matched `kind`; `required` is for the emitted schema alone.
 function literalSpec<V extends string>(value: V): FieldSpec<V> {
   return { required: true, json: { const: value }, parse: () => value };
 }
 
-// [LAW:dataflow-not-control-flow] A segment node's `name`: present-non-empty-string
-// → the name; anything else → the bespoke issue plus a `""` fallback (NOT a drop),
-// so the node recovers and traversal continues. The fallback IS the value (never
-// undefined), so the record always keeps the field.
+// [LAW:dataflow-not-control-flow] A bad `name` recovers to "" rather than dropping, so traversal continues.
 function segmentNameSpec(): FieldSpec<string> {
   return {
-    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
-    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
     required: true,
     json: { type: "string" },
     parse: (ctx, path, field, raw) => {
@@ -124,16 +84,9 @@ function segmentNameSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:one-source-of-truth] Valid directions come from the DIRECTIONS list — the
-// same set the renderer projects. An invalid/absent direction recovers to
-// `vertical` (the node is never dropped) plus the bespoke issue. Distinct from the
-// generic `optionalEnumSpec`, which OMITS on invalid; a container's `direction` is
-// required, so it must recover to a value, not vanish.
+// [LAW:one-source-of-truth] Unlike `optionalEnumSpec`, an invalid direction recovers to a value rather than vanishing.
 function directionSpec(): FieldSpec<Direction> {
   return {
-    // Mandatory in the schema (a missing/invalid direction pushes an issue →
-    // throw); the parse recovers to "vertical", a no-op for `fields`. See
-    // `cellsSegmentsSpec`.
     required: true,
     json: { enum: [...DIRECTIONS] },
     parse: (ctx, path, field, raw) => {
@@ -154,22 +107,12 @@ function directionSpec(): FieldSpec<Direction> {
   };
 }
 
-// [LAW:decomposition] A container's `children` are themselves nodes — the one
-// recursive field. It recovers to `[]` on a non-array value (the node is kept),
-// and otherwise maps each child through the node parser. The parser is referenced
-// through `lazy` so this spec can live inside CONTAINER_SCHEMA as data that points
-// back at `validateRoot` without a temporal-dead-zone read at module load.
+// [LAW:decomposition] The one recursive field: `lazy` lets it point back at `validateRoot` with no dead-zone read.
 function childrenSpec(
   node: (ctx: ValidateCtx, path: string, raw: unknown) => LayoutNode,
 ): FieldSpec<readonly LayoutNode[]> {
   return {
-    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
-    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
     required: true,
-    // [LAW:one-source-of-truth] The recursive field points at the node definition
-    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
-    // self-reference. The runtime recursion and the schema recursion break the
-    // same cycle, declared in one place.
     json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
@@ -186,11 +129,7 @@ function childrenSpec(
   };
 }
 
-// [LAW:types-are-the-program] The AUTHORABLE segment node: `opens` — the
-// disclosure body a trigger hangs (candybar-render-ai7.9) — is deliberately
-// not a field here. Records reject unknown keys, so a config spelling it is a
-// load error, and `disclosureNode` (src/config/disclosure.ts) stays the only
-// producer of a body. The Omit is the statement, checked by the field map.
+// [LAW:types-are-the-program] `opens` is deliberately unauthorable, so `disclosureNode` stays the only producer of a body.
 const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens">> = {
   noun: "layout-node key",
   fields: {
@@ -200,10 +139,6 @@ const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens">> = {
   },
 };
 
-// [LAW:one-source-of-truth] The one spec for a placer's `distribution` field —
-// the container arms and the group body all validate through it, against the
-// same DISTRIBUTION_NAMES the render resolves by, so an unknown name is a load
-// error listing exactly the names a render would accept.
 const distributionSpec = (): FieldSpec<DistributionName> =>
   optionalEnumSpec(DISTRIBUTION_NAMES);
 
@@ -218,17 +153,8 @@ const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
   },
 };
 
-// ─── Option A shape grammar (seg / h / v) ────────────────────────────────────
-
-// [LAW:types-are-the-program] The terse bijective spellings of the canonical
-// tree: a bare string names a segment; an object with exactly one of "seg",
-// "h", or "v" spells a segment-ref-with-predicate, a horizontal container, or
-// a vertical container respectively. Every legal canonical node is expressible;
-// no illegal one is — bijectivity is the acceptance test. The key-count check
-// (exactly one of seg/h/v) is the dispatch-level invariant that makes the wrong
-// arm unrepresentable as a valid parse. [LAW:single-enforcer] — the loader is
-// the sole enforcer; the JSON Schema emitter mirrors it, but the loader's exit
-// code is the truth.
+// [LAW:types-are-the-program] Terse spellings, bijective by construction: exactly one of seg/h/v
+// makes the wrong arm unrepresentable. [LAW:single-enforcer] The loader's exit code is truth.
 
 interface SegArmNode {
   readonly seg: string;
@@ -287,27 +213,14 @@ const V_ARM_SCHEMA: RecordSchema<VArmNode> = {
   },
 };
 
-// ─── validateRoot ────────────────────────────────────────────────────────────
-
-// [LAW:locality-or-seam] The boundary that turns the raw `root` grammar into a
-// validated LayoutNode tree. STRUCTURAL only — whether a segment name resolves and
-// whether a `when` ref exists are cross-ref concerns (validateCrossReferences runs
-// on the MERGED config, so a node can name default-provided segments).
-//
-// [LAW:dataflow-not-control-flow] The `kind` discriminator selects the arm; an
-// unknown kind is rejected, never coerced. Object-guard and unknown-kind fold into
-// one bespoke message each (pinned to the `root` line) — the local dispatch the
-// generic taggedUnion does not express. A `const` (not a hoisted function) so the
-// `lazy` thunk inside CONTAINER_SCHEMA defers reading it; reading it eagerly there
-// would be a temporal-dead-zone crash.
+// [LAW:locality-or-seam] STRUCTURAL only: name resolution is a cross-ref concern over the MERGED config.
+// A `const`, not a hoisted function, so CONTAINER_SCHEMA's `lazy` thunk can defer reading it.
 export const validateRoot = (
   ctx: ValidateCtx,
   path: string,
   raw: unknown,
 ): LayoutNode => {
-  // [LAW:types-are-the-program] A bare string is the terse segment-ref spelling.
-  // Checked before the object guard so the "not an object" error does not fire
-  // on a valid input.
+  // Checked before the object guard so "not an object" cannot fire on a valid input.
   if (typeof raw === "string") {
     if (raw.length === 0) {
       ctx.issues.push({
@@ -334,8 +247,7 @@ export const validateRoot = (
     return record(ctx, SEGMENT_NODE_SCHEMA, path, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") {
-    // [LAW:no-silent-failure] `kind: "cells"` removed in 2de.19. Reject loudly
-    // with the A-grammar equivalent so the author knows exactly how to migrate.
+    // [LAW:no-silent-failure] Reject loudly, naming the A-grammar equivalent.
     ctx.issues.push({
       path,
       message: `kind: "cells" is no longer supported — use the h-arm spelling instead:\n  Old: { kind: "cells", segments: ["seg1", "seg2"] }\n  New: { h: ["seg1", "seg2"] }`,
@@ -346,8 +258,6 @@ export const validateRoot = (
   if (raw.kind === "group") {
     const group = record(ctx, GROUP_SCHEMA, path, raw);
     if (group === null) return EMPTY_VERTICAL_NODE;
-    // Collected for the post-walk synthesis pass (state var + cycle action +
-    // toggle segment); the node itself lowers to the canonical grammar here.
     ctx.groups.push({
       name: group.name,
       label: group.label,
@@ -361,9 +271,6 @@ export const validateRoot = (
     });
     return lowerGroup(group);
   }
-  // [LAW:types-are-the-program] Option A terse arms: exactly one of "seg" / "h"
-  // / "v". Two or more present is an illegal state; zero means the object has
-  // neither a valid "kind" nor a valid terse arm — both are loud rejections.
   const hasH = "h" in raw;
   const hasV = "v" in raw;
   const hasSeg = "seg" in raw;
@@ -416,13 +323,7 @@ export const validateRoot = (
   return EMPTY_VERTICAL_NODE;
 };
 
-// ─── Root fragment (`root:` — a whole tree or a `{ rows }` map) ──────────────
-
-// [LAW:types-are-the-program] The rows map: name → node, each name an
-// identifier (ROW_NAME_RE — never integer-like, so authoring order survives the
-// by-name spread) and each value any layout node. A bad name is a loud issue
-// and the row is dropped from the recovery value; parseDslConfig throws once
-// any issue exists, so the recovery never renders.
+// [LAW:types-are-the-program] A row name is never integer-like, so authoring order survives the spread.
 function rowsSpec(): FieldSpec<Root["rows"]> {
   return {
     required: true,
@@ -467,11 +368,7 @@ const ROWS_SCHEMA: RecordSchema<Root> = {
   },
 };
 
-// [LAW:types-are-the-program] The two intents a `root:` can spell, dispatched
-// on the shape the author wrote: a `{ rows }` object is the by-name fragment,
-// anything else is a whole tree through the node grammar above. A `rows`
-// object nested INSIDE a node is not a fragment and falls to validateRoot's
-// own rejection — rows merge at a root, never at a container.
+// [LAW:types-are-the-program] `{ rows }` is the by-name fragment: rows merge at a root, never at a container.
 export function validateRootFragment(
   ctx: ValidateCtx,
   path: string,
@@ -483,31 +380,14 @@ export function validateRootFragment(
   return validateRoot(ctx, path, raw);
 }
 
-// [LAW:one-source-of-truth] The RootFragment definition: the anyOf of exactly
-// the two arms `validateRootFragment` dispatches over, each derived from the
-// schema the validator interprets.
 export function rootFragmentJson(): JsonNode {
   return { anyOf: [{ $ref: LAYOUT_NODE_REF }, recordJson(ROWS_SCHEMA)] };
 }
 
-// ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
-
-// [LAW:one-source-of-truth] The reserved namespace every synthesized artifact
-// lives under, in all three sections (variables / actions / segments). One
-// group declaration is the single source; the var, the action, and the toggle
-// segment all derive their name from it. A user-authored name under this
-// prefix is rejected so synthesis can never silently collide.
+// [LAW:one-source-of-truth] The reserved namespace: a user name here is rejected, never silently overwritten.
 export const GROUP_NS = "groups.";
 
-// [LAW:one-source-of-truth] The closed sentinel and ▸/▾ glyphs are the shared
-// disclosure primitive (src/config/disclosure.ts) — a group is one of its two
-// body-kinds, so it reuses DISCLOSURE_CLOSED / DISCLOSURE_GLYPH_* rather than
-// keeping a second copy that could drift from the menu's. Group names are
-// forbidden from equaling the sentinel, so a cycle's two members are distinct.
-
-// [LAW:one-source-of-truth] A group name is spliced into the synthesized
-// `when` predicate and toggle template as `.groups.<name>`, so it shares
-// ROW_NAME_RE — the identifier constraint every spliced name carries.
+// [LAW:one-source-of-truth] A group name splices into `.groups.<name>` and may not equal the closed sentinel.
 function groupNameSpec(): FieldSpec<string> {
   return {
     required: true,
@@ -531,9 +411,7 @@ function groupNameSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:single-enforcer] A group's optional shared `key` is a SessionState key —
-// the same non-empty/slash-free wire shape the action loader's `set` key
-// enforces, restated here because the group synthesizes that `set`.
+// [LAW:single-enforcer] The same wire shape the `set` key enforces, since the group synthesizes it.
 function groupKeySpec(): FieldSpec<string> {
   return {
     required: false,
@@ -554,14 +432,8 @@ function groupKeySpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:types-are-the-program] The `group` input record: one declaration carrying
-// everything its synthesized artifacts derive from. `direction` arranges the
-// BODY (the children container) — the toggle row always stacks above it;
-// `key` opts sibling groups into one accordion (shared key ⇒ one open at a
-// time); `open` picks the key's initial state; `bg`/`fg` paint the toggle
-// segment; `when` gates the whole group (toggle included); `distribution`
-// is the BODY container's placer field (dsl-types ContainerNode), since the
-// body is the container the group's children are placed in.
+// [LAW:types-are-the-program] One declaration everything else derives from: `direction`/`distribution`
+// arrange the BODY, `key` opts siblings into one accordion, `when` gates the whole group.
 interface GroupNodeInput {
   readonly kind: "group";
   readonly name: string;
@@ -576,10 +448,7 @@ interface GroupNodeInput {
   readonly children: readonly LayoutNode[];
 }
 
-// [LAW:no-silent-failure] Reject newlines at the validator boundary — a label
-// with \n or \r would reach escapeTemplateLiteral and produce a Go template
-// string literal with an embedded newline, which go-template-js forbids. Fail
-// loudly here so the loader surfaces the problem before synthesis runs.
+// [LAW:no-silent-failure] A newline in a label would produce a template literal go-template-js forbids.
 function groupLabelSpec(): FieldSpec<string> {
   return {
     required: true,
@@ -617,22 +486,13 @@ const GROUP_SCHEMA: RecordSchema<GroupNodeInput> = {
   },
 };
 
-// The state key a group toggles: the explicit shared `key` (accordion) or the
-// group's own derived key (independent toggle). One value selects the behavior
-// — no accordion mode [LAW:dataflow-not-control-flow].
+// [LAW:dataflow-not-control-flow] One value selects accordion vs independent — no mode.
 function groupStateKey(g: { name: string; key?: string }): string {
   return g.key ?? GROUP_NS + g.name;
 }
 
-// [LAW:one-source-of-truth] Lower a group to the canonical grammar: the toggle
-// segment with the body hung on it (`disclosureNode`, the one lowering every
-// disclosure takes). The toggle's ref and the body's open state both derive
-// from the group's name — the same name the synthesis names the state var
-// with, so the walk's gate reads exactly the var the toggle's cycle writes.
-// The body is open exactly when the key holds THIS group's name (a sibling's
-// name or "closed" hides it — the accordion falls out of one key holding one
-// name). The group's own `when` gates the toggle, and a hidden toggle renders
-// no body.
+// [LAW:one-source-of-truth] Trigger and body both derive from the group's name, so the gate reads the
+// var the cycle writes; the accordion falls out of one key holding one name.
 function lowerGroup(g: GroupNodeInput): LayoutNode {
   const ref = GROUP_NS + g.name;
   return disclosureNode(
@@ -656,31 +516,13 @@ function groupIssue(ctx: ValidateCtx, path: string, message: string): void {
   });
 }
 
-// [LAW:one-source-of-truth] The synthesis pass: every artifact a group implies,
-// derived from its one declaration and merged into the raw sections, AFTER the
-// user's own sections parsed — so a user name under the reserved namespace is a
-// loud rejection, never a silent overwrite. Runs once per parse, after the root
-// walk collected every group with its tree position.
-//
-// Invariants enforced here (each a load error, never a silent fixup):
-//   • group names are unique (they name the synthesized artifacts);
-//   • no user-authored variable/action/segment under the reserved namespace;
-//   • an ancestor and a descendant group never share a key (one key holds ONE
-//     open name, so a same-key chain could not represent "both open" — sibling
-//     accordions share keys, nested disclosure nests distinct keys);
-//   • at most one group per shared key declares `open: true` (the key's single
-//     initial value [LAW:one-source-of-truth]).
+// [LAW:one-source-of-truth] Runs AFTER the user's sections parsed, so a reserved name is a loud rejection.
+// Load errors: duplicate names; an ancestor and descendant sharing a key; two `open: true` on one key.
 export function synthesizeGroupDecls(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
 ): void {
-  // [LAW:single-enforcer] The disclosure primitive's shared reserved-namespace
-  // enforcer (mirroring {{ menu }}'s `menus.`) — a user name under `groups.`
-  // would silently shadow a synthesized artifact. Reserved UNCONDITIONALLY,
-  // before the no-groups early return, so the reservation is a stable contract
-  // ("you never author groups.*"), not a rule that only switches on when a
-  // group node happens to be declared this load — same placement as the menus
-  // pass (synthesizeMenuDecls).
+  // [LAW:single-enforcer] Reserved UNCONDITIONALLY, so "you never author groups.*" is a stable contract.
   reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
 
   const groups = ctx.groups;
@@ -714,9 +556,7 @@ export function synthesizeGroupDecls(
     }
   }
 
-  // [LAW:one-source-of-truth] One initial value per key: the single open
-  // group's name, else closed. Every var synthesized on a key carries the SAME
-  // default, so two vars reading one key cannot disagree.
+  // [LAW:one-source-of-truth] One initial value per key, so two vars on it cannot disagree.
   const defaultByKey = new Map<string, string>();
   for (const g of groups) {
     const key = groupStateKey(g);
@@ -740,25 +580,15 @@ export function synthesizeGroupDecls(
   for (const g of groups) {
     const name = GROUP_NS + g.name;
     const key = groupStateKey(g);
-    // [LAW:dataflow-not-control-flow] Depth is a value derivable from the paths
-    // already in ctx.groups — no extra threading. Strict-prefix count gives
-    // nesting depth; the indent embeds as a string constant in the template.
+    // [LAW:dataflow-not-control-flow] Depth derives from the paths already in ctx.groups.
     const depth = groups.filter(
       (other) => other !== g && g.path.startsWith(other.path + "."),
     ).length;
     const indent = "  ".repeat(depth);
-    // [LAW:one-source-of-truth] The shared disclosure toggle: one state var + one
-    // binary cycle action, both from the primitive. Members are ordered default-
-    // state-first (closed first): an unset or sibling-held key counts as the first
-    // member, so the toggle renders ▸ and clicks to its own name — expand, auto-
-    // closing the sibling on a shared key.
+    // [LAW:one-source-of-truth] Closed-first, so an unset or sibling-held key expands this group.
     variables[name] = disclosureStateVar(key, defaultByKey.get(key)!);
     actions[name] = disclosureCycleAction(key, g.name);
-    // [LAW:representation] The disclosure glyph trails the label it gates, so an
-    // arrow reads as belonging to the text on its LEFT — adjacent toggles
-    // ("details ▸" "links ▸") stay unambiguous even when abutted. `indent` is a
-    // structural left-margin (nesting depth) and stays leading; the glyph is a
-    // trailing affordance on the label, never a prefix.
+    // [LAW:representation] The glyph TRAILS its label so abutted toggles stay unambiguous.
     segments[name] = {
       template: disclosureTrigger(
         name,
@@ -774,14 +604,7 @@ export function synthesizeGroupDecls(
   out.segments = { ...(out.segments ?? {}), ...segments };
 }
 
-// ─── Schema emit ─────────────────────────────────────────────────────────────
-
-// [LAW:one-source-of-truth] The LayoutNode definition: the anyOf of ALL arms
-// `validateRoot` dispatches over — kind-based (container / segment / group) and
-// terse A-grammar (bare string, seg-arm, h-arm, v-arm) — each derived from the
-// SAME schema the validator interprets. The `kind` const and the unique required
-// key keep arms disjoint; the container/h/v children `$ref` back here, closing
-// the recursion. `{ type: "string" }` covers the bare-string segment-ref form.
+// [LAW:one-source-of-truth] The anyOf of ALL arms `validateRoot` dispatches over, from the same schemas.
 export function layoutNodeJson(): JsonNode {
   return {
     anyOf: [

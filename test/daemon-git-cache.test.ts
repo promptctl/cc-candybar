@@ -10,15 +10,10 @@ class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public resolveCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public gitDirCalls: string[] = [];
-  // Per-workingDir override for resolveGitDir. Worktree tests use this to
-  // simulate the `.git`-is-a-file → resolved-gitDir indirection without
-  // setting up real worktree filesystems.
+  // Per-workingDir override for resolveGitDir, so worktree tests need no real fs.
   public gitDirByDir: Record<string, string> = {};
   public repoRootByDir: Record<string, string | null> = {};
-  // Per-(workingDir, projectDir) override for resolveEffectiveGitDir. The
-  // default behavior (when a key is absent) falls back to repoRootByDir.
-  // Tests that exercise projectDir-driven cache-key behavior populate this
-  // map directly.
+  // Per-(workingDir, projectDir) override; an absent key falls back to repoRootByDir.
   public effectiveDirByKey: Record<string, string | null> = {};
   public stubInfo: GitInfo = {
     branch: "main",
@@ -86,23 +81,17 @@ class StubGitService extends GitService {
 
 function makeCache(opts: { ttlMs?: number; maxEntries?: number } = {}) {
   const inner = new StubGitService();
-  // sanityIntervalMs=0 disables the periodic check in unit tests; we drive
-  // it manually via runSanityCheckNow().
+  // sanityIntervalMs=0 disables the periodic check; tests drive it manually.
   const svc = new GitDataProvider({ ...opts, inner, sanityIntervalMs: 0 });
   return { svc, inner };
 }
 
 afterEach(() => {
-  // Watchers will fail on the synthetic /repo/* paths but registry guards
-  // against the resulting throw; nothing to clean up here.
 });
 
 describe("GitDataProvider", () => {
   test("two cwds in same repo share one cache entry", async () => {
     const { svc, inner } = makeCache();
-    // After kz8.3 review fix, provider's inner.getGitInfo is invoked with the
-    // resolved repoRoot (not the cwd) so the inner doesn't re-walk findGitRoot.
-    // The stub's lookups expect to see the resolved key.
     inner.repoRootByDir = {
       "/repo/a": "/repo",
       "/repo/b": "/repo",
@@ -152,10 +141,9 @@ describe("GitDataProvider", () => {
 
     await svc.getGitInfo("/a", {});
     await svc.getGitInfo("/b", {});
-    await svc.getGitInfo("/a", {}); // bumps /a
-    await svc.getGitInfo("/c", {}); // should evict /b, not /a
+    await svc.getGitInfo("/a", {});
+    await svc.getGitInfo("/c", {});
 
-    // Re-access /a → cache hit; /b → miss (evicted).
     inner.computeCalls = [];
     await svc.getGitInfo("/a", {});
     await svc.getGitInfo("/b", {});
@@ -182,10 +170,8 @@ describe("GitDataProvider", () => {
   });
 
   test("projectDir override keys cache on effective gitDir, not workingDir", async () => {
-    // workingDir=/cwd is in repoA, but a projectDir=/repoB override makes the
-    // effective gitDir /repoB. The cache key must follow the effective gitDir
-    // so repo B's data doesn't get cached under repo A's key (the pre-fix bug
-    // Copilot flagged on the second-pass review of kz8.3).
+    // A projectDir override makes the effective gitDir /repoB while the cwd is in
+    // repoA; the key must follow the EFFECTIVE dir or B caches under A's key.
     const { svc, inner } = makeCache();
     inner.repoRootByDir = {
       "/cwd": "/repoA",
@@ -193,45 +179,33 @@ describe("GitDataProvider", () => {
       "/repoB": "/repoB",
     };
     inner.effectiveDirByKey = {
-      "/cwd|/repoB": "/repoB", // with projectDir, gitDir becomes /repoB
-      "/cwd": "/repoA", // without, gitDir is /repoA
+      "/cwd|/repoB": "/repoB",
+      "/cwd": "/repoA",
     };
 
     await svc.getGitInfo("/cwd", {}, "/repoB");
     await svc.getGitInfo("/cwd", {});
 
-    // Two distinct effective gitDirs → two cache entries, no contamination.
     expect(svc.getStats().size).toBe(2);
-    // Inner shell-outs land on the resolved gitDirs, not the cwd.
     const dirs = inner.computeCalls.map((c) => c.workingDir).sort();
     expect(dirs).toEqual(["/repoA", "/repoB"]);
   });
 
   test("worktree path resolves HEAD/index from .git file's gitdir target", async () => {
-    // In a worktree, repoRoot/.git is a *file* pointing at the real metadata
-    // dir under main-repo/.git/worktrees/. Watchers and mtime snapshots must
-    // follow that pointer or they silently no-op (the bug Copilot caught on
-    // PR #8 review pass 4).
+    // In a worktree, repoRoot/.git is a *file* pointing at the real metadata dir;
+    // watchers and mtime snapshots must follow it or they silently no-op.
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/wt": "/wt" };
     inner.gitDirByDir = { "/wt": "/main/.git/worktrees/wt" };
 
-    // Fetch + cache without crashing. The internal calls to watcherTargets /
-    // snapshotMtimes use the resolved gitDir, so synthetic "/main/.git/..."
-    // paths don't fail (statSync misses → mtime 0, fs.watch misses → no
-    // watcher, both bounded). The point is that the resolution path *runs*.
     const r = await svc.getGitInfo("/wt", {});
     expect(r).toMatchObject({ kind: "ok", value: { branch: "main" } });
 
-    // Verify resolveGitDir was actually consulted for the worktree path.
     expect(inner.gitDirCalls).toContain("/wt");
   });
 
   test("concurrent cache misses on same key coalesce into one fetch", async () => {
-    // Two parallel callers requesting the same key — without in-flight
-    // coalescing, both observe "no entry yet" and both shell out, doubling
-    // the work the cache exists to eliminate (the race Copilot flagged on
-    // PR #8 review pass 3).
+    // Without in-flight coalescing both callers see "no entry" and both shell out.
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
@@ -241,7 +215,7 @@ describe("GitDataProvider", () => {
     ]);
 
     expect(r1).toMatchObject({ kind: "ok", value: { branch: "main" } });
-    expect(r2).toBe(r1); // same object → same fetch
+    expect(r2).toBe(r1);
     expect(inner.computeCalls).toHaveLength(1);
     expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 1 });
   });
@@ -265,10 +239,7 @@ describe("GitDataProvider", () => {
   });
 });
 
-// Drain helper — subscribe()/refresh callbacks fire after a chain of awaits
-// (gitDir resolution, fetch, in-flight tracker .finally) whose depth is
-// implementation-detail. Each `setImmediate` yield drains a full round of
-// microtasks; some tests trigger nested async chains and need N rounds.
+// Each `setImmediate` yield drains one round of microtasks; nested chains need N.
 async function tick(times = 1): Promise<void> {
   for (let i = 0; i < times; i++) {
     await new Promise<void>((r) => setImmediate(r));
@@ -298,7 +269,6 @@ describe("GitDataProvider.subscribe", () => {
     await tick();
 
     expect(calls).toEqual([null]);
-    // No subscriber registered → no watcher acquired.
     expect(svc.getStats().watchers).toBe(0);
     unsub();
   });
@@ -329,9 +299,7 @@ describe("GitDataProvider.subscribe", () => {
     const unsubB = svc.subscribe("/repo/b", () => {});
     await tick();
 
-    // Both subscribers acquire the same key "git:/repo"; refcount = 2 inside
-    // one slot. The cache's getInfo path also acquires the same key — slot
-    // count, not refcount, is the right metric.
+    // Both subscribers share key "git:/repo": slot count, not refcount, is the metric.
     expect(svc.getStats().watchers).toBe(1);
     unsubA();
     unsubB();
@@ -360,7 +328,6 @@ describe("GitDataProvider.subscribe", () => {
     const unsubGood = svc.subscribe("/repo", (info) => goodCalls.push(info));
     await tick();
 
-    // The throwing subscriber must not prevent later notifications.
     expect(goodCalls).toHaveLength(1);
     expect(goodCalls[0]).toMatchObject({ branch: "main" });
     unsubBad();
@@ -387,15 +354,14 @@ describe("GitDataProvider.subscribe", () => {
     const calls: Array<GitInfo | null> = [];
     const unsub = svc.subscribe("/repo", (info) => calls.push(info));
     await tick();
-    expect(calls).toHaveLength(1); // initial
+    expect(calls).toHaveLength(1);
 
-    // Schedule invalidation; unsubscribe before the async refresh delivers.
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.invalidateRepo("/repo");
     unsub();
     await tick();
 
-    expect(calls).toHaveLength(1); // no post-unsubscribe delivery
+    expect(calls).toHaveLength(1);
   });
 
   test("refresh path does not re-resolve repoRoot on invalidation", async () => {
@@ -404,16 +370,13 @@ describe("GitDataProvider.subscribe", () => {
 
     const unsub = svc.subscribe("/repo", () => {});
     await tick();
-    // Subscribe resolves once.
     expect(inner.resolveCalls.length).toBe(1);
 
-    // Invalidate a few times; the refresh loop should reuse the stored
-    // repoRoot — not call resolveEffectiveGitDir again per iteration.
+    // The refresh loop reuses the stored repoRoot instead of re-resolving each time.
     svc.invalidateRepo("/repo");
     svc.invalidateRepo("/repo");
     await tick(10);
 
-    // Still 1 — refreshes used the stored repoRoot.
     expect(inner.resolveCalls.length).toBe(1);
     unsub();
   });
@@ -425,18 +388,14 @@ describe("GitDataProvider.subscribe", () => {
     const calls: Array<GitInfo | null> = [];
     const unsub = svc.subscribe("/repo", (info) => calls.push(info));
     await tick();
-    expect(calls).toHaveLength(1); // initial
+    expect(calls).toHaveLength(1);
     const initialComputeCalls = inner.computeCalls.length;
 
-    // Fire 10 invalidations synchronously. The first triggers a refresh; the
-    // rest collapse into one trailing-edge re-fetch via refreshAgain.
+    // The first invalidation triggers a refresh; the rest collapse into one trailing.
     for (let i = 0; i < 10; i++) svc.invalidateRepo("/repo");
     await tick(10);
 
-    // Subscribers see at most 2 additional deliveries (the leading edge fetch
-    // and the trailing-edge fetch). Without coalescing this would be 10.
     expect(calls.length - 1).toBeLessThanOrEqual(2);
-    // Inner shell-outs also bounded — leading + trailing only.
     expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
       2,
     );
@@ -470,9 +429,7 @@ describe("GitDataProvider PR cache", () => {
   });
 
   test("PR cache survives GitInfo refetch — one forge call across many renders", async () => {
-    // ttlMs:0 forces a GitInfo miss every call (doFetch runs each time), so
-    // this isolates the PR cache: its own (long) TTL means the forge lookup
-    // fires once even as the local GitInfo is recomputed repeatedly.
+    // ttlMs:0 forces a GitInfo miss every call, isolating the PR cache's own TTL.
     const { svc, inner } = makeCache({ ttlMs: 0 });
     inner.repoRootByDir = { "/repo": "/repo" };
 
@@ -516,7 +473,6 @@ describe("GitDataProvider PR cache", () => {
 
     inner.stubRemote = ok("git@github.com:acme/widget.git");
     await svc.getGitInfo("/repo", { showPullRequest: true });
-    // Re-point origin to a different forge/repo on the same branch.
     inner.stubRemote = ok("git@gitlab.com:acme/widget.git");
     await svc.getGitInfo("/repo", { showPullRequest: true });
 

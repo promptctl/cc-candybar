@@ -1,8 +1,4 @@
-// [LAW:behavior-not-structure] The pure core of the update notice
-// (brandon-build-notice-5d6): which currency facts become an Update, what a
-// dismissal names, the sentence and the three affordances a session sees,
-// and how the act's state changes the row — measured on the channels and on
-// the composed strip, by what each click DOES.
+// [LAW:behavior-not-structure] The pure core of the update notice: which currency facts become an Update, and what each affordance DOES, measured on the composed strip.
 
 import { composeWithDiagnostics, UPDATE_SEVERITY } from "../src/render/diagnostic-strip";
 import {

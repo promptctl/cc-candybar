@@ -8,14 +8,9 @@ import { createDaemonPool } from "./helpers/daemon-pool";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 import { readStartTime } from "../src/daemon/process-fingerprint";
 
-// [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
-// isolation — no real cc-candybar daemon spawns, so this stays fast — mirroring
-// the arbitrateSocket pure-fold test style: full input-space coverage of the
-// mechanism the fork-bomb epic (brandon-daemon-lifecycle-gad.1) needs to hold.
+// [LAW:verifiable-goals] The shared-pool primitive's contract in isolation: no real daemon spawns.
 
-// [LAW:single-enforcer] Every `tmpPoolDir()` call in this file is tracked
-// here and swept once in the file-level `afterAll` — the one cleanup site,
-// so no individual test needs its own dir-removal boilerplate.
+// [LAW:single-enforcer] The one cleanup site for every `tmpPoolDir()` in this file.
 const createdPoolDirs: string[] = [];
 function tmpPoolDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pool-test-"));
@@ -39,8 +34,6 @@ describe("daemon pool", () => {
     const pool = createDaemonPool(tmpPoolDir(), 2);
     const a = await pool.acquire();
     const b = await pool.acquire();
-    // Both live (this process's own pid), so the pool is genuinely full — a
-    // third acquire must not proceed until one is released.
     await expect(
       pool.acquire({ timeoutMs: 300, retryIntervalMs: 50 }),
     ).rejects.toThrow(/no free slot/);
@@ -52,27 +45,16 @@ describe("daemon pool", () => {
     const pool = createDaemonPool(tmpPoolDir(), 1);
     const a = await pool.acquire();
     const pending = pool.acquire({ timeoutMs: 5000, retryIntervalMs: 50 });
-    // Give the pending acquire a moment to actually be polling before we free
-    // the slot, so this exercises the retry path rather than a lucky win.
+    // Let the pending acquire reach its poll first, so this exercises the retry path rather than a lucky win.
     await new Promise((r) => setTimeout(r, 100));
     a.release();
     const b = await pending;
     b.release();
   });
 
-  // [LAW:behavior-not-structure] The reclaim path is what stops a single
-  // crashed test daemon from permanently consuming a slot. Uses a REAL dead
-  // pid (spawned, killed, awaited) rather than a fabricated number — a
-  // fabricated pid risks colliding with a live unrelated process on the host,
-  // which would make this test non-deterministic.
+  // [LAW:behavior-not-structure] A REAL dead pid, not a fabricated number, which could collide with a live process and flake.
   test("reclaims a slot whose recorded owner is dead", async () => {
-    // Kept alive briefly so its start-time can actually be read before it
-    // exits — a null startTime (as if unfingerprinted) would make isSlotLive
-    // fall back to bare kill(pid,0), which a recycled pid could satisfy
-    // within the 2000ms acquire budget on a host with aggressive pid reuse
-    // (low pid_max containers) and flake this test. Recording the real
-    // fingerprint exercises the same start-time-mismatch path production
-    // code relies on to distinguish a recycled pid from the true owner.
+    // Kept alive so its start-time is readable: a null startTime drops isSlotLive to a bare kill(pid,0) a recycled pid could satisfy.
     const dead = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], {
       stdio: "ignore",
     });
@@ -83,7 +65,6 @@ describe("daemon pool", () => {
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
 
     const pool = createDaemonPool(tmpPoolDir(), 1);
-    // Plant a stale slot file directly, as if a prior (now-dead) process held it.
     fs.mkdirSync(pool.dir, { recursive: true });
     fs.writeFileSync(
       path.join(pool.dir, "slot-0.json"),
@@ -97,9 +78,7 @@ describe("daemon pool", () => {
   test("release is a no-op if the slot was already reclaimed by someone else", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 1);
     const a = await pool.acquire();
-    // Simulate another process reclaiming this slot after we lost ownership
-    // some other way (e.g. a sweep) — release() must not blow away the new
-    // owner's record.
+    // release() must not blow away the record of a process that reclaimed the slot after we lost ownership.
     fs.writeFileSync(
       path.join(pool.dir, "slot-0.json"),
       JSON.stringify({ pid: 999999, startTime: null }),
@@ -133,12 +112,7 @@ describe("daemon pool", () => {
   });
 });
 
-// [LAW:verifiable-goals] End-to-end proof of the epic's own acceptance
-// criterion ("Full `pnpm test` peaks at ≤ the chosen ceiling of live
-// daemons — assert via a probe") against REAL cc-candybar daemon
-// subprocesses, not fake stand-ins. Pinned to an isolated size-2 pool (not
-// the shared default) so this test is fast and never contends with the rest
-// of the suite's real spawns.
+// [LAW:verifiable-goals] The ceiling proved against REAL daemon subprocesses, on an isolated size-2 pool.
 describe("daemon pool caps real daemon subprocesses (integration)", () => {
   jest.setTimeout(30_000);
 
@@ -210,9 +184,7 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
     const fx3 = makeFixture("cc-candybar-poolit-3-");
 
     try {
-      // Each spawn's own try/finally starts immediately after it succeeds —
-      // not after all three have been kicked off — so a later spawn (d2, d3)
-      // throwing can never leak an earlier one (d1) that already succeeded.
+      // Each spawn's try/finally opens the moment it succeeds, so a later spawn throwing cannot leak an earlier one.
       const d1 = await spawnTestDaemon(fx1.env, pool);
       try {
         const d2 = await spawnTestDaemon(fx2.env, pool);
@@ -224,11 +196,6 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
             await waitUntil(() => isConnectable(fx2.sockPath), 5000),
           ).toBe(true);
 
-          // Pool is full (2/2). The 3rd spawn must not even start its daemon
-          // process until a slot frees — that's the ceiling this pool exists
-          // to enforce. spawnTestDaemon(..., { timeoutMs: 15000 }) isn't an
-          // option (the signature doesn't expose it), so race the acquire
-          // itself against a short "still blocked" probe.
           const d3Promise = spawnTestDaemon(fx3.env, pool);
           try {
             try {
@@ -238,15 +205,7 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
               ));
               expect(stillBlocked).toBe(true);
             } finally {
-              // Free one slot UNCONDITIONALLY — whether or not the
-              // "still blocked" assertion above passed. d3Promise can only
-              // resolve once a slot frees; releasing here (rather than
-              // after the assertion, which might throw first) guarantees
-              // the drain in the outer catch below always has a slot to
-              // resolve against instead of hanging on spawnTestDaemon's own
-              // ~20s acquire timeout. killTree (not child.kill) — the `tsx`
-              // wrapper forks its own worker that holds the real socket,
-              // which survives as an orphan if only the wrapper dies.
+              // Free a slot UNCONDITIONALLY or the outer drain hangs on the ~20s acquire timeout; killTree because the `tsx` wrapper forks the worker holding the socket.
               d1.killTree();
               d1.release();
             }
@@ -261,13 +220,6 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
               d3.release();
             }
           } catch (err) {
-            // An assertion above threw before `d3Promise` was drained (or
-            // before its own cleanup ran) — d1's slot is already free (the
-            // finally above guarantees that unconditionally), so d3Promise
-            // is resolvable; drain and clean it up rather than abandoning
-            // the handle. Tolerate d3Promise itself rejecting (a genuine
-            // spawn failure) — spawnTestDaemon already releases its slot
-            // internally on that path, so there's nothing further to clean.
             try {
               const d3 = await d3Promise;
               d3.killTree();
@@ -282,8 +234,6 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
           d2.release();
         }
       } finally {
-        // Idempotent — a no-op if the pool-full branch above already freed
-        // d1 (release() is guarded; killTree tolerates an already-dead group).
         d1.killTree();
         d1.release();
       }

@@ -1,9 +1,5 @@
-// [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
-// changed: cache identity (projectDir+cwd, args ignored), last-known-good
-// preservation across failed reloads, candidate-dir watcher firing when a
-// higher-precedence config file appears, and registry disposal on
-// eviction. The legacy renderer's render-cache tests were deleted in
-// bzh.2; this is the new, smaller test set scoped to the DSL spine.
+// [LAW:single-enforcer] RenderCache invariants: identity is (projectDir, cwd)
+// with args ignored; last-known-good survives a failed reload; disposal on eviction.
 
 import {
   chmodSync,
@@ -30,20 +26,15 @@ import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/settings-menu";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 
-// Flatten a layout tree to its segment names, in pre-order — the post-`root`
-// equivalent of the old `config.layout.flatMap(r => r.segments)`.
 const layoutSegments = (root: LayoutNode): string[] =>
   [...walkNodes(root)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
-// One horizontal container of segment refs — what { h: [...names] } lowers to.
 const oneRow = (...segments: string[]): LayoutNode => ({
   kind: "container",
   direction: "horizontal",
   children: segments.map((name) => ({ kind: "segment" as const, name })),
 });
 
-// `observers` defaults to the ReloadSignal's — the tests that hand in their
-// own are probing the observer contract itself, not awaiting a reload.
 function makeCache(observers?: RenderCacheObservers): {
   cache: RenderCache;
   cleanups: Array<() => void>;
@@ -84,13 +75,8 @@ function mkConfigDir(): { dir: string; cleanup: () => void } {
 }
 
 describe("RenderCache", () => {
-  // [LAW:single-enforcer] Isolate XDG_CONFIG_HOME for every test in this
-  // file. dslConfigCandidatePaths consults it at call time (and reads no
-  // CC_CANDYBAR_CONFIG — that is a client hint, brandon-config-5g8); without
-  // isolation, tests would pick up the user's real config at
-  // `$HOME/.config/cc-candybar/config.{json5,json}` and fail in ways
-  // unrelated to what they're asserting. The override points at a fresh
-  // tmpdir scoped to this test suite so the XDG layer is empty by default.
+  // [LAW:single-enforcer] Isolate XDG_CONFIG_HOME: dslConfigCandidatePaths reads
+  // it at call time, so without this the user's real config leaks into every test.
   let xdgIsolateDir: string;
   let savedXdg: string | undefined;
   beforeAll(() => {
@@ -104,12 +90,8 @@ describe("RenderCache", () => {
     rmSync(xdgIsolateDir, { recursive: true, force: true });
   });
 
-  // The resolver's presence predicate is not `existsSync`: a named file
-  // behind an unsearchable directory is `unreadable`, so the bundled default
-  // renders (liveness — the watcher recovers when the directory opens) under
-  // an advisory carrying the stat's own EACCES — never the `missing` notice
-  // claiming a correct path was not found, and never a load-fatal error
-  // about a file nothing read. Root bypasses directory permissions.
+  // The presence predicate is not `existsSync`: a named file behind an
+  // unsearchable directory is `unreadable`, so the default renders under EACCES.
   const asRoot = process.getuid?.() === 0;
   (asRoot ? test.skip : test)(
     "an explicit path behind an unsearchable directory renders the default under a could-not-read advisory",
@@ -144,11 +126,8 @@ describe("RenderCache", () => {
     },
   );
 
-  // brandon-config-5g8: an explicit path to an absent file is the `missing`
-  // resolution — the bundled default renders (liveness: a long-running bar
-  // must not go dark waiting for a file) under a warning that NAMES the
-  // path, so it is never the same render as "no config". The explicit path
-  // is the sole watch candidate, so the file appearing swaps it in.
+  // An explicit path to an absent file is `missing`: the default renders under a
+  // warning NAMING the path, and that path is the sole watch candidate.
   test("an explicit path to an absent file is loud, and loads when the file appears", async () => {
     const { cache, cleanups, reloads } = makeCache();
     const { dir, cleanup } = mkConfigDir();
@@ -158,7 +137,6 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBeNull();
       expect(entry.lastWarning).toContain(`Config file not found: ${cfg}`);
-      // The state beneath the warning is the bundled default's.
       expect(entry.state.config.root).toEqual(
         cache.getOrCreate(dir, dir, undefined).state.config.root,
       );
@@ -184,15 +162,11 @@ describe("RenderCache", () => {
   test("cache identity is (projectDir, cwd, configFile)", () => {
     const { cache, cleanups } = makeCache();
     try {
-      // Same (projectDir, cwd, configFile=undefined) → same entry.
       const a = cache.getOrCreate("/x", "/x", undefined);
       const b = cache.getOrCreate("/x", "/x", undefined);
       expect(a).toBe(b);
       expect(cache.size).toBe(1);
 
-      // Distinct configFile values produce distinct entries — the CLI
-      // override is a real input to config resolution and must be part
-      // of the cache key.
       const c = cache.getOrCreate("/x", "/x", "/tmp/alt.json5");
       const d = cache.getOrCreate("/x", "/x", "/tmp/other.json5");
       expect(c).not.toBe(a);
@@ -209,8 +183,6 @@ describe("RenderCache", () => {
     try {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
-      // No file means state was built from the bundled default — every
-      // built-in segment is declared.
       expect(
         layoutSegments(rootNode(entry.state.config.root)).length,
       ).toBeGreaterThan(0);
@@ -221,10 +193,8 @@ describe("RenderCache", () => {
     }
   });
 
-  // [LAW:verifiable-goals] candybar-settings-ui-0gz: a config that fails its
-  // FIRST load — before the entry ever held a good one — still renders, from
-  // the bundled default, with the error beside it. Broken the way it broke
-  // live: a stale `{{ menu }}` call missing its trigger displays.
+  // [LAW:verifiable-goals] A config that fails its FIRST load still renders — from
+  // the bundled default, with the error beside it.
   test("a config that fails on first sight renders the bundled default under its error", async () => {
     const { dir, cleanup } = mkConfigDir();
     const { dir: bare, cleanup: cleanupBare } = mkConfigDir();
@@ -246,12 +216,8 @@ describe("RenderCache", () => {
         }),
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
-      // The error is loud AND names the file...
       expect(entry.lastError).toMatch(/trigger needs a display/);
       expect(entry.configFilePath).toBe(cfg);
-      // ...while the state is the bundled default's: the same tree a
-      // no-file entry builds, settings menu included — one synthesis, not a
-      // second "safe mode" config.
       const fallback = cache.getOrCreate(bare, bare, undefined);
       const menuOf = (root: LayoutNode): string[] =>
         layoutSegments(root).filter((n) => n.startsWith(SETTINGS_NS));
@@ -261,7 +227,6 @@ describe("RenderCache", () => {
       );
       expect(menuOf(floor).length).toBeGreaterThan(0);
 
-      // Repairing the file swaps the user's config in and clears the error.
       await reloads.after(entry, () =>
         writeFileSync(
           cfg,
@@ -286,7 +251,6 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
     try {
-      // Step 1: write a valid config file, populate the cache from it.
       const cfg = join(dir, ".cc-candybar.json5");
       writeFileSync(
         cfg,
@@ -302,19 +266,15 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       const goodState = entry.state;
-      // Pin the specific state's identity — build-then-swap means a
-      // failed reload must not touch this object reference.
+      // Build-then-swap: a failed reload must not touch this object reference.
       const goodConfigRef = goodState.config;
 
-      // Step 2: overwrite the file with garbage. The watcher fires, the
-      // cache reloads, buildState throws (JSON5 parse error), and the
-      // entry's `state` should be the SAME object as before.
       await reloads.after(entry, () =>
         writeFileSync(cfg, "this is not JSON5 {{{ broken"),
       );
 
       expect(entry.lastError).not.toBeNull();
-      expect(entry.state).toBe(goodState); // identity preserved
+      expect(entry.state).toBe(goodState);
       expect(entry.state.config).toBe(goodConfigRef);
     } finally {
       for (const fn of cleanups) fn();
@@ -326,18 +286,12 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
     try {
-      // First call: no file exists, falls back to default.
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configFilePath).toBeNull();
-      // The bundled default's layout is non-empty. Use the flat segment
-      // count (across all rows) because the user fixture below uses one
-      // row of one segment — matching the default's row count of 1 — so
-      // row count alone wouldn't prove the file was picked up.
       const defaultLayoutSegCount = layoutSegments(
         rootNode(entry.state.config.root),
       ).length;
 
-      // Create the project-local file. The watcher should fire.
       const cfg = join(dir, ".cc-candybar.json5");
       await reloads.after(entry, () =>
         writeFileSync(
@@ -358,7 +312,6 @@ describe("RenderCache", () => {
       );
       expect(entry.configFilePath).toBe(cfg);
       expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
-      // Sanity: was actually different from the default.
       expect(layoutSegments(rootNode(entry.state.config.root)).length).not.toBe(
         defaultLayoutSegCount,
       );
@@ -411,8 +364,7 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();
     try {
-      // Write the config as .json (not .json5) — the same parser handles
-      // both because JSON ⊂ JSON5. Filename is the only difference.
+      // JSON ⊂ JSON5, so one parser reads both; the filename is the difference.
       const cfg = join(dir, ".cc-candybar.json");
       writeFileSync(
         cfg,
@@ -443,8 +395,6 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
     try {
-      // Both files at the same location — .json5 wins on resolution, but
-      // detectConfigCollisions surfaces the duplicate.
       const cfgJson5 = join(dir, ".cc-candybar.json5");
       const cfgJson = join(dir, ".cc-candybar.json");
       const validCfg = JSON.stringify({
@@ -459,23 +409,17 @@ describe("RenderCache", () => {
       writeFileSync(cfgJson, validCfg);
 
       const entry = cache.getOrCreate(dir, dir, undefined);
-      // Load succeeded — .json5 won; warning is the advisory.
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfgJson5);
       expect(entry.lastWarning).not.toBeNull();
       expect(entry.lastWarning).toContain(cfgJson5);
       expect(entry.lastWarning).toContain(cfgJson);
 
-      // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir. Rewrite-then-unlink
-      // so every application of the mutation emits an event (a bare unlink
-      // of an already-absent file emits none) and ends with the file absent.
       await reloads.after(entry, () => {
         writeFileSync(cfgJson, validCfg);
         unlinkSync(cfgJson);
       });
       expect(entry.lastWarning).toBeNull();
-      // The .json5 is still the resolved file; render state intact.
       expect(entry.configFilePath).toBe(cfgJson5);
       expect(entry.lastError).toBeNull();
     } finally {
@@ -495,14 +439,9 @@ describe("RenderCache", () => {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "observer boom",
       );
-      // The entry — and the live registry + watcher it owns — is in the
-      // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
       expect(cache.firstState()).not.toBeNull();
       expect(watchers.size()).toBe(1);
-      // A second lookup finds it rather than building a duplicate: the
-      // observer (which would throw again) does not run, and no second
-      // watcher opens.
       const found = cache.getOrCreate(dir, dir, undefined);
       expect(found.state).toBe(cache.firstState());
       expect(cache.size).toBe(1);
@@ -514,8 +453,7 @@ describe("RenderCache", () => {
   });
 
   test("a throwing observer cannot push the cache over its entry cap", () => {
-    // maxEntries=4. Every lookup throws from the observer AND inserts its
-    // entry (pinned above); the cap must still hold across five of them.
+    // Every lookup throws from the observer AND inserts its entry; the cap holds.
     const { cache, cleanups, watchers } = makeCache({
       onReload: () => {
         throw new Error("observer boom");
@@ -556,19 +494,13 @@ describe("RenderCache", () => {
   test("eviction disposes the evicted entry's registry + watcher", () => {
     const { cache, cleanups } = makeCache();
     try {
-      // maxEntries=4. Insert 5 entries; the oldest gets evicted.
       const entries = [];
       for (let i = 0; i < 5; i++) {
         const e = cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
         entries.push(e);
       }
       expect(cache.size).toBe(4);
-      // Verify the first entry's registry is disposed.
       const evicted = entries[0]!;
-      // [LAW:no-defensive-null-guards] dispose is idempotent; calling it
-      // again on an already-disposed registry would throw or no-op
-      // depending on internals. We don't probe that here — just that the
-      // entry's state is no longer reachable from the cache.
       const survivor = cache.getOrCreate("/p0", "/p0", undefined);
       expect(survivor).not.toBe(evicted);
     } finally {
@@ -577,12 +509,8 @@ describe("RenderCache", () => {
   });
 
   test("a picker config loads into multiple cache entries without a validator clash", () => {
-    // [LAW:one-source-of-truth] A picker's page (int) action derives a writable
-    // page-key validator into the GLOBAL registry. Two cache entries sharing one
-    // config (one repo, two cwds) both register that key; ref-counting must let
-    // both succeed and keep the key valid until the last entry is gone. Before
-    // ref-counting, the second entry threw "already has a validator" and rendered
-    // a config error.
+    // [LAW:one-source-of-truth] Two cache entries sharing one config both register
+    // the picker's page-key validator; ref-counting must let both succeed.
     const { cache, cleanups } = makeCache();
     const { dir, cleanup } = mkConfigDir();
     cleanups.push(cleanup);
@@ -619,7 +547,6 @@ describe("RenderCache", () => {
       const sub = join(dir, "sub");
       const a = cache.getOrCreate(dir, dir, undefined);
       const b = cache.getOrCreate(dir, sub, undefined);
-      // Both entries loaded cleanly — no validator clash on the shared page key.
       expect(a.lastError).toBeNull();
       expect(b.lastError).toBeNull();
       expect(a).not.toBe(b);

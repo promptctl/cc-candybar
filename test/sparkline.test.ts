@@ -1,6 +1,4 @@
-// [LAW:behavior-not-structure] These assert the sparkline CONTRACT — a numeric
-// series maps to a deterministic glyph string, relative to the window's own
-// min/max — never the internals of how the index is computed.
+// [LAW:behavior-not-structure] Asserts the sparkline CONTRACT: a series maps to a deterministic glyph string relative to the window's own min/max, never to how the index is computed.
 
 import {
   renderSparkline,
@@ -9,7 +7,6 @@ import {
 } from "../src/template-engine/sparkline";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 
-// Evaluate the registered `sparkline` template func against a plain scope.
 function evalText(source: string, scope: object): string {
   const engine = createCcCandybarEngine();
   return engine
@@ -21,7 +18,6 @@ function evalText(source: string, scope: object): string {
 
 const [LOW, , , , MID, , , HIGH] = SPARK_LEVELS;
 
-// ─── renderSparkline: the pure core on fixed input series ─────────────────────
 
 describe("renderSparkline — pure rendering of a fixed series", () => {
   test("empty series renders nothing", () => {
@@ -35,8 +31,8 @@ describe("renderSparkline — pure rendering of a fixed series", () => {
 
   test("endpoints always hit the lowest and highest glyph (relative scale)", () => {
     const out = renderSparkline([3, 50, 17, 99, 4]);
-    expect(out[0]).toBe(LOW); // the min (3) → lowest tier
-    expect(out).toContain(HIGH); // the max (99) → highest tier
+    expect(out[0]).toBe(LOW);
+    expect(out).toContain(HIGH);
     expect(out.length).toBe(5);
   });
 
@@ -49,12 +45,10 @@ describe("renderSparkline — pure rendering of a fixed series", () => {
   });
 
   test("negative values normalize against the window min", () => {
-    // min=-5, max=5, range=10 ⇒ -5→0, 0→round(3.5)=4 (MID), 5→7 (HIGH).
     expect(renderSparkline([-5, 0, 5])).toBe(LOW + MID + HIGH);
   });
 
   test("constant magnitude does not affect shape — only relative variation does", () => {
-    // Same shape at two magnitudes renders identically (relative, not absolute).
     expect(renderSparkline([10, 20, 30])).toBe(
       renderSparkline([1000, 2000, 3000]),
     );
@@ -63,7 +57,6 @@ describe("renderSparkline — pure rendering of a fixed series", () => {
 
 describe("renderSparkline — width caps the window to the recent tail", () => {
   test("width shows the LAST `width` samples", () => {
-    // Last 3 of [1..5] = [3,4,5]; min=3,max=5,range=2 ⇒ 3→0, 4→round(3.5)=4, 5→7.
     expect(renderSparkline([1, 2, 3, 4, 5], 3)).toBe(LOW + MID + HIGH);
   });
 
@@ -80,7 +73,6 @@ describe("renderSparkline — width caps the window to the recent tail", () => {
   });
 });
 
-// ─── parseSeries: the scalar-seam decoder ─────────────────────────────────────
 
 describe("parseSeries — decode the delimited series string", () => {
   test("empty string is the genuine empty series", () => {
@@ -104,7 +96,6 @@ describe("parseSeries — decode the delimited series string", () => {
   });
 });
 
-// ─── The registered template helper end to end ────────────────────────────────
 
 describe("sparkline template func", () => {
   test("renders a graph from a series-string scope field", () => {

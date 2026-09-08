@@ -1,15 +1,5 @@
-// [LAW:single-enforcer] These tests pin the multi-line layout contract
-// directly against the render spine. renderDsl walks the canonical node tree
-// (renderNode); a vertical container stacks its children's rendered lines with
-// exactly one `\n` between them. Single-line is the degenerate one-child case —
-// not a separate code path. They also pin the two vertical-line sources: an
-// AUTHORED "\n" inside a segment's cell stream (split-before-layout) and the
-// raw `root` node grammar authored via the A-grammar (seg/h/v).
-//
-// [LAW:behavior-not-structure] Assertions pin observable output: line count,
-// segment-rendered-into-correct-line, exact newline separator, link survival.
-// Internal refactors (hue rotation policy, sink ordering) that preserve these
-// behaviors must not break these tests.
+// [LAW:single-enforcer] Pinned against the render spine — single-line is the degenerate one-child case, not a separate path.
+// [LAW:behavior-not-structure] Only observable output: line count, which segment lands where, the separator, link survival.
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -39,8 +29,6 @@ function buildRuntime(source: string) {
   return { config, compiled, store, registry };
 }
 
-// Strip ANSI for line-shape assertions. Color codes and OSC-8 links live in
-// rendered output but obscure the row-count / row-content checks we want here.
 function stripAnsi(s: string): string {
   return s
     .replace(/\x1b\[[0-9;]*m/g, "")
@@ -80,7 +68,6 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines).toHaveLength(2);
     expect(stripAnsi(lines[0]!)).toContain("TOP");
     expect(stripAnsi(lines[1]!)).toContain("BOT");
-    // No segment cross-contamination.
     expect(stripAnsi(lines[0]!)).not.toContain("BOT");
     expect(stripAnsi(lines[1]!)).not.toContain("TOP");
   });
@@ -106,9 +93,7 @@ describe("renderDsl — multi-line layout", () => {
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
-    // Row 0: A precedes B
     expect(lines[0]!.indexOf("A")).toBeLessThan(lines[0]!.indexOf("B"));
-    // Row 1: C precedes D
     expect(lines[1]!.indexOf("C")).toBeLessThan(lines[1]!.indexOf("D"));
   });
 
@@ -125,8 +110,7 @@ describe("renderDsl — multi-line layout", () => {
   });
 
   test("layout: key is rejected with migration error (removed in 2de.19)", () => {
-    // [LAW:no-silent-failure] `layout:` was removed; the loader must surface the
-    // migration error so users know exactly how to rewrite their config.
+    // [LAW:no-silent-failure] `layout:` was removed; the loader must surface the migration error.
     const source = `{
       segments: { s: { template: ' x ', bg: 'surface', fg: 'foreground' } },
       layout: [['s']],
@@ -158,7 +142,6 @@ describe("renderDsl — multi-line layout", () => {
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
     const lines = out.split("\n").map(stripAnsi);
-    // Row 0 still emits even though `sa` hid — it just contains only B.
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("B");
     expect(lines[0]!).not.toContain("A");
@@ -166,10 +149,7 @@ describe("renderDsl — multi-line layout", () => {
   });
 
   test("authored \\n inside a single segment splits its cell into multiple lines", () => {
-    // The "\n" rides inside ONE segment's rendered cell stream — the cell-stream
-    // split (not output-split) partitions it BEFORE the strip measures, so each
-    // side is its own independently-rendered line. This is the case PR #58's
-    // output-split could catch only by accident; here it is first-class.
+    // The newline rides inside ONE segment's cell stream, so the cell-stream split partitions it BEFORE the strip measures.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'TOP\\nBOT' } },
@@ -184,15 +164,11 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[0]!).not.toContain("BOT");
     expect(lines[1]!).toContain("BOT");
     expect(lines[1]!).not.toContain("TOP");
-    // The "\n" is consumed as the partition point — it never leaks into a line.
     expect(lines[0]!).not.toContain("\n");
   });
 
   test("fixed-width segment with authored \\n caps each line independently", () => {
-    // Regression: the split must happen BEFORE per-segment width layout. With
-    // split-after-layout, the merged 'ABCDE\nFGHIJ' cell measures as one
-    // over-width cell and truncates — destroying the second line. Split-first
-    // lays out each 5-wide line cleanly, so both survive intact.
+    // Regression: the split must happen BEFORE per-segment width layout, or the merged cell measures over-width and truncates the second line away.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'ABCDE\\nFGHIJ' } },
@@ -205,13 +181,10 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("ABCDE");
     expect(lines[1]!).toContain("FGHIJ");
-    // The second line is not truncated away, and no truncation marker appears.
     expect(out).not.toContain("…");
   });
 
   test("OSC-8 link survives an authored \\n split (both pieces keep the URL)", () => {
-    // A linked fragment carrying a "\n" splits into two lines; the OSC-8 hyperlink
-    // span must be preserved on each piece, not dropped at the boundary.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'UP\\nDN' } },
@@ -227,14 +200,12 @@ describe("renderDsl — multi-line layout", () => {
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
     const lines = out.split("\n");
     expect(lines).toHaveLength(2);
-    // Each visual line carries an OSC-8 open sequence for the same URL.
     for (const line of lines) {
       expect(line).toContain("cc-candybar://x/1");
     }
   });
 
   test("A-grammar v-arm with two children stacks them as two lines", () => {
-    // Direct test of the canonical v-arm spelling replacing the old `cells` leaf form.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -256,11 +227,7 @@ describe("renderDsl — multi-line layout", () => {
   });
 
   test("horizontal container of single-line leaves is byte-identical to h-arm (caps across the seam — no abut)", () => {
-    // [LAW:behavior-not-structure] The defining contract of `horizontal`: it
-    // composes CELLS (not serialized blocks), so the joiner caps across the
-    // seam exactly as if the segments lived in one node. Abut would serialize
-    // each child first and string-concat — producing a triangle-into-void seam
-    // and DIFFERENT bytes. Byte-equality is the precise refutation of abut.
+    // [LAW:behavior-not-structure] `horizontal` composes CELLS, not serialized blocks, so the joiner caps across the seam; abut would produce different bytes.
     const segs = `
       segments: {
         sa: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
@@ -284,8 +251,7 @@ describe("renderDsl — multi-line layout", () => {
   });
 
   test("horizontal container of multi-line children zips cells per row (ragged rows carry fewer cells, no padding)", () => {
-    // colL is 2 lines, colR is 1 — row 0 carries both children's cells (joined
-    // in one strip), row 1 carries only the taller child's. No rectangle padding.
+    // Row 0 carries both children's cells, row 1 only the taller child's. No rectangle padding.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -317,8 +283,7 @@ describe("renderDsl — multi-line layout", () => {
   });
 
   test("a container's `when` gates its whole subtree (hidden → no line)", () => {
-    // A false container contributes no lines; its descendants are still walked
-    // (hue stability) but emit nothing.
+    // A false container contributes no lines; its descendants are still walked.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {

@@ -1,10 +1,5 @@
-// [LAW:verifiable-goals] The incremental append-fold (brandon-daemon-perf-bb9):
-// an active session's transcript grows every render, and the store must fold ONLY
-// the appended bytes rather than re-parse the whole file. These tests pin two
-// contracts: (1) the reader yields exactly the new complete lines since a cursor,
-// waiting on a partial trailing line and resetting on a rewrite; (2) the store's
-// incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
-// file — the optimization changes cost, never output.
+// [LAW:verifiable-goals] The incremental fold is OBSERVATIONALLY EQUAL to a
+// from-scratch read: the optimization changes cost, never output.
 
 import {
   mkdtempSync,
@@ -27,7 +22,6 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 
 let seq = 0;
-// One newline-terminated usage line. Unique tags keep every entry distinct.
 function line(day: Date, cost: number, inTok = 10, outTok = 5): string {
   const tag = `e${seq++}`;
   return (
@@ -51,9 +45,7 @@ function hook(sessionId: string, transcriptPath: string): ClaudeHookData {
   } as ClaudeHookData;
 }
 
-// Advance mtime a step so the store's sync mtime gate registers a change — a real
-// append across render ticks always moves the clock; tests are too fast to rely on
-// wall-clock granularity.
+// Tests are too fast for wall-clock mtime granularity, so the clock is stepped.
 let clock = Math.floor(Date.now() / 1000);
 function touch(path: string): void {
   clock += 1;
@@ -82,7 +74,6 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     const second = await readAppendedEntries(t, first.value.cursor);
     expect(second.kind).toBe("ok");
     if (second.kind !== "ok") return;
-    // Only the one appended entry — not a re-read of the first two.
     expect(second.value.entries).toHaveLength(1);
     expect(second.value.entries[0]!.costUSD).toBeCloseTo(0.03, 5);
   });
@@ -90,21 +81,19 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
   test("a partial trailing line (no newline yet) is NOT consumed until its newline lands", async () => {
     const t = join(dir, "A.jsonl");
     const complete = line(new Date(), 0.01);
-    // Write one complete line + a half-written second line (no \n).
     const partial = '{"timestamp":"2024-01-01T00:00:00.000Z","costUSD":0.02';
     writeFileSync(t, complete + partial);
 
     const first = await readAppendedEntries(t, undefined);
     if (first.kind !== "ok") throw new Error("expected ok");
-    expect(first.value.entries).toHaveLength(1); // partial line waits
+    expect(first.value.entries).toHaveLength(1);
     const afterComplete = first.value.cursor.offset;
-    expect(afterComplete).toBe(Buffer.byteLength(complete)); // cursor at the newline
+    expect(afterComplete).toBe(Buffer.byteLength(complete));
 
-    // The writer finishes the second line.
     appendFileSync(t, ',"message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n');
     const second = await readAppendedEntries(t, first.value.cursor);
     if (second.kind !== "ok") throw new Error("expected ok");
-    expect(second.value.entries).toHaveLength(1); // the now-complete line, once
+    expect(second.value.entries).toHaveLength(1);
     expect(second.value.entries[0]!.costUSD).toBeCloseTo(0.02, 5);
   });
 
@@ -115,15 +104,13 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     if (first.kind !== "ok") throw new Error("expected ok");
     expect(first.value.entries).toHaveLength(3);
 
-    // /compact rewrites the transcript smaller than our cursor. Capture the
-    // exact bytes written so the offset assertion pins the real content length,
-    // not an incidentally-equal-length regenerated line.
+    // Capture the exact bytes so the offset pins real content length.
     const compacted = line(new Date(), 0.09);
     writeFileSync(t, compacted);
     const after = await readAppendedEntries(t, first.value.cursor);
     if (after.kind !== "ok") throw new Error("expected ok");
     expect(after.value.reset).toBe(true);
-    expect(after.value.entries).toHaveLength(1); // the whole new file
+    expect(after.value.entries).toHaveLength(1);
     expect(after.value.cursor.offset).toBe(Buffer.byteLength(compacted));
   });
 
@@ -134,9 +121,7 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     if (first.kind !== "ok") throw new Error("expected ok");
     const priorOffset = first.value.cursor.offset;
 
-    // Atomic rewrite: write a DIFFERENT file (>= the old size, so a size-only
-    // check would miss it) and rename it over the path → new inode, same-or-
-    // larger size, different content. Only the inode signal catches this.
+    // Same-or-larger size, different content: only the inode signal catches it.
     const other = join(dir, "A.new.jsonl");
     const rewritten =
       line(new Date(), 0.03) + line(new Date(), 0.04) + line(new Date(), 0.05);
@@ -147,7 +132,7 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     const after = await readAppendedEntries(t, first.value.cursor);
     if (after.kind !== "ok") throw new Error("expected ok");
     expect(after.value.reset).toBe(true);
-    expect(after.value.entries).toHaveLength(3); // the whole new file, not a suffix
+    expect(after.value.entries).toHaveLength(3);
   });
 
   test("absent file (fresh session) is the absent outcome, not an error", async () => {
@@ -160,7 +145,6 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
     const first = await readAppendedEntries(t, undefined);
     if (first.kind !== "ok") throw new Error("expected ok");
-    // Nothing appended → the same cursor reads nothing, no reset.
     const again = await readAppendedEntries(t, first.value.cursor);
     if (again.kind !== "ok") throw new Error("expected ok");
     expect(again.value.entries).toHaveLength(0);
@@ -187,7 +171,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       line(today, 0.04, 400, 80),
     ];
 
-    // Incremental: append one line per "render", ingesting between each.
     const incPath = join(dir, "inc.jsonl");
     writeFileSync(incPath, "");
     const incStore = new SessionUsageStore({ sweepIntervalMs: 0 });
@@ -202,7 +185,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       incStore.close();
     }
 
-    // From-scratch: the same final file read once by a cold store.
     const fullPath = join(dir, "full.jsonl");
     writeFileSync(fullPath, contents.join(""));
     const freshStore = new SessionUsageStore({ sweepIntervalMs: 0 });
@@ -216,24 +198,18 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     expect(incInfo?.kind).toBe("ok");
     expect(freshInfo?.kind).toBe("ok");
     if (incInfo?.kind !== "ok" || freshInfo?.kind !== "ok") return;
-    // The whole point: incremental output == from-scratch output.
     expect(incInfo.value.session.cost).toBeCloseTo(
       freshInfo.value.session.cost!,
       5,
     );
     expect(incInfo.value.session.tokens).toBe(freshInfo.value.session.tokens);
     expect(incInfo.value.session.cost).toBeCloseTo(0.1, 5);
-    expect(incInfo.value.session.tokens).toBe(1000 + 200); // inputs + outputs
+    expect(incInfo.value.session.tokens).toBe(1000 + 200);
   });
 
   test("concurrent different-mtime refolds do not double-count (last-writer-wins is consistent)", async () => {
-    // The race the reviewer flagged: two renders observing DIFFERENT mtimes hit
-    // different SingleFlight keys, both read the same prior, and last-writer-wins.
-    // The invariant that makes it safe: `refold` writes the byte cursor and the
-    // fold as one atomic pair, so whoever wins leaves a consistent (cursor, fold)
-    // covering exactly [0, cursor); the next ingest extends from there. This test
-    // pins the OBSERVABLE consequence — no matter which racer wins, a final read
-    // equals a from-scratch read of the same file (a double-count would exceed it).
+    // Two renders on different mtimes take different SingleFlight keys off one
+    // prior; `refold` writes cursor and fold atomically, so a double-count shows.
     const t = join(dir, "R.jsonl");
     const l1 = line(new Date(), 0.01, 100, 20);
     const l2 = line(new Date(), 0.02, 200, 40);
@@ -241,23 +217,18 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      // Prior established.
       writeFileSync(t, l1);
       touch(t);
       await store.getUsageInfo("R", hook("R", t));
 
-      // Grow to mtime M1, fire A (sees M1) WITHOUT awaiting.
       appendFileSync(t, l2);
       touch(t);
       const a = store.getUsageInfo("R", hook("R", t));
-      // Grow again to mtime M2, fire B (sees M2) WITHOUT awaiting → different
-      // flight keys, both racing off the same prior.
       appendFileSync(t, l3);
       touch(t);
       const b = store.getUsageInfo("R", hook("R", t));
       await Promise.all([a, b]);
 
-      // A settling read must reflect the whole file regardless of who won.
       const finalInfo = await store.getUsageInfo("R", hook("R", t));
       if (finalInfo.kind !== "ok") throw new Error("expected ok");
 
@@ -274,7 +245,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         expect(finalInfo.value.session.tokens).toBe(
           freshInfo.value.session.tokens,
         );
-        // And concretely: 0.06 total, 660 input+output tokens — folded once.
         expect(finalInfo.value.session.cost).toBeCloseTo(0.06, 5);
       } finally {
         fresh.close();
@@ -288,8 +258,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const sid = "S";
     const mainPath = join(dir, `${sid}.jsonl`);
     writeFileSync(mainPath, line(new Date(), 0.01));
-    // Agent sidechain discovered at <dir>/<sid>/subagents/agent-*.jsonl whose
-    // first line's sessionId matches.
+    // A sidechain is <dir>/<sid>/subagents/agent-*.jsonl with a matching sessionId.
     const subagents = join(dir, sid, "subagents");
     mkdirSync(subagents, { recursive: true });
     writeFileSync(
@@ -313,8 +282,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       if (first.kind !== "ok") throw new Error("expected ok");
       expect(first.value.session.cost).toBeCloseTo(0.03, 5);
 
-      // A warm re-read (mtime unchanged) must return the same total — the old
-      // push-into-shared-array bug double-counted agents here.
       const second = await store.getUsageInfo(sid, hook(sid, mainPath));
       if (second.kind !== "ok") throw new Error("expected ok");
       expect(second.value.session.cost).toBeCloseTo(0.03, 5);
@@ -324,18 +291,14 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   });
 
   test("day cost includes the PRICED value for entries lacking costUSD (matches session cost)", async () => {
-    // Regression guard: the old path mutated costUSD to the priced value before
-    // bucketing, so an un-costed entry contributed its priced cost to `today`.
-    // foldFile must do the same — session and day cost agree for such entries.
-    // Isolate the seed to an empty CLAUDE_CONFIG_DIR so `today` folds only the
-    // active session.
+    // Session and day cost must agree for an un-costed entry; the empty
+    // CLAUDE_CONFIG_DIR isolates `today` to the active session.
     const savedConfig = process.env.CLAUDE_CONFIG_DIR;
     const cfgRoot = mkdtempSync(join(tmpdir(), "cc-candybar-inc-cfg-"));
     process.env.CLAUDE_CONFIG_DIR = cfgRoot;
     try {
       const t = join(dir, "P.jsonl");
-      // No costUSD → priced by the unknown-model fallback (input $3/M, output
-      // $15/M): 1M input + 1M output ⇒ $3 + $15 = $18.
+      // Unknown-model fallback: 1M in + 1M out ⇒ $3 + $15 = $18.
       writeFileSync(
         t,
         JSON.stringify({
@@ -356,8 +319,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         if (usage.kind !== "ok" || today.kind !== "ok")
           throw new Error("expected ok");
         expect(usage.value.session.cost).toBeCloseTo(18, 5);
-        // The regression this pins: today MUST equal the session's priced cost,
-        // not 0 (which the pre-fix `costUSD ?? 0` day bucket produced).
         expect(today.value.cost).toBeCloseTo(18, 5);
       } finally {
         store.close();
@@ -378,7 +339,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       if (before.kind !== "ok") throw new Error("expected ok");
       expect(before.value.session.cost).toBeCloseTo(0.06, 5);
 
-      // /compact: fewer, different entries; file shrinks below the cursor.
       writeFileSync(t, line(new Date(), 0.005));
       touch(t);
       const after = await store.getUsageInfo("C", hook("C", t));

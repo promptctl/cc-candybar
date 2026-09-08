@@ -1,18 +1,4 @@
-// candybar-render-ai7.4 — the tint half of decorative colour by address, as the
-// render walk delivers it. [LAW:behavior-not-structure] Every expectation is
-// computed from the model (decorFor over the segment's address in the compiled
-// tree), never from a captured byte string, so any walk that honours the
-// contract passes.
-//
-// The contract:
-//   - a segment that authors no `bg:` wears the vocabulary entry its ADDRESS
-//     selects — the tint is the floor every segment has;
-//   - an authored `bg:` states meaning and paints over it;
-//   - `{{ bgOf }}` reads the effective background, tint included;
-//   - colour derives from WHERE a segment sits, not from how many leaves
-//     precede it in the walk (the hue cursor's defining flaw);
-//   - the render's look reaches the tint, because the tint is read from the
-//     one transposed palette every unpinned segment colours from.
+// [LAW:behavior-not-structure] Expectations are computed from the model (decorFor over the segment's address), never a captured byte string.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
@@ -40,7 +26,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-/** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
   const walk = (node: CompiledNode, address: Address): Address | undefined => {
     if (node.kind === "segment") return node.name === name ? address : undefined;
@@ -125,8 +110,6 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     for (const name of ["a", "b", "c", "echo"]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
-    // Variety with nothing authored: adjacent siblings are dealt different
-    // entries — the whole point of the vocabulary.
     expect(rt.bgOf("a")).not.toBe(rt.bgOf("b"));
     rt.dispose();
   });
@@ -156,9 +139,6 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
   });
 
   test("colour comes from where a segment sits, not from how many leaves precede it", () => {
-    // Row 2's first cell is at the same address whether row 1 holds one leaf
-    // or three; under the old pre-order cursor its index — and so its colour
-    // — would have moved with row 1's leaf count.
     const rowTwoFirst = (rowOne: string): string => {
       const rt = build(`{
         globals: { palette: '${THEME}' },
@@ -196,22 +176,13 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
   });
 });
 
-// --- candybar-render-ai7.5: the bundled default spends no role on decoration --
-//
-// Before .5 the bundled segments named `surface` / `panel` / `surface-active`
-// so that neighbours would look different — hand-curated variety the
-// vocabulary now supplies by address. What survives is MEANING: a threshold
-// template (context / block / weekly / burnrate) or a hue-anchored alert
-// (host's `warning`). [LAW:behavior-not-structure] The first test states that
-// rule over whatever the bundled config declares — a new segment joins the
-// rule by existing; the second and third measure the rendered cells.
+// [LAW:behavior-not-structure] `bg:` is authored only for a threshold template or an alert role; everything else wears its address's tint.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import type { SemanticRole } from "../src/themes/decor";
 
-// [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
-// to (or removed from) the type is a compile error here, not a silent gap.
+// [LAW:types-are-the-program] SemanticRole-keyed: a new role is a compile error here.
 const ALERT_ROLE: Record<SemanticRole, true> = {
   error: true,
   success: true,
@@ -229,8 +200,7 @@ const HOT = {
   weekly: { percentage: 95, resetsAt: 1, etaMinutes: 1 },
 };
 
-// `burnrate` is declared but opt-in (not in the bundled root); a third row
-// merged by name roots it beside the bundled identity/status rows.
+// `burnrate` isn't in the bundled root; merging by name adds it as a third row.
 const BUNDLED = `{
   globals: { palette: '${THEME}' },
   root: { rows: { probe: { h: ['burnrate'] } } },
@@ -241,8 +211,7 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
     const authored = Object.entries(DEFAULT_DSL_CONFIG.segments).flatMap(
       ([name, seg]) => (seg.bg === undefined ? [] : [[name, seg.bg] as const]),
     );
-    // [LAW:no-silent-failure] The sweep must not have taken the
-    // meaning-bearing specs with it: some segment still states something.
+    // [LAW:no-silent-failure] The sweep must still leave some segment stating meaning.
     expect(authored.length).toBeGreaterThan(0);
     for (const [name, bg] of authored) {
       expect([name, bg.includes("{{") || bg in ALERT_ROLE]).toEqual([name, true]);
@@ -276,12 +245,7 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
   });
 });
 
-// [LAW:verifiable-goals] candybar-render-ai7.8: the distribution is an
-// authored, per-instance field. Each test is one line of the ticket's
-// Done-when. [LAW:behavior-not-structure] Expectations are bytes out for a
-// config in — the "authored row" case computes its expectation from the MODEL
-// over an address built WITHOUT the field, re-placing the row's own step, so a
-// compile that ignored the field could not satisfy it.
+// [LAW:behavior-not-structure] Expectations recompute the address without the authored field, so a compile that ignores it cannot satisfy the test.
 describe("candybar-render-ai7.8 — `distribution` is authored per placer", () => {
   const CELLS = ["a", "b", "c", "d"] as const;
   const tree = (rowField: string, rootField = ""): string => `{
@@ -318,12 +282,10 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       ];
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, rePlaced).hex]);
     }
-    // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
     expect(["a", "b", "c"].map((n) => rt.bgOf(n))).not.toEqual(
       ["a", "b", "c"].map((n) => plain.bgOf(n)),
     );
-    // …and the sibling row is an instance of its own, untouched.
     expect(rt.bgOf("d")).toBe(plain.bgOf("d"));
     plain.dispose();
     rt.dispose();
@@ -338,12 +300,9 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     for (const name of CELLS) {
       const authored = addressOf(rt.root, name);
       const unauthored = addressOf(plain.root, name);
-      // Same lineage — synthesis wraps the authored root, and that wrapper
-      // and every row keep their own placement…
+      // Lineage shape is unchanged; only the authored root's own step's placer differs.
       const shape = (a: Address) => a.map(({ index, count }) => ({ index, count }));
       expect(shape(authored)).toEqual(shape(unauthored));
-      // …while exactly one step's placer changed: the authored root's, whose
-      // two rows hold `a b c` (row 0) and `d` (row 1).
       const moved = authored.filter(
         (step, i) => step.distribution !== unauthored[i]!.distribution,
       );

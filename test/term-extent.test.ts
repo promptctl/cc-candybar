@@ -1,6 +1,4 @@
-// [LAW:one-source-of-truth] The same table as rust-client/src/main.rs's
-// detect_term_extent test: both runtimes must read the same COLUMNS/LINES
-// value from the same shell, or neither.
+// [LAW:one-source-of-truth] The same table the Rust client's parser is pinned to.
 import { detectTermExtent } from "../src/term-extent";
 
 describe("detectTermExtent parses exactly what the Rust client parses", () => {

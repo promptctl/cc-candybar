@@ -1,16 +1,5 @@
-// [LAW:types-are-the-program] The `presets` schema: each preset is a named
-// config FRAGMENT — an alternative arrangement of the bar the user switches to
-// — capped at exactly the two sections a render RESOLVES (`root`, `globals`)
-// and closed to the sections the daemon REGISTERS once per process
-// (`variables`, `segments`, `actions`, `helpers`). The reasoning for that cap
-// lives on PresetDecl in dsl-types.ts; enforcing it is this file's job, and the
-// record engine enforces it for free — `rejectUnknownKeys` reports any other
-// section as a "preset key" error naming the two that are legal.
-//
-// This file is the structural pass only. Whether a preset's root names a
-// segment that exists, and whether globals.preset names a declared preset, are
-// CROSS-REFERENCE concerns (loader/cross-ref.ts), because both run on the
-// MERGED config — a preset may stage segments the bundled default provides.
+// [LAW:types-are-the-program] A preset is a config FRAGMENT capped at the two
+// sections a render resolves (`root`, `globals`); the record engine enforces the cap.
 
 import {
   describeType,
@@ -27,14 +16,7 @@ import { presetGlobalsJson, validatePresetGlobals } from "./globals.js";
 import { ROOT_FRAGMENT_REF, validateRootFragment } from "./layout.js";
 import type { PresetDecl } from "../dsl-types.js";
 
-// [LAW:one-source-of-truth] A preset's `root` runs through THE layout validator
-// — the same `validateRootFragment` the top-level `root:` uses, not a reduced
-// copy — so the A-grammar, the `{ rows }` map, the group sugar, and every
-// migration error read identically wherever a layout is authored. Group sugar declared inside a preset therefore
-// also lands in `ctx.groups` and synthesizes its state var / cycle action /
-// toggle segment into the shared sections, exactly as a top-level group does:
-// the synthesized artifacts are process-lifetime (see PresetDecl's cap), the
-// preset only chooses whether to stage them.
+// [LAW:one-source-of-truth] A preset's `root` runs through THE layout validator, not a reduced copy.
 const presetRootSpec: FieldSpec<NonNullable<PresetDecl["root"]>> = {
   required: false,
   json: { $ref: ROOT_FRAGMENT_REF },
@@ -44,10 +26,7 @@ const presetRootSpec: FieldSpec<NonNullable<PresetDecl["root"]>> = {
       : validateRootFragment(ctx, `${path}.${field}`, raw[field]),
 };
 
-// [LAW:one-source-of-truth] A preset's `globals` runs through the globals field
-// table, minus `preset` itself (a preset cannot select a preset — see
-// validatePresetGlobals). A field added to Globals is preset-settable the same
-// day, with no edit here.
+// [LAW:one-source-of-truth] A preset's `globals` runs through the globals field table, minus `preset` itself.
 const presetGlobalsSpec: FieldSpec<NonNullable<PresetDecl["globals"]>> = {
   required: false,
   json: presetGlobalsJson(),
@@ -62,9 +41,7 @@ const PRESET_SCHEMA: RecordSchema<PresetDecl> = {
   fields: { root: presetRootSpec, globals: presetGlobalsSpec },
 };
 
-// An absent presets block is handled by the caller (absence survives the parse);
-// a non-object is a reported error recovering to empty — parseDslConfig throws
-// once any issue exists, so the recovery value never renders.
+// A non-object recovers to empty; parseDslConfig throws on any issue, so the recovery never renders.
 export function validatePresets(
   ctx: ValidateCtx,
   raw: unknown,
@@ -79,24 +56,10 @@ export function validatePresets(
   }
   const out: Record<string, PresetDecl> = {};
   for (const [name, value] of Object.entries(raw)) {
-    // [LAW:no-silent-failure] A preset name is a deliverable set-state value —
-    // a preset picker writes it on the wire, which rejects empty values and
-    // splits on "/". Rejecting the shape HERE surfaces the error on every
-    // config load, not only once an action ranges the "presets" domain (the
-    // identical guard looks.ts applies to look names, for the identical
-    // reason).
-    //
-    // [LAW:one-source-of-truth] Newlines are ALSO rejected — the same reason
-    // loader/layout.ts's groupLabelSpec rejects \n/\r in a group's `label`
-    // before it ever reaches escapeTemplateLiteral: a preset name is spliced
-    // as DISPLAY TEXT into a synthesized Go-template string literal
-    // (edit-chrome.ts's "customized" banner), and that escaper only handles
-    // backslash/quote — an embedded newline produces an unterminated string
-    // literal go-template-js forbids, breaking synthesis for the WHOLE
-    // config, not just this one preset. Unlike a label, a preset name is
-    // also an identifier used across other seams (the `presets` domain, the
-    // `presets.<name>.root` wire key), so this belongs in its general
-    // validity check, not a narrower escape-harder fix at the one splice site.
+    // [LAW:no-silent-failure] A preset name is a deliverable set-state value, so its
+    // shape is rejected here, on every config load.
+    // [LAW:one-source-of-truth] Newlines too: a name is spliced as display text into a
+    // synthesized Go-template string literal whose escaper only handles backslash/quote.
     if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
       ctx.issues.push({
         path: `presets.${name}`,
@@ -111,9 +74,6 @@ export function validatePresets(
   return out;
 }
 
-// [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
-// the validator interprets — a map of preset names to the closed two-section
-// fragment object.
 export function presetsJson(): JsonNode {
   return { type: "object", additionalProperties: recordJson(PRESET_SCHEMA) };
 }

@@ -1,15 +1,7 @@
-// [LAW:single-enforcer] Tests the introspection contract — buildDebugSnapshot
-// is the single function that projects daemon DSL state to the wire-level
-// DebugSnapshot. Two scenarios:
-//   (a) populated state: snapshots reflect a known DslConfig + store
-//   (b) empty state (state===null): snapshots are well-formed and empty
-//
-// [LAW:verifiable-goals] Each test asserts a concrete inline shape — no
-// fuzzy "contains" checks; the wire response shape is fixed by type.
-//
-// [LAW:dataflow-not-control-flow] No real socket setup; the introspector is
-// a pure function over the DSL state bundle, so tests drive it with
-// constructed state and read the result.
+// [LAW:single-enforcer] buildDebugSnapshot is the one projection of daemon DSL
+// state to the wire-level DebugSnapshot.
+// [LAW:verifiable-goals] Each test asserts a concrete inline shape.
+// [LAW:dataflow-not-control-flow] The introspector is pure over the state bundle.
 
 import { SessionState } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
@@ -36,23 +28,10 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
 
-// ─── Fixtures ────────────────────────────────────────────────────────────────
-
-// [LAW:verifiable-goals] The "unset env var" branch of declareEnv must be
-// exercised deterministically. Relying on `CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ`
-// being absent in `process.env` was load-bearing on environment state; a CI
-// runner or developer who happens to export it would silently flip the
-// assertion. beforeEach/afterEach (below) own the env contract — they
-// guarantee the variable is unset for every test in this file and restore
-// any prior value on teardown.
+// [LAW:verifiable-goals] The unset-env branch must not depend on ambient env;
+// the hooks below own that contract.
 const UNSET_ENV_VAR = "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ";
 
-// A minimal DslConfig that exercises every snapshot field:
-//   - literal (no source-side state)
-//   - input (driven by applyInput payload, produces a value)
-//   - env (resolved at declare time — UNSET_ENV_VAR is enforced absent so
-//     this records a lastError and uses the per-variable default)
-//   - template (computed node, depends on other vars)
 const TEST_CONFIG_SOURCE = `{
   globals: {},
   variables: {
@@ -77,10 +56,8 @@ const TEST_CONFIG_SOURCE = `{
   root: { h: ['intro', 'plain'] },
 }`;
 
-// [LAW:single-enforcer] env-state is managed at one place — these hooks —
-// not scattered across each test. `declareEnv` reads `process.env` at
-// registerDslConfig call time, so the env state is set *before* buildState
-// is invoked from within each test.
+// [LAW:single-enforcer] declareEnv reads process.env at registerDslConfig time,
+// so these hooks own the env contract for every test in this file.
 let savedUnsetEnv: string | undefined;
 beforeEach(() => {
   savedUnsetEnv = process.env[UNSET_ENV_VAR];
@@ -91,19 +68,17 @@ afterEach(() => {
   else delete process.env[UNSET_ENV_VAR];
 });
 
-// Build a populated DaemonDslState from the test config + a known payload.
 function buildPopulatedState(): DaemonDslState {
   const config = parseAndValidate(
     "<debug-test>",
     TEST_CONFIG_SOURCE,
-    new Set<string>(), // no palette validation needed — segments don't set one
+    new Set<string>(),
   );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });
-  // Apply a known payload so the 'session.id' input has a value.
   registry.applyInput({ session_id: "abc-123-def" });
   return {
     store,
@@ -111,14 +86,10 @@ function buildPopulatedState(): DaemonDslState {
     config,
     compiled,
     lastRenderBySegment: new Map([
-      // Pre-seed a last-render for one segment so we can verify the snapshot
-      // surfaces it. The bzh.2 wiring will produce this map for real.
       ["intro", "(rendered output goes here)"],
     ]),
   };
 }
-
-// ─── DebugWhat boundary ──────────────────────────────────────────────────────
 
 describe("DebugWhat", () => {
   test("DEBUG_WHATS lists exactly the supported values", () => {
@@ -141,8 +112,6 @@ describe("DebugWhat", () => {
   });
 });
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
-
 describe("buildDebugSnapshot with null state", () => {
   test("vars returns the empty vars shape", () => {
     const snap = buildDebugSnapshot("vars", null);
@@ -159,8 +128,6 @@ describe("buildDebugSnapshot with null state", () => {
     expect(snap).toEqual({ what: "config", config: null });
   });
 });
-
-// ─── Populated state: vars ───────────────────────────────────────────────────
 
 describe("introspectVars with populated state", () => {
   test("includes every declared variable, alphabetized", () => {
@@ -186,9 +153,7 @@ describe("introspectVars with populated state", () => {
     const byName = new Map(vars.map((v) => [v.name, v]));
     expect(byName.get("greeting")?.value).toBe("hello");
     expect(byName.get("session.id")?.value).toBe("abc-123-def");
-    // Unset env var falls back to the per-variable default.
     expect(byName.get("user_path")?.value).toBe("(unset)");
-    // Template evaluates against the live store.
     expect(byName.get("derived")?.value).toBe("hello, world");
   });
 
@@ -196,12 +161,10 @@ describe("introspectVars with populated state", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const byName = new Map(vars.map((v) => [v.name, v]));
-    // The env var with the unset name surfaces a lastError.
     const userPath = byName.get("user_path");
     expect(userPath?.lastError).not.toBeNull();
     expect(userPath?.lastError?.message).toContain(UNSET_ENV_VAR);
     expect(userPath?.lastError?.timestampMs).toBeGreaterThan(0);
-    // Other vars resolved cleanly.
     expect(byName.get("greeting")?.lastError).toBeNull();
     expect(byName.get("session.id")?.lastError).toBeNull();
     expect(byName.get("derived")?.lastError).toBeNull();
@@ -211,26 +174,21 @@ describe("introspectVars with populated state", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const byName = new Map(vars.map((v) => [v.name, v]));
-    // Literals, inputs, envs are all boxes — they have a real age.
     expect(byName.get("greeting")?.ageMs).toBeGreaterThanOrEqual(0);
     expect(byName.get("session.id")?.ageMs).toBeGreaterThanOrEqual(0);
     expect(byName.get("user_path")?.ageMs).toBeGreaterThanOrEqual(0);
-    // 'derived' is a template → computed → age is null.
     expect(byName.get("derived")?.ageMs).toBeNull();
   });
 
   test("type matches each variable's declared type", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
-    // Every variable in the fixture is string-typed. (The synthesized chrome
-    // every bar carries brings its own, including a boolean.)
+    // Chrome the bar synthesizes brings its own types, hence the own-decls filter.
     const own = new Set(ownDeclNames(vars.map((v) => v.name)));
     for (const v of vars.filter((v) => own.has(v.name)))
       expect(v.type).toBe("string");
   });
 });
-
-// ─── Populated state: documents ──────────────────────────────────────────────
 
 describe("introspectVars — documents", () => {
   test("a document snapshots as its canonical JSON text, or the state a template read would surface", () => {
@@ -253,8 +211,6 @@ describe("introspectVars — documents", () => {
     });
   });
 });
-
-// ─── Populated state: segments ───────────────────────────────────────────────
 
 describe("introspectSegments with populated state", () => {
   test("includes every declared segment in layout order", () => {
@@ -281,7 +237,6 @@ describe("introspectSegments with populated state", () => {
       "greeting",
       "session.id",
     ]);
-    // A segment with no references reports an empty array.
     expect(byName.get("plain")?.referencedVars).toEqual([]);
   });
 
@@ -290,12 +245,9 @@ describe("introspectSegments with populated state", () => {
     const segs = introspectSegments(state);
     const byName = new Map(segs.map((s) => [s.name, s]));
     expect(byName.get("intro")?.lastRender).toBe("(rendered output goes here)");
-    // Not seeded → null, not undefined or empty string.
     expect(byName.get("plain")?.lastRender).toBeNull();
   });
 });
-
-// ─── extractReferencedVars: static analysis ──────────────────────────────────
 
 describe("extractReferencedVars", () => {
   const declared = new Set([
@@ -340,7 +292,6 @@ describe("extractReferencedVars", () => {
   });
 
   test("credits ancestor when ref goes deeper than declared", () => {
-    // `.session.id.extra` should still credit `session.id`.
     expect(extractReferencedVars("{{ .session.id.extra }}", declared)).toEqual([
       "session.id",
     ]);
@@ -352,17 +303,12 @@ describe("extractReferencedVars", () => {
     ]);
   });
 
-  // [LAW:single-enforcer] String literals must NOT produce false positives.
-  // The raw extractor (extractTemplateRefs in dsl-loader) strips string
-  // literals from `{{ ... }}` bodies before scanning for dotted paths, so
-  // a printf-style template containing a literal reference to a declared
-  // name does not get falsely credited as a real reference.
+  // [LAW:single-enforcer] The raw extractor strips string literals before
+  // scanning, so a literal name is never credited as a reference.
   test("ignores dotted refs inside string literals", () => {
-    // `.greeting` appears inside a string literal — must NOT be reported.
     expect(extractReferencedVars(`{{ printf ".greeting" }}`, declared)).toEqual(
       [],
     );
-    // Same with single-quoted and backtick literals.
     expect(extractReferencedVars(`{{ printf '.greeting' }}`, declared)).toEqual(
       [],
     );
@@ -372,9 +318,6 @@ describe("extractReferencedVars", () => {
   });
 
   test("real ref outside a string literal still wins", () => {
-    // The string contains a literal `.greeting`, but the action also reads
-    // a real `.session.id` outside the literal. Only the real one is
-    // reported.
     expect(
       extractReferencedVars(
         `{{ printf ".greeting=%s" .session.id }}`,
@@ -383,8 +326,6 @@ describe("extractReferencedVars", () => {
     ).toEqual(["session.id"]);
   });
 });
-
-// ─── Populated state: config ─────────────────────────────────────────────────
 
 describe("introspectConfig with populated state", () => {
   test("returns the parsed DslConfig", () => {
@@ -412,8 +353,6 @@ describe("introspectConfig with populated state", () => {
   });
 
   test("round-trips through JSON without losing shape", () => {
-    // The introspectConfig result becomes a JSON wire frame. Round-tripping
-    // through JSON.stringify/JSON.parse must preserve every observable field.
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     const wireShape = JSON.parse(JSON.stringify(config));
@@ -431,8 +370,6 @@ describe("introspectConfig with populated state", () => {
     );
   });
 });
-
-// ─── Wire-format round-trip ──────────────────────────────────────────────────
 
 describe("Debug protocol wire format", () => {
   test("DebugRequest serializes with correct kind", () => {
@@ -475,31 +412,18 @@ describe("Debug protocol wire format", () => {
       debug: { what: "config", config: introspectConfig(state) },
     };
     const decoded = await decodeFrame(encodeFrame(response));
-    // The DslConfig is JSON-shaped throughout (no Map, no class instance),
-    // so structural equality holds across the round-trip.
+    // The DslConfig is JSON-shaped throughout, so structural equality holds.
     expect(decoded).toEqual(JSON.parse(JSON.stringify(response)));
   });
 });
 
-// ─── PROTOCOL_VERSION discipline: additive ≠ breaking ───────────────────────
-
 describe("PROTOCOL_VERSION", () => {
-  // [LAW:types-are-the-program] PROTOCOL_VERSION carries one theorem:
-  // "old-and-new cannot communicate." Adding a new request kind does not
-  // change that theorem — old clients don't send the new kind, and old
-  // daemons reject it via BAD_REQUEST fallthrough (the additive negotiation,
-  // no separate capabilities exchange needed). Bumping on additive changes
-  // taxed every running session with a VERSION_MISMATCH on rebuild — the
-  // 452-corpse precedent (kz8.5) refuses to kick on permanent errors, so a
-  // bumped version forces visible breakage until each session restarts.
-  // This test pins the discipline so a future additive change cannot
-  // silently re-bump.
+  // [LAW:types-are-the-program] PROTOCOL_VERSION carries one theorem: old and
+  // new cannot communicate. A new request kind is additive, so it must not bump.
   test("the debug kind is additive — no bump from prior protocol", () => {
     expect(PROTOCOL_VERSION).toBe(3);
   });
 });
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function decodeFrame(buf: Buffer): Promise<unknown> {
   return new Promise((resolve, reject) => {

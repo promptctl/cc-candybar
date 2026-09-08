@@ -1,15 +1,4 @@
-// [LAW:verifiable-goals] Style-picker done-gate: clicking a style option
-// RESHAPES the whole bar live (the powerline cap/separator family changes). The
-// reshape lives in the daemon's PER-RENDER strip-style resolution
-// (effectiveStripStyle -> renderOpts.style), OUTSIDE renderDsl — the exact twin
-// of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
-// This test replicates that resolution exactly as src/daemon/server.ts does, so
-// it proves the end-to-end loop: a set-state `style` click changes the bytes the
-// joiner emits between cells.
-//
-// [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
-// for rendering, the real click wire for the set-state, and the same
-// effectiveStripStyle the daemon calls. No parallel rig, no hand-built joiner.
+// [LAW:verifiable-goals] A style click reshapes the bar through the daemon's per-render strip-style resolution, outside renderDsl [LAW:single-enforcer].
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -27,8 +16,6 @@ import {
 const SID = "s-reshape";
 const BASE_THEME = "textual-dark";
 
-// Two cells in one horizontal row, so the joiner runs BETWEEN them — that
-// inter-cell seam is exactly what the strip style reshapes.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
@@ -55,11 +42,7 @@ function buildRuntime() {
   const compiled = registerDslConfig(config, registry);
   const basePalette = paletteForThemeName(BASE_THEME);
 
-  // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
-  // daemon does — the session's clicked style over the config default over the
-  // "powerline" floor. Freezing it would silently pass while the real daemon
-  // reshapes. (server.ts: renderOpts.style = effectiveStripStyle(undefined, 
-  // sessionState.get(sid,'style'), globals.style)).
+  // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the daemon does.
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, basePalette, {
       style: effectiveStripStyle(undefined, 
@@ -74,7 +57,6 @@ function buildRuntime() {
 }
 
 function clickStyle(sessionState: SessionState, style: string): void {
-  // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", style] }]);
   clickUrl(url, testVerbContext(sessionState));
 }
@@ -83,7 +65,7 @@ describe("DSL style picker — live reshape", () => {
   test("clicking a style changes the bytes the joiner emits between cells", () => {
     const { sessionState, render } = buildRuntime();
 
-    const powerline = render(); // default: SessionState unset -> "powerline" floor
+    const powerline = render();
     expect(powerline.length).toBeGreaterThan(0);
 
     clickStyle(sessionState, "capsule");
@@ -92,9 +74,7 @@ describe("DSL style picker — live reshape", () => {
     clickStyle(sessionState, "plain");
     const plain = render();
 
-    // [LAW:verifiable-goals] The reshape IS the contract: each strip style yields
-    // a distinct inter-cell rendering, so all three footprints are pairwise
-    // different. If the session style were ignored, all three would be identical.
+    // [LAW:verifiable-goals] The reshape IS the contract: all three footprints differ pairwise.
     expect(capsule).not.toBe(powerline);
     expect(plain).not.toBe(powerline);
     expect(plain).not.toBe(capsule);
@@ -109,8 +89,6 @@ describe("DSL style picker — live reshape", () => {
       expect(out.length).toBeGreaterThan(0);
       seen.set(style, out);
     }
-    // The render for each style is unique — the domain offered by the picker
-    // maps one-to-one onto a distinct rendered shape (no dead options).
     expect(new Set(seen.values()).size).toBe(STRIP_STYLES.length);
   });
 });
@@ -126,9 +104,8 @@ describe("effectiveStripStyle — session over config over floor", () => {
     expect(effectiveStripStyle(undefined, null, undefined)).toBe("powerline");
   });
   test("a stale out-of-domain session value collapses to the floor", () => {
-    // A SessionState entry left over from a prior option vocabulary (e.g. the
-    // legacy 'muted' preset) is not a renderable strip style — it must not leak
-    // through as a StripStyle. [LAW:no-silent-failure] / [LAW:types-are-the-program]
+    // A stale SessionState entry must not leak through as a StripStyle.
+    // [LAW:no-silent-failure] / [LAW:types-are-the-program]
     expect(effectiveStripStyle(undefined, "muted", undefined)).toBe("powerline");
   });
 });

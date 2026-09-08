@@ -1,16 +1,4 @@
-// The bundled default's threshold colours, pinned as a CONTRACT over palette
-// names — not opaque bytes. block/weekly heat as utilization passes 50 and
-// the (user-overridable) warning threshold; burnrate heats as the projected
-// minutes-to-cap fall under the warn/error minutes, with the -1 "cannot
-// project" sentinel calm; context heats as the integer percentage left drops
-// through 40 and 20. Each row says which palette NAME the cell wears, and the
-// expectation reads the live palette, so the pin holds across themes.
-//
-// Written against the `if ge … else …` helper cascades BEFORE they became one
-// `ramp` call each (brandon-custom-segments-g5z.2): the ramp is proven
-// byte-equivalent by this file passing unchanged on both sides of that
-// change. [LAW:behavior-not-structure] — the contract is the colour at each
-// value, whichever spelling computes it.
+// [LAW:behavior-not-structure] Threshold colours are pinned as palette NAMEs, read from the live palette.
 
 import { getThemePalette, type Palette } from "@promptctl/rich-js";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -23,7 +11,7 @@ import { SessionState } from "../src/daemon/session-state";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;
-const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
+const RESETS_AT = 4_102_444_800; // must satisfy `when: gt .resetsAt 0`
 
 const OPTS = {
   style: "powerline" as const,
@@ -34,8 +22,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// One row: the payload a segment reads, the literal vars it thresholds
-// against, and the palette names its cell must wear.
 interface Row {
   readonly value: number;
   readonly bg: string;
@@ -49,8 +35,6 @@ interface Case {
   readonly rows: readonly Row[];
 }
 
-// Fuller-is-hotter over the displayed (rounded) percentage: the fractional
-// rows pin that the colour agrees with the integer the cell prints.
 const BLOCK_LIKE = (threshold: number): readonly Row[] =>
   threshold === 80
     ? [
@@ -83,8 +67,6 @@ const ETA_HEAT: readonly Row[] = [
   { value: 120, bg: "panel", fg: "foreground" },
 ];
 
-// Less-left-is-hotter over an integer percentage (src/segments/context.ts
-// rounds it), so 20/21 and 40/41 are the exact edges.
 const CONTEXT_LEFT: readonly Row[] = [
   { value: 0, bg: "error", fg: "button-color-foreground" },
   { value: 20, bg: "error", fg: "button-color-foreground" },
@@ -94,8 +76,6 @@ const CONTEXT_LEFT: readonly Row[] = [
   { value: 100, bg: "surface-active", fg: "foreground" },
 ];
 
-// A lowered heat threshold moves BOTH the first warm colour and the text flip
-// — one variable feeds the bg and the fg ramp, so they cannot disagree.
 const HEAT_LOW: readonly Row[] = [
   { value: 19, bg: "panel", fg: "foreground" },
   { value: 20, bg: "warning", fg: "button-color-foreground" },
@@ -199,8 +179,6 @@ function renderOne(
   }
 }
 
-// The fg/bg pair of the SGR run that paints the cell's glyph — the one
-// `38;2;r;g;b;48;2;r;g;b` sequence immediately before the glyph's text.
 function cellColors(
   rendered: string,
   glyph: string,
@@ -224,10 +202,8 @@ function cellColors(
   return { fg: out.fg!, bg: out.bg! };
 }
 
-// What the renderer paints for a (fg name, bg name) pair: the bg verbatim,
-// the fg composited over it — `button-color-foreground` carries alpha
-// (`#ffffffdd`), and rich-js's render flattens alpha over the cell's own bg.
-// `compositeOver` is identity at alpha 1, so every row goes through it.
+// `button-color-foreground` carries alpha, which the renderer flattens over
+// the cell's own bg — `compositeOver` is identity at alpha 1, so every row goes through it.
 function expected(palette: Palette, row: Row): { fg: string; bg: string } {
   const bg = palette.get(row.bg);
   const fg = palette.get(row.fg);
@@ -252,10 +228,7 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
   }
 });
 
-// [LAW:no-silent-failure] A warning threshold set below the heat threshold is
-// a descending pair. The old `if ge …` cascade rendered it by silently
-// dropping the warning band; the ramp refuses to sort and names both
-// positions, so the user can see which two knobs to move together.
+// [LAW:no-silent-failure] A descending threshold pair must name both positions loudly, not silently drop a band.
 describe("a threshold below its neighbour is a loud render error", () => {
   const palette = getThemePalette("textual-dark")!;
   const INVERTED: readonly { segment: string; vars: Readonly<Record<string, number>>; pair: string }[] = [
@@ -264,8 +237,6 @@ describe("a threshold below its neighbour is a loud render error", () => {
     { segment: "burnrate", vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 90 }, pair: "stop 3 at 60 follows stop 2 at 90" },
   ];
   test.each(INVERTED)("$segment $vars names both positions", ({ segment, vars, pair }) => {
-    // The found case lends its payload and glyph; `vars` are this row's own,
-    // over the bundled defaults, so the pair inverts exactly as stated.
     const c = CASES.find((x) => x.segment === segment)!;
     const errors: string[] = [];
     const rendered = renderOne(

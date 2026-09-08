@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] brandon-doctor-b6a: the `☰ ▸ 🧰 tools ▸ 🩺 doctor`
-// route, driven through the real loader, the real spine (registerDslConfig +
-// renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
-// probe answers `RGB` and whose settings.json is a temp file. The recorded
-// client hints are seeded the way server.ts records them, so the click reads
-// the facts of the session's "last render" exactly as production does.
+// [LAW:verifiable-goals] The `☰ ▸ 🧰 tools ▸ 🩺 doctor` route through the real loader, spine and verb handlers; client hints are seeded the way server.ts records them.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -87,7 +82,6 @@ function buildRuntime(tmux: TmuxHint | null) {
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  // What server.ts records on a render: the stamped hints, as JSON.
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
@@ -177,8 +171,6 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     const lines = rt.render().split("\n");
     const toolsRow = lines.findIndex((l) => l.includes("🧰 tools ▾"));
     expect(toolsRow).toBeGreaterThanOrEqual(0);
-    // A vertical body: the button on one row, the report on the next — a long
-    // reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
     expect(lines[toolsRow + 2]).toMatch(/^✗ tmux truecolor/);
     rt.dispose();
@@ -198,8 +190,6 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     );
 
     rt.clickVerb(VERB_DOCTOR_FIX);
-    // one probe for the run click, one for the fix click — the post-fix
-    // report re-reads only the settings env the fix changed
     expect(rt.probes()).toBe(2);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       env: { FORCE_COLOR: "3", [TMUX_TRUECOLOR_VAR]: "1" },
@@ -214,9 +204,6 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     rt.dispose();
   });
 
-  // [LAW:no-silent-failure] A session the daemon never rendered has no client
-  // facts; the doctor refuses loudly rather than diagnose a guessed "not in
-  // tmux".
   test("a doctor-run click for a session that never rendered is refused", () => {
     const rt = buildRuntime(HINT);
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
@@ -225,8 +212,6 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     rt.dispose();
   });
 
-  // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
-  // render that drew it) is refused loudly, never a silent second write.
   test("a second fix click is refused: nothing left to fix", () => {
     const rt = buildRuntime(HINT);
     rt.openTools();

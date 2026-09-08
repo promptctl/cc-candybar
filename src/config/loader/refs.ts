@@ -1,18 +1,11 @@
-// [LAW:dataflow-not-control-flow] Best-effort extraction of the references a
-// template string makes — dotted variable refs, `action "name"` refs, and
-// `picker "apply" "page"` refs. Pure text walks over `{{ … }}` blocks: no
-// full template parse (that is the engine's compile-time job). This file changes
-// when the surface grammar of those refs changes; the cross-ref/cycle passes
-// consume the sets it returns without re-deriving them.
+// [LAW:dataflow-not-control-flow] Best-effort text walks over `{{ … }}` blocks — no full template parse; that is the engine's compile-time job.
 
 const TEMPLATE_BLOCK_RE = /{{([\s\S]*?)}}/g;
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 const DOTTED_REF_RE =
   /(?<![A-Za-z0-9_)])\.([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)/g;
 
-// [LAW:dataflow-not-control-flow] Extract every `.<id>(.<id>)*` token inside
-// `{{ ... }}` blocks after stripping string literals. The result is a set of
-// dotted reference candidates; the caller decides which are valid.
+// Candidates only: the caller decides which resolve.
 export function extractTemplateRefs(template: string): Set<string> {
   const refs = new Set<string>();
   let m: RegExpExecArray | null;
@@ -28,12 +21,7 @@ export function extractTemplateRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:dataflow-not-control-flow] Extract every `action "name"` call from a
-// template, for the load-time existence check. Same best-effort code-span /
-// string-literal walk as extractTemplateRefs: the `action` keyword lives in a
-// CODE span and its NAME is the very next string literal (the display/boundValue
-// literals that follow are preceded by a non-`action` span, so they are never
-// misread as the name).
+// The name is the string literal immediately following the `action` keyword in a code span; later display literals are preceded by a non-`action` span.
 const ACTION_ARG_RE = /\baction\s+$/;
 export function extractActionRefs(template: string): Set<string> {
   const refs = new Set<string>();
@@ -54,15 +42,7 @@ export function extractActionRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:dataflow-not-control-flow] Extract the action names a `picker` OR `menu`
-// call references, for the load-time existence check. A `picker` binds an
-// (apply, page) action pair as its first two string-literal args
-// (`{{ picker "applyTheme" "themePage" true true }}`); a `menu` binds ONLY its
-// apply action (`{{ menu "applyTheme" (dict …) }}`) — its page cursor is
-// synthesized from identity, and the dict's option-name literals must never be
-// misread as action refs. A menu's body IS a picker, so the existence check is
-// identical; one extractor arms on either keyword with the keyword's own arg
-// count [LAW:single-enforcer]. Same code/string-span walk as extractActionRefs.
+// [LAW:single-enforcer] One extractor for both keywords: a `picker` binds (apply, page) as its first two string args, a `menu` only its apply — so a menu's dict literals are never misread as action refs.
 const PICKER_OR_MENU_ARG_RE = /\b(picker|menu)\s+$/;
 export function extractPickerMenuRefs(template: string): Set<string> {
   const refs = new Set<string>();
@@ -71,7 +51,7 @@ export function extractPickerMenuRefs(template: string): Set<string> {
   while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
     const block = m[1]!;
     let cursor = 0;
-    let pending = 0; // remaining name args to capture for the current call
+    let pending = 0;
     let s: RegExpExecArray | null;
     STRING_LITERAL_RE.lastIndex = 0;
     while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
@@ -87,24 +67,13 @@ export function extractPickerMenuRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:types-are-the-program] What a template reference resolves against:
-// the declared variable NAMES (exactly the keys the runtime store holds) and,
-// among them, the DOCUMENTS — `parse: { json }` sources whose fields are a
-// namespace UNDER the name (the scope proxy hands the engine the document and
-// `.doc.a.b` is a field walk the loader cannot see into; a missing field is
-// the runtime's MissingFieldError, as for a payload field). One value, so
-// every reference surface — template refs, `when`, cache.key — resolves the
-// same way; `depends_on` reads `names` alone (the reaction calls the store by
-// exact key).
+// [LAW:types-are-the-program] Names are the runtime store's exact keys; a document's
+// fields are a namespace under its name that the loader cannot see into.
 export interface TemplateScope {
   readonly names: ReadonlySet<string>;
   readonly documents: ReadonlySet<string>;
 }
 
-// A ref resolves if (a) the full dotted name is a declared variable, (b) it
-// is a strict prefix of some declared variable (namespace navigation like
-// .session in `.session.id` when only `session.id` is declared), or (c) a
-// declared document is a strict prefix of it (a field read).
 export function refResolves(ref: string, scope: TemplateScope): boolean {
   if (scope.names.has(ref)) return true;
   const prefix = `${ref}.`;

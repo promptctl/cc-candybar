@@ -1,19 +1,6 @@
-// [LAW:behavior-not-structure] Asserts wrapper output equals the canonical
-// formatter's output. The wrappers' purpose is to expose src/utils/formatters.ts
-// through the template engine without re-deriving the formatting rules;
+// [LAW:behavior-not-structure][LAW:single-enforcer] The wrappers expose
+// src/utils/formatters.ts through the engine without re-deriving the rules;
 // "wrapper === source" is the contract.
-//
-// [LAW:single-enforcer] These tests pin the contract that the DSL's render
-// path produces byte-identical output to the legacy renderer. If a wrapper
-// drifts from its source, the parity harness would also fail — but a focused
-// test localizes the cause to the wrapper instead of the assembled segment.
-//
-// The cost/token/budget (bdi.3) and duration/time-remaining (bdi.4) families
-// moved to DSL helper templates; their byte-parity is pinned in
-// test/dsl-formatters-cost-token.test.ts and test/dsl-formatters-duration-time.test.ts.
-// What remains here are the JS-func primitives with no template-native
-// expression yet (locale grouping, regex model-name parsing) plus the
-// clock-reading numeric primitive minutesUntilReset.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { formatterFuncs } from "../src/template-engine/funcs";
@@ -23,28 +10,17 @@ import {
   shortenModelName,
 } from "../src/utils/formatters";
 
-// Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object = {}): string {
   const engine = createCcCandybarEngine();
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
-// ────────────────────────────────────────────────────────────────
-// 0. Numeric argType gate (validation lives at ONE boundary)
-// ────────────────────────────────────────────────────────────────
-
-// [LAW:no-silent-failure][LAW:single-enforcer] Integer formatters declare the
-// `int` argType, whose gate (@promptctl/go-template-js) rejects a bigint that
-// cannot round-trip to a JS number without precision loss — so a corrupted
-// integer fails loudly AT THE BOUNDARY instead of feeding a wrong value into the
-// formatter. This replaces the old per-wrapper `num()` runtime guard: the same
-// guarantee, moved to the gate that owns numeric carriers. (`formatInteger`
-// chosen as a stable single-arg int wrapper.) `round` declares `float`, which
-// accepts any finite number (it takes fractional values).
+// [LAW:no-silent-failure][LAW:single-enforcer] The `int` argType gate rejects a
+// bigint that cannot round-trip to a JS number; `round` declares `float`, which
+// accepts any finite number.
 describe("numeric argType gate — precision-losing bigint rejected at the boundary", () => {
   test("int accepts a bigint within safe-integer range", () => {
-    // Engine encodes ambiguous Go-template numeric literals as bigint; values
-    // inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) round-trip safely.
+    // The engine encodes ambiguous Go-template numeric literals as bigint.
     const tpl = createCcCandybarEngine().parse("{{ formatInteger 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
@@ -73,15 +49,10 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
   });
 
   test("float (round) accepts a large finite value without a precision guard", () => {
-    // float is intentionally lossy-tolerant — a big literal converts, not throws.
     const tpl = createCcCandybarEngine().parse("{{ round 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 });
-
-// ────────────────────────────────────────────────────────────────
-// 3. Locale-grouped integer
-// ────────────────────────────────────────────────────────────────
 
 describe("formatInteger wrapper", () => {
   test.each([0, 1, 999, 1000, 12345, 50000, 1_234_567])(
@@ -91,10 +62,6 @@ describe("formatInteger wrapper", () => {
     },
   );
 });
-
-// ────────────────────────────────────────────────────────────────
-// 4. round
-// ────────────────────────────────────────────────────────────────
 
 describe("round wrapper", () => {
   test.each([
@@ -112,10 +79,6 @@ describe("round wrapper", () => {
     expect(evalText("{{ round .n }}", { n: input })).toBe(String(expected));
   });
 });
-
-// ────────────────────────────────────────────────────────────────
-// 6. Model-name normalizers
-// ────────────────────────────────────────────────────────────────
 
 describe("formatModelName wrapper", () => {
   test.each([
@@ -150,10 +113,6 @@ describe("shortenModelName wrapper", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────
-// 7. Registry shape
-// ────────────────────────────────────────────────────────────────
-
 describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = formatterFuncs();
@@ -172,22 +131,13 @@ describe("formatterFuncs registry", () => {
     }
   });
 
-  // [LAW:single-enforcer] The engine must wire formatterFuncs in alongside
-  // ccCandybarFuncs — otherwise a template like "{{ formatCost .x }}" parses
-  // but throws FuncNotFoundError at eval time. This regression test catches
-  // an engine.ts refactor that drops the spread.
+  // [LAW:single-enforcer] Guards a refactor that drops the formatterFuncs spread:
+  // the template would parse but throw FuncNotFoundError at eval time.
   test("each registered name is callable from the engine", () => {
     const engine = createCcCandybarEngine();
     for (const name of Object.keys(formatterFuncs())) {
-      // Parse-only smoke: a missing func is reported at evaluate time, but the
-      // engine pre-validates that referenced names exist in the registry.
-      // Calling parse alone doesn't trigger the check (Go templates resolve
-      // lazily), so build a tiny scope and evaluate.
+      // Go templates resolve lazily, so parse alone does not check the name.
       const tpl = engine.parse(`{{ ${name} 0 }}`);
-      // Argument-shape mismatches (e.g. budgetStatus expects 3 args) throw
-      // synchronously; we only assert the engine *knows* the name. Catching
-      // TypeError/ParseError is fine; catching FuncNotFoundError is the
-      // failure mode this test guards against.
       try {
         tpl.evaluate({});
       } catch (err) {

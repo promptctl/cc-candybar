@@ -1,35 +1,4 @@
-// [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
-// per-segment palette override as a menu-able domain — mirroring
-// dsl-persist-actions.test.ts's model for the Globals-scoped `persist`
-// surface it generalizes, over the config-FILE store (candybar-config-dqe):
-//
-//   1. parsePersistTarget classifies a bare persist/reset key STRING as
-//      either a Globals field or a `segments.<name>.palette` target — the
-//      one shared authority cross-ref.ts, config-file-store.ts, and the
-//      daemon write path all classify a key through. A target IS a path
-//      into the config file (persistPath).
-//   2. loader/cross-ref.ts rejects a segment-palette key naming an
-//      undeclared segment, and rejects a bounded stepper (min/max/by) over
-//      one — both at LOAD time, not click time.
-//   3. deriveConfigActionValidators derives the SAME allow-list gate for a
-//      segment-palette persist action as it does for a Globals one — zero
-//      new derivation code, just a differently-shaped key string.
-//   4. A click on a compiled persist action targeting `segments.<name>.
-//      palette` writes `palette` INTO THE CONFIG FILE'S declaration of that
-//      segment — the same file a Globals `persist` edits, at the path the
-//      key spells. A segment the file already declares changes in exactly
-//      one span: every other field, and every byte outside it (comments,
-//      quote style), survives verbatim. A segment the file does NOT declare
-//      but the bundled default does is materialized wholesale first
-//      (`segments` merge by name), then pinned. `reset` deletes `palette`
-//      from the file's declaration; a `palette` the file never authored
-//      changes nothing and records no history.
-//   5. RenderCache reads the pin back from the file through the SAME watcher
-//      a hand edit uses, patching the segment's OWN `palette` field (never
-//      wholesale-replacing it, never touching sibling segments); it survives
-//      a restart because the file IS the store; and a segment neither the
-//      file nor the bundled default declares cannot be pinned at all — the
-//      store refuses loudly rather than authoring a hollow declaration.
+// [LAW:verifiable-goals] A persist/reset key IS a path into the config file.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
@@ -85,19 +54,15 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  // The global settings menu and the edit toggle it reaches are on every bar;
-  // this file's assertions are about the fixture's OWN clickable regions.
+  // The settings menu is on every bar; assert only the fixture's own links.
   return ownLinks(urls);
 }
 
 type SegmentDecls = Record<string, Record<string, unknown>>;
 
-// The file's `segments` block, as JSON5 parses it — what a reload will see.
 function fileSegments(durable: DurableConfig): SegmentDecls {
   return durable.parsed().segments as SegmentDecls;
 }
-
-// ─── parsePersistTarget: the shared key-classification authority ────────────
 
 describe("parsePersistTarget", () => {
   test("classifies a real Globals field", () => {
@@ -134,8 +99,6 @@ describe("parsePersistTarget", () => {
     expect(parsePersistTarget("segments.palette")).toBeNull();
   });
 });
-
-// ─── loader: cross-ref validation of a segment-palette persist/reset target ─
 
 describe("loader: segment-palette persist/reset target validation", () => {
   const base = (actions: string) =>
@@ -214,8 +177,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
   });
 });
 
-// ─── config-validators: the persistent-write gate over a segment key ────────
-
 describe("config-validators: segment-palette persist keys", () => {
   test("deriveConfigActionValidators derives the SAME allow-list shape for a segment-palette key", () => {
     const config = parseAndValidate(
@@ -258,16 +219,10 @@ describe("config-validators: segment-palette persist keys", () => {
   });
 });
 
-// ─── end-to-end: click → the config file, through the real daemon handlers ──
-
 let durable: DurableConfig;
 
-// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
-// writes the same text as the session's config file, so the tree a click
-// edits is the tree the bar rendered — exactly the daemon's own situation.
-// `dflt` is what the file merges over: the empty default by default, the
-// bundled DEFAULT_DSL_CONFIG when a test's subject is a segment the FILE does
-// not author but the bar still renders (the production cascade).
+// [LAW:one-source-of-truth] The tree a click edits is the tree the bar rendered.
+// `dflt` is what the file merges over (the production cascade).
 function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   if (durable.text() === null) durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
@@ -313,8 +268,7 @@ describe("segment-palette persist action click → the config file", () => {
     durable.dispose();
   });
 
-  // The sidebar's declaration carries a `when` and sits under a comment, so
-  // the assertions can tell "one field spliced in" from "decl rewritten".
+  // The decl's `when` and the comment above it tell spliced from rewritten.
   const SIDEBAR_DECL =
     "sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground', when: '{{ true }}' }";
   const SIDEBAR_COMMENT =
@@ -350,13 +304,9 @@ describe("segment-palette persist action click → the config file", () => {
       when: "{{ true }}",
       palette: "nord",
     });
-    // Not a whole-bar pin: globals is still empty.
     expect(durable.parsed().globals).toEqual({});
-    // The sibling segment is untouched.
     expect(fileSegments(durable).bar).toEqual(barBefore);
-    // Exactly one span changed: the authored decl's text (its single quotes,
-    // its `when`) and the comment above it are still there verbatim — the
-    // pin was appended inside the decl, not rewritten around it.
+    // The authored text survives verbatim: spliced, not rewritten.
     const written = durable.text()!;
     expect(written).toContain(SIDEBAR_COMMENT);
     expect(written).toContain(SIDEBAR_DECL.slice(0, -2)); // up to the closing ` }`
@@ -380,7 +330,6 @@ describe("segment-palette persist action click → the config file", () => {
       when: "{{ true }}",
     });
     expect(durable.text()).toContain(SIDEBAR_COMMENT);
-    // The delete is its own history entry — one history over every shape.
     expect(durable.history().past).toHaveLength(2);
     dispose();
   });
@@ -395,10 +344,8 @@ describe("segment-palette persist action click → the config file", () => {
     dispose();
   });
 
-  // [LAW:one-source-of-truth] `segments` merge BY NAME, WHOLESALE, so a
-  // one-field `directory: { palette }` in the file would shadow the bundled
-  // decl and lose its template. The first pin on a bundled segment therefore
-  // copies the whole bundled declaration into the file, then sets palette.
+  // [LAW:one-source-of-truth] `segments` merge by name wholesale: the first pin
+  // copies the whole bundled declaration in before setting palette.
   test("pinning a segment the file does not declare materializes the bundled decl first, then sets palette", () => {
     const SRC_BUNDLED = `{
       globals: {},
@@ -430,15 +377,11 @@ describe("segment-palette persist action click → the config file", () => {
     });
     expect(fileSegments(durable).directory!.template).toBe(bundled.template);
 
-    // Reset deletes ONLY palette: the materialized decl stays authored,
-    // exactly as if the user had written it by hand.
     click(resetUrl!);
     expect(fileSegments(durable).directory).toEqual(bundled);
     dispose();
   });
 });
-
-// ─── config-file-store: what a segment-palette pin may target ───────────────
 
 describe("config-file-store: segment-palette placement", () => {
   beforeEach(() => {
@@ -453,11 +396,7 @@ describe("config-file-store: segment-palette placement", () => {
     logger: () => {},
   });
 
-  // [LAW:no-silent-failure] The gate admits keys from the config a session
-  // rendered; a key naming a segment that neither this file nor the bundled
-  // default declares cannot be materialized, and a hollow `ghost: { palette }`
-  // would be a declaration with no template. The store refuses loudly and
-  // touches nothing.
+  // [LAW:no-silent-failure] A hollow decl with no template is refused loudly.
   test("a segment neither the file nor the bundled default declares cannot be pinned", () => {
     const text = `{
       globals: {},
@@ -474,8 +413,6 @@ describe("config-file-store: segment-palette placement", () => {
     expect(existsSync(durable.historyPath)).toBe(false);
   });
 });
-
-// ─── RenderCache integration: reload, restart, isolation ────────────────────
 
 function makeCache(): {
   cache: RenderCache;
@@ -550,14 +487,11 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
 
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.segments.sidebar!.palette).toBe("nord");
-      // Every other field of the pinned segment survives — the write
-      // splices ONE field, it does not wholesale-replace the segment.
+      // The write splices ONE field; it does not wholesale-replace the segment.
       expect(entry.state.config.segments.sidebar!.template).toBe(
         "sidebar-text",
       );
       expect(entry.state.config.segments.sidebar!.bg).toBe("surface");
-      // The sibling segment is completely unaffected — in the effective
-      // config AND in the file's own text.
       expect(entry.state.config.segments.other!.palette).toBeUndefined();
       expect(entry.state.config.segments.other!.template).toBe("other-text");
       expect(durable.text()).toContain(OTHER_DECL);
@@ -592,8 +526,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       for (const fn of cleanups) fn();
     }
 
-    // Restart: a fresh cache/services pair, reading only the config file on
-    // disk — no in-memory state carries over.
+    // Restart: a fresh cache/services pair, reading only the file on disk.
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(

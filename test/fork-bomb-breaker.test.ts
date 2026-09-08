@@ -20,10 +20,7 @@ function freshDir(): string {
   return path.join(os.tmpdir(), `cc-candybar-breaker-${crypto.randomUUID()}`);
 }
 
-// ─── decideBoot: full input-space enumeration ────────────────────────────────
-//
-// [LAW:effects-at-boundaries] decideBoot is a pure fold — every branch is
-// exercised here with plain values, no fs, no real processes.
+// [LAW:effects-at-boundaries] decideBoot is a pure fold; no fs, no processes.
 
 describe("decideBoot (pure decision)", () => {
   test("not isolated → always allow, regardless of count or ceiling", () => {
@@ -62,8 +59,6 @@ describe("decideBoot (pure decision)", () => {
     expect(decideBoot(true, 0, 0).allow).toBe(false);
   });
 });
-
-// ─── countLiveEntries: pure fold over injected liveness + sweep ─────────────
 
 describe("countLiveEntries (pure fold)", () => {
   const entry = (pid: number): RegistryEntry => ({
@@ -104,8 +99,6 @@ describe("countLiveEntries (pure fold)", () => {
   });
 });
 
-// ─── daemonCeiling: env var parsing ──────────────────────────────────────────
-
 describe("daemonCeiling", () => {
   const ORIGINAL = process.env["CC_CANDYBAR_DAEMON_CEILING"];
   afterEach(() => {
@@ -132,8 +125,7 @@ describe("daemonCeiling", () => {
   test("falls back to default on trailing garbage — a typo must not silently truncate (e.g. '160' fat-fingered as '16o')", () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "16o";
     expect(daemonCeiling()).toBe(16);
-    // Not the truncated 16 — DEFAULT_CEILING also happens to be 16, so pin a
-    // value where truncation and the default would visibly disagree.
+    // Pin a value where truncation and the default would visibly disagree.
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "32o";
     expect(daemonCeiling()).toBe(16);
   });
@@ -145,8 +137,6 @@ describe("daemonCeiling", () => {
     expect(daemonCeiling()).toBe(16);
   });
 });
-
-// ─── readRegistryEntry / listRegistryFiles: real fs boundary ────────────────
 
 describe("readRegistryEntry", () => {
   let dir: string;
@@ -221,16 +211,8 @@ describe("listRegistryFiles", () => {
   });
 });
 
-// ─── realBreakerDeps.ensureDirSafe: symlinked-parent hijack, default vs
-// override ────────────────────────────────────────────────────────────────
-//
-// [LAW:effects-at-boundaries] `lstatSync` only inspects a path's FINAL
-// component; verifying just the leaf registry dir lets a symlinked PARENT be
-// silently followed by `mkdirSync({recursive:true})`, after which the
-// freshly-created leaf looks perfectly clean despite living inside
-// attacker-controlled storage — the same class of attack
-// `ensureSocketParentSafe` guards against for the socket path. Mirrors
-// test/daemon-socket-safety.test.ts's style: real tmp dirs, a real symlink.
+// [LAW:effects-at-boundaries] `lstatSync` inspects only a path's FINAL
+// component, so a symlinked PARENT would be followed by a recursive mkdir.
 
 describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   const ORIGINAL = process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
@@ -278,9 +260,6 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     fs.mkdirSync(dir, { mode: 0o700 });
     process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = dir;
     try {
-      // The parent here is os.tmpdir() itself, which on a shared-/tmp
-      // platform would fail the two-level check — proving the override path
-      // deliberately does not apply it.
       expect(() => realBreakerDeps(null).ensureDirSafe(dir)).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -288,24 +267,15 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   });
 });
 
-// ─── realBreakerDeps.writeEntry: no orphaned tmp file on a rename failure ───
-//
-// [LAW:no-silent-failure] Mirrors socket-lease.ts's writeLease cleanup for
-// the identical write-tmp-then-rename shape: if the rename fails after the
-// tmp file was created, the tmp file must not be left behind (listRegistryFiles
-// only collects *.json, so a stray .tmp would never be swept by anything).
+// [LAW:no-silent-failure] A failed rename must leave no orphaned tmp file:
+// listRegistryFiles collects only *.json, so a stray .tmp is never swept.
 
 describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
   test("rethrows and cleans up the tmp file when the rename target can't accept it", () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, "pid-123.json");
-    // writeFileSync(tmp) must SUCCEED (tmp is a sibling file in an existing
-    // dir) while renameSync(tmp, filePath) FAILS — isolating the rename step
-    // specifically. Renaming a file onto an existing directory is a
-    // reliable, platform-independent way to force exactly that: filePath
-    // itself is a directory, so the rename is rejected (EISDIR) without
-    // ever touching tmp's own write.
+    // Renaming onto an existing directory fails without touching tmp's write.
     fs.mkdirSync(filePath);
     const identity = { pid: 123, startTime: "st" };
     const tmp = `${filePath}.${identity.pid}.tmp`;
@@ -319,8 +289,6 @@ describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
     }
   });
 });
-
-// ─── admitDaemon: effect-layer orchestration over injected deps ────────────
 
 describe("admitDaemon", () => {
   function baseDeps(overrides: Partial<BreakerDeps> = {}): BreakerDeps {
@@ -360,7 +328,7 @@ describe("admitDaemon", () => {
       baseDeps({
         listFiles: () => ["/fake/registry/pid-1.json"],
         readEntry: () => ({ pid: 1, startTime: "st" }),
-        isSameLiveProcess: () => true, // the one existing entry is live
+        isSameLiveProcess: () => true,
         writeEntry,
       }),
     );
@@ -395,12 +363,10 @@ describe("admitDaemon", () => {
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/corrupt.json"],
-        readEntry: () => null, // unreadable — excluded from the count entirely
+        readEntry: () => null,
         isSameLiveProcess: () => true,
       }),
     );
-    // The corrupt entry never enters the live count, so a ceiling of 1 still
-    // has room for us.
     expect(result.decision.allow).toBe(true);
   });
 
@@ -411,7 +377,7 @@ describe("admitDaemon", () => {
         ceiling: 1,
         listFiles: () => ["/fake/registry/pid-1.json"],
         readEntry: () => ({ pid: 1, startTime: "st" }),
-        isSameLiveProcess: () => false, // stale — pid 1 is gone
+        isSameLiveProcess: () => false,
         removeFile,
       }),
     );
@@ -420,11 +386,8 @@ describe("admitDaemon", () => {
   });
 
   test("a pid-recycled ghost naming our OWN pid never counts as a live sibling, even when isSameLiveProcess says alive (the ps-unavailable fallback case)", () => {
-    // Simulates: a past incarnation crashed, left pid-999.json behind with a
-    // DIFFERENT startTime; the OS later recycled pid 999 to us; `ps` is
-    // unavailable so isSameLiveProcess's fallback (bare pidAlive) reads our
-    // own pid as alive and would misclassify this ghost as live — a genuine
-    // sibling would exhaust the ceiling of 1, but the ghost must not.
+    // A recycled pid with a DIFFERENT startTime: without `ps`, bare pidAlive
+    // would misclassify this ghost as live and exhaust the ceiling.
     const isSameLiveProcess = jest.fn(() => true);
     const result = admitDaemon(
       baseDeps({
@@ -436,12 +399,9 @@ describe("admitDaemon", () => {
       }),
     );
     expect(result.decision.allow).toBe(true);
-    // Excluded before it ever reaches the liveness check at all.
     expect(isSameLiveProcess).not.toHaveBeenCalled();
   });
 });
-
-// ─── releaseRegistration: only remove if it still names us ─────────────────
 
 describe("releaseRegistration", () => {
   test("removes the entry when it still names our pid", () => {

@@ -1,12 +1,7 @@
 import fs from "node:fs";
 import { debug } from "../../utils/logger";
 
-// Logger callable used for watcher lifecycle / failure events. Daemon
-// injects `dlog` (writes to daemon.log at the requested level); other
-// consumers (var-system tests, demo) take the default which routes
-// through `debug` — present-but-quiet unless CC_CANDYBAR_DEBUG is set.
-// [LAW:no-defensive-null-guards] Default is always non-null; injection
-// replaces the implementation, never adds a "no logger" mode.
+// [LAW:no-defensive-null-guards] Always non-null; injection replaces the implementation, never adds a "no logger" mode.
 export type WatcherLogger = (
   level: "info" | "warn" | "error",
   message: string,
@@ -14,27 +9,13 @@ export type WatcherLogger = (
 
 const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 
-// [LAW:single-enforcer] One registry owns *all* fs watchers for any consumer
-// (git cache, config cache, ...). Scattered watchers across modules would leak
-// FDs and miss cleanup at shutdown.
-
-// [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
-// single source consumers derive from (e.g. the load harness's git-churn
-// interval must sit above it). Restating "50" anywhere else would let the two
-// drift silently.
+// [LAW:one-source-of-truth] The debounce floor consumers derive from; restating 50 would drift.
 export const DEBOUNCE_MS = 50;
 const DEFAULT_MAX_WATCHERS = 128;
 
-// Absolute filesystem paths the consumer wants invalidation for.
-// `files`: regular files (existence required to watch).
-// `dirs`: directories. Each may optionally restrict which child filenames
-//   should fire — without a filter every change in the dir fires (legacy
-//   git-refs behavior); with a filter only matching basenames fire (config
-//   case: avoids noise from sibling files in ~/.claude/).
+// A dir target with no filter fires on every change in it; with one, only matching basenames.
 export interface DirTarget {
   path: string;
-  // If set, only fire when fs.watch reports a filename in this list.
-  // Filenames are basenames (not paths) — that's what fs.watch supplies.
   filenames?: readonly string[];
 }
 
@@ -50,7 +31,6 @@ interface WatcherSlot {
   debounceTimer: NodeJS.Timeout | null;
   onInvalidate: () => void;
   targets: WatchTargets;
-  // Last-seen accessed-at, so LRU eviction picks the staler one.
   lastTouched: number;
 }
 
@@ -75,10 +55,6 @@ export class WatcherRegistry {
     opts: {
       maxWatchers?: number;
       counters?: WatcherCounters;
-      // [LAW:single-enforcer] One injection point per consumer. The daemon
-      // passes `dlog` so watcher-failure events land in daemon.log; non-
-      // daemon consumers keep the default debug-routed logger and never
-      // touch daemon log files.
       logger?: WatcherLogger;
     } = {},
   ) {
@@ -87,22 +63,14 @@ export class WatcherRegistry {
     this.logger = opts.logger ?? defaultLogger;
   }
 
-  // Acquire (or share) a watcher set keyed by `key`. Multiple acquires on the
-  // same key share a single underlying FSWatcher set; refcount tracks active
-  // consumers. Subsequent acquires *replace* onInvalidate so the latest
-  // consumer's callback is the one that fires — by design, callers funnel into
-  // a single cache module whose callback is a stable closure over the cache map.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets).
+  // Acquires share one FSWatcher set by key: the latest onInvalidate wins, and the FIRST
+  // acquire's targets win (a different target set needs a fresh key).
   acquire(
     key: string,
     targets: WatchTargets,
     onInvalidate: () => void,
   ): WatcherHandle {
     if (this.closed) {
-      // Registry already shut down; return a no-op handle so callers don't
-      // crash mid-shutdown.
       return { release: () => {} };
     }
 
@@ -111,7 +79,6 @@ export class WatcherRegistry {
       existing.refcount++;
       existing.onInvalidate = onInvalidate;
       existing.lastTouched = Date.now();
-      // LRU bump.
       this.slots.delete(key);
       this.slots.set(key, existing);
       return this.makeHandle(key);
@@ -183,8 +150,7 @@ export class WatcherRegistry {
       try {
         const filterSet = target.filenames ? new Set(target.filenames) : null;
         const onDirEvent = (_evt: string, filename: string | null) => {
-          // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
-          // code path every event; the Set's .has() decides whether to fire.
+          // [LAW:dataflow-not-control-flow] The filter is a value; one code path per event.
           if (filterSet && (!filename || !filterSet.has(filename))) return;
           fire();
         };
@@ -218,16 +184,13 @@ export class WatcherRegistry {
 
   private evictIfNeeded(): void {
     while (this.slots.size > this.maxWatchers) {
-      // Map iteration order = insertion order = LRU order (we re-insert on
-      // access).
       const oldest = this.slots.keys().next().value;
       if (oldest === undefined) break;
       const slot = this.slots.get(oldest)!;
       this.closeSlot(slot);
       this.slots.delete(oldest);
       if (this.counters) this.counters.watchersEvicted++;
-      // Force the consumer to drop their entry too — without this the cache
-      // would keep stale data with no watcher behind it.
+      // Force the consumer to drop its entry: no watcher is behind it any more.
       try {
         slot.onInvalidate();
       } catch {}

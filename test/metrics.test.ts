@@ -85,9 +85,7 @@ describe("Metrics Provider", () => {
     expect(metrics.linesRemoved).toBe(10);
   });
 
-  // A transcript that doesn't exist yet is the domain's "no entries" (new
-  // session pre-first-write): the cost-block fields are real, the
-  // transcript-derived counts are genuinely zero.
+  // A transcript that doesn't exist yet is the domain's "no entries", not a failure.
   it("handles missing transcript gracefully", async () => {
     const mockHookData = createMockHookData(
       "nonexistent-session",
@@ -108,9 +106,7 @@ describe("Metrics Provider", () => {
     expect(outcome.value.linesRemoved).toBe(10);
   });
 
-  // [LAW:no-silent-failure] An UNREADABLE transcript (exists, can't be read)
-  // is a loud `failed` carrying the reason — not a confident record with
-  // zeros where the transcript-derived fields should be.
+  // [LAW:no-silent-failure] An unreadable transcript is a loud `failed`, not zeros.
   it("maps an unreadable transcript to a failed outcome", async () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     writeFileSync(transcriptPath, `{"type":"user"}`);
@@ -144,11 +140,7 @@ describe("Metrics Provider", () => {
   it("reuses the folded result when transcript mtime is unchanged (foldMetrics fast-hit, no re-read)", async () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     const fixedMtime = new Date(Date.now() - 60_000);
-    // Two `user` lines → messageCount 2. v2 flips the second line's type
-    // "user" → "xxxx" (byte-length identical) → a fresh parse would count 1.
-    // Each record is newline-terminated: the incremental reader consumes only
-    // complete lines (a trailing partial line waits for its \n), matching how
-    // Claude writes JSONL — so a complete transcript ends in \n.
+    // v2 flips the second line's type byte-length-identically: a fresh parse counts 1.
     const line = (type: string, ts: string) =>
       `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}\n`;
     const t0 = new Date("2024-01-01T00:00:00.000Z").toISOString();
@@ -163,9 +155,6 @@ describe("Metrics Provider", () => {
     const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
-    // Mutate content but hold mtime identical: foldMetrics's mtime gate is
-    // unchanged, so the fast-hit returns the folded 2; a re-read would observe
-    // v2 and return 1.
     expect(v2.length).toBe(v1.length);
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
@@ -185,7 +174,6 @@ describe("Metrics Provider", () => {
         type: "user",
         message: { role: "user", content: "hi" },
       }) + "\n";
-    // Two real user turns to start.
     writeFileSync(transcriptPath, userLine() + userLine());
     let mtime = 1_700_000_000;
     utimesSync(transcriptPath, mtime, mtime);
@@ -193,22 +181,15 @@ describe("Metrics Provider", () => {
 
     const first = await metricsProvider.getMetricsInfo("inc-session", hd);
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
-    // No assistant turn yet → no user→assistant pair → no response time.
     expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
 
-    // Append ONE more user turn; advance mtime so the fold sees the change. A
-    // correct incremental fold reports 3 (adds one), not a re-count from scratch
-    // that happens to also be 3 — verified next by appending a non-user line.
     appendFileSync(transcriptPath, userLine());
     utimesSync(transcriptPath, ++mtime, mtime);
     const second = await metricsProvider.getMetricsInfo("inc-session", hd);
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
     expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
-    // Append an assistant line 1s after the last user turn — messageCount must
-    // NOT change (only real user turns count), AND lastResponseTime must now
-    // reflect that 1s user→assistant gap: proves the recent ring is maintained
-    // incrementally (right entries, right order), not just the count.
+    // Proves the recent ring is maintained incrementally, not just the count.
     appendFileSync(
       transcriptPath,
       JSON.stringify({

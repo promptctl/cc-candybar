@@ -1,16 +1,5 @@
-// A ramp over palette-NAME stops is a colour decision that stays inside the
-// theme system (brandon-custom-segments-g5z.2): its stops resolve through the
-// same live palette an authored `bg: "panel"` does, so a theme click and a
-// look change recolour it with no config change. The contract is stated as
-// EQUALITY with a sibling cell that names the stop directly — one
-// resolution, not a parallel one — under every state, and as the three
-// states painting three different colours.
-//
-// Same rig as test/dsl-theme-picker-recolor.test.ts: renderDsl with the
-// base palette resolved per render the way the daemon does
-// (effectiveThemeName → paletteForThemeName), the look resolved the same way
-// (effectiveLookName → lookKeyByName), the clicks driven through the real
-// wire (effectsUrl → clickUrl → VERBS). No parallel rig.
+// A ramp's palette-NAME stops resolve through the same live palette an authored
+// `bg:` does, so a theme or look click recolours it with no config change.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -32,9 +21,7 @@ import {
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
-// A light theme whose panel/warning/error all differ from textual-dark's —
-// textual-light shares warning and error with it byte-for-byte, so a click
-// between those two could not show the hot stops recolouring.
+// textual-light shares warning and error with textual-dark, so a click between those two shows nothing.
 const PICKED_THEME = "catppuccin-latte";
 const PICKED_LOOK = "vivid";
 
@@ -47,8 +34,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// `viaRamp` colours a number through named stops; `viaName` names the stop
-// the number lands on. The two cells must agree in every state.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   looks: { none: {}, ${PICKED_LOOK}: { chromaScale: 1.6, lightnessShift: 0.08 } },
@@ -72,9 +57,6 @@ const SRC = `{
 
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
-// The derived click gate — the sole authority on what a set-state may write
-// — registered per test so the look click travels the road a real click
-// travels, and released after so the daemon-global registry stays clean.
 const disposers: Array<() => void> = [];
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
@@ -159,7 +141,6 @@ describe("ramp over palette-name stops follows the live theme", () => {
       click("look", PICKED_LOOK);
       const looked = agree();
 
-      // Three states, three colours: the ramp did not freeze at first render.
       expect(new Set([base, themed, looked]).size).toBe(3);
     },
   );

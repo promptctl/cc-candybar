@@ -1,15 +1,5 @@
-// [LAW:verifiable-goals] The JSON Schema's contract: accept the configs a user
-// may legitimately write (A-grammar root tree, all variable/action kinds),
-// reject structurally-broken ones. We validate the COMMITTED artifact
-// (schema/cc-candybar.schema.json) — the same file editors load via `$schema`
-// and the package ships — so this test guards the published contract, not just
-// the generator.
-//
-// [LAW:single-enforcer] Schema = shape; lint = meaning. The schema cannot see
-// cross-references or cycles (a JSON Schema structurally can't), so each good
-// config is asserted to pass BOTH schema and the loader, each structural bad to
-// fail BOTH, and one semantically-broken config is asserted to pass the schema
-// yet fail the loader — pinning the boundary between the two layers.
+// [LAW:verifiable-goals] Validates the COMMITTED artifact, not the generator.
+// [LAW:single-enforcer] Schema = shape, loader = meaning.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -27,14 +17,11 @@ let validate: ValidateFunction;
 
 beforeAll(() => {
   const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
-  // strict:false — the generated schema carries `title`/`$id` annotations and
-  // discriminated-by-presence `anyOf`s that ajv's strict mode warns on; none
-  // affect validation outcome.
+  // strict:false — the annotations trip ajv's strict mode, never validation.
   const ajv = new Ajv({ strict: false, allErrors: true });
   validate = ajv.compile(schema);
 });
 
-// Structurally valid AND semantically valid — schema accepts, loader accepts.
 const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
   [
@@ -105,7 +92,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
-  // ── Option A shape grammar (2de.15) ─────────────────────────────────────
   [
     "A-grammar bare string segment ref",
     `{ segments: { a: { template: 'a' } }, root: "a" }`,
@@ -161,7 +147,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
   ],
 ];
 
-// Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
   ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
@@ -172,18 +157,11 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
   ["non-string palette", `{ globals: { palette: 5 } }`],
-  // `layout:` was removed in 2de.19 — schema rejects (unknown key via additionalProperties),
-  // loader rejects (migration error). Both surfaces correctly reject it.
   ["removed layout key", `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`],
-  // A node must carry its mandatory fields — the loader reports a missing
-  // direction/name (→ throws), so the schema must require them too. The empty
-  // object once passed all three arms vacuously; the required-ness closes that,
-  // keeping schema and loader in lockstep.
+  // Required in the schema too, or an empty object passes all three arms.
   ["bare container node (missing direction/children)", `{ root: { kind: 'container' } }`],
   ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
-  // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
-  // are loader refinements the schema mirrors structurally where JSON Schema
-  // can express them.)
+  // Schema-checkable cycle shape: type + minItems.
   [
     "one-member cycle",
     `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, root: { h: ['t'] } }`,
@@ -204,7 +182,6 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     "group node label with embedded newline",
     `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'g', label: 'line1\\nline2', children: [{ kind: 'segment', name: 'm' }] } }`,
   ],
-  // ── Option A bad structural (2de.15) ─────────────────────────────────────
   ["A-grammar both h and v present", `{ root: { h: [], v: [] } }`],
   ["A-grammar both seg and h present", `{ segments: { a: { template: 'a' } }, root: { seg: 'a', h: ['a'] } }`],
   ["A-grammar seg missing value (non-string)", `{ root: { seg: 42 } }`],
@@ -215,9 +192,7 @@ function schemaAccepts(source: string): boolean {
   return validate(JSON5.parse(source)) === true;
 }
 
-// The full loader pipeline (parse → merge-with-default → cross-ref + cycles),
-// run on a source string without touching disk. loadConfig itself takes a path;
-// this mirrors its body so the corpus stays inline.
+// loadConfig's body against a source string, so the corpus stays inline.
 function loaderAccepts(source: string): boolean {
   try {
     const raw = parseDslConfig("<test>", source);
@@ -245,10 +220,7 @@ describe("config JSON Schema", () => {
     });
   });
 
-  // [LAW:single-enforcer] The boundary: a dangling segment reference is a
-  // CROSS-REFERENCE error the schema structurally cannot catch. It must pass the
-  // schema (shape is fine) and fail the loader (meaning is wrong) — proving the
-  // two layers are complementary, not redundant.
+  // [LAW:single-enforcer] A cross-reference error is one no JSON Schema can catch.
   it("schema accepts but loader rejects a dangling reference", () => {
     const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
     expect(schemaAccepts(source)).toBe(true);

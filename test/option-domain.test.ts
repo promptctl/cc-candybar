@@ -1,11 +1,4 @@
-// [LAW:one-source-of-truth] Direct unit coverage of the option-domain registry
-// itself — resolveOptionDomain is the ONE place render/action.ts and
-// daemon/verbs/state-validators.ts resolve a `from` value, so its contract
-// (inline arrays are self-resolving, named domains check per-config overrides
-// before the global registry, unknown names throw naming what IS known,
-// built-ins can never be reclaimed) is pinned here rather than only exercised
-// incidentally through the config pipeline (test/dsl-actions.test.ts covers
-// that end-to-end acceptance).
+// [LAW:one-source-of-truth] resolveOptionDomain is the ONE place render/action.ts and state-validators.ts resolve a `from` value, so its contract is pinned directly here.
 
 import {
   knownOptionDomainNames,
@@ -27,11 +20,7 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("styles", new Map())).toEqual(STRIP_STYLES);
   });
 
-  // [LAW:one-source-of-truth] candybar-config-engine-71o.3: charsets/
-  // colorCompatibilities must resolve to the EXACT same consts the loader's
-  // own globals.charset/globals.colorCompatibility field validation checks
-  // against (themes/policy.ts) — a menu drawing from these can never
-  // enumerate a value the loader or the render layer would reject.
+  // [LAW:one-source-of-truth] These resolve to the EXACT consts the loader validates globals against, so a menu can never enumerate a value the loader would reject.
   test("charsets/colorCompatibilities are built-in registrations sourced from the loader's own enums", () => {
     expect(resolveOptionDomain("charsets", new Map())).toEqual(CHARSETS);
     expect(resolveOptionDomain("colorCompatibilities", new Map())).toEqual(
@@ -107,7 +96,6 @@ describe("option-domain registry", () => {
     const dispose = registerOptionDomain("idempotent-71o", () => ["x"]);
     dispose();
     expect(() => dispose()).not.toThrow();
-    // Re-registering after disposal succeeds — the slot is genuinely free.
     const dispose2 = registerOptionDomain("idempotent-71o", () => ["y"]);
     expect(resolveOptionDomain("idempotent-71o", new Map())).toEqual(["y"]);
     dispose2();

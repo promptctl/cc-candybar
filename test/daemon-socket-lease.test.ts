@@ -14,8 +14,7 @@ import {
 import { readStartTime } from "../src/daemon/process-fingerprint";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
-// The real kernel start-time of a live pid, so a planted lease matches the true
-// process identity the daemon's arbitration reads back via `ps`.
+// The real kernel start-time of a live pid, so a planted lease matches the identity `ps` reads back.
 function realStartTime(pid: number): string {
   const r = readStartTime(pid);
   if (r.kind !== "start") {
@@ -24,12 +23,7 @@ function realStartTime(pid: number): string {
   return r.token;
 }
 
-// ─── Pure arbitration: full input-space enumeration ──────────────────────────
-//
-// [LAW:effects-at-boundaries] arbitrateSocket is a pure fold over (lease read,
-// injected liveness). Every branch is exercised here with a stub predicate and
-// no real processes — this is the load-bearing correctness test for the
-// socket-theft fix (the integration tests below only prove the wiring).
+// [LAW:effects-at-boundaries] arbitrateSocket is a pure fold; every branch is exercised with a stub predicate.
 
 describe("arbitrateSocket (pure decision)", () => {
   const SAME = (): boolean => true;
@@ -53,7 +47,6 @@ describe("arbitrateSocket (pure decision)", () => {
   });
 
   test("absent → reclaim (no lease; stale socket, no live owner)", () => {
-    // The liveness predicate must not even be consulted when there is no pid.
     const isSame = jest.fn(() => true);
     const d = arbitrateSocket({ kind: "absent" }, isSame);
     expect(d.kind).toBe("reclaim");
@@ -71,29 +64,20 @@ describe("arbitrateSocket (pure decision)", () => {
     expect(isSame).not.toHaveBeenCalled();
   });
 
-  // The predicate receives BOTH the pid and the lease's start-time token — the
-  // process-identity pair that lets a recycled pid be distinguished from the
-  // original owner (RESIDUAL 1). arbitrateSocket forwards them verbatim; the
-  // sameLiveProcess fold (process-fingerprint) decides.
+  // BOTH pid and start-time — the pair that distinguishes a recycled pid.
   test("forwards pid AND startTime to the injected predicate", () => {
     const isSame = jest.fn(() => true);
     arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), isSame);
     expect(isSame).toHaveBeenCalledWith(999, "Thu Jul  9 05:04:25 2026");
   });
 
-  // [LAW:no-silent-failure] The failure DIRECTION is the whole safety argument:
-  // a busy-but-live daemon (backlog full — the ECONNREFUSED case that fooled the
-  // old connect probe) is judged by process identity, which is load-independent.
-  // As long as the SAME process is alive, arbitration attaches-and-exits
-  // regardless of whether it is currently accepting connections.
+  // [LAW:no-silent-failure] Identity, not connectability: a busy-but-live daemon is still live.
   test("liveness comes only from the injected predicate, never from connect", () => {
     const record = owned(999);
     expect(arbitrateSocket(record, () => true).kind).toBe("attach-and-exit");
     expect(arbitrateSocket(record, () => false).kind).toBe("reclaim");
   });
 });
-
-// ─── Lease file I/O ──────────────────────────────────────────────────────────
 
 describe("lease file I/O", () => {
   let dir: string;
@@ -124,12 +108,9 @@ describe("lease file I/O", () => {
       pid: 1234,
       startTime: "Thu Jul  9 05:04:25 2026",
     });
-    // 0600 — never group/world readable.
     expect(fs.statSync(leasePath).mode & 0o077).toBe(0);
   });
 
-  // A host that could not fingerprint (no `ps`) writes a null start-time; the
-  // reader surfaces it as null so sameLiveProcess falls back to kill(pid,0).
   test("writeLease → readLease round-trips a null start-time (unfingerprinted)", () => {
     writeLease(leasePath, {
       pid: 1234,
@@ -144,8 +125,7 @@ describe("lease file I/O", () => {
     });
   });
 
-  // Backward-compat: an OLD lease with no startTime key reads as unfingerprinted
-  // (null), NOT unreadable — so an in-place upgrade doesn't force a false reclaim.
+  // An OLD lease with no startTime reads as unfingerprinted, not unreadable.
   test("readLease: a lease missing startTime entirely → owned with null", () => {
     fs.writeFileSync(leasePath, JSON.stringify({ pid: 55, version: 2 }));
     expect(readLease(leasePath)).toEqual({
@@ -166,8 +146,7 @@ describe("lease file I/O", () => {
     ["non-integer pid", JSON.stringify({ pid: 3.5 })],
     ["non-positive pid", JSON.stringify({ pid: 0 })],
     ["string pid", JSON.stringify({ pid: "123" })],
-    // [LAW:no-silent-failure] A present-but-non-string startTime is a lie we
-    // refuse to coerce into a fingerprint.
+    // [LAW:no-silent-failure] A non-string startTime is a lie we refuse to coerce.
     ["non-string startTime", JSON.stringify({ pid: 9, startTime: 42 })],
   ])("readLease: %s → unreadable", (_label, contents) => {
     fs.writeFileSync(leasePath, contents);
@@ -185,9 +164,7 @@ describe("lease file I/O", () => {
     expect(fs.existsSync(leasePath)).toBe(false);
   });
 
-  // [LAW:one-source-of-truth] A displaced daemon must NOT delete the current
-  // owner's lease — that would cascade the theft (next EADDRINUSE reads absent
-  // → reclaims the live thief's socket).
+  // [LAW:one-source-of-truth] A displaced daemon must NOT delete the current owner's lease.
   test("removeLeaseIfOwned: keeps a lease owned by someone else", () => {
     writeLease(leasePath, {
       pid: 888,
@@ -208,13 +185,7 @@ describe("lease file I/O", () => {
   });
 });
 
-// ─── Integration: the storm shape, against a real daemon ─────────────────────
-//
-// [LAW:behavior-not-structure] These spawn the real daemon binary and drive its
-// EADDRINUSE arbitration end-to-end. The incumbent's "socket" is a PLAIN FILE —
-// connect() to it returns exactly the ECONNREFUSED/ENOTSOCK the deleted probe
-// classified as "dead". So this is the bug's exact trigger; the lease is what
-// keeps the incumbent from being robbed.
+// [LAW:behavior-not-structure] The incumbent's "socket" is a PLAIN FILE, so connect() returns the exact error the deleted probe called "dead".
 
 const BUDGET_MS = 8000;
 
@@ -298,11 +269,7 @@ async function waitForConnectable(
   return false;
 }
 
-// Does this pid name a live process? Signal 0 probes existence without
-// delivering a signal: it returns for a live pid, throws ESRCH for a dead one,
-// and throws EPERM for a live pid we may not signal (still alive). We assert on
-// the *aliveness*, never on the pid's numeric value — so this stays behavior,
-// not numbering, and is invariant under pid reuse. [LAW:behavior-not-structure]
+// [LAW:behavior-not-structure] Signal 0 probes existence; EPERM still means alive.
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -312,9 +279,6 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-// A live process whose pid we control — the "incumbent" whose lease the daemon
-// under test must honour. It never accepts on the socket; its only relevant
-// property is that its pid is alive.
 function spawnLiveHolder(): ChildProcess {
   return spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], {
     stdio: "ignore",
@@ -328,18 +292,12 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
     const fx = makeFixture();
     const holder = spawnLiveHolder();
     try {
-      // A missing pid would make the lease omit `pid` → readLease `unreadable`
-      // → reclaim, passing this test for the wrong reason. Assert it up front.
       expect(holder.pid).toBeDefined();
       const holderPid = holder.pid as number;
-      // Plant a stale plain file at the socket path (bind → EADDRINUSE; connect
-      // → ENOTSOCK/ECONNREFUSED, i.e. the old probe's "dead" verdict) plus a
-      // lease naming the LIVE holder pid.
+      // A stale plain file at the socket path: bind → EADDRINUSE, connect → ENOTSOCK.
       const MARKER = "INCUMBENT-SOCKET-DO-NOT-DELETE";
       fs.writeFileSync(fx.sockPath, MARKER);
-      // The lease carries the holder's REAL kernel start-time, so the daemon's
-      // arbitration reads it back via `ps` and proves the SAME live process still
-      // owns the socket → attach-and-exit (the fingerprint-match path).
+      // The REAL kernel start-time, so arbitration proves the SAME process owns it.
       writeLease(fx.leasePath, {
         pid: holderPid,
         version: 2,
@@ -350,16 +308,11 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
       const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
         const result = await raceExit(daemon, BUDGET_MS);
-        // Exits cleanly (attach-and-exit), never SIGKILL/crash.
         expect(result).not.toBe("timeout");
         expect(result).toMatchObject({ code: 0 });
-        // The incumbent's socket file is untouched — no theft.
         expect(fs.readFileSync(fx.sockPath, "utf8")).toBe(MARKER);
       } finally {
-        // killTree signals the whole process group, not just the `tsx`
-        // wrapper `daemon` names — the wrapper forks its own worker (the
-        // process that actually binds the socket), which survives as an
-        // orphan if only the wrapper is signalled.
+        // killTree signals the whole group: the tsx wrapper forks the worker that binds.
         killTree();
         release();
       }
@@ -372,7 +325,6 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
   test("dead-lease incumbent: next daemon reclaims on first attempt and serves", async () => {
     const fx = makeFixture();
     try {
-      // A holder we kill, so its pid is dead when the daemon reads the lease.
       const holder = spawnLiveHolder();
       expect(holder.pid).toBeDefined();
       const deadPid = holder.pid as number;
@@ -389,21 +341,12 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
 
       const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
-        // Reclaim → unlink stale socket → rebind → serve. First-attempt
-        // reclaim means it becomes connectable without any exit in between.
         const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
         expect(connectable).toBe(true);
-        // The stale socket was a plain file; a connectable socket here means a
-        // live daemon unlinked it, rebound, and now answers — the reclaim. The
-        // lease rewritten to `owned` is that same live owner. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
         expect(released.kind).toBe("owned");
         if (released.kind === "owned") {
-          // The lease names a LIVE owner, not a dead/bogus pid — the behavioral
-          // half of "owned" that `kind` alone can't carry. Stronger than the
-          // removed `!== deadPid` (which missed any wrong pid ≠ deadPid) and
-          // invariant under pid reuse, so it never false-reds. Not a numbering
-          // assertion: we probe the pid's aliveness, never compare its value.
+          // The lease names a LIVE owner — aliveness, never the pid's value.
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
@@ -416,16 +359,9 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
     }
   });
 
-  // RESIDUAL 1 (brandon-daemon-lifecycle-2b3.4): a crashed daemon's pid recycled
-  // to an unrelated LIVE process. A bare kill(pid,0) reads `alive` forever, so
-  // every start attaches-and-exits and NO daemon ever comes up — the inverse of
-  // the socket-theft storm. The start-time fingerprint distinguishes the recycled
-  // process (different start-time) → the daemon reclaims and SERVES.
+  // A crashed daemon's pid recycled to a live process: kill(pid,0) alone would attach forever.
   test("recycled pid (live pid, mismatched start-time): daemon comes up and serves", async () => {
     const fx = makeFixture();
-    // A live holder standing in for the process that recycled the crashed
-    // daemon's pid. Its pid is alive, but its start-time is NOT the token in the
-    // lease, so it is provably a different process.
     const holder = spawnLiveHolder();
     try {
       expect(holder.pid).toBeDefined();
@@ -436,25 +372,18 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         pid: recycledPid,
         version: 2,
         binPath: "/crashed",
-        // A start-time that cannot be the live holder's (far in the past) — the
-        // fingerprint mismatch is what forces the reclaim.
+        // A start-time that cannot be the live holder's — the mismatch forces the reclaim.
         startTime: "Thu Jan  1 00:00:00 1970",
       });
 
       const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
-        // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
         const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
         expect(connectable).toBe(true);
-        // Connectable stale-file socket ⇒ a live daemon reclaimed and serves;
-        // `owned` lease ⇒ that live owner now holds it. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
         expect(released.kind).toBe("owned");
         if (released.kind === "owned") {
-          // The reclaimed lease names a LIVE owner (the new daemon), not the
-          // recycled pid's stale identity. Behavioral, invariant under the pid
-          // reuse this very case is built around — we probe aliveness, not the
-          // number, so recycledPid == successor pid could never false-red it.
+          // A LIVE owner: aliveness, invariant under the pid reuse this case is built around.
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {

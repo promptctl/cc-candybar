@@ -1,10 +1,3 @@
-// [LAW:behavior-not-structure] Tests assert on the observable contract:
-// either a returned DslConfig with the expected shape, or a ConfigError
-// whose issues describe the problem. Tests never reach into private
-// helpers — extractTemplateRefs and findKeyLine are exported for direct
-// unit-test coverage of their tricky bits, but everything else goes
-// through parseDslConfig.
-
 import {
   ConfigError,
   extractTemplateRefs,
@@ -20,15 +13,11 @@ import { rootNode, rootOf } from "../src/config/root";
 
 const FILE = "/tmp/test.json5";
 
-// The bundled default supplies `gitaculous`; merging a user file on top of it is
-// the real production cascade. Palettes must be allow-listed because the default
-// declares `globals.palette`.
 const ALL_PALETTES = new Set(listResolvablePaletteNames());
 function validateAgainstDefault(source: string) {
   return parseAndValidate(FILE, source, ALL_PALETTES, DEFAULT_DSL_CONFIG);
 }
 
-// Convenience builder for vertical stacks of horizontal rows.
 type Row = { segments: readonly string[]; when?: string };
 const vert = (...rows: (Row | readonly string[])[]): LayoutNode => ({
   kind: "container",
@@ -79,8 +68,6 @@ function expectIssue(
   }
 }
 
-// ─── JSON5 syntax errors ─────────────────────────────────────────────────────
-
 describe("loadDslConfig — JSON5 syntax", () => {
   test("malformed JSON throws with line/col", () => {
     const err = expectError("{ globals: { default_bg: ");
@@ -102,8 +89,6 @@ describe("loadDslConfig — JSON5 syntax", () => {
     expectIssue("[1, 2, 3]", { path: "", message: "Config root must be an object" });
   });
 });
-
-// ─── Top-level shape ─────────────────────────────────────────────────────────
 
 describe("loadDslConfig — top-level shape", () => {
   test("empty config is valid", () => {
@@ -150,16 +135,13 @@ describe("loadDslConfig — top-level shape", () => {
   });
 
   test("layout key emits migration error", () => {
-    // [LAW:no-silent-failure] `layout:` removed in 2de.19 — rejected loudly
-    // with an A-grammar rewrite hint rather than an "unknown key" message.
+    // [LAW:no-silent-failure] Rejected with a rewrite hint, not "unknown key".
     expectIssue(`{ layout: "not-array" }`, {
       path: "layout",
       message: /no longer supported/,
     });
   });
 });
-
-// ─── Globals ─────────────────────────────────────────────────────────────────
 
 describe("loadDslConfig — globals", () => {
   test("all string fields accepted", () => {
@@ -254,9 +236,7 @@ describe("loadDslConfig — globals", () => {
     });
   });
 
-  // brandon-display-dam.4: "auto" was the LEGACY display.colorCompatibility
-  // default, so migrating configs will carry it. It gets a pointed rejection
-  // explaining WHY (daemon env ≠ client terminal), not the generic enum list.
+  // The rejection must explain WHY (daemon env ≠ client terminal).
   test('the legacy "auto" is rejected with a migration pointer', () => {
     expectIssue(`{ globals: { colorCompatibility: "auto" } }`, {
       path: "globals.colorCompatibility",
@@ -268,8 +248,6 @@ describe("loadDslConfig — globals", () => {
     });
   });
 });
-
-// ─── Variable kinds ──────────────────────────────────────────────────────────
 
 describe("loadDslConfig — variable source kinds", () => {
   test("literal: string/number/boolean values", () => {
@@ -395,9 +373,7 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
-  // [LAW:no-silent-failure] Non-ttl cache forms on time vars were silently
-  // coerced to the default TTL at render; they are now load-time diagnostics
-  // naming ttl as the only supported form (brandon-config-validation-cje).
+  // [LAW:no-silent-failure] A non-ttl form must be a load-time diagnostic.
   test("time: cache is ttl-only — non-ttl forms are load-time diagnostics", () => {
     for (const cache of [
       `{ watch_file: ".git/HEAD" }`,
@@ -461,12 +437,7 @@ describe("loadDslConfig — variable source kinds", () => {
   });
 });
 
-// ─── Parse step ──────────────────────────────────────────────────────────────
-
-// [LAW:behavior-not-structure] The parse step is a present-key union like
-// `cache:`; these pin the loader's contract for it — each arm, exactly-one,
-// the retired `regex:` spelling, the pattern proofs, and `default` living in
-// the arm's output domain — through the real parse→validate entry.
+// [LAW:behavior-not-structure] Each arm, through the real parse→validate entry.
 describe("loadDslConfig — the parse step of shell/file sources", () => {
   const shell = (fields: string) =>
     `{ variables: { x: { kind: "shell", command: "echo", cache: { never: true }${fields ? `, ${fields}` : ""} } } }`;
@@ -555,8 +526,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       path: "variables.x.parse.regex",
       message: "parse.regex is not a valid regular expression",
     });
-    // A trailing backslash compiles ONLY when something follows it — the
-    // proof is the pattern alone, never the pattern piped for its group count.
     expectIssue(shell(`parse: { regex: "(a)\\\\" }`), {
       path: "variables.x.parse.regex",
       message: "parse.regex is not a valid regular expression",
@@ -593,7 +562,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
         shell(`parse: { json: true }, default: { spent: 0, tags: ["a"] }`),
       ).variables.x,
     ).toMatchObject({ default: { spent: 0, tags: ["a"] } });
-    // A JSON scalar is a document too; null is not a fallback anyone can read.
     expect(
       parseAndValidate(FILE, shell(`parse: { json: true }, default: "plain"`))
         .variables.x,
@@ -602,8 +570,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       path: "variables.x.default",
       message: "variables.x.default must be a JSON value",
     });
-    // A programmatic config can hand the stamp an object JSON5 never produces;
-    // an exotic object with no own enumerable fields is not a document.
     const issues: ConfigIssue[] = [];
     validateVariables(
       { source: "", issues, allowedPalettes: new Set(), groups: [] },
@@ -642,7 +608,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
         message: 'Template references unknown variable ".budget.spent"',
       },
     );
-    // A segment-local document is namespaced like any local.
     expect(() =>
       parseAndValidate(
         FILE,
@@ -662,8 +627,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     });
   });
 });
-
-// ─── Cache policies ──────────────────────────────────────────────────────────
 
 describe("loadDslConfig — cache policies", () => {
   const base = (cache: string) =>
@@ -738,8 +701,6 @@ describe("loadDslConfig — cache policies", () => {
   });
 });
 
-// ─── Segments ────────────────────────────────────────────────────────────────
-
 describe("loadDslConfig — segments", () => {
   test("template required", () => {
     expectIssue(`{ segments: { cwd: {} } }`, {
@@ -808,11 +769,8 @@ describe("loadDslConfig — segments", () => {
   });
 });
 
-// ─── Per-segment palette switch (3rq.2) ──────────────────────────────────────
-
 describe("loadDslConfig — palette switch", () => {
-  // Inject a tiny set so validation behavior is independent of registry
-  // contents; "real" names (gruvbox/monokai/nord) exercise the default path.
+  // Injected so validation is independent of the real registry's contents.
   const ALLOWED = new Set(["gruvbox", "monokai", "solar"]);
 
   test("globals.palette is preserved when a known name", () => {
@@ -865,7 +823,6 @@ describe("loadDslConfig — palette switch", () => {
   });
 
   test("injected allowed set overrides the default registry", () => {
-    // A name in the injected set passes even though it is not a real theme.
     const ok = parseAndValidate(
       FILE,
       `{ globals: { palette: "solar" } }`,
@@ -873,8 +830,7 @@ describe("loadDslConfig — palette switch", () => {
     );
     expect(ok.globals.palette).toBe("solar");
 
-    // A real theme name fails when the injected set excludes it — proving the
-    // injected set is authoritative, not merely additive.
+    // The injected set is authoritative, not merely additive.
     const err = (() => {
       try {
         parseAndValidate(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
@@ -888,10 +844,8 @@ describe("loadDslConfig — palette switch", () => {
   });
 });
 
-// ─── Layout migration errors (2de.19) ────────────────────────────────────────
-// [LAW:no-silent-failure] `layout:` was removed in 2de.19. Any config that
-// still uses it must receive a loud, migration-pointing error (not "unknown
-// key") so the author knows exactly how to rewrite their config.
+// [LAW:no-silent-failure] A config still using `layout:` must get a
+// migration-pointing error, never "unknown key".
 
 describe("loadDslConfig — layout (removed; migration errors)", () => {
   test("any layout: value emits the A-grammar migration error", () => {
@@ -915,7 +869,6 @@ describe("loadDslConfig — layout (removed; migration errors)", () => {
   });
 
   test("kind: cells in root emits migration error", () => {
-    // [LAW:no-silent-failure] `kind: "cells"` was removed in 2de.19.
     expectIssue(
       `{ segments: { a: { template: "x" } }, root: { kind: "cells", segments: ["a"] } }`,
       {
@@ -934,11 +887,8 @@ describe("loadDslConfig — layout (removed; migration errors)", () => {
   });
 });
 
-// ─── Segment rename migration (pdu.4: gitTaculous → gitaculous) ───────────────
-// [LAW:no-silent-failure] The built-in segment was renamed. A user config that
-// still names the old key (merged on top of the bundled default, which now
-// declares `gitaculous`) must get a loud, migration-POINTING error — not the
-// generic "does not match" nor a silent empty render.
+// [LAW:no-silent-failure] The old segment key must get a migration-POINTING
+// error, not a generic mismatch nor a silent empty render.
 
 describe("loadDslConfig — renamed built-in segment", () => {
   test("a root ref to the old name errors with a pointer to the new name", () => {
@@ -962,8 +912,6 @@ describe("loadDslConfig — renamed built-in segment", () => {
     ).not.toThrow();
   });
 });
-
-// ─── Option A shape grammar (2de.15) ─────────────────────────────────────────
 
 describe("loadDslConfig — A-grammar (seg/h/v)", () => {
   test("bare string lowers to a segment ref", () => {
@@ -1065,8 +1013,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
   });
 
   test("bijectivity: A-grammar and canonical spelling lower to identical trees", () => {
-    // [LAW:one-source-of-truth] Both spellings must produce the SAME canonical
-    // tree — they are two representations of one grammar, not two grammars.
+    // [LAW:one-source-of-truth] Two representations of one grammar, not two.
     const canonical = parseAndValidate(
       FILE,
       `{
@@ -1102,8 +1049,6 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
         variables: { "session.id": { kind: "input", path: "session_id", default: "" } },
       }`,
     );
-    // The group lowers to its toggle segment with the body hung on it; the
-    // body holds { h: ["m", "n"] } — a horizontal container of two segment refs.
     const root = rootNode(cfg.root);
     expect(root.children[0]).toMatchObject({
       kind: "segment",
@@ -1147,10 +1092,6 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
     });
   });
 });
-
-// ─── Cross-reference validation ──────────────────────────────────────────────
-
-// ─── Root fragment: the `{ rows }` arm (brandon-config-merge-uk3) ────────────
 
 describe("loadDslConfig — root rows fragment", () => {
   const SEG = `segments: { a: { template: "x" }, b: { template: "y" } }`;
@@ -1215,8 +1156,7 @@ describe("loadDslConfig — root rows fragment", () => {
   });
 
   test("a `rows` map nested inside a container is not a layout node", () => {
-    // Rows merge at a root, never at a container: inside a tree the object
-    // falls to the node grammar, which knows no `rows` key.
+    // Rows merge at a root only; inside a tree the node grammar has no `rows`.
     expect(() =>
       parseAndValidate(FILE, `{ ${SEG}, root: { h: [{ rows: { r: "a" } }] } }`),
     ).toThrow(/root\.h\[0\]\.kind.*a layout node "kind" must be/);
@@ -1276,10 +1216,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("dotted ref is rejected when only a scalar prefix is declared", () => {
-    // .session.id where only `session` is declared: runtime would try to
-    // field-access a scalar and throw MissingFieldError. Loader rejects
-    // ahead of time. Mirrors the scope-proxy's leaf-vs-namespace dispatch
-    // in src/template-engine/scope.ts.
+    // Field-accessing a scalar would throw at render; the loader rejects first.
     expectIssue(
       `{ variables: { session: { kind: "input", path: "session" } },
          segments: { s: { template: "{{ .session.id }}" } } }`,
@@ -1291,9 +1228,6 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("bare reference to a namespace prefix passes (matches scope.has)", () => {
-    // .session where only `session.id` is declared: scope proxy returns a
-    // sub-proxy. Loader treats this as a valid ref because the rendering
-    // failure (if any) is the template engine's job, not the loader's.
     const cfg = parseAndValidate(
       FILE,
       `{ variables: { "session.id": { kind: "input", path: "session.id" } },
@@ -1303,7 +1237,6 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("string literals inside templates are NOT scanned for refs", () => {
-    // A literal ".foo.bar" inside quotes should not count as a reference.
     const cfg = parseAndValidate(
       FILE,
       `{ segments: { s: { template: "{{ printf \\".foo.bar\\" }}" } } }`,
@@ -1352,10 +1285,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("depends_on naming a sibling local in bare form is rejected with namespaced suggestion", () => {
-    // [LAW:one-source-of-truth] The depends_on reaction calls store.read with
-    // each listed name verbatim, and segment locals exist in the store only
-    // under segName.varName — a bare sibling name throws at runtime, so the
-    // validator rejects it at load and names the form that works.
+    // [LAW:one-source-of-truth] depends_on entries are literal store.read keys.
     expectIssue(
       `{ segments: {
         s: {
@@ -1375,8 +1305,6 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("depends_on naming a bare segment-local from a global var is plainly unknown", () => {
-    // No owning segment — no namespaced hint, just the unknown-variable
-    // diagnostic (end-anchored to assert the hint's absence).
     expectIssue(
       `{ variables: {
         g: { kind: "shell", command: "echo", cache: { depends_on: ["local"] } }
@@ -1405,9 +1333,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("depends_on requires an exact store key, not a navigable prefix", () => {
-    // [LAW:one-source-of-truth] Template refs may name a dotted prefix and
-    // navigate INTO the value (refResolves), but depends_on entries are
-    // literal store.read keys — "x" is not a key when only "x.y" is declared.
+    // [LAW:one-source-of-truth] A template ref may navigate; a key may not.
     expectIssue(
       `{ variables: {
         "x.y": { kind: "literal", value: "1" },
@@ -1421,10 +1347,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("bare ref to own segment-local var is rejected with namespaced suggestion", () => {
-    // [LAW:one-source-of-truth] The runtime stores segment locals ONLY under
-    // segName.varName and the scope proxy resolves only literal store keys —
-    // a bare own-segment ref always throws MissingFieldError at render. The
-    // validator enforces the same rule at load, and names the form that works.
+    // [LAW:one-source-of-truth] Segment locals live only under segName.varName.
     expectIssue(
       `{ segments: {
         s: {
@@ -1460,8 +1383,6 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("bare segment-local ref outside any segment context is plainly unknown", () => {
-    // A global template var has no owning segment — no namespaced hint, just
-    // the unknown-variable diagnostic.
     expectIssue(
       `{ variables: { g: { kind: "template", template: "{{ .local }}" } },
          segments: {
@@ -1472,7 +1393,6 @@ describe("loadDslConfig — cross-references", () => {
       }}`,
       {
         path: "variables.g.template",
-        // End-anchored: no namespaced hint outside a segment context.
         message: /Template references unknown variable "\.local"$/,
       },
     );
@@ -1515,8 +1435,6 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.segments.b!.template).toBe("{{ .a.val }}");
   });
 });
-
-// ─── Cycle detection ─────────────────────────────────────────────────────────
 
 describe("loadDslConfig — cycle detection", () => {
   test("two-variable cycle is reported", () => {
@@ -1576,7 +1494,6 @@ describe("loadDslConfig — cycle detection", () => {
     expect(Object.keys(cfg.variables)).toEqual(["a", "b", "c"]);
   });
 
-  // depends_on cycle tests
   test("two-variable depends_on cycle is reported", () => {
     expectIssue(
       `{ variables: {
@@ -1611,7 +1528,6 @@ describe("loadDslConfig — cycle detection", () => {
     expect(Object.keys(cfg.variables)).toEqual(["a", "b"]);
   });
 
-  // cache.key cycle tests
   test("two-variable cache.key cycle is reported", () => {
     expectIssue(
       `{ variables: {
@@ -1635,7 +1551,6 @@ describe("loadDslConfig — cycle detection", () => {
     );
   });
 
-  // mixed cycle: template var references shell var which depends_on the template var
   test("mixed cycle (template → depends_on → template) is reported", () => {
     expectIssue(
       `{ variables: {
@@ -1649,8 +1564,6 @@ describe("loadDslConfig — cycle detection", () => {
     );
   });
 });
-
-// ─── Error aggregation ───────────────────────────────────────────────────────
 
 describe("loadDslConfig — error aggregation", () => {
   test("multiple unrelated errors all reported in one throw", () => {
@@ -1687,8 +1600,6 @@ describe("loadDslConfig — error aggregation", () => {
     expect(issue?.line).toBe(3);
   });
 });
-
-// ─── Valid corpus ────────────────────────────────────────────────────────────
 
 describe("loadDslConfig — valid corpus", () => {
   test("full-featured DSL config covering every source kind", () => {
@@ -1761,8 +1672,6 @@ describe("loadDslConfig — valid corpus", () => {
     });
   });
 });
-
-// ─── Helper unit tests ───────────────────────────────────────────────────────
 
 describe("extractTemplateRefs", () => {
   test("simple ref", () => {

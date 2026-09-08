@@ -1,35 +1,12 @@
-// [LAW:one-source-of-truth] The single point that merges a raw user config
-// onto a default DslConfig to fill missing keys. A user file declares only
-// what differs; the cascade here (shallow-merge globals, by-name merge
-// variables/segments/actions/…, by-name merge of root's rows) is the one place
-// "absent means inherit" is decided. This file changes when the merge
-// semantics change.
+// [LAW:one-source-of-truth] The one place "absent means inherit" is decided.
 //
-// [LAW:one-way-deps] `dflt` is a required parameter — this module is generic
-// merge machinery and does not know about DEFAULT_DSL_CONFIG, the specific
-// bundled instance built ON TOP of it (default-dsl-config.ts imports this
-// function to synthesize itself). A default param pointing back at
-// DEFAULT_DSL_CONFIG would make this generic module depend on its own
-// specific consumer, a cycle. Callers who want "the bundled default" import
-// DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
+// [LAW:one-way-deps] `dflt` is a required parameter: defaulting it to
+// DEFAULT_DSL_CONFIG, which is built on top of this function, would be a cycle.
 
 import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
 import { EMPTY_ROWS, mergeRoot } from "../root.js";
 
-/**
- * Merge a RawDslConfig on top of a default DslConfig. Pure function.
- *
- *   globals    : shallow merge per field (user wins per-field)
- *   variables  : merge by name (user wins per-name)
- *   segments   : merge by name (user wins per-name)
- *   root       : merge by row name (user wins per-name) when the user wrote a
- *                `{ rows }` map; a whole tree replaces the default's rows
- *                (root.ts's mergeRoot — the one fold presets reuse); absent
- *                → the empty rows map, the merge's identity.
- *                [LAW:one-source-of-truth] `layout:` is rejected at parse time
- *                with a migration error (removed in 2de.19), so only `root`
- *                ever reaches this function.
- */
+/** Merge a RawDslConfig on top of a default DslConfig. Pure function. */
 export function mergeWithDefault(
   raw: RawDslConfig,
   dflt: DslConfig,
@@ -39,28 +16,10 @@ export function mergeWithDefault(
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
     segments: { ...dflt.segments, ...(raw.segments ?? {}) },
     root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
-    // declares only the actions that differ from the bundled default (which
-    // ships none).
     actions: { ...dflt.actions, ...(raw.actions ?? {}) },
-    // [LAW:one-source-of-truth] looks merge by name, same cascade — a user
-    // overrides one adaptation by re-declaring its name; the bundled stdlib
-    // (incl. the "none" identity floor) survives every merge by construction.
     looks: { ...dflt.looks, ...(raw.looks ?? {}) },
-    // [LAW:one-source-of-truth] presets merge by name, same cascade — a user
-    // overrides one arrangement by re-declaring its name; the bundled stdlib
-    // (incl. the "default" empty-fragment floor effectivePresetName collapses
-    // to) survives every merge by construction, exactly as looks' "none" does.
     presets: { ...dflt.presets, ...(raw.presets ?? {}) },
-    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
-    // `globals` cascade above, not the by-name cascades around it, because it
-    // IS a globals fragment: a user retuning edit mode's separator says nothing
-    // about its `style`, exactly as a user setting `globals.padding` says
-    // nothing about `globals.charset`.
     editGlobals: { ...dflt.editGlobals, ...(raw.editGlobals ?? {}) },
-    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
-    // overrides one formatter helper by re-declaring its name; the rest inherit
-    // from the bundled default.
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
 }

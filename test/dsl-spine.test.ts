@@ -1,10 +1,5 @@
-// [LAW:single-enforcer] This is the integration test for the bzh.7 render
-// spine. It drives registerDslConfig + renderDsl end-to-end with a REAL
-// DslConfig (parsed from a committed fixture) and a REAL fixture payload —
-// no hand-seeded stores, no single-segment shortcuts.
-//
-// [LAW:verifiable-goals] Success is a byte string that matches a committed
-// snapshot. Any byte drift fails loudly.
+// [LAW:single-enforcer] Drives registerDslConfig + renderDsl end-to-end with a
+// REAL config and payload. [LAW:verifiable-goals] Success is committed bytes.
 
 import { SessionState } from "../src/daemon/session-state";
 import { readFileSync } from "node:fs";
@@ -19,10 +14,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
 
-// [LAW:single-enforcer] Inlined fixture values formerly served by
-// `test/parity/fixtures.ts`. The parity infra was retired alongside the
-// legacy renderer (bzh.2), so this test holds its own minimal fixture
-// rather than importing from a module whose other consumers are gone.
 const SESSION_ID = "0a1b2c3d-4e5f-6789-abcd-ef1234567890";
 
 const HOOK_DATA = {
@@ -38,10 +29,7 @@ const HOOK_DATA = {
   },
 } as const;
 
-// The two palette names used in the fixture. Injected into parseDslConfig so
-// validation does not depend on the filesystem — only the bundled registry.
-// [LAW:one-source-of-truth] Names are the source of truth; the resolver is
-// derived from them at render time via getThemePalette.
+// [LAW:one-source-of-truth] Injected so validation never touches the filesystem.
 const ALLOWED_PALETTES = new Set(["textual-dark", "gruvbox"]);
 
 const FIXTURE_SOURCE = readFileSync(
@@ -49,18 +37,14 @@ const FIXTURE_SOURCE = readFileSync(
   "utf-8",
 );
 
-// Strip opts match the parity harness so bytes are comparable. Width is
-// Infinity so the committed snapshot stays a single line — wrap behavior
-// is tested in test/strip-flex.test.ts (the renderStripCells wrap path).
+// Width is Infinity so the committed snapshot stays a single line.
 const OPTS = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
-// HOME is controlled so the directory template's home-collapse branch is
-// never taken — makes path rendering deterministic across machines.
-// (declareEnv reads process.env.HOME at registerDslConfig call time.)
+// HOME is controlled so the directory template's home-collapse is never taken.
 let savedHome: string | undefined;
 beforeEach(() => {
   savedHome = process.env["HOME"];
@@ -81,7 +65,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   }
 
   test("parseDslConfig accepts the committed fixture", () => {
-    // Validates the fixture is syntactically correct and cross-reference-clean.
     expect(() =>
       parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES),
     ).not.toThrow();
@@ -89,7 +72,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
 
   test("registerDslConfig populates the store with all declared variables", () => {
     const { store } = buildRuntime(HOOK_DATA.workspace.current_dir);
-    // All four declared variables must be present.
     expect(store.has("current_dir")).toBe(true);
     expect(store.has("project_dir")).toBe(true);
     expect(store.has("home")).toBe(true);
@@ -122,7 +104,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
 
     renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
 
-    // After the first render, input boxes must hold the payload values.
     expect(store.read("current_dir")).toBe(HOOK_DATA.workspace.current_dir);
     expect(store.read("project_dir")).toBe(HOOK_DATA.workspace.project_dir);
     expect(store.read("session.id")).toBe(SESSION_ID);
@@ -148,7 +129,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       string,
       readonly import("@promptctl/rich-js").RichText[]
     >();
-    // Pre-seed with a stale entry to verify renderDsl clears it.
     sink.set("doesNotExist", []);
 
     renderDsl(
@@ -162,15 +142,10 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       { perSegmentSink: sink },
     );
 
-    // Stale entry from a previous render must be gone.
     expect(sink.has("doesNotExist")).toBe(false);
-    // Every layout entry that wasn't `when`-hidden appears in the sink.
     expect(sink.size).toBeGreaterThan(0);
-    // [LAW:one-source-of-truth] The tree the render WALKED is the active
-    // preset's resolved root, not `config.root` — the synthesis passes
-    // (settings menu, edit chrome) write `presets[name].root` and leave
-    // `config.root` as the author wrote it. Reading the same tree renderDsl
-    // reads is what makes this assertion about the render.
+    // [LAW:one-source-of-truth] The walked tree is the active preset's root,
+    // not `config.root`, which the synthesis passes leave as the author wrote.
     const allLayoutSegments = [
       ...walkNodes(presetRoot(config, PRESET_FLOOR).node),
     ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
@@ -180,10 +155,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     }
   });
 
-  // [LAW:verifiable-goals] The exact bytes are committed as a snapshot.
-  // Any byte drift — from template changes, palette changes, or render-path
-  // changes — fails loudly here. This is the "assembled-line fixture" that
-  // grows monotonically as more segments reach dsl-parity.
   test("renderDsl produces exact committed bytes (spine correctness)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
@@ -202,8 +173,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("per-segment palette (sessionId uses gruvbox): output differs from base-only render", () => {
-    // Build two runtimes: one with the fixture (sessionId → gruvbox palette),
-    // one with a modified fixture that inherits the base palette for sessionId.
     // Different palettes must produce different ANSI bytes.
     const withGruvboxPalette = (() => {
       const { config, compiled, store, registry } = buildRuntime(
@@ -213,7 +182,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       return renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     })();
 
-    // Override: same fixture but sessionId uses the base palette (textual-dark).
     const noSegmentPaletteSource = FIXTURE_SOURCE.replace(
       "palette: 'gruvbox',",
       "",

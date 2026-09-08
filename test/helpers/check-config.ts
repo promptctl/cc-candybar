@@ -1,8 +1,5 @@
 // [LAW:one-source-of-truth] The one way a test drives a config TEXT through
-// `cc-candybar check`: a real temp file on disk, the actual CLI entry function,
-// never a hand-built render rig. Shared by the shipped-config suites
-// (examples/, plugin/templates/) so they cannot disagree about what "clean"
-// means.
+// `cc-candybar check`: a real temp file and the actual CLI entry function.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -10,8 +7,6 @@ import path from "node:path";
 
 import { checkConfig, checkPlan, type CheckOutcome } from "../../src/check";
 
-// Run `fn` against a real temp config file holding `text`. The file outlives
-// the whole of `fn` (checkConfig is async: it awaits its sources' first run).
 export async function withTempConfig<T>(
   text: string,
   fn: (configPath: string) => Promise<T> | T,
@@ -26,9 +21,6 @@ export async function withTempConfig<T>(
   }
 }
 
-// [LAW:no-silent-failure] The clean outcome, or a throw carrying the outcome's
-// OWN diagnostic — a broken config names its actual load error in the Jest
-// output instead of an opaque kind mismatch.
 export function expectClean(
   label: string,
   outcome: CheckOutcome,
@@ -43,7 +35,6 @@ export function expectClean(
   return outcome;
 }
 
-// The clean outcome of a config given as text.
 export function checkText(
   label: string,
   text: string,

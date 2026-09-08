@@ -1,18 +1,6 @@
-// The colour function: a node's ADDRESS in the layout tree selects one entry
-// of the theme's own decorative vocabulary. Rationale, measurements and the
-// rejected alternatives: design-docs/COLOUR-FROM-THEME-VOCABULARY.md.
-//
-// The rule: a segment's decorative background is `mix(base, themeHue, amount)`
-// — both operands colours the theme already contains — with the entry chosen
-// by the node's position in the tree. It SELECTS from the theme; it never
-// synthesises a colour.
-//
-// [LAW:effects-at-boundaries] Pure. No renderer wiring, no I/O, no traversal
-// state: any node's colour is computable from its address alone, without
-// visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
-// imports only rich-js, which owns the one colour operation used (`blendRgb`);
-// cc-candybar keeps the POLICY (which roles, which amounts, which address
-// formula) and no colour arithmetic of its own.
+// [LAW:effects-at-boundaries] Pure: any node's colour is computable from its
+// address alone. [LAW:one-way-deps] cc-candybar keeps the policy of which roles,
+// amounts and address formula; rich-js owns the one colour operation.
 
 import {
   blendRgb,
@@ -21,44 +9,27 @@ import {
   type Palette,
 } from "@promptctl/rich-js";
 
-// --- The vocabulary -----------------------------------------------------------
-
-/**
- * The three non-semantic root hues. `error`/`success`/`warning` are
- * deliberately NOT here: decoration cannot collide with meaning because
- * meaning is not in the set — strictly stronger than hue-anchoring, which
- * only stopped the semantic colours from moving while leaving decoration free
- * to arrive at them.
- */
+/** The three non-semantic root hues: meaning is not in the set at all. */
 export const DECOR_HUES = ["primary", "secondary", "accent"] as const;
 export type DecorHue = (typeof DECOR_HUES)[number];
 
-/** The theme's neutral surfaces, each carrying its own lightness. */
 export const DECOR_BASES = ["surface", "panel", "surface-lighten-1"] as const;
 export type DecorBase = (typeof DECOR_BASES)[number];
 
-/** Tint amounts. Decoration never exceeds the largest — that bound is the tint region's edge. */
+/** Tint amounts; decoration never exceeds the largest. */
 export const DECOR_AMTS = [0.16, 0.3] as const;
 export type DecorAmount = (typeof DECOR_AMTS)[number];
 
-/** The tint region's edge: the most-tinted cell any hue can produce. Derived, never restated. */
 export const DECOR_MAX_AMOUNT: DecorAmount = DECOR_AMTS.reduce((a, b) =>
   b > a ? b : a,
 );
 
-/**
- * The theme's two poles. Directional cues are mixes toward them — active
- * toward `foreground`, recessed toward `background` — which is what makes the
- * cues invert on their own between light and dark themes, with no branch.
- */
+/** Cues are mixes toward these, so they invert between light and dark. */
 export type ThemePole = "foreground" | "background";
 
-/** The roles whose meaning decoration must never borrow. */
 export type SemanticRole = "error" | "success" | "warning";
 
-// [LAW:types-are-the-program] The exclusion is a theorem about the constant,
-// checked by the compiler: adding a semantic role to DECOR_HUES fails
-// `pnpm typecheck`, not a review. (test/decor.test.ts asserts it at runtime too.)
+// [LAW:types-are-the-program] A semantic role in DECOR_HUES fails typecheck.
 const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
   ? true
   : never = true;
@@ -70,12 +41,7 @@ export interface DecorEntry {
   readonly amount: DecorAmount;
 }
 
-/**
- * The decorative vocabulary, ORDERED: amount-major, then hue, then base, so
- * consecutive indices walk the bases of one hue before changing hue, and the
- * whole lighter set precedes the whole deeper set. 2 × 3 × 3 = 18 entries, all
- * of them the theme's own. An address selects an entry; it never synthesises.
- */
+/** Ordered amount-major, then hue, then base. An address selects an entry. */
 export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_AMTS.flatMap(
   (amount) =>
     DECOR_HUES.flatMap((hue) =>
@@ -83,21 +49,12 @@ export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_AMTS.flatMap(
     ),
 );
 
-// --- Distributions ------------------------------------------------------------
-
-/**
- * Where sibling `index` of `count` lands in [0, 1). One field, read at every
- * level of the tree.
- *
- * [LAW:dataflow-not-control-flow] The distribution is a VALUE an instance
- * carries, not a branch: `decorFor` calls whatever it is handed and the five
- * shipped ones are five entries in one table.
- */
+/** [LAW:dataflow-not-control-flow] A VALUE an instance carries, not a branch. */
 export type Distribution = (index: number, count: number) => number;
 
 const PHI = 0.6180339887498949;
 
-/** Bit reversal of `index` as a binary fraction: 0, ½, ¼, ¾, ⅛, … Never reads the count. */
+/** Bit reversal of `index` as a binary fraction. Never reads the count. */
 const vanDerCorput: Distribution = (index) => {
   let value = 0;
   let place = 0.5;
@@ -105,13 +62,7 @@ const vanDerCorput: Distribution = (index) => {
   return value;
 };
 
-/**
- * The config spelling of the five shipped distributions, default first — the
- * vocabulary a container's or a `{{ menu }}`'s `distribution` field validates
- * against, and the order a load error lists them in. [LAW:one-source-of-truth]
- * The table below is typed over THIS tuple, so a name without a function, or a
- * function without a name, is a compile error.
- */
+/** [LAW:one-source-of-truth] The table below is typed over THIS tuple. */
 export const DISTRIBUTION_NAMES = [
   "van-der-corput",
   "golden-angle",
@@ -126,14 +77,8 @@ export const isDistributionName = (value: unknown): value is DistributionName =>
   typeof value === "string" &&
   (DISTRIBUTION_NAMES as readonly string[]).includes(value);
 
-/**
- * The five shipped distributions. Isolation is a property of the CHOSEN
- * distribution, not of the system: `van-der-corput`, `golden-angle` and
- * `uniform` never read the sibling count, so under them adding, removing or
- * hiding a sibling moves nobody. `monotonic` and `ends-interleaved` read it —
- * legitimate for a CLOSED set (a menu's option domain, where the count is the
- * set) and a trade the author spends knowingly.
- */
+/** The count-blind three move nobody when a sibling is hidden; the other two
+ * are a trade the author spends knowingly on a CLOSED set. */
 export const DISTRIBUTIONS = {
   "van-der-corput": vanDerCorput,
   "golden-angle": (index) => (index * PHI) % 1,
@@ -147,53 +92,28 @@ export const DISTRIBUTIONS = {
 
 export const DEFAULT_DISTRIBUTION: DistributionName = "van-der-corput";
 
-/**
- * [LAW:single-enforcer] THE resolution of an authored distribution NAME to the
- * function an instance places by — an absent name is the default. Every placer
- * (a compiled container, a `{{ menu }}`'s options, a bare `{{ picker }}`) reads
- * "omitted yields van der Corput" through this one call, so no two of them can
- * default differently.
- */
+/** [LAW:single-enforcer] One name-to-function resolution, so no two placers
+ * can default differently. */
 export const placedBy = (name: DistributionName | undefined): Distribution =>
   DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
 
-// --- Address -> entry ---------------------------------------------------------
-
-/** Which child, of how many. `0 <= index < count`. */
 export interface Position {
   readonly index: number;
   readonly count: number;
 }
 
-/**
- * One step down the tree: a position, placed by the PARENT's distribution —
- * the one field every placer carries, read here at every level of the tree.
- * [LAW:dataflow-not-control-flow] A step carries the function it is placed by,
- * so the fold below calls whatever each level was handed; a tree mixing five
- * distributions is five values, not five code paths.
- */
+/** [LAW:dataflow-not-control-flow] A step carries the function it is placed by,
+ * so a tree mixing five distributions is five values, not five code paths. */
 export interface AddressStep extends Position {
   readonly distribution: Distribution;
 }
 
-/** The steps from the root to a node. The root's address is empty. */
 export type Address = readonly AddressStep[];
 
-/**
- * Each level's contribution to the selection decays by this factor, so the
- * row decides the coarse position and the cell refines it. The value the
- * evidence demo was validated with; the doc's separations were measured under it.
- */
+/** Each level's contribution decays by this: rows coarsen, cells refine. */
 export const LEVEL_DECAY = 0.37;
 
-/**
- * The index into a vocabulary of `size` entries that `address` selects: a
- * weighted fold of the per-level positions — each level placed by its own
- * step's distribution — rounded, taken modulo the size. A size of 1 selects
- * entry 0 for every address, which is what makes a one-entry vocabulary a
- * uniform bar. `vocabularySelect` is the sole caller and owns the size ≥ 1
- * precondition.
- */
+/** A weighted fold of the per-level positions, rounded, modulo `size`. */
 function vocabularyIndex(address: Address, size: number): number {
   let value = 0;
   let weight = 1;
@@ -205,18 +125,7 @@ function vocabularyIndex(address: Address, size: number): number {
   return raw < 0 ? raw + size : raw;
 }
 
-/**
- * Where `address` lands on a band's plane→state axis, in [0, 1): the same
- * weighted fold `vocabularyIndex` runs — each level placed by its own step's
- * distribution, decaying by `LEVEL_DECAY` — taken modulo 1 instead of
- * rounded into a vocabulary. One step yields exactly that step's placement
- * (`d % 1 === d` for `d` in [0, 1)), so a picker's options, one step each
- * under their trigger, land where they always did; the empty address (the
- * band's root) lands at 0. The two folds are kept as two spellings rather
- * than one shared helper because `vocabularyIndex` scales by `size` INSIDE
- * the sum, and reassociating that product would move bytes in every
- * committed snapshot for no gain.
- */
+/** The same fold, modulo 1 instead of rounded into a vocabulary. */
 function bandAxis(address: Address): number {
   let value = 0;
   let weight = 1;
@@ -227,15 +136,7 @@ function bandAxis(address: Address): number {
   return value % 1;
 }
 
-/**
- * The entry of `vocabulary` that `address` selects. Generic over the entry
- * type so the selection is testable over any vocabulary — a one-entry one
- * must yield that entry everywhere.
- *
- * [LAW:no-silent-failure] `vocabularyIndex` lands in `[0, size)` by
- * construction and `T` is non-nullable, so an undefined read here is exactly
- * an empty vocabulary — nothing to select — and throws rather than returning it.
- */
+/** [LAW:no-silent-failure] An undefined read means an empty vocabulary. */
 export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
   address: Address,
@@ -246,17 +147,10 @@ export function vocabularySelect<T extends {}>(
   return entry;
 }
 
-/** The decorative entry a node's address selects. */
 export const decorEntryFor = (address: Address): DecorEntry =>
   vocabularySelect(DECOR_VOCABULARY, address);
 
-/**
- * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
- * proven `ColorRgba`. Every shipped theme carries every role this module names
- * (test/decor.test.ts checks the whole registry), so an absence is registry
- * drift or a hand-built palette missing a role — a loud failure naming both,
- * never a fallback colour. [LAW:no-silent-failure]
- */
+/** [LAW:no-silent-failure] A missing role fails loudly, not a fallback colour. */
 export function paletteRole(
   palette: Palette,
   role: DecorBase | DecorHue | ThemePole,
@@ -270,13 +164,7 @@ export function paletteRole(
   return colour;
 }
 
-/**
- * The colour of one vocabulary entry in `palette`: the theme's `base` tinted
- * toward the theme's `hue` by `amount`. [LAW:one-source-of-truth] The one
- * place the rule is spelled — `decorFor` renders through it and `stateFor`
- * measures against it, so the floor is enforced against the very bytes a tint
- * cell will show, not a second transcription of the formula.
- */
+/** [LAW:one-source-of-truth] The one place the tint rule is spelled. */
 export function decorEntryColour(
   palette: Palette,
   { base, hue, amount }: DecorEntry,
@@ -288,41 +176,19 @@ export function decorEntryColour(
   );
 }
 
-/** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (palette: Palette, address: Address): ColorRgba =>
   decorEntryColour(palette, decorEntryFor(address));
 
-// --- The state region ---------------------------------------------------------
-
-/**
- * The contrast a state cell must hold above every tint cell of its own hue.
- * Enforced rather than assumed because "the pure hue is vivid" is false for
- * some palettes (textual-dark's `secondary` sat on its tints at 1.42, and
- * textual-ansi's `primary` at 1.14 — see the design doc's region model).
- */
+/** Enforced, not assumed: "the pure hue is vivid" is false for some palettes. */
 export const STATE_FLOOR = 2.2;
 
-/** The pure form of a hue: the rule's own mix near the top of its range, where the search starts. */
 export const STATE_PURE_AMOUNT = 0.92;
 
-/**
- * The search toward `foreground` runs in twelfths and is allowed to reach
- * `foreground` itself (solarized-dark's `secondary` clears only at the pole).
- */
+/** The search may reach `foreground` itself; some hues clear only there. */
 const STATE_STEPS = 12;
 
-/**
- * The state colour of `hue`: an open disclosure's trigger is drawn here. The
- * pure form of the hue, pushed toward `foreground` in twelfths until it clears
- * `STATE_FLOOR` against the most-tinted cell that hue produces on EVERY base.
- * A hue that already clears at step zero is byte-unchanged — the enforcement
- * is a floor, not a transform.
- *
- * [LAW:dataflow-not-control-flow] Thirteen candidates, one predicate, the
- * first that passes; the values decide, not a branch per theme.
- * [LAW:no-silent-failure] A hue that cannot clear even at `foreground` throws
- * naming palette and hue — never a quieter colour.
- */
+/** [LAW:dataflow-not-control-flow] Candidates and one predicate, so the values
+ * decide. [LAW:no-silent-failure] A hue that cannot clear at the pole throws. */
 export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
   const tintEdge = DECOR_VOCABULARY.filter(
     (entry) => entry.hue === hue && entry.amount === DECOR_MAX_AMOUNT,
@@ -346,12 +212,7 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
   return state;
 }
 
-/**
- * The text colour for a state cell: whichever of the theme's two poles reads
- * better on `background`. A fixed foreground measurably fails on pure hues
- * (design doc, Decisions), so text on a state cell is chosen, never assumed.
- * Symmetric on ties; the one pole that clears is the one returned.
- */
+/** Whichever pole reads better; a fixed foreground measurably fails. */
 export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
   const poles: readonly ThemePole[] = ["background", "foreground"];
   return poles
@@ -363,72 +224,36 @@ export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
     );
 }
 
-// --- Disclosure: bands ---------------------------------------------------------
-
-/**
- * Where a disclosure sits in the colour model: the vocabulary hue of the bar
- * cell that roots it, and how many bands deep it is. `depth` 0 is a bar cell's
- * own band; a disclosure opened from inside that band is depth 1, and so on.
- * The address never enters here — a band is NOT a tree position, it is a
- * plane hung under a trigger, so the only positional fact it needs is the hue
- * its root cell was dealt.
- */
+/** No address enters: a band is a plane hung under a trigger, not a position. */
 export interface Disclosure {
   readonly hue: DecorHue;
   readonly depth: number;
 }
 
-/**
- * How far a band's plane recedes from its state colour toward `background`:
- * `base + perDepth × depth`, capped. Two cues move with depth — the hue
- * advances and the plane recedes. The cap is the limit: between depths 2 and
- * 3 only 0.05 of recession remains while `hueAtDepth` has wrapped onto a hue
- * already used, so adjacent planes are guaranteed apart only through depth 2
- * (the bundled ☰ → ⚙ → picker). A trigger still stands off its plane at
- * depth 3; `test/decor.test.ts` pins the covered depths.
- */
+/** The cap is the limit: adjacent planes are apart only through depth 2. */
 export const BAND_RECESSION = {
   base: 0.42,
   perDepth: 0.14,
   cap: 0.75,
 } as const;
 
-/**
- * The window along the plane→state axis a band's items are placed in, as a
- * fraction of that axis: they start `floor` above the plane and never reach
- * the state, so no item is the plane and none is its own trigger.
- */
+/** So no item is the plane, and none is its own trigger. */
 export const BAND_WINDOW = { floor: 0.12, span: 0.8 } as const;
 
-/** The vocabulary hue `depth` steps after `hue`, wrapping — depth advances the hue. */
 export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
   const index = (DECOR_HUES.indexOf(hue) + depth) % DECOR_HUES.length;
-  // [LAW:no-defensive-null-guards] The index is in range by construction; the
-  // `!` states that, it does not guard it.
+  // [LAW:no-defensive-null-guards] In range by construction; `!` states that.
   return DECOR_HUES[index]!;
 }
 
-/**
- * A disclosure's band: two colours of one hue. `state` is its peak — the
- * colour the trigger that opened it wears, so a trigger is drawn from what it
- * OPENS, not from where it sits — and `plane` is its floor, the state receded
- * toward `background`.
- */
+/** `state` is worn by the trigger: drawn from what it OPENS, not its place. */
 export interface Band {
   readonly state: ColorRgba;
   readonly plane: ColorRgba;
 }
 
-/**
- * The band `disclosure` opens. One expression for every depth: the state of
- * the depth-advanced hue, and that state pulled toward `background` by the
- * depth's recession. The trigger of the band and the band itself are the SAME
- * value read twice, so they cannot disagree about which hue they share.
- *
- * Memoised per (palette, hue, depth): the render walk asks for every segment's
- * band on every render, and palettes are memoised objects (transposedPalette),
- * so the key is stable and the search in `stateFor` runs once per palette.
- */
+/** One expression for every depth, so the trigger and the band cannot disagree
+ * about their hue. Memoised: the walk asks for every segment's band per render. */
 export function bandFor(palette: Palette, disclosure: Disclosure): Band {
   const key = `${disclosure.hue}|${disclosure.depth}`;
   let bands = BAND_MEMO.get(palette);
@@ -452,16 +277,7 @@ export function bandFor(palette: Palette, disclosure: Disclosure): Band {
 }
 const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 
-/**
- * The colour of the item at `address` — its steps from the band's root, each
- * placed by its parent's own distribution — in the band `disclosure` opens:
- * placed along the plane→state axis inside `BAND_WINDOW`. A band's items are
- * addressed by the SAME step shape the bar's rows and cells address the
- * vocabulary through — one placement mechanism at every level; a band only
- * folds the steps onto its plane-to-state axis (`bandAxis`) instead of into
- * the vocabulary. A picker's options are one step each; a group's body is a
- * container whose cells may nest, and nests fold the same way.
- */
+/** The SAME step shape the bar's cells use, folded onto the band's axis. */
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
@@ -475,17 +291,8 @@ export function bandItemFor(
   );
 }
 
-// --- Regions -------------------------------------------------------------------
-
-/**
- * Where a node stands in the colour model (design doc, "The region model"):
- * on the BAR, where its address selects a vocabulary entry, or on a BAND — the
- * plane a disclosure hung under its trigger — where its address is the steps
- * since that band's root and places it along the band's axis. The band's
- * `Disclosure` is the hue and depth its TRIGGER computed; nothing about the
- * trigger's own position enters, which is what lets a body hang on its
- * trigger and still be coloured without walk order [LAW:types-are-the-program].
- */
+/** [LAW:types-are-the-program] Nothing of the trigger's own position enters,
+ * which is what lets a body hang on its trigger and be coloured without order. */
 export type Region =
   | { readonly kind: "bar"; readonly address: Address }
   | {
@@ -494,55 +301,33 @@ export type Region =
       readonly address: Address;
     };
 
-/** The bar's root: the top of the layout tree, before any step. */
 export const BAR_ROOT: Region = { kind: "bar", address: [] };
 
-/** One step down within the same region — a container placing a child. */
 export const descend = (region: Region, step: AddressStep): Region => ({
   ...region,
   address: [...region.address, step],
 });
 
-/** The root of the band `band` opens — where a disclosure body starts. */
 export const bandRoot = (band: Disclosure): Region => ({
   kind: "band",
   band,
   address: [],
 });
 
-/**
- * The foreground an UNAUTHORED `fg:` wears on `background` — the background
- * the cell actually resolves to, tint or authored `bg:`, so the choice can
- * never be measured against a colour the cell does not paint.
- * [LAW:one-source-of-truth]
- */
+/** [LAW:one-source-of-truth] Measured on the background the cell resolves to. */
 export type TextFloor = (background: ColorRgba) => ColorRgba | undefined;
 
-/** The bar's floor: the terminal keeps its own text, whatever the background. */
 export const TERMINAL_TEXT: TextFloor = () => undefined;
 
-/**
- * What a segment in a region is dealt. `tint` is the colour its CLOSED cell
- * wears; `text` is the floor an UNAUTHORED `fg:` defaults to — the terminal's
- * own on the bar, and on a band the theme pole that reads better on the
- * cell's background, because text on a state-region cell is chosen (design
- * doc, Decisions); `disclosure` is the band the segment opens if it is a trigger.
- */
+/** `text` is the floor an UNAUTHORED `fg:` takes; band text is chosen. */
 export interface Decoration {
   readonly tint: ColorRgba;
   readonly text: TextFloor;
   readonly disclosure: Disclosure;
 }
 
-/**
- * [LAW:one-source-of-truth] ONE read per segment, projected three ways. On the
- * bar, one vocabulary entry gives both the tint and the hue of the band the
- * cell opens (at depth 0), so a cell and the band it drops cannot disagree
- * about their hue. On a band, the item is placed by its address and OPENS the
- * next band of the same lineage: the band's own hue one depth further — the
- * demo's `menuPlane(host, depth + 1)` — a natural counted up from the band it
- * stands on, never arithmetic back from a position.
- */
+/** [LAW:one-source-of-truth] ONE read projected three ways, so a cell and the
+ * band it drops cannot disagree about their hue; a band's depth counts up. */
 export function decorationFor(palette: Palette, region: Region): Decoration {
   switch (region.kind) {
     case "bar": {

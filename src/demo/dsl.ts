@@ -1,18 +1,6 @@
-// Minimal end-to-end demo of the segment DSL render spine.
-//
-//   pnpm demo:dsl                       # renders src/demo/statusline.json5
-//   pnpm demo:dsl path/to/other.json5   # renders any DSL config
-//
-// [LAW:single-enforcer] This renders through registerDslConfig + renderDsl
-// — the exact spine the daemon calls. There is no demo-only render path; what
-// prints here is what production produces.
-//
-// [LAW:dataflow-not-control-flow] The body is straight-line: read config →
-// register → render frames → dispose. The config file and payload are data;
-// swapping either changes the output without changing this code. Rendering N
-// frames over time is not branching — it lets the asynchronous sources (shell,
-// time) populate the store and shows the line come alive, exactly as the daemon
-// re-renders on each status-line tick.
+// `pnpm demo:dsl [path/to/config.json5]`.
+// [LAW:single-enforcer] The exact spine the daemon calls; no demo-only path.
+// [LAW:dataflow-not-control-flow] N frames let async sources populate the store.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -43,19 +31,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const configPath = process.argv[2] ?? join(here, "statusline.json5");
 const source = readFileSync(configPath, "utf-8");
 
-// [LAW:one-source-of-truth] The palette names the loader accepts are exactly
-// the names the renderer can resolve — both derive from the same registry, so
-// we hand the loader the live set rather than a hand-maintained copy.
-//
-// Full three-stage pipeline: parse → merge → validate. The renderer accepts
-// only `ValidatedConfig`, so the chain is type-enforced.
+// [LAW:one-source-of-truth] The live palette-name set, not a copy.
 const ALLOWED = new Set(listResolvablePaletteNames());
 const raw = parseDslConfig(configPath, source, ALLOWED);
 const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
 const config = validateConfig(merged, configPath, source, ALLOWED);
 
-// One Claude Code status-line hook event, faked. The `input` vars in the
-// config (cwd, model, session) read their values out of this object.
 const payload = {
   hook_event_name: "Status",
   session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -67,16 +48,7 @@ const payload = {
   },
 };
 
-// The demo has no SessionState, so every resolution below is the config default
-// over its floor. The PRESET resolves first — its fragment supplies the display
-// globals every other option reads — the same preset-first order server.ts and
-// check.ts resolve in, so the demo prints the arrangement a fresh session opens
-// in.
-// [LAW:one-source-of-truth] THE daemon's resolver, not a mirror of it — a
-// fresh-session pick reader (null for every key) and no overrides log to be
-// customized by. The demo previously restated this chain field by field and had
-// already drifted: it hardcoded `style: "powerline"` below and so ignored a
-// config's own `globals.style`.
+// [LAW:one-source-of-truth] THE daemon's resolver, not a mirror of it.
 const effective = resolveEffectiveGlobals(
   config,
   () => null,
@@ -85,17 +57,9 @@ const effective = resolveEffectiveGlobals(
 const basePalette = paletteForThemeName(effective.theme);
 const lookKey = lookKeyByName(config.looks, effective.look);
 
-// A fresh store + registry for this run. (A hot-reloading daemon would
-// dispose() the old pair and build new ones — see registerDslConfig's docs.)
-// registerDslConfig wires the time/shell sources' timers and watchers onto the
-// registry, so dispose() must run even if registration or rendering throws —
-// otherwise those handles keep the process alive. try/finally guarantees it.
+// The registry owns timers and watchers, so dispose() must run even on a throw.
 const store = new VariableStore();
-// [LAW:no-silent-failure] An EMPTY SessionState — `kind: "state"` variables
-// (the default config's style picker, any interactive config) require one at
-// registration; without it declareState fails and the segment renders an error
-// cell. The demo never clicks, so an empty store is correct: every state var
-// resolves to its declared default (closed pickers, "(default)" labels).
+// [LAW:no-silent-failure] `kind: "state"` needs a SessionState; empty is correct.
 const registry = new SourceRegistry(store, "", undefined, new SessionState());
 try {
   const compiled = registerDslConfig(config, registry, {
@@ -120,9 +84,7 @@ try {
         style: effective.style,
         separator: effective.separator,
         colorCompatibility: effective.colorCompatibility,
-        // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
-        // reserve the daemon does so demo output matches the bytes a real
-        // statusline would emit at the same terminal width.
+        // [LAW:one-source-of-truth] The same reserve the daemon applies.
         width: applyClaudeCodeReserve(
           process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
         ),

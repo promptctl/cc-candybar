@@ -1,8 +1,4 @@
-// [LAW:behavior-not-structure] These tests pin the merge cascade's contract:
-// per-key precedence for globals/variables/segments, root rows merged by name
-// (a whole tree replaces), and the brand handoff at validateConfig. The
-// renderer accepts only ValidatedConfig, so the chain proven here is the chain
-// used in production.
+// [LAW:behavior-not-structure] Pins the merge cascade's contract and the brand handoff at validateConfig.
 
 import {
   mergeWithDefault,
@@ -18,8 +14,6 @@ import type {
   SegmentDecl,
 } from "../src/config/dsl-types";
 
-// A horizontal row of segment refs, and a vertical stack of them —
-// convenience builders for test roots.
 const hrow = (...segments: string[]): LayoutNode => ({
   kind: "container",
   direction: "horizontal",
@@ -31,10 +25,7 @@ const vert = (...rows: string[][]): LayoutNode => ({
   children: rows.map((segments) => hrow(...segments)),
 });
 
-// Self-contained default for these tests. Avoids coupling to
-// DEFAULT_DSL_CONFIG's evolving content — merge semantics are the subject,
-// not the bundled default's specific shape. Two named rows, so a replaced
-// row's POSITION is observable.
+// Two named rows, so a replaced row's POSITION is observable.
 const DFLT: DslConfig = {
   globals: { default_bg: "black", default_fg: "white", palette: "textual-dark" },
   variables: {
@@ -64,9 +55,9 @@ describe("mergeWithDefault", () => {
     const raw: RawDslConfig = { globals: { default_fg: "cyan" } };
     const out = mergeWithDefault(raw, DFLT);
     expect(out.globals).toEqual({
-      default_bg: "black", // from default
-      default_fg: "cyan", // from user
-      palette: "textual-dark", // from default
+      default_bg: "black",
+      default_fg: "cyan",
+      palette: "textual-dark",
     });
   });
 
@@ -207,8 +198,6 @@ describe("mergeWithDefault", () => {
 
 describe("validateConfig", () => {
   test("returns ValidatedConfig for a clean merged config", () => {
-    // ValidatedConfig is structurally DslConfig + a phantom brand; runtime
-    // identity is preserved.
     const merged = mergeWithDefault({}, DFLT);
     const validated = validateConfig(merged, "<test>");
     expect(validated).toBe(merged);

@@ -1,7 +1,4 @@
-// Test helpers for the click wire. A rendered click URL is `dispatch/e=…` (an
-// ordered effect list after the verb's `/`); these decode it to its behavioral
-// content and drive it through the REAL daemon path, so assertions track "what
-// effects does this click apply" rather than the exact wire encoding.
+// Decode a rendered click URL to its effects and drive it through the REAL daemon path.
 
 import { parseHandlerUrl } from "../../src/install/index";
 import {
@@ -22,10 +19,7 @@ import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 
-// [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
-// silent log and an update act that refuses loudly — no test here has an
-// update watch, so an apply-update click reaching it is a test bug, never a
-// silent no-op. [LAW:no-silent-failure]
+// [LAW:one-source-of-truth] THE VerbContext a test hands the click path; its acts refuse loudly [LAW:no-silent-failure].
 export function testVerbContext(sessionState: SessionStateRW): VerbContext {
   return {
     sessionState,
@@ -33,8 +27,6 @@ export function testVerbContext(sessionState: SessionStateRW): VerbContext {
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");
     },
-    // Same posture for the doctor's edge: a test that drives a doctor click
-    // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
@@ -49,12 +41,7 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
-// [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
-// handler does, so the helper cannot mask a back-compat decode regression:
-// set-state/step-state and their config-file twins set-config/step-config/
-// reset-config are the multi-argument verbs (slash-segmented); every other verb
-// takes ONE argument — the whole value decoded once — so a direct `copy/a/b`
-// reports one arg "a/b" (exactly what the copy handler copies), not two.
+// [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's handler does.
 const MULTI_ARG_VERBS = new Set<string>([
   VERB_SET_STATE,
   VERB_STEP_STATE,
@@ -72,8 +59,6 @@ function decodeArgs(verb: string, value: string): string[] {
     : [decodeURIComponent(value)];
 }
 
-// Decode a rendered click URL into its ordered effect list (verb + decoded
-// args). A direct (non-dispatch) URL is the degenerate one-effect case.
 export function effectsOf(url: string): DecodedEffect[] {
   const { verb, value } = parseHandlerUrl(url);
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
@@ -83,8 +68,7 @@ export function effectsOf(url: string): DecodedEffect[] {
   }));
 }
 
-// Extract the URLs whose OSC-8 open is immediately preceded by a bold SGR
-// (";1m") — the renderer's "current selection" marking.
+// The renderer's "current selection" marking: an OSC-8 open preceded by a bold SGR.
 export function boldUrls(rendered: string): string[] {
   const re = /;1m\x1b\]8;;([^\x1b]+)\x1b\\/g;
   const out: string[] = [];
@@ -93,7 +77,6 @@ export function boldUrls(rendered: string): string[] {
   return out;
 }
 
-// Drive a rendered click URL through the real parse → dispatch path.
 export function clickUrl(url: string, ctx: VerbContext): void {
   const { verb, value } = parseHandlerUrl(url);
   const handler = VERBS.get(verb);

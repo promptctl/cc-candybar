@@ -12,7 +12,6 @@ import { ABSENT, failed, ok } from "../src/utils/outcome";
 const PKG = "@promptctl/cc-candybar";
 const DIST_TAGS_URL = `${REGISTRY_URL}/-/package/${encodeURIComponent(PKG)}/dist-tags`;
 
-// A registry that answers `dist-tags` with the given body and status.
 function registry(body: unknown, status = 200): typeof fetch {
   return async () =>
     new Response(JSON.stringify(body), {
@@ -21,7 +20,6 @@ function registry(body: unknown, status = 200): typeof fetch {
     });
 }
 
-// A registry that cannot be reached at all.
 const unreachable: typeof fetch = async () => {
   throw new Error("getaddrinfo ENOTFOUND registry.npmjs.org");
 };
@@ -33,9 +31,7 @@ describe("parseReleaseVersion", () => {
     expect(parsed.kind === "ok" && formatVersion(parsed.value)).toBe("12.0.7");
   });
 
-  // [LAW:parse-dont-validate] Anything the ordering cannot cover is refused
-  // at the border as a typed failure naming the text, not admitted with an
-  // undefined comparison.
+  // [LAW:parse-dont-validate] Refused at the border as a typed failure naming the text, never an undefined comparison.
   test.each(["1.2", "v1.2.3", "1.2.3-beta.1", "01.2.3", "dev", ""])(
     "refuses %j",
     (text) => {
@@ -59,9 +55,7 @@ describe("fetchLatestVersion", () => {
     expect(seen?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  // [LAW:no-silent-failure] Every way the lookup can fail to answer is a
-  // `failed` carrying its reason — never a rejection that would take the
-  // install down, never a value that could read as current.
+  // [LAW:no-silent-failure] Every failure is a `failed` carrying its reason, never a rejection that takes the install down.
   test("a refused connection is `failed` with the error text", async () => {
     await expect(fetchLatestVersion(PKG, unreachable, REGISTRY_URL)).resolves.toEqual(
       failed("getaddrinfo ENOTFOUND registry.npmjs.org"),
@@ -128,8 +122,6 @@ describe("assessCurrency", () => {
     });
   });
 
-  // The stamp side gets the same grace as the registry side: a build that is
-  // not a release version cannot be compared, and says so — it never throws.
   test("a non-release stamp is unchecked naming the stamp, whatever the lookup said", () => {
     expect(assessCurrency("1.42.0-beta.1", ok([1, 41, 3]))).toEqual({
       kind: "unchecked",
@@ -142,8 +134,6 @@ describe("assessCurrency", () => {
 });
 
 describe("currencyReport", () => {
-  // The stale warning names both versions, the cause, and the exact
-  // pinned command that gets the current release now — on stderr.
   test("stale: both versions, the cause, and the pinned fix on stderr", () => {
     const stale: Currency = {
       kind: "stale",
@@ -158,8 +148,7 @@ describe("currencyReport", () => {
     expect(report.text).toContain(`pnpm dlx ${PKG}@1.34.0 install`);
   });
 
-  // [LAW:no-silent-failure] Unreachable says "skipped" and never claims the
-  // install is current.
+  // [LAW:no-silent-failure] Unreachable says "skipped" and never claims the install is current.
   test("unchecked: says the check was skipped and why, never 'latest'", () => {
     const report = currencyReport(PKG, {
       kind: "unchecked",
@@ -190,8 +179,6 @@ describe("currencyReport", () => {
   });
 });
 
-// The branches that only run when something is already wrong, driven from
-// the stamp and a fetch through to the report — the seam runInstall calls.
 describe("install currency, composed", () => {
   test("stale registry → stderr warning with the pinned command", async () => {
     const currency = assessCurrency(
@@ -215,8 +202,6 @@ describe("install currency, composed", () => {
     expect(report.text).not.toMatch(/latest/);
   });
 
-  // Nothing on this path can throw: a bad stamp AND no registry still yield
-  // a report, so the advisory check cannot take the install down.
   test("non-release stamp + unreachable registry → still a report", async () => {
     const currency = assessCurrency(
       "dev",

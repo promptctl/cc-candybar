@@ -1,20 +1,5 @@
-// [LAW:verifiable-goals] candybar-settings-ui-aok.5's done-gate: edit mode has
-// its own LOOK, and that look is authored config rather than renderer
-// constants. Four claims, each pinned below:
-//
-//   1. Entering edit mode restyles the whole bar (plain joiners + a visible
-//      separator between cells); leaving restores the previous bytes EXACTLY.
-//   2. The staged fragment outranks a session pick — the rightmost rung of the
-//      precedence chain in src/config/presets.ts — and the session pick governs
-//      again the moment edit mode clears, with nothing saved or restored.
-//   3. A CONFIG can change what edit mode looks like, with no engine edit.
-//   4. The fragment cannot select a preset; the loader says so by name.
-//
-// [LAW:single-enforcer] Drives the real seams: resolveEffectiveGlobals (the one
-// resolution the daemon and `cc-candybar check` both call), the real click wire
-// for the session writes, and registerDslConfig + renderDsl for the bytes. No
-// parallel rig and no hand-built joiner — a test that restated the chain would
-// pass while the daemon diverged, which is the whole failure this ticket closes.
+// [LAW:single-enforcer] Drives the real seams; a test that restated the precedence
+// chain would pass while the daemon diverged.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -38,9 +23,7 @@ const SID = "s-edit-look";
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
 
-// Two cells in one row, so a joiner runs BETWEEN them — that inter-cell seam is
-// exactly what the staged style reshapes. `session.id` is declared because any
-// config carrying state vars needs it (cross-ref.ts).
+// Two cells so a joiner runs BETWEEN them; `session.id` is required of any config carrying state vars.
 function src(extra = ""): string {
   return `{
   globals: { palette: '${BASE_THEME}', style: 'powerline' },
@@ -70,17 +53,13 @@ function buildRuntime(source: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  // [LAW:single-enforcer] The real derived gate — the sole authority on what a
-  // click may write. Registering it here is what makes the set-state calls
-  // below travel the same road a real click travels.
+  // [LAW:single-enforcer] Registering the real derived gate is what makes the set-state calls below travel a real click's road.
   liveDisposers.push(
     ...deriveActionValidators(config).map(({ key, spec }) =>
       registerStateValidator(key, spec),
     ),
   );
 
-  // [LAW:one-source-of-truth] The daemon's own resolution, called the way the
-  // daemon calls it — a session-key reader and the entry's customized fact.
   const effectiveNow = () =>
     resolveEffectiveGlobals(
       config,
@@ -120,9 +99,7 @@ function setState(
   clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]), testVerbContext(sessionState));
 }
 
-// [LAW:single-enforcer] STATE_VALIDATORS is daemon-global and ref-counted, so a
-// registration leaked past its test would widen the gate for every suite that
-// follows. One drain, here, covering every runtime any test built.
+// [LAW:single-enforcer] STATE_VALIDATORS is daemon-global and ref-counted: a leaked registration widens the gate for every following suite.
 const liveDisposers: Array<() => void> = [];
 afterEach(() => {
   for (const dispose of liveDisposers.splice(0)) dispose();
@@ -146,9 +123,7 @@ describe("edit mode's look — a staged globals fragment", () => {
 
     expect(editing).not.toBe(before);
     expect(editing).toContain(" | ");
-    // [LAW:dataflow-not-control-flow] Restoration is by construction, not by a
-    // save/restore path: nothing wrote the previous style anywhere, it was only
-    // out-ranked. Byte equality is the proof that nothing was persisted.
+    // [LAW:dataflow-not-control-flow] Nothing saved the previous style; it was only out-ranked, and byte equality proves it.
     expect(after).toBe(before);
   });
 
@@ -162,9 +137,6 @@ describe("edit mode's look — a staged globals fragment", () => {
     expect(effectiveNow().style).toBe("capsule");
 
     enterEditMode(sessionState);
-    // The rightmost rung wins: a session pick made BEFORE entering edit mode
-    // cannot survive into a mode whose whole job is to stop segments reading as
-    // one continuous strip.
     expect(effectiveNow().style).toBe("plain");
     expect(render()).not.toBe(capsule);
 
@@ -174,9 +146,6 @@ describe("edit mode's look — a staged globals fragment", () => {
   });
 
   test("the look is authored: two configs differing only in editGlobals render differently", () => {
-    // [LAW:verifiable-goals] The ticket's actual bar — "a config can change the
-    // edit-mode look; a test demonstrates it with config data only and no
-    // engine edit". Both runtimes below run the SAME engine.
     const bundled = buildRuntime(
       src(`editGlobals: { style: 'plain', default_separator: ' | ' },`),
     );
@@ -193,12 +162,7 @@ describe("edit mode's look — a staged globals fragment", () => {
   });
 
   test("a config declaring no editGlobals gets no restyling from edit mode", () => {
-    // The empty fragment is the identity one — the mode is carried entirely by
-    // what the fragment CONTAINS, so staging nothing resolves to exactly the
-    // pre-edit values [LAW:dataflow-not-control-flow]. Asserted on the resolved
-    // globals rather than on rendered bytes, because edit mode also splices its
-    // +/- CHROME into the tree: that is a different feature (edit-chrome.ts),
-    // and conflating the two would make this test fail for the wrong reason.
+    // [LAW:dataflow-not-control-flow] Asserted on resolved globals, not bytes: edit mode also splices +/- chrome, a different feature.
     const { sessionState, effectiveNow } = buildRuntime(src());
     const before = effectiveNow();
     enterEditMode(sessionState);
@@ -220,8 +184,7 @@ describe("edit mode's look — a staged globals fragment", () => {
   });
 
   test("an unstaged field still resolves through its own session pick while editing", () => {
-    // The fragment is a DELTA, not a replacement: staging `style` says nothing
-    // about `padding`, exactly as a preset's globals delta does.
+    // The fragment is a DELTA: staging `style` says nothing about `padding`.
     const { sessionState, effectiveNow } = buildRuntime(
       src(`editGlobals: { style: 'plain' },`),
     );
@@ -265,8 +228,7 @@ describe("editGlobals — the loader's contract", () => {
   });
 
   test("a user fragment merges FIELD by field over the bundled one", () => {
-    // [LAW:one-source-of-truth] The `globals` cascade, not the by-name cascade:
-    // retuning the separator must not silently drop the bundled `plain`.
+    // [LAW:one-source-of-truth] Retuning the separator must not silently drop the bundled `plain`.
     const config: ValidatedConfig = parseAndValidate(
       "<edit-look>",
       `{ editGlobals: { default_separator: ' ~ ' } }`,
@@ -280,8 +242,7 @@ describe("editGlobals — the loader's contract", () => {
 
 describe("the bundled default's edit look", () => {
   test("ships plain joiners with a charset-safe separator", () => {
-    // " | " rather than a box-drawing glyph: the fragment layers over globals
-    // that may declare `charset: "ascii"`, and it must not assume otherwise.
+    // Not a box-drawing glyph: the fragment layers over globals that may declare `charset: "ascii"`.
     expect(DEFAULT_DSL_CONFIG.editGlobals.style).toBe("plain");
     expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toBe(" | ");
     expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toMatch(

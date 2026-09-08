@@ -1,17 +1,10 @@
-// [LAW:behavior-not-structure] The accept/reject shape table for the porcelain
-// v2 parser, asserted against fixtures captured from REAL `git status
-// --porcelain=v2 --branch` runs (clean/ahead/behind/dirty/detached/unborn/
-// conflict). The parser is the single core git projection (brandon-daemon-perf
-// -bb9.1); every field it lifts — branch, sha, upstream, ahead/behind, worktree
-// status — must survive each state, so each state is one case here.
+// [LAW:behavior-not-structure] The accept/reject shape table for the porcelain v2 parser, one case per state.
 
 import { parseStatusV2 } from "../src/segments/git";
 import { ABSENT, ok } from "../src/utils/outcome";
 
 describe("parseStatusV2", () => {
   test("empty input → benign default (detached/clean, all absent), never a crash", () => {
-    // Not reachable in production (getCoreAsync only parses a successful git
-    // exit), but locks the pure parser's degenerate-input contract.
     expect(parseStatusV2("")).toEqual({
       branch: "detached",
       status: "clean",
@@ -144,9 +137,7 @@ describe("parseStatusV2", () => {
   });
 
   test("upstream present but branch.ab absent → upstream ok, aheadBehind absent", () => {
-    // Reachable: upstream configured but the remote-tracking ref is missing, so
-    // git emits `# branch.upstream` yet omits `# branch.ab` (can't compute).
-    // aheadBehind must stay absent — not a fabricated "+0 -0".
+    // Upstream configured but the tracking ref missing: aheadBehind stays absent, never "+0 -0".
     const out = [
       "# branch.oid d737dfec86b2ac139ae9f50310151acb9cea6378",
       "# branch.head master",
@@ -168,7 +159,6 @@ describe("parseStatusV2", () => {
   });
 
   test("rename '2' line counts staged from its XY", () => {
-    // A pure rename is staged (R.); its XY columns parse like an ordinary change.
     const out = [
       "# branch.oid 4c5592cabba6ee07ef1398b81b8f9510ebe62d47",
       "# branch.head main",

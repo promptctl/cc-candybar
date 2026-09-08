@@ -1,7 +1,4 @@
-// [LAW:types-are-the-program] The globals schema: a fixed set of string fields
-// plus a validated palette name, declared as DATA and interpreted by the record
-// engine. This file changes when a global default field is added or removed —
-// add a key to GLOBALS_SCHEMA and Globals; the engine does the rest.
+// [LAW:types-are-the-program] The globals schema declared as DATA and interpreted by the record engine: add a key to GLOBALS_SCHEMA and Globals, the engine does the rest.
 
 import { type Globals } from "../dsl-types.js";
 import {
@@ -29,14 +26,8 @@ import {
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
 
-// [LAW:types-are-the-program] Closed enum like `charset`, plus one
-// migration-pointing rejection: "auto" was the LEGACY default, so migrating
-// configs will carry it — but the daemon runs detached, so rich-js env
-// detection would downsample against the daemon's terminal, not the client's.
-// Rather than ship that silent lie [LAW:no-silent-failure], "auto" is outside
-// the ColorCompatibility domain and gets an error that says why (same species
-// as the removed-layout migration errors in layout.ts). The json emit and the
-// membership check derive from the same COLOR_COMPATIBILITIES literal.
+// [LAW:no-silent-failure] Closed enum plus one migration-pointing rejection:
+// "auto" is outside the domain because the detached daemon would detect its own terminal, not the client's.
 const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
   required: false,
   json: { enum: [...COLOR_COMPATIBILITIES] },
@@ -56,10 +47,7 @@ const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
   },
 };
 
-// [LAW:one-source-of-truth] THE globals field table, declared once. Both the
-// top-level `globals:` schema and the preset-scoped one below are built from
-// this map, so a field added here is automatically settable from a preset —
-// there is no second list to remember to grow.
+// [LAW:one-source-of-truth] THE globals field table: both the top-level and preset-scoped schemas build from it, so there is no second list to grow.
 const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   default_bg: optionalStringSpec(),
   default_fg: optionalStringSpec(),
@@ -67,36 +55,15 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   default_separator: optionalStringSpec(),
   default_truncate_marker: optionalStringSpec(),
   palette: paletteSpec(),
-  // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
-  // registry-static palette set, the look domain is per-config (the merged
-  // `looks` block), so membership is a cross-ref check on the MERGED config —
-  // a user's globals.look may name a default-provided look. Shape-only here,
-  // exactly the shape/meaning split paletteSpec's schema facet keeps.
+  // [LAW:types-are-the-program] Shape only — the look domain is per-config, so membership is a post-merge cross-ref.
   look: optionalStringSpec(),
-  // [LAW:types-are-the-program] The config-default PRESET name — same
-  // per-config-domain shape as `look` (membership is a post-merge cross-ref
-  // check, since a user's globals.preset may name a default-provided preset).
   preset: optionalStringSpec(),
-  // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
-  // shapes the joiner can render), unlike the open-ended palette NAME — so it
-  // validates by membership and emits a JSON-Schema `enum`.
   style: optionalEnumSpec(STRIP_STYLES),
   autoWrap: optionalBooleanSpec(),
-  // Intra-cell spaces per side. Bounded above so a config value can never
-  // drive an unbounded `" ".repeat` allocation in the daemon
-  // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
-  // silently-huge render.
-  // [LAW:one-source-of-truth] The bound comes from PADDING_RANGE, the same
-  // literal the bundled default's stepper actions bound clicks by and the
-  // session-half parse admits values from — so the file, the click, and the
-  // session pick cannot end up honouring three different ranges.
+  // [LAW:one-source-of-truth] Bounded by PADDING_RANGE, the same literal the stepper actions and the session parse use, so file/click/session cannot diverge.
   padding: optionalIntSpec(PADDING_RANGE),
-  // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
-  // vocabularies pickJoiner can render — validates by membership, emits a
-  // JSON-Schema `enum` from the same CHARSETS literal.
   charset: optionalEnumSpec(CHARSETS),
   updateNotice: optionalBooleanSpec(),
-  // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: colorCompatibilitySpec,
 };
 
@@ -105,24 +72,12 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
   fields: GLOBALS_FIELDS,
 };
 
-// [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
-// config's own globals at render time — may not carry `preset`: which preset is
-// active has exactly one authority (session pick over globals.preset over the
-// floor), and a fragment re-selecting a preset would be a second one. For a
-// preset's own fragment that second authority is also cyclic; for edit mode's
-// it would let a look-only fragment restage the whole layout, which edit chrome
-// already owns. Same species of bespoke, migration-pointing rejection as
-// colorCompatibility's "auto" above, and for the same reason: an author who
-// writes it deserves to be told WHY, not handed a bare unknown-key message.
-//
-// [LAW:one-type-per-behavior] Both fragments reject the field identically and
-// differ only in the SUBJECT a diagnostic names, so this is one spec taking
-// that noun as data — never two specs that could drift in what they reject.
+// [LAW:one-source-of-truth] A globals FRAGMENT may not carry `preset`: which preset
+// is active has exactly one authority, and a fragment re-selecting one would be a second.
 function nestedPresetSpec(subject: string): FieldSpec<string> {
   return {
     required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags it too.
     json: {
       not: {},
       description: `not allowed here — ${subject} cannot select a preset`,
@@ -144,18 +99,13 @@ function nestedPresetSpec(subject: string): FieldSpec<string> {
   };
 }
 
-// [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
-// field table with exactly one field swapped for its rejection — not a
-// hand-listed subset that a future globals field could be forgotten from.
+// [LAW:one-source-of-truth] The SAME field table with one field swapped, not a hand-listed subset a future globals field could be forgotten from.
 const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
   fields: { ...GLOBALS_FIELDS, preset: nestedPresetSpec("a preset") },
 };
 
-// [LAW:one-type-per-behavior] Edit mode's staged globals are the same shape one
-// rung later in the precedence chain, so they reuse the same table rather than
-// declaring which fields edit mode "supports" — a field added to Globals is
-// edit-settable the same day, with no edit here.
+// [LAW:one-type-per-behavior] Edit mode's staged globals are the same shape one rung later, so a field added to Globals is edit-settable with no edit here.
 const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "editGlobals key",
   fields: {
@@ -164,11 +114,7 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   },
 };
 
-// An absent globals block is the empty default (no issue); a non-object is a
-// reported error that recovers to the empty default, since parseDslConfig throws
-// once any issue exists so the recovery value never renders [LAW:no-silent-failure].
-// `path` is explicit because the same schema validates the top-level `globals:`
-// block and a preset's nested one, and a diagnostic must name where it actually is.
+// [LAW:no-silent-failure] A non-object is a reported error recovering to {}; parseDslConfig throws once any issue exists, so the recovery never renders.
 export function validateGlobals(
   ctx: ValidateCtx,
   path: string,
@@ -178,7 +124,6 @@ export function validateGlobals(
   return record(ctx, GLOBALS_SCHEMA, path, raw) ?? {};
 }
 
-// The preset-scoped twin: same interpreter, the schema that rejects `preset`.
 export function validatePresetGlobals(
   ctx: ValidateCtx,
   path: string,
@@ -187,9 +132,7 @@ export function validatePresetGlobals(
   return record(ctx, PRESET_GLOBALS_SCHEMA, path, raw) ?? {};
 }
 
-// [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
-// the validator interprets — `globals` emit is `recordJson(GLOBALS_SCHEMA)`,
-// symmetric to `validateGlobals` calling `record(GLOBALS_SCHEMA)`.
+// [LAW:one-source-of-truth] The emitter derives from the SAME declaration the validator interprets.
 export function globalsJson(): JsonNode {
   return recordJson(GLOBALS_SCHEMA);
 }
@@ -198,8 +141,6 @@ export function presetGlobalsJson(): JsonNode {
   return recordJson(PRESET_GLOBALS_SCHEMA);
 }
 
-// Edit mode's twin of the two above: same interpreter, same field table, the
-// schema whose `preset` rejection names the editGlobals fragment.
 export function validateEditGlobals(
   ctx: ValidateCtx,
   path: string,
@@ -212,13 +153,7 @@ export function editGlobalsJson(): JsonNode {
   return recordJson(EDIT_GLOBALS_SCHEMA);
 }
 
-// [LAW:one-source-of-truth] THE membership check for "is this a real Globals
-// field" — derived from GLOBALS_SCHEMA.fields, the same declaration
-// validateGlobals/globalsJson interpret, so a `persist`/`reset` action's
-// target key is checked against exactly the field set a hand-authored
-// `globals: {...}` block would be. Used by cross-ref.ts (candybar-config-
-// engine-71o.2) to catch a typo'd persist target at config-load time instead
-// of a confusing click-time "invariant broken" error.
+// [LAW:one-source-of-truth] THE membership check, derived from the same declaration validateGlobals interprets, so a persist target is checked against exactly the hand-authorable field set.
 const GLOBALS_FIELD_NAMES: ReadonlySet<string> = new Set(
   Object.keys(GLOBALS_SCHEMA.fields),
 );
@@ -230,20 +165,10 @@ export function listGlobalsFieldNames(): readonly string[] {
   return [...GLOBALS_FIELD_NAMES];
 }
 
-// [LAW:types-are-the-program] Every NUMERIC globals field with the value that
-// renders when a config declares none, typed TOTAL over those fields — so
-// adding a numeric globals field without a floor is a COMPILE error, not a
-// silent seed-from-`min` (the bug this table exists to prevent, recurring for
-// the new field). It lives here rather than beside DEFAULT_PADDING in
-// themes/policy.ts because it must name `Globals`, and policy.ts is the leaf
-// dsl-types imports FROM — a table that needs both belongs on this side of
-// that edge [LAW:one-way-deps].
-// The direction matters: `NonNullable<Globals[K]> extends number` asks "is this
-// field's type a number", which is what the totality claim needs. The mirror
-// (`number extends …`) happens to agree for a field declared as plain `number`
-// — the two are symmetric there — but silently drops a field typed as a
-// literal union (`zoom?: 1 | 2 | 3`), which is a perfectly ordinary way to
-// declare a bounded numeric setting and exactly the case this guard exists for.
+// [LAW:types-are-the-program] Total over the numeric globals fields, so adding one
+// without a floor is a COMPILE error, not a silent seed from `min`. The direction
+// matters: the mirror form silently drops a field typed as a literal union.
+// [LAW:one-way-deps] It lives here, not in themes/policy.ts, because it must name `Globals`.
 type NumericGlobalsField = {
   [K in keyof Globals]-?: NonNullable<Globals[K]> extends number ? K : never;
 }[keyof Globals];
@@ -252,12 +177,7 @@ const NUMERIC_GLOBALS_FLOORS: Readonly<Record<NumericGlobalsField, number>> = {
   padding: DEFAULT_PADDING,
 };
 
-// [LAW:single-enforcer] THE seed for a bounded stepper over a globals field:
-// what the bar renders with no write of any kind — the config's own value, or
-// the field's floor when it declares none. Both write gates read it (the
-// SessionState one through stateKeySeeds, the config-file one through
-// configKeySeeds), so a session stepper and its durable twin can never start
-// from different numbers, and neither can silently start from `min`.
+// [LAW:single-enforcer] THE seed for a bounded stepper: the config's own value, or the field's floor. Both write gates read it, so a session stepper and its durable twin cannot start from different numbers.
 export function numericGlobalsSeeds(
   globals: Globals,
 ): ReadonlyMap<string, number> {

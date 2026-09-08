@@ -1,20 +1,5 @@
-// [LAW:verifiable-goals] `cc-candybar check [path]` — the authoring agent's eyes.
-// Config diagnostics otherwise surface VISUALLY (composeWithDiagnostics renders
-// error/warning icons into the bar), a channel a blind config author never sees.
-// This command runs the production pipeline and projects its verdict onto a
-// text + exit-code contract a script can close its own loop on:
-//   0 — config loads and renders (warnings, if any, on stderr)
-//   1 — config is invalid (parse / validate / register / render failure)
-//   2 — usage error or a named file could not be read
-//
-// [LAW:single-enforcer] No parallel validation path: the verdict is reached
-// through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in server.ts) — resolveDslConfig →
-// detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
-// deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path — check additionally waits a
-// bounded settle for shell/file sources' first run, which the daemon's first
-// cold render does not (its next render shows what check showed).
+// [LAW:verifiable-goals] `cc-candybar check [path]` — the authoring agent's eyes: diagnostics that otherwise surface only VISUALLY, projected onto a text + exit-code contract (0 renders, 1 invalid, 2 usage or unreadable).
+// [LAW:single-enforcer] No parallel validation path — the verdict runs the exact functions the daemon runs, so "check passes" and "the daemon renders" cannot diverge.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -42,34 +27,14 @@ import {
   type EffectiveGlobals,
 } from "./daemon/render-payload.js";
 
-// [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
-// of the config alone, not of whichever terminal invoked the check. Templates
-// evaluate in full before any width-driven wrap/pagination, so width shapes
-// layout, never diagnostics.
+// [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function of the config alone, not of whichever terminal invoked the check.
 const CHECK_WIDTH = 200;
 
-// How long the verdict waits for a shell/file source's first run before
-// rendering with whatever it holds (and naming the stragglers as a warning).
-// Generous against a slow `uptime`, short against a hung command.
+// How long the verdict waits for a shell/file source's first run — generous against a slow `uptime`, short against a hung command.
 const SOURCE_SETTLE_MS = 5000;
 
-// One faked Claude Code hook event, shaped like the daemon's augmented payload
-// (see src/daemon/render-payload.ts) — the `input` vars read out of it by their
-// dotted `path`. [LAW:verifiable-goals] It is deliberately RICH (dirty git with
-// every worktree count, an upstream, a stash, a recent commit; home set; live
-// session/today/context/metrics/rate-limit data) so gated segments actually
-// RENDER their content instead of gating off. A minimal payload would let a
-// field-name typo in the git/directory/metrics/budget branches slip through —
-// those branches only run when their data is present.
-//
-// `effective` is threaded in exactly as the daemon threads it (server.ts
-// resolves one EffectiveGlobals struct per render and feeds BOTH the
-// payload's `*.effective` fields and BuildLineOptions/basePalette below)
-// [LAW:one-source-of-truth].
-//
-// test/example-configs.test.ts asserts rendered content against these literal
-// values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
-// fails that suite loudly rather than drifting silently.
+// [LAW:verifiable-goals] One faked hook event, deliberately RICH so gated segments actually RENDER: a minimal payload would let a field-name typo in a git/directory/metrics/budget branch slip through, since those branches run only when their data is present.
+// [LAW:one-source-of-truth] `effective` is threaded in exactly as the daemon threads it. test/example-configs.test.ts asserts against these literal values, so changing one fails that suite loudly.
 export function checkPayload(
   effective: EffectiveGlobals,
 ): Record<string, unknown> {
@@ -119,20 +84,11 @@ export function checkPayload(
     weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
     cache: { expiresAt: nowSec + 15 * 60 },
     tmux: { session: "work" },
-    // `ssh: true` for the same reason `tmux.session` is populated: this
-    // fixture deliberately satisfies every gate so a when-gated segment
-    // RENDERS and its template gets checked. A local-looking fixture would
-    // gate the host segment off and let a typo inside it ship.
+    // `ssh: true` for the same reason `tmux.session` is populated: the fixture satisfies every gate, so a when-gated segment RENDERS and its template gets checked.
     host: { name: "tester-box", user: "tester", ssh: true },
     theme: { effective: effective.theme },
     look: { effective: effective.look },
-    // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
-    // already carried `preset` — a pre-existing gap this ticket's own fixture
-    // needs closed: a preset trigger's `.preset.effective` label and
-    // brandon-layout-edit-2gc.5's `.preset.customized` gate both silently
-    // fell back to their declared defaults ("" / false) rather than the
-    // resolved value, exactly the drift the sibling `*.effective` fields
-    // already guard against.
+    // [LAW:one-source-of-truth] Without this, `.preset.effective` and `.preset.customized` fall back to their declared defaults rather than the resolved value.
     preset: {
       effective: effective.preset,
       customized: effective.presetCustomized,
@@ -145,14 +101,8 @@ export function checkPayload(
   };
 }
 
-// [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
-// the target file's contents — discriminated into the three outcomes the exit-
-// code contract projects. `checkConfig` carries the decision; `runCheck` only
-// maps it to (streams, exit), so the contract is testable without spawning a
-// process or stubbing process.exit.
-//
-// `configPath` null means the bundled default was checked (no config file
-// found — the daemon renders the same default in that state).
+// [LAW:dataflow-not-control-flow] The result is DATA: `checkConfig` carries the decision and `runCheck` only maps it to (streams, exit), so the contract is testable without spawning a process.
+// `configPath` null means the bundled default was checked — the state in which the daemon renders that same default.
 export type CheckOutcome =
   | {
       readonly kind: "clean";
@@ -172,13 +122,7 @@ export type CheckOutcome =
       readonly message: string;
     };
 
-// The no-target search: the daemon's own resolver over (cwd, cwd), so the
-// file this checks IS the file the daemon would load from this directory.
-// It names no explicit file, so `missing`/`unreadable` are unreachable and
-// the projection is file-or-default — but either arm may carry chain
-// locations the search could not check, and that advisory is the SAME
-// notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
-// what the bar would, never a re-derivation of it.
+// [LAW:one-source-of-truth] The daemon's own resolver over (cwd, cwd), so this checks the file the daemon would load here; unchecked chain locations ride the SAME notice RenderCache renders.
 function searchedFile(cwd: string, warnings: string[]): string | null {
   const resolution = resolveDslConfig(cwd, cwd);
   const notice = configResolutionNotice(resolution);
@@ -186,45 +130,23 @@ function searchedFile(cwd: string, warnings: string[]): string | null {
   return resolution.kind === "file" ? resolution.path : null;
 }
 
-// Run the daemon's load-and-render pipeline against one config target.
-//
-// With no target, the path resolves exactly as the daemon resolves it for a
-// client with no override (resolveDslConfig: project/cwd → XDG), so the file
-// this checks IS the file the daemon would load from this directory. The
-// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (runCheck), the way
-// the statusline client sends it as a hint — a set override always names
-// the file, so an absent one is `unreadable` here, never a clean verdict
-// about the bundled default.
-//
-// [LAW:no-silent-failure] With an explicit target, the named file must exist
-// and be readable — a missing file is `unreadable`, never a fall-through to the
-// bundled default. (The daemon's --config-to-missing-file behavior — render the
-// default, watch for the file to appear — is liveness for a long-running
-// renderer; a verdict command must not report "clean" about a file it never
-// read.)
+// Run the daemon's load-and-render pipeline against one config target. The CLI's own `$CC_CANDYBAR_CONFIG` enters as the target, the way the statusline client sends it as a hint.
+// [LAW:no-silent-failure] An explicit target must exist and be readable — a missing file is `unreadable`, never a fall-through to the bundled default, because a verdict command must not report "clean" about a file it never read.
 export async function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
 ): Promise<CheckOutcome> {
-  // Advisories accumulate from the search onward, independent of load
-  // success — mirror of RenderCache.reloadInto.
+  // Advisories accumulate from the search onward, independent of load success.
   const warnings: string[] = [];
 
-  // [LAW:one-source-of-truth] No pre-read: the ONE content read of the config
-  // file is the readFileSync inside loadConfig. Readability is established by
-  // the same read that parses (no double I/O); the catch below classifies its
-  // errno failure as `unreadable`. The explicit-target statSync is a metadata
-  // probe at the argv trust boundary, not a second read: a directory target
-  // (`check .`) fails read() with a path-less EISDIR the catch could not
-  // attribute, so the not-a-file usage error is decided here.
+  // [LAW:one-source-of-truth] No pre-read: the ONE content read is the readFileSync inside loadConfig, and the catch below classifies its errno as `unreadable`.
+  // The statSync is a metadata probe, not a second read: a directory target fails read() with a path-less EISDIR the catch could not attribute.
   const configPath =
     target !== undefined
       ? path.resolve(expandHome(target))
       : searchedFile(cwd, warnings);
   if (target !== undefined && configPath !== null) {
-    // throwIfNoEntry suppresses only ENOENT (left for the content read to
-    // classify); EACCES/EPERM on the probe itself is equally "could not read
-    // the named file" — same outcome, not an uncaught stack.
+    // throwIfNoEntry suppresses only ENOENT; EACCES/EPERM on the probe is equally "could not read the named file".
     let st: fs.Stats | undefined;
     try {
       st = fs.statSync(configPath, { throwIfNoEntry: false });
@@ -244,9 +166,7 @@ export async function checkConfig(
     }
   }
 
-  // [LAW:dataflow-not-control-flow] Collision detection runs independent of
-  // load success: even if the .json5 fails to parse, the author still wants
-  // to know a shadowed .json sibling exists.
+  // [LAW:dataflow-not-control-flow] Collision detection runs independent of load success: a shadowed .json sibling is worth knowing even when the .json5 fails to parse.
   const collision = detectConfigCollisions(cwd, cwd);
   if (collision !== null) warnings.push(collision);
 
@@ -254,13 +174,8 @@ export async function checkConfig(
     const rendered = await loadRegisterRender(configPath, cwd, warnings);
     return { kind: "clean", configPath, warnings, rendered };
   } catch (e) {
-    // A filesystem error on the config file itself (ENOENT/EACCES from
-    // loadConfig's read — errno errors carry the failing `.path`, which is the
-    // discriminator against deeper fs failures) is the `unreadable` outcome:
-    // the named file could not be read at all, distinct from a file that read
-    // but is invalid. [LAW:no-silent-failure] — never a fall-through to the
-    // bundled default. Duck-typed, not `instanceof Error`: fs errors can cross
-    // a realm boundary (jest/graceful-fs), where instanceof lies.
+    // [LAW:no-silent-failure] An fs error on the config file itself (the errno's `.path` is the discriminator) is `unreadable` — the file could not be read at all, distinct from one that read but is invalid, and never a fall-through to the default.
+    // Duck-typed rather than `instanceof Error`: fs errors can cross a realm boundary (jest/graceful-fs), where instanceof lies.
     const errno = e as Partial<NodeJS.ErrnoException> | null;
     if (
       configPath !== null &&
@@ -272,10 +187,7 @@ export async function checkConfig(
     ) {
       return { kind: "unreadable", path: configPath, message: errno.message };
     }
-    // Same classification RenderCache.reloadInto applies: ConfigError and
-    // register/render throws (template parse, MissingFieldError, action arity)
-    // are all author-facing diagnostics — the daemon would surface each via
-    // composeWithDiagnostics, so check surfaces each as fatal text.
+    // The same classification RenderCache.reloadInto applies: ConfigError and register/render throws are all author-facing diagnostics, so check surfaces each as fatal text.
     const message =
       e instanceof ConfigError
         ? e.message
@@ -286,11 +198,7 @@ export async function checkConfig(
   }
 }
 
-// The buildState + per-request-render mirror: every call below is the function
-// the daemon calls, in the daemon's order [LAW:single-enforcer]. Returns the
-// rendered line; appends the register pass's advisory `loadWarnings` (partial
-// declaration failures) to `warnings` — the same channel RenderCache merges
-// them into.
+// [LAW:single-enforcer] Every call below is the function the daemon calls, in the daemon's order; the register pass's advisory `loadWarnings` join the same channel RenderCache merges them into.
 async function loadRegisterRender(
   configPath: string | null,
   cwd: string,
@@ -308,63 +216,31 @@ async function loadRegisterRender(
   );
   try {
     const compiled = registerDslConfig(config, registry, { cwd });
-    // Registered before the validator pass so a derive throw (a key-kind
-    // clash) still carries the partial-load warnings into the fatal outcome.
+    // Registered before the validator pass so a derive throw still carries the partial-load warnings into the fatal outcome.
     warnings.push(...compiled.loadWarnings);
-    // [LAW:no-ambient-temporal-coupling] A shell/file source's first run is
-    // async; the verdict renders what the sources YIELDED, not their pre-scan
-    // fallbacks (a json document with no default is an error cell until it is
-    // scanned — exactly what an author must see). The registry owns the
-    // "every run complete" state; a source still out at the deadline is named
-    // and the render proceeds on what it holds.
+    // [LAW:no-ambient-temporal-coupling] The verdict renders what the sources YIELDED, not their pre-scan fallbacks; a source still out at the deadline is named and the render proceeds.
     const pending = await registry.settled(SOURCE_SETTLE_MS);
     if (pending.length > 0) {
       warnings.push(
         `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
-    // Derivation only (the throw-on-clash coherence pass over the action
-    // table); the daemon additionally registers the results in its global
-    // validator registry, which a one-shot check has no wire to serve.
+    // Derivation only; the daemon additionally registers the results in its global validator registry, which a one-shot check has no wire to serve.
     deriveActionValidators(config);
 
-    // Fresh session (no clicked theme/style/look), so the session half of
-    // each resolution is null — the config default over the floor, exactly
-    // what the daemon renders for a session that has never clicked.
-    // [LAW:one-source-of-truth] The preset resolves first and its fragment's
-    // globals feed every field below, the SAME order the daemon resolves in
-    // (server.ts) — so `check` renders the arrangement a fresh session actually
-    // opens in, not the config's un-presetted root.
+    // [LAW:one-source-of-truth] The preset resolves first and its globals feed every field below, the SAME order the daemon resolves in, so check renders the arrangement a fresh session opens in.
     const effective: EffectiveGlobals = resolveEffectiveGlobals(
       config,
-      // A fresh session: no clicked theme/style/look, and edit mode off. The
-      // resolution is THE daemon's (resolveEffectiveGlobals), not a copy that
-      // agrees with it today — which is the whole reason check renders what the
-      // daemon would render rather than something adjacent.
+      // A fresh session: the resolution is THE daemon's, not a copy that agrees with it today.
       () => null,
-      // [LAW:no-silent-failure] `check` renders the file as the bundled
-      // default's peer, never as a customization OF it — a root the file
-      // authors is simply the bar `check` verifies, so `.preset.customized`
-      // is false for THIS (primary, returned) render. A second render pass below also
-      // exercises `true`, so a `.preset.customized`-gated segment still
-      // gets checked — just not through this value.
+      // [LAW:no-silent-failure] check renders the file as the bundled default's peer, never as a customization OF it, so `.preset.customized` is false for this returned render; the pass below exercises `true`.
       () => false,
     );
-    // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
-    // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
-    // partially-declared variable) renders as a visible ⚠ error cell — partial
-    // rendering, the daemon's channel for a human looking at the bar. The blind
-    // authoring agent is not looking at the bar; check collects the same errors
-    // through the render's observer seam and fails the verdict, so exit 0 never
-    // blesses a bar that renders ⚠.
+    // [LAW:no-silent-failure] A throwing template renders as a visible ⚠ cell — a channel the blind authoring agent never sees, so check collects the same errors through the render's observer seam and fails the verdict.
     const renderOnce = (
       payloadEffective: EffectiveGlobals,
     ): { rendered: string; segmentErrors: Map<string, string> } => {
-      // [LAW:types-are-the-program] Keyed by segment NAME, not appended to a
-      // list — a segment errors at most once per pass, so this is the
-      // strongest true shape (dedupe-by-construction within one pass) and
-      // what makes deduping ACROSS the two passes below a plain key check
-      // rather than a message-text comparison.
+      // [LAW:types-are-the-program] Keyed by segment NAME: a segment errors at most once per pass, which makes deduping ACROSS the two passes a key check rather than a message comparison.
       const segmentErrors = new Map<string, string>();
       const rendered = renderDsl(
         config,
@@ -395,33 +271,15 @@ async function loadRegisterRender(
     };
 
     const primary = renderOnce(effective);
-    // [LAW:verifiable-goals] `.preset.customized` is the ONE gate this
-    // config surface adds that a rich, data-driven fixture (checkPayload's
-    // own stated design one comment up) can never drive true on its own —
-    // every OTHER field a segment might gate on is a VALUE checkPayload can
-    // just supply richly; this one is a daemon-resolved FACT about session
-    // state, not a hookData field a config author's own file ever carries.
-    // Without a second pass, a typo or MissingFieldError inside a user's
-    // OWN `when: '{{ .preset.customized }}'`-gated content (docs/
-    // interaction-authoring.md's own documented pattern) would pass check
-    // clean and only surface later as a live ⚠ error cell. Second pass
-    // only — the RETURNED rendering stays the realistic default (a fresh
-    // session has never customized anything); this pass exists purely to
-    // catch broken content behind the one gate the first pass can't reach.
+    // [LAW:verifiable-goals] `.preset.customized` is the ONE gate a rich fixture can never drive true on its own: it is a daemon-resolved FACT about session state, not a payload field, so without this pass broken content behind that gate would check clean.
+    // Second pass only — the RETURNED rendering stays the realistic fresh-session default.
     const customizedCheck = renderOnce({
       ...effective,
       presetCustomized: true,
     });
 
-    // [LAW:no-silent-failure] An UNCONDITIONAL segment error (one whose
-    // `when`, if any, is true in both passes — the two renders share the
-    // same config/store/registry and differ only in `presetCustomized`)
-    // fires in BOTH passes identically. Deduped by segment NAME rather than
-    // concatenated: a customizedCheck error is only genuinely NEW
-    // information when primary didn't already report that same segment —
-    // reporting it twice would double-count one bug and the "(under
-    // .preset.customized = true)" tag would misdirect the reader into
-    // thinking it's specific to that gate when it isn't.
+    // [LAW:no-silent-failure] An unconditional segment error fires identically in both passes, which share config/store/registry and differ only in `presetCustomized`.
+    // Deduped by segment NAME: reporting it twice would double-count one bug, and the "(under .preset.customized = true)" tag would misdirect the reader.
     const errors = [
       ...[...primary.segmentErrors].map(
         ([segName, message]) => `segment "${segName}": ${message}`,
@@ -443,9 +301,7 @@ async function loadRegisterRender(
     }
     return primary.rendered;
   } finally {
-    // [LAW:single-enforcer] The registry owns every async handle the config
-    // declared (timers, fs watchers, git subscriptions); a one-shot check must
-    // not leak them past the verdict.
+    // [LAW:single-enforcer] The registry owns every async handle the config declared; a one-shot check must not leak them past the verdict.
     registry.dispose();
   }
 }
@@ -454,11 +310,7 @@ const EXIT_CLEAN = 0;
 const EXIT_FATAL = 1;
 const EXIT_USAGE = 2;
 
-// [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is
-// DATA: a total fold over CheckOutcome returning one descriptor; runCheck runs
-// the two unconditional writes + exit against it. Verdict on stdout, every
-// diagnostic (warnings included) on stderr — so `check` in a pipeline yields a
-// parseable verdict while a human still sees the advisories.
+// [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is DATA. Verdict on stdout, every diagnostic on stderr, so a pipeline gets a parseable verdict while a human still sees the advisories.
 export interface CliPlan {
   readonly stdout: string;
   readonly stderr: string;
@@ -500,11 +352,7 @@ export function checkPlan(o: CheckOutcome): CliPlan {
   }
 }
 
-// `cc-candybar check [path]` — the argv binding. Extra arguments and an empty
-// path argument are usage errors (loud, not silently ignored — the likeliest
-// cause is an unquoted or mis-expanded shell variable). An empty string is not
-// "no argument": `checkConfig(undefined)` means "resolve like the daemon",
-// while `""` is a malformed target that would otherwise EISDIR on the cwd.
+// Extra arguments and an empty path are usage errors: `checkConfig(undefined)` means "resolve like the daemon", while `""` is a malformed target that would otherwise EISDIR on the cwd.
 export async function runCheck(args: readonly string[]): Promise<never> {
   if (args.length > 1 || args[0] === "") {
     process.stderr.write(

@@ -4,47 +4,16 @@ import v8 from "node:v8";
 import { daemonDir } from "./paths";
 import { dlog, type DaemonLogger } from "./log";
 
-// [LAW:single-enforcer] One module owns "when does the daemon plan to die".
-// Only the RSS trigger remains — idle and age limits were removed because they
-// interrupted active sessions. The RSS limit is a true anomaly backstop; normal
-// operation should never approach it now that transcript parsing is pruned.
-//
-// [LAW:one-source-of-truth] The daemon's memory budget is ONE number, read from
-// ONE place. Two limits derive from it and their ORDER is the whole point:
-//
-//   RSS backstop (this module)   — graceful: heap snapshot, logged shutdown,
-//                                  clean restart on the next tick.
-//   V8 old-space cap (spawners)  — hard: V8 aborts with SIGABRT below every JS
-//                                  handler, so no log line, no snapshot, and
-//                                  the next daemon finds only a stale socket.
-//
-// The cap sits at HEAP_CAP_OVER_RSS × the backstop, a margin wide enough that
-// the graceful path fires first under any growth the 60 s poll can see (a
-// burst that doubles RSS inside one poll window can still reach the hard cap).
-// Before this the two were unrelated literals (400 MB heap in each spawner,
-// 512 MB RSS here), and the 2026-09-03 outage found the gap: a daemon holding
-// twenty configs' worth of duplicated helper-template ASTs (since fixed in
-// src/dsl/render.ts compileHelpers) blew the heap in seconds, aborted
-// silently, and crash-looped on every render tick while the backstop — a 60 s
-// poll — never got a turn. Raising the env override raises BOTH, because both
-// spawners derive the cap through heapCapMb below. The Rust client mirrors
-// RSS_LIMIT_ENV, DEFAULT_RSS_LIMIT_MB, and HEAP_CAP_OVER_RSS as literals
-// (rust-client/src/launch.rs); scripts/check-protocol.mjs fails the build on
-// drift.
+// [LAW:single-enforcer] One module owns "when does the daemon plan to die" — an
+// RSS backstop, the only trigger left. [LAW:one-source-of-truth] ONE budget, whose
+// two limits are ORDERED: the graceful backstop must fire before V8's hard heap
+// cap, which aborts below every JS handler with no log line and no snapshot.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 512;
 export const HEAP_CAP_OVER_RSS = 2;
 
-// [LAW:parse-dont-validate] Absent → default; a positive integer → that; present
-// but malformed → throw. Only an operator ever sets this variable, so garbage
-// is an operator error, and `|| default` would silently run at a budget they
-// did not ask for. [LAW:no-silent-failure]
-//
-// [LAW:one-source-of-truth] The grammar is ONE rule both runtimes apply
-// verbatim — ASCII digits only, > 0, within the safe-integer range —
-// so the spawner and the daemon it spawns accept and reject the same values
-// (rust-client/src/launch.rs heap_cap_mb). A grammar that differed by so much
-// as a leading `+` would let a client spawn a daemon that refuses to boot.
+// [LAW:parse-dont-validate] Malformed throws, never falls back [LAW:no-silent-failure]:
+// only an operator sets this, and both runtimes must apply one grammar verbatim.
 export function rssLimitMb(env: NodeJS.ProcessEnv): number {
   const raw = env[RSS_LIMIT_ENV];
   if (raw === undefined) return DEFAULT_RSS_LIMIT_MB;
@@ -64,7 +33,6 @@ export function heapCapMb(env: NodeJS.ProcessEnv): number {
 
 const BYTES_PER_MB = 1024 * 1024;
 
-// The budget in the unit `process.memoryUsage().rss` reports.
 export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
   return rssLimitMb(env) * BYTES_PER_MB;
 }
@@ -74,11 +42,7 @@ const HEAP_SNAPSHOT_KEEP = 3;
 
 export interface LimitsDeps {
   now: () => number;
-  // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
-  // writer's identity are injected, not reached for ambiently. Without these,
-  // unit tests of checkRss compute filenames against the real daemonDir() and
-  // emit real dlog lines into the user's production daemon.log — the seam must
-  // cover every dependency or it isn't a seam.
+  // [LAW:locality-or-seam] Injected, never ambient — else tests write the real log.
   pid: number;
   snapshotDir: string;
   log: DaemonLogger;
@@ -113,11 +77,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       `RSS ${rss} > limit ${rssLimit}; writing heap snapshot then shutting down`,
     );
     try {
-      // [LAW:types-are-the-program] Uniqueness is by construction (the writer's
-      // pid), not by trusting the clock to be real and sub-ms-distinct. Two
-      // overlapping daemons hitting the wall in the same millisecond — or a
-      // frozen `now` — still produce distinct files; the timestamp stays the
-      // leading component so rotateSnapshots' newest-first ordering holds.
+      // [LAW:types-are-the-program] Unique by construction (the pid), not the clock.
       const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
       const file = path.join(
         deps.snapshotDir,
@@ -161,10 +121,7 @@ function rotateSnapshots(
   keep: number,
   remove: (p: string) => void,
 ): void {
-  // Newest-first by basename (the leading ISO timestamp is lexically ordered;
-  // the trailing -<pid> only tiebreaks same-instant writes). Sort by basename
-  // so paths with different parent dirs still order correctly when the test
-  // mock and production use different prefixes.
+  // Sort by BASENAME so paths under different parent dirs still order newest-first.
   const sorted = [...files].sort((a, b) => {
     const aBase = a.slice(a.lastIndexOf("/") + 1);
     const bBase = b.slice(b.lastIndexOf("/") + 1);
@@ -177,14 +134,12 @@ function rotateSnapshots(
   }
 }
 
-// Default real-fs deps for the daemon. Test code constructs its own.
 export function realLimitsDeps(
   startedAtMs: number,
   shutdown: (code: number) => void,
   overrides: Partial<LimitsDeps> = {},
 ): LimitsDeps {
-  // [LAW:one-source-of-truth] One captured dir backs both the new-snapshot path
-  // and the listing used for rotation, so they can never read different dirs.
+  // [LAW:one-source-of-truth] One captured dir backs both the write and the listing.
   const dir = daemonDir();
   return {
     now: () => Date.now(),

@@ -1,35 +1,8 @@
 #!/usr/bin/env node
 // heap-retainers.mjs — reverse-BFS retaining paths from a class to a GC root.
-//
-// WHY THIS EXISTS
-// ---------------
-// A histogram (heap-analyze.mjs) tells you WHAT grew; it does not tell you WHO
-// is holding it. That second question is what overturned the a-priori suspect
-// ranking for the daemon RSS leak: this script showed that ALL ~3046
-// FSReqPromise were retained DIRECTLY by `synthetic / (Global handles)` —
-// libuv's pending-request table — not by any JS cache, watcher, or MobX
-// reaction. The leak was held from the BOTTOM (pending syscalls), not the top.
-// See ticket brandon-daemon-memory-leak-5qh. Committed so that finding is
-// reproducible: `node scripts/heap-retainers.mjs snap.heapsnapshot FSReqPromise`.
-//
-// USAGE
-//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json]
-//
-//   <match-RE>   JS regexp matched against "<type> / <name>"; instances of
-//                matching nodes are the BFS targets.
-//   --limit N    trace at most N target instances (default 5). The cap is
-//                LOUD, not silent: a "(N more matching nodes not traced)" line
-//                is printed so truncation is never mistaken for completeness.
-//   --json       emit { paths: [[ "<root>", ..., "<target>" ], ...] }.
-//
-// A retaining path is printed root-first: the GC root, then each retaining
-// edge's owner down to the target instance. Edge labels (.field / [index])
-// annotate how each step holds the next.
 
 import { parseSnapshot, nodeLabel } from "./heap-analyze.mjs";
 
-// Edge label for edge record `rec`: property/internal/context edges name a
-// string; element/hidden edges carry a numeric index.
 function edgeLabel(s, rec) {
   const off = rec * s.edgeStride;
   const type = s.edgeTypes[s.edges[off + s.edgeTypeIdx]];
@@ -38,8 +11,7 @@ function edgeLabel(s, rec) {
   return s.strings[nameOrIndex] ?? `#${nameOrIndex}`;
 }
 
-// Build reverse adjacency: for every directed edge from→to, record (from, edgeRec)
-// under `to`, so BFS can walk from a target up toward its retainers.
+// Reverse adjacency, so BFS can walk from a target up toward its retainers.
 function buildReverse(s) {
   const firstEdge = new Int32Array(s.nodeCount + 1);
   for (let i = 0; i < s.nodeCount; i++) {
@@ -55,8 +27,7 @@ function buildReverse(s) {
   return reverse;
 }
 
-// Shortest retaining path (root-first list of labels) from any GC root to
-// `target`, found by BFS over reverse edges. Ordinal 0 is V8's synthetic root.
+// Root-first path to `target`. Ordinal 0 is V8's synthetic root.
 function pathToRoot(s, reverse, target) {
   const parent = new Map();
   parent.set(target, null);

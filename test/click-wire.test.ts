@@ -1,9 +1,4 @@
-// [LAW:verifiable-goals] 70m.8 acceptance for the click wire itself: an ordered
-// effect list serializes to ONE dispatch URL and parses back; arbitrary
-// slash/&/= bearing values round-trip (the slash-safety the old whole-value
-// decode could not give); the `dispatch` verb runs EVERY effect, aggregates
-// failures without aborting, and cannot nest; and old direct (non-dispatch)
-// links still parse and run.
+// [LAW:verifiable-goals] The click wire: an ordered effect list serializes to ONE dispatch URL and parses back, slash/&/=-bearing values round-trip, and `dispatch` runs EVERY effect, aggregates failures, and cannot nest.
 
 import {
   effectsUrl,
@@ -92,8 +87,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   });
 
   test("a bare value containing '?' copies verbatim — ? is data, not a delimiter", () => {
-    // Regression: only `/` delimits the verb; `dispatch/e=…` carries the effect
-    // list, so `?` never needs to split and stays part of a bare copy value.
+    // Regression: only `/` delimits the verb, so `?` stays part of a bare copy value.
     expect(parseHandlerUrl("cc-candybar://hello?world")).toEqual({
       verb: "copy",
       value: "hello?world",
@@ -101,9 +95,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   });
 
   test("a direct single-arg link keeps its unencoded slashes in the raw value", () => {
-    // Regression: the copy handler decodes the WHOLE value (oneArg →
-    // decodeURIComponent), so an old `copy/a/b` link copies "a/b", not "a".
-    // parseHandlerUrl hands the raw tail; only the verb is split off.
+    // Regression: a single-arg verb decodes the WHOLE value, so `copy/a/b` copies "a/b".
     expect(parseHandlerUrl("cc-candybar://copy/a/b")).toEqual({
       verb: "copy",
       value: "a/b",
@@ -111,19 +103,12 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   });
 
   test("effectsOf mirrors the daemon's per-verb decode (single-arg whole, set-state segmented)", () => {
-    // A single-arg verb decodes the whole value: direct `copy/a/b` → one arg
-    // "a/b", matching what the copy handler copies (so the helper can't mask a
-    // back-compat regression).
     expect(effectsOf("cc-candybar://copy/a/b")).toEqual([
       { verb: "copy", args: ["a/b"] },
     ]);
-    // set-state, the one multi-arg verb, still segments.
     expect(effectsOf("cc-candybar://set-state/s1/theme/nord")).toEqual([
       { verb: "set-state", args: ["s1", "theme", "nord"] },
     ]);
-    // The doctor verbs: doctor-run takes the session alone (whole decode),
-    // doctor-fix the session and the check (segmented) — the classification a
-    // prior round caught drifting.
     expect(effectsOf(`cc-candybar://${VERB_DOCTOR_RUN}/a/b`)).toEqual([
       { verb: VERB_DOCTOR_RUN, args: ["a/b"] },
     ]);
@@ -136,21 +121,17 @@ describe("parseHandlerUrl — verb split, value raw", () => {
 describe("dispatch verb — run all, aggregate, no nesting", () => {
   test("every effect runs; a later failure does not undo an earlier success", () => {
     const sessionState = new SessionState();
-    // First effect writes a valid key; second names an unknown key (rejected).
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ]);
-    // The aggregated failure surfaces, naming the bad effect...
     expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
     // ...but the earlier effect still committed (run-all, not abort-on-first).
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
   });
 
   test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {
-    // A leaf's input rejection (set-state unknown key) is BadVerbArgs; the
-    // aggregate must stay BadVerbArgs so the dispatcher maps it to BAD_REQUEST,
-    // not RENDER_FAILED. (An operational leaf failure flips it to a plain Error.)
+    // A leaf's input rejection stays BadVerbArgs so the dispatcher maps it to BAD_REQUEST, not RENDER_FAILED.
     const sessionState = new SessionState();
     const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
     expect(() => clickUrl(url, ctx(sessionState))).toThrow(BadVerbArgs);
@@ -176,15 +157,12 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
   });
 
   test("dispatch is the only verb that resolves a nested dispatch — leaf table excludes it", () => {
-    // The full table dispatches `dispatch`, but the leaf table it folds over
-    // does not — so an effect can never re-enter dispatch.
+    // The leaf table does not dispatch `dispatch`, so an effect can never re-enter it.
     expect(VERBS.has(VERB_DISPATCH)).toBe(true);
   });
 
   test("per-effect errors are written to click.error in session state for bar display", () => {
     const sessionState = new SessionState();
-    // Two effects: first valid, second bad. Dispatch throws but also writes
-    // per-effect errors to session state so the next render shows them.
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
@@ -193,13 +171,11 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const clickError = sessionState.get(SID, "click.error");
     expect(clickError).not.toBeNull();
     expect(clickError).toMatch(/no-such-key/);
-    // Session ID is extracted from the first set-state effect.
     expect(clickError).toMatch(/set-state:/);
   });
 
   test("click.error is not written when no session-bearing effect exists", () => {
     const sessionState = new SessionState();
-    // copy-only dispatch with an unknown verb — no session ID available.
     const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
     expect(() => clickUrl(url, ctx(sessionState))).toThrow();
     expect(sessionState.get(SID, "click.error")).toBeNull();

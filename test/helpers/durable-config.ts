@@ -1,16 +1,5 @@
-// [LAW:one-source-of-truth] The durable store under test IS the config file
-// (candybar-config-dqe). A test that drives persist/reset/undo/redo clicks
-// through the real verb handlers needs exactly what a real session has: a
-// config file the session "rendered from", the render origin that names it
-// in SessionState, and the daemon's edit history beside it. This fixture
-// stands those three up under one temp root and tears them down together,
-// so no suite re-spells the origin key or the history path.
-//
-// [LAW:single-enforcer] Every env var that steers where a durable write lands
-// is isolated here, for the fixture's lifetime, and restored on dispose: the
-// XDG pair derive the history path and the first-ever-write fallback. (A
-// developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
-// it is a client hint, composed into the render origin, brandon-config-5g8.)
+// [LAW:one-source-of-truth] The durable store under test IS the config file.
+// [LAW:single-enforcer] Env vars steering a durable write are isolated here.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,24 +14,15 @@ import {
 } from "../../src/daemon/verbs";
 
 export interface DurableConfig {
-  /** The session's projectDir AND cwd — the temp root. */
   readonly projectDir: string;
-  /** `<projectDir>/.cc-candybar.json5` — the file a write lands in once it exists. */
   readonly configPath: string;
   /** Where a write lands while `configPath` does NOT exist: the XDG tail. */
   readonly xdgConfigPath: string;
   readonly historyPath: string;
   write(text: string): void;
-  /** The file's current text, or null when it does not exist. */
   text(): string | null;
-  /** The file parsed as JSON5 (throws when absent). */
   parsed(): Record<string, unknown>;
-  /** The history stack of `configPath` (or `file`) — empty until its first edit. */
   history(file?: string): FileHistory;
-  /**
-   * What the render handler records so a click resolves this file — or, with
-   * `configFile`, the explicit path the session's render was composed from.
-   */
   seedOrigin(
     sessionState: SessionStateRW,
     sessionId: string,
@@ -53,7 +33,6 @@ export interface DurableConfig {
 
 type EnvVars = Readonly<Record<string, string | undefined>>;
 
-/** Set each var to its value; undefined unsets it. */
 function assignEnv(vars: EnvVars): void {
   for (const [name, value] of Object.entries(vars)) {
     if (value === undefined) delete process.env[name];
@@ -89,8 +68,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    // The history file itself is created by the first edit, so before one an
-    // absent file and an absent entry both read as the empty stack.
+    // Before the first edit, an absent file and an absent entry both read as the empty stack.
     history: (file = configPath) =>
       (
         JSON.parse(readOrNull(configEditHistoryPath()) ?? "{}") as Record<

@@ -1,45 +1,5 @@
-// [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
-// the real spine (mirroring dsl-persist-actions.test.ts's model one arm
-// over), re-aimed at the config FILE as the one durable store
-// (candybar-config-dqe):
-//
-//   1. The loader proves the `removeSegment`/`insertSegment` ActionDecl
-//      shapes: persist-only, literal at author time, rejects `:`/`/` in any
-//      name, rejects a bad `relation`.
-//   2. Cross-ref catches an undeclared preset name, an undeclared segment
-//      name, and the wrong ARM paired with a "presets.<name>.root" target
-//      (to/from/cycle/bounded have no meaning as a tree op) — all load-time,
-//      never a click-time surprise.
-//   3. deriveConfigActionValidators derives a ONE-MEMBER allow-list per
-//      declared layout action (the op token IS the gate) — a click carrying
-//      any other token is a loud rejection, never silently applied
-//      (satisfies the ticket's "a template CANNOT write a layout position
-//      the declarations do not name").
-//   4. A click on a compiled layout-op action fires VERB_APPLY_LAYOUT_OP
-//      through the REAL daemon handler, which validates the token and then
-//      rewrites the tree IN THE SESSION'S CONFIG FILE, in place, in the
-//      authoring grammar (bare names inside `{ h: [...] }` / `{ v: [...] }`)
-//      — every byte outside the edited span survives, the edit is one
-//      whole-file history entry, and a target/anchor the tree no longer
-//      holds is a LOUD error from the store (the bar clicked was stale),
-//      never a silent no-op.
-//   5. RenderCache reads the edited tree back through the SAME watcher-driven
-//      reload path a hand edit to the config file takes (bundled default <
-//      CONFIG FILE < ACTIVE PRESET), and the edit survives a real restart
-//      because the file IS the edit. A first-ever edit on a bundled root
-//      row materializes `root.rows.<row>` alone (rows merge by name); one
-//      under a bundled preset's name materializes the whole bundled
-//      declaration (`segments`/`presets` still merge by name, wholesale).
-//   6. brandon-layout-edit-2gc.5's own done-gate: "customized" is now the
-//      fact that the config FILE authors a root at the path presetRoot()
-//      reports for the active preset (`root` for a preset staging the
-//      config root, `presets.<n>.root` otherwise) — hand-written or
-//      click-written, indistinguishable by design — projected as
-//      `entry.state.authoredRoots` and `.preset.customized`. Edit mode
-//      synthesizes a `reset`-backed banner for it per preset for free, and
-//      firing that reset through the real daemon handler DELETES the
-//      authored root from the file, so the next reload falls back to the
-//      bundled tree — never a silent drift between screen and disk.
+// [LAW:verifiable-goals] Driven through the real spine and the REAL daemon handler:
+// a layout click rewrites the session's config FILE in place, in the authoring grammar.
 
 import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/settings-menu";
@@ -112,12 +72,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  // The global settings menu and the edit toggle it reaches are on every bar;
-  // this file's assertions are about the fixture's OWN clickable regions.
+  // The settings menu and edit toggle are on every bar; these assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);
 }
-
-// ─── loader: the removeSegment/insertSegment ActionDecl arms ─────────────────
 
 describe("removeSegment/insertSegment loader shape", () => {
   const base = (actions: string, presets = "{}") => `{
@@ -309,12 +266,7 @@ describe("cross-ref: presets.<name>.root target", () => {
   });
 });
 
-// ─── authoredFragment: the authoring spelling of a canonical root ────────────
-
-// [LAW:one-source-of-truth] A materialized layout is written in the grammar a
-// user writes and read back by the one loader; the spelling is lossless, own
-// fields included, or a click-written row would reload as something the user
-// never configured.
+// [LAW:one-source-of-truth] The spelling is lossless, own fields included, or a click-written row would reload as something the user never configured.
 describe("authoredFragment — lossless over every own field", () => {
   const readBack = (fragment: RootFragment): RootFragment =>
     parseDslConfig(
@@ -373,11 +325,6 @@ describe("authoredFragment — lossless over every own field", () => {
   });
 });
 
-// ─── config-validators: the derived gate is a one-member allow-list ──────────
-
-// The members one derived contribution gates, by key — the shape assertions
-// about "did MY action contribute its token" read, now that edit chrome unions
-// its own tokens onto the same per-preset key.
 function allowedFor(
   contributions: readonly { key: string; spec: { kind: string } }[],
   key: string,
@@ -409,11 +356,7 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
-    // [LAW:behavior-not-structure] The contract is "this action contributes ITS
-    // token to that preset's root gate". The same key also carries the tokens
-    // edit chrome mints for every content segment — now on every bar, since the
-    // global settings menu makes edit mode reachable — so membership, not the
-    // whole list, is what this action's declaration decides.
+    // [LAW:behavior-not-structure] The contract is membership — this action contributes ITS token — not the whole list.
     expect(allowedFor(contributions, "presets.default.root")).toContain(
       encodeLayoutOp({ op: "remove", target: "directory" }),
     );
@@ -439,8 +382,7 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
-    // Both actions land on ONE key (the union is the point); membership rather
-    // than exact contents, since edit chrome contributes to the same key.
+    // Both actions land on ONE key (the union is the point), so assert membership.
     const allowed = new Set(allowedFor(contributions, "presets.default.root"));
     for (const token of [
       encodeLayoutOp({ op: "remove", target: "directory" }),
@@ -471,12 +413,7 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
     }
   });
 
-  // brandon-layout-edit-2gc.5 PR review: a preset that declares NO
-  // removeSegment/insertSegment/insertSegmentFrom action at all (e.g. one
-  // edited down to zero non-exempt segments, so spliceContainer's loop never
-  // ran) must still register `presets.<name>.root` — otherwise its OWN
-  // synthesized `reset` action's target is unknown to the gate the moment
-  // it's needed most.
+  // A preset declaring no layout-op action must still register `presets.<name>.root`, or its synthesized reset has no gate.
   test("a preset's root key is registered even with zero layout-op actions targeting it", () => {
     const config = parseAndValidate(
       "<test>",
@@ -492,21 +429,14 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
     );
     const contributions = deriveConfigActionValidators(config);
     const rootEntry = contributions.find((c) => c.key === "presets.empty.root");
-    // The registration is the contract: a preset with no layout-op action of
-    // its own still gets its root key, so its reset click is never orphaned.
-    // Its members are whatever edit chrome minted for that preset's tree.
     expect(rootEntry).toBeDefined();
     expect(rootEntry!.spec.kind).toBe("allow-list");
   });
 });
 
-// ─── end-to-end: click → the config FILE, through the real daemon handler ────
-
 let durable: DurableConfig;
 
-// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
-// writes the same text as the session's config file, so the tree a click
-// edits is the tree the bar rendered — exactly the daemon's own situation.
+// [LAW:one-source-of-truth] The runtime parses `src` for the render AND writes it as the session's config file, exactly as the daemon does.
 function buildLayoutRuntime(src: string, sessionId = "s1") {
   if (durable.text() === null) durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
@@ -552,9 +482,7 @@ describe("apply-layout-op click → the config file", () => {
     durable.dispose();
   });
 
-  // The comment beside `root` is the canary: a click edits ONE span of the
-  // tree, and everything else in the file — this comment included — is
-  // preserved verbatim.
+  // The comment beside `root` is the canary: everything outside the edited span is preserved verbatim.
   const ROOT_COMMENT = "// identity row over the edit bar";
   const SRC = `{
     globals: {},
@@ -581,17 +509,14 @@ describe("apply-layout-op click → the config file", () => {
     const urls = extractUrls(render());
     expect(effectsOf(urls[0]!)[0]!.verb).toBe("apply-layout-op");
     click(urls[0]!);
-    // The file's own root is the edited tree, in the authoring grammar.
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "bar"] });
-    // One span changed; the rest of the file is the author's, byte for byte.
     const written = durable.text()!;
     expect(written).toContain(ROOT_COMMENT);
     expect(written).toContain(
       "removeDirectory: { persist: 'presets.default.root'",
     );
     expect(written).not.toBe(original);
-    // And the edit is ONE whole-file history entry — the same shape a
-    // persist/reset records, so undo needs no layout-specific path.
+    // ONE whole-file history entry — the same shape persist/reset records, so undo needs no layout-specific path.
     expect(durable.history().past).toEqual([
       { before: original, after: written },
     ]);
@@ -601,8 +526,8 @@ describe("apply-layout-op click → the config file", () => {
   test("two clicks COMPOSE — the second edits the tree the first left behind", () => {
     const { render, click, dispose } = buildLayoutRuntime(SRC);
     const urls = extractUrls(render());
-    click(urls[0]!); // remove directory
-    click(urls[1]!); // insert gitPr after git
+    click(urls[0]!);
+    click(urls[1]!);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["git", "gitPr"] }, "bar"],
     });
@@ -610,34 +535,25 @@ describe("apply-layout-op click → the config file", () => {
     dispose();
   });
 
-  // [LAW:no-silent-failure] The bar that emitted the click was rendered
-  // before the tree changed. There is no op log to "replay past" a stale
-  // entry any more — the store refuses the edit, names the missing segment,
-  // and touches neither the file nor the history.
+  // [LAW:no-silent-failure] The store refuses a stale edit, names the missing segment, and touches neither file nor history.
   test("a stale target/anchor is a LOUD error from the store, and the file is untouched", () => {
     const { render, click, dispose } = buildLayoutRuntime(SRC);
     const urls = extractUrls(render());
-    click(urls[0]!); // remove directory
+    click(urls[0]!);
     const afterFirst = durable.text()!;
 
-    // The same `-` again: "directory" is already gone.
     expect(() => click(urls[0]!)).toThrow(/holds no segment "directory".*stale/);
     expect(durable.text()).toBe(afterFirst);
     expect(durable.history().past).toHaveLength(1);
 
-    // An insert whose anchor was removed since the render, likewise.
-    click(urls[2]!); // remove git
+    click(urls[2]!);
     expect(() => click(urls[1]!)).toThrow(/holds no segment "git".*stale/);
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
     dispose();
   });
 
-  // [LAW:no-silent-failure] A custom preset the file declared at render time
-  // and no longer does (deleted by hand before the reload landed) is declared
-  // NOWHERE — not "a preset declaring no root", which stages the shared
-  // `root`. Both the structural edit and the reset must refuse, and the
-  // file's own top-level root must survive untouched.
+  // [LAW:no-silent-failure] A preset declared NOWHERE is not "a preset declaring no root"; both the edit and the reset must refuse.
   test("a click on a preset the file no longer declares is refused — never redirected onto the file's root", () => {
     const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
     const SRC_CUSTOM = `{
@@ -657,14 +573,12 @@ describe("apply-layout-op click → the config file", () => {
     }`;
     const { render, click, dispose } = buildLayoutRuntime(SRC_CUSTOM);
     const urls = extractUrls(render());
-    // The hand edit: the preset declaration vanishes; everything else stays.
     durable.write(SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"));
     expect(durable.parsed().presets).toEqual({});
 
     const undeclared = /neither the config file nor the bundled default declares presets\.mine/;
     expect(() => click(urls[0]!)).toThrow(undeclared);
-    // The reset link is hand-built: the harness filters rendered preset-root
-    // resets as edit chrome's own banner, and the verb is what is under test.
+    // The reset link is hand-built: the harness filters edit chrome's own banner, and the verb is what is under test.
     const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
     expect(() => click(resetUrl)).toThrow(undeclared);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
@@ -672,10 +586,7 @@ describe("apply-layout-op click → the config file", () => {
     dispose();
   });
 
-  // [LAW:one-source-of-truth] `restagesFragment` (the document) and
-  // `restages` (the loader) must classify one fragment alike: a preset whose
-  // root is an empty rows map carrying only a `distribution` IS staged, so its
-  // reset deletes `presets.<p>.root` — never the file's own top-level root.
+  // [LAW:one-source-of-truth] `restagesFragment` and `restages` must classify one fragment alike.
   test("a reset on a preset authored as `{ rows: {}, distribution }` deletes the preset's root, not the file's", () => {
     const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
     const SRC_PLACED = `{
@@ -721,10 +632,7 @@ describe("apply-layout-op click → the config file", () => {
     dispose();
   });
 
-  // [LAW:no-silent-failure] A click carries only a session id; WHICH file it
-  // edits comes from the origin the render recorded. A session that never
-  // rendered has none — the verb refuses rather than guessing the daemon's
-  // own XDG path.
+  // [LAW:no-silent-failure] WHICH file a click edits comes from the origin the render recorded; a session that never rendered has none.
   test("a click on a session with no recorded render origin is refused — no file to write", () => {
     const { dispose } = buildLayoutRuntime(SRC);
     const ctx: VerbContext = testVerbContext(new SessionState());
@@ -744,16 +652,7 @@ describe("apply-layout-op click → the config file", () => {
   });
 });
 
-// ─── the "customized" banner's own escaping: quote/backslash preset names ──
-
-// brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
-// preset name (only empty/slash/newline are rejected — see loader/
-// presets.ts), and wrapWithPresetRows splices the name into a
-// synthesized Go-template string literal. Unlike the newline case (which
-// gets rejected at load, since escaping can't fix an embedded literal
-// newline), a quote/backslash-bearing name is escaped, not rejected — so
-// this proves the escape actually holds through real parseAndValidate +
-// registerDslConfig + renderDsl, not just by inspection.
+// Quotes and backslashes are LEGAL in a preset name, so they are escaped into the synthesized template, not rejected.
 describe('the "customized" banner escapes quote/backslash preset names', () => {
   // eslint-disable-next-line no-control-regex
   const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
@@ -777,11 +676,8 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
       }`,
       ALLOWED,
     );
-    // The compile itself (parse every synthesized template) must not throw —
-    // an unescaped quote would break the Go-template source.
+    // An unescaped quote would break the Go-template source, so the compile itself must not throw.
     const store = new VariableStore();
-    // The banner is edit chrome: visible only with edit mode open AND the
-    // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
     const registry = new SourceRegistry(store, "", undefined, sessionState);
@@ -810,13 +706,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
   });
 });
 
-// brandon-layout-edit-2gc.5 PR review round 4: a preset's declared root may
-// carry its OWN top-level `when` — including the A-grammar's bare-segment-
-// ref shorthand `{ seg, when }` (loader/layout.ts), NOT only a container.
-// wrapWithPresetRows's when-carry-up only reaches a container's own
-// `when`; without ALSO copying it onto spliceEditChromeForPreset's
-// synthetic wrapper for a bare-segment root, that shape's own gate never
-// reached the carry-up at all.
+// A preset's declared root may carry its OWN top-level `when`, including the bare-segment-ref shorthand `{ seg, when }`.
 describe("the reset banner respects a preset root's own top-level `when`", () => {
   // eslint-disable-next-line no-control-regex
   const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
@@ -880,8 +770,6 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
   });
 });
 
-// ─── RenderCache integration: the file's tree, reload, restart, reset ───────
-
 function makeCache(reloads?: ReloadSignal): {
   cache: RenderCache;
   sessionState: SessionState;
@@ -906,22 +794,11 @@ function makeCache(reloads?: ReloadSignal): {
   return { cache, sessionState, cleanups };
 }
 
-// [LAW:locality-or-seam] The bundled default's `toolbar` segment references
-// `edit.toggle` (brandon-layout-edit-2gc.4), and `RenderCache` merges every
-// project's config on top of that default — so `edit.mode`/`edit.toggle`
-// (and, once validateConfig runs, per-preset `-`/`+` chrome) are now present
-// in EVERY resolved preset root this suite builds, `when`-gated shut but
-// structurally always there. This describe block asserts what a layout edit
-// does to a preset's ORDINARY content, so chrome nodes — recognizable purely
-// by the reserved `edit.` namespace their synthesis mints them under — are
-// filtered out here rather than at every call site.
+// [LAW:locality-or-seam] Edit chrome and the settings menu ride EVERY resolved preset root, so chrome is filtered by its reserved `edit.` namespace here rather than at every call site.
 function segmentNamesOf(root: LayoutNode): string[] {
   const out: string[] = [];
   const walk = (node: LayoutNode): void => {
     if (node.kind === "segment") {
-      // Synthesized chrome, not content: edit mode's +/- affordances and the
-      // global settings menu (candybar-settings-ui-aok.1) both ride every
-      // resolved preset root. These assertions are about the CONTENT tree.
       if (!node.name.startsWith(EDIT_NS) && !node.name.startsWith(SETTINGS_NS))
         out.push(node.name);
     } else {
@@ -932,21 +809,15 @@ function segmentNamesOf(root: LayoutNode): string[] {
   return out;
 }
 
-// The content names of the tree a preset renders, read the way the render
-// does (presetRoot — a preset staging the config root reads `root`).
 function presetNamesOf(entry: CacheEntry, preset: string): string[] {
   return segmentNamesOf(presetRoot(entry.state.config, preset).node);
 }
 
-// Fire one leaf verb through the REAL handler, with the wire's own encoding
-// — exactly what a hand click sends, no key discovered from an action name.
 function fireVerb(verb: string, ctx: VerbContext, ...args: string[]): void {
   VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
 }
 
-// A session that has rendered from the fixture's file — the origin a durable
-// verb resolves the file from. The cache's own SessionState, so the click
-// reads the same store the render published into.
+// A session that has rendered from the fixture's file — the origin a durable verb resolves the file from.
 function originCtx(sessionState: SessionState, sessionId = "s1"): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
   return testVerbContext(sessionState);
@@ -1000,10 +871,7 @@ describe("RenderCache: authoredRoots — the file authors a root at the preset's
     expect(authored.has("default")).toBe(false);
   });
 
-  // [LAW:one-source-of-truth] "Where does this preset's tree live" is ONE
-  // decision (presetRoot): a declared preset with no root of its own stages
-  // the config root, so the file's `root` customizes it exactly as it does
-  // the floor — the same fact read at the same path.
+  // [LAW:one-source-of-truth] "Where does this preset's tree live" is ONE decision (presetRoot).
   test("a declared preset with no root of its own is customized by the file's `root`, like the floor", () => {
     durable.write(`{
       segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
@@ -1025,9 +893,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   });
 
   const ROOT_COMMENT = "// the hand-authored row";
-  // Declares its own `rm`/`ins` actions so the cache's derived gate admits
-  // exactly the tokens the tests fire — the same gate a rendered `-`/`+`
-  // click passes through.
   const userConfigBody = `{
   globals: {},
   segments: {
@@ -1056,12 +921,8 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     relation: "after",
   });
 
-  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through
-  // the SAME watcher a hand edit to the file fires — there is no second
-  // "overrides changed" channel. The first application is the click itself;
-  // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
-  // the file with the bytes the click left, so every application ends in the
-  // same on-disk state and emits an event.
+  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through the SAME watcher a hand edit fires.
+  // A retry re-touches the file with the bytes the click left (fs.watch has no ready signal).
   test("a `-` click rewrites the file's root, and the live cache reloads it through the config-file watcher", async () => {
     durable.write(userConfigBody);
     const reloads = new ReloadSignal();
@@ -1074,8 +935,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "default")).toEqual(["directory", "git"]);
-      // Hand-authored `root` → already "customized" before any click: the
-      // banner's fact is "the file authors this tree", by whichever hand.
+      // Hand-authored `root` → already "customized": the fact is "the file authors this tree", by whichever hand.
       expect(entry.state.authoredRoots.has("default")).toBe(true);
 
       const ctx = originCtx(sessionState);
@@ -1104,10 +964,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // A preset whose root is a bare segment ref (`root: "sidebar"`) gets the
-  // same `-`/`+` chrome as a container root, so its clicks must land: the
-  // editor addresses it as the one-child container it abbreviates, and the
-  // tree edited down to nothing still loads.
+  // A bare-segment-ref root is addressed as the one-child container it abbreviates, and a tree edited down to nothing still loads.
   test("layout edits land on a bare-segment preset root, down to an empty container that still loads", () => {
     durable.write(`{
   globals: {},
@@ -1206,9 +1063,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:verifiable-goals] "The change survives a daemon restart" — a fresh
-  // RenderCache/GitDataProvider/WatcherRegistry (exactly what a real restart
-  // rebuilds), reading nothing but the config file on disk.
+  // [LAW:verifiable-goals] A fresh cache/provider/registry — what a real restart rebuilds — reading nothing but the file on disk.
   test("the edit survives a restart", () => {
     durable.write(userConfigBody);
     const { cache, sessionState, cleanups } = makeCache();
@@ -1239,24 +1094,8 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:verifiable-goals] brandon-layout-edit-2gc.4's own done-gate: the
-  // bundled default's `toolbar` segment hosts `edit.toggle`
-  // (docs/interaction-authoring.md's "The bundled default ships this on"),
-  // which raises a self-lockout question .3's handoff flagged explicitly —
-  // does removing the trigger's own host via edit mode's `-` strand a user
-  // with no way back? Proven here through the REAL RenderCache (the ONLY
-  // harness that resolves the file's tree against the bundled default AND
-  // recomputes the `+` picker's addable domain fresh each reload — see
-  // dsl-edit-mode.test.ts's sibling test for why its lighter-weight harness
-  // can prove the click but not this), against a project with NO
-  // hand-authored segments/root/actions of its own, so every artifact here
-  // — `toolbar`, `edit.toggle`, the addable domain, and the gate the clicks
-  // pass — comes from DEFAULT_DSL_CONFIG's own edit chrome alone.
-  // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the
-  // first merged row holding the segment, bundled rows before the file's own
-  // new ones — and the splice must edit THAT row, not the first occurrence in
-  // file-text order. Here `directory` sits in the bundled identity row AND in
-  // the file's own `extra` row, and the file authors `extra` first.
+  // [LAW:verifiable-goals] Removing edit.toggle's own host must not strand the user with no way back.
+  // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the first merged row holding the segment, not the first in file-text order.
   test("a segment placed in an inherited row and a file row: the edit lands on the row the cascade resolved", () => {
     durable.write(
       `{ globals: {}, segments: {}, root: { rows: { extra: { h: ['directory'] } } } }`,
@@ -1287,9 +1126,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:one-source-of-truth] `presets.default.root: { rows: {} }` is the
-  // merge identity: presetRoot reports the preset authored at `root`, so the
-  // store must edit `root` too — and name it when the click is stale.
+  // [LAW:one-source-of-truth] `{ rows: {} }` is the merge identity: presetRoot reports `root`, so the store must edit `root` too.
   test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", () => {
     durable.write(
       `{ globals: {}, segments: {}, presets: { default: { root: { rows: {} } } } }`,
@@ -1319,7 +1156,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
       expect(parsed.root.rows.identity!.h).not.toContain("directory");
       expect(parsed.presets.default.root).toEqual({ rows: {} });
-      // The same click again is stale, and names the root it stages.
       expect(removeDirectory).toThrow(/^root holds no segment "directory"/);
     } finally {
       for (const fn of cleanups) fn();
@@ -1332,9 +1168,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
     const { cache, sessionState, cleanups } = makeCache();
     try {
-      // Before any click: toolbar is in the resolved tree, the file authors
-      // no root of its own, and the `+` picker's addable domain does NOT yet
-      // offer toolbar (it's already placed).
       const before = cache.getOrCreate(
         durable.projectDir,
         durable.projectDir,
@@ -1344,8 +1177,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(presetNamesOf(before, "default")).toContain("toolbar");
       expect(before.state.authoredRoots.has("default")).toBe(false);
 
-      // Edit mode's own `-` beside toolbar: the token its synthesized action
-      // declares, through the gate this cache entry registered for it.
       fireVerb(
         "apply-layout-op",
         originCtx(sessionState),
@@ -1353,10 +1184,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "toolbar" }),
       );
-      // MATERIALIZATION: the file never authored a root, so ONLY the
-      // bundled row holding `toolbar` was copied in (`root.rows.identity`,
-      // authoring grammar) and then edited — the status row stays inherited,
-      // and every other section is untouched.
+      // MATERIALIZATION: only the bundled row holding `toolbar` was copied in; the status row stays inherited.
       const parsed = durable.parsed() as {
         root: { rows: Record<string, { h: string[] }> };
         globals: unknown;
@@ -1368,8 +1196,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.globals).toEqual({});
       expect(parsed.segments).toEqual({});
 
-      // A fresh cache — a real restart, not an in-process cache rebuild —
-      // reloading against the SAME project dir (same config file).
+      // A fresh cache — a real restart — against the SAME config file.
       const {
         cache: cache2,
         sessionState: sessionState2,
@@ -1384,11 +1211,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         expect(afterRemove.lastError).toBeNull();
         expect(presetNamesOf(afterRemove, "default")).not.toContain("toolbar");
         expect(afterRemove.state.authoredRoots.has("default")).toBe(true);
-        // The trigger is gone, but the REST of the preset's chrome is still
-        // there — other `-`/`+` affordances remain, so the bar isn't a dead
-        // end (only the render's own `when` gate hides them until a session
-        // sets edit.mode open, which this test doesn't need to drive to
-        // confirm the STRUCTURE is intact).
         const allNames: string[] = [];
         for (const node of walkNodes(
           presetRoot(afterRemove.state.config, "default").node,
@@ -1397,18 +1219,13 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         }
         const remainingChrome = allNames.filter((n) => n.startsWith(EDIT_NS));
         expect(remainingChrome.length).toBeGreaterThan(0);
-        // And "toolbar" is now a legal target of an insertSegmentFrom pick —
-        // every `+` in this preset ranges the SAME addable domain, computed
-        // fresh from the tree above, so any of them offers it back.
+        // Every `+` ranges the SAME addable domain, computed fresh from the tree above.
         expect(
           addableSegmentDomains(afterRemove.state.config).get(
             addableDomainName("default"),
           ),
         ).toContain("toolbar");
 
-        // Click that `+` and pick "toolbar": the exact token
-        // insertSegmentFrom's real click writes, through the gate this
-        // reload derived from that domain.
         fireVerb(
           "apply-layout-op",
           originCtx(sessionState2),
@@ -1430,8 +1247,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
             undefined,
           );
           expect(restored.lastError).toBeNull();
-          // Fully recovered — through clicks the bar itself offered, no
-          // hand edit, surviving two full "restarts" along the way.
           expect(presetNamesOf(restored, "default")).toContain("toolbar");
         } finally {
           for (const fn of cleanups3) fn();
@@ -1444,21 +1259,12 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:verifiable-goals] brandon-layout-edit-2gc.5's own done-gate: the
-  // visible diagnostic and its reset affordance, driven through the REAL
-  // RenderCache (authoredRoots is a fact of THIS reload, never re-read), the
-  // REAL synthesized reset action (edit-chrome.ts's wrapWithPresetRows,
-  // reached only when DEFAULT_DSL_CONFIG's `toolbar` wires edit.toggle —
-  // exactly the merged-default path every other test in this describe block
-  // already exercises), and the REAL daemon reset-config handler — never a
-  // synthetic stand-in for any of the three.
+  // [LAW:verifiable-goals] The visible diagnostic and its reset affordance, through the REAL cache, action, and daemon handler.
   test("a customized preset shows the diagnostic; resetting deletes the authored root and restores the bundled tree", () => {
     durable.write(`{ globals: {}, segments: {} }`);
 
     const { cache, sessionState, cleanups } = makeCache();
     try {
-      // Before any edit: not customized — the file authors no root — and
-      // the tree is the bundled default's own.
       const before = cache.getOrCreate(
         durable.projectDir,
         durable.projectDir,
@@ -1493,8 +1299,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         expect(presetNamesOf(customized, "default")).toEqual(
           namesBefore.filter((n) => n !== "directory"),
         );
-        // The synthesized reset action targets the SAME key the +/-
-        // affordances already write — no second gate to register.
+        // The synthesized reset targets the SAME key the +/- affordances write — no second gate.
         const resetActionNames = Object.entries(
           customized.state.config.actions,
         )
@@ -1502,16 +1307,12 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           .map(([name]) => name);
         expect(resetActionNames.length).toBe(1);
 
-        // Fire the reset click through the REAL daemon handler — no key
-        // to discover from the action name; reset-config only ever needs
-        // the target key, exactly like a hand click would send.
         fireVerb(
           "reset-config",
           originCtx(sessionState2),
           "s1",
           "presets.default.root",
         );
-        // The authored root is DELETED from the file; its siblings stay.
         expect(durable.parsed()).toEqual({ globals: {}, segments: {} });
 
         const { cache: cache3, cleanups: cleanups3 } = makeCache();
@@ -1535,22 +1336,8 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
-  // "compact" preset has exactly 3 non-exempt segments (directory/git/
-  // context — candybar-settings-ui-aok.3 dropped its standalone preset
-  // control, since the settings menu is spliced into every preset root and
-  // carries one) — removing all 3 via the synthesized `-` chrome
-  // leaves spliceContainer with zero children, so removeChrome/insertChrome
-  // contribute NOTHING for "compact" on the next reload. Proves the reset
-  // banner's own click still works in exactly that state, through the REAL
-  // RenderCache and the REAL daemon reset-config handler — not just that
-  // the key is derived (the narrower unit test above).
-  //
-  // Also the materialization gate: the file never declared `compact`, and
-  // `presets` merge by name WHOLESALE, so the first `-` copies the whole
-  // bundled compact declaration (its `globals` and its `root`, in authoring
-  // grammar) into the file before editing — a one-field `compact` would
-  // shadow the bundled one and lose its `padding: 0`.
+  // The bundled "compact" preset can be edited down to zero non-exempt segments, so its reload contributes no chrome;
+  // and `presets` merge WHOLESALE, so the first `-` materializes the whole bundled declaration.
   test("a preset emptied of every segment can still be reset through a real click", () => {
     durable.write(`{ globals: {}, segments: {} }`);
 
@@ -1606,8 +1393,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(emptied.state.authoredRoots.has("compact")).toBe(true);
       expect(presetNamesOf(emptied, "compact")).toEqual([]);
 
-      // Would throw BadVerbArgs("unknown config key") before the
-      // always-registered preset-root contribution.
+      // Would throw BadVerbArgs("unknown config key") without the always-registered preset-root contribution.
       expect(() =>
         fireVerb(
           "reset-config",
@@ -1616,7 +1402,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "presets.compact.root",
         ),
       ).not.toThrow();
-      // reset = DELETE that path: the authored root is gone from the file.
       const compact = durable.parsed().presets as Record<string, unknown>;
       expect(compact.compact).not.toHaveProperty("root");
     } finally {

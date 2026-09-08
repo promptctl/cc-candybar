@@ -1,8 +1,4 @@
-// [LAW:types-are-the-program] The cache-policy schema: a CacheDecl is exactly one
-// of ttl / watch_file / depends_on / key / never, declared as DATA (CACHE_SCHEMA)
-// and interpreted by the tag-by-present-key engine (oneOfPresent).
-// requireCache/optionalCache gate presence by source kind. This file changes when
-// the cache vocabulary changes — add an arm to CACHE_SCHEMA and CacheDecl.
+// [LAW:types-are-the-program] The cache-policy schema as DATA (CACHE_SCHEMA), interpreted by the tag-by-present-key engine; a new policy is a new arm.
 
 import {
   CACHE_KEYS,
@@ -38,8 +34,7 @@ export function requireCache(
       });
       return null;
     }
-    // For kinds where cache is optional and absent, this path is unreachable
-    // because callers use optionalCache; keep narrow.
+    // Unreachable for optional kinds: those callers use optionalCache.
     return null;
   }
   return validateCache(ctx, `${path}.cache`, raw.cache);
@@ -55,12 +50,7 @@ export function optionalCache(
   return c ?? undefined;
 }
 
-// [LAW:dataflow-not-control-flow] The `cache` field as a record-field spec, so a
-// per-kind variable schema declares its cache policy as DATA. `kind` selects the
-// requiredness: file/shell/git require it (a missing cache reports the per-kind
-// message and fails the arm); template leaves it optional; time is optional but
-// ttl-only (ttlOnlyCacheSpec below). The field key is conventionally "cache",
-// read directly by requireCache/optionalCache.
+// [LAW:dataflow-not-control-flow] `kind` selects requiredness, so a per-kind variable schema declares its cache policy as data.
 export function requireCacheSpec(kind: SourceKind): FieldSpec<CacheDecl> {
   return {
     required: true,
@@ -78,15 +68,7 @@ export function optionalCacheSpec(): FieldSpec<CacheDecl> {
   };
 }
 
-// [LAW:types-are-the-program] The cache schema declared as DATA: arm keys in
-// CACHE_KEYS order (the structural messages join them), each arm carrying its
-// value-validation predicate and bespoke message. The literal "cache.<key>"
-// prefix is the contract text, independent of the runtime path used for line.
-// [LAW:one-source-of-truth] Each arm's `json` is the schema for the VALUE at its
-// present key — duration/path/key are strings, depends_on a string array, never
-// the literal true; the duration FORMAT (and non-empty) is a semantic check the
-// validator keeps (a JSON Schema `pattern` could mirror it, but the loader's
-// duration grammar is the single authority, so the schema stays at `type:string`).
+// [LAW:types-are-the-program] Arm keys in CACHE_KEYS order. [LAW:one-source-of-truth] Each arm's `json` types the VALUE at its present key; the duration FORMAT stays a validator check because the loader's grammar is its only authority.
 const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
   noun: "cache",
   arms: {
@@ -156,13 +138,7 @@ function validateCache(
   return oneOfPresent(ctx, CACHE_SCHEMA, path, raw);
 }
 
-// [LAW:types-are-the-program] The ttl-only subset for kinds whose runtime
-// honors no other invalidation (time vars refresh on a clock; declareTime
-// always registers a TTL timer). OneOfPresentSchema<TtlCacheDecl> forces
-// exactly the ttl arm at compile time, and the arm is CACHE_SCHEMA's own —
-// a subset of the vocabulary, never a parallel grammar. A non-ttl form is a
-// load-time diagnostic naming ttl as the only supported key, replacing the
-// runtime's former silent coercion to the default TTL [LAW:no-silent-failure].
+// [LAW:types-are-the-program] The ttl-only subset for kinds honoring no other invalidation; the arm is CACHE_SCHEMA's own, never a parallel grammar. [LAW:no-silent-failure] A non-ttl form is a load error, not a coercion.
 const TTL_ONLY_CACHE_SCHEMA: OneOfPresentSchema<TtlCacheDecl> = {
   noun: "time-variable cache",
   arms: { ttl: CACHE_SCHEMA.arms.ttl },
@@ -184,8 +160,7 @@ export function ttlOnlyCacheSpec(): FieldSpec<TtlCacheDecl> {
   };
 }
 
-// [LAW:one-source-of-truth] The cache emitter derives from the SAME CACHE_SCHEMA
-// the validator interprets — shared by the per-kind variable cache fields.
+// [LAW:one-source-of-truth] The emitter derives from the SAME CACHE_SCHEMA the validator interprets.
 export function cacheJson(): JsonNode {
   return oneOfPresentJson(CACHE_SCHEMA);
 }

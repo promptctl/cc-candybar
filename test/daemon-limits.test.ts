@@ -97,15 +97,12 @@ describe("limits.checkRss", () => {
     expect(rec.snapshotsWritten[0]).toMatch(
       /^\/fake-snapshot-dir\/heap-.*\.heapsnapshot$/,
     );
-    // No ambient logging: every line landed in the injected sink.
     expect(rec.logs.map((l) => l.msg)).toContain(
       "heap snapshot written: /fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
     );
   });
 
   test("filename carries the pid so overlapping daemons never collide", () => {
-    // Two daemons hit the wall at the SAME instant (identical fakeNow); only
-    // the pid distinguishes their snapshots, so neither clobbers the other.
     const a = newRec();
     a.fakeRss = 250 * 1024 * 1024;
     a.pid = 111;
@@ -134,7 +131,6 @@ describe("heap snapshot rotation", () => {
     ];
     const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
     limits.checkRss();
-    // After write+rotate: 4 existed (3 plus new one), keep=3, oldest removed.
     expect(rec.removed).toHaveLength(1);
     expect(rec.removed[0]).toContain("2026-01-01");
   });
@@ -150,24 +146,20 @@ describe("describeNextRestart", () => {
 
   test("flags rss approaching limit", () => {
     const rec = newRec();
-    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024; // > 75% of the default
+    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024;
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toContain("rss");
   });
 
   test("returns null when rss is healthy", () => {
     const rec = newRec();
-    rec.fakeRss = 50 * 1024 * 1024; // well under limit
+    rec.fakeRss = 50 * 1024 * 1024;
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toBeNull();
   });
 });
 
-// [LAW:one-source-of-truth] These vector tables are the SAME tables
-// rust-client/src/launch.rs runs against heap_cap_mb — one grammar, pinned
-// from both sides. scripts/check-protocol.mjs diffs the two ACCEPT and the two
-// REJECT lists, so adding a vector on one side without the other fails the
-// build.
+// [LAW:one-source-of-truth] Mirrors rust-client/src/launch.rs's vector tables; check-protocol.mjs diffs both sides.
 const ACCEPT: Array<[string, number]> = [
   ["1024", 1024],
   ["007", 7],

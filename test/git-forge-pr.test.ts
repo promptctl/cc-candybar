@@ -1,8 +1,4 @@
-// Forge PR/MR classification contract. The accept/reject table that decides
-// whether a forge-CLI launch result is an open PR (`ok`), genuinely none / no
-// integration (`absent`), or a lookup failure that must stay VISIBLE
-// (`failed`). [LAW:no-silent-failure] The whole point of the table is that a
-// transient forge outage never collapses into the same render state as "no PR".
+// [LAW:no-silent-failure] A transient forge outage must never collapse into the same render state as "no PR".
 
 import {
   classifyForgePr,
@@ -45,8 +41,6 @@ describe("detectForge", () => {
     ["git@bitbucket.org:team/repo.git", null],
     ["https://git.sr.ht/~user/repo", null],
     ["ssh://git@gitlab.example.com:22/group/proj.git", "gitlab"],
-    // Host-based, not substring: a repo NAMED gitlab/github on another host
-    // must NOT misdispatch (the bug a whole-URL substring match would have).
     ["git@github.com:foo/gitlab-mirror.git", "github"],
     ["git@example.com:team/gitlab.git", null],
     ["https://example.com/org/github.com-clone.git", null],
@@ -99,8 +93,6 @@ describe("classifyForgePr (github)", () => {
   });
 
   test("gh present but unlaunchable (EACCES spawn-error) → failed (visible)", () => {
-    // [LAW:no-silent-failure] Only a MISSING binary is absent; a CLI that
-    // exists but can't launch is a real failure, not "no PR".
     const r = classify(failResult("spawn-error", "", "spawn gh EACCES"));
     expect(r.kind).toBe("failed");
     if (r.kind === "failed") expect(r.reason).toMatch(/gh pr view/);
