@@ -12,7 +12,7 @@ The September investigation (`docs/daemon-memory-2026-09.md`) found the daemon's
 
 The backstop kept firing after the fix. It writes a heap snapshot on every breach, and three exist under `$XDG_STATE_HOME/cc-candybar/`:
 
-| Breach | Snapshot file | Nodes | Edges | Cause |
+| Breach | Snapshot size | Nodes | Edges | Cause |
 |---|---|---|---|---|
 | 2026-09-03 | 909 MB | 12,460,522 | 45,269,239 | Helper-AST duplication; fixed by go-template-js 0.8.0 + PR #198 |
 | 2026-09-04 | 52.6 MB | 654,861 | 2,725,980 | Post-fix; unexplained |
@@ -30,7 +30,7 @@ Each reason is paired with what it changes in this codebase; a reason with no co
 
 **Deterministic memory.** Without a collector, the RSS backstop, the spawner's heap cap, the `HEAP_CAP_OVER_RSS` mirror in two runtimes, and the heap-snapshot-on-breach path stop existing as concepts. `src/daemon/limits.ts` and the `launch.rs` mirror are deleted, not ported. Memory is what the data structures hold.
 
-**Sum types with exhaustive matching.** The daemon is built on discriminated unions, and the compiler checks their totality only where a `switch` happens to be written as one total projection. In Rust each becomes an enum the compiler refuses to `match` with an arm missing: `Outcome` (absent / failed / ok), `Presence` (present / absent / Unchecked), `ConfigResolution` (file / default / missing / unreadable), `BuildCurrency` (current / stale / not-source-checkout / unchecked), `Region` (bar / band), the `ActionDecl` vocabulary (set with its five value sources, copy, open, doctor), and `LayoutNode` (container / segment). `[LAW:types-are-the-program]` is what the codebase already claims; the port makes the compiler enforce it.
+**Sum types with exhaustive matching.** The daemon is built on discriminated unions, and the compiler checks their totality only where a `switch` happens to be written as one total projection. In Rust each becomes an enum the compiler refuses to `match` with an arm missing: `Outcome` (absent / failed / ok), `Presence` (present / absent / Unchecked), `ConfigResolution` (file / default / missing / unreadable), `BuildCurrency` (current / stale / not-source-checkout / unchecked), `Region` (bar / band), the `ActionDecl` union (`src/config/action.ts` is the source of its arm list: `set` and `persist` each with their value sources, the structural `persist` edits, `copy`, `open`, `reset`, `undo`, `redo`, `doctor`, and the dual form), and `LayoutNode` (container / segment). `[LAW:types-are-the-program]` is what the codebase already claims; the port makes the compiler enforce it.
 
 **Ownership and `Drop`.** The render cache's contract, "the `SourceRegistry` owns the async handles; dispose before swap" (`reloadInto` in `src/daemon/cache/render.ts`), is a discipline the code follows. In Rust the registry's watchers, timers, and git subscriptions are fields whose `Drop` runs when the old registry is dropped, so a swap that forgot to dispose cannot be written. `[LAW:single-enforcer]` becomes structural rather than reviewed.
 
@@ -79,7 +79,7 @@ The port changes no observable behaviour. Same socket path, same wire format and
 
 **Actions and derived validators**
 
-- `set` (to / from / min-max-by / int / cycle), `copy`, `open`, `doctor`; plus the dual set+persist form, a separate declaration sharing one of those value sources.
+- The action vocabulary is the `ActionDecl` union in `src/config/action.ts`, the source of its arm list; the file wins if this summary diverges. Read today: `set` (to / from / min-max-by / int / cycle), `persist` (to / from / min-max-by / cycle, plus the structural removeSegment / insertSegment / insertSegmentFrom edits), `copy`, `open`, `reset`, `undo`, `redo`, `doctor` (run / fix), and the dual set+persist form, a separate declaration sharing one of the value sources both destinations have.
 - Validators are derived from the action declarations (`deriveActionValidators`), the sole gate authority `[LAW:single-enforcer]`; a template can reference an action but cannot smuggle an un-gated write.
 - Click → URL handler → `url-handle` → daemon verbs, unchanged.
 
@@ -151,7 +151,7 @@ Six primitives are needed: a signal, a lazily cached memo, a disposable effect, 
 
 Adoption, from crates.io downloads: `reactive_graph` 2,541,837 total / 1,081,737 recent, repository last commit 2026-09-03; `sycamore-reactive` 298,929 / 19,646; `dioxus-signals` 2,738,871 / 1,102,856; `futures-signals` 1,024,630 / 101,374; `reaktiv` 48 lifetime downloads, 13 stars; `observe` 6,421 downloads with 11% documentation coverage. `floem_reactive`, `leptos_reactive`, and `reactive-signals` are outside the 18-month window and were not evaluated.
 
-`reactive_graph` is the only crate that satisfies all six primitives standalone, under a permissive licence, with real adoption. It is runtime-agnostic by its own README (browser, tokio, GTK), its Cargo dependencies contain no leptos crates (`any_spawner`, `slotmap`, `futures`), and every doctest bootstraps it with an `Owner` and an executor. `reaktiv` covers the six too and is the closest to MobX of anything surveyed (a bare atom, a lazy computed, a transaction, drop-disposed effects), but at 48 downloads it is a reference implementation to read, not a dependency to take.
+`reactive_graph` is the only crate that covers all six primitives standalone, under a permissive licence, with real adoption, with two of the six still open per its own row: batch semantics and zero-observer memo caching are confirmed by the phase-1 spike (Translation points 3 and 4 below). It is runtime-agnostic by its own README (browser, tokio, GTK), its Cargo dependencies contain no leptos crates (`any_spawner`, `slotmap`, `futures`), and every doctest bootstraps it with an `Owner` and an executor. `reaktiv` covers the six too and is the closest to MobX of anything surveyed (a bare atom, a lazy computed, a transaction, drop-disposed effects), but at 48 downloads it is a reference implementation to read, not a dependency to take.
 
 The alternative is writing the runtime, roughly 1–2k lines: a thread-local observer stack; a slotmap arena holding every node, with `Copy` handles; interior mutability confined to the arena; three-state dirtiness (clean / possibly-stale / stale) so a recompute that produces an equal value does not cascade; lazy memos that recompute on read; effects queued until batch end. A runtime confined to one thread matches the daemon, which renders one request at a time.
 
