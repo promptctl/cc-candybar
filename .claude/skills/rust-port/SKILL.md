@@ -38,20 +38,13 @@ Three crates, per `Component map`: styled text and colour (from rich-js — OKLC
 
 ## The reactive runtime
 
-Six primitives are the whole MobX surface; each maps to `reactive_graph` (MIT):
+The MobX surface is six primitives — signal, keepAlive computed, reaction, runInAction, createAtom, untracked — in three files: `src/var-system/store.ts`, `src/var-system/sources.ts`, `src/daemon/session-state.ts`. The doc's `Reactive runtime` section and its `Translation points` carry the mapping onto `reactive_graph` and the own-runtime alternative; this skill does not repeat them, so they cannot drift.
 
-- `observable.box(initial, { deep: false })` — `BoxNode`/`DocumentCell`, `src/var-system/store.ts` → `RwSignal` / `ArcRwSignal`.
-- `computed(fn, { keepAlive: true })` — `ComputedNode`, `store.ts` → `Memo`. keepAlive means "cached with zero observers"; Memo's docs do not state this — verify by test before relying on it.
-- `reaction(expr, effect)` — the `key` cache policy and `depends_on`, `src/var-system/sources.ts` → a `Memo` (PartialEq-gated, since MobX fires only when the RESULT changes) feeding an `ImmediateEffect`.
-- `runInAction` — `store.ts` `set`/`setDocument`, one per delivery in `sources.ts` → `effect::batch`; it defers ImmediateEffects only.
-- `createAtom` + `reportObserved`/`reportChanged` — `src/daemon/session-state.ts` → `Trigger` / `ArcTrigger`, `track()` / `notify()`.
-- `untracked` → `graph::untrack`.
-
-The alternative is ~1–2k lines of own runtime: a thread-local observer stack over a slotmap arena with Copy handles, three-state dirtiness (clean / possibly-stale / stale) so an equal recompute does not cascade, lazy memos, effects queued to batch end. A spike decides between the two; its outcome goes in `Open questions`. Do not skip the spike because one option "seems obviously fine".
+A phase-1 spike decides between the two on those translation points, and its outcome is written to the doc's `Open questions`. keepAlive-style caching with zero observers is verified by a test before any code relies on it. Do not skip the spike because one option "seems obviously fine".
 
 ## Workflow
 
-The git workflow in CLAUDE.md applies unchanged: clean tree, main up to date (0 ahead / 0 behind or stop), branch, commit, push, PR — and invoke `memento:address-pr-reviews` on the PR in the same response as opening it. Run `lit quickstart` first; each phase is an epic, each component a child ticket; a ticket closes when merged, never when green.
+Git, every time: clean tree; main at 0 ahead / 0 behind, or stop and report the state; branch; commit the finished work; push; open a PR — and invoke `memento:address-pr-reviews` on the PR in the same response as opening it. Run `lit quickstart` first; each phase is an epic, each component a child ticket; a ticket closes when merged, never when green.
 
 ## Verification
 
