@@ -34,7 +34,7 @@ Before writing Rust for a module:
 
 ## The three libraries (phase 1)
 
-Three crates, per `Component map`: styled text and colour (from rich-js — OKLCH lives there, the daemon keeps no colour math), the template engine (from go-template-js, an own port: Go syntax, an opaque styled-text value flowing through typed functions — `Template engine` and `What the landscape shows` record why no existing crate fits), and the reactive runtime (the MobX subset). The maintainer has ported the first two once already; the runtime is the one with a real decision in it.
+Three crates, per `Component map`: styled text and colour (from rich-js — OKLCH lives there, the daemon keeps no colour math), the template engine (from go-template-js, an own port: Go syntax, an opaque styled-text value flowing through typed functions — `Template engine` records why no existing crate fits), and the reactive runtime (the MobX subset). The maintainer has ported the first two once already; the runtime is the one with a real decision in it.
 
 ## The reactive runtime
 
@@ -54,7 +54,7 @@ Git, every time: clean tree; main at 0 ahead / 0 behind, or stop and report the 
 
 ## Phase 0: diagnose before you justify
 
-`Why rewrite` names the reason; the measurement decides whether it is true. `vmmap` the live daemon and sample `v8.getHeapStatistics()` / `process.memoryUsage()` over time. Exit: one sentence in `Why rewrite` stating what the non-heap RSS is, with the measurement. If most resident memory is file-backed pages or subprocess churn, a port reproduces it — which is why this comes first.
+`Why rewrite` names the reason; the measurement decides whether it is true. `vmmap` the live daemon and sample `v8.getHeapStatistics()` / `process.memoryUsage()` over time. The exit criterion is the doc's `Sequencing` phase-0 entry, in full, not a paraphrase. If most resident memory is file-backed pages or subprocess churn, a port reproduces it — which is why this comes first.
 
 ## Temptations, rehearsed
 

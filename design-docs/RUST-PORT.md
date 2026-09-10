@@ -79,7 +79,7 @@ The port changes no observable behaviour. Same socket path, same wire format and
 
 **Actions and derived validators**
 
-- `set` (to / from / min-max-by / int / cycle / persist dual), `copy`, `open`, `doctor`.
+- `set` (to / from / min-max-by / int / cycle), `copy`, `open`, `doctor`; plus the dual set+persist form, a separate declaration sharing one of those value sources.
 - Validators are derived from the action declarations (`deriveActionValidators`), the sole gate authority `[LAW:single-enforcer]`; a template can reference an action but cannot smuggle an un-gated write.
 - Click → URL handler → `url-handle` → daemon verbs, unchanged.
 
