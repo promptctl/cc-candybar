@@ -132,26 +132,25 @@ The variable system uses a small, exact subset of MobX. Three files import it (`
 - `reaction(expr, effect)` at two sites in `sources.ts`: the `key` cache policy, where a parsed key template is evaluated inside the tracked expression and the source re-runs when its rendered string changes, and `depends_on`, which tracks the joined `changeKey` of named variables. Both push an `IReactionDisposer` onto a cleanups list. A MobX `reaction` runs its effect only when the expression's result changes, not on every tracked write.
 - `runInAction` in `store.ts` (`set`, `setDocument`, `runInAction`) and in `sources.ts`, one per delivery, so a multi-write delivery invalidates dependents once.
 - `createAtom` with `reportObserved()` and `reportChanged()` in `session-state.ts`, so a render that reads session state registers a dependency and a click that writes it fires once per batch.
-- `untracked` at a few sites.
 
 Not used: deep observables, proxies, decorators or `makeObservable`, observable arrays or maps, `autorun` in the render path.
 
 The subset is ported rather than replaced with a static, AST-derived dependency graph, because the `key` reaction discovers its dependencies by evaluating a template through the scope. The set of variables a key template reads is only known by running it, so a graph computed from the AST would either over-approximate (every variable the template could name) or miss reads that go through helpers and dotted document paths. Porting the observer model keeps every pinned test's semantics.
 
-Six primitives are needed: a signal, a lazily cached memo, a disposable effect, a batch, an untracked read, and a data-less atom. The crates surveyed, every licence read verbatim from the crates.io licence field:
+Five primitives are needed: a signal, a lazily cached memo, a disposable effect, a batch, and a data-less atom. The crates surveyed, every licence read verbatim from the crates.io licence field:
 
-| Crate | Version (date) | Licence | Standalone | Signal | Lazy cached memo | Disposable effect | Batch | Untracked | Atom |
-|---|---|---|---|---|---|---|---|---|---|
-| `reactive_graph` | 0.2.14; 0.3.0-beta2 (2026-07-18) | `MIT` | yes | yes (`RwSignal`, `ArcRwSignal`) | yes (`Memo`, lazy per docs; zero-observer caching not stated) | yes (`ImmediateEffect` stops on drop; `Effect::stop()`) | partial (`batch` covers `ImmediateEffect` only) | yes (`untrack`) | yes (`Trigger`: `track()` / `notify()`) |
-| `sycamore-reactive` | 0.9.3 (2026-08-31) | `MIT` | yes (`create_root`) | yes | no (`create_memo` is eager) | no (`create_effect` returns `()`, scope disposal only) | yes | yes | no (idiom: `create_signal(())` + `track()`) |
-| `dioxus-signals` | 0.7.10 (2026-07-30) | `MIT OR Apache-2.0` | no (`Runtime::new` is `pub(crate)`, panics without a VirtualDom) | yes | not verified | not verified | no | not verified | not verified |
-| `futures-signals` | 0.3.34 (2024-07-26) | `MIT` | yes | yes | no (not auto-tracking; explicit `map`, lossy) | not verified | no | not verified | no |
-| `reaktiv` | 0.1.1 (2025-12-19) | `MIT OR Apache-2.0` | yes | yes (bare `Signal::emit` / `track_dependency`) | yes (`Computed::lazy`) | yes (drop-disposed) | yes (`Transaction::run`) | yes | yes (a `Signal` is data-less by design) |
-| `observe` | 2.0.0 (2026-01-20) | `MIT` | partial (hard tokio dependency) | yes (`Var`) | yes (`Computed`) | partial (`Reaction`; "Reactions must be triggered inside a batch()") | yes | not verified | not verified |
+| Crate | Version (date) | Licence | Standalone | Signal | Lazy cached memo | Disposable effect | Batch | Atom |
+|---|---|---|---|---|---|---|---|---|
+| `reactive_graph` | 0.2.14; 0.3.0-beta2 (2026-07-18) | `MIT` | yes | yes (`RwSignal`, `ArcRwSignal`) | yes (`Memo`, lazy per docs; zero-observer caching not stated) | yes (`ImmediateEffect` stops on drop; `Effect::stop()`) | partial (`batch` covers `ImmediateEffect` only) | yes (`Trigger`: `track()` / `notify()`) |
+| `sycamore-reactive` | 0.9.3 (2026-08-31) | `MIT` | yes (`create_root`) | yes | no (`create_memo` is eager) | no (`create_effect` returns `()`, scope disposal only) | yes | no (idiom: `create_signal(())` + `track()`) |
+| `dioxus-signals` | 0.7.10 (2026-07-30) | `MIT OR Apache-2.0` | no (`Runtime::new` is `pub(crate)`, panics without a VirtualDom) | yes | not verified | not verified | no | not verified |
+| `futures-signals` | 0.3.34 (2024-07-26) | `MIT` | yes | yes | no (not auto-tracking; explicit `map`, lossy) | not verified | no | no |
+| `reaktiv` | 0.1.1 (2025-12-19) | `MIT OR Apache-2.0` | yes | yes (bare `Signal::emit` / `track_dependency`) | yes (`Computed::lazy`) | yes (drop-disposed) | yes (`Transaction::run`) | yes (a `Signal` is data-less by design) |
+| `observe` | 2.0.0 (2026-01-20) | `MIT` | partial (hard tokio dependency) | yes (`Var`) | yes (`Computed`) | partial (`Reaction`; "Reactions must be triggered inside a batch()") | yes | not verified |
 
 Adoption, from crates.io downloads: `reactive_graph` 2,541,837 total / 1,081,737 recent, repository last commit 2026-09-03; `sycamore-reactive` 298,929 / 19,646; `dioxus-signals` 2,738,871 / 1,102,856; `futures-signals` 1,024,630 / 101,374; `reaktiv` 48 lifetime downloads, 13 stars; `observe` 6,421 downloads with 11% documentation coverage. `floem_reactive`, `leptos_reactive`, and `reactive-signals` are outside the 18-month window and were not evaluated.
 
-`reactive_graph` is the only crate that covers all six primitives standalone, under a permissive licence, with real adoption, with two of the six still open per its own row: batch semantics and zero-observer memo caching are confirmed by the phase-1 spike (Translation points 3 and 4 below). It is runtime-agnostic by its own README (browser, tokio, GTK), its Cargo dependencies contain no leptos crates (`any_spawner`, `slotmap`, `futures`), and every doctest bootstraps it with an `Owner` and an executor. `reaktiv` covers the six too and is the closest to MobX of anything surveyed (a bare atom, a lazy computed, a transaction, drop-disposed effects), but at 48 downloads it is a reference implementation to read, not a dependency to take.
+`reactive_graph` is the only crate that covers all five primitives standalone, under a permissive licence, with real adoption, with two of the five still open per its own row: batch semantics and zero-observer memo caching are confirmed by the phase-1 spike (Translation points 3 and 4 below). It is runtime-agnostic by its own README (browser, tokio, GTK), its Cargo dependencies contain no leptos crates (`any_spawner`, `slotmap`, `futures`), and every doctest bootstraps it with an `Owner` and an executor. `reaktiv` covers the five too and is the closest to MobX of anything surveyed (a bare atom, a lazy computed, a transaction, drop-disposed effects), but at 48 downloads it is a reference implementation to read, not a dependency to take.
 
 The alternative is writing the runtime, roughly 1–2k lines: a thread-local observer stack; a slotmap arena holding every node, with `Copy` handles; interior mutability confined to the arena; three-state dirtiness (clean / possibly-stale / stale) so a recompute that produces an equal value does not cascade; lazy memos that recompute on read; effects queued until batch end. A runtime confined to one thread matches the daemon, which renders one request at a time.
 

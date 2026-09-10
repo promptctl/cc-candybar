@@ -38,7 +38,7 @@ Three crates, per `Component map`: styled text and colour (from rich-js — OKLC
 
 ## The reactive runtime
 
-The MobX surface is six primitives — signal, keepAlive computed, reaction, runInAction, createAtom, untracked — in three files: `src/var-system/store.ts`, `src/var-system/sources.ts`, `src/daemon/session-state.ts`. The doc's `Reactive runtime` section and its `Translation points` carry the mapping onto `reactive_graph` and the own-runtime alternative; this skill does not repeat them, so they cannot drift.
+The MobX surface is five primitives — signal, keepAlive computed, reaction, runInAction, createAtom — in three files: `src/var-system/store.ts`, `src/var-system/sources.ts`, `src/daemon/session-state.ts`. The doc's `Reactive runtime` section and its `Translation points` carry the mapping onto `reactive_graph` and the own-runtime alternative; this skill does not repeat them, so they cannot drift.
 
 A phase-1 spike decides between the two on those translation points, and its outcome is written to the doc's `Open questions`. keepAlive-style caching with zero observers is verified by a test before any code relies on it. Do not skip the spike because one option "seems obviously fine".
 
