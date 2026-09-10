@@ -38,7 +38,7 @@ Each reason is paired with what it changes in this codebase; a reason with no co
 
 **The release pipeline already builds Rust.** `.github/workflows/release.yml` cross-compiles all four targets (x86_64 and aarch64 for linux-gnu and apple-darwin) from Linux with `cargo zigbuild`, no macOS runners, and publishes them as per-platform npm packages (`@promptctl/cc-candybar-darwin-arm64` and siblings, as `optionalDependencies`). A Rust daemon is one more binary through a path that exists.
 
-**Crates for the arithmetic.** `palette` for OKLCH and OKLab, `unicode-width`, and `unicode-segmentation` are the crates the port would lean on for colour math and cell measurement. Their versions and current state are from training, not verified today; they are checked before phase 1.
+**Crates for the arithmetic.** `palette` for OKLCH and OKLab, `unicode-width`, and `unicode-segmentation` are the crates the port would lean on for colour math and cell measurement. Their versions and current state are from training, not verified today; verifying and pinning them is part of phase 1's exit criterion.
 
 ### Where Go would have been easier
 
@@ -109,12 +109,12 @@ The TypeScript daemon is 39,534 lines of `src/` and 47,711 lines of `test/`. The
 
 | TypeScript module or library | Lines | Rust crate or module | Notes |
 |---|---|---|---|
-| `rust-client/` | 1,848 | `cc-candybar-client` (exists) | Becomes the client half of one workspace; its mirrored protocol consts are replaced by the shared `protocol` module |
-| rich-js (styled text, colour) | 22,775 | `rich` crate, own port | Ported from rich-js's own test suite; `palette` for OKLCH/OKLab, `unicode-width` for cells (versions not verified) |
-| go-template-js (`text/template` + Sprig) | 16,907 | `gotmpl` crate, own port | See Template engine below for why no existing crate fits |
+| `rust-client/` | 1,848 | `cc-candybar` crate (exists; `rust-client/Cargo.toml`) | Becomes the client half of one workspace; its mirrored protocol consts are replaced by the shared `protocol` module |
+| rich-js (styled text, colour) | 22,775 | `cc-rich` crate, own port | Ported from rich-js's own test suite; `palette` for OKLCH/OKLab, `unicode-width` for cells (versions not verified) |
+| go-template-js (`text/template` + Sprig) | 16,907 | `cc-gotmpl` crate, own port | Named apart from the published `gotmpl`, which Template engine below evaluates and rejects |
 | MobX subset (`src/var-system/store.ts`, `sources.ts`, `src/daemon/session-state.ts`) | — | Reactive runtime | `reactive_graph` or an own runtime; see Reactive runtime below |
 | `src/daemon/server.ts`, `protocol.ts`, `paths.ts`, `limits.ts`, `parent-watchdog.ts` | — | `daemon` module | Socket, framing, pid mutex, parent-death watchdog; `limits.ts` is deleted, not ported |
-| `src/daemon/cache/git.ts`, `session-usage-store.ts`, `render.ts`, `session-state.ts` | — | `cache` module | Git watchers, PR TTL cache, byte-cursor usage fold, render LRU with `Drop`-driven dispose |
+| `src/daemon/cache/git.ts`, `src/daemon/cache/session-usage-store.ts`, `src/daemon/cache/render.ts`, `src/daemon/session-state.ts` | — | `cache` module | Git watchers, PR TTL cache, byte-cursor usage fold, render LRU with `Drop`-driven dispose |
 | `src/var-system/` | — | `var_system` module | Boxes, computeds, the nine source kinds, `SourceParse`, documents |
 | `src/dsl/render.ts`, `src/render/`, `src/themes/` | — | `render` module | `registerDslConfig` + `renderDsl`, decor and bands, actions, picker, diagnostic strip |
 | `src/config/` (loader, merge, schema emitter, `json5-edit.ts`) | — | `config` module | Validation with the same error text; the span-tracking JSON5 editor; the JSON schema emitter stays one source with the validator |
@@ -186,13 +186,13 @@ Each phase has an exit criterion. The TypeScript daemon keeps shipping and recei
 
 **Phase 0: memory diagnosis.** Sample `vmmap`, `v8.getHeapStatistics()`, and `process.memoryUsage()` on the live daemon over a working day, and read the two post-fix heap snapshots. Exit: a written finding, appended to `docs/daemon-memory-2026-09.md`, stating what the resident memory at breach was made of and whether a port removes it, and one sentence in Why rewrite above replacing the hypothesis with the measurement. If the answer is "not V8's", the port's justification is rewritten around the reasons in Why Rust before phase 1 starts.
 
-**Phase 1: the three libraries as crates.** `rich`, `gotmpl`, and the reactive runtime (a spike deciding `reactive_graph` against an own runtime, on the four translation points), each in its own crate with its own tests ported from the TypeScript libraries' suites. Exit: every ported test passes; the crate versions of `palette`, `unicode-width`, and `unicode-segmentation` are verified and pinned; the memo-with-zero-observers behaviour is pinned by a test.
+**Phase 1: the three libraries as crates.** `cc-rich`, `cc-gotmpl`, and the reactive runtime (a spike deciding `reactive_graph` against an own runtime, on the four translation points), each in its own crate with its own tests ported from the TypeScript libraries' suites. Exit: every ported test passes; the crate versions of `palette`, `unicode-width`, and `unicode-segmentation` are verified and pinned; the memo-with-zero-observers behaviour is pinned by a test.
 
 **Phase 2: daemon core.** Protocol and framing, socket, pid mutex, the parent-death watchdog, the four caches, the variable system with its nine source kinds, config loading and merge, `registerDslConfig` and `renderDsl`. Exit, the parity gate: for every existing test payload, a request over the socket to the Rust daemon returns byte-identical output to the TypeScript daemon, diagnostics strip included. The gate is a test that runs both daemons on isolated sockets and diffs; it stays in the suite until phase 4 deletes one side.
 
 **Phase 3: verbs and the loop.** The click verbs, session state, the durable config editing path (span editor, undo/redo, `durableConfigPath` at click time), the doctor, the update notice, `daemon-stats`. Exit: the click-path tests pass against the Rust daemon; a live session drives the settings menu end to end through the real URL handler.
 
-**Phase 4: cutover.** `cc-candybar install` stages the Rust daemon at the per-platform data path. The TypeScript daemon is deleted, not kept as a fallback: one renderer is the rule (`[LAW:one-source-of-truth]`), and a fallback path is a second renderer that will drift the moment nobody is watching it. `scripts/check-protocol.mjs`, `src/daemon/limits.ts`, and the heap-cap mirror go with it. Exit: a release whose npm package ships no `dist/` daemon and whose `daemon-stats` reports no heap.
+**Phase 4: cutover.** `cc-candybar install` stages the Rust daemon at the per-platform data path. The TypeScript daemon is deleted, not kept as a fallback: one renderer is the rule (`[LAW:one-source-of-truth]`), and a fallback path is a second renderer that will drift the moment nobody is watching it. `scripts/check-protocol.mjs`, `src/daemon/limits.ts`, and the heap-cap mirror go with it. Exit: a release whose npm package ships no `dist/` daemon and whose `daemon-stats` reports no heap, and every test that pinned daemon behaviour has a Rust counterpart or a recorded reason it does not.
 
 ## Open questions
 

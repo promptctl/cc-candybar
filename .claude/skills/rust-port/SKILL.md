@@ -67,4 +67,4 @@ Git, every time: clean tree; main at 0 ahead / 0 behind, or stop and report the 
 
 ## Done
 
-A phase is done when its `Sequencing` exit criterion is met AND recorded in the doc. The port is done when `cc-candybar install` stages the Rust daemon, the TS daemon and its bundle are deleted, `scripts/check-protocol.mjs` is deleted because one crate holds the constants, and every test that pinned daemon behaviour has a Rust counterpart or a recorded reason it does not. Short of that, report the phase and its state; do not call it done.
+A phase is done when its `Sequencing` exit criterion is met AND recorded in the doc. The port is done when the doc's `Sequencing` phase-4 exit is met, in full, as written there. Short of that, report the phase and its state; do not call it done.
