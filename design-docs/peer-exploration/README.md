@@ -11,6 +11,7 @@ stage's output is a document in this directory that the next stage consumes.
 | Stage | Directory | Output |
 |-------|-----------|--------|
 | 1. Candidates | `1-candidates/` | One file per territory, listing projects with a name, URL, verified stats, a description, and what makes each interesting. |
+| 2. Categorized | `2-categorized/` | [`four-axes.md`](2-categorized/four-axes.md) — all 44 judged on primitives, UX, uniqueness, and polished-versus-hacky, plus a licence-risk table. |
 
 Later stages are added here as they are run.
 
