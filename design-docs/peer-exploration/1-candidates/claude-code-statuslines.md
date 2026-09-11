@@ -26,12 +26,6 @@ Territory: tools Claude Code invokes via the `statusLine` setting, plus usage tr
 - **What it is:** A Rust statusline binary shipped through npm as `@cometix/ccline`, rendering model / directory / git / context with Nerd Font glyphs and an interactive TUI for theme and segment configuration.
 - **Interesting because:** Beyond the bar it ships a "robust patcher" that edits the Claude Code install itself to suppress the built-in "Context low" warning and force verbose mode, with automatic backups and a patch strategy designed to survive Claude Code version bumps — a statusline that treats the host app as a modifiable surface, not just a JSON source.
 
-## abtop
-- **URL:** https://github.com/graykode/abtop
-- **Stats:** Rust · 3,506 stars · 475 commits · last push 2026-09-10
-- **What it is:** "btop, but for AI coding agents" — a full-screen TUI showing every Claude Code, Codex CLI and OpenCode session at once with token usage, context-window bars, rate limits, child processes and listening ports.
-- **Interesting because:** Sessions are discovered from local process and file state rather than being registered, which gets it multi-profile and multi-agent coverage for free; it detects *orphan ports* left behind by servers an agent forgot to kill; and pressing Enter on a row focuses the terminal pane actually running that agent across cmux, tmux and iTerm2.
-
 ## Yet Another Statusline (YAS!)
 - **URL:** https://github.com/tmck-code/yet-another-statusline
 - **Stats:** Python · 242 stars · 598 commits · last push 2026-09-10

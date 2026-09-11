@@ -20,7 +20,7 @@ Two territories are in scope.
 
 | File | Territory | Projects |
 |------|-----------|----------|
-| `claude-code-statuslines.md` | cc-candybar's own niche: tools Claude Code invokes via the `statusLine` setting, plus usage trackers with a statusline mode and HUD plugins. | 25 |
+| `claude-code-statuslines.md` | cc-candybar's own niche: tools Claude Code invokes via the `statusLine` setting, plus usage trackers with a statusline mode and HUD plugins. | 24 |
 | `perf-daemons.md` | The performance substrate: projects whose reason to exist is making a repeated computation cheap enough to run on every prompt or every second. | 20 |
 
 The first territory is the peer set. The second is not a peer set at all and is kept
@@ -41,13 +41,10 @@ than from a page or from a model's memory. Commit counts come from the `rel="las
 number of a one-per-page commits request, which makes the last page number equal the
 total.
 
-All 45 surviving entries were re-queried against the API after the survey and every
-claimed figure matched. Anything that could not be verified is marked `unverified`
-rather than estimated.
+Every surviving entry was re-queried against the API after the survey and every claimed
+figure matched. Anything that could not be verified is marked `unverified` rather than
+estimated.
 
-## Known caveat
-
-`abtop` appears in the Claude Code file but is not a statusline. It is a full-screen
-terminal monitor for agent sessions. It is kept because it is the only project that
-discovers sessions from process and file state rather than registration, but it does not
-belong to the peer set proper.
+Entries must also earn their category. `abtop` was removed from the Claude Code file
+because it is a full-screen session monitor rather than a statusline, however
+interesting its session discovery is.
