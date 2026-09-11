@@ -10,32 +10,44 @@ stage's output is a document in this directory that the next stage consumes.
 
 | Stage | Directory | Output |
 |-------|-----------|--------|
-| 1. Candidates | `1-candidates/` | One file per survey territory, listing projects with a name, URL, verified stats, a description, and what makes each interesting. |
+| 1. Candidates | `1-candidates/` | One file per territory, listing projects with a name, URL, verified stats, a description, and what makes each interesting. |
 
 Later stages are added here as they are run.
 
-## Stage 1 method
+## Scope
 
-Nine subagents surveyed nine territories in parallel, each writing one file. The
-territories partition the space by what kind of thing renders the bar, not by
-alphabet, so that the same project is rarely found twice:
+Two territories are in scope.
 
-| File | Territory |
-|------|-----------|
-| `claude-code-statuslines.md` | cc-candybar's own niche |
-| `ai-agent-huds.md` | Status bars for Codex, Gemini CLI, opencode, aider and the rest |
-| `shell-prompts.md` | Starship, Powerlevel10k, oh-my-posh and their lineage |
-| `multiplexer-bars.md` | tmux, zellij, WezTerm and Kitty status surfaces |
-| `desktop-bars.md` | Waybar, Polybar, eww, SketchyBar, xbar and the plugin protocols |
-| `editor-statuslines.md` | Heirline, lualine, doom-modeline and editor component models |
-| `perf-daemons.md` | gitstatusd, watchman, mise: the repeated-computation substrate |
-| `terminal-interaction.md` | OSC-8, terminal graphics, capability detection, cell width |
-| `config-and-theming.md` | Config languages, schema UX, format-preserving edits, colour science |
+| File | Territory | Projects |
+|------|-----------|----------|
+| `claude-code-statuslines.md` | cc-candybar's own niche: tools Claude Code invokes via the `statusLine` setting, plus usage trackers with a statusline mode and HUD plugins. | 25 |
+| `perf-daemons.md` | The performance substrate: projects whose reason to exist is making a repeated computation cheap enough to run on every prompt or every second. | 20 |
 
-Every star count, commit count and last-push date in stage 1 was read from the GitHub
-API rather than from a page or from memory. Commit counts come from the `rel="last"`
-page number of a one-per-page commits request. Anything that could not be verified is
-marked `unverified` rather than estimated.
+The first territory is the peer set. The second is not a peer set at all and is kept
+for a different reason: cc-candybar's open problems are a high git-subprocess rate, an
+unexplained gap between JavaScript heap and resident memory, and every cache rebuilding
+cold on daemon restart. These are solved problems elsewhere, and that file is where the
+solutions are catalogued.
 
-Overlap between territories was allowed and deduped afterwards, on the reasoning that
-a duplicate is cheap to remove and a gap is invisible.
+A wider stage-1 sweep also covered shell prompts, multiplexer bars, desktop bars, editor
+statuslines, terminal interaction, config languages, and status bars for other AI coding
+agents. Those were cut as too far from cc-candybar to be worth the reading time. They
+remain in git history at commit `d7fed0a` if a later stage wants them back.
+
+## Verification
+
+Every star count, commit count and last-push date was read from the GitHub API rather
+than from a page or from a model's memory. Commit counts come from the `rel="last"` page
+number of a one-per-page commits request, which makes the last page number equal the
+total.
+
+All 45 surviving entries were re-queried against the API after the survey and every
+claimed figure matched. Anything that could not be verified is marked `unverified`
+rather than estimated.
+
+## Known caveat
+
+`abtop` appears in the Claude Code file but is not a statusline. It is a full-screen
+terminal monitor for agent sessions. It is kept because it is the only project that
+discovers sessions from process and file state rather than registration, but it does not
+belong to the peer set proper.
