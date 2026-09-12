@@ -1,3 +1,10 @@
+## [1.62.1](https://github.com/promptctl/cc-candybar/compare/v1.62.0...v1.62.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **release:** wait for the registry to serve the platform packages, not for a lockfile retry budget (brandon-release-j08) ([9572183](https://github.com/promptctl/cc-candybar/commit/95721838404876910a7dcd3ae572b8245e3786ad))
+
 # [1.62.0](https://github.com/promptctl/cc-candybar/compare/v1.61.6...v1.62.0) (2026-09-12)
 
 
