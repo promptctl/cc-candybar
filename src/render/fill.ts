@@ -39,9 +39,9 @@ function visibleCols(serialized: string): number {
  * means nothing against an unbounded row (the demo and the check command render at
  * Infinity, and a content-sized cell is the honest answer there).
  *
- * [LAW:no-ambient-temporal-coupling] The width the other cells occupy is MEASURED,
- * not modelled: the row is serialized once through the very function that will
- * serialize it for real, with the fill cells emptied, and the leftover is the
+ * [LAW:no-ambient-temporal-coupling] The width the row already occupies is
+ * MEASURED, not modelled: the row is serialized once as it stands, through the very
+ * function that will serialize it for real, and each fill grows by its share of the
  * difference. A model of the joiner chrome would be a second theory of the strip's
  * geometry — and the numbers differ per style (powerline costs nothing inside the
  * budget, capsule and plain cost per seam) and for `plain` depend on the author's
