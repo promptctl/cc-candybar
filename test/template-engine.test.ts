@@ -406,6 +406,9 @@ describe("ccCandybarFuncs registry", () => {
       "abbreviatePath",
       "basename",
       "bool",
+      // brandon-template-funcs-jku: a threshold cascade with a text result. It sits
+      // here and not with the palette readers because it needs no palette.
+      "cascade",
       "dirname",
       "int",
       "sparkline",

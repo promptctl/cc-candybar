@@ -344,6 +344,26 @@ A gauge is not a sparkline: the sparkline normalises every sample against its ow
 window, so it shows SHAPE over time and cannot say "73 % of the maximum". Both
 exist and they stay separate.
 
+When the answer to a threshold is a **word** rather than a colour, `cascade` is the
+same decision with a text result — the stops ascend and the last one at or below the
+value wins, exactly as in `ramp`:
+
+```json5 check:pass
+{
+  segments: {
+    ctx: {
+      template: '◔ {{ .context.contextLeft }}% {{ cascade .context.contextLeft "0:COMPACT!" "25:tight" "60:roomy" }}',
+      fg: '{{ ramp .context.contextLeft "step" 0 "error" 25 "warning" 60 "foreground" }}',
+    },
+  },
+  root: { rows: { status: { h: ["model", "ctx"] } } },
+}
+```
+
+Write the two with the same stop positions and the word and the colour change
+together. A descending pair is a loud error in both, because a silently sorted
+cascade is a different cascade than the one you wrote.
+
 Every position anyone might tune is a **declared variable** riding in the
 position slot; the only literal positions are the fixed ends of the value's
 domain (`0`, and `100` for a percentage). The knob is then one number to

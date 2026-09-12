@@ -1056,10 +1056,15 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
         "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
+      // brandon-template-funcs-jku: this was a three-level `if` chain over the same
+      // value, which is a threshold cascade that could not be read as one. `cascade`
+      // is `ramp`'s decision with a text result, so the thresholds are visible as
+      // numbers here the way the block/weekly `bg:` cascades are. The bands are the
+      // chain's own: <= 8 error, <= 20 warning, above that foreground
+      // (test/cascade.test.ts pins the two against each other at every boundary).
       fg:
-        "{{ if le (minutesUntilReset .cache.expiresAt) 8 }}error" +
-        "{{ else }}{{ if le (minutesUntilReset .cache.expiresAt) 20 }}warning" +
-        "{{ else }}foreground{{ end }}{{ end }}",
+        '{{ cascade (minutesUntilReset .cache.expiresAt) "0:error" ' +
+        '"9:warning" "21:foreground" }}',
       when: "{{ gt .cache.expiresAt 0 }}",
     },
     context: {

@@ -18,6 +18,7 @@ import {
   shortenModelName,
 } from "../utils/formatters.js";
 import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
+import { cascadeAt, parseCascadeStops } from "./cascade.js";
 import { renderSparkline, parseSeries } from "./sparkline.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
@@ -137,6 +138,20 @@ export function ccCandybarFuncs(): FuncMap {
       fn: (series: string, width?: number) =>
         renderSparkline(parseSeries(series), width),
       argTypes: ["string", "int"],
+    },
+    // A threshold cascade whose result is TEXT (brandon-template-funcs-jku): the
+    // same `<value> <stops…>` shape `{{ ramp }}` takes, minus the easing, because
+    // interpolating between two words is meaningless. It needs no palette — the
+    // results are the author's own strings — so unlike `{{ gauge }}` it lives here
+    // beside the sparkline rather than in render/segment-color.ts.
+    //
+    // Returns a bare string, which the engine lifts, so a cascade composes inside
+    // any template position a word can occupy — including a `fg:`, where it
+    // replaces the nested `if` chain that could not be read as a cascade at all.
+    cascade: {
+      fn: (value: number, ...stops: string[]) =>
+        cascadeAt(value, parseCascadeStops(stops)),
+      argTypes: ["float", "string"],
     },
   };
 }
