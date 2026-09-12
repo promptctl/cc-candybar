@@ -682,6 +682,22 @@ export const SOURCES_REQUIRING_CACHE: readonly SourceKind[] = [
 
 export interface SegmentDecl {
   readonly template: string;
+  // What this segment SHOWS, for an author choosing between them — authoring
+  // metadata, never rendered. A segment owes none; the bundled standard library
+  // carries one for every name it declares (pinned in
+  // test/default-dsl-config.test.ts) because that config merges into every user
+  // file, which makes it the catalogue `cc-candybar segments` and the published
+  // schema answer out of.
+  //
+  // [LAW:one-source-of-truth] It lives ON the declaration it describes, so it
+  // travels with the segment instead of sitting in a parallel inventory that
+  // drifts from it silently. One consequence to know rather than discover: a
+  // file's declaration under a bundled name is a per-FIELD delta, so overriding
+  // a bundled `template` inherits the bundled description — which then
+  // describes something that is no longer there. That is the uniform merge rule
+  // doing exactly what it does for every other field, not a special case worth
+  // one; a delta that changes what a segment MEANS should say so here too.
+  readonly description?: string;
   readonly width?: "auto" | number;
   readonly justify?: JustifyMode;
   readonly truncate?: TruncateMode;

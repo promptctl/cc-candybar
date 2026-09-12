@@ -69,6 +69,13 @@ export interface VarSnapshot {
 // One row of the `segments` snapshot.
 export interface SegmentSnapshot {
   readonly name: string;
+  // What the segment's own declaration says it shows (SegmentDecl.description),
+  // or null where it says nothing — `cc-candybar segments` is the surface an
+  // author asks "what can I put on my bar" through, and the bundled default
+  // merges into every config, so its descriptions answer here
+  // (brandon-config-schema-qqg). [LAW:types-are-the-program] A snapshot row is
+  // total: "has no description" is a fact about the segment, not a missing key.
+  readonly description: string | null;
   // The template source string (verbatim, as authored in the config).
   readonly template: string;
   // Names of variables potentially referenced by the template, found via

@@ -765,25 +765,31 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // IN ADDITION to the structural padding.
   segments: {
     directory: {
+      description:
+        "The current directory, shortened fish-style — `~` under home, project-relative inside the project.",
       template: DIR_TEMPLATE,
       fg: "foreground",
     },
     model: {
+      description: "The active model's display name.",
       template: "✱ {{ formatModelName .model.display_name }}",
       fg: "foreground",
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
+      description: "The session id, truncated to 8 characters.",
       template: "⌗{{ trunc 8 .session.id }}",
       fg: "foreground",
       when: '{{ ne .session.id "" }}',
     },
     version: {
+      description: "The Claude Code version reported in the hook payload.",
       template: "◈ v{{ .version }}",
       fg: "foreground",
       when: '{{ ne .version "" }}',
     },
     tmux: {
+      description: "The tmux session name; hidden when not inside tmux.",
       template: 'tmux:{{ .tmux.session | default "none" }}',
       fg: "foreground",
       when: '{{ ne .tmux.session "" }}',
@@ -809,6 +815,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
     // rather than a blank that reads as a rendering bug ([LAW:no-silent-failure]).
     host: {
+      description: "user@host on a warning background, shown only over SSH.",
       template:
         '⇄ {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
       bg: "warning",
@@ -816,6 +823,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ .host.ssh }}",
     },
     git: {
+      description:
+        "Branch, sha, ahead/behind, staged/unstaged/untracked/conflict counts, upstream, stash count, and a clean/dirty/conflict glyph.",
       template: GIT_TEMPLATE,
       // A computed `fg:` — the field is a template evaluating to a color
       // reference, and `bgOf` is available here because a segment's background
@@ -826,6 +835,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ ne .git.branch "" }}',
     },
     gitaculous: {
+      description:
+        "The same git state in asyncgit's compact spelling: repo, in-progress operation, sha, S/U/? flags, branch, upstream ±, stash count, and time since the last commit.",
       // Recolored from raw green/red (render-bugs-pdu.3's era) to semantic
       // palette names (brandon-segments-3eo.1), then unified against `git`'s
       // choice of color per fact via the shared GIT_COLOR table above
@@ -881,6 +892,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // renders a distinct ⚠ marker so an outage is not mistaken for "no PR";
     // no PR (both empty) leaves the `when` gate false and the segment absent.
     gitPr: {
+      description:
+        "The pull request open for this branch, as a link; `⚠ PR` when the forge lookup failed.",
       // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
       // region — the clickable area is the glyph text itself.
       template:
@@ -932,6 +945,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // real RenderCache reload; test/dsl-edit-mode.test.ts covers the click
     // itself and that edit.mode survives it).
     toolbar: {
+      description:
+        "Quick actions: copy the session id, open the project, transcript or repo, and toggle edit mode.",
       template:
         '{{ action "copySession" "⎘ id" }}' +
         ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}' +
@@ -940,18 +955,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       fg: "foreground",
     },
     session: {
+      description:
+        "This session's cost and token total, with a budget warning once a budget is configured.",
       template:
         '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .session.budget.amount "warn" .session.budget.warningThreshold) }}',
       fg: "foreground",
     },
     today: {
+      description:
+        "Today's cost and tokens across every session, with a budget warning once a budget is configured.",
       template:
         '☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }}',
       fg: "foreground",
     },
     block: {
+      description:
+        "The 5-hour rate-limit block: percent used and time to reset, heating to warning then error.",
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
@@ -961,6 +982,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ gt .block.resetsAt 0 }}",
     },
     weekly: {
+      description:
+        "The weekly rate-limit quota: percent used and time to reset, heating to warning then error.",
       template:
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
@@ -976,6 +999,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // "cannot project" sentinel sits calm at the first stop. Shown when either
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
+      description:
+        "Spend per hour, with the projected time to the 5-hour and weekly limits.",
       template:
         '⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
@@ -993,6 +1018,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // no layout flicker); `output` is the live generation rate, `input` spikes at
     // turn start, `total` is their sum.
     speed: {
+      description:
+        "Token throughput for the latest exchange: output, input, and total.",
       template:
         '⇅ out {{ template "formatSpeed" .speed.output }} · ' +
         'in {{ template "formatSpeed" .speed.input }} · ' +
@@ -1010,6 +1037,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // two samples before its first bar). [LAW:effects-at-boundaries] — all the
     // history lives in the daemon ring, the template only draws.
     tokenSparkline: {
+      description: "A sparkline of recent token throughput.",
       template: "⚡ {{ sparkline .speed.history 24 }}",
       fg: "foreground",
       when: '{{ ne .speed.history "" }}',
@@ -1023,6 +1051,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // legacy inline-colored text (warm = normal, ≤20m = warning, ≤8m/cold =
     // error).
     cacheTimer: {
+      description:
+        "Minutes until the prompt cache expires, or `cold` once it has.",
       template:
         "◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
         "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
@@ -1033,6 +1063,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ gt .cache.expiresAt 0 }}",
     },
     context: {
+      description:
+        "Context used, in tokens and percent remaining, heating as it fills.",
       template:
         "◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
       // contextLeft is an integer (src/segments/context.ts rounds it), so the
@@ -1042,6 +1074,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ gt .context.totalTokens 0 }}",
     },
     metrics: {
+      description:
+        "Response times, session duration, message count, and lines added/removed.",
       // [LAW:dataflow-not-control-flow] Each part guards on its own value
       // rather than gating the whole segment on a single dimension. With
       // MetricsPayload's fields independently optional and pickNonNull
@@ -1081,6 +1115,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // convention); labels read `.field.effective` (the daemon-resolved value
     // BuildLineOptions actually rendered with), never a restated literal.
     charsetControl: {
+      description:
+        "The `⚙ terminal` drawer's control for `globals.charset` — the joiner glyph vocabulary.",
       template:
         "{{ .charset.effective }} " +
         `{{ menu "applyCharsetForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
@@ -1088,6 +1124,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       fg: "foreground",
     },
     colorCompatControl: {
+      description:
+        "The `⚙ terminal` drawer's control for `globals.colorCompatibility` — the colour depth.",
       template:
         "{{ .colorCompatibility.effective }} " +
         `{{ menu "applyColorCompatForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
@@ -1116,6 +1154,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // selection" highlight — a documented, already-accepted degrade path,
     // not a bug.
     directoryPaletteControl: {
+      description:
+        "The `⚙ terminal` drawer's control pinning the directory segment's own palette.",
       template:
         "🎨 directory " +
         `{{ menu "applyDirectoryPaletteForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +

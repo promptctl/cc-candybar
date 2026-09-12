@@ -167,6 +167,15 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
   ],
   // ── A delta over a bundled segment omits its template (brandon-config-ph5)
   ["segment delta over a bundled name", `{ segments: { directory: { palette: 'dracula' } } }`],
+  // ── A segment says what it shows (brandon-config-schema-qqg)
+  [
+    "segment describing itself",
+    `{ segments: { a: { template: 'a', description: 'what it shows' } }, root: 'a' }`,
+  ],
+  [
+    "delta re-describing a bundled segment",
+    `{ segments: { directory: { description: 'my own directory cell' } } }`,
+  ],
 ];
 
 // Structurally broken — schema rejects, loader rejects.
@@ -178,6 +187,7 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
   ["non-object rows", `{ root: { rows: 'a' } }`],
   ["non-string template", `{ segments: { a: { template: 42 } } }`],
+  ["non-string description", `{ segments: { a: { template: 'a', description: 42 } } }`],
   ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
   ["non-string palette", `{ globals: { palette: 5 } }`],
@@ -267,6 +277,20 @@ describe("config JSON Schema", () => {
     const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
     expect(schemaAccepts(source)).toBe(true);
     expect(loaderAccepts(source)).toBe(false);
+  });
+
+  // brandon-config-schema-qqg. The description exists FOR an editor's
+  // autocomplete, so its presence in the published artifact is the deliverable,
+  // not an implementation detail — and it must appear on both record shapes,
+  // because a delta over a bundled name is where a user most often wants to say
+  // what their version of that segment shows.
+  it("publishes description on both the segment and the delta shapes", () => {
+    const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
+    for (const def of ["Segment", "SegmentDelta"]) {
+      expect(schema.definitions[def].properties.description).toEqual({
+        type: "string",
+      });
+    }
   });
 
   // [LAW:one-source-of-truth] Every delta target the schema names by name is

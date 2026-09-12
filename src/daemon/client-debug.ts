@@ -93,6 +93,12 @@ function formatSegments(segments: readonly SegmentSnapshot[]): string {
   const lines: string[] = [`segments (${segments.length})`, ``];
   for (const seg of segments) {
     lines.push(`  ${seg.name}`);
+    // [LAW:dataflow-not-control-flow] Same shape as the rows below it: every
+    // row's presence follows its value, so a segment that describes itself says
+    // so and one that does not prints no empty label.
+    if (seg.description !== null) {
+      lines.push(`    shows     ${seg.description}`);
+    }
     lines.push(`    template  ${seg.template}`);
     if (seg.referencedVars.length > 0) {
       lines.push(`    vars      ${seg.referencedVars.join(", ")}`);

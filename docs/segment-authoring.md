@@ -259,6 +259,7 @@ run:
   },
   segments: {
     budget: {
+      description: "Spend against this period's budget, flagged when it outpaces the clock.",
       template: '{{ .budget.period }} ${{ printf "%.2f" .budget.spent }}/{{ .budget.limit }} · {{ .budget.spentPct }}% spent · {{ .budget.timePct }}% elapsed{{ if gt .budget.spentPct .budget.timePct }} ⚑{{ end }}',
       when: "{{ gt .budget.limit 0 }}",
     },
@@ -266,6 +267,18 @@ run:
   root: { rows: { status: { h: ["model", "context", "budget"] } } },
 }
 ```
+
+`description:` is for whoever picks this segment up next — you in another
+session, or anyone running `cc-candybar segments`, which prints it beside the
+template. Nothing renders it, it is optional, and it rides the declaration
+rather than living in a list somewhere else, so it moves with the segment. Every
+bundled segment carries one, which is what makes that command a catalogue of
+what the standard library shows; the published JSON schema carries the field
+too, so an editor pointed at `$schema` completes it. One consequence is worth
+knowing rather than discovering: a declaration under a **bundled** name is a
+per-field delta, so overriding a bundled segment's `template` inherits that
+segment's description — which then describes something that is no longer there.
+If your version means something different, say so there too.
 
 A segment with no `bg:` wears a tint the theme derives from its position in
 the row. Authoring a `bg:` is a statement of meaning — this cell is hot — and

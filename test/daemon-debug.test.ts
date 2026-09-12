@@ -63,6 +63,7 @@ const TEST_CONFIG_SOURCE = `{
   },
   segments: {
     intro: {
+      description: 'the greeting cell',
       template: '{{ .greeting }} {{ .session.id }}',
       bg: 'surface',
       fg: 'foreground',
@@ -283,6 +284,21 @@ describe("introspectSegments with populated state", () => {
     ]);
     // A segment with no references reports an empty array.
     expect(byName.get("plain")?.referencedVars).toEqual([]);
+  });
+
+  // brandon-config-schema-qqg: `cc-candybar segments` is the surface that
+  // answers "what can I put on my bar, and what does each one show", so the
+  // description has to reach the snapshot — a description only the JSON schema
+  // carries is invisible to an author who is reading the CLI.
+  //
+  // [LAW:types-are-the-program] `null` rather than an absent key: a snapshot row
+  // is total, and "this segment has no description" is a fact about it, not a
+  // hole in the row.
+  test("description rides the snapshot, and its absence is null", () => {
+    const state = buildPopulatedState();
+    const byName = new Map(introspectSegments(state).map((s) => [s.name, s]));
+    expect(byName.get("intro")?.description).toBe("the greeting cell");
+    expect(byName.get("plain")?.description).toBeNull();
   });
 
   test("lastRender comes from the daemon's per-segment map", () => {

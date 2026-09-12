@@ -1413,6 +1413,9 @@
         "template": {
           "type": "string"
         },
+        "description": {
+          "type": "string"
+        },
         "width": {
           "anyOf": [
             {
@@ -2047,6 +2050,9 @@
       "type": "object",
       "properties": {
         "template": {
+          "type": "string"
+        },
+        "description": {
           "type": "string"
         },
         "width": {

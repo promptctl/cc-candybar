@@ -153,6 +153,12 @@ function varsSpec(): FieldSpec<Readonly<Record<string, VariableDecl>>> {
 // unknown-key loop, result-threading, and optional-omission the old body hand-rolled.
 const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   template: ownTemplateSpec(),
+  // [LAW:one-source-of-truth] One row is the whole change: this table is what
+  // the validator interprets AND what `segmentDefinitions()` emits into the
+  // published JSON schema, and SEGMENT_DELTA_SCHEMA reuses it, so a file may
+  // set `description` on its own segment or on a delta over a bundled name
+  // with no further edit anywhere (brandon-config-schema-qqg).
+  description: optionalStringSpec(),
   width: widthSpec(),
   justify: optionalEnumSpec(JUSTIFY_MODES),
   truncate: optionalEnumSpec(TRUNCATE_MODES),

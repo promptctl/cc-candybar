@@ -202,6 +202,7 @@ export function introspectSegments(
     if (!seg) continue;
     out.push({
       name,
+      description: seg.description ?? null,
       template: seg.template,
       referencedVars: extractReferencedVars(seg.template, declaredNames),
       lastRender: lastRenderBySegment.get(name) ?? null,

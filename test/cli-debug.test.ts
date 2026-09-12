@@ -76,22 +76,34 @@ describe("formatDebug", () => {
     expect(formatDebug({ what: "vars", vars: [] })).toContain("DSL not active");
   });
 
-  it("renders segments with template and referenced vars", () => {
+  it("renders segments with description, template and referenced vars", () => {
     const snap: DebugSnapshot = {
       what: "segments",
       segments: [
         {
           name: "git",
+          description: "what the repo is doing",
           template: "{{ .git.branch }}",
           referencedVars: ["git.branch"],
+          lastRender: null,
+        },
+        {
+          name: "mine",
+          description: null,
+          template: "x",
+          referencedVars: [],
           lastRender: null,
         },
       ],
     };
     const out = formatDebug(snap);
-    expect(out).toContain("segments (1)");
+    expect(out).toContain("segments (2)");
     expect(out).toContain("{{ .git.branch }}");
     expect(out).toContain("git.branch");
+    // brandon-config-schema-qqg: the described segment says what it shows; the
+    // one with no description prints no empty label pretending to be one.
+    expect(out).toContain("what the repo is doing");
+    expect(out).not.toMatch(/mine[\s\S]*?shows {4}\n/);
   });
 
   it("renders a null config as 'DSL not active'", () => {

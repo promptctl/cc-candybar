@@ -13,6 +13,7 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
 import { walkNodes } from "../src/config/dsl-types";
+import { isReservedName } from "../src/config/loader/reserved-namespace";
 import { rootNode } from "../src/config/root";
 import {
   parseDslConfig,
@@ -61,6 +62,33 @@ describe("DEFAULT_DSL_CONFIG", () => {
     expect(Object.keys(parsed.segments).length).toBeGreaterThan(0);
     // The two named rows ARE the merge keys a user file restates one of.
     expect(Object.keys(parsed.root.rows)).toEqual(["identity", "status"]);
+  });
+
+  // brandon-config-schema-qqg. A description is documentation, so nothing can
+  // test that it is TRUE — only that the author of a bundled segment wrote one.
+  // That floor is worth enforcing because this config IS the catalogue: it merges
+  // into every user file, so `cc-candybar segments` and the published schema
+  // answer "what can I put on my bar, and what does each one show" out of these
+  // declarations or not at all.
+  //
+  // [LAW:one-source-of-truth] The exemption is `isReservedName`, the predicate
+  // that already means "synthesized, not authored" — a `groups.`/`settings.`/
+  // `edit.`/`menus.` name is minted by a synthesis pass, and
+  // reservedNamespaceCollisions REFUSES a hand-authored declaration under it, so
+  // such a segment could not carry an authored description even in principle.
+  // Re-spelling the prefixes here would be a second list to drift.
+  test("every bundled segment an author can choose describes itself", () => {
+    const own = Object.entries(DEFAULT_DSL_CONFIG.segments).filter(
+      ([name]) => !isReservedName(name),
+    );
+    // Guard against a vacuous pass: the bundled default is the standard
+    // library, so an empty or tiny `own` means the filter (or the config)
+    // broke, not that every segment is described.
+    expect(own.length).toBeGreaterThanOrEqual(20);
+    const undescribed = own
+      .filter(([, seg]) => (seg.description ?? "").trim() === "")
+      .map(([name]) => name);
+    expect(undescribed).toEqual([]);
   });
 
   test("every layout entry is a declared segment", () => {
