@@ -37,6 +37,7 @@ import {
 } from "./parse.js";
 import type { JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
+import { TrailingEdge } from "../utils/trailing-edge.js";
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
 
@@ -585,6 +586,11 @@ export class SourceRegistry {
   // explicit "every source has completed its current run" state a caller
   // (`cc-candybar check`) awaits instead of guessing a delay.
   private readonly inFlight = new Map<string, Promise<void>>();
+  // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
+  // that arrived mid-read, so a re-trigger re-reads once rather than starting a
+  // parallel read or being dropped. Shared with the git cache's refresh path,
+  // which had the same problem first — see src/utils/trailing-edge.ts.
+  private readonly reads = new TrailingEdge();
   // [LAW:single-enforcer] The registry owns every async handle its sources
   // hold — timers, watchers, reactions, and the child processes and file
   // reads in flight. This is their cancellation: dispose() aborts it, so a
@@ -789,16 +795,27 @@ export class SourceRegistry {
     reader: SourceReader,
     publish: Publish,
   ): void {
-    if (this.inFlight.has(name)) return;
+    // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
+    // source is mid-read is not a duplicate to drop: it means the inputs the
+    // running read is about to publish are already stale. The trailing edge
+    // remembers it and re-reads once more, so the published value is the last
+    // trigger's, never whichever one happened not to collide. Dropping it was
+    // only ever survivable for `ttl`, which asks again on a clock; a
+    // `depends_on`, `key` or `watch_file` trigger fires once and never again,
+    // so a dropped one stayed stale forever (brandon-var-sources-tex).
+    //
     // [LAW:no-silent-failure] A cancelled read publishes nothing; the
     // registry's own abort is the one rejection a run may end in. Any other
     // rejection is a bug and stays unhandled — loud.
-    this.track(
-      name,
+    const trigger = this.reads.run(name, () =>
       reader.read().then(publish, (err: unknown) => {
         if (err !== this.abort.signal.reason) throw err;
       }),
     );
+    // A queued trigger needs no tracking: the loop it joined is already the
+    // tracked promise, and it does not resolve until that trigger's own pass has
+    // run — which is exactly what makes `settled()` wait for the re-read too.
+    if (trigger.kind === "started") this.track(name, trigger.done);
   }
 
   // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
@@ -807,10 +824,15 @@ export class SourceRegistry {
   // Several names may share one promise (every git field of a cwd rides one
   // subscription); each gets its own entry and clears independently.
   private track(name: string, work: Promise<void>): void {
-    this.inFlight.set(
-      name,
-      work.finally(() => this.inFlight.delete(name)),
-    );
+    // The identity check is the same one SingleFlight makes, for the same
+    // reason: `TrailingEdge` releases a key before this `finally` runs, so a
+    // trigger landing in that window starts a NEW tracked loop, and an
+    // unconditional delete here would remove the live entry and leave
+    // `settled()` no longer waiting for work that is still out.
+    const tracked: Promise<void> = work.finally(() => {
+      if (this.inFlight.get(name) === tracked) this.inFlight.delete(name);
+    });
+    this.inFlight.set(name, tracked);
   }
 
   // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
@@ -1063,6 +1085,10 @@ export class SourceRegistry {
     this.cleanups.length = 0;
     for (const sub of this.gitSubscriptions.values()) sub.unsubscribe();
     this.gitSubscriptions.clear();
+    // A trigger queued while a read was in flight must not be honoured after
+    // teardown: the abort above cancels the read that is out, and this drops the
+    // re-read it would otherwise have asked for.
+    this.reads.clear();
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
     if (this.ownsGitProvider) this.gitProvider.close();

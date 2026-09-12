@@ -4,6 +4,7 @@ import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
+import { TrailingEdge } from "../../utils/trailing-edge";
 
 // Logger callable for cache invalidation / eviction / subscriber-error
 // events. Daemon passes `dlog` so these land in daemon.log at the right
@@ -192,15 +193,15 @@ export class GitDataProvider extends GitService {
     string,
     Promise<Outcome<PullRequest>>
   >();
-  // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo.
-  // `refreshing` holds the repoRoots whose refresh loop is currently
-  // executing; `refreshAgain` is the trailing-edge flag: if a new
-  // invalidation arrives while a refresh is in flight, we set this flag and
-  // the loop will re-fetch once more before exiting. Without this,
-  // back-to-back invalidations (rapid commits, rebase) would fan back out
-  // into parallel `git status` calls — exactly the failure kz8.3 collapses.
-  private readonly refreshing = new Set<string>();
-  private readonly refreshAgain = new Set<string>();
+  // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo: a
+  // new invalidation arriving while a refresh is in flight makes the running
+  // loop re-fetch once more rather than starting a second fetch, so back-to-back
+  // invalidations (rapid commits, a rebase) collapse into at most two fetches
+  // instead of fanning out into parallel `git status` calls — the failure kz8.3
+  // collapses. The mechanism itself is src/utils/trailing-edge.ts, shared with
+  // the var-system's shell/file sources, which had the same bug in the other
+  // direction (brandon-var-sources-tex).
+  private readonly refreshes = new TrailingEdge();
   private hits = 0;
   private misses = 0;
   private invalidations = 0;
@@ -546,47 +547,38 @@ export class GitDataProvider extends GitService {
     this.refreshSubscribers(repoRoot);
   }
 
-  // [LAW:single-enforcer] Refreshes for one repo are serialized. If invalidation
-  // re-fires while the current refresh is awaiting `getGitInfo`, we set the
-  // trailing-edge flag and the loop re-runs once more; back-to-back
-  // invalidations collapse into at most two fetches, never N parallel ones.
+  // Nobody listening means nothing to schedule — checked here rather than inside
+  // the pass so an invalidation on a repo with no subscribers (every watcher fire
+  // for a pull-path-only repo) starts no loop at all.
   private refreshSubscribers(repoRoot: string): void {
-    if (this.refreshing.has(repoRoot)) {
-      this.refreshAgain.add(repoRoot);
-      return;
-    }
     const entry = this.subscribersByRepo.get(repoRoot);
     if (!entry || entry.callbacks.size === 0) return;
-    this.refreshing.add(repoRoot);
-    void this.doRefreshLoop(repoRoot);
+    this.refreshes.run(repoRoot, () => this.refreshOnce(repoRoot));
   }
 
-  private async doRefreshLoop(repoRoot: string): Promise<void> {
-    try {
-      do {
-        this.refreshAgain.delete(repoRoot);
-        const entry = this.subscribersByRepo.get(repoRoot);
-        if (!entry || entry.callbacks.size === 0) return;
-        // Use the stored repoRoot — no findGitRoot per refresh, no chance of
-        // re-resolving to a different value under racing fs changes.
-        const refreshed = await this.getGitInfoForRoot(repoRoot, {
-          ...SUBSCRIBE_OPTIONS,
-        });
-        const info = this.deliverable(refreshed, repoRoot);
-        const current = this.subscribersByRepo.get(repoRoot);
-        if (!current || current.callbacks.size === 0) return;
-        // [LAW:dataflow-not-control-flow] Membership check at call time, not at
-        // snapshot time. A subscriber that unsubscribed during the await above
-        // (or during a prior cb invocation in this same iteration) must not
-        // receive this notification — has() reads the current truth.
-        for (const cb of [...current.callbacks]) {
-          if (!current.callbacks.has(cb)) continue;
-          this.safeInvoke(cb, info);
-        }
-      } while (this.refreshAgain.has(repoRoot));
-    } finally {
-      this.refreshing.delete(repoRoot);
-      this.refreshAgain.delete(repoRoot);
+  // One pass: re-fetch and deliver. Returning early here ends the pass, not the
+  // loop — so where the old inline `do/while` exited outright on a vanished
+  // subscriber set, this can perform one further no-op pass when a trigger was
+  // queued mid-flight. It re-reads the same empty set and returns, delivering
+  // nothing either way.
+  private async refreshOnce(repoRoot: string): Promise<void> {
+    const entry = this.subscribersByRepo.get(repoRoot);
+    if (!entry || entry.callbacks.size === 0) return;
+    // Use the stored repoRoot — no findGitRoot per refresh, no chance of
+    // re-resolving to a different value under racing fs changes.
+    const refreshed = await this.getGitInfoForRoot(repoRoot, {
+      ...SUBSCRIBE_OPTIONS,
+    });
+    const info = this.deliverable(refreshed, repoRoot);
+    const current = this.subscribersByRepo.get(repoRoot);
+    if (!current || current.callbacks.size === 0) return;
+    // [LAW:dataflow-not-control-flow] Membership check at call time, not at
+    // snapshot time. A subscriber that unsubscribed during the await above
+    // (or during a prior cb invocation in this same iteration) must not
+    // receive this notification — has() reads the current truth.
+    for (const cb of [...current.callbacks]) {
+      if (!current.callbacks.has(cb)) continue;
+      this.safeInvoke(cb, info);
     }
   }
 
@@ -660,8 +652,7 @@ export class GitDataProvider extends GitService {
     // provider with the same repoRoot starts clean. In-flight fetches still
     // resolve (we can't cancel a pending await on inner.getGitInfo) but the
     // map is cleared so the next caller starts a fresh fetch.
-    this.refreshing.clear();
-    this.refreshAgain.clear();
+    this.refreshes.clear();
     this.fetchInFlight.clear();
     // In-flight PR fetches resolve naturally; clearing the maps means the next
     // caller starts fresh (the prCache is rebuilt cold like every other cache).

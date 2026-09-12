@@ -1172,6 +1172,43 @@ describe("SourceRegistry — depends_on cache policy", () => {
     }
   });
 
+  // brandon-var-sources-tex. runSource used to return early when the name was
+  // already in flight, so this change — arriving while the first read was still
+  // out — was dropped, and `val` settled on the pre-change content forever. Only
+  // `ttl` survived that, because only `ttl` asks again on a clock.
+  it("a dependency change DURING a read is not dropped: the published value is the last trigger's", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("trigger", "string", "a");
+      // `cat` FIRST, then sleep: the read captures the file as it was when the
+      // pass began and only finishes 300 ms later. A `sleep; cat` would read the
+      // post-change content on its first pass and prove nothing.
+      registry.declareShell("val", `cat ${dataFile}; sleep 0.3`, {
+        parse: TEXT,
+        cache: { kind: "depends_on", varNames: ["trigger"] },
+      });
+
+      // 50 ms in, the declare-time read is still out. Change both the dependency
+      // and the data: this is the collision, not a sequence.
+      await settle(50);
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "b");
+
+      // The queued re-read is part of the tracked work, so settled() is what
+      // decides when to look — no second sleep guessing at the re-read.
+      expect(await registry.settled(3000)).toEqual([]);
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
   it("does NOT re-run shell when dependency value is unchanged", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
