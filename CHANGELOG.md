@@ -1,3 +1,10 @@
+# [1.70.0](https://github.com/promptctl/cc-candybar/compare/v1.69.0...v1.70.0) (2026-09-12)
+
+
+### Features
+
+* **picker:** an option over a colour-valued domain is painted in what picking it would apply (brandon-picker-31z) ([b986706](https://github.com/promptctl/cc-candybar/commit/b98670678570444c93fd94c033d46691546a89cf))
+
 # [1.69.0](https://github.com/promptctl/cc-candybar/compare/v1.68.0...v1.69.0) (2026-09-12)
 
 
