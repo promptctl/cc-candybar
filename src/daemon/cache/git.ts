@@ -77,6 +77,17 @@ interface PrCacheEntry {
   computedAt: number;
 }
 
+// [LAW:types-are-the-program] The cached value is the PROMISE of the resolution,
+// not the resolved outcome, so caching and coalescing are one fact rather than a
+// cache plus a parallel in-flight map. The N callers that arrive while the first
+// resolution is still running share it — and `registerDslConfig` makes that real,
+// calling subscribe() once per declared `kind: "git"` variable inside a single
+// synchronous loop.
+interface ResolutionCacheEntry {
+  readonly dir: Promise<Outcome<string>>;
+  readonly computedAt: number;
+}
+
 interface GitCacheEntry {
   info: GitInfo;
   computedAt: number;
@@ -183,6 +194,15 @@ export class GitDataProvider extends GitService {
   // here; subsequent concurrent callers await the same promise and resolve in
   // lockstep.
   private readonly fetchInFlight = new Map<string, Promise<Outcome<GitInfo>>>();
+  // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
+  // inputs resolution reads — `workingDir|projectDir`. Separate from `entries`
+  // because it answers a different question: `entries` holds a repo's STATE,
+  // this holds WHICH repo (if any) a directory belongs to. Untracked, that
+  // question was re-asked on every render, and outside a repo re-asking means
+  // spawning `git rev-parse --show-toplevel`: a Claude Code session in a
+  // non-repo directory spawned git on every status-line tick for its whole
+  // lifetime (brandon-git-cache-y2t).
+  private readonly resolutions = new Map<string, ResolutionCacheEntry>();
   // [LAW:one-source-of-truth] The forge PR cache, keyed by `repoRoot|branch`
   // (a branch switch is a new key, so its PR is fetched fresh; the old branch's
   // entry ages out). Separate from `entries` because it carries its own TTL.
@@ -267,6 +287,61 @@ export class GitDataProvider extends GitService {
     };
   }
 
+  // [LAW:single-enforcer] The daemon-side cache for the resolution step, placed
+  // here because this class IS "GitService with the daemon's caching": it already
+  // overrides getGitInfo and owns `entries` and `prCache`, and resolution was the
+  // one fact it forwarded uncached. Overriding it means every caller — the pull
+  // path below, subscribe(), any future one — shares the cache without opting in,
+  // and `findGitRoot` stays uncached in src/segments/git.ts as its own comment
+  // promises (brandon-git-cache-y2t).
+  //
+  // One TTL over ALL THREE outcome kinds, and the SAME ttlMs the GitInfo entries
+  // use [LAW:one-type-per-behavior]: the bar is already that stale about git
+  // state, so being that stale about "is this a repo" promises nothing new, and
+  // `git init` in a directory the bar has seen becomes visible within one window
+  // — the invalidation story a negative answer needs. There is deliberately no
+  // branch on `kind` here. `failed` is the kind that matters most: a resolution
+  // that fails by TIMEOUT costs two seconds of a render, and retrying it every
+  // tick forever is the worst of the three cases, not the one to leave uncached.
+  // (`doFetch`'s separate choice to cache only `ok` is about a repo's STATE, a
+  // value that self-heals on the next miss; it is untouched.)
+  override resolveEffectiveGitDir(
+    workingDir: string,
+    projectDir?: string,
+  ): Promise<Outcome<string>> {
+    const key = `${workingDir}|${projectDir ?? ""}`;
+    const now = Date.now();
+
+    const existing = this.resolutions.get(key);
+    if (existing && now - existing.computedAt < this.ttlMs) {
+      // LRU touch, as `entries` and `prCache` do: the cwd being rendered every
+      // tick is the one that must survive eviction.
+      this.resolutions.delete(key);
+      this.resolutions.set(key, existing);
+      return existing.dir;
+    }
+
+    const dir = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
+    this.resolutions.set(key, { dir, computedAt: now });
+    // [LAW:no-silent-failure] A REJECTION is a bug in the resolver, not an answer
+    // worth pinning for a window — resolveEffectiveGitDir returns outcomes by
+    // construction, so drop the entry and let the next caller re-ask. The
+    // rejection still reaches whoever awaited `dir`; this handler only evicts.
+    void dir.catch(() => {
+      if (this.resolutions.get(key)?.dir === dir) this.resolutions.delete(key);
+    });
+    this.evictResolutionsIfNeeded();
+    return dir;
+  }
+
+  private evictResolutionsIfNeeded(): void {
+    while (this.resolutions.size > this.maxEntries) {
+      const oldest = this.resolutions.keys().next().value;
+      if (oldest === undefined) break;
+      this.resolutions.delete(oldest);
+    }
+  }
+
   override async getGitInfo(
     workingDir: string,
     options: GitOptions = {},
@@ -277,7 +352,7 @@ export class GitDataProvider extends GitService {
     // effectiveDir, projectDir = undefined: it lands on the same dir without
     // re-running its own resolution branches. An absent (not a repo) or
     // failed resolution passes through as the fetch outcome.
-    const effectiveDir = await this.inner.resolveEffectiveGitDir(
+    const effectiveDir = await this.resolveEffectiveGitDir(
       workingDir,
       projectDir,
     );
@@ -461,11 +536,13 @@ export class GitDataProvider extends GitService {
     let attached: { repoRoot: string; entry: RepoSubscribers } | null = null;
 
     const firstDelivery = (async () => {
-      // Resolve once at subscribe time using the same logic the pull surface
-      // uses. var-system's declareGit doesn't pass projectDir, but going
-      // through resolveEffectiveGitDir keeps the cache-key derivation
-      // identical for both surfaces — single source of truth.
-      const resolved = await this.inner.resolveEffectiveGitDir(workingDir);
+      // Resolve once at subscribe time through the SAME method the pull surface
+      // uses — this class's own override, so both surfaces share one cache-key
+      // derivation and one resolution cache [LAW:one-source-of-truth]. That
+      // sharing is what makes N declared git variables in a non-repo cwd one
+      // `rev-parse` instead of N: registerDslConfig starts every subscribe in one
+      // synchronous loop, and they all await the first one's promise.
+      const resolved = await this.resolveEffectiveGitDir(workingDir);
       if (unsubscribed) return;
 
       if (resolved.kind !== "ok") {
@@ -658,6 +735,9 @@ export class GitDataProvider extends GitService {
     // caller starts fresh (the prCache is rebuilt cold like every other cache).
     this.prCache.clear();
     this.prFetchInFlight.clear();
+    // In-flight resolutions resolve naturally; clearing the map means a fresh
+    // provider re-asks rather than inheriting this one's answers.
+    this.resolutions.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
   }
 }

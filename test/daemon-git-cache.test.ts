@@ -58,11 +58,24 @@ class StubGitService extends GitService {
     return `${workingDir}/.git`;
   }
 
+  // Resolution knobs the resolution-cache tests drive: a `failed` outcome, a
+  // rejection (a resolver bug), and a gate that holds every resolution open so
+  // concurrent callers are genuinely concurrent rather than merely interleaved.
+  public resolveFailure: string | null = null;
+  public resolveThrows = false;
+  public resolveGate: { promise: Promise<void>; resolve: () => void } | null =
+    null;
+
   override async resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<string>> {
     this.resolveCalls.push({ workingDir, projectDir });
+    if (this.resolveGate) await this.resolveGate.promise;
+    if (this.resolveThrows) throw new Error("resolver bug");
+    if (this.resolveFailure !== null) {
+      return { kind: "failed", reason: this.resolveFailure };
+    }
     const key = projectDir ? `${workingDir}|${projectDir}` : workingDir;
     if (key in this.effectiveDirByKey) {
       const dir = this.effectiveDirByKey[key] ?? null;
@@ -269,6 +282,16 @@ describe("GitDataProvider", () => {
 // (gitDir resolution, fetch, in-flight tracker .finally) whose depth is
 // implementation-detail. Each `setImmediate` yield drains a full round of
 // microtasks; some tests trigger nested async chains and need N rounds.
+// A promise whose settling the test controls — the only way to make N callers
+// genuinely concurrent, rather than hoping an await boundary lands where needed.
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 async function tick(times = 1): Promise<void> {
   for (let i = 0; i < times; i++) {
     await new Promise<void>((r) => setImmediate(r));
@@ -457,6 +480,132 @@ describe("GitDataProvider.subscribe", () => {
       2,
     );
     sub.unsubscribe();
+  });
+});
+
+// ─── Resolution cache ────────────────────────────────────────────────────────
+
+// [LAW:behavior-not-structure] brandon-git-cache-y2t: outside a repo, every
+// render re-asked "which repo is this?" and that question costs a `git rev-parse
+// --show-toplevel` spawn, so a Claude Code session in a non-repo directory spawned
+// git on every status-line tick for its whole lifetime. These pin the BEHAVIOUR —
+// how many times the inner resolver is asked — not the cache's shape.
+describe("GitDataProvider gitDir resolution cache", () => {
+  test("N renders in a non-repo cwd ask the resolver once, not N times", async () => {
+    const { svc, inner } = makeCache();
+    // No entry for /nowhere: the stub answers ABSENT, as rev-parse's non-zero
+    // exit does for a directory in no repo.
+    inner.repoRootByDir = { "/nowhere": null };
+
+    for (let i = 0; i < 10; i++) {
+      expect((await svc.getGitInfo("/nowhere", {})).kind).toBe("absent");
+    }
+
+    expect(inner.resolveCalls).toHaveLength(1);
+  });
+
+  test("an absent answer expires, so a directory that becomes a repo is seen", async () => {
+    // The invalidation story for a negative answer is the TTL: `git init` in a
+    // directory the bar has already rendered becomes visible within one window.
+    const { svc, inner } = makeCache({ ttlMs: 0 });
+    inner.repoRootByDir = { "/nowhere": null };
+    expect((await svc.getGitInfo("/nowhere", {})).kind).toBe("absent");
+
+    inner.repoRootByDir = { "/nowhere": "/nowhere" };
+    const after = await svc.getGitInfo("/nowhere", {});
+    expect(after.kind).toBe("ok");
+    expect(inner.resolveCalls.length).toBeGreaterThan(1);
+  });
+
+  test("a failed resolution is cached too — the timeout case is the costly one", async () => {
+    // A resolution that fails by TIMEOUT burns two seconds of a render; retrying
+    // it every tick forever is the worst of the three outcome kinds, so it is not
+    // the one left uncached.
+    const { svc, inner } = makeCache();
+    inner.resolveFailure = "git rev-parse --show-toplevel timed out";
+
+    for (let i = 0; i < 5; i++) {
+      const out = await svc.getGitInfo("/wherever", {});
+      expect(out.kind).toBe("failed");
+    }
+
+    expect(inner.resolveCalls).toHaveLength(1);
+  });
+
+  test("concurrent callers share one resolution", async () => {
+    // registerDslConfig calls subscribe() once per declared `kind: "git"`
+    // variable inside ONE synchronous loop, so the concurrent case is the real
+    // one: six variables in a non-repo cwd must not be six rev-parse spawns.
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+    inner.resolveGate = deferred();
+
+    const pending = Array.from({ length: 6 }, () =>
+      svc.getGitInfo("/nowhere", {}),
+    );
+    inner.resolveGate.resolve();
+    for (const out of await Promise.all(pending)) {
+      expect(out.kind).toBe("absent");
+    }
+
+    expect(inner.resolveCalls).toHaveLength(1);
+  });
+
+  test("the pull and subscribe surfaces share one resolution", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    await svc.getGitInfo("/repo", {});
+    const sub = svc.subscribe("/repo", () => {});
+    await sub.firstDelivery;
+
+    // Two surfaces, one question asked once — they go through the same override.
+    expect(inner.resolveCalls).toHaveLength(1);
+    sub.unsubscribe();
+  });
+
+  test("projectDir is part of the key, so it cannot be answered by the wrong entry", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/cwd": "/cwd", "/project": "/project" };
+    inner.effectiveDirByKey = { "/cwd|/project": "/project" };
+
+    expect(await svc.getGitInfo("/cwd", {})).toMatchObject({ kind: "ok" });
+    await svc.getGitInfo("/cwd", {}, "/project");
+
+    expect(inner.resolveCalls).toEqual([
+      { workingDir: "/cwd", projectDir: undefined },
+      { workingDir: "/cwd", projectDir: "/project" },
+    ]);
+    // …and the second call landed on /project, not on /cwd's cached answer.
+    expect(inner.computeCalls.map((c) => c.workingDir)).toEqual([
+      "/cwd",
+      "/project",
+    ]);
+  });
+
+  test("a rejecting resolver is not pinned for a window", async () => {
+    // resolveEffectiveGitDir returns outcomes by construction, so a REJECTION is
+    // a bug, not an answer: it must reach the caller and leave no entry behind.
+    const { svc, inner } = makeCache();
+    inner.resolveThrows = true;
+
+    await expect(svc.getGitInfo("/boom", {})).rejects.toThrow("resolver bug");
+    await expect(svc.getGitInfo("/boom", {})).rejects.toThrow("resolver bug");
+
+    expect(inner.resolveCalls).toHaveLength(2);
+  });
+
+  test("close() drops the answers instead of carrying them past shutdown", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+    await svc.getGitInfo("/nowhere", {});
+    expect(inner.resolveCalls).toHaveLength(1);
+
+    svc.close();
+    // A closed provider holds no answers: every cache it owns is rebuilt cold,
+    // and the resolution cache is not the one exception.
+    await svc.getGitInfo("/nowhere", {});
+    expect(inner.resolveCalls).toHaveLength(2);
   });
 });
 
