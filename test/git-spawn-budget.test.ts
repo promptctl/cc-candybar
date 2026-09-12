@@ -74,7 +74,6 @@ describe("git spawns per cache miss", () => {
     expect(svc.invocations).toEqual([
       "status --porcelain=v2 --branch",
       "log -1 --format=%ct",
-      "stash list",
       "config --local --get-regexp ^remote\\..*\\.url$",
     ]);
   });

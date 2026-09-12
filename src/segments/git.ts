@@ -819,19 +819,18 @@ export class GitService {
       result.timeSinceCommit = await this.getTimeSinceLastCommitAsync(gitDir);
     }
 
-    // Light operations run in parallel. Helpers never reject — failure is a
-    // value in the outcome — so plain Promise.all replaces the allSettled +
-    // untyped resultMap machinery the swallowing design required.
+    // [LAW:polishing-by-subtraction] These two used to overlap in a `Promise.all`
+    // because both were spawns worth running at once. The stash count is a file
+    // read now, so the parallelism had one side left and the await is plain.
+    if (options.showStashCount) result.stashCount = this.getStashCount(gitDir);
+
     // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
     // remotes read, so they can never disagree about origin and asking for both
     // costs exactly one spawn. A failed read fails both alike, by construction.
-    const [stashCount, remotes] = await Promise.all([
-      options.showStashCount ? this.getStashCountAsync(gitDir) : undefined,
+    const remotes =
       options.showRepoName || options.showRepoUrl
-        ? this.getRemotesAsync(gitDir)
-        : undefined,
-    ]);
-    if (stashCount !== undefined) result.stashCount = stashCount;
+        ? await this.getRemotesAsync(gitDir)
+        : undefined;
     if (remotes !== undefined && options.showRepoName) {
       result.repoName = derived(remotes, (r) => this.repoNameFrom(r, gitDir));
       result.isWorktree = isWorktreeDir;
@@ -938,23 +937,60 @@ export class GitService {
     return ok(Math.floor((now - commitTime) / 1000));
   }
 
-  private async getStashCountAsync(
-    workingDir: string,
-  ): Promise<Outcome<number>> {
-    // An empty stash list is a REAL count of 0; only a transport/exit failure
-    // is `failed` — the meaning-erasure the old catch-to-0 created is
-    // unrepresentable now. `stash list` never exits non-zero as an answer.
-    const r = classify(
-      "git stash list",
-      await this.execGitAsync(["stash", "list"], {
-        cwd: workingDir,
-        timeout: 2000,
-      }),
-      "failed",
+  // [LAW:decomposition] The COMMON git directory — where refs shared between a
+  // repo and its linked worktrees live. `resolveGitDir` answers the other,
+  // per-worktree question, which is the right one for HEAD and index and exactly
+  // why it exists. `refs/stash` is not of that kind: measured, a linked
+  // worktree's `git stash list` reports the MAIN repo's stashes, and the reflog
+  // backing them exists ONLY under the common dir. Reading the per-worktree
+  // gitdir would answer zero stashes for every worktree, silently.
+  private resolveCommonGitDir(workingDir: string): string {
+    const gitDir = this.resolveGitDir(workingDir);
+    try {
+      // A linked worktree's gitdir holds `commondir`, one line, a path relative
+      // to it (`../..` in the ordinary layout).
+      const commonDir = fs
+        .readFileSync(path.join(gitDir, "commondir"), "utf-8")
+        .trim();
+      if (commonDir) return path.resolve(gitDir, commonDir);
+    } catch {
+      // No `commondir` file is the ordinary case: this already IS the common dir.
+    }
+    return gitDir;
+  }
+
+  // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for
+  // `refs/stash`, not the ref — measured two ways: a hand-written
+  // `logs/refs/stash` is precisely what `git stash list` reports, and a
+  // `refs/stash` that exists with no reflog counts zero from both. libgit2
+  // spells the same fact as `git_reflog_read` + `git_reflog_entrycount`. So the
+  // count is this file's line count, and the counting expression below is the one
+  // the `stash list` output already went through — only its input changed. A
+  // reflog message cannot contain a newline, so lines and entries agree.
+  //
+  // [LAW:no-silent-failure] The three states survive the swap. ENOENT is a REAL
+  // count of 0 — no stash was ever pushed here — while any other read error is
+  // `failed`, so the meaning-erasure the old catch-to-0 created stays
+  // unrepresentable. Sync, because reading one small file is not worth a
+  // microtask: its former `Promise.all` partner is the only spawn left.
+  private getStashCount(workingDir: string): Outcome<number> {
+    const reflog = path.join(
+      this.resolveCommonGitDir(workingDir),
+      "logs",
+      "refs",
+      "stash",
     );
-    if (r.kind !== "ok") return r;
-    const stashList = r.value.trim();
-    return ok(stashList ? stashList.split("\n").length : 0);
+    let text: string;
+    try {
+      text = fs.readFileSync(reflog, "utf-8");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return ok(0);
+      return failed(
+        `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    const entries = text.trim();
+    return ok(entries ? entries.split("\n").length : 0);
   }
 
   // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
