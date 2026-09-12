@@ -84,27 +84,44 @@ Saving the file triggers a hot-reload of every active session.
 ```
 
 - **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Runs until it exits on an RSS backstop (default 512 MB via `CC_CANDYBAR_RSS_LIMIT_MB`; the V8 heap cap the spawner passes is twice that, a margin wide enough that the graceful backstop fires first under any growth its 60 s poll can see) or the host restarts; there is no idle or age timeout.
-- **Client** (`src/daemon/client.ts`) — each Claude Code hook invocation connects to the daemon, sends a render request, and prints the ANSI response. On failure, spawns a fresh daemon and emits empty output.
-- **Renderer** (`src/render/`, `src/segments/`) — segments produce styled output from cached data. Themes cascade from defaults through palette resolution using OKLCH color math.
-- **TUI grid** (`src/tui/`) — CSS Grid-inspired layout engine with breakpoints, column sizing (`auto`, `1fr`, fixed), spanning, and automatic culling of empty segments.
+- **Client** (`rust-client/src/main.rs`) — the Rust binary installed as `bin/cc-candybar`, and the only thing on the per-render path: it connects to the daemon, sends the hook JSON, and prints the ANSI response. On a daemon miss it spawns one detached and prints an empty line, so the next refresh finds a warm daemon. Every subcommand (`install`, `daemon`, `check`, `doctor`, …) execs the Node bundle at `dist/index.mjs`, which carries a socket relay of its own (`src/daemon/client.ts`) as the fallback when no native binary is staged.
+- **Renderer** (`src/dsl/render.ts`) — `renderDsl` is the single render path; the daemon, the demo and the tests all call it. It walks the config's layout tree, evaluates each segment's templates against the daemon's payload, and hands the styled cells to `src/render/` (strip and joiner selection, pickers and menus, the diagnostic strip). The payload's data comes from the providers in `src/segments/` — git, session, context, metrics, tmux, pricing.
+- **Themes** (`src/themes/`) — palette construction plus name policy (which theme, style, charset and colour depth names resolve to what). The colour arithmetic itself — blending, contrast, OKLCH transposition — lives in the separate `rich-js` package; this repo does none of it.
 
 ## Segments
 
-| Segment | Shows | Symbol |
-|---------|-------|--------|
-| directory | CWD name (`full`, `fish`, `basename`) | — |
-| git | Branch, SHA, working tree, upstream, stash, tags | `⎇` |
-| model | Current Claude model | `✱` |
-| session | Per-session cost/tokens/breakdown | `§` |
-| today | Daily usage with budget monitoring | `☉` |
-| context | Context window usage with auto-compact threshold | `◔` |
-| block | 5-hour rate-limit utilization | `◱` |
-| weekly | 7-day rolling rate-limit utilization | `◑` |
-| metrics | Response time, duration, lines changed | `⧖` |
-| version | Claude Code version | `◈` |
-| tmux | tmux session name | — |
-| sessionId | Session identifier (cmd-click to copy) | `⌗` |
-| env | Arbitrary environment variable | `⚙` |
+These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a user's `root` whether or not the default bar places it.
+
+| Segment | Shows | Visible |
+|---------|-------|---------|
+| `directory` | the cwd, abbreviated fish-style (`~/c/cc-candybar`) | always |
+| `model` | `✱` and the model's display name | always |
+| `sessionId` | `⌗` and the first 8 characters of the session id | always |
+| `version` | `◈ v` and the Claude Code version | always |
+| `tmux` | `tmux:` and the tmux session name | inside tmux |
+| `host` | `⇄ user@host` | over SSH |
+| `git` | repo, `⎇` branch, sha, ahead/behind, worktree, upstream, stash, working-tree status | in a repo |
+| `gitaculous` | the same facts in gitaculous's spelling — `(git)`, repo, operation, sha, `S`/`U`/`?`/`!` counts, upstream, stashes, time since the last commit | in a repo |
+| `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
+| `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page, toggle edit mode | always |
+| `session` | `§` this session's cost and tokens, plus budget status | always |
+| `today` | `☉` today's cost and tokens across sessions, plus budget status | always |
+| `block` | `◱` the 5-hour rate-limit window's utilization | while that window is active |
+| `weekly` | `◑` the 7-day rolling rate limit's utilization | while that window is active |
+| `burnrate` | `⚡` cost per hour, then ETA to the 5-hour and weekly limits | while either window is active |
+| `speed` | `⇅` output, input and total tokens per second | once the session has tokens |
+| `tokenSparkline` | `⚡` a sparkline over the last 24 speed samples | once speed samples exist |
+| `cacheTimer` | `◴` minutes until the prompt cache expires, or `cold` | while a cache expiry is known |
+| `context` | `◔` context tokens used and the percentage left | when context tokens are known |
+| `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
+
+Three more declarations are controls for the settings drawer rather than things the bar reports. Each pairs a picker with a `↺` reset:
+
+| Control | Sets |
+|---------|------|
+| `charsetControl` | the joiner glyph vocabulary (`unicode` or `ascii`) |
+| `colorCompatControl` | the output colour depth (truecolor, 256, ansi, none) |
+| `directoryPaletteControl` | `🎨 directory` — the palette pinned to the `directory` segment alone |
 
 Each segment is a DSL declaration with a `template` (text + interpolation + style functions), a `bg`/`fg` palette spec, and optional `when` predicate. Templates compose freely — every formatter in the bundled function library (`formatCost`, `formatTokens`, `formatLongTimeRemaining`, `budgetStatus`, `link`, `urlEncode`, the sprig string/list/dict library, …) is available in every segment.
 
