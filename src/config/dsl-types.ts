@@ -698,7 +698,13 @@ export interface SegmentDecl {
   // doing exactly what it does for every other field, not a special case worth
   // one; a delta that changes what a segment MEANS should say so here too.
   readonly description?: string;
-  readonly width?: "auto" | number;
+  // "auto" → content-sized; a positive integer → that many columns; "fill" →
+  // whatever is left of the row once every other cell has taken its natural
+  // width, split evenly when a row declares more than one
+  // (brandon-layout-0c2). A fill segment can never widen a row past the width
+  // it was given: when the other cells already fill it every share is zero and
+  // the strip's own wrap owns the overflow exactly as before.
+  readonly width?: "auto" | number | "fill";
   readonly justify?: JustifyMode;
   readonly truncate?: TruncateMode;
   readonly bg?: string;

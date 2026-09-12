@@ -112,7 +112,10 @@ describe("loadDslConfig — JSON5 syntax", () => {
   });
 
   test("root must be an object", () => {
-    expectIssue("[1, 2, 3]", { path: "", message: "Config root must be an object" });
+    expectIssue("[1, 2, 3]", {
+      path: "",
+      message: "Config root must be an object",
+    });
   });
 });
 
@@ -448,7 +451,8 @@ describe("loadDslConfig — variable source kinds", () => {
   test("git: field must be in closed set + cache required", () => {
     expectIssue(`{ variables: { b: { kind: "git" } } }`, {
       path: "variables.b.field",
-      message: "git field must be one of: branch, sha, dirty, ahead, behind, stash",
+      message:
+        "git field must be one of: branch, sha, dirty, ahead, behind, stash",
     });
     expectIssue(
       `{ variables: { b: { kind: "git", field: "not-a-field", cache: { ttl: "5s" } } } }`,
@@ -503,11 +507,14 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
         message: 'Unknown shell variable key "defualt"',
       },
     );
-    expectIssue(`{ variables: { t: { kind: "state", key: "theme", fallback: "x" } } }`, {
-      path: "variables.t.fallback",
-      message:
-        'Unknown state variable key "fallback". Expected one of: kind, key, default',
-    });
+    expectIssue(
+      `{ variables: { t: { kind: "state", key: "theme", fallback: "x" } } }`,
+      {
+        path: "variables.t.fallback",
+        message:
+          'Unknown state variable key "fallback". Expected one of: kind, key, default',
+      },
+    );
   });
 
   test("the message names the arm the author wrote, not the union", () => {
@@ -589,7 +596,9 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
         `{ variables: { x: { ${keys
           .filter((k) => k !== "kind")
           .map((k) => `${k}: null`)
-          .join(", ")}${keys.length > 1 ? ", " : ""}kind: "${kind}", zzz_not_a_key: 1 } } }`,
+          .join(
+            ", ",
+          )}${keys.length > 1 ? ", " : ""}kind: "${kind}", zzz_not_a_key: 1 } } }`,
         {
           path: "variables.x.zzz_not_a_key",
           message: `Unknown ${kind} variable key "zzz_not_a_key". Expected one of: ${keys.join(", ")}`,
@@ -677,15 +686,17 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
   });
 
   test("an unrecognised parse key is not the json arm: a document default is rejected beside it", () => {
-    const err = expectError(shell(`parse: { format: "json" }, default: { a: 1 }`));
+    const err = expectError(
+      shell(`parse: { format: "json" }, default: { a: 1 }`),
+    );
     expect(err.issues.map((i) => i.path).sort()).toEqual([
       "variables.x.default",
       "variables.x.parse",
       "variables.x.parse.format",
     ]);
-    expect(err.issues.find((i) => i.path === "variables.x.default")?.message).toContain(
-      "must be a string",
-    );
+    expect(
+      err.issues.find((i) => i.path === "variables.x.default")?.message,
+    ).toContain("must be a string");
   });
 
   test("a regex must compile and must carry the capture group the runtime reads", () => {
@@ -770,11 +781,15 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     expect(() =>
       parseAndValidate(
         FILE,
-        withSeg(`budget: { kind: "shell", command: "echo", parse: { json: true }, cache: { never: true } }`),
+        withSeg(
+          `budget: { kind: "shell", command: "echo", parse: { json: true }, cache: { never: true } }`,
+        ),
       ),
     ).not.toThrow();
     expectIssue(
-      withSeg(`budget: { kind: "shell", command: "echo", cache: { never: true } }`),
+      withSeg(
+        `budget: { kind: "shell", command: "echo", cache: { never: true } }`,
+      ),
       {
         path: "segments.s.template",
         message: 'Template references unknown variable ".budget.spent"',
@@ -892,7 +907,9 @@ describe("loadDslConfig — segments", () => {
   test("a delta over an inherited name may omit its template; any other name may not", () => {
     const parse = (source: string) =>
       parseDslConfig("<test>", source, new Set(["nord"]), new Set(["cwd"]));
-    expect(parse(`{ segments: { cwd: { palette: "nord" } } }`).segments).toEqual({
+    expect(
+      parse(`{ segments: { cwd: { palette: "nord" } } }`).segments,
+    ).toEqual({
       cwd: { palette: "nord" },
     });
     expect(() => parse(`{ segments: { mine: { palette: "nord" } } }`)).toThrow(
@@ -900,15 +917,24 @@ describe("loadDslConfig — segments", () => {
     );
   });
 
-  test("width: 'auto' or positive int", () => {
+  test("width: 'auto', 'fill', or positive int", () => {
     expectIssue(`{ segments: { x: { template: "t", width: 0 } } }`, {
       path: "segments.x.width",
-      message: 'width must be "auto" or a positive integer',
+      message: 'width must be "auto", "fill", or a positive integer',
     });
     expectIssue(`{ segments: { x: { template: "t", width: "wide" } } }`, {
       path: "segments.x.width",
-      message: 'width must be "auto" or a positive integer',
+      message: 'width must be "auto", "fill", or a positive integer',
     });
+    // brandon-layout-0c2: "fill" is the third member — a segment that takes the
+    // row's leftover width. Accepted here; what it MEANS is pinned in
+    // test/layout-fill.test.ts against serialized columns.
+    expect(
+      parseAndValidate(
+        FILE,
+        `{ segments: { x: { template: "t", width: "fill" } } }`,
+      ).segments.x!.width,
+    ).toBe("fill");
     const ok = parseAndValidate(
       FILE,
       `{ segments: { x: { template: "t", width: 12 }, y: { template: "u", width: "auto" } } }`,
@@ -1002,9 +1028,7 @@ describe("loadDslConfig — palette switch", () => {
   });
 
   test("unknown palette issue carries a source line", () => {
-    const err = expectError(
-      `{\n  globals: {\n    palette: "nope",\n  },\n}`,
-    );
+    const err = expectError(`{\n  globals: {\n    palette: "nope",\n  },\n}`);
     const issue = err.issues.find((i) => i.path === "globals.palette");
     expect(issue?.line).toBe(3);
   });
@@ -1047,13 +1071,10 @@ describe("loadDslConfig — palette switch", () => {
 
 describe("loadDslConfig — layout (removed; migration errors)", () => {
   test("any layout: value emits the A-grammar migration error", () => {
-    expectIssue(
-      `{ segments: { a: { template: "x" } }, layout: [["a"]] }`,
-      {
-        path: "layout",
-        message: /no longer supported/,
-      },
-    );
+    expectIssue(`{ segments: { a: { template: "x" } }, layout: [["a"]] }`, {
+      path: "layout",
+      message: /no longer supported/,
+    });
   });
 
   test("migration error message shows A-grammar rewrite examples", () => {
@@ -1139,7 +1160,9 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: { seg: "a", when: "{{ true }}" } }`,
     );
-    expect(cfg.root).toEqual(rootOf({ kind: "segment", name: "a", when: "{{ true }}" }));
+    expect(cfg.root).toEqual(
+      rootOf({ kind: "segment", name: "a", when: "{{ true }}" }),
+    );
   });
 
   test("{ h: [...] } lowers to a horizontal container", () => {
@@ -1147,14 +1170,16 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { h: ["a", "b"] } }`,
     );
-    expect(cfg.root).toEqual(rootOf({
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        { kind: "segment", name: "a" },
-        { kind: "segment", name: "b" },
-      ],
-    }));
+    expect(cfg.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "a" },
+          { kind: "segment", name: "b" },
+        ],
+      }),
+    );
   });
 
   test("{ v: [...] } lowers to a vertical container", () => {
@@ -1162,14 +1187,16 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { v: ["a", "b"] } }`,
     );
-    expect(cfg.root).toEqual(rootOf({
-      kind: "container",
-      direction: "vertical",
-      children: [
-        { kind: "segment", name: "a" },
-        { kind: "segment", name: "b" },
-      ],
-    }));
+    expect(cfg.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "vertical",
+        children: [
+          { kind: "segment", name: "a" },
+          { kind: "segment", name: "b" },
+        ],
+      }),
+    );
   });
 
   test("nested h-in-v-in-h lowers to the expected canonical tree", () => {
@@ -1180,27 +1207,29 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
         root: { h: [{ v: ["a", { h: ["b", "c"] }] }] },
       }`,
     );
-    expect(cfg.root).toEqual(rootOf({
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        {
-          kind: "container",
-          direction: "vertical",
-          children: [
-            { kind: "segment", name: "a" },
-            {
-              kind: "container",
-              direction: "horizontal",
-              children: [
-                { kind: "segment", name: "b" },
-                { kind: "segment", name: "c" },
-              ],
-            },
-          ],
-        },
-      ],
-    }));
+    expect(cfg.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          {
+            kind: "container",
+            direction: "vertical",
+            children: [
+              { kind: "segment", name: "a" },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: "b" },
+                  { kind: "segment", name: "c" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
   });
 
   test("{ h, when } preserves the predicate on the container", () => {
@@ -1208,12 +1237,14 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: { h: ["a"], when: "{{ true }}" } }`,
     );
-    expect(cfg.root).toEqual(rootOf({
-      kind: "container",
-      direction: "horizontal",
-      children: [{ kind: "segment", name: "a" }],
-      when: "{{ true }}",
-    }));
+    expect(cfg.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: [{ kind: "segment", name: "a" }],
+        when: "{{ true }}",
+      }),
+    );
   });
 
   test("bijectivity: A-grammar and canonical spelling lower to identical trees", () => {
@@ -1336,7 +1367,10 @@ describe("loadDslConfig — root rows fragment", () => {
     "a row name that is not an identifier (%s) is a loud error",
     (name) => {
       expect(() =>
-        parseAndValidate(FILE, `{ ${SEG}, root: { rows: { "${name}": "a" } } }`),
+        parseAndValidate(
+          FILE,
+          `{ ${SEG}, root: { rows: { "${name}": "a" } } }`,
+        ),
       ).toThrow(/row name "[^"]+" must be an identifier/);
     },
   );
@@ -1400,13 +1434,10 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("template references unknown variable is reported", () => {
-    expectIssue(
-      `{ segments: { cwd: { template: "{{ .nope }}" } } }`,
-      {
-        path: "segments.cwd.template",
-        message: 'Template references unknown variable ".nope"',
-      },
-    );
+    expectIssue(`{ segments: { cwd: { template: "{{ .nope }}" } } }`, {
+      path: "segments.cwd.template",
+      message: 'Template references unknown variable ".nope"',
+    });
   });
 
   test("template referencing declared variable passes", () => {
@@ -1890,13 +1921,26 @@ describe("loadDslConfig — valid corpus", () => {
     }`;
     const cfg = parseAndValidate(FILE, source);
     expect(Object.keys(cfg.variables).sort()).toEqual([
-      "branch", "constant", "cwd", "cwd_short", "home", "hostname",
-      "load_avg", "now", "sid",
+      "branch",
+      "constant",
+      "cwd",
+      "cwd_short",
+      "home",
+      "hostname",
+      "load_avg",
+      "now",
+      "sid",
     ]);
-    expect(cfg.root).toEqual(rootOf({
-      kind: "container", direction: "horizontal",
-      children: ["cwd", "branch", "load"].map((name) => ({ kind: "segment", name })),
-    }));
+    expect(cfg.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: ["cwd", "branch", "load"].map((name) => ({
+          kind: "segment",
+          name,
+        })),
+      }),
+    );
   });
 
   test("minimal valid config loads to canonical empty shape", () => {
@@ -1922,16 +1966,22 @@ describe("extractTemplateRefs", () => {
   });
 
   test("dotted ref", () => {
-    expect([...extractTemplateRefs("{{ .session.id }}")]).toEqual(["session.id"]);
+    expect([...extractTemplateRefs("{{ .session.id }}")]).toEqual([
+      "session.id",
+    ]);
   });
 
   test("multiple refs across blocks", () => {
-    const refs = extractTemplateRefs("{{ .a }} static {{ .b | upper }} {{ if .c }}{{ .d }}{{ end }}");
+    const refs = extractTemplateRefs(
+      "{{ .a }} static {{ .b | upper }} {{ if .c }}{{ .d }}{{ end }}",
+    );
     expect([...refs].sort()).toEqual(["a", "b", "c", "d"]);
   });
 
   test("strips string literals", () => {
-    expect([...extractTemplateRefs(`{{ printf ".not.a.ref" .real }}`)]).toEqual(["real"]);
+    expect([...extractTemplateRefs(`{{ printf ".not.a.ref" .real }}`)]).toEqual(
+      ["real"],
+    );
   });
 
   test("ignores text outside {{ }}", () => {
@@ -1939,9 +1989,9 @@ describe("extractTemplateRefs", () => {
   });
 
   test("numeric literals don't match", () => {
-    expect([...extractTemplateRefs("{{ if gt .x 1.5 }}{{ .y }}{{ end }}")]).toEqual([
-      "x", "y",
-    ]);
+    expect([
+      ...extractTemplateRefs("{{ if gt .x 1.5 }}{{ .y }}{{ end }}"),
+    ]).toEqual(["x", "y"]);
   });
 
   test("function calls aren't refs (no leading dot)", () => {

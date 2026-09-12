@@ -1422,6 +1422,9 @@
               "const": "auto"
             },
             {
+              "const": "fill"
+            },
+            {
               "type": "integer",
               "minimum": 1
             }
@@ -2059,6 +2062,9 @@
           "anyOf": [
             {
               "const": "auto"
+            },
+            {
+              "const": "fill"
             },
             {
               "type": "integer",

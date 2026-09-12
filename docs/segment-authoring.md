@@ -268,6 +268,27 @@ run:
 }
 ```
 
+A segment's `width:` is `"auto"` by default — as wide as its content. Give it a
+positive integer for a fixed column count, or `"fill"` to take whatever is left of
+the row after the other cells have taken their natural widths (two fills in one row
+split it). A fill never widens a row past the width it was given: when the row is
+already full it takes nothing and the bar wraps exactly as before.
+
+A spacer that pushes the rest of a row to the right is one segment. Its template
+must render **something** — a single space is enough — because a segment whose
+template renders nothing contributes no cell at all, and a cell is what carries the
+claim on the leftover:
+
+```json5 check:pass
+{
+  segments: {
+    spacer: { template: " ", width: "fill" },
+    tail: { template: "{{ .model.display_name }}" },
+  },
+  root: { rows: { status: { h: ["model", "spacer", "tail"] } } },
+}
+```
+
 `description:` is for whoever picks this segment up next — you in another
 session, or anyone running `cc-candybar segments`, which prints it beside the
 template. Nothing renders it, it is optional, and it rides the declaration

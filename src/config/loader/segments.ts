@@ -107,21 +107,29 @@ function ownTemplateSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:types-are-the-program] `width` is `"auto"` or a positive integer — a union
-// the generic string/enum specs cannot express, so it carries its own parse and
-// bespoke message as DATA. Absent → omitted; present-and-wrong → issue + omitted.
-function widthSpec(): FieldSpec<"auto" | number> {
+// [LAW:types-are-the-program] `width` is `"auto"`, `"fill"`, or a positive
+// integer — a union the generic string/enum specs cannot express, so it carries
+// its own parse and bespoke message as DATA. Absent → omitted;
+// present-and-wrong → issue + omitted.
+function widthSpec(): FieldSpec<"auto" | number | "fill"> {
   return {
     required: false,
-    json: { anyOf: [{ const: "auto" }, { type: "integer", minimum: 1 }] },
+    json: {
+      anyOf: [
+        { const: "auto" },
+        { const: "fill" },
+        { type: "integer", minimum: 1 },
+      ],
+    },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
       if (v === "auto") return "auto";
+      if (v === "fill") return "fill";
       if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
       ctx.issues.push({
         path: `${path}.${field}`,
-        message: `width must be "auto" or a positive integer, got ${describeValue(v)}`,
+        message: `width must be "auto", "fill", or a positive integer, got ${describeValue(v)}`,
         line: findKeyLine(ctx.source, [...path.split("."), field]),
       });
       return undefined;

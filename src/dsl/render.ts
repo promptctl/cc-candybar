@@ -37,6 +37,7 @@ import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
+import { resolveFill } from "../render/fill.js";
 import { paletteForThemeName, transposedPalette } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -831,7 +832,11 @@ export function renderDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
-  return renderNode(root, true, BAR_ROOT)
-    .map((line) => renderStripCells(line, opts))
-    .join("\n");
+  return (
+    renderNode(root, true, BAR_ROOT)
+      // A row's fill demands resolve here and nowhere else: this is the one place a
+      // composed row and the width it must fit are both in hand (brandon-layout-0c2).
+      .map((line) => renderStripCells(resolveFill(line, opts), opts))
+      .join("\n")
+  );
 }
