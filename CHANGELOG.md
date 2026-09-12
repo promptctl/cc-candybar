@@ -1,3 +1,10 @@
+## [1.61.5](https://github.com/promptctl/cc-candybar/compare/v1.61.4...v1.61.5) (2026-09-12)
+
+
+### Bug Fixes
+
+* **daemon:** cache the gitDir resolution so a non-repo cwd stops spawning git (brandon-git-cache-y2t) ([b1dbbb9](https://github.com/promptctl/cc-candybar/commit/b1dbbb93e20c0df72179545ab16dee98bfee8bca))
+
 ## [1.61.4](https://github.com/promptctl/cc-candybar/compare/v1.61.3...v1.61.4) (2026-09-12)
 
 
