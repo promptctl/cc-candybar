@@ -1,3 +1,10 @@
+## [1.71.1](https://github.com/promptctl/cc-candybar/compare/v1.71.0...v1.71.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **check:** a globals slot is not a segment, so `check` stops calling it one ([a3277a7](https://github.com/promptctl/cc-candybar/commit/a3277a70b28cf23f473ca2c9d21aa7ee85895e6b))
+
 # [1.71.0](https://github.com/promptctl/cc-candybar/compare/v1.70.0...v1.71.0) (2026-09-12)
 
 
