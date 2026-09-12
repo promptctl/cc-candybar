@@ -1,3 +1,10 @@
+# [1.66.0](https://github.com/promptctl/cc-candybar/compare/v1.65.0...v1.66.0) (2026-09-12)
+
+
+### Features
+
+* **template-funcs:** a gauge draws one value against a fixed maximum, cell by cell (brandon-template-funcs-zv5) ([fab6060](https://github.com/promptctl/cc-candybar/commit/fab60600d3581630c3b89210667c2dc1def96bd4))
+
 # [1.65.0](https://github.com/promptctl/cc-candybar/compare/v1.64.1...v1.65.0) (2026-09-12)
 
 
