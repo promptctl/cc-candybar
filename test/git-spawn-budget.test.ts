@@ -10,7 +10,14 @@
 // for.
 
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -101,10 +108,9 @@ describe("git spawns per cache miss", () => {
     const again = await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
 
     expect(again.kind).toBe("ok");
-    expect(svc.invocations).toEqual([
-      "status --porcelain=v2 --branch",
-      "config --local --get-regexp ^remote\\..*\\.url$",
-    ]);
+    // Both memos are warm on the second fetch, so the irreducible call is all that
+    // is left: the working-tree walk nothing can answer from a file.
+    expect(svc.invocations).toEqual(["status --porcelain=v2 --branch"]);
   });
 
   test("a new commit is asked about exactly once", async () => {
@@ -145,6 +151,99 @@ describe("git spawns per cache miss", () => {
     if (info.kind !== "ok") return;
     expect(info.value.timeSinceCommit).toEqual({ kind: "absent" });
     expect(svc.invocations).toEqual(["status --porcelain=v2 --branch"]);
+  });
+
+  // [LAW:verifiable-goals] The remotes memo, and the two ways it must come loose:
+  // a config edit, and never on its own.
+  test("a second fetch does not re-read remotes, and a config edit makes it", async () => {
+    const svc = new CountingGitService();
+    const stable = join(root, "remotes");
+    mkdirSync(stable);
+    run("git init -q -b main", stable);
+    run("git config user.email t@t.t && git config user.name t", stable);
+    run("git commit -q --allow-empty -m init", stable);
+    run("git remote add origin https://github.com/o/r.git", stable);
+
+    const configCalls = (): string[] =>
+      svc.invocations.filter((i) => i.startsWith("config --local"));
+
+    const first = await svc.getGitInfo(stable, { showRepoName: true });
+    expect(first).toMatchObject({ value: { repoName: { value: "r" } } });
+    expect(configCalls()).toHaveLength(1);
+
+    svc.invocations.length = 0;
+    const second = await svc.getGitInfo(stable, { showRepoName: true });
+    expect(second).toMatchObject({ value: { repoName: { value: "r" } } });
+    expect(configCalls()).toHaveLength(0);
+
+    // Changing the remote changes the config file, so the memo must not survive it
+    // — the answer the bar shows would otherwise be the old repository's name.
+    // git writes config through a lock file and a rename, so this path replaces
+    // the file: a NEW inode, which the identity key notices on its own.
+    run("git remote set-url origin https://github.com/o/renamed.git", stable);
+    svc.invocations.length = 0;
+    const third = await svc.getGitInfo(stable, { showRepoName: true });
+    expect(configCalls()).toHaveLength(1);
+    expect(third).toMatchObject({ value: { repoName: { value: "renamed" } } });
+  });
+
+  // The case the STAMP is for, as opposed to the identity: an edit IN PLACE keeps
+  // the inode, so the key is unchanged and only mtime/size say anything happened.
+  // Without this, keying on identity alone would have passed every test above —
+  // git's own writes replace the file — while a hand edit from an editor that
+  // truncates and rewrites would have been invisible for the daemon's lifetime.
+  test("an in-place config edit invalidates the memo", async () => {
+    const svc = new CountingGitService();
+    const inplace = join(root, "inplace");
+    mkdirSync(inplace);
+    run("git init -q -b main", inplace);
+    run("git config user.email t@t.t && git config user.name t", inplace);
+    run("git commit -q --allow-empty -m init", inplace);
+    run("git remote add origin https://github.com/o/before.git", inplace);
+
+    const configPath = join(inplace, ".git", "config");
+    const before = await svc.getGitInfo(inplace, { showRepoName: true });
+    expect(before).toMatchObject({ value: { repoName: { value: "before" } } });
+    const inode = statSync(configPath).ino;
+
+    writeFileSync(
+      configPath,
+      readFileSync(configPath, "utf8").replace("before.git", "after.git"),
+    );
+    expect(statSync(configPath).ino).toBe(inode);
+
+    svc.invocations.length = 0;
+    const after = await svc.getGitInfo(inplace, { showRepoName: true });
+    expect(
+      svc.invocations.filter((i) => i.startsWith("config --local")),
+    ).toHaveLength(1);
+    expect(after).toMatchObject({ value: { repoName: { value: "after" } } });
+  });
+
+  // Two worktrees of one repo share one config file, so they share one memo. The
+  // memo is keyed by that file rather than by the directory asking, which is what
+  // makes this true rather than coincidental.
+  test("a worktree shares the main repo's remotes memo", async () => {
+    const svc = new CountingGitService();
+    const shared = join(root, "shared");
+    mkdirSync(shared);
+    run("git init -q -b main", shared);
+    run("git config user.email t@t.t && git config user.name t", shared);
+    run("git commit -q --allow-empty -m init", shared);
+    run("git remote add origin https://github.com/o/shared.git", shared);
+    const wt = join(root, "shared-wt");
+    run(`git worktree add -q "${wt}"`, shared);
+
+    await svc.getGitInfo(shared, { showRepoName: true });
+    svc.invocations.length = 0;
+    const fromWorktree = await svc.getGitInfo(wt, { showRepoName: true });
+
+    expect(fromWorktree).toMatchObject({
+      value: { repoName: { value: "shared" } },
+    });
+    expect(
+      svc.invocations.filter((i) => i.startsWith("config --local")),
+    ).toEqual([]);
   });
 
   test("a cwd below the repo root finds the root without spawning git", async () => {

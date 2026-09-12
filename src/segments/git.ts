@@ -645,6 +645,45 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
 // repos cannot grow this without limit, not because the entries are large.
 const COMMIT_TIME_CACHE_MAX = 256;
 
+const REMOTES_CACHE_MAX = 256;
+
+// [LAW:types-are-the-program] A memo and the stamp that makes it valid, together:
+// a remembered answer without the fact that dates it is not a cache, it is a
+// guess.
+interface RemotesMemo {
+  readonly stamp: string;
+  readonly remotes: Promise<Outcome<GitRemote[]>>;
+}
+
+// [LAW:one-source-of-truth] The config file's IDENTITY, not a spelling of a path
+// to it: `dev:ino` names the file itself, so two worktrees of one repo share one
+// memo even though their two routes to that file disagree textually — a linked
+// worktree's `.git` pointer holds the path git wrote, which on macOS is the
+// physical one (/private/var/…) where the caller's own path is logical (/var/…).
+// Keying on the text gave one file two memos, which is how the second reader
+// re-spawned for an answer already in hand.
+//
+// `stamp` is `mtimeMs:size` rather than the mtime alone: a real `git remote add`
+// was measured leaving the mtime unchanged at one-second resolution while the size
+// moved, and a MISSED change is the costly direction (a false one costs a single
+// spawn). Both come from the one stat this already had to make.
+//
+// `null` means the file could not be stat'd, which is the one answer that must not
+// be memoised — there is nothing to date it by.
+interface ConfigIdentity {
+  readonly key: string;
+  readonly stamp: string;
+}
+
+function configIdentity(configPath: string): ConfigIdentity | null {
+  try {
+    const st = fs.statSync(configPath);
+    return { key: `${st.dev}:${st.ino}`, stamp: `${st.mtimeMs}:${st.size}` };
+  } catch {
+    return null;
+  }
+}
+
 export class GitService {
   private isGitRepo(workingDir: string): boolean {
     try {
@@ -1119,7 +1158,70 @@ export class GitService {
   // carrying a second no-value state through three consumers. Exit 128 (an
   // unreadable or corrupt config) is NOT that answer and stays `failed`, so a
   // broken repo never renders as an empty one. [LAW:no-silent-failure]
+  // [LAW:one-source-of-truth] The memo is keyed by the CONFIG FILE's identity, not
+  // by the working directory and not by a path, because the file is what the answer
+  // depends on: two worktrees of one repo share one config, so they share one memo,
+  // and one repo cannot hold two answers. See `configIdentity` for why a path would
+  // not have been enough.
+  //
+  // Remotes change roughly never, and this was re-read on every cache miss. The
+  // stamp is the config's `mtimeMs:size` rather than its mtime alone — a real `git
+  // remote add` was measured leaving the mtime unchanged at one-second resolution
+  // while the size moved, and a missed change is the costly direction here (a
+  // false one costs a single spawn). Deliberately NOT parsing .git/config: `git
+  // config` honours `include` and `includeIf`, so a hand-rolled INI reader is an
+  // enumeration gap with a wrong answer at the end of it. Keeping the spawn behind
+  // the memo gets the saving with none of that exposure.
+  //
+  // The honest edges, both of which the spawn itself would not have: a remote added
+  // through an INCLUDED file whose own mtime changed is not seen, and neither is
+  // one in a `config.worktree` under `extensions.worktreeConfig`. A stat that fails
+  // yields no stamp and therefore no memo, so an unreadable config re-reads rather
+  // than freezing an answer.
   async getRemotesAsync(workingDir: string): Promise<Outcome<GitRemote[]>> {
+    const configPath = path.join(
+      this.resolveCommonGitDir(workingDir),
+      "config",
+    );
+    const identity = configIdentity(configPath);
+    if (identity === null) return this.readRemotes(workingDir);
+    const { key, stamp } = identity;
+
+    const memo = this.remotesByConfig.get(key);
+    if (memo !== undefined && memo.stamp === stamp) {
+      this.remotesByConfig.delete(key);
+      this.remotesByConfig.set(key, memo);
+      return memo.remotes;
+    }
+
+    const remotes = this.readRemotes(workingDir);
+    this.remotesByConfig.set(key, { stamp, remotes });
+    // Only a settled `ok` is worth keeping: an empty list is a real answer, while
+    // `failed` (exit 128, an unreadable config) is a condition to re-ask about
+    // rather than one to hold until the file changes.
+    void remotes.then(
+      (outcome) => {
+        const held = this.remotesByConfig.get(key);
+        if (outcome.kind !== "ok" && held?.remotes === remotes) {
+          this.remotesByConfig.delete(key);
+        }
+      },
+      () => {
+        const held = this.remotesByConfig.get(key);
+        if (held?.remotes === remotes) this.remotesByConfig.delete(key);
+      },
+    );
+    while (this.remotesByConfig.size > REMOTES_CACHE_MAX) {
+      const oldest = this.remotesByConfig.keys().next().value;
+      if (oldest === undefined) break;
+      this.remotesByConfig.delete(oldest);
+    }
+    return remotes;
+  }
+
+  private readonly remotesByConfig = new Map<string, RemotesMemo>();
+
+  private async readRemotes(workingDir: string): Promise<Outcome<GitRemote[]>> {
     const r = classify(
       "git config --get-regexp remote url",
       await this.execGitAsync(
