@@ -60,6 +60,9 @@ export const LAUNCH_CATEGORIES = [
   // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
   // arbitration — never per render — so it needs no rate limit.
   "process-fingerprint",
+  // The RSS backstop's post-mortem memory attribution (memory-report.ts):
+  // `footprint`/`vmmap` on the death path, once per breach, never per render.
+  "limits.memory-report",
   // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
   // over a published install). One click, one long-running child; the
   // notice's own running/failed state serialises clicks, so no rate limit.

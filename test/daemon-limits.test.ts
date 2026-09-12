@@ -11,9 +11,17 @@ import {
 interface Recorder {
   shutdownCalls: number[];
   snapshotsWritten: string[];
+  reportsWritten: Array<{ file: string; text: string }>;
+  // Every artifact step in the order it happened — the ordering claim below is
+  // about which state the memory attribution describes, so it has to be
+  // observable, not inferred.
+  order: string[];
+  captureThrows: boolean;
+  reportWriteThrows: boolean;
   removed: string[];
   logs: Array<{ level: string; msg: string }>;
   fakeRss: number;
+  fakeHeapTotal: number;
   fakeNow: number;
   startedAtMs: number;
   pid: number;
@@ -27,13 +35,25 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
     pid: rec.pid,
     snapshotDir: rec.snapshotDir,
     log: (level, msg) => rec.logs.push({ level, msg }),
-    rssBytes: () => rec.fakeRss,
+    memoryBytes: () => ({ rss: rec.fakeRss, heapTotal: rec.fakeHeapTotal }),
+    captureMemoryReport: () => {
+      rec.order.push("capture");
+      if (rec.captureThrows) throw new Error("footprint exploded");
+      return "# memory report from: footprint -p 4242\n118 MB tag 16";
+    },
+    writeMemoryReport: (file, text) => {
+      rec.order.push("write-report");
+      if (rec.reportWriteThrows) throw new Error("EACCES");
+      rec.reportsWritten.push({ file, text });
+      rec.existingFiles.push(file);
+    },
     writeHeapSnapshot: (file) => {
+      rec.order.push("write-heap");
       rec.snapshotsWritten.push(file);
       rec.existingFiles.push(file);
       return file;
     },
-    listSnapshots: () => [...rec.existingFiles],
+    listArtifacts: () => [...rec.existingFiles],
     removeFile: (file) => {
       rec.removed.push(file);
       const i = rec.existingFiles.indexOf(file);
@@ -51,7 +71,12 @@ function newRec(): Recorder {
     snapshotsWritten: [],
     removed: [],
     logs: [],
+    reportsWritten: [],
+    order: [],
+    captureThrows: false,
+    reportWriteThrows: false,
     fakeRss: 50 * 1024 * 1024,
+    fakeHeapTotal: 20 * 1024 * 1024,
     fakeNow: Date.parse("2026-04-01T00:00:00Z"),
     startedAtMs: Date.parse("2026-04-01T00:00:00Z"),
     pid: 4242,
@@ -123,20 +148,113 @@ describe("limits.checkRss", () => {
 });
 
 
+// brandon-daemon-limits-inw. A heap snapshot can only ever describe the V8 half,
+// and the breach that trips this backstop is the one where RSS and the heap
+// disagree — measured on the live daemon as 230 MB RSS against a 122 MB heap. So
+// the death path also records what the platform can attribute.
+describe("the breach records where the memory actually was", () => {
+  function breach(rec: Recorder): void {
+    rec.fakeRss = 250 * 1024 * 1024;
+    makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 })).checkRss();
+  }
+
+  test("the captured attribution is written beside the snapshot, same identity", () => {
+    const rec = newRec();
+    breach(rec);
+    expect(rec.reportsWritten).toHaveLength(1);
+    expect(rec.reportsWritten[0]!.file).toBe(
+      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
+    );
+    // The captured text reaches the file verbatim — the capture and the write
+    // are separate deps precisely so this is observable.
+    expect(rec.reportsWritten[0]!.text).toContain("118 MB tag 16");
+    // Same stamp and pid as the snapshot: one breach, one identity, two files.
+    expect(rec.snapshotsWritten[0]).toBe(
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+    );
+  });
+
+  // [LAW:no-ambient-temporal-coupling] Ordering that matters is stated, not
+  // hoped for: writing a heap snapshot allocates and can move hundreds of MB, so
+  // an attribution taken afterwards would describe the state the SNAPSHOT
+  // produced rather than the state that tripped the limit.
+  test("the attribution is captured before the snapshot rewrites the state", () => {
+    const rec = newRec();
+    breach(rec);
+    expect(rec.order).toEqual(["capture", "write-report", "write-heap"]);
+  });
+
+  // [LAW:no-silent-failure] One artifact failing must not cost the other: they
+  // are separately attempted, and each failure is named in the log.
+  test("a failed capture still leaves the heap snapshot and a reason", () => {
+    const rec = newRec();
+    rec.captureThrows = true;
+    breach(rec);
+    expect(rec.snapshotsWritten).toHaveLength(1);
+    expect(rec.reportsWritten).toHaveLength(0);
+    expect(rec.logs.map((l) => `${l.level}: ${l.msg}`).join("\n")).toContain(
+      "footprint exploded",
+    );
+    expect(rec.shutdownCalls).toEqual([0]);
+  });
+
+  test("a failed report write still leaves the heap snapshot and a reason", () => {
+    const rec = newRec();
+    rec.reportWriteThrows = true;
+    breach(rec);
+    expect(rec.snapshotsWritten).toHaveLength(1);
+    expect(rec.logs.map((l) => l.msg).join("\n")).toContain("EACCES");
+    expect(rec.shutdownCalls).toEqual([0]);
+  });
+
+  test("the breach log names the heap share of the RSS that tripped it", () => {
+    const rec = newRec();
+    rec.fakeHeapTotal = 30 * 1024 * 1024;
+    breach(rec);
+    const warn = rec.logs.find((l) => l.level === "warn")!.msg;
+    expect(warn).toContain(String(250 * 1024 * 1024));
+    expect(warn).toContain(String(30 * 1024 * 1024));
+  });
+});
+
 describe("heap snapshot rotation", () => {
   test("keeps only the 3 newest snapshots", () => {
     const rec = newRec();
     rec.fakeRss = 250 * 1024 * 1024;
     rec.existingFiles = [
-      "/d/heap-2026-01-01T00-00-00-000Z.heapsnapshot",
-      "/d/heap-2026-02-01T00-00-00-000Z.heapsnapshot",
-      "/d/heap-2026-03-01T00-00-00-000Z.heapsnapshot",
+      "/d/heap-2026-01-01T00-00-00-000Z-1.heapsnapshot",
+      "/d/heap-2026-02-01T00-00-00-000Z-1.heapsnapshot",
+      "/d/heap-2026-03-01T00-00-00-000Z-1.heapsnapshot",
     ];
     const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
     limits.checkRss();
     // After write+rotate: 4 existed (3 plus new one), keep=3, oldest removed.
     expect(rec.removed).toHaveLength(1);
     expect(rec.removed[0]).toContain("2026-01-01");
+  });
+
+  // brandon-daemon-limits-inw. A breach now leaves TWO files, so counting files
+  // would keep one and a half post-mortems. The unit is the BREACH: its identity
+  // is the shared `<stamp>-<pid>` tail, and both of an evicted breach's files go.
+  test("rotation counts breaches, not files, and evicts a breach whole", () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    rec.existingFiles = [
+      "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot",
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+    ];
+    makeLimits(
+      makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024, snapshotsKeep: 1 }),
+    ).checkRss();
+    // The new breach is kept whole; the older breach's BOTH files are gone.
+    expect([...rec.removed].sort()).toEqual([
+      "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot",
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+    ]);
+    expect(rec.existingFiles.sort()).toEqual([
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
+    ]);
   });
 });
 
@@ -153,6 +271,17 @@ describe("describeNextRestart", () => {
     rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024; // > 75% of the default
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toContain("rss");
+  });
+
+  // brandon-daemon-limits-inw: the warning is the one place a human is told
+  // growth is coming, so it says whether the growth is V8-side (a cache to fix)
+  // or not (something the heap snapshot could never have shown them).
+  test("the warning names the heap share, so the reader knows which half grew", () => {
+    const rec = newRec();
+    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024;
+    rec.fakeHeapTotal = 11 * 1024 * 1024;
+    const warning = makeLimits(makeDeps(rec)).describeNextRestart();
+    expect(warning).toContain(String(11 * 1024 * 1024));
   });
 
   test("returns null when rss is healthy", () => {

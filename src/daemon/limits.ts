@@ -3,11 +3,18 @@ import path from "node:path";
 import v8 from "node:v8";
 import { daemonDir } from "./paths";
 import { dlog, type DaemonLogger } from "./log";
+import { memoryReport, platformProbes } from "./memory-report";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
 // Only the RSS trigger remains — idle and age limits were removed because they
 // interrupted active sessions. The RSS limit is a true anomaly backstop; normal
 // operation should never approach it now that transcript parsing is pruned.
+//
+// How much of the budget is even reachable by eviction was measured rather than
+// assumed (brandon-daemon-limits-inw): on the live daemon roughly 50 MB of RSS is
+// clean file-backed code plus kernel page tables that no cache can release, so a
+// 512 MB budget is about 460 MB of controllable memory. The same measurement is
+// why a breach records more than a heap snapshot — see checkRss.
 //
 // [LAW:one-source-of-truth] The daemon's memory budget is ONE number, read from
 // ONE place. Two limits derive from it and their ORDER is the whole point:
@@ -72,6 +79,48 @@ export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 
+// [LAW:one-source-of-truth] The artifacts a breach leaves, spelled ONCE. The
+// writer names them from this table, the real lister filters by it, and rotation
+// strips it to recover the `<stamp>-<pid>` identity the pair shares. Three
+// independent spellings of one pair — which is what adding the memory report
+// naively produced — is exactly how a rotation quietly stops matching what the
+// writer emits, leaving a directory that grows forever or a heap snapshot whose
+// attribution was evicted from under it.
+const BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
+} as const;
+
+type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
+
+function artifactFile(
+  dir: string,
+  kind: BreachArtifact,
+  identity: string,
+): string {
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return path.join(dir, `${prefix}${identity}${suffix}`);
+}
+
+// Every artifact of a breach answers to its own affix pair; anything else in the
+// directory is not ours to rotate.
+function breachArtifactOf(base: string): BreachArtifact | null {
+  for (const kind of Object.keys(BREACH_ARTIFACTS) as BreachArtifact[]) {
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
+  }
+  return null;
+}
+
+// What the backstop measures, in the units process.memoryUsage() reports. RSS is
+// what the kernel bills and therefore what the limit is on; heapTotal is the part
+// V8 admits to, and the gap between them is the whole reason this module writes
+// an attribution artifact rather than only a heap snapshot.
+export interface MemorySizes {
+  readonly rss: number;
+  readonly heapTotal: number;
+}
+
 export interface LimitsDeps {
   now: () => number;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
@@ -82,9 +131,20 @@ export interface LimitsDeps {
   pid: number;
   snapshotDir: string;
   log: DaemonLogger;
-  rssBytes: () => number;
+  // [LAW:one-source-of-truth] ONE read, both numbers. `process.memoryUsage()`
+  // returns them together, so two deps would be two reads that could disagree
+  // about the same instant — and every message here that mentions RSS also wants
+  // to say how much of it is V8, which is the difference between "a cache to
+  // fix" and "something a heap snapshot cannot show you".
+  memoryBytes: () => MemorySizes;
+  // The platform's own attribution of this process's resident memory, as text.
+  // Total by contract (src/daemon/memory-report.ts): it reports which probe
+  // could not answer rather than throwing, because the caller is already dying.
+  captureMemoryReport: () => string;
+  writeMemoryReport: (filePath: string, text: string) => void;
   writeHeapSnapshot: (filePath: string) => string;
-  listSnapshots: () => string[];
+  // Every artifact a breach leaves behind, for rotation — both kinds.
+  listArtifacts: () => string[];
   removeFile: (filePath: string) => void;
   shutdown: (code: number) => void;
   startedAtMs: number;
@@ -105,38 +165,56 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
 
   function checkRss(): boolean {
     if (triggered) return true;
-    const rss = deps.rssBytes();
+    const { rss, heapTotal } = deps.memoryBytes();
     if (rss <= rssLimit) return false;
     triggered = true;
     deps.log(
       "warn",
-      `RSS ${rss} > limit ${rssLimit}; writing heap snapshot then shutting down`,
+      `RSS ${rss} > limit ${rssLimit} (v8 heap ${heapTotal}); recording memory then shutting down`,
     );
-    try {
-      // [LAW:types-are-the-program] Uniqueness is by construction (the writer's
-      // pid), not by trusting the clock to be real and sub-ms-distinct. Two
-      // overlapping daemons hitting the wall in the same millisecond — or a
-      // frozen `now` — still produce distinct files; the timestamp stays the
-      // leading component so rotateSnapshots' newest-first ordering holds.
-      const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
-      const file = path.join(
-        deps.snapshotDir,
-        `heap-${stamp}-${deps.pid}.heapsnapshot`,
+    // [LAW:types-are-the-program] Uniqueness is by construction (the writer's
+    // pid), not by trusting the clock to be real and sub-ms-distinct. Two
+    // overlapping daemons hitting the wall in the same millisecond — or a frozen
+    // `now` — still produce distinct files; the timestamp stays the leading
+    // component so rotation's newest-first ordering holds. Both of a breach's
+    // artifacts share this identity, which is what makes them one post-mortem.
+    const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
+    const identity = `${stamp}-${deps.pid}`;
+
+    // [LAW:no-ambient-temporal-coupling] The attribution goes FIRST. Writing a
+    // heap snapshot allocates and can move hundreds of megabytes, so a reading
+    // taken after it would describe the state the snapshot produced rather than
+    // the state that tripped the limit.
+    //
+    // [LAW:no-silent-failure] Each artifact is attempted on its own: one
+    // failing must not cost the other, and either failure is named in the log
+    // where the post-mortem will look for it.
+    attempt(deps.log, "memory report", () => {
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity);
+      deps.writeMemoryReport(file, deps.captureMemoryReport());
+      deps.log("info", `memory report written: ${file}`);
+    });
+    attempt(deps.log, "heap snapshot", () => {
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity);
+      deps.log(
+        "info",
+        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`,
       );
-      const written = deps.writeHeapSnapshot(file);
-      deps.log("info", `heap snapshot written: ${written}`);
-      rotateSnapshots(deps.listSnapshots(), keep, deps.removeFile);
-    } catch (e) {
-      deps.log("warn", `heap snapshot failed: ${(e as Error).message}`);
-    }
+    });
+    attempt(deps.log, "artifact rotation", () => {
+      rotateBreaches(deps.listArtifacts(), keep, deps.removeFile);
+    });
     deps.shutdown(0);
     return true;
   }
 
   function describeNextRestart(): string | null {
-    const rss = deps.rssBytes();
+    const { rss, heapTotal } = deps.memoryBytes();
     if (rss > rssLimit * 0.75) {
-      return `rss ${rss} approaching limit ${rssLimit}`;
+      // The heap share is the actionable half of the sentence: growth inside V8
+      // is a cache to fix, growth outside it is not, and the reader cannot tell
+      // which from an RSS number alone.
+      return `rss ${rss} approaching limit ${rssLimit} (v8 heap ${heapTotal})`;
     }
     return null;
   }
@@ -156,24 +234,56 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   return { checkRss, describeNextRestart, arm };
 }
 
-function rotateSnapshots(
+// [LAW:no-silent-failure] The death path's one shape for "do this, and if it
+// fails say which thing failed and carry on to the next". Swallowing would leave
+// a breach with no artifacts and no explanation; throwing would skip the
+// shutdown.
+function attempt(log: DaemonLogger, what: string, body: () => void): void {
+  try {
+    body();
+  } catch (e) {
+    log("warn", `${what} failed: ${(e as Error).message}`);
+  }
+}
+
+// [LAW:types-are-the-program] Rotation's unit is the BREACH, not the file. A
+// breach leaves a heap snapshot AND a memory report sharing one `<stamp>-<pid>`
+// identity, so counting files would keep one and a half post-mortems and evict
+// half of another — leaving a heap snapshot whose attribution is gone, which is
+// the pairing this whole change exists to create.
+function breachIdentity(filePath: string): string {
+  const base = filePath.slice(filePath.lastIndexOf("/") + 1);
+  const kind = breachArtifactOf(base);
+  // A file we did not write keeps its whole name as its identity, so it groups
+  // alone and is rotated on its own terms rather than pairing with a real breach.
+  if (kind === null) return base;
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return base.slice(prefix.length, base.length - suffix.length);
+}
+
+function rotateBreaches(
   files: string[],
   keep: number,
   remove: (p: string) => void,
 ): void {
-  // Newest-first by basename (the leading ISO timestamp is lexically ordered;
-  // the trailing -<pid> only tiebreaks same-instant writes). Sort by basename
-  // so paths with different parent dirs still order correctly when the test
-  // mock and production use different prefixes.
-  const sorted = [...files].sort((a, b) => {
-    const aBase = a.slice(a.lastIndexOf("/") + 1);
-    const bBase = b.slice(b.lastIndexOf("/") + 1);
-    return bBase.localeCompare(aBase);
-  });
-  for (const f of sorted.slice(keep)) {
-    try {
-      remove(f);
-    } catch {}
+  // Newest-first by identity (the leading ISO timestamp is lexically ordered;
+  // the trailing -<pid> only tiebreaks same-instant writes). Grouping by
+  // identity rather than sorting paths is also what keeps a breach's two files
+  // adjacent regardless of which prefix sorts first.
+  const byIdentity = new Map<string, string[]>();
+  for (const f of files) {
+    const id = breachIdentity(f);
+    const group = byIdentity.get(id);
+    if (group === undefined) byIdentity.set(id, [f]);
+    else group.push(f);
+  }
+  const newestFirst = [...byIdentity.keys()].sort((a, b) => b.localeCompare(a));
+  for (const id of newestFirst.slice(keep)) {
+    for (const f of byIdentity.get(id) ?? []) {
+      try {
+        remove(f);
+      } catch {}
+    }
   }
 }
 
@@ -191,13 +301,25 @@ export function realLimitsDeps(
     pid: process.pid,
     snapshotDir: dir,
     log: dlog,
-    rssBytes: () => process.memoryUsage().rss,
+    memoryBytes: () => {
+      // One call, both numbers — see the dep's comment.
+      const mem = process.memoryUsage();
+      return { rss: mem.rss, heapTotal: mem.heapTotal };
+    },
+    captureMemoryReport: () =>
+      memoryReport(platformProbes(process.platform, process.pid)),
+    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
+    // identity, so it shares a permission — a post-mortem pair where one half is
+    // world-readable and the other is not invites exactly the "is this
+    // sensitive?" question at the worst moment to be asking it.
+    writeMemoryReport: (file, text) =>
+      fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
-    listSnapshots: () => {
+    listArtifacts: () => {
       try {
         return fs
           .readdirSync(dir)
-          .filter((f) => f.startsWith("heap-") && f.endsWith(".heapsnapshot"))
+          .filter((f) => breachArtifactOf(f) !== null)
           .map((f) => path.join(dir, f));
       } catch {
         return [];
