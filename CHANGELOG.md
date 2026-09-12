@@ -1,3 +1,10 @@
+# [1.67.0](https://github.com/promptctl/cc-candybar/compare/v1.66.0...v1.67.0) (2026-09-12)
+
+
+### Features
+
+* **template-funcs:** a threshold cascade whose result is text (brandon-template-funcs-jku) ([0792930](https://github.com/promptctl/cc-candybar/commit/079293062dd7616f361b0f16d5d761bb91c40a76))
+
 # [1.66.0](https://github.com/promptctl/cc-candybar/compare/v1.65.0...v1.66.0) (2026-09-12)
 
 
