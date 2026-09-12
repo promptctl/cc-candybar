@@ -16,7 +16,7 @@ describe("parseStatusV2", () => {
       branch: "detached",
       status: "clean",
       aheadBehind: ABSENT,
-      sha: ABSENT,
+      oid: ABSENT,
       upstream: ABSENT,
       workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
     });
@@ -32,7 +32,10 @@ describe("parseStatusV2", () => {
     expect(parseStatusV2(out)).toEqual({
       branch: "main",
       status: "clean",
-      sha: ok("0b0b58b"),
+      // The parser keeps the FULL object id; the 7-char form is a display policy
+      // applied where the display field is built (computeGitInfo), and the full
+      // value is what keys the commit-timestamp cache.
+      oid: ok("0b0b58b683ccf6d126c5587730a4bb286e23919f"),
       upstream: ok("origin/main"),
       aheadBehind: ok({ ahead: 0, behind: 0 }),
       workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
@@ -69,10 +72,10 @@ describe("parseStatusV2", () => {
     expect(parseStatusV2(out).branch).toBe("detached");
   });
 
-  test("unborn HEAD → sha absent, branch is the initial branch, clean", () => {
+  test("unborn HEAD → oid absent, branch is the initial branch, clean", () => {
     const out = ["# branch.oid (initial)", "# branch.head main"].join("\n");
     const r = parseStatusV2(out);
-    expect(r.sha).toEqual(ABSENT);
+    expect(r.oid).toEqual(ABSENT);
     expect(r.branch).toBe("main");
     expect(r.status).toBe("clean");
   });

@@ -501,7 +501,10 @@ interface CoreStatus {
   // Each an Outcome so "no upstream / unborn HEAD" (absent) stays distinct from
   // a value — the same three-state contract every on-demand field carries.
   aheadBehind: Outcome<AheadBehind>;
-  sha: Outcome<string>;
+  // The FULL object id, absent on an unborn HEAD. Both a display sha and the
+  // commit-timestamp cache key derive from this one value, so they cannot come to
+  // disagree about which commit is HEAD [LAW:one-source-of-truth].
+  oid: Outcome<string>;
   upstream: Outcome<string>;
 }
 
@@ -521,7 +524,7 @@ interface CoreStatus {
 // branch label respectively, matching the prior fallback-chain behavior.
 export function parseStatusV2(stdout: string): CoreStatus {
   let branch = "detached";
-  let sha: Outcome<string> = ABSENT;
+  let oid: Outcome<string> = ABSENT;
   let upstream: Outcome<string> = ABSENT;
   let aheadBehind: Outcome<AheadBehind> = ABSENT;
   let staged = 0;
@@ -536,12 +539,7 @@ export function parseStatusV2(stdout: string): CoreStatus {
       const rest = line.slice(2);
       if (rest.startsWith("branch.oid ")) {
         const v = rest.slice("branch.oid ".length).trim();
-        // Fixed 7-char truncation is the display contract. `git rev-parse
-        // --short` auto-lengthens on collision, but re-spawning it here to
-        // recover that would undo this segment's whole point — one porcelain=v2
-        // read instead of a fan-out. The sha is display-only (never a lookup
-        // key), so a 7-char ambiguity in a >1M-object repo is cosmetic.
-        sha = v === "(initial)" ? ABSENT : ok(v.slice(0, 7));
+        oid = v === "(initial)" ? ABSENT : ok(v);
       } else if (rest.startsWith("branch.head ")) {
         const v = rest.slice("branch.head ".length).trim();
         branch = v === "(detached)" ? "detached" : v;
@@ -584,7 +582,7 @@ export function parseStatusV2(stdout: string): CoreStatus {
     branch,
     status,
     aheadBehind,
-    sha,
+    oid,
     upstream,
     workingTree: { staged, unstaged, untracked, conflicts },
   };
@@ -641,6 +639,11 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
   if (state.toLowerCase() !== "opened") return ABSENT;
   return ok({ number: iid, state, url });
 }
+
+// One commit timestamp is 40 bytes of key and a number, and a bar sees a handful
+// of commits per session; the bound exists so a long-lived daemon walking many
+// repos cannot grow this without limit, not because the entries are large.
+const COMMIT_TIME_CACHE_MAX = 256;
 
 export class GitService {
   private isGitRepo(workingDir: string): boolean {
@@ -807,7 +810,16 @@ export class GitService {
     // sha, upstream, and the worktree counts all rode in on the core call —
     // attaching them here is a memory read, not another spawn.
     if (options.showWorkingTree) result.workingTree = core.value.workingTree;
-    if (options.showSha) result.sha = core.value.sha;
+    // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
+    // lives with the display field rather than in the parser: `CoreStatus` keeps
+    // the one fact git reported. `git rev-parse --short` auto-lengthens on
+    // collision, but re-spawning it to recover that would undo this segment's
+    // whole point — one porcelain=v2 read instead of a fan-out — and this value is
+    // display-only. The full oid is what keys the commit-timestamp cache, so
+    // ambiguity here stays cosmetic instead of becoming a wrong lookup.
+    if (options.showSha) {
+      result.sha = derived(core.value.oid, (o) => o.slice(0, 7));
+    }
     if (options.showUpstream) result.upstream = core.value.upstream;
 
     // Heavy operations stay serial — each is an expensive git invocation and
@@ -816,7 +828,10 @@ export class GitService {
       result.tag = await this.getNearestTagAsync(gitDir);
     }
     if (options.showTimeSinceCommit) {
-      result.timeSinceCommit = await this.getTimeSinceLastCommitAsync(gitDir);
+      result.timeSinceCommit = await this.timeSinceCommit(
+        gitDir,
+        core.value.oid,
+      );
     }
 
     // [LAW:polishing-by-subtraction] These two used to overlap in a `Promise.all`
@@ -913,15 +928,100 @@ export class GitService {
     );
   }
 
-  private async getTimeSinceLastCommitAsync(
-    workingDir: string,
+  // [LAW:decomposition] Two facts were folded into one call, and only one of them
+  // is a property of the repo. The commit's TIMESTAMP never changes — a sha names
+  // one commit forever — while "how long ago" is that timestamp minus a clock
+  // read. Split apart, the repo fact becomes cacheable with no TTL at all (the
+  // daemon's GitDataProvider keys it on the oid) and the clock read stays where it
+  // belongs, recomputed every time this runs. Folded together, the spawn could
+  // only ever be cached for as long as the answer was allowed to be wrong.
+  //
+  // An unborn HEAD has no commit to time, and says so without spawning anything:
+  // `oid` is already absent, and that absence IS the answer the old non-zero
+  // `git log` exit was translated into.
+  private async timeSinceCommit(
+    gitDir: string,
+    oid: Outcome<string>,
   ): Promise<Outcome<number>> {
-    // non-zero = no commits yet (empty repo) — a domain answer.
+    if (oid.kind !== "ok") return oid;
+    const committedAt = await this.commitTimestampMs(gitDir, oid.value);
+    return derived(committedAt, (ms) => Math.floor((Date.now() - ms) / 1000));
+  }
+
+  // [LAW:one-source-of-truth] exception: the class header rules out a cache here,
+  // and this is one — with the reason that rule exists absent. The rule forbids
+  // layering a per-process cache over an already-cached call because it "would
+  // double the invalidation surface"; this map has NO invalidation surface. An oid
+  // is content-addressed, so the commit it names has one committer date, the same
+  // one forever and in every repo holding the object. There is no staleness to
+  // coordinate, so there is no second invalidation to get wrong.
+  //
+  // It lives here rather than in the daemon's GitDataProvider, where the design
+  // doc put it, because the provider computes GitInfo on a SEPARATE inner
+  // GitService: an override on the provider would never be called. The cache has
+  // to be where the spawn is.
+  //
+  // What it buys: `git log -1` fired once per cache miss — once per 30 s TTL
+  // window on an active repo — to answer a question that had not changed since the
+  // last commit. It now fires once per commit. `timeSinceCommit` above subtracts a
+  // fresh clock read every call, which is why splitting that derivation out is what
+  // made this cacheable at all.
+  //
+  // Only `ok` is stored: `absent`/`failed` are transient (a commit the status call
+  // just named should be readable), and pinning one under a key that never expires
+  // would make a blip permanent. The promise is the value, so caching and
+  // coalescing are one fact.
+  private readonly commitTimes = new Map<string, Promise<Outcome<number>>>();
+
+  private async commitTimestampMs(
+    gitDir: string,
+    oid: string,
+  ): Promise<Outcome<number>> {
+    const hit = this.commitTimes.get(oid);
+    if (hit !== undefined) {
+      // LRU touch: re-insert so the oldest key is the least recently asked for.
+      this.commitTimes.delete(oid);
+      this.commitTimes.set(oid, hit);
+      return hit;
+    }
+    const pending = this.readCommitTimestampMs(gitDir, oid);
+    this.commitTimes.set(oid, pending);
+    void pending.then(
+      (outcome) => {
+        if (outcome.kind !== "ok" && this.commitTimes.get(oid) === pending) {
+          this.commitTimes.delete(oid);
+        }
+      },
+      () => {
+        if (this.commitTimes.get(oid) === pending) {
+          this.commitTimes.delete(oid);
+        }
+      },
+    );
+    while (this.commitTimes.size > COMMIT_TIME_CACHE_MAX) {
+      const oldest = this.commitTimes.keys().next().value;
+      if (oldest === undefined) break;
+      this.commitTimes.delete(oldest);
+    }
+    return pending;
+  }
+
+  // The spawn itself. Naming the commit rather than leaving it implicit in HEAD is
+  // what makes the value content-addressed, and it closes a race the implicit form
+  // had: HEAD could move between the status call that reported the oid and this
+  // one, so the timestamp could describe a different commit than the sha shown
+  // beside it.
+  private async readCommitTimestampMs(
+    gitDir: string,
+    oid: string,
+  ): Promise<Outcome<number>> {
+    // non-zero = the commit is not there to read — a domain answer, `absent`.
+    // `--` ends the revision list so an oid can never be read as a pathspec.
     const r = nonEmpty(
       classify(
         "git log -1",
-        await this.execGitAsync(["log", "-1", "--format=%ct"], {
-          cwd: workingDir,
+        await this.execGitAsync(["log", "-1", "--format=%ct", oid, "--"], {
+          cwd: gitDir,
           timeout: 2000,
         }),
         "absent",
@@ -929,12 +1029,11 @@ export class GitService {
     );
     if (r.kind !== "ok") return r;
 
-    const commitTime = parseInt(r.value) * 1000;
-    if (Number.isNaN(commitTime)) {
+    const committedAt = parseInt(r.value, 10) * 1000;
+    if (Number.isNaN(committedAt)) {
       return failed(`git log -1: unparseable timestamp "${r.value}"`);
     }
-    const now = Date.now();
-    return ok(Math.floor((now - commitTime) / 1000));
+    return ok(committedAt);
   }
 
   // [LAW:decomposition] The COMMON git directory — where refs shared between a
