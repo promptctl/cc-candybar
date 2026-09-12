@@ -1,3 +1,10 @@
+## [1.61.6](https://github.com/promptctl/cc-candybar/compare/v1.61.5...v1.61.6) (2026-09-12)
+
+
+### Bug Fixes
+
+* **config:** a reserved accordion key is a load error, compared after ident collapse (brandon-menus-du8) ([9c0760f](https://github.com/promptctl/cc-candybar/commit/9c0760f71b82da768d06f0c3f7cd5839831aae94))
+
 ## [1.61.5](https://github.com/promptctl/cc-candybar/compare/v1.61.4...v1.61.5) (2026-09-12)
 
 
