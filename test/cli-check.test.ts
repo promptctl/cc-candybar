@@ -422,7 +422,7 @@ describe("checkConfig — explicit target", () => {
       }`,
     );
     const message = expectFatal(await checkConfig(p, dir));
-    expect(message).toContain("config renders with 1 segment error");
+    expect(message).toContain("config renders with 1 render error");
     expect(message).not.toContain("(under .preset.customized = true)");
     expect(message.split('segment "chip"').length - 1).toBe(1);
   });
@@ -452,8 +452,12 @@ describe("checkConfig — explicit target", () => {
       }`,
     );
     const message = expectFatal(await checkConfig(p, dir));
-    expect(message).toContain("globals.palette");
     expect(message).toContain("no-such-theme");
+    // Under the SLOT's own label — a globals slot is not a segment, and a report
+    // calling it one misdirects the reader (and would collide with a segment that
+    // happened to be named `globals.palette`).
+    expect(message).toContain("globals.palette: ");
+    expect(message).not.toContain('segment "globals.palette"');
   });
 
   it("a globals.palette rule that resolves is clean — the slot accepts a rule at all", async () => {

@@ -376,17 +376,21 @@ async function loadRegisterRender(
     // partially-declared variable) renders as a visible ⚠ error cell — partial
     // rendering, the daemon's channel for a human looking at the bar. The blind
     // authoring agent is not looking at the bar; check collects the same errors
-    // through the render's observer seam and fails the verdict, so exit 0 never
-    // blesses a bar that renders ⚠.
+    // through the render's observer seam — a segment's ⚠, and a globals rule the
+    // render could not honour (brandon-themes-dzl) — and fails the verdict, so
+    // exit 0 never blesses a bar the daemon would render a complaint on.
     const renderOnce = (
       payloadEffective: EffectiveGlobals,
-    ): { rendered: string; segmentErrors: Map<string, string> } => {
-      // [LAW:types-are-the-program] Keyed by segment NAME, not appended to a
-      // list — a segment errors at most once per pass, so this is the
-      // strongest true shape (dedupe-by-construction within one pass) and
-      // what makes deduping ACROSS the two passes below a plain key check
-      // rather than a message-text comparison.
-      const segmentErrors = new Map<string, string>();
+    ): { rendered: string; failures: Map<string, string> } => {
+      // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
+      // appended to a list — each can fail at most once per pass, so this is the
+      // strongest true shape (dedupe-by-construction within one pass) and what
+      // makes deduping ACROSS the two passes below a plain key check rather than
+      // a message-text comparison. The key carries WHAT failed because two
+      // different domains report here — a segment, or a globals slot whose rule
+      // the render could not honour — and a bare name could not tell them apart
+      // (nor stop a segment named `globals.palette` from displacing the slot).
+      const failures = new Map<string, string>();
       const rendered = renderDsl(
         config,
         compiled,
@@ -404,14 +408,14 @@ async function loadRegisterRender(
         },
         {
           onSegmentError: (segName: string, message: string) =>
-            segmentErrors.set(segName, message),
+            failures.set(`segment "${segName}"`, message),
           // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
           // installed theme is a real finding for a headless pass: the bar would
           // render, in the wrong theme, with nobody watching the strip. Reported
           // under the slot as its "segment" name so it dedupes and prints through
           // the one channel every other finding does.
           onRenderWarning: (message: string) =>
-            segmentErrors.set("globals.palette", message),
+            failures.set("globals.palette", message),
         },
         {
           theme: payloadEffective.theme,
@@ -419,7 +423,7 @@ async function loadRegisterRender(
           preset: payloadEffective.preset,
         },
       );
-      return { rendered, segmentErrors };
+      return { rendered, failures };
     };
 
     const primary = renderOnce(effective);
@@ -451,21 +455,21 @@ async function loadRegisterRender(
     // .preset.customized = true)" tag would misdirect the reader into
     // thinking it's specific to that gate when it isn't.
     const errors = [
-      ...[...primary.segmentErrors].map(
-        ([segName, message]) => `segment "${segName}": ${message}`,
+      ...[...primary.failures].map(
+        ([label, message]) => `${label}: ${message}`,
       ),
-      ...[...customizedCheck.segmentErrors]
-        .filter(([segName]) => !primary.segmentErrors.has(segName))
+      ...[...customizedCheck.failures]
+        .filter(([label]) => !primary.failures.has(label))
         .map(
-          ([segName, message]) =>
-            `segment "${segName}": ${message} (under .preset.customized = true)`,
+          ([label, message]) =>
+            `${label}: ${message} (under .preset.customized = true)`,
         ),
     ];
     if (errors.length > 0) {
       throw new Error(
-        `config renders with ${errors.length} segment error${
+        `config renders with ${errors.length} render error${
           errors.length === 1 ? "" : "s"
-        } (the daemon would render ⚠ error cells):\n` +
+        } (the daemon would show them on the bar):\n` +
           errors.map((m) => `  ${m}`).join("\n"),
       );
     }
