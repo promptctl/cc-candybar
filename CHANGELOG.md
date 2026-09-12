@@ -1,3 +1,18 @@
+# [1.62.0](https://github.com/promptctl/cc-candybar/compare/v1.61.6...v1.62.0) (2026-09-12)
+
+
+### Features
+
+* **check:** `--render` prints the bar check already computed (brandon-check-m2a) ([8f31f3e](https://github.com/promptctl/cc-candybar/commit/8f31f3e04e80e350593c3542b5293de02247ce25))
+
+
+### Performance Improvements
+
+* **git:** cache the commit timestamp by commit, so `git log -1` fires once per commit (brandon-git-cache-y9h) ([53c1e17](https://github.com/promptctl/cc-candybar/commit/53c1e178b0326825889775f6579caf69bd0acbe1))
+* **git:** count stashes from the refs/stash reflog instead of spawning git (brandon-git-cache-y9h) ([3fffadd](https://github.com/promptctl/cc-candybar/commit/3fffadddc7f3f00439e2f9a90b9e6e1b145850e4))
+* **git:** find the repo root by filesystem ascent instead of spawning git (brandon-git-cache-y9h) ([8d438b1](https://github.com/promptctl/cc-candybar/commit/8d438b1c8ae317558a8fbc843357add62513e45c))
+* **git:** memoise the remotes read against the config file, closing the four-spawn miss (brandon-git-cache-y9h) ([fcb2b7a](https://github.com/promptctl/cc-candybar/commit/fcb2b7a16f0061503324fdd98dce2ef07298ab52))
+
 ## [1.61.6](https://github.com/promptctl/cc-candybar/compare/v1.61.5...v1.61.6) (2026-09-12)
 
 
