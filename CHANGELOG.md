@@ -1,3 +1,10 @@
+# [1.71.0](https://github.com/promptctl/cc-candybar/compare/v1.70.0...v1.71.0) (2026-09-12)
+
+
+### Features
+
+* **themes:** a theme may be chosen by data, not only by name (brandon-themes-dzl) ([60ea80c](https://github.com/promptctl/cc-candybar/commit/60ea80c53d26603f363e951b00406b0e78e9f9c1))
+
 # [1.70.0](https://github.com/promptctl/cc-candybar/compare/v1.69.0...v1.70.0) (2026-09-12)
 
 
