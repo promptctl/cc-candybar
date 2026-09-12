@@ -198,10 +198,14 @@ export class GitDataProvider extends GitService {
   // inputs resolution reads — `workingDir|projectDir`. Separate from `entries`
   // because it answers a different question: `entries` holds a repo's STATE,
   // this holds WHICH repo (if any) a directory belongs to. Untracked, that
-  // question was re-asked on every render, and outside a repo re-asking means
-  // spawning `git rev-parse --show-toplevel`: a Claude Code session in a
-  // non-repo directory spawned git on every status-line tick for its whole
-  // lifetime (brandon-git-cache-y2t).
+  // question is re-asked on every render. When this cache landed, re-asking it
+  // outside a repo meant spawning `git rev-parse --show-toplevel` on every
+  // status-line tick for a session's whole lifetime (brandon-git-cache-y2t);
+  // `findGitRoot` is a filesystem ascent now (brandon-git-cache-y9h), so what
+  // this bounds is a walk to the filesystem root — the deeper the non-repo cwd,
+  // the more stats it saves — rather than a subprocess. Smaller stakes, same
+  // shape, and it still coalesces the burst of concurrent resolutions
+  // `registerDslConfig` starts for a config's `kind: "git"` variables.
   private readonly resolutions = new Map<string, ResolutionCacheEntry>();
   // [LAW:one-source-of-truth] The forge PR cache, keyed by `repoRoot|branch`
   // (a branch switch is a new key, so its PR is fetched fresh; the old branch's
