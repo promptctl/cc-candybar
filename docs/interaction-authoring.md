@@ -1328,7 +1328,18 @@ Four things to know about that slot:
 - **A result naming no declared look becomes `none`**, exactly as a stale
   session pick does. A typo makes the bar plain, never broken.
 - **A malformed template is a load error**, reported against `globals.look` when
-  the config loads — not once per repaint.
+  the config loads — not once per repaint:
+
+```json5 check:fail
+{
+  globals: { look: '{{ if .model.display_name }}hot' },   // no {{ end }}
+}
+```
+
+```error
+globals.look is not a valid template: expected `{{end}}`
+```
+
 - **Committing a look with `persist?` replaces the expression** with the name you
   picked, because `globals.look` is the one slot both live in. That is what
   committing a default means here; keep the expression if you want the rule
