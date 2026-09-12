@@ -34,6 +34,7 @@ interface CallCounts {
   today: number;
   context: number;
   metrics: number;
+  activity: number;
   tmux: number;
 }
 
@@ -44,6 +45,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     today: 0,
     context: 0,
     metrics: 0,
+    activity: 0,
     tmux: 0,
   };
   const deps = {
@@ -72,6 +74,12 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     metricsProvider: {
       getMetricsInfo: async () => {
         counts.metrics++;
+        return ABSENT;
+      },
+    },
+    activityProvider: {
+      getActivityInfo: async () => {
+        counts.activity++;
         return ABSENT;
       },
     },
@@ -128,6 +136,11 @@ const SHARED_VARIABLES: DslConfig["variables"] = {
     default: 0,
   },
   "tmux.session": { kind: "input", path: "tmux.session", default: "" },
+  "activity.tool.running": {
+    kind: "input",
+    path: "activity.tool.running",
+    default: "",
+  },
 };
 
 const SHARED_SEGMENTS: DslConfig["segments"] = {
@@ -148,6 +161,11 @@ const SHARED_SEGMENTS: DslConfig["segments"] = {
     bg: "surface",
     fg: "foreground",
   },
+  activity: {
+    template: " {{ .activity.tool.running }} ",
+    bg: "panel",
+    fg: "foreground",
+  },
 };
 
 const CONFIG_WITHOUT_METRICS: DslConfig = {
@@ -166,7 +184,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   globals: {},
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
-  root: rootOf("directory", "git", "metrics", "tmux"),
+  root: rootOf("directory", "git", "metrics", "tmux", "activity"),
   actions: {},
   looks: {},
   presets: {},
@@ -189,6 +207,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
     // those providers are not invoked.
     expect(counts.metrics).toBe(0);
+    expect(counts.activity).toBe(0);
     expect(counts.tmux).toBe(0);
     expect(counts.today).toBe(0);
     expect(counts.context).toBe(0);
@@ -207,6 +226,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
+    expect(counts.activity).toBe(1);
     expect(counts.tmux).toBe(1);
     // Still no today/context/usage/block — they have no segments in this
     // layout either.

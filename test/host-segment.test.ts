@@ -57,6 +57,7 @@ const DEPS = {
   },
   contextProvider: { getContextInfo: async () => ABSENT },
   metricsProvider: { getMetricsInfo: async () => ABSENT },
+  activityProvider: { getActivityInfo: async () => ABSENT },
   tmuxService: { getSessionId: async () => ABSENT },
   log: () => {},
 } as unknown as RenderPayloadDeps;

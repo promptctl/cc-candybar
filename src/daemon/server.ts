@@ -96,6 +96,7 @@ import {
 } from "./render-payload.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
+import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
 import {
   collectDiagnostics,
@@ -138,6 +139,7 @@ const diagnosticDump = new DiagnosticDump(diagnosticsDir());
 // providers serve the augmented payload that flows through every render.
 const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
+const activityProvider = new ActivityProvider();
 const tmuxService = new TmuxService();
 const renderCache = new RenderCache(
   {
@@ -1300,6 +1302,7 @@ const payloadDeps = {
   usageStore,
   contextProvider,
   metricsProvider,
+  activityProvider,
   tmuxService,
   // [LAW:single-enforcer] buildRenderPayload is the one log site for the
   // outcome-carrying provider lanes (git, cache).

@@ -34,7 +34,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
 
-Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous, toolbar) over a status row (model, context, cacheTimer, block, weekly). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
+Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous, toolbar) over a status row (model, context, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
 ## Customization
 
@@ -114,6 +114,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `cacheTimer` | `◴` minutes until the prompt cache expires, or `cold` | while a cache expiry is known |
 | `context` | `◔` context tokens used and the percentage left | when context tokens are known |
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
+| `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
 Three more declarations are controls for the settings drawer rather than things the bar reports. Each pairs a picker with a `↺` reset:
 

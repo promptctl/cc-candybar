@@ -717,6 +717,9 @@
         "metrics": {
           "$ref": "#/definitions/SegmentDelta"
         },
+        "activity": {
+          "$ref": "#/definitions/SegmentDelta"
+        },
         "charsetControl": {
           "$ref": "#/definitions/SegmentDelta"
         },

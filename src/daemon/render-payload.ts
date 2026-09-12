@@ -49,6 +49,11 @@ import type {
 } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
+import type {
+  ActivityInfo,
+  ActivityProvider,
+  ToolTally,
+} from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type {
@@ -285,6 +290,8 @@ export interface RenderPayload extends ClaudeHookData {
   readonly cache?: CachePayload;
   readonly context?: ContextPayload;
   readonly metrics?: MetricsPayload;
+  // The one non-quantity family (brandon-activity-ue7): what Claude is DOING.
+  readonly activity?: ActivityPayload;
 }
 
 // Flattened projection of GitInfo: every field shape the parity bindings
@@ -445,6 +452,38 @@ export interface MetricsPayload {
   readonly linesRemoved?: number;
 }
 
+// [LAW:types-are-the-program] The activity family, absent whenever there is
+// nothing real to say — `todo` when no list exists, `tool` when nothing has run
+// this turn, `command` when the turn opened with plain text. The same
+// drop-the-field-rather-than-emit-zeros policy as every family above, so an
+// author sees their declared `default`.
+export interface ActivityPayload {
+  readonly command?: string;
+  readonly todo?: ActivityTodoPayload;
+  readonly tool?: ActivityToolPayload;
+}
+
+// `total`/`completed` are the whole list; `position`/`active` describe the ONE
+// item in progress and are absent together when none is (a list that is all
+// pending, or all complete). `completed` is what tells those two apart, which is
+// why it rides alongside rather than being inferred from `position`.
+export interface ActivityTodoPayload {
+  readonly total: number;
+  readonly completed: number;
+  readonly position?: number;
+  readonly active?: string;
+}
+
+// [LAW:series-crosses-var-seam-as-string, in this repo's terms] A VarValue is a
+// scalar, so a tally crosses as `"Bash:3,Read:1"` — the SAME
+// `"<name>:<count>"` spelling `cascade` and `gauge` stops already use, which
+// sprig's `splitList` reads back into a real list inside a template. Both fields
+// carry one encoding, so one helper renders either.
+export interface ActivityToolPayload {
+  readonly running?: string;
+  readonly done?: string;
+}
+
 // ─── Provider dependencies ────────────────────────────────────────────────────
 
 export interface RenderPayloadDeps {
@@ -455,6 +494,7 @@ export interface RenderPayloadDeps {
   readonly usageStore: SessionUsageStore;
   readonly contextProvider: ContextProvider;
   readonly metricsProvider: MetricsProvider;
+  readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
@@ -929,6 +969,7 @@ export async function buildRenderPayload(
     today,
     context,
     metrics,
+    activity,
     tmuxSession,
     cacheExpiry,
     speed,
@@ -954,6 +995,9 @@ export async function buildRenderPayload(
     ),
     lane("metrics", wants("metrics") || wants("burn"), () =>
       deps.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
+    ),
+    lane("activity", wants("activity"), () =>
+      deps.activityProvider.getActivityInfo(hookData.session_id, hookData),
     ),
     lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
@@ -997,6 +1041,7 @@ export async function buildRenderPayload(
   const todayValue = take(today);
   const contextValue = take(context);
   const metricsValue = take(metrics);
+  const activityValue = take(activity);
   const tmuxValue = take(tmuxSession);
   const cacheValue = take(cacheExpiry);
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
@@ -1098,6 +1143,9 @@ export async function buildRenderPayload(
           linesRemoved: metricsValue.linesRemoved,
         });
 
+  const activityPayload: ActivityPayload | undefined =
+    activityValue === undefined ? undefined : projectActivity(activityValue);
+
   return {
     ...hookData,
     ...(workspace !== undefined && { workspace }),
@@ -1155,7 +1203,54 @@ export async function buildRenderPayload(
       },
     }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
+    ...(activityPayload !== undefined && { activity: activityPayload }),
   };
+}
+
+// [LAW:effects-at-boundaries] The activity projection is pure: the provider's
+// record in, the wire shape out. Returns undefined when the record says nothing
+// is happening, so the family is dropped exactly like a provider that had no
+// data — one absence policy, not two.
+function projectActivity(info: ActivityInfo): ActivityPayload | undefined {
+  const activeAt = info.todos.findIndex((t) => t.active);
+  const todo: ActivityTodoPayload | undefined =
+    info.todos.length === 0
+      ? undefined
+      : {
+          total: info.todos.length,
+          completed: info.todos.filter((t) => t.done).length,
+          ...(activeAt >= 0 && {
+            position: activeAt + 1,
+            active: info.todos[activeAt]!.text,
+          }),
+        };
+  const running = encodeTally(info.running);
+  const done = encodeTally(info.done);
+  const tool: ActivityToolPayload | undefined =
+    running === undefined && done === undefined
+      ? undefined
+      : {
+          ...(running !== undefined && { running }),
+          ...(done !== undefined && { done }),
+        };
+  if (info.command === null && todo === undefined && tool === undefined) {
+    return undefined;
+  }
+  return {
+    ...(info.command !== null && { command: info.command }),
+    ...(todo !== undefined && { todo }),
+    ...(tool !== undefined && { tool }),
+  };
+}
+
+// [LAW:one-source-of-truth] The ONE encoding of a tool tally, read back by one
+// template helper. Absent (not an empty string) when there is nothing tallied,
+// so the field is dropped rather than emitting a value a `when` would have to
+// treat as falsy by coincidence.
+function encodeTally(tally: readonly ToolTally[]): string | undefined {
+  return tally.length === 0
+    ? undefined
+    : tally.map((t) => `${t.name}:${t.count}`).join(",");
 }
 
 // [LAW:types-are-the-program] Project an object with possibly-null fields

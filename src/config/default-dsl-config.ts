@@ -740,6 +740,57 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
+    // Activity — daemon fetches via ActivityProvider (brandon-activity-ue7).
+    // The one non-quantity family: what Claude is DOING rather than how much of
+    // it there has been. Every field is absent in the payload when there is
+    // nothing real to say, so these defaults are also the "nothing happening"
+    // reading the `when` gates test.
+    "activity.command": {
+      kind: "input",
+      path: "activity.command",
+      type: "string",
+      default: "",
+    },
+    "activity.todo.total": {
+      kind: "input",
+      path: "activity.todo.total",
+      type: "number",
+      default: 0,
+    },
+    "activity.todo.completed": {
+      kind: "input",
+      path: "activity.todo.completed",
+      type: "number",
+      default: 0,
+    },
+    "activity.todo.position": {
+      kind: "input",
+      path: "activity.todo.position",
+      type: "number",
+      default: 0,
+    },
+    "activity.todo.active": {
+      kind: "input",
+      path: "activity.todo.active",
+      type: "string",
+      default: "",
+    },
+    // `"Bash:3,Read:1"` — tools by name and count; `formatToolTally` reads it
+    // back. Note there is deliberately NO variable named `activity.todo` or
+    // `activity.tool`: a scalar at a prefix would shadow every leaf under it.
+    "activity.tool.running": {
+      kind: "input",
+      path: "activity.tool.running",
+      type: "string",
+      default: "",
+    },
+    "activity.tool.done": {
+      kind: "input",
+      path: "activity.tool.done",
+      type: "string",
+      default: "",
+    },
+
     // No page-cursor var: a {{ menu }} synthesizes its own page
     // cursor (state var + int action, named by menuPageKey) under the reserved
     // menus.* namespace, alongside its open-state.
@@ -1104,10 +1155,44 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}" +
         "{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ",
       fg: "foreground",
+      // [LAW:no-silent-failure] Each arm is a BOOLEAN, not the value itself.
+      // `evaluateWhen` hides a segment only on the literal text "false", so
+      // `{{ or <numbers> }}` over all-zero fields renders "0" — visible, an empty
+      // bg-styled cell, the exact outcome the paragraph above says this gate
+      // prevents. Found while adding `activity`, which copied this shape
+      // (brandon-activity-ue7).
       when:
-        "{{ or .metrics.lastResponseTime .metrics.responseTime" +
-        " .metrics.sessionDuration .metrics.messageCount" +
-        " .metrics.linesAdded .metrics.linesRemoved }}",
+        "{{ or (gt .metrics.lastResponseTime 0.0) (gt .metrics.responseTime 0.0)" +
+        " (gt .metrics.sessionDuration 0.0) (gt .metrics.messageCount 0)" +
+        " (gt .metrics.linesAdded 0) (gt .metrics.linesRemoved 0) }}",
+    },
+    // What Claude is doing right now (brandon-activity-ue7) — the only segment
+    // on the bar whose content is not a quantity. Three parts, each gated on its
+    // own value exactly as `metrics` is, and the whole cell gated off when the
+    // session is idle, so a bar at rest is unchanged from before this existed.
+    //
+    // The todo part has two readings of one list: the in-progress item with its
+    // position while there is one, and the completed-of-total tally when there is
+    // not. `completed` (not `position`) is what distinguishes a finished list
+    // from an all-pending one — `☑ 7/7` and `☑ 0/7` are both true statements.
+    // `abbrev` bounds the task text, since an `activeForm` is a sentence.
+    activity: {
+      description:
+        "What Claude is doing: the slash command that opened the turn, the in-progress todo, and the tools in flight.",
+      template:
+        "{{ if .activity.command }} ⌘ {{ .activity.command }}{{ end }}" +
+        "{{ if .activity.todo.total }}" +
+        "{{ if .activity.todo.active }} ☐ {{ .activity.todo.position }}/{{ .activity.todo.total }} {{ abbrev 32 .activity.todo.active }}" +
+        "{{ else }} ☑ {{ .activity.todo.completed }}/{{ .activity.todo.total }}{{ end }}" +
+        "{{ end }}" +
+        '{{ if .activity.tool.running }} ⟳ {{ template "formatToolTally" .activity.tool.running }}{{ end }}' +
+        '{{ if .activity.tool.done }} ✓ {{ template "formatToolTally" .activity.tool.done }}{{ end }} ',
+      fg: "foreground",
+      // Boolean arms, for the reason spelled on `metrics` above: a `when` is
+      // hidden only by the literal text "false".
+      when:
+        '{{ or (ne .activity.command "") (gt .activity.todo.total 0)' +
+        ' (ne .activity.tool.running "") (ne .activity.tool.done "") }}',
     },
     // ── The TWO globals steppers left in this drawer. `charset` and
     // `colorCompatibility` have no SessionState half at all — they describe
@@ -1231,6 +1316,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "cacheTimer" },
           { kind: "segment", name: "block" },
           { kind: "segment", name: "weekly" },
+          // Last on the row on purpose: it is the most volatile cell on the bar
+          // (it appears, changes width, and drops again within one turn), so
+          // trailing it means nothing to its left ever reflows.
+          { kind: "segment", name: "activity" },
         ],
       },
     },
@@ -1507,6 +1596,22 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       '{{ else if ge . 1000 }}{{ printf "%.1f" (divf . 1000) }}K' +
       "{{ else }}{{ . }}{{ end }}",
     formatTokens: '{{ template "formatTokenCount" . }} tokens',
+    // A tool tally — `"Bash:3,Read:1"`, the payload's one encoding for both
+    // running and completed tools — read back as `Bash×3 Read`, capped at the
+    // first two names with a `+N` overflow for the rest. A count of 1 shows no
+    // multiplier, so the common case reads as a plain tool name.
+    // [LAW:one-source-of-truth] ONE helper for both fields, because the payload
+    // gives them one shape; a second spelling would be a second policy for
+    // "how a tool tally reads". The caller must gate on the value being
+    // non-empty — an empty tally is absent in the payload, and `splitList` on ""
+    // yields one positionless member.
+    formatToolTally:
+      '{{ $names := splitList "," . }}' +
+      "{{ range $i, $pair := $names }}{{ if lt $i 2 }}" +
+      '{{ if $i }} {{ end }}{{ $kv := splitList ":" $pair }}{{ index $kv 0 }}' +
+      '{{ if ne (index $kv 1) "1" }}×{{ index $kv 1 }}{{ end }}' +
+      "{{ end }}{{ end }}" +
+      "{{ if gt (len $names) 2 }} +{{ sub (len $names) 2 }}{{ end }}",
     // Burn rate: "$X.XX/hr" when projectable, "—/hr" otherwise. The daemon
     // emits -1 (a structurally-impossible rate) for not-projectable, so the
     // branch reads a VALUE, never a hidden control-flow flag. Reuses formatCost

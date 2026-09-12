@@ -145,6 +145,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "cacheTimer",
         "block",
         "weekly",
+        // Trails the status row, when-gated on the session having any activity
+        // at all, so an idle bar is byte-identical to one without it
+        // (brandon-activity-ue7).
+        "activity",
         "toolbar",
         "groups.settings",
         "charsetControl",
@@ -404,7 +408,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           "charsetControl","colorCompatControl",
           "directoryPaletteControl"
         ] } ] },
-      { h: ["model","context","cacheTimer","block","weekly"] }
+      { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);

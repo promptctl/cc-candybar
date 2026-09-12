@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
+import { entryActivity, type EntryActivity } from "./transcript-activity";
 
 export interface ClaudeHookData {
   // cc-candybar internal — not part of Anthropic's schema
@@ -302,7 +303,24 @@ export interface ParsedEntry {
   };
   costUSD?: number;
   isSidechain?: boolean;
+  // [LAW:one-source-of-truth] What this entry says Claude is DOING, projected
+  // here rather than by a second scanner (src/utils/transcript-activity.ts).
+  // Same discipline as `firstContentType`: bounded scalars out of
+  // `message.content[]`, never the array. Undefined for every entry that
+  // contributes no activity, which is most of them.
+  activity?: EntryActivity;
   raw: PrunedRaw;
+}
+
+// [LAW:one-source-of-truth] A real user turn vs. a tool_result echoed back as a
+// "user" line. Two folds ask this — the message count and the activity turn
+// boundary — so it is spelled once, over the projected scalars, beside the type
+// it classifies.
+export function isRealUserMessage(entry: ParsedEntry): boolean {
+  const messageType = entry.type || entry.message?.role || entry.message?.type;
+  const isToolResult =
+    entry.type === "user" && entry.message?.firstContentType === "tool_result";
+  return messageType === "user" && !isToolResult;
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
@@ -432,6 +450,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
     isSidechain: parsed.isSidechain === true,
+    activity: entryActivity(parsed),
     raw: {
       model: typeof parsed.model === "string" ? parsed.model : undefined,
       message: msg
