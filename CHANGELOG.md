@@ -1,3 +1,10 @@
+## [1.61.1](https://github.com/promptctl/cc-candybar/compare/v1.61.0...v1.61.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **check:** settled() waits for a git subscription's first delivery (brandon-check-settle-dt7) ([71b692b](https://github.com/promptctl/cc-candybar/commit/71b692b850fdfb80b2854f71c0da9c1315c58506))
+
 # [1.61.0](https://github.com/promptctl/cc-candybar/compare/v1.60.0...v1.61.0) (2026-09-08)
 
 
