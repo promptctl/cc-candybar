@@ -244,11 +244,13 @@ export function record<T>(
 
 // [LAW:decomposition] The field-assembly core: run each field spec against an
 // already-guarded object, collect the present values, fail the whole when a
-// required field is absent or invalid. `record` adds the object guard and
-// unknown-key rejection on top; a tagged-union arm reuses THIS directly, because
-// an arm must NOT reject unknown keys — the discriminator (`kind`) is a sibling
-// key the arm doesn't list. Returns the assembled record, or null when a required
-// field failed. This is the join `record` and `taggedUnion`'s arms share.
+// required field is absent or invalid. `record` adds the object guard on top; a
+// tagged-union arm reuses THIS directly, because an arm is reached with its
+// discriminator already read. Unknown keys are rejected by BOTH callers — an arm's
+// legal set is its field map plus the tag (`armFacets`), which is why the arm not
+// listing `kind` was never a reason to stay silent (brandon-config-9li). Returns
+// the assembled record, or null when a required field failed. This is the join
+// `record` and `taggedUnion`'s arms share.
 export function fields<T>(
   ctx: ValidateCtx,
   fieldMap: FieldSpecMap<T>,
@@ -266,18 +268,26 @@ export function fields<T>(
   return ok ? (out as T) : null;
 }
 
-// [LAW:single-enforcer] One reject-unknown-key loop for every record, replacing
-// the per-module hand-rolled copies. The `noun` carries the only per-record
-// variation in the message; the allowed set is the schema's declared field names.
+// The no-issues-yet case of `rejectUnknownKeys`'s suppression set, named once so
+// a record's call site reads as the absence it is rather than a fresh allocation.
+const EMPTY_PATHS: ReadonlySet<string> = new Set<string>();
+
+// [LAW:single-enforcer] One reject-unknown-key loop for every record AND every
+// tagged-union arm, replacing the per-module hand-rolled copies. The `noun`
+// carries the only per-record variation in the message; the allowed set is the
+// schema's declared field names. `spokenFor` names the paths a more specific
+// reporter already claimed, so this generic message stays the FALLBACK it is —
+// empty for a record, whose specs read no key outside the map.
 function rejectUnknownKeys(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
   noun: string,
   allowed: ReadonlySet<string>,
+  spokenFor: ReadonlySet<string> = EMPTY_PATHS,
 ): void {
   for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path}.${key}`)) {
       ctx.issues.push({
         path: `${path}.${key}`,
         message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
@@ -402,6 +412,13 @@ export interface TaggedArm<M> {
   // `{ [tag]: { const } }` into `json`). taggedUnionJson simply collects each
   // arm's `json` into the `anyOf`. Authored beside `parse`.
   readonly json: JsonNode;
+  // [LAW:one-source-of-truth] The validate-side spelling of the SAME key set
+  // `json`'s `additionalProperties: false` closes — the arm's field map plus the
+  // discriminator. Both come out of one `armFacets` call over one field map, so
+  // the editor-facing schema and the loader cannot disagree about which keys a
+  // member admits; that disagreement WAS brandon-config-9li (`readMode` on a
+  // shell source: rejected by the emitted schema, accepted by the loader).
+  readonly keys: ReadonlySet<string>;
   parse(ctx: ValidateCtx, path: string, raw: Record<string, unknown>): M | null;
 }
 
@@ -418,6 +435,11 @@ export interface TaggedUnionSchema<T, K extends string> {
   // tag-value list is the arm-map's key order.
   readonly tag: K;
   readonly noun: string;
+  // The noun for ONE member, which the tag value qualifies in the unknown-key
+  // message: "variable" yields `Unknown shell variable key "readMode"` — the
+  // spelling every other record family already uses, so an author meets one
+  // phrasing whichever section they typo in.
+  readonly memberNoun: string;
   readonly arms: TaggedArmMap<T, K>;
 }
 
@@ -465,7 +487,42 @@ export function taggedUnion<T, K extends string>(
     return null;
   }
 
-  return arms[tagValue]!.parse(ctx, path, raw);
+  // [LAW:no-silent-failure] The arm speaks first, then the generic loop reports
+  // the keys it left unspoken-for. Order is the whole point: a field spec may own
+  // a sibling key it has something SPECIFIC to say about — the retired top-level
+  // `regex:` names its replacement — and that message must both precede and
+  // REPLACE "unknown key", never sit beside it as a second line about one typo.
+  // Suppression reads the issues this arm itself pushed, a value taken here
+  // rather than reached for later [LAW:no-ambient-temporal-coupling].
+  const arm = arms[tagValue]!;
+  const before = ctx.issues.length;
+  const parsed = arm.parse(ctx, path, raw);
+  const spokenFor = new Set(ctx.issues.slice(before).map((i) => i.path));
+  rejectUnknownKeys(
+    ctx,
+    path,
+    raw,
+    `${tagValue} ${schema.memberNoun} key`,
+    arm.keys,
+    spokenFor,
+  );
+  return parsed;
+}
+
+// [LAW:one-source-of-truth] The two derived facets of a tagged-union arm, from
+// ONE field map and ONE discriminator: the member's JSON schema (tag const baked
+// in, unknown keys closed) and the key set the loader rejects against. Authored
+// as one expression so neither can be updated without the other, and so the tag
+// name is written once per arm instead of once per facet.
+export function armFacets<M>(
+  tag: string,
+  tagValue: string,
+  fieldMap: FieldSpecMap<M>,
+): Pick<TaggedArm<M>, "json" | "keys"> {
+  return {
+    json: withConst(objectJson(fieldMap), tag, tagValue),
+    keys: new Set([tag, ...Object.keys(fieldMap)]),
+  };
 }
 
 // [LAW:types-are-the-program] An arm parser narrows an already-guarded record to

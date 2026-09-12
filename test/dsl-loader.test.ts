@@ -21,7 +21,10 @@ import {
   setValue,
 } from "../src/config/json5-edit";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { validateVariables } from "../src/config/loader/variables";
+import {
+  validateVariables,
+  variableDeclJson,
+} from "../src/config/loader/variables";
 import type { ConfigIssue } from "../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -468,6 +471,131 @@ describe("loadDslConfig — variable source kinds", () => {
       cache: { watch_file: ".git/HEAD" },
       default: "(detached)",
     });
+  });
+});
+
+// ─── Unknown keys on a variable declaration ──────────────────────────────────
+
+// [LAW:behavior-not-structure] brandon-config-9li: a variable arm was the one
+// declaration family that accepted a key it had no meaning for — a typo, or a
+// field belonging to a different arm — while a segment, a `globals`, a layout node
+// and a `cache:` all rejected it. These pin the rejection at the BEHAVIOUR: the
+// author's mistake is named, whichever arm they made it in.
+describe("loadDslConfig — unknown keys on a variable declaration", () => {
+  test("a field from another arm is rejected, listing the arm's own keys", () => {
+    // The ticket's own repro: readMode is a file-reader fact with no meaning on a
+    // shell source, and `config OK` was the answer for as long as it went unread.
+    expectIssue(
+      `{ variables: { x: { kind: "shell", command: "echo hi", readMode: "first-line", cache: { never: true }, default: "" } } }`,
+      {
+        path: "variables.x.readMode",
+        message:
+          'Unknown shell variable key "readMode". Expected one of: kind, command, parse, cache, default',
+      },
+    );
+  });
+
+  test("a typo'd field name is rejected, not silently dropped", () => {
+    expectIssue(
+      `{ variables: { x: { kind: "shell", command: "echo", cache: { never: true }, defualt: "n/a" } } }`,
+      {
+        path: "variables.x.defualt",
+        message: 'Unknown shell variable key "defualt"',
+      },
+    );
+    expectIssue(`{ variables: { t: { kind: "state", key: "theme", fallback: "x" } } }`, {
+      path: "variables.t.fallback",
+      message:
+        'Unknown state variable key "fallback". Expected one of: kind, key, default',
+    });
+  });
+
+  test("the message names the arm the author wrote, not the union", () => {
+    // A `path` on a shell source is an author reaching for the file arm; the fix
+    // is a different `kind`, so the error has to say which arm it is judging.
+    expectIssue(
+      `{ variables: { x: { kind: "shell", command: "echo", path: "/etc/hostname", cache: { never: true } } } }`,
+      {
+        path: "variables.x.path",
+        message:
+          'Unknown shell variable key "path". Expected one of: kind, command, parse, cache, default',
+      },
+    );
+    // …and the same key IS legal on the arm that owns it.
+    expect(
+      parseAndValidate(
+        FILE,
+        `{ variables: { x: { kind: "file", path: "/etc/hostname", readMode: "first-line", cache: { never: true } } } }`,
+      ).variables.x,
+    ).toMatchObject({ kind: "file", readMode: "first-line" });
+  });
+
+  test("the discriminator itself is legal on every arm", () => {
+    // `kind` is the one key no arm's field map lists; an arm that rejected it
+    // would reject every declaration in the language.
+    for (const decl of [
+      `{ kind: "literal", value: "v" }`,
+      `{ kind: "input", path: "session_id" }`,
+      `{ kind: "env", name: "HOME" }`,
+      `{ kind: "file", path: "/p", cache: { never: true } }`,
+      `{ kind: "shell", command: "echo", cache: { never: true } }`,
+      `{ kind: "template", template: "x" }`,
+      `{ kind: "time", layout: "15:04", cache: { ttl: "1s" } }`,
+      `{ kind: "git", field: "branch", cache: { never: true } }`,
+      `{ kind: "state", key: "theme" }`,
+    ]) {
+      expect(
+        // `state` demands a global session.id (declareState reads that box), so
+        // every decl is checked in a config that carries one.
+        parseAndValidate(
+          FILE,
+          `{ variables: { "session.id": { kind: "input", path: "session_id" }, x: ${decl} } }`,
+        ).variables.x,
+      ).toMatchObject({ kind: expect.any(String) });
+    }
+  });
+
+  test("a specific message about a key REPLACES the generic one", () => {
+    // The retired top-level `regex:` names its replacement. One typo earns one
+    // error: the unknown-key fallback stays silent about a key a field spec has
+    // already spoken for, so the author is not asked to reconcile two lines.
+    const err = expectError(
+      `{ variables: { x: { kind: "shell", command: "echo", regex: "v([0-9]+)", cache: { never: true } } } }`,
+    );
+    const about = err.issues.filter((i) => i.path === "variables.x.regex");
+    expect(about).toHaveLength(1);
+    expect(about[0]!.message).toContain("was retired");
+  });
+
+  test("every arm's rejection matches the schema it publishes", () => {
+    // [LAW:one-source-of-truth] The bug was the emitted JSON schema already
+    // closing each arm (additionalProperties: false) while the loader left it
+    // open. This walks the published schema and asserts the loader agrees: for
+    // every arm, a key the schema does not list is a load error.
+    const schema = variableDeclJson() as {
+      anyOf: ReadonlyArray<{
+        properties: Record<string, { const?: string }>;
+        required: readonly string[];
+        additionalProperties: boolean;
+      }>;
+    };
+    expect(schema.anyOf.length).toBeGreaterThan(0);
+    for (const armSchema of schema.anyOf) {
+      expect(armSchema.additionalProperties).toBe(false);
+      const kind = armSchema.properties.kind!.const!;
+      const keys = Object.keys(armSchema.properties);
+      expect(keys).toContain("kind");
+      expectIssue(
+        `{ variables: { x: { ${keys
+          .filter((k) => k !== "kind")
+          .map((k) => `${k}: null`)
+          .join(", ")}${keys.length > 1 ? ", " : ""}kind: "${kind}", zzz_not_a_key: 1 } } }`,
+        {
+          path: "variables.x.zzz_not_a_key",
+          message: `Unknown ${kind} variable key "zzz_not_a_key". Expected one of: ${keys.join(", ")}`,
+        },
+      );
+    }
   });
 });
 

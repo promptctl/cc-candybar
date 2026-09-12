@@ -361,7 +361,7 @@ declaration or a layout `when` there is no segment, and the call fails
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The
-first six are load errors — the config never renders. The rest are render
+first seven are load errors — the config never renders. The rest are render
 errors: the config loads, a template throws, and `check` exits 1 naming the
 segment the daemon would draw as `⚠`.
 
@@ -387,6 +387,33 @@ The regex is the parse step's arm now. The error spells the replacement:
 
 ```error
 variables.budgetPct.regex was retired; the regex is the parse step's regex arm now: parse: { regex: "spentPct[^0-9]*([0-9.]+)" }
+```
+
+### A `readMode` on a `shell` source
+
+`readMode` picks whole-file vs first-line, and only a `file` source reads a
+file. On a `shell` source the loader names the stray field rather than
+dropping it:
+
+```json5 check:fail
+{
+  variables: {
+    budgetPct: {
+      kind: "shell",
+      command: "budget-status",
+      readMode: "first-line",
+      parse: { regex: "spentPct[^0-9]*([0-9.]+)" },
+      cache: { ttl: "60s" },
+      default: "0",
+    },
+  },
+  segments: { budget: { template: "{{ .budgetPct }}% spent" } },
+  root: { rows: { status: { h: ["model", "budget"] } } },
+}
+```
+
+```error
+Unknown shell variable key "readMode". Expected one of: kind, command, parse, cache, default
 ```
 
 ### A `shell` or `file` source with no `cache:`

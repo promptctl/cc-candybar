@@ -25,11 +25,11 @@ import {
 import type { JsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
+  armFacets,
   describeType,
   describeValue,
   fields,
   isPlainObject,
-  objectJson,
   oneOfPresent,
   oneOfPresentJson,
   optionalStringField,
@@ -40,7 +40,6 @@ import {
   optionalEnumSpec,
   taggedUnion,
   taggedUnionJson,
-  withConst,
   type FieldSpec,
   type FieldSpecMap,
   type JsonNode,
@@ -376,8 +375,16 @@ const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
   default: optionalStringSpec(),
 };
 
+// [LAW:one-source-of-truth] The discriminator's name, spelled once: the schema's
+// `tag` and every arm's baked-in const / legal-key set read this one constant, so
+// a rename cannot leave one facet describing a different field than the other.
+const VARIABLE_TAG = "kind";
+
 // [LAW:decomposition] A regular arm parses its non-`kind` fields via `fields` and
 // re-attaches the tag the engine already validated; null threading is preserved.
+// Its other two facets — the member's JSON schema and the key set the loader
+// rejects against — are `armFacets` over the SAME field map `fields` validates,
+// so a field added here reaches all three interpreters at once.
 function arm<
   K extends VariableDecl["kind"],
   M extends Omit<Extract<VariableDecl, { kind: K }>, "kind">,
@@ -386,11 +393,7 @@ function arm<
   fieldMap: FieldSpecMap<M>,
 ): TaggedArm<Extract<VariableDecl, { kind: K }>> {
   return {
-    // [LAW:one-source-of-truth] The arm's emit facet: the member object schema
-    // with its `kind` discriminator baked in — `objectJson` over the SAME field
-    // map `fields` validates, plus `{ kind: { const } }`. taggedUnionJson collects
-    // these verbatim into the union's anyOf.
-    json: withConst(objectJson(fieldMap), "kind", kind),
+    ...armFacets(VARIABLE_TAG, kind, fieldMap),
     parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
       const body = fields(ctx, fieldMap, path, raw);
       // [LAW:types-are-the-program] `fieldMap: FieldSpecMap<M>` is checked against
@@ -405,8 +408,13 @@ function arm<
 }
 
 const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
-  tag: "kind",
+  tag: VARIABLE_TAG,
   noun: "source kind",
+  // `Unknown shell variable key "readMode". Expected one of: kind, command,
+  // parse, cache, default` — a field from the wrong arm, or a typo'd one, is the
+  // loud error a segment's has always been (brandon-config-9li). The author of a
+  // config they cannot see rendered has no other signal [LAW:no-silent-failure].
+  memberNoun: "variable",
   arms: {
     literal: arm("literal", LITERAL_FIELDS),
     // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
