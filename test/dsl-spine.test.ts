@@ -107,7 +107,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       store,
       registry,
       HOOK_DATA,
-      basePalette,
       OPTS,
     );
     expect(typeof result).toBe("string");
@@ -120,7 +119,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     );
     const basePalette = getThemePalette("textual-dark"!);
 
-    renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
+    renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS);
 
     // After the first render, input boxes must hold the payload values.
     expect(store.read("current_dir")).toBe(HOOK_DATA.workspace.current_dir);
@@ -134,8 +133,8 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     );
     const basePalette = getThemePalette("textual-dark"!);
 
-    const a = renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
-    const b = renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
+    const a = renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS);
+    const b = renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS);
     expect(a).toBe(b);
   });
 
@@ -157,7 +156,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       store,
       registry,
       HOOK_DATA,
-      basePalette,
       OPTS,
       { perSegmentSink: sink },
     );
@@ -195,7 +193,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       store,
       registry,
       HOOK_DATA,
-      basePalette,
       OPTS,
     );
     expect(result).toMatchSnapshot();
@@ -210,7 +207,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         HOOK_DATA.workspace.current_dir,
       );
       const basePalette = getThemePalette("textual-dark"!);
-      return renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
+      return renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS);
     })();
 
     // Override: same fixture but sessionId uses the base palette (textual-dark).
@@ -230,7 +227,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         cwd: HOOK_DATA.workspace.current_dir,
       });
       const basePalette = getThemePalette("textual-dark"!);
-      return renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
+      return renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS);
     })();
 
     expect(withGruvboxPalette).not.toBe(withBasePaletteOnly);

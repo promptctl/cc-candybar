@@ -17,7 +17,6 @@
 // closure are two different theorems — the bleed defect satisfied the first and
 // broke the second, so closure needs its own guard.
 
-import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -68,8 +67,7 @@ function render(src: string, opts: BuildLineOptions): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = getThemePalette("textual-dark"!);
-  return renderDsl(config, compiled, store, registry, {}, basePalette, opts);
+  return renderDsl(config, compiled, store, registry, {}, opts);
 }
 
 // A multi-link toolbar with PLAIN text trailing the final link — the shape that

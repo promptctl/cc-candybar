@@ -31,10 +31,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
-import {
-  effectiveThemeName,
-  listResolvablePaletteNames,
-} from "../src/themes/policy";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, boldUrls, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -406,7 +404,6 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(width),
     );
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
@@ -562,7 +559,6 @@ describe("persist action click → the config file", () => {
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
-        basePalette,
         opts(),
       );
     const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
@@ -1047,20 +1043,20 @@ describe("RenderCache: the config file is the durable store", () => {
       const sessionState = new SessionState();
       sessionState.set("s1", "theme", "dracula");
       expect(
-        effectiveThemeName(
+        resolveThemeSelection(
           undefined,
           sessionState.get("s1", "theme"),
           entry.state.config.globals.palette,
         ),
-      ).toBe("dracula");
+      ).toMatchObject({ kind: "decided", name: "dracula" });
       // A session that never picked reads the file's default.
       expect(
-        effectiveThemeName(
+        resolveThemeSelection(
           undefined,
           sessionState.get("s2-no-pick", "theme"),
           entry.state.config.globals.palette,
         ),
-      ).toBe("nord");
+      ).toMatchObject({ kind: "decided", name: "nord" });
     } finally {
       for (const fn of cleanups) fn();
     }

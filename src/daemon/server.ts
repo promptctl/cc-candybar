@@ -75,7 +75,6 @@ import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { renderDsl } from "../dsl/render.js";
-import { paletteForThemeName } from "../themes/index.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -1011,13 +1010,14 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         effective,
         hints,
       );
-      // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
-      // is derived from the same effective theme resolved above — so a theme
-      // click recolors the whole bar on the next render. Not frozen on the
-      // cache entry (one entry serves many sessions). paletteForThemeName
-      // memoizes, so the per-render cost is one Map lookup once the theme is
-      // warm.
-      const basePalette = paletteForThemeName(effective.theme);
+      // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
+      // and could not honour — today a `globals.palette` rule naming no installed
+      // theme (brandon-themes-dzl). Collected per render into a local, so there is
+      // no cross-render state to clear, and folded into the strip's WARNING
+      // channel below: the bar renders in the floor theme with a line above it
+      // saying why, which is this repo's answer everywhere else that a render can
+      // proceed but an author needs to know.
+      const renderWarnings: string[] = [];
       // [LAW:one-source-of-truth] Every renderOpts field below reuses the
       // SAME `effective` struct the payload was just built from — no second
       // `?? DEFAULT_X` computation to drift from it.
@@ -1041,7 +1041,6 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         entry.state.store,
         entry.state.registry,
         payload,
-        basePalette,
         renderOpts,
         // [LAW:single-enforcer] The per-segment StripCell sink for the
         // `debug segments` projection. Its identity stays stable for the
@@ -1049,8 +1048,16 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // in place. Cells are cheap (already computed during the render);
         // the per-segment ANSI serialization happens lazily inside the
         // debug handler so normal renders pay no extra serializer cost.
-        { perSegmentSink: entry.state.lastRenderCellsBySegment },
         {
+          perSegmentSink: entry.state.lastRenderCellsBySegment,
+          onRenderWarning: (message: string) => renderWarnings.push(message),
+        },
+        {
+          // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
+          // and name together, so renderDsl publishes the `theme.effective` the
+          // bar was actually painted from. No separate basePalette argument: one
+          // would be a second clock free to disagree with that name.
+          theme: effective.theme,
           look: effective.look,
           preset: effective.preset,
         },
@@ -1082,10 +1089,14 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // Null when the error is not a load error, or no file resolved.
       const failedConfigFile =
         entry.lastError === null ? null : entry.configFilePath;
+      // [LAW:one-source-of-truth] One warning channel: the load-time warning this
+      // config carries and whatever this render could not honour, joined into the
+      // one string collectDiagnostics splits into rows. A second channel would be a
+      // second place a warning could be dropped.
       const diagnostics = collectDiagnostics(
         combinedError,
         updates,
-        entry.lastWarning ?? "",
+        [entry.lastWarning ?? "", ...renderWarnings].filter(Boolean).join("\n"),
       );
       // [LAW:effects-at-boundaries] The one write the strip depends on, at
       // the edge: the session's dump file mirrors this render's diagnostics

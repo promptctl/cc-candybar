@@ -71,12 +71,11 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       store,
       registry,
       { session_id: "s1", ...payload },
-      getThemePalette(THEME),
       OPTS,
       { perSegmentSink: sink },
       look === undefined
         ? undefined
-        : { look: { kind: "decided" as const, name: "test", key: look } },
+        : { look: { kind: "decided" as const, name: "test", value: look } },
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {

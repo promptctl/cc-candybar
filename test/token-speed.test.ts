@@ -18,6 +18,7 @@ import {
   utimesSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { join } from "node:path";
 
 import {
@@ -43,7 +44,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 import { FLOOR_LOOK } from "./helpers/floor-look";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
@@ -271,7 +271,7 @@ const SPEED_PATHS = new Set([
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: "textual-dark",
+  theme: resolveThemeSelection(undefined, null, "textual-dark"),
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
@@ -449,8 +449,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    const bp = getThemePalette(cfg.globals.palette ?? "catppuccin-latte")!;
-    return renderDsl(cfg, compiled, store, registry, payload, bp, {
+    return renderDsl(cfg, compiled, store, registry, payload, {
       style: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,

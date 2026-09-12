@@ -437,6 +437,37 @@ describe("checkConfig — explicit target", () => {
     );
     expect((await checkConfig(p, dir)).kind).toBe("fatal");
   });
+
+  it("a globals.palette rule whose result names no installed theme is FATAL, named by slot", async () => {
+    // [LAW:no-silent-failure] brandon-themes-dzl: the bar would render — in the
+    // wrong theme, under a strip nobody is watching in a headless pass — so the
+    // one thing check must not do is call it clean. It is reported through the
+    // same channel a ⚠ segment is, under the SLOT's name.
+    const p = write(
+      "theme-rule-bad.json5",
+      `{
+        globals: { palette: '{{ if true }}no-such-theme{{ else }}nord{{ end }}' },
+        segments: { a: { template: 'a' } },
+        root: { h: ['a'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain("globals.palette");
+    expect(message).toContain("no-such-theme");
+  });
+
+  it("a globals.palette rule that resolves is clean — the slot accepts a rule at all", async () => {
+    const p = write(
+      "theme-rule-ok.json5",
+      `{
+        globals: { palette: '{{ if true }}nord{{ else }}dracula{{ end }}' },
+        segments: { a: { template: 'a' } },
+        root: { h: ['a'] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    expect(outcome.kind).toBe("clean");
+  });
 });
 
 describe("checkConfig — default resolution (the daemon's own chain)", () => {

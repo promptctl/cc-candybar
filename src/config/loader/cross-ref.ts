@@ -31,7 +31,7 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
-import { isLookExpression } from "../../themes/policy.js";
+import { isExpression } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNode, rootNode } from "../root.js";
@@ -127,11 +127,11 @@ export function validateCrossReferences(
   // pick does (`decideLookName` collapses a non-member to the floor), and its
   // own well-formedness is checked where every other template's is — parsed
   // eagerly by registerDslConfig, so a malformed one is still a load error.
-  // `isLookExpression` is the ONE predicate both readers use, so this exemption
+  // `isExpression` is the ONE predicate every reader uses, so this exemption
   // cannot be wider or narrower than what the render will actually evaluate.
   if (
     cfg.globals.look !== undefined &&
-    !isLookExpression(cfg.globals.look) &&
+    !isExpression(cfg.globals.look) &&
     !Object.prototype.hasOwnProperty.call(cfg.looks, cfg.globals.look)
   ) {
     ctx.issues.push({

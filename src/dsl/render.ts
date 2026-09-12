@@ -11,7 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { RichText, Palette, ThemeKey } from "@promptctl/rich-js";
+import type { RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -39,13 +39,19 @@ import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
 import {
   decideLookName,
-  effectiveThemeName,
-  isLookExpression,
+  decideThemeName,
+  EXPRESSION_SLOTS,
+  finishSelection,
+  declaredBasePalette,
+  isExpression,
   LOOK_FLOOR,
   paletteForThemeName,
+  resolveThemeSelection,
+  THEME_FLOOR,
   transposedPalette,
-  type DecidedLook,
+  type ExpressionSlot,
   type LookSelection,
+  type ThemeSelection,
 } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -118,13 +124,21 @@ export interface CompiledConfig {
   readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
-  // [LAW:types-are-the-program] The compiled `globals.look` expression, present
-  // exactly when the config authored one (brandon-looks-pe6). Parsed HERE, with
-  // every other pre-parsed template, for the two reasons those are: the
-  // per-render cost is an evaluation and not a parse, and a malformed template is
-  // a LOAD error — the place an author expects to be told — rather than a render
-  // error they would hear about once per repaint.
-  readonly lookExpression?: Template<RichText>;
+  // [LAW:one-source-of-truth] The compiled template for each globals slot whose
+  // author wrote a RULE instead of a name — `look` (brandon-looks-pe6) and
+  // `palette` (brandon-themes-dzl). Keyed by slot rather than one field per slot,
+  // so the eager parse, the drift check and the evaluation are each written once
+  // and a third such slot is one entry in `EXPRESSION_SLOTS`
+  // [LAW:one-type-per-behavior]. A slot is present here exactly when
+  // `isExpression` says its value is a rule, which is the same predicate the
+  // loader exempted from membership and the resolution reads — so the map's keys
+  // and the `expression` arms a render meets are the same set by construction.
+  //
+  // Parsed HERE, with every other pre-parsed template, for the two reasons those
+  // are: the per-render cost is an evaluation and not a parse, and a malformed
+  // template is a LOAD error — the place an author expects to be told — rather
+  // than a render error they would hear about once per repaint.
+  readonly globalExpressions: ReadonlyMap<ExpressionSlot, Template<RichText>>;
   // [LAW:one-source-of-truth] The single "which segment is rendering" record
   // every segment-scoped template function reads — the menu's identity, the
   // `color` func's palette, the `bgOf` func's background. Surfaced here so the
@@ -368,11 +382,12 @@ export function registerDslConfig(
     // Same contract as stripStyle: renderDsl republishes the live resolved
     // base palette each render; `globals.palette` is the registration-time
     // value, so a compile-only path (no render) still has a real palette.
-    // [LAW:one-source-of-truth] Resolved through the same effectiveThemeName the
-    // render uses, with no session pick — so the floor here is the one floor.
-    basePalette: paletteForThemeName(
-      effectiveThemeName(undefined, null, config.globals.palette),
-    ),
+    // [LAW:one-source-of-truth] Resolved through the same resolution the render
+    // uses, with no session pick — so the floor here is the one floor — and it
+    // must go through `declaredBasePalette` rather than the raw name, because that
+    // slot may hold a RULE (brandon-themes-dzl) and `paletteForThemeName` of a
+    // template would throw at LOAD for a config that renders perfectly well.
+    basePalette: declaredBasePalette(config.globals.palette),
     // Same contract as stripStyle: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -604,73 +619,80 @@ export function registerDslConfig(
     roots.set(name, compileNode(node, path));
   }
 
-  // [LAW:no-silent-failure] Parsed eagerly so a malformed look expression is a
-  // load error naming its own slot, not a per-render throw. The slot is detected
-  // by SHAPE (`isLookExpression`), the same way a template is told from a literal
-  // everywhere else here, so this is present iff `resolveLookSelection` will hand
-  // renderDsl an `expression` arm to evaluate — one predicate, two readers.
-  const lookExpression = isLookExpression(config.globals.look)
-    ? parseLookExpression(parse, config.globals.look!)
-    : undefined;
+  // [LAW:no-silent-failure] Parsed eagerly so a malformed rule is a load error
+  // naming its own slot, not a per-render throw. Membership is decided by SHAPE
+  // (`isExpression`), the same way a template is told from a literal everywhere
+  // else here, so an entry exists iff the resolution will hand renderDsl an
+  // `expression` arm for that slot — one predicate, every reader.
+  // [LAW:dataflow-not-control-flow] One fold over the slot table: adding a slot
+  // never adds a branch here.
+  const globalExpressions = new Map<ExpressionSlot, Template<RichText>>();
+  for (const slot of EXPRESSION_SLOTS) {
+    const authored = config.globals[slot];
+    if (isExpression(authored))
+      globalExpressions.set(slot, parseExpressionSlot(parse, slot, authored!));
+  }
 
   return {
     segments: compiled,
     roots,
     activeSegment,
     menuRuntime,
-    ...(lookExpression !== undefined && { lookExpression }),
+    globalExpressions,
     loadWarnings,
   };
 }
 
-// ─── globals.look as an expression (brandon-looks-pe6) ───────────────────────
+// ─── A globals slot holding a rule (brandon-looks-pe6, brandon-themes-dzl) ───
 
 // [LAW:no-silent-failure] Re-thrown with the slot attached: the engine knows the
 // template is malformed, only cc-candybar knows which config field it came from.
 // The same reasoning (and the same shape) as a `bg:`/`fg:` parse failure.
-function parseLookExpression(
+function parseExpressionSlot(
   parse: (src: string) => Template<RichText>,
+  slot: ExpressionSlot,
   source: string,
 ): Template<RichText> {
   try {
     return parse(source);
   } catch (e) {
     throw new Error(
-      `globals.look is not a valid template: ${e instanceof Error ? e.message : String(e)}`,
+      `globals.${slot} is not a valid template: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 }
 
-// [LAW:no-defensive-null-guards] `isLookExpression` gates BOTH the compile in
-// registerDslConfig and the `expression` arm resolveLookSelection produces, so a
-// missing template here is drift between the two readers of that one predicate —
-// a loud caller bug, never a case to absorb into the identity look.
-function evalLookExpression(compiled: CompiledConfig, scope: object): string {
-  if (compiled.lookExpression === undefined) {
+// [LAW:no-defensive-null-guards] `isExpression` gates BOTH the compile in
+// registerDslConfig and the `expression` arm the resolution produces, so a
+// missing template here is drift between two readers of that one predicate — a
+// loud caller bug, never a case to absorb into a field's floor.
+function evalExpressionSlot(
+  compiled: CompiledConfig,
+  slot: ExpressionSlot,
+  scope: object,
+): string {
+  const template = compiled.globalExpressions.get(slot);
+  if (template === undefined) {
     throw new Error(
-      "globals.look is an expression but no compiled template exists — " +
-        "registerDslConfig and resolveLookSelection disagree about isLookExpression",
+      `globals.${slot} is an expression but no compiled template exists — ` +
+        `registerDslConfig and the resolution disagree about isExpression`,
     );
   }
-  return compiled.lookExpression
+  return template
     .evaluate(scope)
     .map((f) => f.plain)
     .join("");
 }
 
-// The look the render actually transposes with. Returns the selection ITSELF
-// when it was already decided — identity, so the caller can tell "the fold
-// finished here" from "it had already finished" without re-testing the
-// discriminator [LAW:dataflow-not-control-flow].
-function finishLook(
-  selected: LookSelection,
-  compiled: CompiledConfig,
-  declaredLooks: Readonly<Record<string, ThemeKey>>,
-  scope: object,
-): DecidedLook {
-  return selected.kind === "decided"
-    ? selected
-    : decideLookName(evalLookExpression(compiled, scope), declaredLooks);
+// The name a render publishes for a slot BEFORE its fold has finished: the
+// decided name, or that field's floor when only this render can settle it.
+// [LAW:dataflow-not-control-flow] One total projection of the union to one value,
+// shared by both slots, rather than a per-slot branch at the push site.
+function provisionalName(
+  selected: LookSelection | ThemeSelection,
+  floorName: string,
+): string {
+  return selected.kind === "decided" ? selected.name : floorName;
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -724,6 +746,21 @@ export interface RenderObservers {
   // registry-dispose contract): an observer that throws is a caller bug
   // surfaced loudly, never caught and absorbed by the render walk.
   readonly onSegmentError?: (segName: string, message: string) => void;
+  // [LAW:no-silent-failure] Optional observer for a resolution this render had to
+  // complete for itself and could not honour — today exactly one thing: a
+  // `globals.palette` RULE whose result names no installed theme
+  // (brandon-themes-dzl). The render continues in the floor theme, because the
+  // value is data-driven and a throw would take the whole statusline away the
+  // moment live data reached a branch with a typo — but the author must be able to
+  // see WHY the bar is the wrong colour, and a palette has no cell of its own to
+  // show a ⚠ in the way a failing segment does.
+  //
+  // Optional for the same reason the two above are: a caller that passes none has
+  // said it is not listening (a compile-only test, the demo). Both shipping
+  // callers listen — the daemon folds these into the diagnostic strip's warning
+  // channel, and `cc-candybar check` folds them into its verdict, so the same
+  // fact is visible whether or not anyone is looking at a bar.
+  readonly onRenderWarning?: (message: string) => void;
 }
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
@@ -745,6 +782,16 @@ export interface RenderSelection {
   // deliberately splits here and nowhere else (brandon-looks-pe6). The base
   // palette is transposed by the result ONCE per render.
   readonly look?: LookSelection;
+  // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
+  // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
+  // base PALETTE beside the name, which is why renderDsl takes no `basePalette`
+  // argument any more: renderDsl is the one producer of `theme.effective` (under a
+  // rule nobody upstream knows the answer), so a palette arriving separately from
+  // the name it is labelled with would be a second clock free to say gruvbox while
+  // the label said nord. `Palette.name` cannot stand in for the name either —
+  // `resolvePaletteName` folds aliases, so a user who picked `dark` would be
+  // labelled `textual-dark`.
+  readonly theme?: ThemeSelection;
   // The resolved preset NAME: effectivePresetName over SessionState/globals,
   // collapsed to the floor if stale. Selects which of `compiled.roots` this
   // render walks. The name (not the fragment) crosses this seam because the
@@ -759,17 +806,27 @@ export function renderDsl(
   store: VariableStore,
   registry: SourceRegistry,
   payload: unknown,
-  basePalette: Palette,
   opts: BuildLineOptions,
   observers?: RenderObservers,
   selection?: RenderSelection,
 ): string {
-  const { perSegmentSink, onSegmentError } = observers ?? {};
+  const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
-  const selected = selection?.look ?? decideLookName(LOOK_FLOOR, config.looks);
+  const selectedLook =
+    selection?.look ?? decideLookName(LOOK_FLOOR, config.looks);
+  // [LAW:one-source-of-truth] The theme's twin, resolved the same way one rung up
+  // (brandon-themes-dzl). An omitting caller gets the same fold minus the two
+  // rungs only it could know — so it renders what the CONFIG declares, which is a
+  // true default rather than a fallback [LAW:no-silent-failure]: a compile-only
+  // caller that never resolved SessionState still honours `globals.palette`, rule
+  // included, exactly as it honours every other authored global. Substituting the
+  // floor here would silently repaint every such render.
+  const selectedTheme =
+    selection?.theme ??
+    resolveThemeSelection(undefined, null, config.globals.palette);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
   // the exact wrap width — never a cached or independently-measured copy. This is
@@ -786,17 +843,23 @@ export function renderDsl(
   // carries it. So the payload never carries this field — renderDsl injects it,
   // exactly as it injects `term.cols`, which is why a `{{ .look.effective }}`
   // label and the transposed palette cannot disagree (brandon-looks-pe6).
-  const payloadWith = (lookName: string): object => ({
+  const payloadWith = (themeName: string, lookName: string): object => ({
     ...(payload as object),
     term: { cols: opts.width },
+    theme: { effective: themeName },
     look: { effective: lookName },
   });
-  // The expression arm's provisional value is the FLOOR: it is what an expression
-  // naming no declared look collapses to, so a look expression that reads
-  // `.look.effective` (a self-reference) sees the answer it would get by naming
-  // nothing, rather than a stale value from a previous render.
+  // An expression arm's provisional value is its FLOOR: it is what that slot
+  // collapses to when its result names nothing, so a rule reading its own
+  // `.effective` (a self-reference) sees the answer it would get by naming
+  // nothing, rather than a stale value from a previous render. A rule in ONE slot
+  // reading the OTHER's `.effective` sees the same thing, which is why neither
+  // slot's rule may be written to depend on the other's result.
   registry.applyInput(
-    payloadWith(selected.kind === "decided" ? selected.name : LOOK_FLOOR),
+    payloadWith(
+      provisionalName(selectedTheme, THEME_FLOOR),
+      provisionalName(selectedLook, LOOK_FLOOR),
+    ),
   );
   // [LAW:single-enforcer] Publish the render's strip style onto the shared action
   // runtime so the picker can reserve the joiner's end-cap chrome at its
@@ -808,32 +871,50 @@ export function renderDsl(
   // style: the picker reserves 2×padding at its pagination seam, the same seam
   // that reserves the joiner chrome — one resolved value, read where needed.
   compiled.menuRuntime.action.padding = opts.padding;
-  // [LAW:one-source-of-truth] And the render's BASE palette, beside them: a
-  // picker over a colour-valued domain paints each option in the palette picking
-  // it would put in force, and a look's answer is this base transposed by that
-  // look's key. The base, never the looked palette below — transposedPalette must
-  // not be chained (its memo keys on the base palette's name, which transposition
-  // preserves), and a look applies to the base by definition.
-  compiled.menuRuntime.action.basePalette = basePalette;
-
   const scope = buildScope(store);
-  // The other half of the look fold, which could only ever happen here: the
-  // expression reads the store the line above just filled with this render's
-  // values. A decided look returns itself, so the republish below is skipped by
-  // identity rather than by re-testing the discriminator.
-  const look = finishLook(selected, compiled, config.looks, scope);
-  // [LAW:no-silent-failure] The expression arm learned a name the push above
-  // could not carry, so push it: without this the settings menu's `◐ look`
-  // control would label itself from the floor while the bar wore the expression's
+  // The other half of each fold, which could only ever happen here: a rule reads
+  // the store the push above just filled with this render's values. A decided
+  // selection returns ITSELF, so the republish below is skipped by identity
+  // rather than by re-testing the discriminator [LAW:dataflow-not-control-flow].
+  // [LAW:one-type-per-behavior] One `finishSelection` for both slots; what differs
+  // is the two values each hands it — which template to evaluate, and how a name
+  // becomes that field's value.
+  const theme = finishSelection(
+    selectedTheme,
+    () => evalExpressionSlot(compiled, "palette", scope),
+    // [LAW:effects-at-boundaries] The message belongs to the theme domain, the
+    // channel to the caller: a result naming no installed theme renders the floor
+    // and says so, rather than throwing away the whole bar.
+    (name) => decideThemeName(name, (message) => onRenderWarning?.(message)),
+  );
+  const look = finishSelection(
+    selectedLook,
+    () => evalExpressionSlot(compiled, "look", scope),
+    (name) => decideLookName(name, config.looks),
+  );
+  // [LAW:no-silent-failure] A rule arm learned a name the push above could not
+  // carry, so push it: without this the settings menu's `🎨 theme` / `◐ look`
+  // controls would label themselves from the floor while the bar wore the rule's
   // result — one fact with two answers. All payload ingestion goes through
   // applyInput (see SourceRegistry's own contract), so this is that one path,
   // called again, not a second way to write an input box.
-  if (look !== selected) registry.applyInput(payloadWith(look.name));
+  if (theme !== selectedTheme || look !== selectedLook)
+    registry.applyInput(payloadWith(theme.name, look.name));
+  // [LAW:one-source-of-truth] The render's BASE palette, published beside the
+  // style and padding: a picker over a colour-valued domain paints each option in
+  // the palette picking it would put in force, and a look's answer is this base
+  // transposed by that look's key. The base, never the looked palette below —
+  // transposedPalette must not be chained (its memo keys on the base palette's
+  // name, which transposition preserves), and a look applies to the base by
+  // definition. Published after the fold finishes, because under a rule this is
+  // the first line at which the base palette is known.
+  const basePalette = theme.value;
+  compiled.menuRuntime.action.basePalette = basePalette;
   // [LAW:one-source-of-truth] The render's palette: the base theme under the
   // session's look, transposed ONCE here — every unpinned segment colours from
   // this one object, so a look click recolours the whole bar from one
   // transposition, not one per segment.
-  const palette = transposedPalette(basePalette, look.key);
+  const palette = transposedPalette(basePalette, look.value);
 
   perSegmentSink?.clear();
 

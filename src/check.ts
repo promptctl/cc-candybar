@@ -41,7 +41,6 @@ import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import { registerDslConfig, renderDsl } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
-import { paletteForThemeName } from "./themes/palette-resolvers.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -136,9 +135,9 @@ export function checkPayload(
     // RENDERS and its template gets checked. A local-looking fixture would
     // gate the host segment off and let a typo inside it ship.
     host: { name: "tester-box", user: "tester", ssh: true },
-    theme: { effective: effective.theme },
-    // No `look` — renderDsl injects `look.effective`, because under an
-    // expression it is the only thing that knows the answer (brandon-looks-pe6).
+    // No `theme` or `look` — renderDsl injects both `.effective` fields, because
+    // under a rule it is the only thing that knows the answer (brandon-looks-pe6,
+    // brandon-themes-dzl).
     // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
     // already carried `preset` — a pre-existing gap this ticket's own fixture
     // needs closed: a preset trigger's `.preset.effective` label and
@@ -394,7 +393,6 @@ async function loadRegisterRender(
         store,
         registry,
         checkPayload(payloadEffective),
-        paletteForThemeName(payloadEffective.theme),
         {
           style: payloadEffective.style,
           separator: payloadEffective.separator,
@@ -405,10 +403,18 @@ async function loadRegisterRender(
           charset: payloadEffective.charset,
         },
         {
-          onSegmentError: (segName, message) =>
+          onSegmentError: (segName: string, message: string) =>
             segmentErrors.set(segName, message),
+          // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
+          // installed theme is a real finding for a headless pass: the bar would
+          // render, in the wrong theme, with nobody watching the strip. Reported
+          // under the slot as its "segment" name so it dedupes and prints through
+          // the one channel every other finding does.
+          onRenderWarning: (message: string) =>
+            segmentErrors.set("globals.palette", message),
         },
         {
+          theme: payloadEffective.theme,
           look: payloadEffective.look,
           preset: payloadEffective.preset,
         },

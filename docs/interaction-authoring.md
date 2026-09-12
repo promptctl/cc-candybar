@@ -1374,6 +1374,51 @@ declared look (checked after the merge, so naming a stdlib look is fine):
 Unknown look key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift
 ```
 
+### A theme chosen by data, the same way
+
+`globals.palette` accepts a template too, and it is the same slot rule one
+dimension over: a look adapts whatever theme is in force, a theme *replaces* it.
+Reach for this when the fact is about the environment rather than the
+temperature — which checkout you are in, which cluster you are pointed at:
+
+```json5 check:pass
+{
+  globals: {
+    // One expression picks the whole theme. A plain name still works here;
+    // the template form is recognised by the `{{`, exactly as for `look`.
+    palette: '{{ cascade (round .block.nativeUtilization) "0:tokyo-night" "80:gruvbox" }}',
+  },
+}
+```
+
+Everything the `look` slot promises holds here — a plain name still works, a
+session pick or an edit-mode staging outranks the expression, and a malformed
+template is a load error against `globals.palette` rather than a per-repaint
+throw. `.theme.effective` reads back whatever the expression chose, so a
+`🎨 {{ .theme.effective }}` label always names the theme you are looking at.
+
+One thing differs, and it is worth knowing before you write the expression. A
+look naming nothing goes quietly to `none`, because a bar wearing no look is a
+perfectly sensible bar. A *theme* naming nothing cannot be quiet: there is no
+"no theme", so the bar falls back to the default theme **and says so above the
+bar**, and `cc-candybar check` fails on it:
+
+```json5 check:fail
+{
+  globals: { palette: '{{ if true }}tokoy-night{{ end }}' },   // transposed letters
+}
+```
+
+```error
+globals.palette
+```
+
+The bar still renders — a theme chosen from live data must not be able to blank
+your statusline when the data reaches a branch you typo'd — but you will see the
+reason on the diagnostic strip until you fix it. A **per-segment** `palette:` will
+not take a template at all: that pin is resolved once when the config loads, so a
+rule there could never be evaluated.
+
 ## `kind: "group"` — the layout disclosure
 
 A group collapses an arbitrary layout subtree behind a synthesized ▸/▾ toggle

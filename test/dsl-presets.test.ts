@@ -41,7 +41,6 @@ import {
   presetGlobals,
   presetRoot,
 } from "../src/config/presets";
-import { paletteForThemeName } from "../src/themes";
 import { checkConfig } from "../src/check";
 
 const SID = "s-presets";
@@ -283,7 +282,6 @@ describe("preset selection — the arrangement the bar renders", () => {
         store,
         registry,
         { session_id: SID, preset: { effective: preset } },
-        paletteForThemeName(THEME),
         { ...OPTS, padding },
         undefined,
         { preset },

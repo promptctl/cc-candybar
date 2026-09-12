@@ -23,7 +23,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { paletteForThemeName } from "../src/themes";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -96,7 +95,6 @@ function buildRuntime(source: string) {
       store,
       registry,
       { session_id: SID },
-      paletteForThemeName(effective.theme),
       {
         style: effective.style,
         separator: effective.separator,
@@ -106,6 +104,11 @@ function buildRuntime(source: string) {
         charset: effective.charset,
         width: Number.POSITIVE_INFINITY,
       },
+      undefined,
+      // The theme rides in the SELECTION now (brandon-themes-dzl), resolved from
+      // the same `effective` struct every other field above comes from — so the
+      // bar cannot be painted from one resolution and labelled from another.
+      { theme: effective.theme },
     );
   };
 

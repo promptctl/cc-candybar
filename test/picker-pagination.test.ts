@@ -94,7 +94,6 @@ function buildRuntime(
       store,
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
-      basePalette,
       {
         style,
         colorCompatibility: "truecolor" as const,
@@ -314,7 +313,6 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
-        basePalette,
         {
           style,
           colorCompatibility: "truecolor" as const,

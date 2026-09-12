@@ -10,6 +10,7 @@ import {
   utimesSync,
 } from "node:fs";
 import { join } from "node:path";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
@@ -29,7 +30,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ const todoWrite = (
 ): string => toolUse({ id, name: "TodoWrite", input: { todos } });
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: "textual-dark",
+  theme: resolveThemeSelection(undefined, null, "textual-dark"),
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
@@ -559,7 +559,6 @@ describe("the bundled activity segment renders the payload", () => {
             },
             ...(activity !== undefined && { activity }),
           },
-          getThemePalette("textual-dark"),
           {
             // Plain, because what is under test is the cell's TEXT: the
             // powerline joiner's end-cap glyphs are not whitespace, so they

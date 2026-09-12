@@ -8,7 +8,7 @@
 //
 // Same rig as test/dsl-theme-picker-recolor.test.ts: renderDsl with the
 // base palette resolved per render the way the daemon does
-// (effectiveThemeName → paletteForThemeName), the look resolved the same way
+// (resolveThemeSelection, whose decided arm carries the palette), the look the same way
 // (resolveLookSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
@@ -23,11 +23,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import {
-  resolveLookSelection,
-  effectiveThemeName,
-  paletteForThemeName,
-} from "../src/themes";
+import { resolveLookSelection, resolveThemeSelection } from "../src/themes";
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
@@ -93,12 +89,10 @@ function buildRuntime() {
   );
 
   const render = (payload: { pct: number; stop: string }): string => {
-    const basePalette = paletteForThemeName(
-      effectiveThemeName(
-        undefined,
-        sessionState.get(SID, "theme"),
-        config.globals.palette,
-      ),
+    const theme = resolveThemeSelection(
+      undefined,
+      sessionState.get(SID, "theme"),
+      config.globals.palette,
     );
     const look = resolveLookSelection(
       undefined,
@@ -112,10 +106,9 @@ function buildRuntime() {
       store,
       registry,
       { session_id: SID, ...payload },
-      basePalette,
       OPTS,
       undefined,
-      { look },
+      { theme, look },
     );
   };
   const click = (key: "theme" | "look", value: string): void =>

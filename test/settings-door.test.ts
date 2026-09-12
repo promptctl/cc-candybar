@@ -98,7 +98,6 @@ function doorCell(themeName: string): { bg: ColorRgba; fg: ColorRgba } {
       workspace: { current_dir: "/w/p", project_dir: "/w/p" },
       model: { display_name: "Opus" },
     },
-    paletteOf(themeName),
     OPTS,
     { perSegmentSink: sink },
   );

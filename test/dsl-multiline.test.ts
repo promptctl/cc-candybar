@@ -12,7 +12,6 @@
 // behaviors must not break these tests.
 
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -26,10 +25,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-
-function basePalette() {
-  return getThemePalette("textual-dark"!);
-}
 
 function buildRuntime(source: string) {
   const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
@@ -56,7 +51,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     expect(out.includes("\n")).toBe(false);
     expect(stripAnsi(out)).toContain("A");
   });
@@ -75,7 +70,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n");
     expect(lines).toHaveLength(2);
     expect(stripAnsi(lines[0]!)).toContain("TOP");
@@ -103,7 +98,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, { h: ['sc', 'sd'] }] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     // Row 0: A precedes B
@@ -120,7 +115,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     expect(out).toBe("");
   });
 
@@ -156,7 +151,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, 'sc'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     // Row 0 still emits even though `sa` hid — it just contains only B.
     expect(lines).toHaveLength(2);
@@ -177,7 +172,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -200,7 +195,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("ABCDE");
@@ -224,7 +219,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n");
     expect(lines).toHaveLength(2);
     // Each visual line carries an OSC-8 open sequence for the same URL.
@@ -248,7 +243,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -277,8 +272,8 @@ describe("renderDsl — multi-line layout", () => {
       root: { kind: 'container', direction: 'horizontal', children: ['sa', 'sb'] } }`;
     const hArm = buildRuntime(hArmSrc);
     const horiz = buildRuntime(horizSrc);
-    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, basePalette(), OPTS);
-    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, basePalette(), OPTS);
+    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, OPTS);
+    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, OPTS);
     expect(horizOut).toBe(hArmOut);
     expect(horizOut.split("\n")).toHaveLength(1);
   });
@@ -307,7 +302,7 @@ describe("renderDsl — multi-line layout", () => {
       },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("L1");
@@ -336,7 +331,7 @@ describe("renderDsl — multi-line layout", () => {
       ] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("B");

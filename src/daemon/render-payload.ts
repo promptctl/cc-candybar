@@ -33,9 +33,12 @@ import {
   type LookSelection,
   effectivePadding,
   effectiveStripStyle,
-  effectiveThemeName,
   DEFAULT_UPDATE_NOTICE,
 } from "../themes/policy.js";
+import {
+  resolveThemeSelection,
+  type ThemeSelection,
+} from "../themes/palette-resolvers.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { rootNode } from "../config/root.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
@@ -77,7 +80,16 @@ import type {
 // over its floor constant is their whole resolution. See CHARSETS in
 // themes/policy.ts for why that is a decision rather than a gap.
 export interface EffectiveGlobals {
-  readonly theme: string;
+  // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
+  // (brandon-themes-dzl) — `look`'s twin one dimension over, and for the same
+  // reason: a session pick, a staged fragment and a plain `globals.palette` all
+  // resolve to a `decided` arm carrying the name AND the base palette it denotes,
+  // while a `globals.palette` holding a TEMPLATE resolves to an `expression` arm,
+  // because the store does not hold this render's values until renderDsl pushes
+  // them. So renderDsl finishes that one rung, and is therefore also the one place
+  // `theme.effective` is published — which is why the payload below carries no
+  // `theme` field and the server hands renderDsl no separate base palette.
+  readonly theme: ThemeSelection;
   // [LAW:types-are-the-program] The look as far as it can be resolved HERE
   // (brandon-looks-pe6). A session pick, a staged fragment and a plain
   // `globals.look` all resolve to a `decided` arm exactly as they always did; a
@@ -160,7 +172,7 @@ export function resolveEffectiveGlobals(
   return {
     preset,
     presetCustomized: presetCustomized(preset),
-    theme: effectiveThemeName(
+    theme: resolveThemeSelection(
       staged.palette,
       sessionPick("theme"),
       globals.palette,
@@ -224,24 +236,15 @@ export interface RenderPayload extends ClaudeHookData {
   // requested" (two syscalls and one already-parsed wire hint). The fields
   // INSIDE it carry the real optionality — see HostPayload.
   readonly host: HostPayload;
-  // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
-  // effectiveThemeName(sessionState.theme, globals.palette). The SAME value the
-  // rendered basePalette is built from, surfaced so a trigger label can display
-  // the active theme WITHOUT the config restating it (the label and the colors
-  // trace to one resolution and cannot drift).
-  // [LAW:types-are-the-program] REQUIRED, not optional: the daemon resolves it
-  // every render and buildRenderPayload includes it unconditionally, so the
-  // domain truth is "always present". A `?` here would let a callsite believe it
-  // could be undefined and guard defensively against an impossibility.
-  readonly theme: { readonly effective: string };
-  // `look.effective` is deliberately NOT a field here. It is `theme`'s twin one
-  // dimension over in every other respect, but the look is the one selection
-  // whose config rung may be an EXPRESSION (brandon-looks-pe6), so the fold
-  // finishes inside renderDsl — which therefore injects `look: { effective }`
-  // into the payload it pushes, exactly as it injects `term: { cols }`. One
-  // producer, so the name a label displays and the key the palette transposed by
-  // cannot disagree [LAW:one-source-of-truth]. `EffectiveGlobals.look` above
-  // carries the SELECTION that render resolves.
+  // `theme.effective` and `look.effective` are deliberately NOT fields here.
+  // They are the two selections whose config rung may hold an EXPRESSION
+  // (brandon-looks-pe6, brandon-themes-dzl), so each fold finishes inside
+  // renderDsl — which therefore injects `theme: { effective }` and
+  // `look: { effective }` into the payload it pushes, exactly as it injects
+  // `term: { cols }`. ONE producer per field, so the name a label displays and
+  // the palette the bar actually wears cannot disagree
+  // [LAW:one-source-of-truth]. `EffectiveGlobals` above carries the SELECTIONS
+  // that render resolves.
   // [LAW:one-type-per-behavior] The daemon-resolved effective PRESET name —
   // effectivePresetName(sessionState.preset, globals.preset, presets) — theme
   // and look's twin one level up: the SAME name that selected the layout this
@@ -1157,10 +1160,9 @@ export async function buildRenderPayload(
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
     // hand) and a config reading e.g. `.padding.effective` must always find it.
-    theme: { effective: effective.theme },
-    // No `look` here on purpose: renderDsl injects `look.effective` because it
-    // is the only thing that knows the answer for an expression, and one
-    // producer is the whole point [LAW:one-source-of-truth].
+    // No `theme` or `look` here on purpose: renderDsl injects both `.effective`
+    // fields because it is the only thing that knows the answer under a rule, and
+    // one producer per fact is the whole point [LAW:one-source-of-truth].
     preset: {
       effective: effective.preset,
       customized: effective.presetCustomized,

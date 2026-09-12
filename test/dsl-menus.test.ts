@@ -163,7 +163,6 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(),
       { perSegmentSink: sink },
       // The look is resolved by the CALLER (the daemon does it over staged/

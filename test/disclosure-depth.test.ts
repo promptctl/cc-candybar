@@ -164,7 +164,7 @@ function build(src: string, withDefault = false) {
   // the sink, which would read here as "did not render"; say what it was.
   const render = (): string => {
     const errors: string[] = [];
-    const out = renderDsl(config, compiled, store, registry, PAYLOAD, palette, OPTS, {
+    const out = renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
       perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
     });

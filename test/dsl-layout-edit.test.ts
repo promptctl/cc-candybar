@@ -524,7 +524,6 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(),
     );
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
@@ -803,7 +802,6 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
         project_dir: "/tmp/proj",
         preset: { effective: presetName, customized: true },
       },
-      basePalette,
       opts(),
       undefined,
       { preset: presetName },
@@ -862,7 +860,6 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
           project_dir: "/tmp/proj",
           preset: { effective: "gated", customized: true },
         },
-        basePalette,
         opts(),
         undefined,
         { preset: "gated" },

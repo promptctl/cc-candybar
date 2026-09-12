@@ -25,7 +25,6 @@
 //     they are reached the way a user reaches them, by clicking ☰ then ⚙.
 
 import { createEngine } from "@promptctl/go-template-js";
-import { getThemePalette } from "@promptctl/rich-js";
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -149,7 +148,11 @@ function buildRuntime(root: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const basePalette = getThemePalette("textual-dark");
+  // No theme handed in: renderDsl resolves it from `globals.palette`, so these
+  // bytes are the bundled default's own declared theme (tokyo-night) — the ones
+  // the daemon really emits for this config. Before brandon-themes-dzl this rig
+  // passed a textual-dark palette beside a config declaring tokyo-night, and the
+  // snapshot pinned a bar production never renders.
   const disposers = [
     ...deriveActionValidators(config).map(({ key, spec }) =>
       registerStateValidator(key, spec),
@@ -160,7 +163,7 @@ function buildRuntime(root: string) {
   ];
   const ctx: VerbContext = testVerbContext(sessionState);
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, basePalette, OPTS);
+    renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

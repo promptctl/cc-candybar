@@ -5,6 +5,7 @@
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -48,7 +49,7 @@ function depsWith(
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: "textual-dark",
+  theme: resolveThemeSelection(undefined, null, "textual-dark"),
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
@@ -327,14 +328,14 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 });
 
 // [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/charset/
-// colorCompatibility/autoWrap/padding are theme's twins — this pins
+// colorCompatibility/autoWrap/padding are style's twins — this pins
 // that buildRenderPayload projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
-// with no `wants` gate — exactly like theme/look).
+// with no `wants` gate — unlike theme/look, which renderDsl produces).
 describe("buildRenderPayload — effective globals projection", () => {
-  test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two daemon-consumed fields have none", async () => {
+  test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
     const effective: EffectiveGlobals = {
-      theme: "nord",
+      theme: resolveThemeSelection(undefined, null, "nord"),
       look: FLOOR_LOOK,
       preset: "default",
       presetCustomized: true,
@@ -355,11 +356,12 @@ describe("buildRenderPayload — effective globals projection", () => {
       effective,
       NO_HINTS,
     );
-    expect(payload.theme).toEqual({ effective: "nord" });
-    // `look` is the one field this projection does NOT carry: renderDsl injects
-    // `look.effective` because under an expression it is the only thing that
-    // knows the answer (brandon-looks-pe6). Asserted absent rather than left
-    // unmentioned, so re-adding a second producer fails here.
+    // `theme` and `look` are the two fields this projection does NOT carry:
+    // renderDsl injects both `.effective` values, because under a RULE in that
+    // globals slot it is the only thing that knows the answer (brandon-looks-pe6
+    // for `look`, brandon-themes-dzl for `theme`). Asserted absent rather than
+    // left unmentioned, so re-adding a second producer fails here.
+    expect("theme" in payload).toBe(false);
     expect("look" in payload).toBe(false);
     expect(payload.preset).toEqual({ effective: "default", customized: true });
     expect(payload.style).toEqual({ effective: "capsule" });

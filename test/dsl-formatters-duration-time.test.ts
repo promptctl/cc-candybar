@@ -20,7 +20,6 @@
 // helper bodies the shipped statusline uses — not a test-local copy.
 
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -38,8 +37,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = getThemePalette("textual-dark"!);
-
 // A whole-second-aligned frozen instant: clock().getTime() === NOW_MS exactly,
 // so minutesUntilReset's `epoch*1000 - now` arithmetic has no sub-second slack.
 const NOW_MS = Date.parse("2026-06-04T00:00:00.000Z");
@@ -79,7 +76,6 @@ function render(call: string, payload: Record<string, number>): string {
     store,
     registry,
     payload,
-    BASE_PALETTE,
     OPTS,
   );
   return out

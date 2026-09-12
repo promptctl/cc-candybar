@@ -10,6 +10,7 @@ import {
   DEFAULT_PADDING,
   PADDING_RANGE,
   STRIP_STYLES,
+  isExpression,
   type ColorCompatibility,
 } from "../../themes/policy.js";
 import {
@@ -17,14 +18,15 @@ import {
   optionalEnum,
   optionalEnumSpec,
   optionalIntSpec,
+  optionalStringField,
   optionalStringSpec,
-  paletteSpec,
   record,
   recordJson,
   type FieldSpec,
   type FieldSpecMap,
   type JsonNode,
   type RecordSchema,
+  validatePaletteName,
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
@@ -56,6 +58,33 @@ const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
   },
 };
 
+// [LAW:types-are-the-program] `globals.palette` admits a NAME or a RULE
+// (brandon-themes-dzl). A template there names no theme — it names how to choose
+// one per render — so there is nothing for the name check to check; its own
+// well-formedness is checked where every other template's is (parsed eagerly by
+// registerDslConfig, so a malformed one is still a LOAD error), and its result
+// gets the forgiveness `decideThemeName` owns.
+//
+// [LAW:one-type-per-behavior] A spec of its own rather than a flag on the shared
+// `paletteSpec`, because the two slots genuinely differ in behaviour now: a
+// per-segment `palette:` is a static pin frozen at registration, so a rule there
+// could never be settled per render and must stay a load error. Both reach the
+// one `validatePaletteName`, so the name policy itself cannot drift.
+//
+// [LAW:dataflow-not-control-flow] The exemption reads the SAME `isExpression`
+// the eager parse and the render's fold read, so the loader cannot accept a shape
+// the render declines to evaluate, nor reject one it would have settled.
+const paletteOrRuleSpec: FieldSpec<string> = {
+  required: false,
+  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names are
+  // resolved at load from installed palettes, and a rule is a string too.
+  json: { type: "string" },
+  parse: (ctx, path, field, raw) => {
+    const v = optionalStringField(ctx, path, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path, raw);
+  },
+};
+
 // [LAW:one-source-of-truth] THE globals field table, declared once. Both the
 // top-level `globals:` schema and the preset-scoped one below are built from
 // this map, so a field added here is automatically settable from a preset —
@@ -66,7 +95,7 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   default_empty_value: optionalStringSpec(),
   default_separator: optionalStringSpec(),
   default_truncate_marker: optionalStringSpec(),
-  palette: paletteSpec(),
+  palette: paletteOrRuleSpec,
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
   // `looks` block), so membership is a cross-ref check on the MERGED config —

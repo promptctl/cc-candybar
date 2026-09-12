@@ -22,7 +22,6 @@
 //      user cannot delete carries them.
 
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { getThemePalette } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
 import { SessionState } from "../src/daemon/session-state";
@@ -32,9 +31,9 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
   effectiveAutoWrap,
   effectivePadding,
-  effectiveThemeName,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -135,30 +134,35 @@ function rig(
           // EffectiveGlobals); mirroring that here — through the same policy
           // functions, not a restated rule — is what lets an assertion read
           // the LABEL after a click instead of only the click's URL.
-          theme: {
-            effective: effectiveThemeName(undefined, 
-              sessionState.get(SID, "theme"),
-              config.globals.palette,
-            ),
-          },
-          look: { effective: "none" },
+          // `theme`/`look` are absent on purpose: renderDsl publishes both
+          // `.effective` values itself, so they ride in the SELECTION below and a
+          // value here would be overwritten (brandon-themes-dzl).
           style: { effective: "powerline" },
           preset: { effective: "default" },
           autoWrap: {
-            effective: effectiveAutoWrap(undefined, 
+            effective: effectiveAutoWrap(
+              undefined,
               sessionState.get(SID, "autoWrap"),
               config.globals.autoWrap,
             ),
           },
           padding: {
-            effective: effectivePadding(undefined, 
+            effective: effectivePadding(
+              undefined,
               sessionState.get(SID, "padding"),
               config.globals.padding,
             ),
           },
         },
-        getThemePalette("tokyo-night"),
         opts(),
+        undefined,
+        {
+          theme: resolveThemeSelection(
+            undefined,
+            sessionState.get(SID, "theme"),
+            config.globals.palette,
+          ),
+        },
       ),
     click: (url: string) => {
       const { verb, value } = parseHandlerUrl(url);

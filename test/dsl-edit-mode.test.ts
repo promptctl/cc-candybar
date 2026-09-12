@@ -153,7 +153,6 @@ function buildEditRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(),
     );
   const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
@@ -550,7 +549,6 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
-        basePalette,
         { ...opts(), padding },
       );
     const padded0 = stripAnsi(renderWith(0));

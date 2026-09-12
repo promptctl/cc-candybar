@@ -18,7 +18,6 @@
 //   5. Width, mechanically, at 80 and 120 columns.
 
 import { RichText } from "@promptctl/rich-js";
-import { paletteForThemeName } from "../src/themes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -115,7 +114,6 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
       store,
       registry,
       PAYLOAD,
-      paletteForThemeName(effective.theme),
       {
         style: effective.style,
         separator: effective.separator,
@@ -125,6 +123,11 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
         charset: effective.charset,
         width,
       },
+      undefined,
+      // The theme rides in the SELECTION now (brandon-themes-dzl), resolved from
+      // the same `effective` struct every other field above comes from — so the
+      // bar cannot be painted from one resolution and labelled from another.
+      { theme: effective.theme },
     );
   };
 

@@ -85,7 +85,7 @@ function renderDir(paths: {
         added_dirs: [],
       },
     };
-    return renderDsl(parsed, compiled, store, registry, payload, basePalette, {
+    return renderDsl(parsed, compiled, store, registry, payload, {
       style: "plain",
       colorCompatibility: "none",
       wrap: true,
@@ -208,7 +208,6 @@ describe("configurability seam: user template override restores full path", () =
             added_dirs: [],
           },
         },
-        basePalette,
         {
           style: "plain",
           colorCompatibility: "none",

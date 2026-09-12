@@ -30,7 +30,6 @@ import {
   resolveLookSelection,
   effectivePadding,
   effectiveStripStyle,
-  paletteForThemeName,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
 import type { PresetDecl } from "../src/config/dsl-types";
@@ -72,7 +71,6 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = paletteForThemeName(BASE_THEME);
   // The click below goes through the real dispatch, which consults the
   // daemon-global validator registry — so the config's derived gate has to be
   // registered, exactly as the daemon registers it on load.
@@ -90,7 +88,6 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       store,
       registry,
       { session_id: sid },
-      basePalette,
       {
         style: "powerline" as const,
         colorCompatibility: "truecolor" as const,

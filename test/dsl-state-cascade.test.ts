@@ -16,17 +16,17 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
-import {
-  effectiveThemeName,
-  paletteForThemeName,
-} from "../src/themes";
+import { resolveThemeSelection } from "../src/themes";
 import { testVerbContext } from "./helpers/click";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
+  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -51,7 +51,9 @@ const CONFIG_SRC = `{
 // Strip ANSI so assertions can pin on the rendered text alone — color codes
 // vary with palette and would obscure the dataflow assertion we care about.
 function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
+  return s
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
 }
 
 describe("DSL state cascade (vhi.1 acceptance)", () => {
@@ -66,17 +68,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry);
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(
-        renderDsl(
-          config,
-          compiled,
-          store,
-          registry,
-          HOOK_DATA,
-          basePalette,
-          OPTS,
-        ),
-      );
+      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS));
     return { config, store, registry, sessionState, render };
   }
 
@@ -96,8 +88,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
     // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
     // the COLOR cascade by resolving basePalette per render from the session
-    // theme exactly as the daemon does (effectiveThemeName ∘ paletteForThemeName
-    // over SessionState) — no frozen entry palette.
+    // theme exactly as the daemon does (resolveThemeSelection over
+    // SessionState, whose decided arm carries the palette) — no frozen entry
+    // palette.
     // globals.palette is SET (as in the bundled default) — the regression this
     // pins: a config-default base theme must NOT be frozen per-segment, or the
     // session theme could never override it. A segment with no explicit
@@ -120,22 +113,17 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    // Mirror the daemon's per-render base-palette derivation.
+    // Mirror the daemon's per-render theme resolution. Without this the two
+    // renders below would BOTH be the floor theme and the test would assert
+    // that two identical strings differ — vacuous rather than merely weaker.
     const render = () =>
-      renderDsl(
-        config,
-        compiled,
-        store,
-        registry,
-        HOOK_DATA,
-        paletteForThemeName(
-          effectiveThemeName(undefined, 
-            sessionState.get(SESSION_ID, "theme"),
-            config.globals.palette,
-          ),
+      renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS, undefined, {
+        theme: resolveThemeSelection(
+          undefined,
+          sessionState.get(SESSION_ID, "theme"),
+          config.globals.palette,
         ),
-        OPTS,
-      );
+      });
 
     const before = render(); // effective theme = textual-dark (globals default)
     const ctx = testVerbContext(sessionState);
@@ -409,10 +397,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // chosen value AND collapse the menu in one click.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
-    VERBS.get("set-state")!(
-      `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
-      ctx,
-    );
+    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
@@ -524,10 +509,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
-      VERBS.get("set-state")!(
-        `${SESSION_ID}/theme/nord/nonsense-key/foo`,
-        ctx,
-      ),
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
     ).toThrow(/pair 2: unknown state key "nonsense-key"/);
   });
 
@@ -541,9 +523,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     // Empty key at pair 1.
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx),
-    ).toThrow(/empty key at pair 1/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).toThrow(
+      /empty key at pair 1/,
+    );
     // Empty key at pair 2 (theme valid, then empty key).
     expect(() =>
       VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
@@ -628,17 +610,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry);
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(
-        renderDsl(
-          config,
-          compiled,
-          store,
-          registry,
-          HOOK_DATA,
-          basePalette,
-          OPTS,
-        ),
-      );
+      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS));
     const ctx = testVerbContext(sessionState);
 
     expect(render()).toContain("tb=[]");

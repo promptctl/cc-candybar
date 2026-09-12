@@ -14,7 +14,6 @@
 // helper bodies the shipped statusline uses — not a test-local copy.
 
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -32,8 +31,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = getThemePalette("textual-dark"!);
-
 // Input vars the test segment reads; all numeric, default 0 so an absent payload
 // key exercises the var-system default (the DSL's representation of "missing").
 const VARS = `{
@@ -71,7 +68,6 @@ function render(call: string, payload: Record<string, number>): string {
     store,
     registry,
     payload,
-    BASE_PALETTE,
     OPTS,
   );
   return out

@@ -8,6 +8,7 @@ import {
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
 import type { ClientHints } from "../src/daemon/protocol";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import type {
   EffectiveGlobals,
   RenderPayloadDeps,
@@ -103,7 +104,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
 const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: "textual-dark",
+  theme: resolveThemeSelection(undefined, null, "textual-dark"),
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,

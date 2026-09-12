@@ -9,7 +9,6 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { getThemePalette } from "@promptctl/rich-js";
 import { loadConfig, validateConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
@@ -61,14 +60,12 @@ describe("shipped examples load and render through the real cascade", () => {
     // thrown — surface it here so a broken example var fails the test loudly.
     expect(compiled.loadWarnings).toEqual([]);
 
-    const basePalette = getThemePalette("textual-dark"!);
     const rendered = renderDsl(
       config,
       compiled,
       store,
       registry,
       PAYLOAD,
-      basePalette,
       {
         style: "powerline",
         colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,

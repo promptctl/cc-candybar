@@ -1,16 +1,16 @@
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
 // recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
 // prove the click writes SessionState and the active-marking moves, but they
-// pass a STATIC basePalette into renderDsl — so they never exercise the
-// recolor. The recolor lives in the daemon's PER-RENDER basePalette resolution
-// (effectiveThemeName -> paletteForThemeName), OUTSIDE renderDsl. This test
+// omit the theme selection entirely — so they render the floor theme every time
+// and never exercise the recolor. The recolor lives in the daemon's PER-RENDER
+// theme resolution (resolveThemeSelection), OUTSIDE renderDsl. This test
 // replicates that resolution exactly as src/daemon/server.ts does, so it proves
 // the end-to-end loop: a set-state `theme` click changes the bytes a
 // non-picker segment renders.
 //
 // [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
 // for rendering, parseHandlerUrl + VERBS for the click, and the same
-// effectiveThemeName/paletteForThemeName the daemon calls. No parallel rig.
+// resolveThemeSelection the daemon calls. No parallel rig.
 //
 // [LAW:behavior-not-structure] A cell's colour is read BY SEGMENT NAME, off the
 // `perSegmentSink` the daemon itself renders with, never by position in the
@@ -25,9 +25,14 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, effectsOf, clickUrl, boldUrls } from "./helpers/click";
+import {
+  testVerbContext,
+  effectsOf,
+  clickUrl,
+  boldUrls,
+} from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { effectiveThemeName, paletteForThemeName } from "../src/themes";
+import { resolveThemeSelection } from "../src/themes";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
@@ -35,7 +40,10 @@ const PICKED_THEME = "textual-light";
 
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
+  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -80,34 +88,38 @@ function buildRuntime() {
   const compiled = registerDslConfig(config, registry);
   const sink = new Map<string, readonly RichText[]>();
 
-  // [LAW:one-source-of-truth] Resolve basePalette per render the SAME way the
+  // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
-  // pass while the real daemon recolors. (server.ts: basePalette =
-  // paletteForThemeName(effectiveThemeName(undefined, sessionState.get(sid,'theme'),
-  // globals.palette))).
+  // pass while the real daemon recolors. (server.ts hands renderDsl
+  // `theme: resolveThemeSelection(staged, sessionState.get(sid,'theme'),
+  // globals.palette)`, and the SELECTION carries the palette, so there is no
+  // separate base palette here to fall out of step with the name.)
   const render = (): Painted => {
-    const basePalette = paletteForThemeName(
-      effectiveThemeName(undefined, 
-        sessionState.get(SID, "theme"),
-        config.globals.palette,
-      ),
-    );
     const bar = renderDsl(
       config,
       compiled,
       store,
       registry,
       { session_id: SID },
-      basePalette,
       OPTS,
       { perSegmentSink: sink },
+      {
+        theme: resolveThemeSelection(
+          undefined,
+          sessionState.get(SID, "theme"),
+          config.globals.palette,
+        ),
+      },
     );
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. renderDsl
     // clears it at the top of the next call, so a colour read deferred past
     // that call would measure a render this Painted never described.
     const bgs = new Map(
-      [...sink].map(([name, cells]) => [name, cells[0]?.style?.bgcolor?.value?.hex]),
+      [...sink].map(([name, cells]) => [
+        name,
+        cells[0]?.style?.bgcolor?.value?.hex,
+      ]),
     );
     const bgOf = (segment: string): string => {
       const hex = bgs.get(segment);

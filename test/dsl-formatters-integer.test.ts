@@ -21,7 +21,6 @@
 // pinned separately below.
 
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -40,8 +39,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = getThemePalette("textual-dark"!);
-
 const VARS = `{ n: { kind: "input", path: "n", type: "number", default: 0 } }`;
 
 // Render `{{ formatInteger .n }}` through the production path, merged onto
@@ -68,7 +65,6 @@ function render(n: number): string {
     store,
     registry,
     { n },
-    BASE_PALETTE,
     OPTS,
   );
   return out

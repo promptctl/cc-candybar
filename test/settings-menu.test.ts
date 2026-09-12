@@ -19,7 +19,6 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
-import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -91,9 +90,8 @@ function buildRuntime(src: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const basePalette = getThemePalette("textual-dark"!);
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, basePalette, OPTS);
+    renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );

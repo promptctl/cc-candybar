@@ -16,7 +16,6 @@
 //      reserved namespace, ancestor/descendant key sharing, one open per key).
 
 import { ownValidators } from "./helpers/ambient-chrome";
-import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -68,7 +67,6 @@ function buildRuntime(src: string, sessionId = "s1") {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = getThemePalette("textual-dark"!);
   const render = (): string =>
     renderDsl(
       config,
@@ -76,7 +74,6 @@ function buildRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(),
     );
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>

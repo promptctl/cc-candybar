@@ -7,7 +7,6 @@
 // key is a no-op (an inherited define emits nothing).
 
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -26,8 +25,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-
-const BASE_PALETTE = getThemePalette("textual-dark"!);
 
 // A minimal default to merge onto: an empty config so each test exercises only
 // its own helper slice (the production cascade is tested separately via the
@@ -65,7 +62,6 @@ function render(source: string, payload: unknown, dflt?: DslConfig): string {
     store,
     registry,
     payload,
-    BASE_PALETTE,
     OPTS,
   );
 }

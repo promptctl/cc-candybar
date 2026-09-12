@@ -28,7 +28,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
-  effectiveThemeName,
+  resolveThemeSelection,
   resolveLookSelection,
   paletteForThemeName,
 } from "../src/themes";
@@ -201,22 +201,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
           added_dirs: [],
         },
       };
-      const line = renderDsl(
-        parsed,
-        compiled,
-        store,
-        registry,
-        payload,
-        basePalette,
-        {
-          style: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding: 1,
-          charset: "unicode",
-          width: Number.POSITIVE_INFINITY,
-        },
-      );
+      const line = renderDsl(parsed, compiled, store, registry, payload, {
+        style: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 1,
+        charset: "unicode",
+        width: Number.POSITIVE_INFINITY,
+      });
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
       expect(line.length).toBeGreaterThan(0);
@@ -231,7 +223,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // own applyTheme/applyLook actions (deriveActionValidators →
   // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
   // then re-renders with theme.effective/look.effective recomputed exactly as
-  // server.ts does (effectiveThemeName/resolveLookSelection over SessionState) —
+  // server.ts does (resolveThemeSelection/resolveLookSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
   test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
     const SID = "theming-8uj-1";
@@ -255,7 +247,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
     const render = (): string => {
-      const theme = effectiveThemeName(
+      const theme = resolveThemeSelection(
         undefined,
         sessionState.get(SID, "theme"),
         parsed.globals.palette,
@@ -281,13 +273,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
             project_dir: "/tmp",
             added_dirs: [],
           },
-          theme: { effective: theme },
-          look: { effective: look },
         },
-        paletteForThemeName(theme),
         opts,
         undefined,
-        { look },
+        // Both `.effective` fields are renderDsl's to publish, so the payload
+        // carries neither and the SELECTIONS are what cross the seam — the same
+        // two values src/daemon/server.ts hands in.
+        { theme, look },
       );
     };
     try {
@@ -374,7 +366,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(parsed, compiled, store, registry, payload, bp, {
+        return renderDsl(parsed, compiled, store, registry, payload, {
           style: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
@@ -443,7 +435,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
+        return renderDsl(cfg, compiled, store, registry, payload, opts);
       } finally {
         registry.dispose();
       }
@@ -503,7 +495,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
+        return renderDsl(cfg, compiled, store, registry, payload, opts);
       } finally {
         registry.dispose();
       }
@@ -553,7 +545,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             },
             git,
           },
-          basePalette,
           {
             style: "powerline",
             colorCompatibility: "truecolor",
@@ -632,22 +623,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
           home: opts.home,
         };
-        const line = renderDsl(
-          dirOnly,
-          compiled,
-          store,
-          registry,
-          payload,
-          basePalette,
-          {
-            style: "powerline",
-            colorCompatibility: "truecolor",
-            wrap: true,
-            padding: 1,
-            charset: "unicode",
-            width: Number.POSITIVE_INFINITY,
-          },
-        );
+        const line = renderDsl(dirOnly, compiled, store, registry, payload, {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        });
         // Strip ANSI escapes AND the Powerline joiner glyphs
         // (U+E0B0..U+E0BC range) so assertions can probe visible
         // segment text only.
@@ -821,22 +804,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const basePalette = paletteForThemeName(
           theme ?? cfg.globals.palette ?? "textual-dark",
         );
-        return renderDsl(
-          cfg,
-          compiled,
-          store,
-          registry,
-          GIT_PAYLOAD,
-          basePalette,
-          {
-            style: "powerline",
-            colorCompatibility: "truecolor",
-            wrap: true,
-            padding: 1,
-            charset: "unicode",
-            width: Number.POSITIVE_INFINITY,
-          },
-        );
+        return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        });
       } finally {
         registry.dispose();
       }
@@ -1027,7 +1002,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
           store,
           registry,
           payload,
-          basePalette,
           {
             style: "powerline",
             colorCompatibility: "truecolor",
@@ -1129,22 +1103,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
               resetsAt: Math.floor(Date.now() / 1000) + 600,
             },
           };
-          return renderDsl(
-            blockOnly,
-            compiled,
-            store,
-            registry,
-            payload,
-            basePalette,
-            {
-              style: "powerline",
-              colorCompatibility: "truecolor",
-              wrap: true,
-              padding: 1,
-              charset: "unicode",
-              width: Number.POSITIVE_INFINITY,
-            },
-          );
+          return renderDsl(blockOnly, compiled, store, registry, payload, {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          });
         } finally {
           registry.dispose();
         }
@@ -1223,7 +1189,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             },
             ...payload,
           },
-          basePalette,
           {
             style: "powerline",
             colorCompatibility: "truecolor",
@@ -1378,7 +1343,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
         store,
         registry,
         withPayload(checkPayload(effective)),
-        paletteForThemeName(effective.theme),
         {
           style: effective.style,
           separator: effective.separator,

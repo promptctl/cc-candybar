@@ -34,7 +34,6 @@
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
-import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -277,7 +276,6 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = getThemePalette("textual-dark"!);
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
       config,
@@ -285,7 +283,6 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      basePalette,
       opts(width),
     );
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>

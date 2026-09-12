@@ -5,9 +5,12 @@
 // arithmetic of its own.
 export {
   resolvePaletteName,
-  effectiveThemeName,
+  THEME_FLOOR,
   LOOK_FLOOR,
-  isLookExpression,
+  EXPRESSION_SLOTS,
+  isExpression,
+  resolveSelection,
+  finishSelection,
   decideLookName,
   resolveLookSelection,
   effectiveStripStyle,
@@ -17,9 +20,24 @@ export {
   listResolvablePaletteNames,
   STRIP_STYLES,
 } from "./policy.js";
-export type { StripStyle, LookSelection, DecidedLook } from "./policy.js";
+export type {
+  StripStyle,
+  Selection,
+  Decided,
+  ExpressionSlot,
+  LookSelection,
+  DecidedLook,
+} from "./policy.js";
 
-export { paletteForThemeName, transposedPalette } from "./palette-resolvers.js";
+export {
+  paletteForThemeName,
+  transposedPalette,
+  decideThemeName,
+  resolveThemeSelection,
+  themeFloor,
+  declaredBasePalette,
+} from "./palette-resolvers.js";
+export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";
 
 export {
   DECOR_HUES,

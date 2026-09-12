@@ -16,7 +16,14 @@
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
-import { resolvePaletteName } from "./policy.js";
+import {
+  finishSelection,
+  resolvePaletteName,
+  resolveSelection,
+  THEME_FLOOR,
+  type Decided,
+  type Selection,
+} from "./policy.js";
 
 const baseCache = new Map<string, Palette>();
 const transposeCache = new Map<string, Palette>();
@@ -33,17 +40,32 @@ const transposeCache = new Map<string, Palette>();
  * the loud failure for that broken invariant, not a fallback.
  */
 export function paletteForThemeName(name: string): Palette {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" (resolved "${resolvePaletteName(name)}") did not ` +
+        `resolve in the theme registry — allowed names and the registry are ` +
+        `inconsistent`,
+    );
+  }
+  return palette;
+}
+
+// [LAW:single-enforcer] THE name → base Palette construction, and the one memo
+// over it. Answering null rather than throwing is what lets its two callers
+// differ in the only way they must: a PRE-VALIDATED name (a config default the
+// loader checked, a session pick the set-state gate admitted, a per-segment pin)
+// treats absence as registry drift and throws above; a name a RULE produced
+// (brandon-themes-dzl) treats it as an author mistake, collapses to the floor and
+// reports. Two absence policies, one construction — a second `getThemePalette`
+// call beside this one would be a second place a theme name becomes a palette.
+function basePaletteFor(name: string): Palette | null {
   const resolved = resolvePaletteName(name);
   const hit = baseCache.get(resolved);
   if (hit !== undefined) return hit;
 
   const palette = getThemePalette(resolved);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" (resolved "${resolved}") did not resolve in the ` +
-        `theme registry — allowed names and the registry are inconsistent`,
-    );
-  }
+  if (palette === null) return null;
   baseCache.set(resolved, palette);
   return palette;
 }
@@ -78,4 +100,108 @@ export function transposedPalette(base: Palette, key: ThemeKey): Palette {
   const transposed = transposePalette(base, key);
   transposeCache.set(cacheKey, transposed);
   return transposed;
+}
+
+// ─── The theme as a name-or-rule selection (brandon-themes-dzl) ──────────────
+
+// The theme instances of `Selection`/`Decided`. A theme's `value` is the base
+// Palette the name denotes — carried beside the name because ONE lookup produced
+// both, so a label and the palette the bar wears cannot disagree
+// [LAW:one-source-of-truth]. This is also what lets `renderDsl` take no
+// `basePalette` argument: a palette handed in beside a name would be a second
+// clock, free to say gruvbox while the label said nord.
+export type ThemeSelection = Selection<Palette>;
+export type DecidedTheme = Decided<Palette>;
+
+// One rung's contribution: the theme this name selects, or null when it names
+// nothing installed — which is not a pick at all, so the fold moves on.
+//
+// [LAW:polishing-by-subtraction] The construction IS the membership test. The
+// theme domain was described as OPEN, with no membership to check; that was true
+// only because every rung reaching `paletteForThemeName` had been pre-validated
+// elsewhere. `basePaletteFor` answering null is the one membership fact, so
+// asking `listResolvablePaletteNames().includes(...)` first would be the same
+// question twice — and the second answer could only ever restate the first.
+//
+// The NAME kept is the author's own, never the resolved one: `resolvePaletteName`
+// folds aliases, so a user who picked `dark` must still read `dark` on the label.
+function namedTheme(name: string): DecidedTheme | null {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+
+// [LAW:single-enforcer] The membership policy for a theme NAME, wherever the
+// name came from — a config default, a session pick, or an expression's RESULT.
+// An installed theme decides; anything else is the floor, and SAYS SO.
+//
+// The report is what makes this the theme's version rather than a copy of
+// `decideLookName`: that floor is the identity adaptation, so collapsing to it in
+// silence leaves a bar that simply wears no look. This floor is a specific
+// palette, so a silent collapse would leave the bar in a theme nobody asked for
+// with nothing to point at [LAW:no-silent-failure]. It is reported rather than
+// thrown because the value is DATA-driven: an expression can be correct for a
+// week and then name nothing when a threshold moves, and a throw would take the
+// whole statusline away (the strip alone, no bar) at exactly that moment.
+//
+// [LAW:effects-at-boundaries] `onUnresolvable` is a capability the caller hands
+// in — the message belongs to this domain, the channel does not. The one return
+// type also means this and `decideLookName` are interchangeable as
+// `finishSelection`'s `decide`.
+export function decideThemeName(
+  name: string,
+  onUnresolvable: (message: string) => void,
+): DecidedTheme {
+  const named = namedTheme(name);
+  if (named !== null) return named;
+  onUnresolvable(
+    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme`,
+  );
+  // [LAW:no-defensive-null-guards] The floor is installed — it is a registry
+  // palette this package ships — so the non-null assertion states a fact rather
+  // than defending one, and `paletteForThemeName` would throw first if it broke.
+  return namedTheme(THEME_FLOOR)!;
+}
+
+// The theme a render should use, as far as it can be known before the render
+// runs [LAW:one-type-per-behavior] — `resolveSelection` with the theme's own two
+// values. The floor cannot report, because no name failed to resolve: reaching it
+// is the ordinary "nothing was declared" answer.
+export function resolveThemeSelection(
+  stagedPalette: string | undefined,
+  sessionTheme: string | null,
+  globalsPalette: string | undefined,
+): ThemeSelection {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    namedTheme(THEME_FLOOR)!,
+    namedTheme,
+  );
+}
+
+// The theme every rung below the floor lands on, as a decided selection: the
+// default `RenderSelection.theme`, and the value `decideThemeName` collapses to.
+// [LAW:no-defensive-null-guards] The floor is a palette this package ships, so
+// the assertion states a fact rather than defending one.
+export function themeFloor(): DecidedTheme {
+  return namedTheme(THEME_FLOOR)!;
+}
+
+// The base palette before any render has happened: the theme the config declares,
+// or the floor when that slot holds a RULE only a render can settle. A rule's
+// answer is not WRONG here, it is unknowable — no store has been filled yet — so
+// it collapses to the same floor a rule naming nothing does, and there is nothing
+// to report because no name failed [LAW:no-silent-failure].
+//
+// [LAW:dataflow-not-control-flow] `finishSelection` with an evaluator that yields
+// the floor name: one value, no arm on the discriminator.
+export function declaredBasePalette(
+  globalsPalette: string | undefined,
+): Palette {
+  return finishSelection(
+    resolveThemeSelection(undefined, null, globalsPalette),
+    () => THEME_FLOOR,
+    themeFloor,
+  ).value;
 }

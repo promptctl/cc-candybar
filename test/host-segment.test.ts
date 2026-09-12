@@ -15,6 +15,7 @@
 // what lands in the payload, and whether the bundled segment renders.
 
 import os from "node:os";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 
 import {
   buildRenderPayload,
@@ -32,11 +33,10 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { FLOOR_LOOK } from "./helpers/floor-look";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: "textual-dark",
+  theme: resolveThemeSelection(undefined, null, "textual-dark"),
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
@@ -152,7 +152,6 @@ describe("the bundled host segment", () => {
         store,
         registry,
         { ...(HOOK as object), host } as never,
-        paletteForThemeName(EFFECTIVE_GLOBALS.theme),
         {
           style: "powerline" as const,
           colorCompatibility: "none" as const,

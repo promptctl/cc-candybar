@@ -61,7 +61,7 @@ function buildRuntime() {
   // reshapes. (server.ts: renderOpts.style = effectiveStripStyle(undefined, 
   // sessionState.get(sid,'style'), globals.style)).
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, { session_id: SID }, basePalette, {
+    renderDsl(config, compiled, store, registry, { session_id: SID }, {
       style: effectiveStripStyle(undefined, 
         sessionState.get(SID, "style"),
         config.globals.style,

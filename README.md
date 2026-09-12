@@ -128,7 +128,7 @@ Each segment is a DSL declaration with a `template` (text + interpolation + styl
 
 ## Themes
 
-The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` take a palette colour name (`primary`, `surface`, `panel`, `accent`, `foreground`, `warning`, `error`, …) or a computed colour such as `{{ darken (color "primary") 2 }}`; a segment that authors no `bg` wears the theme's decorative tint for its position. Color math runs through OKLCH for perceptual uniformity.
+The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`) — or a template evaluated every render, so the theme can follow live data. Each segment may override with its own `palette:` field, and `bg`/`fg` take a palette colour name (`primary`, `surface`, `panel`, `accent`, `foreground`, `warning`, `error`, …) or a computed colour such as `{{ darken (color "primary") 2 }}`; a segment that authors no `bg` wears the theme's decorative tint for its position. Color math runs through OKLCH for perceptual uniformity.
 
 ## Installation
 

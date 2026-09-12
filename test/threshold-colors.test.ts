@@ -20,6 +20,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;
@@ -161,13 +162,19 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 };
 
+// The theme is named rather than handed over as a Palette: renderDsl resolves it
+// from the SELECTION now (brandon-themes-dzl), so a name is the whole input and
+// the palette the expectations read is built from that same name.
 function renderOne(
   c: Case,
   value: number,
-  palette: Palette,
+  themeName: string,
   onSegmentError?: (segName: string, message: string) => void,
 ): string {
-  const narrowed = narrowToSegment(parseAndValidate("<default>", SERIALIZED), c.segment);
+  const narrowed = narrowToSegment(
+    parseAndValidate("<default>", SERIALIZED),
+    c.segment,
+  );
   const one = {
     ...narrowed,
     variables: {
@@ -190,9 +197,9 @@ function renderOne(
       store,
       registry,
       { ...HOOK, ...c.payload(value) },
-      palette,
       OPTS,
       { onSegmentError },
+      { theme: resolveThemeSelection(undefined, null, themeName) },
     );
   } finally {
     registry.dispose();
@@ -245,7 +252,7 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
     test.each(c.rows)(
       `${c.segment} ${varLabel} at $value wears bg=$bg fg=$fg`,
       (row) => {
-        const rendered = renderOne(c, row.value, palette);
+        const rendered = renderOne(c, row.value, paletteName);
         expect(cellColors(rendered, c.glyph)).toEqual(expected(palette, row));
       },
     );
@@ -258,24 +265,45 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
 // positions, so the user can see which two knobs to move together.
 describe("a threshold below its neighbour is a loud render error", () => {
   const palette = getThemePalette("textual-dark")!;
-  const INVERTED: readonly { segment: string; vars: Readonly<Record<string, number>>; pair: string }[] = [
-    { segment: "block", vars: { "block.budget.warningThreshold": 30 }, pair: "stop 2 at 30 follows stop 1 at 50" },
-    { segment: "weekly", vars: { "weekly.budget.warningThreshold": 30 }, pair: "stop 2 at 30 follows stop 1 at 50" },
-    { segment: "burnrate", vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 90 }, pair: "stop 3 at 60 follows stop 2 at 90" },
+  const INVERTED: readonly {
+    segment: string;
+    vars: Readonly<Record<string, number>>;
+    pair: string;
+  }[] = [
+    {
+      segment: "block",
+      vars: { "block.budget.warningThreshold": 30 },
+      pair: "stop 2 at 30 follows stop 1 at 50",
+    },
+    {
+      segment: "weekly",
+      vars: { "weekly.budget.warningThreshold": 30 },
+      pair: "stop 2 at 30 follows stop 1 at 50",
+    },
+    {
+      segment: "burnrate",
+      vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 90 },
+      pair: "stop 3 at 60 follows stop 2 at 90",
+    },
   ];
-  test.each(INVERTED)("$segment $vars names both positions", ({ segment, vars, pair }) => {
-    // The found case lends its payload and glyph; `vars` are this row's own,
-    // over the bundled defaults, so the pair inverts exactly as stated.
-    const c = CASES.find((x) => x.segment === segment)!;
-    const errors: string[] = [];
-    const rendered = renderOne(
-      { ...c, vars },
-      60,
-      palette,
-      (name, message) => errors.push(`${name}: ${message}`),
-    );
-    expect(rendered).toContain("⚠");
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(new RegExp(`^${segment}: .*ascending position order; ${pair}`));
-  });
+  test.each(INVERTED)(
+    "$segment $vars names both positions",
+    ({ segment, vars, pair }) => {
+      // The found case lends its payload and glyph; `vars` are this row's own,
+      // over the bundled defaults, so the pair inverts exactly as stated.
+      const c = CASES.find((x) => x.segment === segment)!;
+      const errors: string[] = [];
+      const rendered = renderOne(
+        { ...c, vars },
+        60,
+        "textual-dark",
+        (name, message) => errors.push(`${name}: ${message}`),
+      );
+      expect(rendered).toContain("⚠");
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(
+        new RegExp(`^${segment}: .*ascending position order; ${pair}`),
+      );
+    },
+  );
 });

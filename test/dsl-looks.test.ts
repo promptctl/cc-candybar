@@ -33,8 +33,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import {
   decideLookName,
-  effectiveThemeName,
-  paletteForThemeName,
+  resolveThemeSelection,
   resolveLookSelection,
 } from "../src/themes";
 
@@ -218,7 +217,6 @@ describe('from: "looks" — rendered options and the derived gate share the conf
         store,
         registry,
         { session_id: SID },
-        paletteForThemeName(THEME),
         OPTS,
       );
       // Each look name appears as a clickable region writing itself to `look` —
@@ -235,7 +233,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
 // ─── Live recolor: the whole loop, composing with the theme ───────────────────
 
 // Mirrors the daemon's per-render resolution verbatim (server.ts): basePalette
-// from effectiveThemeName, the look ThemeKey from effectiveLookName →
+// from resolveThemeSelection, the look ThemeKey from effectiveLookName →
 // lookKeyByName, threaded into renderDsl. The click drives the REAL wire.
 describe("look click — live whole-bar recolor over the active theme", () => {
   const SRC = `{
@@ -266,11 +264,10 @@ describe("look click — live whole-bar recolor over the active theme", () => {
       registerStateValidator(key, spec),
     );
     const render = (): string => {
-      const basePalette = paletteForThemeName(
-        effectiveThemeName(undefined, 
-          sessionState.get(SID, "theme"),
-          config.globals.palette,
-        ),
+      const theme = resolveThemeSelection(
+        undefined,
+        sessionState.get(SID, "theme"),
+        config.globals.palette,
       );
       const look = resolveLookSelection(
         undefined,
@@ -284,10 +281,9 @@ describe("look click — live whole-bar recolor over the active theme", () => {
         store,
         registry,
         { session_id: SID },
-        basePalette,
         OPTS,
         undefined,
-        { look },
+        { theme, look },
       );
     };
     const dispose = (): void => {
@@ -416,9 +412,6 @@ describe("globals.look as an expression — a look chosen by data", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct }, look: { effective: "none" } },
-        paletteForThemeName(
-          effectiveThemeName(undefined, sessionState.get(SID, "theme"), config.globals.palette),
-        ),
         OPTS,
         undefined,
         {
@@ -532,14 +525,19 @@ describe("globals.look as an expression — a look chosen by data", () => {
   // `looks` merges BY NAME, so a user's own `none` is authorable and IS the floor;
   // without this case the lookup could be deleted and no test would notice.
   test("the floor is the config's own `none`, not a hardcoded identity", () => {
-    const OWN_FLOOR = SRC.replace("none: {},", "none: { lightnessScale: -1, lightnessShift: 1 },");
+    const OWN_FLOOR = SRC.replace(
+      "none: {},",
+      "none: { lightnessScale: -1, lightnessShift: 1 },",
+    );
     // An expression naming no declared look collapses to the floor — and the
     // floor here is a real transformation, so the bar must actually wear it.
     const { render, dispose } = buildRuntime(
       OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ "vapor" }}',`),
     );
     // The same bar with `none` named outright: the floor's own colour.
-    const ref = buildRuntime(OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`));
+    const ref = buildRuntime(
+      OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`),
+    );
     try {
       expect(bgOf(render(90), "◆ here")).toBe(bgOf(ref.render(0), "◆ here"));
       // And it is NOT the identity — which is what makes the assertion above
@@ -548,7 +546,9 @@ describe("globals.look as an expression — a look chosen by data", () => {
         SRC.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`),
       );
       try {
-        expect(bgOf(render(90), "◆ here")).not.toBe(bgOf(identity.render(0), "◆ here"));
+        expect(bgOf(render(90), "◆ here")).not.toBe(
+          bgOf(identity.render(0), "◆ here"),
+        );
       } finally {
         identity.dispose();
       }
@@ -591,10 +591,16 @@ describe("globals.look as an expression — a look chosen by data", () => {
   // heard about at render, on every render.
   test("an expression is exempt from the membership cross-ref; a plain non-member still is not", () => {
     const withExpr = mergeWithDefault(
-      parseDslConfig("<looks-expr>", `{ globals: { look: '{{ .x }}' } }`, ALLOWED),
+      parseDslConfig(
+        "<looks-expr>",
+        `{ globals: { look: '{{ .x }}' } }`,
+        ALLOWED,
+      ),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(withExpr, "<looks-expr>", "", ALLOWED)).not.toThrow();
+    expect(() =>
+      validateConfig(withExpr, "<looks-expr>", "", ALLOWED),
+    ).not.toThrow();
     const withName = mergeWithDefault(
       parseDslConfig("<looks-expr>", `{ globals: { look: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
@@ -611,9 +617,16 @@ describe("globals.look as an expression — a look chosen by data", () => {
       ALLOWED,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     try {
-      expect(() => registerDslConfig(config, registry)).toThrow(/globals\.look/);
+      expect(() => registerDslConfig(config, registry)).toThrow(
+        /globals\.look/,
+      );
     } finally {
       registry.dispose();
     }
@@ -625,7 +638,12 @@ describe("globals.look as an expression — a look chosen by data", () => {
 describe("resolveLookSelection", () => {
   const LOOKS = {
     none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
-    vivid: { hueShift: 0, chromaScale: 1.5, lightnessScale: 1, lightnessShift: 0 },
+    vivid: {
+      hueShift: 0,
+      chromaScale: 1.5,
+      lightnessScale: 1,
+      lightnessShift: 0,
+    },
   };
   const EXPR = "{{ .a }}";
 
@@ -633,7 +651,7 @@ describe("resolveLookSelection", () => {
     expect(resolveLookSelection(undefined, null, "vivid", LOOKS)).toEqual({
       kind: "decided",
       name: "vivid",
-      key: LOOKS.vivid,
+      value: LOOKS.vivid,
     });
   });
 
@@ -647,18 +665,18 @@ describe("resolveLookSelection", () => {
     expect(resolveLookSelection(undefined, "vivid", EXPR, LOOKS)).toEqual({
       kind: "decided",
       name: "vivid",
-      key: LOOKS.vivid,
+      value: LOOKS.vivid,
     });
     expect(resolveLookSelection(undefined, "none", EXPR, LOOKS)).toEqual({
       kind: "decided",
       name: "none",
-      key: LOOKS.none,
+      value: LOOKS.none,
     });
     // A staged fragment is the rightmost rung and decides over both.
     expect(resolveLookSelection("vivid", null, EXPR, LOOKS)).toEqual({
       kind: "decided",
       name: "vivid",
-      key: LOOKS.vivid,
+      value: LOOKS.vivid,
     });
   });
 
@@ -672,7 +690,7 @@ describe("resolveLookSelection", () => {
     expect(resolveLookSelection(undefined, "vapor", undefined, LOOKS)).toEqual({
       kind: "decided",
       name: "none",
-      key: LOOKS.none,
+      value: LOOKS.none,
     });
   });
 });
