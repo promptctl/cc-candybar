@@ -11,6 +11,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import type { GitDataProvider } from "../src/daemon/cache/git";
 import { buildScope } from "../src/template-engine/scope";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
@@ -1278,7 +1279,14 @@ async function makeGitRepo(): Promise<{ dir: string; cleanup: () => void }> {
   return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
-function settleGit(ms = 350): Promise<void> {
+// [LAW:no-ambient-temporal-coupling] A wait for a delivery NOTHING promises: a
+// watcher-driven refresh after a real `git checkout`/`git add`, where the fs
+// event, the debounce and the re-fetch are all outside this process's control.
+// Every FIRST delivery is awaited through `registry.settled()` instead — the
+// registry's own "every async source has completed" state, which covers a git
+// subscription since brandon-check-settle-dt7 — so a sleep survives here only
+// for the case that genuinely has no handle to await.
+function settleGit(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
@@ -1288,7 +1296,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("b", { field: "branch", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("b")).toBe("string");
       registry.dispose();
     } finally { cleanup(); }
@@ -1299,7 +1307,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("s", { field: "sha", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("s")).toBe("string");
       registry.dispose();
     } finally { cleanup(); }
@@ -1310,7 +1318,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("d", { field: "dirty", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("d")).toBe("boolean");
       registry.dispose();
     } finally { cleanup(); }
@@ -1321,7 +1329,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("a", { field: "ahead", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("a")).toBe("number");
       registry.dispose();
     } finally { cleanup(); }
@@ -1332,7 +1340,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("bh", { field: "behind", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("bh")).toBe("number");
       registry.dispose();
     } finally { cleanup(); }
@@ -1343,7 +1351,7 @@ describe("SourceRegistry — git: field types", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("st", { field: "stash", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.getType("st")).toBe("number");
       registry.dispose();
     } finally { cleanup(); }
@@ -1356,7 +1364,7 @@ describe("SourceRegistry — git: field values", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("branch", { field: "branch", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("branch")).toBe("main");
       registry.dispose();
     } finally { cleanup(); }
@@ -1367,7 +1375,7 @@ describe("SourceRegistry — git: field values", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("sha", { field: "sha", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("sha")).toMatch(/^[0-9a-f]{7}$/);
       registry.dispose();
     } finally { cleanup(); }
@@ -1378,7 +1386,7 @@ describe("SourceRegistry — git: field values", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("dirty", { field: "dirty", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("dirty")).toBe(false);
       registry.dispose();
     } finally { cleanup(); }
@@ -1390,7 +1398,7 @@ describe("SourceRegistry — git: field values", () => {
       fs.writeFileSync(path.join(dir, "untracked.txt"), "dirt\n");
       const { store, registry } = make();
       registry.declareGit("dirty", { field: "dirty", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("dirty")).toBe(true);
       registry.dispose();
     } finally { cleanup(); }
@@ -1402,7 +1410,7 @@ describe("SourceRegistry — git: field values", () => {
       const { store, registry } = make();
       registry.declareGit("ah", { field: "ahead", cwd: dir });
       registry.declareGit("bh", { field: "behind", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("ah")).toBe(0);
       expect(store.read("bh")).toBe(0);
       registry.dispose();
@@ -1414,7 +1422,7 @@ describe("SourceRegistry — git: field values", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("st", { field: "stash", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("st")).toBe(0);
       registry.dispose();
     } finally { cleanup(); }
@@ -1428,7 +1436,7 @@ describe("SourceRegistry — git: field values", () => {
       execSync("git stash", { cwd: dir, stdio: "pipe" });
       const { store, registry } = make();
       registry.declareGit("st", { field: "stash", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("st")).toBe(1);
       registry.dispose();
     } finally { cleanup(); }
@@ -1445,7 +1453,7 @@ describe("SourceRegistry — git: failure fallback", () => {
         cwd: dir,
         varDefault: "no-repo",
       });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("branch")).toBe("no-repo");
       registry.dispose();
     } finally { cleanup(); }
@@ -1458,7 +1466,7 @@ describe("SourceRegistry — git: failure fallback", () => {
       registry.declareGit("dirty", { field: "dirty", cwd: dir });
       registry.declareGit("ahead", { field: "ahead", cwd: dir });
       registry.declareGit("branch", { field: "branch", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("dirty")).toBe(false);
       expect(store.read("ahead")).toBe(0);
       expect(store.read("branch")).toBe("");
@@ -1473,7 +1481,7 @@ describe("SourceRegistry — git: watch trigger invalidation", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("branch", { field: "branch", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("branch")).toBe("main");
 
       execSync("git checkout -b new-feature", { cwd: dir, stdio: "pipe" });
@@ -1489,7 +1497,7 @@ describe("SourceRegistry — git: watch trigger invalidation", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("dirty", { field: "dirty", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("dirty")).toBe(false);
 
       fs.writeFileSync(path.join(dir, "new.txt"), "content\n");
@@ -1510,7 +1518,7 @@ describe("SourceRegistry — git: shared poller per cwd", () => {
       registry.declareGit("branch", { field: "branch", cwd: dir });
       registry.declareGit("dirty", { field: "dirty", cwd: dir });
       registry.declareGit("sha", { field: "sha", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
 
       const sha1 = store.read("sha") as string;
       expect(store.read("branch")).toBe("main");
@@ -1536,7 +1544,7 @@ describe("SourceRegistry — git: shared poller per cwd", () => {
     try {
       const { store, registry } = make();
       registry.declareGit("branch", { field: "branch", cwd: dir });
-      await settleGit();
+      await registry.settled(2000);
       expect(store.read("branch")).toBe("main");
 
       registry.dispose();
@@ -1852,6 +1860,55 @@ describe("SourceRegistry — in-flight runs", () => {
     } finally {
       cleanup();
     }
+  });
+
+  // brandon-check-settle-dt7. `inFlight` was populated by runSource alone, so
+  // settled() was total over shell/file sources and silently blind to a git
+  // subscription — and `cc-candybar check`, whose whole reason for awaiting it is
+  // to render what the sources yielded, printed a branchless bar and reported
+  // nothing outstanding. These two pin both arms: the delivery is waited for, and
+  // a delivery that has not landed is NAMED.
+  it("settled() waits for a git subscription's first delivery: the real branch, not the declare-time zero", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      registry.declareGit("sha", { field: "sha", cwd: dir });
+      // The box is valid and typed from the moment it is declared — and empty.
+      // This is exactly what a one-shot render used to print, because nothing
+      // told it the real value was still on its way.
+      expect(store.read("branch")).toBe("");
+
+      expect(await registry.settled(3000)).toEqual([]);
+
+      expect(store.read("branch")).toBe("main");
+      expect(store.read("sha")).toMatch(/^[0-9a-f]{7}$/);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("settled() names every git variable whose first delivery is still out at the deadline", async () => {
+    // A provider that never delivers. The subject here is the DEADLINE arm, and
+    // a real provider cannot be held open on demand — so the one thing declareGit
+    // asks of a provider is supplied directly.
+    const neverDelivers = {
+      subscribe: () => ({
+        firstDelivery: new Promise<void>(() => {}),
+        unsubscribe: () => {},
+      }),
+    } as unknown as GitDataProvider;
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", neverDelivers);
+
+    registry.declareGit("branch", { field: "branch", cwd: "/repo" });
+    registry.declareGit("sha", { field: "sha", cwd: "/repo" });
+
+    // Both fields ride ONE subscription and both names come back: what a caller
+    // can act on is which VARIABLES are unresolved, not which subscription is.
+    expect(await registry.settled(50)).toEqual(["branch", "sha"]);
+    registry.dispose();
   });
 
   it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {

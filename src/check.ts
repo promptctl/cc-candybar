@@ -48,9 +48,10 @@ import {
 // layout, never diagnostics.
 const CHECK_WIDTH = 200;
 
-// How long the verdict waits for a shell/file source's first run before
-// rendering with whatever it holds (and naming the stragglers as a warning).
-// Generous against a slow `uptime`, short against a hung command.
+// How long the verdict waits for an async source's first run — a shell or file
+// read, a git subscription's first delivery — before rendering with whatever it
+// holds (and naming the stragglers as a warning). Generous against a slow
+// `uptime`, short against a hung command.
 const SOURCE_SETTLE_MS = 5000;
 
 // One faked Claude Code hook event, shaped like the daemon's augmented payload
@@ -319,8 +320,9 @@ async function loadRegisterRender(
     // Registered before the validator pass so a derive throw (a key-kind
     // clash) still carries the partial-load warnings into the fatal outcome.
     warnings.push(...compiled.loadWarnings);
-    // [LAW:no-ambient-temporal-coupling] A shell/file source's first run is
-    // async; the verdict renders what the sources YIELDED, not their pre-scan
+    // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
+    // or file read, a git subscription's first delivery — completes after
+    // registration; the verdict renders what the sources YIELDED, not their pre-scan
     // fallbacks (a json document with no default is an error cell until it is
     // scanned — exactly what an author must see). The registry owns the
     // "every run complete" state; a source still out at the deadline is named

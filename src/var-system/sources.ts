@@ -569,6 +569,10 @@ export class SourceRegistry {
         GitField,
         Array<{ name: string; varDefault: VarValue | undefined }>
       >;
+      // The subscription's first delivery, kept because every field declared
+      // for this cwd — including ones declared after the subscription was
+      // opened — registers it as its own in-flight work. One promise, N names.
+      firstDelivery: Promise<void>;
       unsubscribe: () => void;
     }
   >();
@@ -789,23 +793,34 @@ export class SourceRegistry {
     // [LAW:no-silent-failure] A cancelled read publishes nothing; the
     // registry's own abort is the one rejection a run may end in. Any other
     // rejection is a bug and stays unhandled — loud.
-    const run = reader
-      .read()
-      .then(publish, (err: unknown) => {
+    this.track(
+      name,
+      reader.read().then(publish, (err: unknown) => {
         if (err !== this.abort.signal.reason) throw err;
-      })
-      .finally(() => this.inFlight.delete(name));
-    this.inFlight.set(name, run);
+      }),
+    );
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every shell/file run
-  // in flight — and every run one of them triggered (a `depends_on`
-  // reaction fires inside a publish) — has completed, or at the deadline.
-  // The value is the names still in flight: empty when all settled. This is
-  // the state a one-shot render (`cc-candybar check`) awaits so it renders
-  // what those sources yielded, never a guessed delay; the registry owns the
-  // timer, so no caller races one of its own. A git subscription's first
-  // delivery is not a run here: `check` renders a git box as declared.
+  // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
+  // pending work enters here and leaves when it completes, so "which sources
+  // are still out" has a single mechanism rather than one per source kind.
+  // Several names may share one promise (every git field of a cwd rides one
+  // subscription); each gets its own entry and clears independently.
+  private track(name: string, work: Promise<void>): void {
+    this.inFlight.set(
+      name,
+      work.finally(() => this.inFlight.delete(name)),
+    );
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
+  // pending work — a shell/file run, a git subscription's first delivery, and
+  // every run one of them triggered (a `depends_on` reaction fires inside a
+  // publish) — has completed, or at the deadline. The value is the names still
+  // in flight: empty when all settled. This is the state a one-shot render
+  // (`cc-candybar check`) awaits so it renders what those sources yielded,
+  // never a guessed delay; the registry owns the timer, so no caller races one
+  // of its own.
   async settled(withinMs: number): Promise<readonly string[]> {
     const deadline = Date.now() + withinMs;
     while (this.inFlight.size > 0) {
@@ -918,7 +933,7 @@ export class SourceRegistry {
         GitField,
         Array<{ name: string; varDefault: VarValue | undefined }>
       >();
-      const unsubscribe = this.gitProvider.subscribe(opts.cwd, (info) => {
+      const subscription = this.gitProvider.subscribe(opts.cwd, (info) => {
         // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
         // snapshot value decides each box's content, not whether code runs.
         this.store.runInAction(() => {
@@ -937,7 +952,11 @@ export class SourceRegistry {
           }
         });
       });
-      sub = { fieldSubs, unsubscribe };
+      sub = {
+        fieldSubs,
+        firstDelivery: subscription.firstDelivery,
+        unsubscribe: subscription.unsubscribe,
+      };
       this.gitSubscriptions.set(opts.cwd, sub);
     }
 
@@ -947,6 +966,14 @@ export class SourceRegistry {
       sub.fieldSubs.set(opts.field, fieldList);
     }
     fieldList.push({ name, varDefault: opts.varDefault });
+    // [LAW:one-source-of-truth] `inFlight` is the one answer to "is any source
+    // still working", so a git box's first delivery belongs in it exactly as a
+    // shell run does — otherwise `settled()` is total over one KIND of async
+    // source and silently partial over the other, which is what made
+    // `cc-candybar check` print a branchless bar and report nothing pending.
+    // The box already holds a valid typed value, so this changes no render: it
+    // only makes the wait honest.
+    this.track(name, sub.firstDelivery);
   }
 
   // state: read-through to SessionState. The computed reads two deps — the

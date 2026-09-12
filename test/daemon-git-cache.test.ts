@@ -275,18 +275,25 @@ async function tick(times = 1): Promise<void> {
   }
 }
 
+// [LAW:no-ambient-temporal-coupling] The first delivery is awaited through the
+// subscription's own `firstDelivery`, never through a count of setImmediates:
+// "the initial snapshot has landed" is a state the provider publishes, so these
+// tests assert against it instead of betting on how many ticks the resolve +
+// fetch chain happens to take. `tick()` survives only where the wait is for a
+// delivery the provider does NOT promise — a post-invalidation refresh, whose
+// arrival has no such handle (and whose own seam is brandon-var-sources-tex).
 describe("GitDataProvider.subscribe", () => {
   test("delivers initial snapshot once", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
-    await tick();
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    await sub.firstDelivery;
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ branch: "main", status: "clean" });
-    unsub();
+    sub.unsubscribe();
   });
 
   test("delivers null once for non-repo cwd; no watcher held", async () => {
@@ -294,13 +301,13 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/nowhere": null };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/nowhere", (info) => calls.push(info));
-    await tick();
+    const sub = svc.subscribe("/nowhere", (info) => calls.push(info));
+    await sub.firstDelivery;
 
     expect(calls).toEqual([null]);
     // No subscriber registered → no watcher acquired.
     expect(svc.getStats().watchers).toBe(0);
-    unsub();
+    sub.unsubscribe();
   });
 
   test("invalidateRepo refreshes subscribers", async () => {
@@ -308,8 +315,8 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
-    await tick();
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    await sub.firstDelivery;
     expect(calls).toHaveLength(1);
 
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
@@ -318,23 +325,23 @@ describe("GitDataProvider.subscribe", () => {
 
     expect(calls).toHaveLength(2);
     expect(calls[1]).toMatchObject({ branch: "feature" });
-    unsub();
+    sub.unsubscribe();
   });
 
   test("multiple subscribers in same repo share one watcher slot", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
 
-    const unsubA = svc.subscribe("/repo/a", () => {});
-    const unsubB = svc.subscribe("/repo/b", () => {});
-    await tick();
+    const subA = svc.subscribe("/repo/a", () => {});
+    const subB = svc.subscribe("/repo/b", () => {});
+    await Promise.all([subA.firstDelivery, subB.firstDelivery]);
 
     // Both subscribers acquire the same key "git:/repo"; refcount = 2 inside
     // one slot. The cache's getInfo path also acquires the same key — slot
     // count, not refcount, is the right metric.
     expect(svc.getStats().watchers).toBe(1);
-    unsubA();
-    unsubB();
+    subA.unsubscribe();
+    subB.unsubscribe();
   });
 
   test("unsubscribe before delivery suppresses the callback", async () => {
@@ -342,9 +349,11 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
-    unsub();
-    await tick();
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    sub.unsubscribe();
+    // A suppressed delivery still SETTLES — nothing is left outstanding once the
+    // subscriber is gone, which is what lets `settled()` clear its name.
+    await sub.firstDelivery;
 
     expect(calls).toHaveLength(0);
   });
@@ -354,30 +363,37 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const goodCalls: Array<GitInfo | null> = [];
-    const unsubBad = svc.subscribe("/repo", () => {
+    const bad = svc.subscribe("/repo", () => {
       throw new Error("bad subscriber");
     });
-    const unsubGood = svc.subscribe("/repo", (info) => goodCalls.push(info));
-    await tick();
+    const good = svc.subscribe("/repo", (info) => goodCalls.push(info));
+    await Promise.all([bad.firstDelivery, good.firstDelivery]);
 
     // The throwing subscriber must not prevent later notifications.
     expect(goodCalls).toHaveLength(1);
     expect(goodCalls[0]).toMatchObject({ branch: "main" });
-    unsubBad();
-    unsubGood();
+    bad.unsubscribe();
+    good.unsubscribe();
   });
 
   test("subscriber throwing on null delivery does not crash", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
-    expect(() => {
-      const unsub = svc.subscribe("/nowhere", () => {
-        throw new Error("bad subscriber");
-      });
-      unsub();
-    }).not.toThrow();
-    await tick();
+    // The throwing subscriber has to actually RECEIVE the null delivery for this
+    // to prove anything, and awaiting firstDelivery is what makes it: the
+    // previous shape unsubscribed first, so the callback never ran and the test
+    // asserted only that two synchronous calls did not throw.
+    const bad = svc.subscribe("/nowhere", () => {
+      throw new Error("bad subscriber");
+    });
+    const seen: Array<GitInfo | null> = [];
+    const good = svc.subscribe("/nowhere", (info) => seen.push(info));
+    await Promise.all([bad.firstDelivery, good.firstDelivery]);
+
+    expect(seen).toEqual([null]);
+    bad.unsubscribe();
+    good.unsubscribe();
   });
 
   test("unsubscribe during invalidation prevents stale delivery", async () => {
@@ -385,14 +401,14 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
-    await tick();
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    await sub.firstDelivery;
     expect(calls).toHaveLength(1); // initial
 
     // Schedule invalidation; unsubscribe before the async refresh delivers.
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.invalidateRepo("/repo");
-    unsub();
+    sub.unsubscribe();
     await tick();
 
     expect(calls).toHaveLength(1); // no post-unsubscribe delivery
@@ -402,8 +418,8 @@ describe("GitDataProvider.subscribe", () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    const unsub = svc.subscribe("/repo", () => {});
-    await tick();
+    const sub = svc.subscribe("/repo", () => {});
+    await sub.firstDelivery;
     // Subscribe resolves once.
     expect(inner.resolveCalls.length).toBe(1);
 
@@ -415,7 +431,7 @@ describe("GitDataProvider.subscribe", () => {
 
     // Still 1 — refreshes used the stored repoRoot.
     expect(inner.resolveCalls.length).toBe(1);
-    unsub();
+    sub.unsubscribe();
   });
 
   test("rapid invalidations coalesce into at most two refreshes", async () => {
@@ -423,8 +439,8 @@ describe("GitDataProvider.subscribe", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const calls: Array<GitInfo | null> = [];
-    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
-    await tick();
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    await sub.firstDelivery;
     expect(calls).toHaveLength(1); // initial
     const initialComputeCalls = inner.computeCalls.length;
 
@@ -440,7 +456,7 @@ describe("GitDataProvider.subscribe", () => {
     expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
       2,
     );
-    unsub();
+    sub.unsubscribe();
   });
 });
 

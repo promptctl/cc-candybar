@@ -90,6 +90,25 @@ type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
 
 type SubscribeCallback = (info: GitInfo | null) => void;
 
+// [LAW:types-are-the-program] subscribe() starts work that finishes later, so
+// what it returns carries both facts about that work: how to stop listening, and
+// when the first snapshot has actually landed. A bare `() => void` left the
+// second one unrepresentable, and every consumer that needed it had to guess —
+// `cc-candybar check` rendered git boxes at their declare-time zero and reported
+// nothing outstanding, and the provider's own tests awaited a count of
+// setImmediates (brandon-check-settle-dt7).
+export interface GitSubscription {
+  // Resolves once the first delivery is done — after gitDir resolution and the
+  // first fetch, and equally after the single `null` delivery for a cwd that is
+  // not a repo, or immediately if the caller unsubscribed before either. It is
+  // the *completion* of that delivery, never a promise of the snapshot:
+  // subscribers read values through the callback, and keeping the first delivery
+  // on the same path as every later one is what makes them one mechanism
+  // [LAW:one-source-of-truth].
+  readonly firstDelivery: Promise<void>;
+  readonly unsubscribe: () => void;
+}
+
 interface RepoSubscribers {
   // The effective gitDir is the cache + watcher identity; subscribers
   // register with a working directory but we resolve to gitDir once at
@@ -433,13 +452,14 @@ export class GitDataProvider extends GitService {
   // Initial delivery is asynchronous: subscribe() returns immediately, but
   // the callback fires *after* both gitDir resolution and the first fetch
   // settle (the fetch can include a `git status` shell-out on a cold cache).
-  // It is **not** a same-tick or microtask delivery — consumers should not
-  // rely on the box value changing before the next render scheduling tick.
-  subscribe(workingDir: string, callback: SubscribeCallback): () => void {
+  // It is **not** a same-tick or microtask delivery — so a consumer that needs
+  // to know when it happened awaits the returned `firstDelivery` rather than
+  // counting ticks.
+  subscribe(workingDir: string, callback: SubscribeCallback): GitSubscription {
     let unsubscribed = false;
     let attached: { repoRoot: string; entry: RepoSubscribers } | null = null;
 
-    void (async () => {
+    const firstDelivery = (async () => {
       // Resolve once at subscribe time using the same logic the pull surface
       // uses. var-system's declareGit doesn't pass projectDir, but going
       // through resolveEffectiveGitDir keeps the cache-key derivation
@@ -493,15 +513,18 @@ export class GitDataProvider extends GitService {
       this.safeInvoke(callback, this.deliverable(initial, repoRoot));
     })();
 
-    return () => {
-      unsubscribed = true;
-      if (!attached) return;
-      const { repoRoot, entry } = attached;
-      entry.callbacks.delete(callback);
-      if (entry.callbacks.size === 0) {
-        entry.watcher.release();
-        this.subscribersByRepo.delete(repoRoot);
-      }
+    return {
+      firstDelivery,
+      unsubscribe: () => {
+        unsubscribed = true;
+        if (!attached) return;
+        const { repoRoot, entry } = attached;
+        entry.callbacks.delete(callback);
+        if (entry.callbacks.size === 0) {
+          entry.watcher.release();
+          this.subscribersByRepo.delete(repoRoot);
+        }
+      },
     };
   }
 
