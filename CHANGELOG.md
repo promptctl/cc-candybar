@@ -1,3 +1,10 @@
+# [1.64.0](https://github.com/promptctl/cc-candybar/compare/v1.63.0...v1.64.0) (2026-09-12)
+
+
+### Features
+
+* **limits:** a breach records where the memory actually was, not just the heap half (brandon-daemon-limits-inw) ([e4727ca](https://github.com/promptctl/cc-candybar/commit/e4727ca0f293752dae28c01c6d60d699c0259d1f))
+
 # [1.63.0](https://github.com/promptctl/cc-candybar/compare/v1.62.1...v1.63.0) (2026-09-12)
 
 
