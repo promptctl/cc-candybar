@@ -39,6 +39,7 @@ import {
   menuPageKey,
   menuStateKey,
   parseMenuOptions,
+  sharedMenuStateKey,
   type MenuOptions,
 } from "../menu-keys.js";
 import {
@@ -53,7 +54,11 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
-import { MENU_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
+import {
+  MENU_NS,
+  reservedNamespaceCollisions,
+  reservedNamespaceOf,
+} from "./reserved-namespace.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -164,15 +169,37 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
       `whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`,
     );
   }
+  let options: MenuOptions;
   try {
-    return {
-      kind: "ok",
-      apply: applyArg.value,
-      options: parseMenuOptions(entries),
-    };
+    options = parseMenuOptions(entries);
   } catch (e) {
     return issue(`with invalid options — ${(e as Error).message}`);
   }
+  // [LAW:no-silent-failure] An accordion key is the one authored name that never
+  // becomes a declaration, so `reservedNamespaceCollisions` cannot see it — and
+  // `menuStateKey` collapses it through `ident()`, which is where a reserved
+  // namespace leaks: every spelling of `settings.pickers` collapses to the state
+  // key the settings menu's picker accordion mints, and a shared key joining an
+  // accordion is the mechanism BY DESIGN, so the join was silent (brandon-menus-du8).
+  // Gated here, at load, because this pass sees exactly the AUTHORED menus: the
+  // settings menu synthesizes its own artifacts in `validateConfig`, after this
+  // pass has run, so its own reserved key is never asked to pass its own gate.
+  // The render side re-reads these options but re-checks nothing — a config that
+  // loaded holds no reserved key [LAW:parse-dont-validate].
+  const sharedKey = options.key;
+  if (sharedKey !== undefined) {
+    const reserved = reservedNamespaceOf(sharedKey);
+    if (reserved !== undefined) {
+      return issue(
+        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace — ` +
+          `a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes ` +
+          `"${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the ` +
+          `synthesized accordion that owns that namespace instead of grouping only your own menus. ` +
+          `Name the group without the reserved prefix`,
+      );
+    }
+  }
+  return { kind: "ok", apply: applyArg.value, options };
 }
 
 // [LAW:no-defensive-null-guards] A bare engine purely for AST introspection: it

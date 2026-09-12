@@ -55,8 +55,19 @@ export function menuStateKey(
   sharedKey: string | undefined,
 ): string {
   return sharedKey !== undefined
-    ? MENU_NS + ident(sharedKey)
+    ? sharedMenuStateKey(sharedKey)
     : MENU_NS + ident(segName) + "." + ident(applyName);
+}
+
+// [LAW:decomposition] The shared arm of that derivation, named so the loader's
+// reserved-key error can quote the key an authored group WOULD derive without
+// inventing a segment and apply name to ask for it (brandon-menus-du8). It is the
+// arm `menuStateKey` itself takes, so there is no second spelling to drift: the
+// `ident()` collapse here is exactly the one the gate reasons about, and the two
+// ranges are disjoint by construction — a shared key holds no dot after the
+// namespace, an independent one holds exactly one.
+export function sharedMenuStateKey(sharedKey: string): string {
+  return MENU_NS + ident(sharedKey);
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its
