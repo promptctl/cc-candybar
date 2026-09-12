@@ -1,3 +1,10 @@
+## [1.61.2](https://github.com/promptctl/cc-candybar/compare/v1.61.1...v1.61.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **var-system:** a re-trigger during a read re-reads instead of being dropped (brandon-var-sources-tex) ([bfd46dd](https://github.com/promptctl/cc-candybar/commit/bfd46dd457569497c1bbd8404334aecb09c19cd0))
+
 ## [1.61.1](https://github.com/promptctl/cc-candybar/compare/v1.61.0...v1.61.1) (2026-09-12)
 
 
