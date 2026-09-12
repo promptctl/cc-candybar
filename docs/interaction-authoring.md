@@ -12,13 +12,16 @@
 
 # Interaction authoring: actions, menus, groups
 
-You are authoring a cc-candybar config **you cannot see rendered**. Every
-mistake you make either becomes a load error (text you can read) or a wrong
-pixel (which you cannot). This surface is designed so that the mistakes that
-matter are load errors. Your loop:
+You are authoring a cc-candybar config for a bar you **read rather than look
+at**: `cc-candybar check --render` prints what it renders, so the rows, the
+glyphs and the content come back as text you can read, while a wrong colour
+reaches you only as the escape bytes around them. Every other mistake either
+becomes a load error (text you can read) or a wrong pixel (which you cannot).
+This surface is designed so that the mistakes that matter are load errors.
+Your loop:
 
 ```
-edit config  →  cc-candybar check <path>  →  read exit code + stderr  →  repeat
+edit config  →  cc-candybar check --render <path>  →  read exit code + stderr + bar  →  repeat
 ```
 
 Exit contract:
@@ -34,8 +37,10 @@ the daemon's exact pipeline (parse → merge on the bundled default → validate
 register → render against a rich representative payload), so "check exits 0"
 and "the daemon renders it" are one fact. It also fails (exit 1) when a
 segment's template throws at evaluation — the state a user would see as a `⚠`
-error cell in the bar. `cc-candybar lint` is an alias; `cc-candybar schema`
-prints the JSON Schema.
+error cell in the bar. `--render` prints that bar beneath the verdict — the
+same render the exit code was reached on, so a row you rearranged is something
+you read back rather than guess at (docs/segment-authoring.md shows one).
+`cc-candybar lint` is an alias; `cc-candybar schema` prints the JSON Schema.
 
 A user config **merges onto the bundled default** by name (globals per-field;
 variables/segments/actions/looks/helpers/`root.rows` per-name; a whole tree at

@@ -23,6 +23,7 @@ import {
   type CheckOutcome,
 } from "../src/check";
 import { detectConfigEnv } from "../src/config-hint";
+import { stripAnsi } from "./helpers/daemon-e2e";
 
 let dir: string;
 
@@ -553,6 +554,49 @@ describe("checkPlan — the text/exit-code contract", () => {
     expect(plan.code).toBe(2);
     expect(plan.stderr).toContain("gone.json5");
   });
+
+  // brandon-check-m2a. [LAW:one-source-of-truth] The bar that prints is the
+  // string the verdict was reached on — the same render, not a second one at
+  // some other width, which would let `check` bless one bar and show another.
+  it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
+    const clean: CheckOutcome = {
+      kind: "clean",
+      configPath: "/tmp/x.json5",
+      warnings: [],
+      rendered: " ~/c/x \n Opus 4.8 ",
+    };
+    expect(checkPlan(clean).stdout).toBe("✓ /tmp/x.json5: config OK\n");
+
+    const withBar = checkPlan(clean, true);
+    expect(withBar.stdout).toBe(
+      `✓ /tmp/x.json5: config OK\n${clean.rendered}\n`,
+    );
+    expect(withBar.code).toBe(0);
+    expect(withBar.stderr).toBe("");
+  });
+
+  // [LAW:types-are-the-program] `rendered` lives on the clean arm alone, so
+  // asking for a preview of a config that never rendered cannot print a stale
+  // or partial bar — there is nothing in the value to print.
+  it("--render prints no bar for an outcome that never rendered", () => {
+    expect(
+      checkPlan(
+        {
+          kind: "fatal",
+          configPath: "/tmp/x.json5",
+          message: "broken",
+          warnings: [],
+        },
+        true,
+      ).stdout,
+    ).toBe("");
+    expect(
+      checkPlan(
+        { kind: "unreadable", path: "gone.json5", message: "ENOENT" },
+        true,
+      ).stdout,
+    ).toBe("");
+  });
 });
 
 // `runCheck` is the argv edge: it owns process.exit and the streams, and it is
@@ -610,5 +654,59 @@ describe("runCheck — the argv edge", () => {
     expect(viaEnv.code).toBe(1);
     expect(viaEnv.stderr).toContain(`✗ ${bad}`);
     expect(viaEnv.stderr).toContain('Unknown top-level key "theme"');
+  });
+
+  // brandon-check-m2a — the flag an author reaches for to SEE the bar. The
+  // assertion is the visible text of a segment it declared: proof the bar on
+  // stdout is this config's render, not a fixed banner.
+  it("--render prints the bar the config renders, given before or after the path", async () => {
+    const p = write(
+      "edge-render.json5",
+      `{ segments: { a: { template: 'HELLO-BAR' } }, root: { h: ['a'] } }`,
+    );
+    const before = await run(["--render", p]);
+    expect(before.code).toBe(0);
+    expect(before.stdout).toContain(`✓ ${p}: config OK`);
+    expect(stripAnsi(before.stdout)).toContain("HELLO-BAR");
+
+    // Flag order is not a second contract: one parse, one request.
+    expect((await run([p, "--render"])).stdout).toBe(before.stdout);
+
+    // Opt-in: without the flag the verdict's stdout is what it always was.
+    expect(stripAnsi((await run([p])).stdout)).not.toContain("HELLO-BAR");
+  });
+
+  // [LAW:no-silent-failure] A misspelled flag must not be read as a path (and
+  // then reported as an unreadable file, which is a diagnostic about the wrong
+  // thing) — the parse names the option it did not recognise.
+  it("an unknown option is a loud usage error naming it, not a path", async () => {
+    const r = await run(["--rendre"]);
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toContain("--rendre");
+    expect(r.stderr).toContain(
+      "Usage: cc-candybar check [--render] [config-file]",
+    );
+  });
+
+  // [LAW:parse-dont-validate] Asserted on the MESSAGE, not the code: exit 2 is
+  // also what an unreadable file returns, so a gate that let two paths through
+  // and then failed to read the first would pass a code-only assertion — it
+  // did, when the arity comparison was mutated by one.
+  it("two paths, or an empty path, stay usage errors with or without the flag", async () => {
+    const ARITY = "check: expected at most one non-empty path";
+    for (const args of [
+      ["a.json5", "b.json5"],
+      [""],
+      ["--render", ""],
+      ["--render", "a.json5", "b.json5"],
+    ]) {
+      const r = await run(args);
+      expect({ args, code: r.code, usage: r.stderr.includes(ARITY) }).toEqual({
+        args,
+        code: 2,
+        usage: true,
+      });
+    }
   });
 });

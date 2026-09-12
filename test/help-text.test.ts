@@ -13,4 +13,12 @@ describe("HELP_TEXT", () => {
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/persist\?/);
   });
+
+  // brandon-check-m2a. A flag nobody is told about is a flag nobody uses: the
+  // preview exists for an author reading `--help`, so its absence here is a
+  // shipped feature with no way in.
+  test("documents check's --render preview beside the command", () => {
+    expect(HELP_TEXT).toContain("check [--render] [file]");
+    expect(HELP_TEXT).toMatch(/--render also\n\s+prints the bar it rendered/);
+  });
 });

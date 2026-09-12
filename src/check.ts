@@ -1,4 +1,5 @@
-// [LAW:verifiable-goals] `cc-candybar check [path]` — the authoring agent's eyes.
+// [LAW:verifiable-goals] `cc-candybar check [--render] [path]` — the authoring
+// agent's eyes.
 // Config diagnostics otherwise surface VISUALLY (composeWithDiagnostics renders
 // error/warning icons into the bar), a channel a blind config author never sees.
 // This command runs the production pipeline and projects its verdict onto a
@@ -6,6 +7,11 @@
 //   0 — config loads and renders (warnings, if any, on stderr)
 //   1 — config is invalid (parse / validate / register / render failure)
 //   2 — usage error or a named file could not be read
+//
+// `--render` adds one thing to that contract: the bar it rendered, on stdout
+// beneath the verdict (brandon-check-m2a). The pipeline already computed it, and
+// for an author who cannot look at a live bar it is the only place the layout,
+// the glyphs and the colours are readable at all.
 //
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
@@ -46,6 +52,12 @@ import {
 // of the config alone, not of whichever terminal invoked the check. Templates
 // evaluate in full before any width-driven wrap/pagination, so width shapes
 // layout, never diagnostics.
+//
+// It is also the width `--render` prints at, because there is ONE render here
+// and the printed bar is it [LAW:one-source-of-truth]. Laying the preview out at
+// `process.stdout.columns` instead would bless one bar and show another, and it
+// would read a terminal the author this exists for does not have — a piped
+// stdout has no columns.
 const CHECK_WIDTH = 200;
 
 // How long the verdict waits for an async source's first run — a shell or file
@@ -479,7 +491,17 @@ function warningLines(warnings: readonly string[]): string {
   return warnings.map((w) => `warning: ${w}\n`).join("");
 }
 
-export function checkPlan(o: CheckOutcome): CliPlan {
+// `--render` (brandon-check-m2a): the bar beneath the verdict line, for an
+// author who cannot look at a live one. [LAW:one-source-of-truth] It is
+// `o.rendered` — the very string the verdict was reached ON — so the bar an
+// author reads and the bar `check` blessed cannot differ; re-rendering here
+// (at a terminal width, say) would be two clocks, and the audience this exists
+// for reads a pipe, which has no width at all. The flag adds a VALUE to one
+// stream rather than selecting a code path: runCheck's two writes are
+// unconditional either way, and the arms that never rendered have no bar to
+// print because `rendered` lives on the clean arm alone
+// [LAW:types-are-the-program].
+export function checkPlan(o: CheckOutcome, render = false): CliPlan {
   switch (o.kind) {
     case "clean": {
       const where = o.configPath ?? "bundled default (no config file found)";
@@ -488,7 +510,8 @@ export function checkPlan(o: CheckOutcome): CliPlan {
           ? ` (${o.warnings.length} warning${o.warnings.length === 1 ? "" : "s"})`
           : "";
       return {
-        stdout: `✓ ${where}: config OK${count}\n`,
+        stdout:
+          `✓ ${where}: config OK${count}\n` + (render ? `${o.rendered}\n` : ""),
         stderr: warningLines(o.warnings),
         code: EXIT_CLEAN,
       };
@@ -510,21 +533,65 @@ export function checkPlan(o: CheckOutcome): CliPlan {
   }
 }
 
-// `cc-candybar check [path]` — the argv binding. Extra arguments and an empty
-// path argument are usage errors (loud, not silently ignored — the likeliest
-// cause is an unquoted or mis-expanded shell variable). An empty string is not
-// "no argument": `checkConfig(undefined)` means "resolve like the daemon",
-// while `""` is a malformed target that would otherwise EISDIR on the cwd.
-export async function runCheck(args: readonly string[]): Promise<never> {
-  if (args.length > 1 || args[0] === "") {
-    process.stderr.write(
-      "check: expected at most one non-empty path\nUsage: cc-candybar check [config-file]\n",
-    );
-    process.exit(EXIT_USAGE);
+const RENDER_FLAG = "--render";
+const USAGE = `Usage: cc-candybar check [${RENDER_FLAG}] [config-file]\n`;
+
+// [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request
+// the rest of the command reads by field; nothing inland re-reads `args`.
+// `runCheck` used to inspect them inline and write+exit from the middle of
+// itself, which put the usage contract out of reach of everything but a
+// spawned process — the same reason `checkPlan` is a value: a misspelled
+// option is now observable exactly like every other outcome.
+type CheckArgs =
+  | {
+      readonly kind: "run";
+      readonly target: string | undefined;
+      readonly render: boolean;
+    }
+  | { readonly kind: "usage"; readonly message: string };
+
+function parseCheckArgs(args: readonly string[]): CheckArgs {
+  const options = args.filter((a) => a.startsWith("--"));
+  const paths = args.filter((a) => !a.startsWith("--"));
+  // [LAW:no-silent-failure] An unrecognised option is named, never taken for a
+  // path — read as one it would be reported as an unreadable file, a
+  // diagnostic about the wrong thing entirely.
+  const unknown = options.filter((o) => o !== RENDER_FLAG);
+  if (unknown.length > 0) {
+    return {
+      kind: "usage",
+      message: `check: unknown option ${unknown.join(" ")}\n${USAGE}`,
+    };
   }
-  const plan = checkPlan(
-    await checkConfig(args[0] ?? detectConfigEnv(process.env)),
-  );
+  // An empty string is not "no argument": `target: undefined` means "resolve
+  // like the daemon", while `""` is a malformed target (the likeliest cause is
+  // an unquoted or mis-expanded shell variable) that would otherwise EISDIR on
+  // the cwd.
+  if (paths.length > 1 || paths[0] === "") {
+    return {
+      kind: "usage",
+      message: `check: expected at most one non-empty path\n${USAGE}`,
+    };
+  }
+  return {
+    kind: "run",
+    target: paths[0],
+    render: options.includes(RENDER_FLAG),
+  };
+}
+
+// `cc-candybar check [--render] [path]` — the argv binding, and the one place
+// the command touches the process: two unconditional writes and the exit code
+// its plan carries.
+export async function runCheck(args: readonly string[]): Promise<never> {
+  const parsed = parseCheckArgs(args);
+  const plan: CliPlan =
+    parsed.kind === "usage"
+      ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+      : checkPlan(
+          await checkConfig(parsed.target ?? detectConfigEnv(process.env)),
+          parsed.render,
+        );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);

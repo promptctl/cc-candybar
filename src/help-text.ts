@@ -81,11 +81,13 @@ Config tooling:
                            2 usage error / unreadable settings. Run it from a
                            Claude Code shell (or inside the same tmux pane) so
                            it sees Claude Code's own environment.
-  check [config-file]      Validate a config on the full render pipeline (parse
+  check [--render] [file]  Validate a config on the full render pipeline (parse
                            → merge → validate → register → render) with no
                            daemon. With no path, checks the same file the daemon
                            would load from here. Exit 0 clean (warnings on
-                           stderr), 1 invalid, 2 unreadable. "lint" is an alias.
+                           stderr), 1 invalid, 2 unreadable. --render also
+                           prints the bar it rendered, so you can read a config
+                           without installing it. "lint" is an alias.
   schema                   Print the JSON Schema for the config file shape
                            (.cc-candybar.json5). Point an editor's $schema at it
                            for autocomplete + structural validation.

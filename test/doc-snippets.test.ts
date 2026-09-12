@@ -23,6 +23,11 @@
 //   ```json5 check:fail  — a complete config; must be fatal (exit 1), and the
 //                          IMMEDIATELY FOLLOWING fenced block, tagged `error`,
 //                          must quote a substring of the actual fatal message.
+//   ```render            — the bar the IMMEDIATELY PRECEDING check:pass config
+//                          renders, as `cc-candybar check --render` prints it
+//                          with SGR/OSC-8 stripped (a doc cannot hold escape
+//                          bytes). Trailing spaces and edge blank lines are
+//                          normalised on both sides; every other byte is exact.
 //   ```sh stub:<name>    — an executable the doc's `shell` snippets may run:
 //                          its body is written verbatim as `<name>` onto a PATH
 //                          prefix before any snippet runs, so a `shell` source
@@ -35,6 +40,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
+import { stripAnsi } from "./helpers/daemon-e2e";
 
 const ROOT = path.join(__dirname, "..");
 
@@ -46,6 +52,7 @@ type Snippet =
   | { readonly kind: "pass" }
   | { readonly kind: "fail" }
   | { readonly kind: "error" }
+  | { readonly kind: "render" }
   | { readonly kind: "stub"; readonly name: string }
   | { readonly kind: "other" };
 
@@ -57,6 +64,7 @@ function parseInfo(info: string): Snippet {
   if (info === "json5 check:pass") return { kind: "pass" };
   if (info === "json5 check:fail") return { kind: "fail" };
   if (info === "error") return { kind: "error" };
+  if (info === "render") return { kind: "render" };
   const stub = STUB_INFO.exec(info);
   if (stub !== null) return { kind: "stub", name: stub[1]! };
   return { kind: "other" };
@@ -65,7 +73,12 @@ function parseInfo(info: string): Snippet {
 // The floors a doc's families must clear. Zero is a real floor (the README
 // has no fail snippets and no stubs), not an absence.
 type Family = Exclude<Snippet["kind"], "error" | "other">;
-const FAMILIES = ["pass", "fail", "stub"] as const satisfies readonly Family[];
+const FAMILIES = [
+  "pass",
+  "fail",
+  "stub",
+  "render",
+] as const satisfies readonly Family[];
 
 interface Doc {
   readonly path: string;
@@ -75,13 +88,13 @@ interface Doc {
 const DOCS: readonly Doc[] = [
   {
     path: "docs/interaction-authoring.md",
-    floors: { pass: 4, fail: 10, stub: 0 },
+    floors: { pass: 4, fail: 10, stub: 0, render: 0 },
   },
   {
     path: "docs/segment-authoring.md",
-    floors: { pass: 6, fail: 8, stub: 1 },
+    floors: { pass: 6, fail: 8, stub: 1, render: 1 },
   },
-  { path: "README.md", floors: { pass: 1, fail: 0, stub: 0 } },
+  { path: "README.md", floors: { pass: 1, fail: 0, stub: 0, render: 0 } },
 ];
 
 interface Fence {
@@ -204,6 +217,26 @@ const failSnippets = [...fencesByDoc.values()].flatMap((docFences) =>
     .filter(({ f }) => f.snippet.kind === "fail"),
 );
 
+// A render fence previews the config ABOVE it, so the pairing runs backwards:
+// a pass snippet owes no preview, but a preview owes its config. Paired within
+// each doc, like the fail→error pairing, so a doc's first fence can never
+// borrow the previous doc's last as its config.
+const renderSnippets = [...fencesByDoc.values()].flatMap((docFences) =>
+  docFences
+    .map((f, i) => ({ f, config: docFences[i - 1] }))
+    .filter(({ f }) => f.snippet.kind === "render"),
+);
+
+// [LAW:one-source-of-truth] The doc shows the bar and the test reads the bar
+// from the render — so the two cannot drift, and a bundled-default change that
+// moves a glyph fails here instead of teaching the next author a bar that no
+// longer exists. Trailing whitespace and edge blank lines are normalised (a
+// markdown file will not preserve them faithfully); the leading padding spaces
+// of each row are NOT, because they are the bar.
+function previewText(s: string): string {
+  return s.replace(/[ \t]+$/gm, "").replace(/^\n+|\n+$/g, "");
+}
+
 describe("doc snippet contract", () => {
   // Guard the extractor: a format drift that matches nothing must fail loudly,
   // not let the whole suite pass vacuously.
@@ -242,6 +275,34 @@ describe("doc snippet contract", () => {
       expect(checkPlan(outcome).code).toBe(0);
       expect(outcome.warnings).toEqual([]);
       expect(outcome.rendered.length).toBeGreaterThan(0);
+    },
+  );
+
+  test.each(
+    renderSnippets.map(({ f, config }) => [f.doc, f.line, f, config] as const),
+  )(
+    "render fence at %s line %d shows what its config actually renders",
+    async (_doc, _line, f, config) => {
+      if (config === undefined || config.snippet.kind !== "pass") {
+        throw new Error(
+          `${f.doc} line ${f.line}: a \`\`\`render block must come immediately after the \`\`\`json5 check:pass config it previews`,
+        );
+      }
+      const outcome = await checkSnippet(config);
+      if (outcome.kind !== "clean") {
+        throw new Error(
+          `${config.doc} line ${config.line}: expected clean, got ${outcome.kind}: ${
+            "message" in outcome ? outcome.message : ""
+          }`,
+        );
+      }
+      // The bar `--render` prints IS `outcome.rendered` (pinned in
+      // test/cli-check.test.ts), so asserting against it pins the doc to the
+      // command's own stdout without putting this machine's temp path in the
+      // fence.
+      expect(previewText(stripAnsi(outcome.rendered))).toBe(
+        previewText(f.body),
+      );
     },
   );
 

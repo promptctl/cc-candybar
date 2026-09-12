@@ -7,6 +7,9 @@
     ```error              — block must quote a substring of check's actual stderr.
     ```sh stub:<name>     — an executable named <name>, written verbatim onto PATH
                             before any snippet runs; a `shell` snippet may run it.
+    ```render             — the bar the check:pass config ABOVE it renders, as
+                            `cc-candybar check --render` prints it minus the
+                            colour escapes; asserted byte for byte.
   Every ```json5 block in this file MUST carry one of the two annotations.
   Do not edit a snippet or a quoted error without running the test — the quoted
   strings are asserted against the real loader, not transcribed.
@@ -15,19 +18,20 @@
 # Segment authoring: a script, a source, a segment, a ramp
 
 You are adding a segment whose data comes from **your own program** — a
-budget tracker, a queue depth, a deploy status — to a bar you cannot see
-rendered. The whole job is four declarations: a script that prints one JSON
-document, a `shell` variable that runs it and parses that document, a segment
-template that reads the document's fields by dotted path, and a `ramp` in the
-segment's `bg:` that turns one of those numbers into a theme colour. The
-script never chooses a colour and the template never branches on thresholds:
-the colour decision lives in the theme system, so it follows a theme click
-and a look exactly as the built-in segments do.
+budget tracker, a queue depth, a deploy status — to a bar you read as text
+rather than look at. The whole job is four declarations: a script that prints
+one JSON document, a `shell` variable that runs it and parses that document,
+a segment template that reads the document's fields by dotted path, and a
+`ramp` in the segment's `bg:` that turns one of those numbers into a theme
+colour. The script never chooses a colour and the template never branches on
+thresholds: the colour decision lives in the theme system, so it follows a
+theme click and a look exactly as the built-in segments do.
 
-Your eyes are `cc-candybar check`'s exit code and stderr:
+Your eyes are `cc-candybar check` — its exit code and stderr for whether the
+config is sound, and `--render` for what it puts on screen:
 
 ```
-edit config  →  cc-candybar check <path>  →  read exit code + stderr  →  repeat
+edit config  →  cc-candybar check --render <path>  →  read exit code + stderr + bar  →  repeat
 ```
 
 | exit | meaning |
@@ -103,6 +107,23 @@ what that failure renders as depends on the `default` you declare (Step 2).
   root: { rows: { status: { h: ["model", "context", "budget"] } } },
 }
 ```
+
+That config is complete, so `check` can already show you it. `--render` prints
+the bar beneath the verdict — the same render the exit code was reached on,
+with the colours it will really have (stripped here, since a document cannot
+hold escape bytes). Nothing is installed and the running daemon is not
+touched; the payload is `check`'s own fixture, which is why the numbers below
+are the same on every machine:
+
+```render
+ ☰  ⇄ tester@tester-box  ~/c/c/src  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m  ⎘ id ↗ proj ↗ log ↗ repo ✎ edit  ⚙ terminal ▸ 
+ ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
+```
+
+The bundled `identity` row is above and this config's `status` row below it,
+with the budget segment last; the `` between cells is the powerline joiner,
+and `check` renders the settings door (`☰`) into the first row exactly as the
+daemon does — so what you read there is the whole bar, chrome included.
 
 The complete shape of a `shell` variable:
 
