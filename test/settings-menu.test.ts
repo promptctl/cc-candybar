@@ -673,9 +673,9 @@ describe("the menu is chrome-exempt", () => {
     // The non-emptiness is half the assertion: `every` over an empty list is
     // the same vacuous pass one indirection further out.
     expect(domains.length).toBeGreaterThan(0);
-    for (const offered of domains) {
-      expect(offered.length).toBeGreaterThan(0);
-      expect(offered.filter((n) => n.startsWith(SETTINGS_NS))).toEqual([]);
+    for (const { members } of domains) {
+      expect(members.length).toBeGreaterThan(0);
+      expect(members.filter((n) => n.startsWith(SETTINGS_NS))).toEqual([]);
     }
   });
 });

@@ -56,8 +56,8 @@ import {
 import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
-import { renderPicker } from "./picker.js";
-import { bandItemStyle } from "./band-style.js";
+import { renderPicker, requireOptionKind } from "./picker.js";
+import { optionItemStyle } from "./band-style.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 
 // [LAW:one-type-per-behavior] A `{{ menu }}` needs one structural fact it cannot
@@ -190,12 +190,15 @@ function renderMenu(
           // [LAW:one-source-of-truth] The body's items are the band THIS
           // segment opens — the same record the walk draws the trigger from —
           // placed by THIS menu's distribution: the picker knows positions,
-          // the instance knows how it places them.
-          (position) =>
-            bandItemStyle(placement, {
-              ...position,
-              distribution: options.distribution,
-            }),
+          // the instance knows how it places them. Unless the menu's domain is
+          // colour-valued, in which case the OPTION colours its own cell; one
+          // call decides, the same one the standalone `{{ picker }}` makes.
+          optionItemStyle(
+            placement,
+            options.distribution,
+            action.basePalette,
+            requireOptionKind(action, applyName).paletteOf,
+          ),
         ),
       ]
     : [];

@@ -21,6 +21,7 @@
 // FuncMap in as data). The generic engine never imports this module.
 
 import { RichText, Style } from "@promptctl/rich-js";
+import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
@@ -31,7 +32,11 @@ import {
   PERSIST_WHEN,
   type ActionDecl,
 } from "../config/action.js";
-import { resolveOptionDomain } from "../config/option-domain.js";
+import {
+  resolveOptionDomain,
+  type OptionPalette,
+  type ResolvedDomain,
+} from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
@@ -76,6 +81,12 @@ export type CompiledActionDecl =
       // without re-resolving the source list, and so the set-option IS
       // self-describing (it knows its own domain), not just a key.
       readonly options: readonly string[];
+      // [LAW:one-source-of-truth] The domain's OTHER facet, resolved at the same
+      // moment from the same registry entry: how a member paints itself, when
+      // the domain is colour-valued (brandon-picker-31z). Always present as a
+      // key, `undefined` for every domain that is not, so a reader discriminates
+      // on the kind it already has rather than on whether a field was spread in.
+      readonly paletteOf: OptionPalette | undefined;
     }
   | {
       // [LAW:types-are-the-program] A stepper affordance. It carries ONLY the
@@ -131,6 +142,8 @@ export type CompiledActionDecl =
       readonly key: string;
       readonly stateVar: string;
       readonly options: readonly string[];
+      // set-option's durability twin, so it carries the same domain facts.
+      readonly paletteOf: OptionPalette | undefined;
     }
   | {
       readonly kind: "persist-bounded";
@@ -168,6 +181,11 @@ export type CompiledActionDecl =
       readonly anchor: string;
       readonly relation: "before" | "after";
       readonly options: readonly string[];
+      // Carried for the same reason the other two option kinds carry it: the
+      // rule is "a picker over a colour-valued domain paints its options",
+      // uniform over every option kind, not a list of kinds that qualify.
+      // Segment names are not colour-valued, so this is `undefined` in practice.
+      readonly paletteOf: OptionPalette | undefined;
     }
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
   // the session's config file's edits — `reset`'s fine-grained sibling. No key:
@@ -256,6 +274,16 @@ export interface ActionRuntime {
   // segment layout pads every line it emits, so a page packed to the full
   // budget would otherwise be pushed past the width by the pad spaces.
   padding: number;
+  // [LAW:locality-or-seam] The current render's BASE palette — the theme before
+  // the look — published per render by renderDsl exactly like stripStyle and
+  // padding. A picker over a colour-valued domain paints each option in the
+  // palette picking it would put in force, and a look's answer is the base
+  // transposed by that look's key. It must be the base and not the segment's own
+  // (already-looked) palette: transposedPalette may never be chained, because its
+  // memo keys on the base palette's NAME, which transposition preserves.
+  // A picked theme or look recolours the WHOLE bar, so the render-wide base is
+  // also the honest input even inside a `palette:`-pinned segment.
+  basePalette: Palette;
 }
 
 // ─── Compilation ───────────────────────────────────────────────────────────────
@@ -277,7 +305,7 @@ export function compileActions(
   // This config's per-config option domains (currently just "looks" — the
   // config's merged look names) — resolveOptionDomain checks these before
   // falling back to the global registry (themes/styles).
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();
   for (const [name, action] of Object.entries(actions)) {
@@ -298,7 +326,7 @@ function compileAction(
   name: string,
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): CompiledActionDecl {
   // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
   // the SAME explosion the validator derivations fold over
@@ -325,11 +353,13 @@ function compileAction(
       };
     }
     if ("from" in action) {
+      const domain = resolveOptionDomain(action.from, perConfigDomains);
       return {
         kind: "set-option",
         key: action.set,
         stateVar,
-        options: [...resolveOptionDomain(action.from, perConfigDomains)],
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
       };
     }
     if ("int" in action) {
@@ -361,11 +391,13 @@ function compileAction(
       };
     }
     if ("from" in action) {
+      const domain = resolveOptionDomain(action.from, perConfigDomains);
       return {
         kind: "persist-option",
         key: action.persist,
         stateVar,
-        options: [...resolveOptionDomain(action.from, perConfigDomains)],
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
       };
     }
     if ("cycle" in action) {
@@ -396,14 +428,17 @@ function compileAction(
       };
     }
     if ("insertSegmentFrom" in action) {
+      const domain = resolveOptionDomain(
+        action.insertSegmentFrom,
+        perConfigDomains,
+      );
       return {
         kind: "layout-op-option",
         key: action.persist,
         anchor: action.anchor,
         relation: action.relation,
-        options: [
-          ...resolveOptionDomain(action.insertSegmentFrom, perConfigDomains),
-        ],
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
       };
     }
     return {

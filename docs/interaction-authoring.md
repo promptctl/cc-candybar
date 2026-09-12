@@ -1181,6 +1181,16 @@ that, below. The body is a paged picker over the apply
 action's option domain, dropped onto the line below the enclosing row while
 open.
 
+An option cell is normally coloured by where it sits in the band the menu
+opens. Over a **colour-valued** domain — `themes` and `looks`, the two whose
+members ARE colours — each cell is instead painted in the palette that picking it
+would put in force: the theme's (or look's) own background, with its own
+`primary` as the label. Nothing is authored for this and nothing can turn it off;
+it follows from the domain, so `{{ menu "applyTheme" … }}` shows every theme in
+its own colours while `{{ menu "applyStyle" … }}` keeps the band's. A
+`distribution` option has no effect on a colour-valued picker, since the colour
+is a fact about the option rather than about its position.
+
 ```json5 check:pass
 {
   actions: {

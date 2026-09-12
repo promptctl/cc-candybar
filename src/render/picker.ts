@@ -39,7 +39,7 @@ import {
   type CompiledActionDecl,
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
-import { bandItemStyle } from "./band-style.js";
+import { optionItemStyle } from "./band-style.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -47,13 +47,18 @@ import {
 import { placedBy, type Position } from "../themes/decor.js";
 
 // [LAW:locality-or-seam] How an option cell is coloured, as a VALUE the caller
-// hands in: the picker lays out item `position` (which option, of how many)
-// and knows nothing of bands, hues, depth or how the instance PLACES its
-// options — the caller completes the position into an address step with its
-// own distribution. Both callers supply the band of the segment the picker
-// renders inside (`bandItemStyle`), so a menu body and a standalone
-// `{{ picker }}` colour their items by one rule.
-export type ItemStyle = (position: Position) => Style;
+// hands in: the picker lays out item `position` (which option, of how many) and
+// names the `option` that cell applies, and knows nothing of bands, hues, depth,
+// palettes, or how the instance PLACES its options — the caller completes the
+// position into an address step with its own distribution, and decides whether
+// the OPTION or its position is what colours the cell. Both callers go through
+// the one `optionItemStyle`, so a menu body and a standalone `{{ picker }}`
+// colour their items by one rule.
+//
+// The option was always sitting beside the call site below and was never passed,
+// which is why no item style could be a function of the choice being offered
+// (brandon-picker-31z).
+export type ItemStyle = (position: Position, option: string) => Style;
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -165,7 +170,12 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 // cell, apply it" shape; only WHAT the click writes differs, which is
 // realize()'s job, not the picker's. Rejecting any of the three here would be
 // an artificial gap — there is nothing about "picker" that excludes one kind.
-function requireOptionKind(
+//
+// [LAW:single-enforcer] Exported so the one thing a caller needs BEFORE the grid
+// renders — the option domain's own painter, for `optionItemStyle` — is read
+// through the same resolution renderPicker itself makes, dual half included.
+// A second lookup could disagree with the grid about which half is live.
+export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
 ): Extract<
@@ -336,7 +346,7 @@ export function renderPicker(
         option,
         optionUrl(option),
         option === current,
-        itemStyle({ index: i, count: apply.options.length }),
+        itemStyle({ index: i, count: apply.options.length }, option),
       ),
     );
   }
@@ -396,11 +406,12 @@ export function pickerFuncs(
           // A bare `{{ picker }}` authors no options dict, so it places by
           // the default — the same resolution a `{{ menu }}` with no
           // "distribution" option makes.
-          (position) =>
-            bandItemStyle(requireActiveSegment(activeSegment, "{{ picker }}"), {
-              ...position,
-              distribution: placedBy(undefined),
-            }),
+          optionItemStyle(
+            requireActiveSegment(activeSegment, "{{ picker }}"),
+            placedBy(undefined),
+            runtime.basePalette,
+            requireOptionKind(runtime, applyName).paletteOf,
+          ),
         );
       },
       argTypes: ["string", "string", "bool", "bool"],

@@ -1,4 +1,4 @@
-// [LAW:one-type-per-behavior] An option domain is a NAME → members lookup,
+// [LAW:one-type-per-behavior] An option domain is a NAME → domain lookup,
 // regardless of where the members come from. Before this module, "themes" /
 // "styles" / "looks" were three special-cased branches wearing a closed
 // TypeScript union (OptionSource) — a hardcoded list of legal domain NAMES
@@ -20,18 +20,23 @@
 // `perConfigDomains`, the same way `lookNames` already is.
 //
 // [LAW:one-source-of-truth] This is the ONE place a domain name resolves to
-// its members. render/action.ts (rendering options) and
+// the domain. render/action.ts (rendering options) and
 // daemon/verbs/state-validators.ts (deriving the click gate) both call
 // through here instead of each hand-rolling the themes/styles/looks branch —
 // the rendered options and the derived gate cannot diverge because there is
 // no second resolver.
 
+import type { Palette, ThemeKey } from "@promptctl/rich-js";
 import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
   STRIP_STYLES,
 } from "../themes/policy.js";
+import {
+  paletteForThemeName,
+  transposedPalette,
+} from "../themes/palette-resolvers.js";
 import { presetNames } from "./presets.js";
 
 // [LAW:types-are-the-program] The authoring shape of a `set … from` value: a
@@ -43,9 +48,39 @@ export type OptionDomain = string | readonly string[];
 
 export type OptionDomainResolver = () => readonly string[];
 
+// [LAW:types-are-the-program] The one fact that makes a domain COLOUR-VALUED:
+// the palette that picking a member would put in force. `themes` answers with
+// the theme's own palette; `looks` answers with the render's base palette
+// transposed by that look's ThemeKey. Every other domain (styles, presets,
+// charsets, an inline array, edit mode's addable segment names) has no answer,
+// which is exactly the absence below.
+//
+// `base` is the palette the render's LOOK applies to — never a palette that has
+// already been transposed. `transposedPalette` must not be chained: its memo
+// keys on the base palette's NAME, which transposition preserves, so
+// transposing an already-looked palette both double-pays OKLCH quantization and
+// collides the shared memo (gruvbox+vivid vs gruvbox+dim+vivid). The render
+// publishes its base on ActionRuntime for exactly this reason.
+export type OptionPalette = (option: string, base: Palette) => Palette;
+
+// [LAW:one-source-of-truth] Resolving a domain yields the DOMAIN, not one facet
+// of it. Members and "how a member paints itself" are two things the SAME
+// registration knows, so they arrive together and cannot drift: a colour-valued
+// domain that some consumer resolved as bare members would be a domain whose
+// colour half exists for the gate but not the render.
+//
+// [LAW:dataflow-not-control-flow] `paletteOf`'s PRESENCE is the discriminator —
+// the same move the segment type makes with an authored `bg?:`, not a new
+// `coloured: true` flag beside a field that already says it.
+export interface ResolvedDomain {
+  readonly members: readonly string[];
+  readonly paletteOf?: OptionPalette;
+}
+
 interface DomainEntry {
   readonly permanent: boolean;
   readonly resolve: OptionDomainResolver;
+  readonly paletteOf?: OptionPalette;
 }
 
 const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
@@ -53,8 +88,9 @@ const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
 function registerBuiltinDomain(
   name: string,
   resolve: OptionDomainResolver,
+  paletteOf?: OptionPalette,
 ): void {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve });
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, paletteOf });
 }
 
 // [LAW:one-source-of-truth] "themes"/"styles" become ORDINARY registrations —
@@ -62,7 +98,18 @@ function registerBuiltinDomain(
 // canonical lists the set-state validator and the `themes()`/`styles()`
 // template bindings already consult (listResolvablePaletteNames/
 // STRIP_STYLES). No special-cased branch remains anywhere downstream.
-registerBuiltinDomain("themes", () => listResolvablePaletteNames());
+//
+// A theme member paints itself through the ONE
+// name -> Palette enforcer (palette-resolvers.ts, already memoized per name),
+// the same one the render resolves its own base palette through — so an option
+// cell and the bar it would produce cannot come from two constructions. The
+// render's CURRENT look is deliberately not composed in: the cell shows the
+// theme being chosen, and the look control beside it shows the look.
+registerBuiltinDomain(
+  "themes",
+  () => listResolvablePaletteNames(),
+  (option) => paletteForThemeName(option),
+);
 registerBuiltinDomain("styles", () => STRIP_STYLES);
 // [LAW:one-source-of-truth] Same shape as themes/styles: the exact consts
 // the loader's own field validation and the render layer's glyph/color-depth
@@ -80,6 +127,10 @@ registerBuiltinDomain("colorCompatibilities", () => COLOR_COMPATIBILITIES);
 export function registerOptionDomain(
   name: string,
   resolve: OptionDomainResolver,
+  // A colour-valued registration says so here (see OptionPalette) — the same
+  // channel the built-in `themes` uses, so a future domain over palettes needs
+  // no new plumbing anywhere downstream.
+  paletteOf?: OptionPalette,
 ): () => void {
   const existing = _GLOBAL_OPTION_DOMAINS.get(name);
   if (existing) {
@@ -90,7 +141,7 @@ export function registerOptionDomain(
           : ""),
     );
   }
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: false, resolve });
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: false, resolve, paletteOf });
   let active = true;
   return () => {
     if (!active) return;
@@ -119,15 +170,29 @@ export function registerOptionDomain(
 // option-domain.ts (type-only, but still a cycle this module stays clear of,
 // per [LAW:one-way-deps]).
 export function perConfigDomainsFor(config: {
-  readonly looks: Readonly<Record<string, unknown>>;
+  readonly looks: Readonly<Record<string, ThemeKey>>;
   readonly presets: Readonly<Record<string, unknown>>;
-}): ReadonlyMap<string, readonly string[]> {
+}): ReadonlyMap<string, ResolvedDomain> {
   return new Map([
-    ["looks", Object.keys(config.looks)],
+    [
+      "looks",
+      {
+        members: Object.keys(config.looks),
+        // [LAW:one-source-of-truth] A look IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call renderDsl makes for the look actually in force. One
+        // transposition of the BASE, never a second over an already-looked
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared look.
+        paletteOf: (option: string, base: Palette) =>
+          transposedPalette(base, config.looks[option]!),
+      },
+    ],
     // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
     // whether or not a config declares it, and presetNames is where that is
     // stated (once, for the gate and the render alike).
-    ["presets", presetNames(config.presets)],
+    ["presets", { members: presetNames(config.presets) }],
   ]);
 }
 
@@ -136,7 +201,7 @@ export function perConfigDomainsFor(config: {
 // overrides (currently just "looks"). Used both to resolve a name and to spell
 // out the legal set in an unknown-domain error.
 export function knownOptionDomainNames(
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): readonly string[] {
   return [
     ...new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()]),
@@ -151,13 +216,15 @@ export function knownOptionDomainNames(
 // caller/wiring bug, not a config-authoring mistake.
 export function resolveOptionDomain(
   from: OptionDomain,
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
-): readonly string[] {
-  if (typeof from !== "string") return from;
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): ResolvedDomain {
+  // An inline array is its own domain — a bare list of words, so it can never
+  // be colour-valued, structurally rather than by a check.
+  if (typeof from !== "string") return { members: from };
   const local = perConfigDomains.get(from);
   if (local) return local;
   const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) return entry.resolve();
+  if (entry) return { members: entry.resolve(), paletteOf: entry.paletteOf };
   throw new Error(
     `unknown option domain "${from}" (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`,
   );

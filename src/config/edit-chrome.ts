@@ -33,6 +33,7 @@ import {
 } from "./dsl-types.js";
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import type { ResolvedDomain } from "./option-domain.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
@@ -129,18 +130,19 @@ export function addableDomainName(presetName: string): string {
 // sites instead of inside it).
 export function addableSegmentDomains(
   config: DslConfig,
-): ReadonlyMap<string, readonly string[]> {
+): ReadonlyMap<string, ResolvedDomain> {
   const declared = Object.keys(config.segments).filter(
     (n) => !isChromeExempt(n),
   );
-  const domains = new Map<string, readonly string[]>();
+  const domains = new Map<string, ResolvedDomain>();
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
     const present = collectSegmentNames(node);
-    domains.set(
-      addableDomainName(name),
-      declared.filter((n) => !present.has(n)),
-    );
+    // Segment names carry no colour, so this domain declares no `paletteOf` —
+    // a `+` picker's options keep their band placement.
+    domains.set(addableDomainName(name), {
+      members: declared.filter((n) => !present.has(n)),
+    });
   }
   return domains;
 }

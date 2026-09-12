@@ -1406,7 +1406,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         expect(
           addableSegmentDomains(afterRemove.state.config).get(
             addableDomainName("default"),
-          ),
+          )?.members,
         ).toContain("toolbar");
 
         // Click that `+` and pick "toolbar": the exact token

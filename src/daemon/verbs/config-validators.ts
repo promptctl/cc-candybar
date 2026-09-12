@@ -14,6 +14,7 @@ import { actionDestinations, type ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
+  type ResolvedDomain,
 } from "../../config/option-domain";
 import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
@@ -59,7 +60,7 @@ export function rangeParamsForConfig(key: string): RangeParams | null {
 function actionKeySpecs(
   a: ActionDecl,
   seeds: ReadonlyMap<string, number>,
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): KeySpecContribution[] {
   if (!("persist" in a)) return [];
   if ("to" in a) {
@@ -71,7 +72,7 @@ function actionKeySpecs(
         key: a.persist,
         spec: {
           kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains),
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members,
         },
       },
     ];
@@ -132,7 +133,7 @@ function actionKeySpecs(
           allowed: resolveOptionDomain(
             a.insertSegmentFrom,
             perConfigDomains,
-          ).map((segment) =>
+          ).members.map((segment) =>
             encodeLayoutOp({
               op: "insert",
               segment,

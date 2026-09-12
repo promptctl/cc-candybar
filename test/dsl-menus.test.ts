@@ -25,19 +25,26 @@
 //      LOAD errors naming the new form — never silently reinterpreted.
 
 import { ownLinks } from "./helpers/ambient-chrome";
-import { getThemePalette } from "@promptctl/rich-js";
+import {
+  ensureContrast,
+  getThemePalette,
+  transposePalette,
+} from "@promptctl/rich-js";
+import type { Palette, Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import {
   deriveActionValidators,
   registerStateValidator,
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
+import { decideLookName } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -53,6 +60,7 @@ import {
   decorEntryFor,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
+  paletteRole,
   textOn,
   type Address,
 } from "../src/themes/decor";
@@ -76,6 +84,32 @@ function addressOf(root: CompiledNode, name: string): Address {
 }
 
 const ALLOWED = new Set(listResolvablePaletteNames());
+
+// brandon-picker-31z's cell: the applied palette's own ground, with its own
+// `primary` as the text, slid in OKLCH lightness by rich-js until it clears AA.
+// Spelled once here, so the render's rule and this file's expectation of it are
+// one line apart rather than repeated per assertion.
+const appliedGround = (applied: Palette): { bg: string; fg: string } => {
+  const ground = paletteRole(applied, "background");
+  return {
+    bg: ground.hex,
+    fg: ensureContrast(paletteRole(applied, "primary"), ground, 4.5).hex,
+  };
+};
+function expectApplied(
+  cell: { bg: string | undefined; fg: string | undefined },
+  applied: Palette,
+): void {
+  const { bg, fg } = appliedGround(applied);
+  expect(cell.bg).toBe(bg);
+  expect(cell.fg).toBe(fg);
+}
+function expectAppliedCell(style: Style, applied: Palette): void {
+  expectApplied(
+    { bg: style.bgcolor?.value?.hex, fg: style.color?.value?.hex },
+    applied,
+  );
+}
 
 function opts() {
   return {
@@ -114,7 +148,7 @@ function bgCodes(rendered: string): Set<string> {
   return out;
 }
 
-function buildRuntime(src: string, sessionId = "s1") {
+function buildRuntime(src: string, sessionId = "s1", look?: string) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
@@ -132,6 +166,14 @@ function buildRuntime(src: string, sessionId = "s1") {
       basePalette,
       opts(),
       { perSegmentSink: sink },
+      // The look is resolved by the CALLER (the daemon does it over staged/
+      // session/globals) and handed in; renderDsl reads no globals.look of its
+      // own, so a fixture declaring one renders at the floor unless it arrives
+      // here. [LAW:no-silent-failure] naming an undeclared look would collapse
+      // to the floor, so tests that depend on a look assert its effect.
+      look === undefined
+        ? undefined
+        : { look: decideLookName(look, config.looks) },
     );
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
@@ -658,9 +700,10 @@ describe("toggle round trip + drop stacking", () => {
     const trigger = cells[0]!;
     expect(trigger.style?.bgcolor?.value?.hex).toBe(band.state.hex);
     expect(trigger.style?.color?.value?.hex).toBe(textOn(palette, band.state).hex);
-    // The dropped line is the band: its plane, and every option cell placed
-    // by (index, count) over the WHOLE domain — one item per theme name, in
-    // the domain's own order (ALLOWED is that list, insertion-ordered).
+    // The dropped line is the band: its plane. The OPTION cells are not —
+    // `themes` is a colour-valued domain, so brandon-picker-31z paints each
+    // cell in the theme it names, not in the band (the next describe pins that
+    // the band placement is still what a generic domain gets).
     const body = cells[1]!;
     expect(body.style?.bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
@@ -670,12 +713,19 @@ describe("toggle round trip + drop stacking", () => {
     const optionSpans = spans.filter((s) => options.includes(body.plain.slice(s.start, s.end)));
     expect(optionSpans.length).toBeGreaterThan(1);
     for (const span of optionSpans) {
-      const index = options.indexOf(body.plain.slice(span.start, span.end));
+      const name = body.plain.slice(span.start, span.end);
       const style = span.style;
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
-      expect(style.bgcolor?.value?.hex).toBe(
+      expectAppliedCell(style, paletteForThemeName(name));
+      // And it is NOT the band item it would have worn before: the address is
+      // out of the decision, which is the whole point of the change.
+      expect(style.bgcolor?.value?.hex).not.toBe(
         bandItemFor(palette, disclosure, [
-          { index, count: options.length, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+          {
+            index: options.indexOf(name),
+            count: options.length,
+            distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+          },
         ]).hex,
       );
     }
@@ -1172,9 +1222,19 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
 // candybar-render-ai7.8: a menu is an instance too — its band places its
 // options by the SAME `distribution` field a container carries, spelled in the
 // menu's options dict; the picker knows positions, the menu knows placement.
+//
+// The domain here is an INLINE array, deliberately: brandon-picker-31z takes the
+// address out of the decision for a COLOUR-valued domain, so a placement
+// property can only be stated over a domain that is still placed — which is
+// every domain but themes/looks. `WORDS_SRC` is MENU_SRC with its `from`
+// swapped, so the fixture differs from the one above in exactly that.
 describe("a menu's `distribution` option places its band", () => {
+  const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
   const WITH = (dictEntry: string): string =>
     MENU_SRC.replace(
+      "{ set: 'theme', from: 'themes' }",
+      `{ set: 'theme', from: ${JSON.stringify(WORDS)} }`,
+    ).replace(
       '{{ menu "applyTheme" "▸" "▾" }}',
       `{{ menu "applyTheme" "▸" "▾" (dict ${dictEntry}) }}`,
     );
@@ -1189,7 +1249,7 @@ describe("a menu's `distribution` option places its band", () => {
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
     const disclosure = { hue: decorEntryFor(address).hue, depth: 0 };
     const body = sink.get("themepicker")![1]!;
-    const options = [...ALLOWED];
+    const options = [...WORDS];
     const optionSpans = body.spans.filter(
       (s) =>
         typeof s.style !== "string" &&
@@ -1228,5 +1288,225 @@ describe("a menu's `distribution` option places its band", () => {
     expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED)).toThrow(
       /unknown \{\{ menu \}\} option "distributon".*"distribution" \(one of "van-der-corput"/,
     );
+  });
+});
+
+// brandon-picker-31z: choosing a theme means reading names, and every option cell
+// used to be painted by its address in the band — a fact about the GRID, not
+// about the choice. A colour-valued option domain (`themes`, `looks`) now paints
+// each cell in the palette picking it would put in force. Driven through the real
+// spine, asserted against the same two constructions the render uses
+// (paletteForThemeName / transposedPalette), never a copy of the blend.
+describe("a picker over a colour-valued domain paints what picking would apply", () => {
+  /** The (text, colours) of every option cell in one rendered line. */
+  function optionCellsOf(
+    body: RichText,
+    domain: readonly string[],
+  ): { name: string; bg: string | undefined; fg: string | undefined }[] {
+    return body.spans
+      .filter((span) => {
+        if (typeof span.style === "string" || span.style.link === undefined)
+          return false;
+        return domain.includes(body.plain.slice(span.start, span.end));
+      })
+      .map((span) => {
+        const style = span.style;
+        if (typeof style === "string")
+          throw new Error("span style is a name, not a Style");
+        return {
+          name: body.plain.slice(span.start, span.end),
+          bg: style.bgcolor?.value?.hex,
+          fg: style.color?.value?.hex,
+        };
+      });
+  }
+  // A `{{ menu }}` drops its body onto the line below the trigger, so the grid
+  // is cell 1; a bare `{{ picker }}` IS the line, so it is cell 0.
+  const optionCells = (
+    sink: Map<string, readonly RichText[]>,
+    segName: string,
+    domain: readonly string[],
+  ) => optionCellsOf(sink.get(segName)![1]!, domain);
+
+  // A look picker beside the theme picker, so both colour-valued domains are
+  // exercised on one bar. `globals.look` names a real look deliberately — see
+  // the chaining test below, which only has teeth while the bar wears one, and
+  // `dim` is chosen because scaling lightness provably moves a background
+  // (scaling chroma leaves a near-neutral one where it was).
+  const BOTH_PICKERS_SRC = `{
+    globals: { look: 'dim' },
+    looks: {
+      none: {},
+      dim: { lightnessScale: 0.7 },
+      vivid: { chromaScale: 1.6 },
+    },
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+    },
+    actions: {
+      applyTheme: { set: 'theme', from: 'themes' },
+      applyLook: { set: 'look', from: 'looks' },
+    },
+    segments: {
+      themepicker: { template: '\u{1f3a8} {{ menu "applyTheme" "\u25b8" "\u25be" }}' },
+      lookpicker: { template: '\u25d0 {{ menu "applyLook" "\u25b8" "\u25be" }}' },
+    },
+    root: { h: ['themepicker', 'lookpicker'] },
+  }`;
+  const LKEY = "menus.lookpicker.applyLook";
+
+  test("every theme option wears that theme's own ground, text chosen by measure", () => {
+    const { render, sink, clickToggle, dispose } = buildRuntime(BOTH_PICKERS_SRC);
+    render();
+    clickToggle(render(), TKEY, "applyTheme");
+    render();
+    const cells = optionCells(sink, "themepicker", [...ALLOWED]);
+    expect(cells.length).toBe(ALLOWED.size);
+    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name));
+    // The point of the exercise: the grid actually distinguishes its options.
+    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBeGreaterThan(1);
+    dispose();
+  });
+
+  test("a theme option's colour is a function of the option ALONE — not its index, count or distribution", () => {
+    const colours = (dictEntry: string): Map<string, string | undefined> => {
+      const { render, sink, clickToggle, dispose } = buildRuntime(
+        BOTH_PICKERS_SRC.replace(
+          '{{ menu "applyTheme" "\u25b8" "\u25be" }}',
+          `{{ menu "applyTheme" "\u25b8" "\u25be" (dict ${dictEntry}) }}`,
+        ),
+      );
+      render();
+      clickToggle(render(), TKEY, "applyTheme");
+      render();
+      const out = new Map(
+        optionCells(sink, "themepicker", [...ALLOWED]).map((c) => [c.name, c.bg]),
+      );
+      dispose();
+      return out;
+    };
+    // Two distributions that demonstrably place a band differently (the ai7.8
+    // test above pins that) produce byte-identical option colours here: the
+    // address is out of the decision, not merely reordered.
+    const monotonic = colours('"distribution" "monotonic"');
+    const uniform = colours('"distribution" "uniform"');
+    expect(monotonic.size).toBe(ALLOWED.size);
+    expect([...monotonic.entries()]).toEqual([...uniform.entries()]);
+  });
+
+  test("every look option wears the BASE palette under that look, not the bar's already-looked one", () => {
+    const { render, sink, config, palette, clickToggle, dispose } =
+      buildRuntime(BOTH_PICKERS_SRC, "s1", "dim");
+    render();
+    clickToggle(render(), LKEY, "applyLook");
+    render();
+    const names = Object.keys(config.looks);
+    const cells = optionCells(sink, "lookpicker", names);
+    expect(cells.length).toBe(names.length);
+    for (const cell of cells) {
+      // rich-js's transposePalette DIRECTLY, never cc-candybar's memoized
+      // `transposedPalette`: that memo keys on the base palette's NAME, which
+      // transposition preserves, so an implementation transposing the WRONG base
+      // would populate the very cache key this expectation then reads — handing
+      // the assertion the implementation's own answer. Asking rich-js fresh is
+      // what makes the base observable. (It is also why the memo must never be
+      // handed an already-transposed palette in the first place.)
+      expectApplied(cell, transposePalette(palette, config.looks[cell.name]!));
+    }
+    // Every look is told apart, ground or no ground: `vivid` scales CHROMA, so
+    // its near-neutral background does not move — the hue in the text is what
+    // distinguishes it, which is why the cell carries one.
+    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBe(names.length);
+    // THE PREMISE, asserted rather than assumed: this bar really is wearing a
+    // look, so "the already-looked palette" below is a palette that differs from
+    // the base. Without this the next two expectations are vacuous — which is
+    // exactly how they first shipped, passing while the look never arrived.
+    const floor = buildRuntime(BOTH_PICKERS_SRC);
+    floor.render();
+    floor.clickToggle(floor.render(), LKEY, "applyLook");
+    floor.render();
+    const trigger = (cells: readonly RichText[]): string | undefined =>
+      cells[0]!.style?.bgcolor?.value?.hex;
+    expect(trigger(sink.get("lookpicker")!)).not.toBe(
+      trigger(floor.sink.get("lookpicker")!),
+    );
+    floor.dispose();
+    // The chaining guard, and the reason this renders under a look at all:
+    // the bar wears base-under-vivid, so a painter handed the SEGMENT's palette
+    // instead of the base would transpose an already-transposed palette — which
+    // both double-pays OKLCH quantization and collides transposedPalette's memo
+    // (it keys on the base palette's NAME, which transposition preserves). Under
+    // that bug the identity look `none` would come back wearing dim's ground.
+    const none = cells.find((c) => c.name === "none")!;
+    const dim = cells.find((c) => c.name === "dim")!;
+    expect(none.bg).toBe(paletteRole(palette, "background").hex);
+    expect(none.bg).not.toBe(dim.bg);
+    expect(none.fg).toBe(
+      ensureContrast(
+        paletteRole(palette, "primary"),
+        paletteRole(palette, "background"),
+        4.5,
+      ).hex,
+    );
+    dispose();
+  });
+
+  // The rule has two call sites — a `{{ menu }}` body and a bare `{{ picker }}`
+  // — and both must go through the one `optionItemStyle`. Every test above drives
+  // the menu; this one drives the picker directly, so neither site can lose the
+  // painter while the other keeps it.
+  test("a bare {{ picker }} over a colour-valued domain paints its options too", () => {
+    const PICKER_SRC = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        'theme-page': { kind: 'state', key: 'theme-page' },
+      },
+      actions: {
+        applyTheme: { set: 'theme', from: 'themes' },
+        themePage: { set: 'theme-page', int: true },
+      },
+      segments: {
+        grid: { template: '{{ picker "applyTheme" "themePage" false false }}' },
+      },
+      root: { h: ['grid'] },
+    }`;
+    const { render, sink, dispose } = buildRuntime(PICKER_SRC);
+    render();
+    const cells = optionCellsOf(sink.get("grid")![0]!, [...ALLOWED]);
+    expect(cells.length).toBe(ALLOWED.size);
+    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name));
+    dispose();
+  });
+
+  test("a picker over a domain that is NOT colour-valued keeps its band placement", () => {
+    const WORDS = ["alpha", "bravo", "charlie", "delta"];
+    const { render, sink, compiled, palette, clickToggle, dispose } = buildRuntime(
+      BOTH_PICKERS_SRC.replace(
+        "{ set: 'theme', from: 'themes' }",
+        `{ set: 'theme', from: ${JSON.stringify(WORDS)} }`,
+      ),
+    );
+    render();
+    clickToggle(render(), TKEY, "applyTheme");
+    render();
+    const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
+    const disclosure = { hue: decorEntryFor(address).hue, depth: 0 };
+    const cells = optionCells(sink, "themepicker", WORDS);
+    expect(cells.length).toBe(WORDS.length);
+    for (const cell of cells) {
+      expect(cell.bg).toBe(
+        bandItemFor(palette, disclosure, [
+          {
+            index: WORDS.indexOf(cell.name),
+            count: WORDS.length,
+            distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+          },
+        ]).hex,
+      );
+    }
+    dispose();
   });
 });

@@ -39,6 +39,7 @@ import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
 import {
   decideLookName,
+  effectiveThemeName,
   isLookExpression,
   LOOK_FLOOR,
   paletteForThemeName,
@@ -364,6 +365,14 @@ export function registerDslConfig(
     // style each render; "powerline" is the registration-time default so a
     // compile-only path (no render) still has a valid value.
     stripStyle: "powerline",
+    // Same contract as stripStyle: renderDsl republishes the live resolved
+    // base palette each render; `globals.palette` is the registration-time
+    // value, so a compile-only path (no render) still has a real palette.
+    // [LAW:one-source-of-truth] Resolved through the same effectiveThemeName the
+    // render uses, with no session pick — so the floor here is the one floor.
+    basePalette: paletteForThemeName(
+      effectiveThemeName(undefined, null, config.globals.palette),
+    ),
     // Same contract as stripStyle: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -799,6 +808,13 @@ export function renderDsl(
   // style: the picker reserves 2×padding at its pagination seam, the same seam
   // that reserves the joiner chrome — one resolved value, read where needed.
   compiled.menuRuntime.action.padding = opts.padding;
+  // [LAW:one-source-of-truth] And the render's BASE palette, beside them: a
+  // picker over a colour-valued domain paints each option in the palette picking
+  // it would put in force, and a look's answer is this base transposed by that
+  // look's key. The base, never the looked palette below — transposedPalette must
+  // not be chained (its memo keys on the base palette's name, which transposition
+  // preserves), and a look applies to the base by definition.
+  compiled.menuRuntime.action.basePalette = basePalette;
 
   const scope = buildScope(store);
   // The other half of the look fold, which could only ever happen here: the

@@ -20,6 +20,7 @@ import { actionDestinations, type ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
+  type ResolvedDomain,
 } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
@@ -136,7 +137,7 @@ export function rangeParamsFor(key: string): RangeParams | null {
 function actionKeySpecs(
   a: ActionDecl,
   seeds: ReadonlyMap<string, number>,
-  perConfigDomains: ReadonlyMap<string, readonly string[]>,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): KeySpecContribution[] {
   if (!("set" in a)) return [];
   if ("to" in a) {
@@ -148,7 +149,7 @@ function actionKeySpecs(
         key: a.set,
         spec: {
           kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains),
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members,
         },
       },
     ];
