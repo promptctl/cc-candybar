@@ -25,7 +25,7 @@ import {
   type DaemonEntry,
 } from "./spawn-test-daemon";
 import { daemonPool } from "./daemon-pool";
-import { sendDaemonRequest } from "./daemon-wire";
+import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
 import { logPath } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 
@@ -47,10 +47,10 @@ const SUN_PATH_MAX = 104;
 const MKDTEMP_SUFFIX = "XXXXXX";
 
 // [LAW:no-silent-failure] `sockaddr_un.sun_path` is 104 bytes on macOS (108 on
-// Linux). Past that, bind() fails inside the spawned daemon and the only
-// symptom a test sees is spawnDaemonWithEnv timing out five seconds later with
-// "socket file absent" — which reads like a slow daemon and costs an afternoon.
-// The prefix is the only part a caller controls, so fail here, naming the real
+// Linux). Past that, bind() fails inside the spawned daemon, and what a test
+// sees is spawnDaemonWithEnv reporting a daemon that exited before binding —
+// true, but it names the exit, not the reason the bind was impossible. The
+// prefix is the only part a caller controls, so fail here, naming the real
 // cause and the fix.
 //
 // Runs BEFORE anything is created, which is why it needs no cleanup path: there
@@ -163,33 +163,11 @@ export async function spawnDaemonWithEnv(
   const daemon = await spawnTestDaemon(env, daemonPool, entry);
   const { child, killTree, release } = daemon;
 
-  const deadline = Date.now() + 5000;
-  let alive = false;
-  while (!alive && Date.now() < deadline) {
-    if (fs.existsSync(sockPath)) {
-      try {
-        const resp = await sendDaemonRequest(
-          sockPath,
-          { v: PROTOCOL_VERSION, kind: "stats" },
-          1000,
-        );
-        alive = resp.ok;
-      } catch {
-        alive = false;
-      }
-    }
-    if (!alive) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
-  }
-  if (!alive) {
+  const readiness = await awaitReadiness(child, sockPath);
+  if (readiness.phase !== "serving") {
     killTree();
     release();
-    throw new Error(
-      "daemon did not answer a stats round trip within 5000ms (socket file" +
-        ` ${fs.existsSync(sockPath) ? "exists" : "absent"})\n` +
-        daemonLogTail(env),
-    );
+    throw new Error(readinessFailure(readiness, sockPath, env));
   }
 
   return {
@@ -201,11 +179,156 @@ export async function spawnDaemonWithEnv(
   };
 }
 
+// [LAW:one-source-of-truth] ONE readiness budget for every call site of this
+// helper — the PR #226 review's point stands: no per-caller knob, so a number
+// that moves moves in one place.
+//
+// MEASURED, not inherited (brandon-ci-flakes-630.c7o). `tsx` compiling and
+// loading src/index.ts is the entire cost; the daemon's own bind-to-serving step
+// is noise beside it. Spawn to answered `stats`, on a 12-core Mac with a warm
+// tsx cache:
+//
+//   machine state                             boot to serving
+//   load ~17 / 12 cores (1.4x oversubscribed)   0.49 - 0.59 s
+//   4 spawns at once (the maxWorkers: 4 shape)  0.63 - 0.95 s
+//   load ~40 (3.3x)                             2.31 - 2.85 s
+//   load ~116 (9.7x)                            over 5 s — the reported failure
+//
+// Boot cost tracks CPU oversubscription almost linearly, so this number is a
+// statement about how starved a machine may be before the suite calls a healthy
+// daemon broken. 12 s buys ~24x oversubscription — 2.4x the load that broke the
+// inherited 5 s — and two of them still fit inside jest.config.js's 30 s
+// testTimeout, which is what a cold-restart test spends it on.
+const READINESS_BUDGET_MS = 12_000;
+
+// A bound socket answered in 2-65 ms across every row above, so this bounds a
+// round trip that has already been accepted, not a boot. It stays far below the
+// budget on purpose: one unanswered attempt must not consume the boot's wait.
+const STATS_REPLY_BUDGET_MS = 1000;
+
+const READINESS_POLL_MS = 25;
+
+// [LAW:types-are-the-program] Readiness is not a boolean: a failure carries TWO
+// facts, and which pair it is decides the diagnosis. How far the socket got says
+// which half of the boot died — the criterion this ticket exists for — and the
+// child's exit says whether the daemon refused or is merely slow. `serving` is
+// the only success and it carries neither, so the failure arm's phase is exactly
+// the two remaining values and the projection below is total over them; there is
+// no unreachable third case to write a sentence for.
+//
+// The pair deliberately stops short of "is the answering daemon OURS". Nothing
+// on the wire says which process answered, and an exit read cannot stand in for
+// it: against a LIVE incumbent the socket answers on the first poll, before our
+// own child has reached its EADDRINUSE decision at all (measured), so an
+// exit-based check would catch that case only when the scheduler happened to
+// cooperate. A coin-flip detector for a race is worse than a documented one —
+// see the accepted-incumbent case in test/spawn-isolated-daemon.test.ts.
+type BootPhase = "booting" | "bound" | "serving";
+type FailedPhase = Exclude<BootPhase, "serving">;
+
+export interface ReadinessFailure {
+  readonly phase: FailedPhase;
+  readonly exit: ExitResult | null;
+}
+
+type Readiness = { readonly phase: "serving" } | ReadinessFailure;
+
+// [LAW:no-ambient-temporal-coupling] Every failure this helper can diagnose is
+// awaited as a named fact; the budget bounds the one state that publishes none.
+// The daemon writes nothing before it binds — its first log line is `daemon up`,
+// AFTER the bind — so there is no earlier milestone to wait on inside `tsx`
+// boot, which is exactly the phase that times out. But a daemon that refuses to
+// boot EXITS, and the `tsx` wrapper propagates that exit, so every refusal the
+// daemon diagnoses about itself (`refusing to boot`, the fork-bomb breaker,
+// `EADDRINUSE ... exiting`) is readable the instant it happens instead of at the
+// end of a budget. That is what lets the budget above be generous: it is no
+// longer the detector for anything the daemon can tell us itself, only the last
+// bound on a live process that has not answered yet.
+async function awaitReadiness(
+  child: ChildProcess,
+  sockPath: string,
+): Promise<Readiness> {
+  const deadline = Date.now() + READINESS_BUDGET_MS;
+  let phase: FailedPhase = "booting";
+  for (;;) {
+    if (fs.existsSync(sockPath)) {
+      phase = "bound";
+      if (await answersStats(sockPath)) return { phase: "serving" };
+    }
+    const exit = exitedAlready(child);
+    if (exit !== null) return { phase, exit };
+    if (Date.now() >= deadline) return { phase, exit: null };
+    await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
+  }
+}
+
+// [LAW:one-source-of-truth] Node retains the terminal code/signal on the
+// ChildProcess after `exit` fires, which is what makes reading it directly
+// race-free — the same property `waitForExit`'s pre-check reads in
+// daemon-wire.ts. This is that read's polling half: one synchronous look per
+// poll, so no `once("exit")` listener accumulates across iterations. It is asked
+// only while nothing has answered yet, which is the whole window in which a
+// refusal is the explanation.
+function exitedAlready(child: ChildProcess): ExitResult | null {
+  if (child.exitCode === null && child.signalCode === null) return null;
+  return { code: child.exitCode, signal: child.signalCode };
+}
+
+async function answersStats(sockPath: string): Promise<boolean> {
+  try {
+    const resp = await sendDaemonRequest(
+      sockPath,
+      { v: PROTOCOL_VERSION, kind: "stats" },
+      STATS_REPLY_BUDGET_MS,
+    );
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+// [LAW:dataflow-not-control-flow] One total projection of the (phase, exit) pair
+// onto the sentence a reader needs: what the socket did, what our process did,
+// then the daemon's own words. Exported so every combination is checked as a
+// value, rather than by provoking each process state in a test that would then
+// have to wait for it.
+export function readinessFailure(
+  readiness: ReadinessFailure,
+  sockPath: string,
+  env: NodeJS.ProcessEnv,
+): string {
+  return (
+    `daemon never became ready: ${socketDid(readiness.phase, sockPath)}; ` +
+    `${processDid(readiness.exit)}\n${daemonLogTail(env)}`
+  );
+}
+
+function socketDid(phase: FailedPhase, sockPath: string): string {
+  switch (phase) {
+    case "booting":
+      return `no socket at ${sockPath}, so it never got as far as binding`;
+    case "bound":
+      return `it bound ${sockPath} but never answered a stats round trip`;
+  }
+}
+
+function processDid(exit: ExitResult | null): string {
+  if (exit === null) {
+    return (
+      `the process was still running when the ${READINESS_BUDGET_MS}ms budget ` +
+      `expired, so this is a slow boot, not a refusal`
+    );
+  }
+  const how =
+    exit.signal !== null ? `signal ${exit.signal}` : `code ${exit.code}`;
+  return `the process exited (${how}), and said why in the log below`;
+}
+
 // [LAW:no-silent-failure] A daemon that never answered wrote its own reason
 // down — `refusing to boot`, `EADDRINUSE … exiting`, `parent watchdog` — in
 // the log this env points it at (its stdio is drained into nothing). A
-// readiness failure that quotes that log names its cause; one that only says
-// "socket file exists" reads like a slow daemon and costs an afternoon.
+// readiness failure that quotes that log names its cause, where the phase above
+// only names which half of the boot it died in.
 function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
   const file = logPath(env);
   let text: string;
