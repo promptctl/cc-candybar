@@ -59,10 +59,15 @@ export interface VarSnapshot {
     readonly timestampMs: number;
     readonly message: string;
   } | null;
-  // Wall-clock ms since the box was last set (Box) or null for Computed
-  // nodes whose freshness is governed by MobX invalidation, not a single
-  // timestamp. Null is structurally distinct from 0 so consumers can
+  // Wall-clock ms since the box's value last CHANGED (Box), or null for
+  // Computed nodes whose freshness is governed by MobX invalidation, not a
+  // single timestamp. Null is structurally distinct from 0 so consumers can
   // distinguish "no age tracking applies" from "just updated."
+  //
+  // Changed, not written: a source that re-runs and parses identical content
+  // leaves this alone (brandon-var-system-1tl). It used to record the last
+  // write, which read as constant freshness for a variable nothing had moved in
+  // hours — misleading in exactly the situation this field is consulted in.
   readonly ageMs: number | null;
 }
 

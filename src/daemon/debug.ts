@@ -9,7 +9,8 @@
 //
 // [LAW:one-source-of-truth] The introspector reads through the live
 // VariableStore (current values), SourceRegistry (lastErrors), VarNode
-// (lastUpdatedMs), and DslConfig (declared source kinds, segment templates).
+// (lastUpdatedMs — when the value last changed), and DslConfig (declared source
+// kinds, segment templates).
 // There is no parallel cache, no shadow snapshot kept in sync — the daemon
 // has one DSL state and this module projects it.
 //

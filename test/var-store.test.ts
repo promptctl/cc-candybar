@@ -1,3 +1,5 @@
+import { autorun } from "mobx";
+
 import {
   VariableStore,
   toString,
@@ -256,6 +258,54 @@ describe("type-checked cast helpers", () => {
 // [LAW:behavior-not-structure] A document node holds an Outcome, is read by its
 // own accessor, and is refused by the scalar reads by name — the contract the
 // scope proxy and the registry's publishers build on.
+// brandon-var-system-1tl. `lastUpdatedMs` is surfaced by src/daemon/debug.ts as
+// the node's AGE, and both its name and the reason anyone reads it say "when did
+// this last change" — which is exactly the question being asked when debugging a
+// source that re-runs without effect. It used to be stamped on every write.
+//
+// [LAW:no-ambient-temporal-coupling] The clock is the test's, not the machine's:
+// with the real `Date.now()`, two writes inside one millisecond produce the same
+// stamp, so "the stamp did not move" would pass for the wrong reason — the
+// defect's own failure mode.
+describe("VariableStore — the age records a change, not a write", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("a scalar write that moves nothing leaves the age alone", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore();
+    store.defineBox("n", "number", 7);
+    expect(store.getNode("n").lastUpdatedMs()).toBe(1000);
+
+    jest.setSystemTime(5000);
+    store.setBox("n", 7);
+    expect(store.getNode("n").lastUpdatedMs()).toBe(1000);
+
+    jest.setSystemTime(9000);
+    store.setBox("n", 8);
+    expect(store.getNode("n").lastUpdatedMs()).toBe(9000);
+  });
+
+  it("a document rescan that parsed the same content leaves the age alone", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ a: 1 }));
+    expect(store.getNode("d").lastUpdatedMs()).toBe(1000);
+
+    jest.setSystemTime(5000);
+    store.setDocument("d", ok({ a: 1 }));
+    expect(store.getNode("d").lastUpdatedMs()).toBe(1000);
+
+    jest.setSystemTime(9000);
+    store.setDocument("d", ok({ a: 2 }));
+    expect(store.getNode("d").lastUpdatedMs()).toBe(9000);
+  });
+});
+
 describe("VariableStore — documents", () => {
   const doc = () => ({ a: 1, b: { c: "x" } });
 
@@ -355,6 +405,60 @@ describe("VariableStore — documents", () => {
     store.setDocument("d", ok({ ...doc(), a: 2 }));
     expect(store.changeKey("d")).not.toBe(before);
     expect(store.changeKey("n")).toBe("7");
+  });
+
+  // brandon-var-system-1tl. The defect: the document box compared by Object.is
+  // against a value `toDocument` rebuilds on every scan, so a `json` source
+  // that re-read byte-identical content woke every observer — while changeKey,
+  // one method away, said the same rescan was not a change. Two spellings of
+  // "did this document change" that disagree; the content one wins, and now
+  // there is only one.
+  it("a rescan yielding identical content wakes nobody, and changeKey agrees", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok(doc()));
+    let runs = 0;
+    const stop = autorun(() => {
+      store.readDocument("d");
+      runs++;
+    });
+    expect(runs).toBe(1);
+    const key = store.changeKey("d");
+
+    // A rescan that parsed the same bytes into a fresh object.
+    store.setDocument("d", ok(doc()));
+    expect({ runs, key: store.changeKey("d") }).toEqual({ runs: 1, key });
+
+    // And one that parsed the same content in another key order: toDocument
+    // sorts, so this is the same document by the only measure that matters.
+    store.setDocument("d", ok({ b: { c: "x" }, a: 1 }));
+    expect({ runs, key: store.changeKey("d") }).toEqual({ runs: 1, key });
+
+    // Real movement still wakes it.
+    store.setDocument("d", ok({ ...doc(), a: 2 }));
+    expect(runs).toBe(2);
+    expect(store.changeKey("d")).not.toBe(key);
+    stop();
+  });
+
+  // The non-ok arms are values too: a source that keeps failing for the same
+  // reason has not changed, and one whose reason changes has.
+  it("an unchanged outcome is unchanged whatever its kind", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", failed("boom"));
+    let runs = 0;
+    const stop = autorun(() => {
+      store.readDocument("d");
+      runs++;
+    });
+    store.setDocument("d", failed("boom"));
+    expect(runs).toBe(1);
+    store.setDocument("d", failed("different"));
+    expect(runs).toBe(2);
+    store.setDocument("d", ABSENT);
+    expect(runs).toBe(3);
+    store.setDocument("d", ABSENT);
+    expect(runs).toBe(3);
+    stop();
   });
 
   it("getNode hands out a document wrapper with no mutation surface and no scalar type", () => {

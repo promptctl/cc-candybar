@@ -43,7 +43,13 @@ class BoxNode implements VarNode {
   private readonly cell: IObservableValue<VarValue>;
   // [LAW:single-enforcer] One write path (`set`) updates both the value and
   // the timestamp; introspection reads from the same place renderers do.
-  private lastSetAt: number;
+  //
+  // It records when the value last CHANGED, which is what debug.ts calls the
+  // node's age and what anyone reading that age is asking (brandon-var-system-
+  // 1tl). Stamping every write instead reported attempts, and reported them most
+  // misleadingly in the one situation where the age is consulted: a source
+  // re-running with no effect.
+  private lastChangedAt: number;
 
   constructor(
     readonly name: string,
@@ -52,7 +58,7 @@ class BoxNode implements VarNode {
   ) {
     assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
-    this.lastSetAt = Date.now();
+    this.lastChangedAt = Date.now();
   }
 
   read(): VarValue {
@@ -61,12 +67,20 @@ class BoxNode implements VarNode {
 
   set(value: VarValue): void {
     assertType(this.name, this.type, value, "set value");
+    // [LAW:single-enforcer] ONE comparison decides both halves of a write:
+    // whether observers hear about it (they do not, because an unchanged value is
+    // never written) and whether the age moved. Configuring the box's own
+    // `equals` beside this would be a second mechanism for the same decision —
+    // and a dead one, since `set` is the only writer and never hands the cell an
+    // equal value. A mutation proved it dead rather than an argument: inverting
+    // that `equals` changed no test.
+    if (Object.is(this.cell.get(), value)) return;
     this.cell.set(value);
-    this.lastSetAt = Date.now();
+    this.lastChangedAt = Date.now();
   }
 
   lastUpdatedMs(): number {
-    return this.lastSetAt;
+    return this.lastChangedAt;
   }
 }
 
@@ -114,11 +128,17 @@ class ComputedNode implements VarNode {
 // template read must see, so the failure travels WITH the value to the one
 // place that unwraps it (the scope proxy, src/template-engine/scope.ts) and
 // surfaces there naming the variable. A scalar box has no such states: its
-// fallback is a string. Same observable-box mechanics as BoxNode (deep:false —
-// a scan replaces the whole document, dependents invalidate once). Every ok
-// value is shaped by toDocument on the way IN — the one place the document
-// invariant (null prototypes, sorted keys) is enforced, for a scan's output
-// and an authored default alike [LAW:single-enforcer].
+// fallback is a string. Every ok value is shaped by toDocument on the way IN —
+// the one place the document invariant (null prototypes, sorted keys) is
+// enforced, for a scan's output and an authored default alike
+// [LAW:single-enforcer].
+//
+// Equality is by CONTENT (documentKey), not by identity: `toDocument` rebuilds a
+// fresh object on every scan, so an identity comparison made a `json` source that
+// re-read byte-identical bytes wake every observer of the document — while
+// `changeKey`, whose own comment explains why it compares structurally, said the
+// same rescan was not a change. Two answers to "did this document change" that
+// disagreed; they are one function now (brandon-var-system-1tl).
 export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
@@ -129,14 +149,14 @@ export interface DocumentNode {
 class DocumentCell implements DocumentNode {
   readonly kind = "document" as const;
   private readonly cell: IObservableValue<Outcome<JsonValue>>;
-  private lastSetAt: number;
+  private lastChangedAt: number;
 
   constructor(
     readonly name: string,
     initial: Outcome<JsonValue>,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
-    this.lastSetAt = Date.now();
+    this.lastChangedAt = Date.now();
   }
 
   read(): Outcome<JsonValue> {
@@ -144,13 +164,33 @@ class DocumentCell implements DocumentNode {
   }
 
   set(value: Outcome<JsonValue>): void {
-    this.cell.set(shaped(value));
-    this.lastSetAt = Date.now();
+    const next = shaped(value);
+    // [LAW:single-enforcer] As in BoxNode: one comparison, and not writing IS
+    // the notification rule. An unchanged rescan reaches no observer because the
+    // cell is never handed the value, so the box needs no `equals` of its own to
+    // enforce what this line already decided.
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
+    this.lastChangedAt = Date.now();
   }
 
   lastUpdatedMs(): number {
-    return this.lastSetAt;
+    return this.lastChangedAt;
   }
+}
+
+// [LAW:one-source-of-truth] THE answer to "are these the same document" — the
+// document box's equality, its age, and `changeKey` are all this one expression.
+// Canonical because every stored document has sorted keys and null prototypes
+// (toDocument), so a rescan that produced the same content in another key order
+// keys identically; total because the non-ok arms are values too (two failures
+// for the same reason are not a change, a new reason is).
+export function documentKey(outcome: Outcome<JsonValue>): string {
+  return JSON.stringify(outcome);
+}
+
+function sameDocument(a: Outcome<JsonValue>, b: Outcome<JsonValue>): boolean {
+  return documentKey(a) === documentKey(b);
 }
 
 function shaped(outcome: Outcome<JsonValue>): Outcome<JsonValue> {
@@ -278,7 +318,7 @@ export class VariableStore {
   // content in another key order is not a change.
   changeKey(name: string): string {
     const node = this.requireNode(name);
-    if (node.kind === "document") return JSON.stringify(node.read());
+    if (node.kind === "document") return documentKey(node.read());
     // A scalar read can throw: a `template` variable with no authored `default`
     // reads as its failure (brandon-var-sources-1p6). Failing IS a change — a
     // dependant must re-run when its dependency stops producing a value — and a
