@@ -1,3 +1,10 @@
+## [1.61.3](https://github.com/promptctl/cc-candybar/compare/v1.61.2...v1.61.3) (2026-09-12)
+
+
+### Bug Fixes
+
+* **var-system:** a template variable that fails reads as the failure (brandon-var-sources-1p6) ([9f33c6b](https://github.com/promptctl/cc-candybar/commit/9f33c6b934858c98de78e31bdf2bf6a7e18b7786))
+
 ## [1.61.2](https://github.com/promptctl/cc-candybar/compare/v1.61.1...v1.61.2) (2026-09-12)
 
 
