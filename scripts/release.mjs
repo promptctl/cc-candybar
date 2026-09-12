@@ -18,11 +18,22 @@
 //   4. Rewrite root package.json's optionalDependencies to the release
 //      version. semantic-release/npm publishes the main package next, with
 //      the rewritten manifest.
+//   5. Wait for the registry to serve those four versions, then re-sync
+//      pnpm-lock.yaml to the rewritten specifiers — .releaserc commits both
+//      files, and CI's `pnpm install --frozen-lockfile` fails on every later
+//      branch if they disagree.
+//
+// Rerunning this script for a version whose platform packages are already
+// published is SAFE and is the documented recovery for a release that failed
+// after step 3: step 3 skips what the registry already serves, and every later
+// step is a rewrite of the same two files to the same values.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { awaitRegistryVisibility, registryState } from "./npm-registry.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -66,17 +77,24 @@ for (const p of PLATFORMS) {
 // 3. Publish platform packages first so the main package's optionalDependencies
 // resolve when users install it. Skip packages already at this version so
 // reruns after a partial failure don't abort on 403.
-import { execSync } from "node:child_process";
+//
+// [LAW:no-silent-failure] A registry we could not ASK is not a registry that
+// says no: on `unchecked` we publish and let `npm publish` arbitrate, because
+// npm is the single enforcer of "this version already exists" and refuses a
+// duplicate loudly. What must never happen is treating an outage as "absent"
+// silently and reporting a release that published nothing.
+const platformPackages = PLATFORMS.map((p) => `@promptctl/cc-candybar-${p}`);
 for (const p of PLATFORMS) {
   const pkgName = `@promptctl/cc-candybar-${p}`;
-  let alreadyPublished = false;
-  try {
-    const result = execSync(`npm view ${pkgName}@${version} version 2>/dev/null`, { encoding: "utf8" }).trim();
-    alreadyPublished = result === version;
-  } catch { /* not published yet */ }
-  if (alreadyPublished) {
+  const state = registryState(pkgName, version);
+  if (state.kind === "serves") {
     console.log(`  skipping ${pkgName}@${version} (already published)`);
     continue;
+  }
+  if (state.kind === "unchecked") {
+    console.log(
+      `  could not ask the registry about ${pkgName}@${version} (${state.reason}); publishing and letting npm arbitrate`,
+    );
   }
   const dir = resolve(ROOT, "npm", `cc-candybar-${p}`);
   console.log(`  publishing ${dir}`);
@@ -113,8 +131,17 @@ console.log(`release.mjs: optionalDependencies pinned to ${version}`);
 // but npm registry propagation is NOT instant. A regen run immediately resolves
 // only the subset already live and SILENTLY DROPS the rest (they are optional),
 // shipping a lockfile missing architectures — which is exactly the recurring
-// breakage. So retry the regen until all four are present, and FAIL the release
-// (never ship a partial lockfile) if propagation hasn't completed in time.
+// breakage. So the regen is verified against the lockfile and the release FAILS
+// (never shipping a partial lockfile) if an architecture is missing.
+//
+// The waiting happens BEFORE that, against the registry itself
+// (brandon-release-j08): a regen loop cannot afford patience, because every unit
+// of it costs a full resolve, and a 3-minute ceiling built that way aborted two
+// consecutive releases after their platform packages were already public. The
+// fact the regen needs — "the registry serves all four" — is four cheap reads,
+// so it is waited for directly and generously, and only then is the lockfile
+// resolved. The small retry that remains covers pnpm's own metadata cache, which
+// is a different clock from npm's and the only one a regen can observe.
 function lockfileSpecifier(platform) {
   const lock = readFileSync(resolve(ROOT, "pnpm-lock.yaml"), "utf8");
   const m = lock.match(
@@ -122,8 +149,29 @@ function lockfileSpecifier(platform) {
   );
   return m?.[1];
 }
-const REGEN_MAX_ATTEMPTS = 12;
-const REGEN_WAIT_S = 15;
+const VISIBILITY_BUDGET_MS = 10 * 60 * 1000;
+const VISIBILITY_POLL_MS = 10 * 1000;
+const visibility = awaitRegistryVisibility(platformPackages, version, {
+  budgetMs: VISIBILITY_BUDGET_MS,
+  pollMs: VISIBILITY_POLL_MS,
+  log: (m) => console.log(`release.mjs: ${m}`),
+});
+if (visibility.kind === "timedOut") {
+  fail(
+    `the registry did not serve ${visibility.pending.length} platform package(s) at ${version} ` +
+      `within ${VISIBILITY_BUDGET_MS / 60000} minutes: ` +
+      visibility.pending
+        .map(({ name, state }) => `${name} (${state.kind}: ${state.reason})`)
+        .join(", ") +
+      `. They were published in step 3, so this is propagation lag or an npm ` +
+      `outage — never a missing publish. Rerunning this job is safe: step 3 ` +
+      `skips versions the registry already serves.`,
+  );
+}
+console.log(`release.mjs: the registry serves all ${PLATFORMS.length} platform packages at ${version}`);
+
+const REGEN_MAX_ATTEMPTS = 4;
+const REGEN_WAIT_S = 20;
 let synced = false;
 for (let attempt = 1; attempt <= REGEN_MAX_ATTEMPTS; attempt++) {
   console.log(`release.mjs: re-syncing pnpm-lock.yaml to ${version} (attempt ${attempt}/${REGEN_MAX_ATTEMPTS})`);
@@ -143,6 +191,10 @@ for (let attempt = 1; attempt <= REGEN_MAX_ATTEMPTS; attempt++) {
   execSync(`sleep ${REGEN_WAIT_S}`);
 }
 if (!synced) {
-  fail(`pnpm-lock.yaml missing platform optionalDependencies at ${version} after ${REGEN_MAX_ATTEMPTS} attempts`);
+  fail(
+    `pnpm-lock.yaml still missing platform optionalDependencies at ${version} after ` +
+      `${REGEN_MAX_ATTEMPTS} regen attempts, THOUGH the registry serves all ${PLATFORMS.length} ` +
+      `— so this is pnpm's cached metadata, not npm propagation`,
+  );
 }
 console.log(`release.mjs: pnpm-lock.yaml re-synced to ${version} with all ${PLATFORMS.length} platforms`);
