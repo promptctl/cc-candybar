@@ -202,7 +202,7 @@ Recommendation: option 1 for now (in the segment). Variant theming via mapping i
 
 ## Hard constraints the design must satisfy
 
-- **Color compatibility**: must continue to support `colorCompatibility: "auto" | "truecolor" | "256" | "ansi" | "none"`. The Palette resolves to a hex; the renderer downgrades. (rich-js's `Color.downgrade(ColorSystem)` handles this.)
+- **Color compatibility**: must continue to support `colorCompatibility: "truecolor" | "256" | "ansi" | "none"`. The Palette resolves to a hex; the renderer downgrades. (rich-js's `Color.downgrade(ColorSystem)` handles this.) This bullet also demanded `"auto"`; that half of the constraint is retired and the loader now refuses the name, because the render daemon runs detached — detection would read the daemon's terminal, not the client's.
 - **Custom themes**: user can still define their own palette inline (via config) without authoring an external file. Current `theme: "custom"` escape hatch needs an analogue.
 - **No regression** on existing theme names: `dark`, `light`, `nord`, `tokyo-night`, `rose-pine` must continue to work, even if their implementation changes from "static color map" to "named palette + default mapping." Visually equivalent.
 - **TUI mode parity**: the TUI panel layout must theme correctly under the new model. Likely uses the same palette + a `tui.*` section of the mapping (panel border, header bg, content fg).
