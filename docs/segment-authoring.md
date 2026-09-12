@@ -322,6 +322,28 @@ words: `"step"` holds each stop's colour until the next position — a
 between neighbouring stops in OKLCH. Positions are required, must ascend, and
 the value clamps at both ends; a value exactly on a stop is that stop's colour.
 
+The same ramp draws a **gauge**: one value against a fixed maximum, as a row of
+cells, where each cell's colour is this ramp asked at that cell's own position
+rather than at the value. `{{ gauge <value> <max> <width> <filled> <empty> }}`
+alone is monochrome and takes the segment's `fg:`; add an easing and
+`"<position>:<colour>"` stops and the cells are painted individually, so a
+half-full gauge reads two-toned the way a threshold cascade does:
+
+```json5 check:pass
+{
+  segments: {
+    ctx: {
+      template: '◔ {{ gauge .context.contextLeft 100 10 "▰" "▱" "step" "0:error" "40:warning" "70:success" }}',
+    },
+  },
+  root: { rows: { status: { h: ["model", "ctx"] } } },
+}
+```
+
+A gauge is not a sparkline: the sparkline normalises every sample against its own
+window, so it shows SHAPE over time and cannot say "73 % of the maximum". Both
+exist and they stay separate.
+
 Every position anyone might tune is a **declared variable** riding in the
 position slot; the only literal positions are the fixed ends of the value's
 domain (`0`, and `100` for a percentage). The knob is then one number to
@@ -859,7 +881,7 @@ In a layout node's `when` the call itself is refused, naming the reason:
 ```
 
 ```error
-{{ color }} / {{ ramp }} is only available inside a segment's templates — there is no active segment here.
+{{ color }} / {{ ramp }} / {{ gauge }} is only available inside a segment's templates — there is no active segment here.
 ```
 
 ## Before you report done
