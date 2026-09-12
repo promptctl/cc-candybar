@@ -1,3 +1,10 @@
+# [1.68.0](https://github.com/promptctl/cc-candybar/compare/v1.67.0...v1.68.0) (2026-09-12)
+
+
+### Features
+
+* **looks:** a look can be chosen by data, not only by a name (brandon-looks-pe6) ([d806096](https://github.com/promptctl/cc-candybar/commit/d806096b4ef6f2a0b5f6b29475f26db1c7f7abc5))
+
 # [1.67.0](https://github.com/promptctl/cc-candybar/compare/v1.66.0...v1.67.0) (2026-09-12)
 
 
