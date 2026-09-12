@@ -44,6 +44,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
+import { FLOOR_LOOK } from "./helpers/floor-look";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -271,7 +272,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
-  look: "none",
+  look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
   style: "powerline",

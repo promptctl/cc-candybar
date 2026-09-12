@@ -70,7 +70,11 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
   // `looks` block), so membership is a cross-ref check on the MERGED config —
-  // a user's globals.look may name a default-provided look. Shape-only here,
+  // a user's globals.look may name a default-provided look. That check also
+  // EXEMPTS a template in this slot (brandon-looks-pe6: a look chosen by data
+  // names the rule, not a look), which is a second reason the shape rule here is
+  // the right one: `string` already admits both, so neither the spec nor the
+  // emitted schema needed a new arm. Shape-only here,
   // exactly the shape/meaning split paletteSpec's schema facet keeps.
   look: optionalStringSpec(),
   // [LAW:types-are-the-program] The config-default PRESET name — same

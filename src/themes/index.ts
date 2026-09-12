@@ -6,8 +6,10 @@
 export {
   resolvePaletteName,
   effectiveThemeName,
-  effectiveLookName,
-  lookKeyByName,
+  LOOK_FLOOR,
+  isLookExpression,
+  decideLookName,
+  resolveLookSelection,
   effectiveStripStyle,
   effectiveAutoWrap,
   effectivePadding,
@@ -15,7 +17,7 @@ export {
   listResolvablePaletteNames,
   STRIP_STYLES,
 } from "./policy.js";
-export type { StripStyle } from "./policy.js";
+export type { StripStyle, LookSelection, DecidedLook } from "./policy.js";
 
 export { paletteForThemeName, transposedPalette } from "./palette-resolvers.js";
 

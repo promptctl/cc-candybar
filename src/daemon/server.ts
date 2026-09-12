@@ -75,7 +75,7 @@ import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { renderDsl } from "../dsl/render.js";
-import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
+import { paletteForThemeName } from "../themes/index.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -1049,7 +1049,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // debug handler so normal renders pay no extra serializer cost.
         { perSegmentSink: entry.state.lastRenderCellsBySegment },
         {
-          look: lookKeyByName(entry.state.config.looks, effective.look),
+          look: effective.look,
           preset: effective.preset,
         },
       );

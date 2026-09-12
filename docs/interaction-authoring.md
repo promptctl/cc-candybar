@@ -1272,7 +1272,7 @@ optional, absent = identity:
 
 Selection reuses the standard seam: one session key (`look`), one action with
 `from: "looks"`, one `{{ menu }}`. `globals.look` sets the config default
-(session pick wins); `.look.effective` is the daemon-resolved active name for
+(session pick wins); `.look.effective` is the resolved active name for
 trigger labels. The bundled stdlib (`none`, `vivid`, `muted`, `dim`, `bright`,
 `inverted`) merges under your names — `none` is the identity look and the
 resolution floor. A per-segment `palette:` pin ignores the look, exactly as it
@@ -1298,6 +1298,44 @@ ignores the session theme.
   ] },
 }
 ```
+
+### A look chosen by data, not by a name
+
+`globals.look` also accepts a **template**, evaluated every render like a `when`.
+Its result names a look. This is the one way to recolour the *whole bar*
+coherently from one fact — every segment moves through the theme's own
+vocabulary, so nothing needs a `bg:` override to say "things are hot now":
+
+```json5 check:pass
+{
+  globals: {
+    // Below 80 % of the rate-limit window the bar is untouched; past it the
+    // whole thing goes muted, then dim. One expression, every segment.
+    look: '{{ cascade (round .block.nativeUtilization) "0:none" "80:muted" "95:dim" }}',
+  },
+}
+```
+
+Four things to know about that slot:
+
+- **A plain name still works.** The expression form is recognised by shape — a
+  `{{` in the value — and a look name can never contain braces, so there is
+  nothing to declare and nothing to switch on.
+- **A session pick still wins.** Clicking a look, or staging one in edit mode,
+  outranks the expression; the expression is the *default*, one rung down. That
+  includes picking `none` explicitly — a pick is a decision, so a hot bar does
+  not override it.
+- **A result naming no declared look becomes `none`**, exactly as a stale
+  session pick does. A typo makes the bar plain, never broken.
+- **A malformed template is a load error**, reported against `globals.look` when
+  the config loads — not once per repaint.
+- **Committing a look with `persist?` replaces the expression** with the name you
+  picked, because `globals.look` is the one slot both live in. That is what
+  committing a default means here; keep the expression if you want the rule
+  rather than the answer.
+
+`.look.effective` reads back whatever the expression chose, so a `◐ {{
+.look.effective }}` label always names the look you are actually looking at.
 
 The block validates loudly: axis names outside the four, non-finite numbers,
 and negative `chromaScale` are load errors, and `globals.look` must name a

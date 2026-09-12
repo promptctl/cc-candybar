@@ -12,7 +12,6 @@
 // govern output, not whether operations run.
 
 import type { RichText, Palette, ThemeKey } from "@promptctl/rich-js";
-import { IDENTITY } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -38,7 +37,15 @@ import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
-import { paletteForThemeName, transposedPalette } from "../themes/index.js";
+import {
+  decideLookName,
+  isLookExpression,
+  LOOK_FLOOR,
+  paletteForThemeName,
+  transposedPalette,
+  type DecidedLook,
+  type LookSelection,
+} from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -110,6 +117,13 @@ export interface CompiledConfig {
   readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
+  // [LAW:types-are-the-program] The compiled `globals.look` expression, present
+  // exactly when the config authored one (brandon-looks-pe6). Parsed HERE, with
+  // every other pre-parsed template, for the two reasons those are: the
+  // per-render cost is an evaluation and not a parse, and a malformed template is
+  // a LOAD error — the place an author expects to be told — rather than a render
+  // error they would hear about once per repaint.
+  readonly lookExpression?: Template<RichText>;
   // [LAW:one-source-of-truth] The single "which segment is rendering" record
   // every segment-scoped template function reads — the menu's identity, the
   // `color` func's palette, the `bgOf` func's background. Surfaced here so the
@@ -581,13 +595,73 @@ export function registerDslConfig(
     roots.set(name, compileNode(node, path));
   }
 
+  // [LAW:no-silent-failure] Parsed eagerly so a malformed look expression is a
+  // load error naming its own slot, not a per-render throw. The slot is detected
+  // by SHAPE (`isLookExpression`), the same way a template is told from a literal
+  // everywhere else here, so this is present iff `resolveLookSelection` will hand
+  // renderDsl an `expression` arm to evaluate — one predicate, two readers.
+  const lookExpression = isLookExpression(config.globals.look)
+    ? parseLookExpression(parse, config.globals.look!)
+    : undefined;
+
   return {
     segments: compiled,
     roots,
     activeSegment,
     menuRuntime,
+    ...(lookExpression !== undefined && { lookExpression }),
     loadWarnings,
   };
+}
+
+// ─── globals.look as an expression (brandon-looks-pe6) ───────────────────────
+
+// [LAW:no-silent-failure] Re-thrown with the slot attached: the engine knows the
+// template is malformed, only cc-candybar knows which config field it came from.
+// The same reasoning (and the same shape) as a `bg:`/`fg:` parse failure.
+function parseLookExpression(
+  parse: (src: string) => Template<RichText>,
+  source: string,
+): Template<RichText> {
+  try {
+    return parse(source);
+  } catch (e) {
+    throw new Error(
+      `globals.look is not a valid template: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+// [LAW:no-defensive-null-guards] `isLookExpression` gates BOTH the compile in
+// registerDslConfig and the `expression` arm resolveLookSelection produces, so a
+// missing template here is drift between the two readers of that one predicate —
+// a loud caller bug, never a case to absorb into the identity look.
+function evalLookExpression(compiled: CompiledConfig, scope: object): string {
+  if (compiled.lookExpression === undefined) {
+    throw new Error(
+      "globals.look is an expression but no compiled template exists — " +
+        "registerDslConfig and resolveLookSelection disagree about isLookExpression",
+    );
+  }
+  return compiled.lookExpression
+    .evaluate(scope)
+    .map((f) => f.plain)
+    .join("");
+}
+
+// The look the render actually transposes with. Returns the selection ITSELF
+// when it was already decided — identity, so the caller can tell "the fold
+// finished here" from "it had already finished" without re-testing the
+// discriminator [LAW:dataflow-not-control-flow].
+function finishLook(
+  selected: LookSelection,
+  compiled: CompiledConfig,
+  declaredLooks: Readonly<Record<string, ThemeKey>>,
+  scope: object,
+): DecidedLook {
+  return selected.kind === "decided"
+    ? selected
+    : decideLookName(evalLookExpression(compiled, scope), declaredLooks);
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -655,11 +729,13 @@ export interface RenderObservers {
 // caller (a compile-only test, the demo) renders the unadapted config — a true
 // default, not a fallback [LAW:no-silent-failure].
 export interface RenderSelection {
-  // The resolved look, as a ThemeKey: effectiveLookName over SessionState/
-  // globals, then lookKeyByName — resolved by the caller exactly how basePalette
-  // is. IDENTITY is the "none" look; the base palette is transposed by it ONCE
-  // per render.
-  readonly look?: ThemeKey;
+  // The look, resolved by the caller as far as it CAN be: `resolveLookSelection`
+  // over staged/session/globals, exactly how basePalette is resolved upstream.
+  // A `decided` arm is the whole answer; an `expression` arm is the one rung only
+  // a render can settle, because it reads this render's values — the fold
+  // deliberately splits here and nowhere else (brandon-looks-pe6). The base
+  // palette is transposed by the result ONCE per render.
+  readonly look?: LookSelection;
   // The resolved preset NAME: effectivePresetName over SessionState/globals,
   // collapsed to the floor if stale. Selects which of `compiled.roots` this
   // render walks. The name (not the fragment) crosses this seam because the
@@ -680,7 +756,11 @@ export function renderDsl(
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError } = observers ?? {};
-  const { look = IDENTITY, preset = PRESET_FLOOR } = selection ?? {};
+  const { preset = PRESET_FLOOR } = selection ?? {};
+  // [LAW:one-source-of-truth] The floor honours a config that declares its own
+  // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
+  // config says it is, not a constant this file repeats.
+  const selected = selection?.look ?? decideLookName(LOOK_FLOOR, config.looks);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
   // the exact wrap width — never a cached or independently-measured copy. This is
@@ -691,7 +771,24 @@ export function renderDsl(
   // segment), applied at the pagination seam in renderPicker. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
-  registry.applyInput({ ...(payload as object), term: { cols: opts.width } });
+  // [LAW:one-source-of-truth] `look.effective` is published by whatever FINISHED
+  // the look fold, and nothing else CAN publish it: under an expression nobody
+  // upstream knows the answer, and under a decided name the selection already
+  // carries it. So the payload never carries this field — renderDsl injects it,
+  // exactly as it injects `term.cols`, which is why a `{{ .look.effective }}`
+  // label and the transposed palette cannot disagree (brandon-looks-pe6).
+  const payloadWith = (lookName: string): object => ({
+    ...(payload as object),
+    term: { cols: opts.width },
+    look: { effective: lookName },
+  });
+  // The expression arm's provisional value is the FLOOR: it is what an expression
+  // naming no declared look collapses to, so a look expression that reads
+  // `.look.effective` (a self-reference) sees the answer it would get by naming
+  // nothing, rather than a stale value from a previous render.
+  registry.applyInput(
+    payloadWith(selected.kind === "decided" ? selected.name : LOOK_FLOOR),
+  );
   // [LAW:single-enforcer] Publish the render's strip style onto the shared action
   // runtime so the picker can reserve the joiner's end-cap chrome at its
   // pagination seam (the menu body renders through the same renderPicker). Set
@@ -704,11 +801,23 @@ export function renderDsl(
   compiled.menuRuntime.action.padding = opts.padding;
 
   const scope = buildScope(store);
+  // The other half of the look fold, which could only ever happen here: the
+  // expression reads the store the line above just filled with this render's
+  // values. A decided look returns itself, so the republish below is skipped by
+  // identity rather than by re-testing the discriminator.
+  const look = finishLook(selected, compiled, config.looks, scope);
+  // [LAW:no-silent-failure] The expression arm learned a name the push above
+  // could not carry, so push it: without this the settings menu's `◐ look`
+  // control would label itself from the floor while the bar wore the expression's
+  // result — one fact with two answers. All payload ingestion goes through
+  // applyInput (see SourceRegistry's own contract), so this is that one path,
+  // called again, not a second way to write an input box.
+  if (look !== selected) registry.applyInput(payloadWith(look.name));
   // [LAW:one-source-of-truth] The render's palette: the base theme under the
   // session's look, transposed ONCE here — every unpinned segment colours from
   // this one object, so a look click recolours the whole bar from one
   // transposition, not one per segment.
-  const palette = transposedPalette(basePalette, look);
+  const palette = transposedPalette(basePalette, look.key);
 
   perSegmentSink?.clear();
 

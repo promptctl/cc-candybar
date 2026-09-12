@@ -16,6 +16,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { FLOOR_LOOK } from "./helpers/floor-look";
 
 type LogEntry = { level: string; msg: string };
 
@@ -48,7 +49,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
-  look: "none",
+  look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
   style: "powerline",
@@ -326,7 +327,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 });
 
 // [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/charset/
-// colorCompatibility/autoWrap/padding are theme/look's twins — this pins
+// colorCompatibility/autoWrap/padding are theme's twins — this pins
 // that buildRenderPayload projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
 // with no `wants` gate — exactly like theme/look).
@@ -334,7 +335,7 @@ describe("buildRenderPayload — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two daemon-consumed fields have none", async () => {
     const effective: EffectiveGlobals = {
       theme: "nord",
-      look: "vivid",
+      look: FLOOR_LOOK,
       preset: "default",
       presetCustomized: true,
       style: "capsule",
@@ -355,7 +356,11 @@ describe("buildRenderPayload — effective globals projection", () => {
       NO_HINTS,
     );
     expect(payload.theme).toEqual({ effective: "nord" });
-    expect(payload.look).toEqual({ effective: "vivid" });
+    // `look` is the one field this projection does NOT carry: renderDsl injects
+    // `look.effective` because under an expression it is the only thing that
+    // knows the answer (brandon-looks-pe6). Asserted absent rather than left
+    // unmentioned, so re-adding a second producer fails here.
+    expect("look" in payload).toBe(false);
     expect(payload.preset).toEqual({ effective: "default", customized: true });
     expect(payload.style).toEqual({ effective: "capsule" });
     expect(payload.charset).toEqual({ effective: "ascii" });

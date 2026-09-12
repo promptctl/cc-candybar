@@ -25,7 +25,7 @@ import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
-import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
+import { paletteForThemeName } from "../themes/index.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
@@ -81,7 +81,6 @@ const effective = resolveEffectiveGlobals(
   () => false,
 );
 const basePalette = paletteForThemeName(effective.theme);
-const lookKey = lookKeyByName(config.looks, effective.look);
 
 // A fresh store + registry for this run. (A hot-reloading daemon would
 // dispose() the old pair and build new ones — see registerDslConfig's docs.)
@@ -129,7 +128,7 @@ try {
         charset: effective.charset,
       },
       undefined,
-      { look: lookKey, preset: effective.preset },
+      { look: effective.look, preset: effective.preset },
     );
     process.stdout.write(`  ${line}\n`);
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);

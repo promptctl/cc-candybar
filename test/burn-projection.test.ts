@@ -29,6 +29,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
+import { FLOOR_LOOK } from "./helpers/floor-look";
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -136,7 +137,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
-  look: "none",
+  look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
   style: "powerline",

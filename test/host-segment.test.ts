@@ -33,10 +33,11 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
+import { FLOOR_LOOK } from "./helpers/floor-look";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
-  look: "none",
+  look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
   style: "powerline",

@@ -32,10 +32,10 @@ import {
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
 import {
-  effectiveLookName,
+  decideLookName,
   effectiveThemeName,
-  lookKeyByName,
   paletteForThemeName,
+  resolveLookSelection,
 } from "../src/themes";
 
 const SID = "s-looks";
@@ -272,7 +272,8 @@ describe("look click — live whole-bar recolor over the active theme", () => {
           config.globals.palette,
         ),
       );
-      const effectiveLook = effectiveLookName(undefined, 
+      const look = resolveLookSelection(
+        undefined,
         sessionState.get(SID, "look"),
         config.globals.look,
         config.looks,
@@ -286,7 +287,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
         basePalette,
         OPTS,
         undefined,
-        { look: lookKeyByName(config.looks, effectiveLook) },
+        { look },
       );
     };
     const dispose = (): void => {
@@ -360,34 +361,318 @@ describe("look click — live whole-bar recolor over the active theme", () => {
   });
 });
 
-// ─── Policy: resolution and the loud name→key boundary ────────────────────────
+// ─── A look chosen by data (brandon-looks-pe6) ────────────────────────────────
 
-describe("effectiveLookName / lookKeyByName", () => {
-  const LOOKS = {
-    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
-    vivid: {
-      hueShift: 0,
-      chromaScale: 1.5,
-      lightnessScale: 1,
-      lightnessShift: 0,
+// [LAW:behavior-not-structure] The claim is that the WHOLE BAR is transposed by
+// what an expression in `globals.look` evaluates to, per render, and that the
+// precedence the three name rungs already had is unchanged — a session pick
+// still outranks it. Every assertion measures a serialized background SGR (the
+// colour the terminal receives) or the load-time refusal, never which function
+// computed the choice.
+//
+// The rig mirrors the daemon verbatim: `resolveLookSelection` over the three
+// rungs, threaded into renderDsl as `RenderSelection.look`, exactly as
+// buildRenderPayload → server.ts does.
+describe("globals.look as an expression — a look chosen by data", () => {
+  // The expression reads a payload field, which is the point: `.context.pct` is
+  // stand-in for the rate-limit/idle facts the ticket names. Two declared looks
+  // that are visibly different, plus the identity floor.
+  const SRC = `{
+    globals: {
+      palette: '${THEME}',
+      look: '{{ if ge (int .ctx.pct) 80 }}inverted{{ else if ge (int .ctx.pct) 40 }}washed{{ else }}none{{ end }}',
     },
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      // No \`look\` state var here on purpose: a SCALAR at \`look\` would shadow the
+      // \`look.*\` namespace the label below reads, the same way a json document
+      // owns its dotted prefix. The bundled config avoids it by namespacing the
+      // synthesized picks under \`settings.\`.
+      'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
+      'look.effective': { kind: 'input', path: 'look.effective', default: '' },
+    },
+    looks: {
+      none: {},
+      washed: { chromaScale: 0.2 },
+      inverted: { lightnessScale: -1, lightnessShift: 1 },
+    },
+    segments: {
+      plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
+      label: { template: 'L={{ .look.effective }}', bg: 'surface', fg: 'foreground' },
+    },
+    root: { v: ['plain', 'label'] },
+  }`;
+
+  function buildRuntime(src = SRC) {
+    const config = parseAndValidate("<looks-expr>", src, ALLOWED);
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry);
+    const render = (pct: number, staged?: string): string =>
+      renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: SID, ctx: { pct }, look: { effective: "none" } },
+        paletteForThemeName(
+          effectiveThemeName(undefined, sessionState.get(SID, "theme"), config.globals.palette),
+        ),
+        OPTS,
+        undefined,
+        {
+          look: resolveLookSelection(
+            staged,
+            sessionState.get(SID, "look"),
+            config.globals.look,
+            config.looks,
+          ),
+        },
+      );
+    return { sessionState, render, dispose: () => registry.dispose() };
+  }
+
+  // The bg SGR of the row carrying a marker — the same row-scoped measure the
+  // click tests above use.
+  const bgOf = (rendered: string, marker: string): string => {
+    const line = rendered.split("\n").find((l) => l.includes(marker));
+    expect(line).toBeDefined();
+    const m = line!.match(/48;2;(\d+;\d+;\d+)/);
+    expect(m).not.toBeNull();
+    return m![1]!;
+  };
+  // What the same bar looks like under a look chosen by NAME — the reference
+  // every expression result is checked against, so "it changed colour" is never
+  // mistaken for "it changed to the right colour".
+  const byName = (name: string): string => {
+    const { render, dispose } = buildRuntime(
+      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '${name}',`),
+    );
+    try {
+      return bgOf(render(0), "◆ here");
+    } finally {
+      dispose();
+    }
   };
 
-  test("session over config default over the none floor", () => {
-    expect(effectiveLookName(undefined, "vivid", "none", LOOKS)).toBe("vivid");
-    expect(effectiveLookName(undefined, null, "vivid", LOOKS)).toBe("vivid");
-    expect(effectiveLookName(undefined, null, undefined, LOOKS)).toBe("none");
+  test("the expression is evaluated per render, and its result transposes the whole bar", () => {
+    const { render, dispose } = buildRuntime();
+    try {
+      // Each band lands on the SAME colour the named look produces — not merely
+      // a different colour from its neighbour.
+      expect(bgOf(render(10), "◆ here")).toBe(byName("none"));
+      expect(bgOf(render(50), "◆ here")).toBe(byName("washed"));
+      expect(bgOf(render(90), "◆ here")).toBe(byName("inverted"));
+      // Per render, not once per config: the same runtime moves both ways.
+      expect(bgOf(render(10), "◆ here")).toBe(byName("none"));
+    } finally {
+      dispose();
+    }
   });
 
-  test("a name outside the declared set collapses to none", () => {
-    expect(effectiveLookName(undefined, "vapor", undefined, LOOKS)).toBe("none");
-    expect(effectiveLookName(undefined, null, "vapor", LOOKS)).toBe("none");
+  test("look.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
+    const { render, dispose } = buildRuntime();
+    try {
+      expect(render(90)).toContain("L=inverted");
+      expect(render(50)).toContain("L=washed");
+      expect(render(10)).toContain("L=none");
+    } finally {
+      dispose();
+    }
   });
 
-  test("lookKeyByName throws loudly on a non-member (broken merge invariant)", () => {
-    expect(lookKeyByName(LOOKS, "vivid")).toEqual(LOOKS.vivid);
-    expect(() => lookKeyByName(LOOKS, "vapor")).toThrow(
-      /Look "vapor" is not declared in this config/,
+  // [LAW:one-source-of-truth] The ticket's hard requirement: precedence stays
+  // exactly as it is. A session pick is decided by the user AFTER the config was
+  // written, so it outranks the expression — and the expression is not consulted
+  // at all, which is what makes an explicit pick of the FLOOR hold.
+  test("a session pick outranks the expression", () => {
+    const { sessionState, render, dispose } = buildRuntime();
+    try {
+      sessionState.set(SID, "look", "washed");
+      expect(bgOf(render(90), "◆ here")).toBe(byName("washed"));
+      expect(render(90)).toContain("L=washed");
+      // The case a floor-equality test would get wrong: picking "none" is a
+      // DECISION, not the absence of one, so a hot payload must not recolour.
+      sessionState.set(SID, "look", "none");
+      expect(bgOf(render(90), "◆ here")).toBe(byName("none"));
+    } finally {
+      dispose();
+    }
+  });
+
+  test("a staged (edit-mode) look outranks the expression too", () => {
+    const { render, dispose } = buildRuntime();
+    try {
+      expect(bgOf(render(90, "washed"), "◆ here")).toBe(byName("washed"));
+    } finally {
+      dispose();
+    }
+  });
+
+  // [LAW:no-silent-failure] but also: not a throw. A typo in an expression's
+  // result is the same class of mistake as a stale session look, and collapses
+  // the same way — the bar keeps rendering.
+  test("a result naming no declared look collapses to the none floor, and the bar renders", () => {
+    const { render, dispose } = buildRuntime(
+      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ "vapor" }}',`),
     );
+    try {
+      const out = render(90);
+      expect(bgOf(out, "◆ here")).toBe(byName("none"));
+      expect(out).toContain("L=none");
+    } finally {
+      dispose();
+    }
+  });
+
+  // Found by a mutation that did NOT bite: replacing the floor LOOKUP with the
+  // identity key changed nothing, because every config in this file declares
+  // `none: {}` — which normalizes to the identity, so the two are the same value.
+  // `looks` merges BY NAME, so a user's own `none` is authorable and IS the floor;
+  // without this case the lookup could be deleted and no test would notice.
+  test("the floor is the config's own `none`, not a hardcoded identity", () => {
+    const OWN_FLOOR = SRC.replace("none: {},", "none: { lightnessScale: -1, lightnessShift: 1 },");
+    // An expression naming no declared look collapses to the floor — and the
+    // floor here is a real transformation, so the bar must actually wear it.
+    const { render, dispose } = buildRuntime(
+      OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ "vapor" }}',`),
+    );
+    // The same bar with `none` named outright: the floor's own colour.
+    const ref = buildRuntime(OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`));
+    try {
+      expect(bgOf(render(90), "◆ here")).toBe(bgOf(ref.render(0), "◆ here"));
+      // And it is NOT the identity — which is what makes the assertion above
+      // discriminate between reading the config and assuming the identity.
+      const identity = buildRuntime(
+        SRC.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`),
+      );
+      try {
+        expect(bgOf(render(90), "◆ here")).not.toBe(bgOf(identity.render(0), "◆ here"));
+      } finally {
+        identity.dispose();
+      }
+    } finally {
+      dispose();
+      ref.dispose();
+    }
+  });
+
+  // Also found by a non-biting mutation: nothing observed the value pushed for
+  // `look.effective` BEFORE the expression runs, because the republish overwrites
+  // it before any segment renders. The one thing that can observe it is the
+  // expression itself, so the documented answer for a self-reference — the floor,
+  // i.e. what naming nothing would give you — is pinned here rather than asserted
+  // in a comment.
+  test("a look expression reading .look.effective sees the floor, not a stale name", () => {
+    const { sessionState, render, dispose } = buildRuntime(
+      SRC.replace(
+        /look: '\{\{[^']*\}\}',/,
+        `look: '{{ if eq .look.effective "none" }}inverted{{ else }}washed{{ end }}',`,
+      ),
+    );
+    try {
+      expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
+      expect(render(0)).toContain("L=inverted");
+      // Still the floor on the NEXT render, not the previous render's answer —
+      // the provisional is a constant, not a carried-over value.
+      expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
+      // And a session pick still wins, so the expression is not even consulted.
+      sessionState.set(SID, "look", "washed");
+      expect(bgOf(render(0), "◆ here")).toBe(byName("washed"));
+    } finally {
+      dispose();
+    }
+  });
+
+  // The load-time half. Shape-detection (a `{{` in the slot) is what tells an
+  // expression from a name, so the membership cross-ref must not fire on one —
+  // and the template must be PARSED at load, or a malformed one would first be
+  // heard about at render, on every render.
+  test("an expression is exempt from the membership cross-ref; a plain non-member still is not", () => {
+    const withExpr = mergeWithDefault(
+      parseDslConfig("<looks-expr>", `{ globals: { look: '{{ .x }}' } }`, ALLOWED),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(() => validateConfig(withExpr, "<looks-expr>", "", ALLOWED)).not.toThrow();
+    const withName = mergeWithDefault(
+      parseDslConfig("<looks-expr>", `{ globals: { look: "vapor" } }`, ALLOWED),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(() => validateConfig(withName, "<looks-expr>", "", ALLOWED)).toThrow(
+      /globals\.look "vapor" does not match any declared look/,
+    );
+  });
+
+  test("a malformed look expression fails at LOAD, not at render", () => {
+    const config = parseAndValidate(
+      "<looks-expr>",
+      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ if .ctx.pct }}hot',`),
+      ALLOWED,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      expect(() => registerDslConfig(config, registry)).toThrow(/globals\.look/);
+    } finally {
+      registry.dispose();
+    }
+  });
+});
+
+// ─── resolveLookSelection: the fold, and where it stops ───────────────────────
+
+describe("resolveLookSelection", () => {
+  const LOOKS = {
+    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
+    vivid: { hueShift: 0, chromaScale: 1.5, lightnessScale: 1, lightnessShift: 0 },
+  };
+  const EXPR = "{{ .a }}";
+
+  test("a plain name decides, carrying both the name and its key", () => {
+    expect(resolveLookSelection(undefined, null, "vivid", LOOKS)).toEqual({
+      kind: "decided",
+      name: "vivid",
+      key: LOOKS.vivid,
+    });
+  });
+
+  test("an expression is undecided only when no higher rung decided", () => {
+    expect(resolveLookSelection(undefined, null, EXPR, LOOKS)).toEqual({
+      kind: "expression",
+      source: EXPR,
+    });
+    // A session pick decides, so the expression is never reached — including a
+    // pick of the floor name itself.
+    expect(resolveLookSelection(undefined, "vivid", EXPR, LOOKS)).toEqual({
+      kind: "decided",
+      name: "vivid",
+      key: LOOKS.vivid,
+    });
+    expect(resolveLookSelection(undefined, "none", EXPR, LOOKS)).toEqual({
+      kind: "decided",
+      name: "none",
+      key: LOOKS.none,
+    });
+    // A staged fragment is the rightmost rung and decides over both.
+    expect(resolveLookSelection("vivid", null, EXPR, LOOKS)).toEqual({
+      kind: "decided",
+      name: "vivid",
+      key: LOOKS.vivid,
+    });
+  });
+
+  test("a stale name at any rung falls through to the next, never to an expression it outranks", () => {
+    // A stale session pick is no pick, so the expression below it is reached.
+    expect(resolveLookSelection(undefined, "vapor", EXPR, LOOKS)).toEqual({
+      kind: "expression",
+      source: EXPR,
+    });
+    // With no expression, a stale name collapses to the floor as it always did.
+    expect(resolveLookSelection(undefined, "vapor", undefined, LOOKS)).toEqual({
+      kind: "decided",
+      name: "none",
+      key: LOOKS.none,
+    });
   });
 });

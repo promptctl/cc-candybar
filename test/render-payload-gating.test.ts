@@ -14,6 +14,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
+import { FLOOR_LOOK } from "./helpers/floor-look";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -95,7 +96,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
-  look: "none",
+  look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
   style: "powerline",

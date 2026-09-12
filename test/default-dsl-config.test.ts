@@ -29,8 +29,7 @@ import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveThemeName,
-  effectiveLookName,
-  lookKeyByName,
+  resolveLookSelection,
   paletteForThemeName,
 } from "../src/themes";
 import {
@@ -228,7 +227,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // own applyTheme/applyLook actions (deriveActionValidators →
   // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
   // then re-renders with theme.effective/look.effective recomputed exactly as
-  // server.ts does (effectiveThemeName/effectiveLookName over SessionState) —
+  // server.ts does (effectiveThemeName/resolveLookSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
   test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
     const SID = "theming-8uj-1";
@@ -257,7 +256,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         sessionState.get(SID, "theme"),
         parsed.globals.palette,
       );
-      const look = effectiveLookName(
+      const look = resolveLookSelection(
         undefined,
         sessionState.get(SID, "look"),
         parsed.globals.look,
@@ -284,7 +283,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         paletteForThemeName(theme),
         opts,
         undefined,
-        { look: lookKeyByName(parsed.looks, look) },
+        { look },
       );
     };
     try {
@@ -1390,7 +1389,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
             segmentErrors.push(`segment "${segName}": ${message}`),
         },
         {
-          look: lookKeyByName(DEFAULT_DSL_CONFIG.looks, effective.look),
+          look: effective.look,
           preset: effective.preset,
         },
       );

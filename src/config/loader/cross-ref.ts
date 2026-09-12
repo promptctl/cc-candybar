@@ -31,6 +31,7 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
+import { isLookExpression } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNode, rootNode } from "../root.js";
@@ -119,8 +120,18 @@ export function validateCrossReferences(
   // block (a user's default may be a bundled look — same reason every cross-ref
   // runs post-merge). Same existence-check shape as layout→segments; an unknown
   // name is a load error, never a silent identity fallback.
+  //
+  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no look,
+  // it names the RULE for choosing one per render, so there is nothing here to
+  // check membership of. Its result gets the same forgiveness a stale session
+  // pick does (`decideLookName` collapses a non-member to the floor), and its
+  // own well-formedness is checked where every other template's is — parsed
+  // eagerly by registerDslConfig, so a malformed one is still a load error.
+  // `isLookExpression` is the ONE predicate both readers use, so this exemption
+  // cannot be wider or narrower than what the render will actually evaluate.
   if (
     cfg.globals.look !== undefined &&
+    !isLookExpression(cfg.globals.look) &&
     !Object.prototype.hasOwnProperty.call(cfg.looks, cfg.globals.look)
   ) {
     ctx.issues.push({

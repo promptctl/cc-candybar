@@ -74,7 +74,9 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       getThemePalette(THEME),
       OPTS,
       { perSegmentSink: sink },
-      look === undefined ? undefined : { look },
+      look === undefined
+        ? undefined
+        : { look: { kind: "decided" as const, name: "test", key: look } },
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {

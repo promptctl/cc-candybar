@@ -27,7 +27,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import {
   effectiveAutoWrap,
-  effectiveLookName,
+  resolveLookSelection,
   effectivePadding,
   effectiveStripStyle,
   paletteForThemeName,
@@ -285,8 +285,12 @@ describe("a stale session pick falls to the config default, not the floor", () =
   });
 
   it("look: an orphaned name yields the configured look", () => {
-    expect(effectiveLookName(undefined, "deleted-look", "vivid", LOOKS)).toBe("vivid");
-    expect(effectiveLookName(undefined, "deleted-look", undefined, LOOKS)).toBe("none");
+    expect(
+      resolveLookSelection(undefined, "deleted-look", "vivid", LOOKS),
+    ).toMatchObject({ kind: "decided", name: "vivid" });
+    expect(
+      resolveLookSelection(undefined, "deleted-look", undefined, LOOKS),
+    ).toMatchObject({ kind: "decided", name: "none" });
   });
 
   it("preset: an orphaned name yields the configured preset", () => {
@@ -301,9 +305,9 @@ describe("a stale session pick falls to the config default, not the floor", () =
   it("a config default that is ITSELF stale still reaches the floor", () => {
     // The per-config domains are the only ones where the loader cannot catch a
     // stale default, so both rungs have to be parsed, not just the session's.
-    expect(effectiveLookName(undefined, "deleted-look", "also-deleted", LOOKS)).toBe(
-      "none",
-    );
+    expect(
+      resolveLookSelection(undefined, "deleted-look", "also-deleted", LOOKS),
+    ).toMatchObject({ kind: "decided", name: "none" });
     expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");
   });
 });

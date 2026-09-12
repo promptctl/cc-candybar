@@ -13,7 +13,7 @@
 // darken/contrast, hue/transpose) lives in rich-js, as does the semantic/anchor
 // knowledge of which tokens keep their hue (ANCHORED_ROOTS).
 
-import { listThemePalettes, type ThemeKey } from "@promptctl/rich-js";
+import { IDENTITY, listThemePalettes, type ThemeKey } from "@promptctl/rich-js";
 import type { ColorSystemSpec } from "@promptctl/rich-js/widgets";
 
 // --- Theme name aliasing ---
@@ -149,45 +149,111 @@ export function effectiveMemberName(
 
 // --- Look (theme-adaptation) identifiers ---
 
-// [LAW:one-source-of-truth] The look domain's instance of the shared resolver
-// above — the floor is `"none"`, the identity adaptation every merged config
-// carries. A named wrapper (not a bare call at each site) so the floor is
-// spelled once and the three call sites cannot disagree about it.
-export function effectiveLookName(
+// [LAW:one-source-of-truth] The look domain's floor: the name of the identity
+// adaptation every merged config carries. Spelled once because three different
+// things collapse to it — a stale session pick, a config default naming no
+// declared look, and an EXPRESSION whose result names none (brandon-looks-pe6)
+// — and they must all land on the same name.
+export const LOOK_FLOOR = "none";
+
+// [LAW:types-are-the-program] What a render was told about its look, and the
+// whole of it (brandon-looks-pe6). Either the fold FINISHED before the render —
+// a session pick, a staged fragment, or a plain name in `globals.look` — and
+// carries both the name a label displays and the key the palette transposes by,
+// or it did not, and carries the expression the render evaluates to finish it.
+//
+// The union is what keeps the ticket's precedence requirement structural rather
+// than a matter of statement order: an expression can only ever occupy the
+// `globals` rung, so when a higher rung decided there is no expression arm left
+// to evaluate. An explicit session pick of the FLOOR name is therefore a
+// decision that holds — which a "did it come out as the floor?" test would get
+// wrong.
+export type LookSelection =
+  | { readonly kind: "decided"; readonly name: string; readonly key: ThemeKey }
+  | { readonly kind: "expression"; readonly source: string };
+
+// The arm a render ends up holding, whichever way it got there. Named so the
+// functions that RESOLVE a look can say so in their return type rather than
+// handing back a union one arm of which they have just ruled out.
+export type DecidedLook = Extract<LookSelection, { kind: "decided" }>;
+
+// Shape-detection, the same way a template is told from a literal everywhere
+// else in this config language: a declared look NAME can never contain braces,
+// so there is no ambiguity to resolve and no second declaration an author has to
+// keep in sync with the value they wrote.
+export function isLookExpression(globalsLook: string | undefined): boolean {
+  return globalsLook !== undefined && globalsLook.includes("{{");
+}
+
+// One rung's contribution: the look this name selects, or null when it names no
+// declared look — which is not a pick at all, so the fold moves on.
+// [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
+// `hasOwnProperty` first and then looking the key up would be the same question
+// twice, and the second answer could only ever restate the first.
+function namedLook(
+  name: string,
+  declaredLooks: Readonly<Record<string, ThemeKey>>,
+): DecidedLook | null {
+  const key = declaredLooks[name];
+  return key === undefined ? null : { kind: "decided", name, key };
+}
+
+// [LAW:single-enforcer] The membership policy for a look NAME, wherever the name
+// came from — a config default, a session pick, or an expression's RESULT. A
+// declared look decides; anything else is the floor. This is the one place the
+// forgiveness the ticket asks for an expression's result lives, and it is the
+// same forgiveness a stale session pick has always had.
+//
+// The floor is looked up too, because `looks` merges BY NAME and a user may
+// declare their own `none` — the floor is whatever this config says it is. Only
+// a config declaring no `none` at all (no merge with the bundled stdlib: a
+// compile-only caller) falls back to the identity key, which is what the stdlib
+// would have declared anyway; the NAME reported is `LOOK_FLOOR` either way, so
+// nothing downstream can tell the two apart or needs to.
+export function decideLookName(
+  name: string,
+  declaredLooks: Readonly<Record<string, ThemeKey>>,
+): DecidedLook {
+  return (
+    namedLook(name, declaredLooks) ??
+    namedLook(LOOK_FLOOR, declaredLooks) ?? {
+      kind: "decided",
+      name: LOOK_FLOOR,
+      key: IDENTITY,
+    }
+  );
+}
+
+// The look a render should use, as far as it can be known before the render runs.
+//
+// [LAW:one-type-per-behavior] ONE fold over the same rungs `effectiveMemberName`
+// folds for every per-config domain — staged over session over config default
+// over the floor — lifted into the `LookSelection` domain so that ONE rung may
+// hold an expression instead of a name. The rungs' order and their membership
+// parse are unchanged; the only new thing is what that one rung is allowed to
+// hold, which is why this is not a second resolver beside the old one.
+export function resolveLookSelection(
   stagedLook: string | undefined,
   sessionLook: string | null,
   globalsLook: string | undefined,
   declaredLooks: Readonly<Record<string, ThemeKey>>,
-): string {
-  return effectiveMemberName(
-    stagedLook,
+): LookSelection {
+  const named = (raw: string): LookSelection | null =>
+    namedLook(raw, declaredLooks);
+  // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
+  // config-default rung, so `effectiveGlobal`'s `??` chain enforces the
+  // precedence — there is no "is there an expression?" branch anywhere deciding
+  // whether the rungs above it are honoured.
+  const configRung: LookSelection | null = isLookExpression(globalsLook)
+    ? { kind: "expression", source: globalsLook! }
+    : named(globalsLook ?? LOOK_FLOOR);
+  return effectiveGlobal<LookSelection>(
+    stagedLook === undefined ? null : named(stagedLook),
     sessionLook,
-    globalsLook,
-    "none",
-    declaredLooks,
+    configRung,
+    decideLookName(LOOK_FLOOR, declaredLooks),
+    named,
   );
-}
-
-// [LAW:single-enforcer] The one place an effective look NAME becomes the
-// ThemeKey a render transposes with. By the time a name reaches here it must be
-// a member: effectiveLookName collapses unknown names to the "none" floor, and
-// mergeWithDefault guarantees the bundled "none" exists in every DslConfig.
-// [LAW:no-defensive-null-guards] the throw is the loud failure for that broken
-// invariant (a hand-built config missing the stdlib), never a silent identity
-// fallback that would hide the drift.
-export function lookKeyByName(
-  looks: Readonly<Record<string, ThemeKey>>,
-  name: string,
-): ThemeKey {
-  const key = looks[name];
-  if (key === undefined) {
-    throw new Error(
-      `Look "${name}" is not declared in this config — effectiveLookName ` +
-        `collapses unknown names to "none", and every merged config carries ` +
-        `"none"; a miss here is merge/policy drift`,
-    );
-  }
-  return key;
 }
 
 // --- Powerline strip-style identifiers ---

@@ -41,7 +41,6 @@ import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import { registerDslConfig, renderDsl } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
-import { lookKeyByName } from "./themes/policy.js";
 import { paletteForThemeName } from "./themes/palette-resolvers.js";
 import {
   resolveEffectiveGlobals,
@@ -138,7 +137,8 @@ export function checkPayload(
     // gate the host segment off and let a typo inside it ship.
     host: { name: "tester-box", user: "tester", ssh: true },
     theme: { effective: effective.theme },
-    look: { effective: effective.look },
+    // No `look` — renderDsl injects `look.effective`, because under an
+    // expression it is the only thing that knows the answer (brandon-looks-pe6).
     // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
     // already carried `preset` — a pre-existing gap this ticket's own fixture
     // needs closed: a preset trigger's `.preset.effective` label and
@@ -409,7 +409,7 @@ async function loadRegisterRender(
             segmentErrors.set(segName, message),
         },
         {
-          look: lookKeyByName(config.looks, payloadEffective.look),
+          look: payloadEffective.look,
           preset: payloadEffective.preset,
         },
       );

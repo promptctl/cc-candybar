@@ -9,7 +9,7 @@
 // Same rig as test/dsl-theme-picker-recolor.test.ts: renderDsl with the
 // base palette resolved per render the way the daemon does
 // (effectiveThemeName → paletteForThemeName), the look resolved the same way
-// (effectiveLookName → lookKeyByName), the clicks driven through the real
+// (resolveLookSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -24,9 +24,8 @@ import {
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
 import {
-  effectiveLookName,
+  resolveLookSelection,
   effectiveThemeName,
-  lookKeyByName,
   paletteForThemeName,
 } from "../src/themes";
 
@@ -101,14 +100,11 @@ function buildRuntime() {
         config.globals.palette,
       ),
     );
-    const look = lookKeyByName(
+    const look = resolveLookSelection(
+      undefined,
+      sessionState.get(SID, "look"),
+      config.globals.look,
       config.looks,
-      effectiveLookName(
-        undefined,
-        sessionState.get(SID, "look"),
-        config.globals.look,
-        config.looks,
-      ),
     );
     return renderDsl(
       config,
