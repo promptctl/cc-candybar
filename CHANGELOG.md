@@ -1,3 +1,10 @@
+# [1.65.0](https://github.com/promptctl/cc-candybar/compare/v1.64.1...v1.65.0) (2026-09-12)
+
+
+### Features
+
+* **layout:** a segment can take the row's leftover width (brandon-layout-0c2) ([813b2ed](https://github.com/promptctl/cc-candybar/commit/813b2ed9c98e94e911730b171d7118c5954efdbd))
+
 ## [1.64.1](https://github.com/promptctl/cc-candybar/compare/v1.64.0...v1.64.1) (2026-09-12)
 
 
