@@ -1065,12 +1065,71 @@ describe("SourceRegistry — template: basic", () => {
     registry.dispose();
   });
 
-  it("defaultEmptyValue returned when template fails and no varDefault", () => {
+  // brandon-var-sources-1p6 NARROWED this deliberately, and the old assertion
+  // (defaultEmptyValue standing in for a failed template) is what it replaces.
+  // `globals.default_empty_value` is a global cosmetic floor for ABSENT values;
+  // letting it also absorb a failed DERIVATION meant one unrelated global
+  // silenced every broken template in a config, with nothing to tell the author
+  // which of the two mechanisms had swallowed it. Tolerance is now stated per
+  // variable, by the `default` on the declaration that wants it.
+  it("a failed template is NOT absorbed by defaultEmptyValue: the read is the failure", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "(none)");
     registry.declareTemplate("t", "{{ .nonexistent }}");
-    expect(store.read("t")).toBe("(none)");
+    expect(() => store.read("t")).toThrow(/variable "t"/);
+    expect(registry.getLastError("t")).toBeDefined();
     registry.dispose();
+  });
+
+  // The read IS the failure, which is what carries it to the segment that reads
+  // it (⚠ naming the variable) and to `cc-candybar check` (exit 1) with no
+  // co-operation from either — the same contract a non-ok document has.
+  it("a template that throws with no default reads as the failure, naming variable and reason", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    registry.declareTemplate("c", '{{ ramp 35 "step" 0 "panel" }}');
+    // `ramp` is registered per-segment by the renderer, so a variable template
+    // evaluated outside any segment cannot see it — the exact shape that found
+    // this bug while writing docs/segment-authoring.md.
+    expect(() => store.read("c")).toThrow(/variable "c": .*ramp/);
+    registry.dispose();
+  });
+
+  // Registration stays non-fatal: a template may throw against declare-time
+  // values and evaluate cleanly against a real payload, so the eager read
+  // records the failure without rejecting the config. Loudness belongs at the
+  // read that needs the value.
+  it("a throwing template does not make registration throw", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    expect(() => registry.declareTemplate("c", "{{ .nope }}")).not.toThrow();
+    expect(registry.getLastError("c")).toBeDefined();
+    registry.dispose();
+  });
+
+  // changeKey reads scalars, so a failing template used as a `depends_on`
+  // dependency would otherwise throw inside the reaction that asked. Failing is
+  // a change, and the key carries it rather than escaping.
+  it("a failing template can still be a depends_on dependency", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      registry.declareTemplate("broken", "{{ .nope }}");
+      expect(() =>
+        registry.declareShell("val", `cat ${dataFile}`, {
+          parse: TEXT,
+          cache: { kind: "depends_on", varNames: ["broken"] },
+        }),
+      ).not.toThrow();
+      expect(await registry.settled(3000)).toEqual([]);
+      expect(store.read("val")).toBe("v1");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
   });
 });
 
@@ -1083,12 +1142,22 @@ describe("SourceRegistry — template: cycle detection", () => {
     registry.dispose();
   });
 
-  it("self-referencing template returns fallback, not unhandled throw", () => {
+  // brandon-var-sources-1p6 replaces the old assertion here, which was that this
+  // read returns "(cycle)" — the defaultEmptyValue. A cycle can never produce a
+  // value, so blanking it meant a config with a self-referencing template
+  // rendered empty and `check` exited 0. The read is now the failure, named.
+  //
+  // The throw is a value-shaped failure at the read boundary, not the unhandled
+  // crash the old title feared: the segment reading it renders ⚠. Reading twice
+  // pins that — MobX caches the deriver's exception and re-raises the same one,
+  // so a second read says the same thing and the store is not left mid-compute.
+  it("a self-referencing template reads as the failure, repeatably", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "(cycle)");
     registry.declareTemplate("self", "{{ .self }}");
-    expect(() => store.read("self")).not.toThrow();
-    expect(store.read("self")).toBe("(cycle)");
+    expect(() => store.read("self")).toThrow(/variable "self"/);
+    expect(() => store.read("self")).toThrow(/variable "self"/);
+    expect(registry.getLastError("self")).toBeDefined();
     registry.dispose();
   });
 });

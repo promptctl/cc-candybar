@@ -278,9 +278,20 @@ export class VariableStore {
   // content in another key order is not a change.
   changeKey(name: string): string {
     const node = this.requireNode(name);
-    return node.kind === "document"
-      ? JSON.stringify(node.read())
-      : String(node.read());
+    if (node.kind === "document") return JSON.stringify(node.read());
+    // A scalar read can throw: a `template` variable with no authored `default`
+    // reads as its failure (brandon-var-sources-1p6). Failing IS a change — a
+    // dependant must re-run when its dependency stops producing a value — and a
+    // key derived from the reason keeps it one: ok → failed differs, and two
+    // consecutive failures for the same reason do not. Letting the throw escape
+    // would instead break the reaction that asked, which is the one consumer
+    // with no way to recover. [LAW:no-silent-failure] the failure is carried in
+    // the key, not swallowed.
+    try {
+      return String(node.read());
+    } catch (e) {
+      return ` failed:${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs

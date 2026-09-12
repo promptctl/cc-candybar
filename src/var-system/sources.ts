@@ -885,17 +885,52 @@ export class SourceRegistry {
         this.lastErrors.delete(name);
         return result;
       } catch (e) {
-        // [LAW:no-defensive-null-guards] Template eval failures (including
-        // MobX cycle detection) surface as last_error; the box still holds
-        // a safe fallback rather than propagating the throw to the renderer.
-        this.recordError(name, e instanceof Error ? e.message : String(e));
-        return this.stringInitial(opts.varDefault);
+        const message = e instanceof Error ? e.message : String(e);
+        // Recorded either way, so `cc-candybar debug` names the failure even
+        // when an authored default makes the read succeed.
+        this.recordError(name, message);
+        // [LAW:no-silent-failure] A derivation that FAILED is not a value. With
+        // no authored `default`, the read is the failure — the same contract a
+        // non-ok document has (unwrapDocument in template-engine/scope.ts): the
+        // segment reading it renders ⚠ naming this variable and the reason, and
+        // `cc-candybar check` fails on it, instead of a blank that reads exactly
+        // like an author who wanted a blank. Before this, a template throwing
+        // (`{{ ramp … }}` outside any segment is the one that found it) read as
+        // empty and check exited 0 (brandon-var-sources-1p6).
+        //
+        // An authored `default` is the author SAYING a failure here is
+        // tolerable, which is the only thing that field has ever meant for a
+        // template variable — so it keeps meaning it rather than becoming a knob
+        // with no effect. [LAW:types-are-the-program] the discriminator is the
+        // optionality already in the declaration; no new flag.
+        //
+        // `globals.default_empty_value` deliberately does NOT tolerate: it is a
+        // global cosmetic floor for absent values, and letting it stand in for a
+        // per-variable `default` would let one unrelated global silently switch
+        // this loudness back off for every template in the config.
+        if (opts.varDefault === undefined) {
+          throw new Error(`variable "${name}": ${message}`);
+        }
+        return opts.varDefault;
       }
     });
     // Force eager evaluation so any cycle is detected here (at config load)
     // rather than silently at the first render.  MobX keepAlive computeds are
     // otherwise lazy.
-    this.store.read(name);
+    //
+    // The throw above is not a load failure: the deriver recorded it before
+    // rethrowing, and a template that throws against declare-time values may
+    // evaluate cleanly against a real payload (a field that is empty now and
+    // populated per render). Loudness belongs where the value is READ — the
+    // segment that reads it — not at registration, which would reject configs
+    // that render correctly. [LAW:no-silent-failure] the failure is not
+    // swallowed here, it is deferred to the read that actually needs the value.
+    try {
+      this.store.read(name);
+    } catch {
+      // Recorded by the deriver; MobX has cached the failure and every read of
+      // this variable will surface it.
+    }
   }
 
   // time: current wall-clock time formatted with a Go reference-time layout.

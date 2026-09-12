@@ -343,6 +343,41 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
+  // brandon-var-sources-1p6. A `template` variable whose evaluation throws used
+  // to read as its default — empty — so the blank rendered, nothing named the
+  // variable, and check blessed it with exit 0. The failure now arrives here
+  // through the same ⚠ path a non-ok document takes, which is why check needed
+  // no new code to catch it.
+  it("reports a template variable whose evaluation throws as fatal, naming the variable", async () => {
+    const p = write(
+      "template-var-throws.json5",
+      `{
+        variables: { c: { kind: "template", template: '{{ ramp 35 "step" 0 "panel" 80 "error" }}' } },
+        segments: { x: { template: "v=[{{ .c }}]" } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain('segment "x"');
+    expect(message).toContain('variable "c"');
+  });
+
+  // The same template with an authored `default` is the author stating that a
+  // failure here is tolerable — the only thing that field has ever meant for a
+  // template variable. It renders the default and check passes, which is what
+  // keeps `default` a live field instead of a knob with no effect.
+  it("a template variable with an authored default tolerates its own failure", async () => {
+    const p = write(
+      "template-var-throws-default.json5",
+      `{
+        variables: { c: { kind: "template", template: '{{ ramp 35 "step" 0 "panel" 80 "error" }}', default: "n/a" } },
+        segments: { x: { template: "v=[{{ .c }}]" } },
+        root: { h: ['x'] },
+      }`,
+    );
+    expect((await checkConfig(p, dir)).kind).toBe("clean");
+  });
+
   // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
   // check's rich-but-static fixture can never drive true on its own (unlike
   // every OTHER field a segment might gate on, which checkPayload just

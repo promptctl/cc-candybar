@@ -721,13 +721,13 @@ misspelled palette name fails with `color reference "eror" did not resolve`.
 
 ### A `ramp` outside a segment
 
-In a variable template there is no segment to take a palette from. The
-variable does not error: it evaluates to its default (empty), and the failure
-surfaces wherever that empty string lands — in a `bg:` as an invalid colour.
-Had the variable been read in the template body instead, the segment would
-have rendered with a blank where the colour was and `check` would have
-passed, so put the `ramp` in the segment's `bg:` and read the document field
-there:
+In a variable template there is no segment to take a palette from, and `ramp`
+is registered per-segment against the palette of the one currently rendering —
+so the function is not there to call. The variable reads as that failure: the
+segment renders a ⚠ error cell and `check` exits 1, naming the variable rather
+than the `bg:` that never received a colour. A `default` on the variable is how
+you say such a failure is tolerable; without one it is loud. Put the `ramp` in
+the segment's `bg:` and read the document field there:
 
 ```json5 check:fail
 {
@@ -752,7 +752,7 @@ there:
 ```
 
 ```error
-Invalid bg color "": color reference "" did not resolve
+segment "budget": variable "budgetColor": function "ramp" is not registered (did you mean: wrap, frame?)
 ```
 
 In a layout node's `when` the call itself is refused, naming the reason:

@@ -95,20 +95,16 @@ export function introspectVars(
     // comes from this one node.
     const node = store.getNode(name);
     const err = registry.getLastError(name);
-    // [LAW:no-defensive-null-guards] No try/catch around node.read():
-    // every SourceRegistry-declared variable either holds a typed
-    // fallback (declareShell/declareFile/declareGit/declareInput catch
-    // internally and write a fallback) or is a computed whose deriver
-    // also catches (declareTemplate). Cycles are detected eagerly at
-    // register time (declareTemplate's force-read). So a read-throw
-    // here would be a *programming* error, not a runtime condition
-    // the snapshot should mask. Letting it propagate keeps the failure
-    // loud at the source instead of laundering it as a synthesized
-    // lastError with an unstable Date.now() timestamp.
+    // A read CAN throw, and the premise that it could not no longer holds:
+    // declareShell/declareFile/declareGit/declareInput still write a typed
+    // fallback, but a `template` variable with no authored `default` reads as
+    // its failure since brandon-var-sources-1p6. `valueOf` renders that
+    // message as the value, exactly as it already does for a failed document —
+    // it is a runtime condition, which is what this snapshot is for.
     //
-    // [LAW:single-enforcer] lastError is sourced from SourceRegistry
-    // only. There is no second timestamp-producer that could drift
-    // from the registry's record.
+    // [LAW:single-enforcer] lastError is still sourced from SourceRegistry
+    // only. `valueOf` synthesizes no timestamp, so there is no second
+    // timestamp-producer to drift from the registry's record.
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
@@ -129,7 +125,22 @@ export function introspectVars(
 // failed one — as the state a template read of it would surface.
 function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
   if (node.kind !== "document") {
-    return { type: node.type, value: node.read() };
+    // [LAW:no-silent-failure] A `template` variable with no authored `default`
+    // now READS as its failure rather than as an empty string
+    // (brandon-var-sources-1p6), so a read here can throw for the same reason a
+    // failed document reads as its reason — which is a runtime condition this
+    // snapshot exists to show, not a programming error. It is surfaced the way
+    // the document arm below surfaces one: the message stands in for the value,
+    // beside the registry's own lastError record. Masking it would be the one
+    // thing worse than either — the variable is the reason someone ran `debug`.
+    try {
+      return { type: node.type, value: node.read() };
+    } catch (e) {
+      return {
+        type: node.type,
+        value: e instanceof Error ? e.message : String(e),
+      };
+    }
   }
   const doc = node.read();
   switch (doc.kind) {
