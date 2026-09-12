@@ -1,3 +1,10 @@
+# [1.69.0](https://github.com/promptctl/cc-candybar/compare/v1.68.0...v1.69.0) (2026-09-12)
+
+
+### Features
+
+* **activity:** the payload says what Claude is doing, not only how much (brandon-activity-ue7) ([4106e11](https://github.com/promptctl/cc-candybar/commit/4106e112e7f5d323104b23f70e0231706e740e2b))
+
 # [1.68.0](https://github.com/promptctl/cc-candybar/compare/v1.67.0...v1.68.0) (2026-09-12)
 
 
