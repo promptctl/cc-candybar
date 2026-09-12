@@ -1,3 +1,10 @@
+# [1.63.0](https://github.com/promptctl/cc-candybar/compare/v1.62.1...v1.63.0) (2026-09-12)
+
+
+### Features
+
+* **config:** a segment says what it shows, and the schema and `segments` carry it (brandon-config-schema-qqg) ([073d474](https://github.com/promptctl/cc-candybar/commit/073d4749aa5fbd2f240bcd042300d4d528f2e096))
+
 ## [1.62.1](https://github.com/promptctl/cc-candybar/compare/v1.62.0...v1.62.1) (2026-09-12)
 
 
