@@ -1,3 +1,10 @@
+## [1.61.4](https://github.com/promptctl/cc-candybar/compare/v1.61.3...v1.61.4) (2026-09-12)
+
+
+### Bug Fixes
+
+* **config:** unknown keys on a variable declaration are rejected (brandon-config-9li) ([17e3d48](https://github.com/promptctl/cc-candybar/commit/17e3d48904708050f0b62dc842bf13aed0c564ac))
+
 ## [1.61.3](https://github.com/promptctl/cc-candybar/compare/v1.61.2...v1.61.3) (2026-09-12)
 
 
