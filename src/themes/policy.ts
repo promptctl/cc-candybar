@@ -183,7 +183,13 @@ export type ExpressionSlot = (typeof EXPRESSION_SLOTS)[number];
 // keep in sync with the value they wrote. ONE predicate for every slot and every
 // reader — the loader's membership exemption, registerDslConfig's eager parse,
 // and the resolution below — so no reader can be wider or narrower than another.
-export function isExpression(globalsValue: string | undefined): boolean {
+//
+// [LAW:types-are-the-program] A type guard, not a bare boolean: the predicate
+// already proves the value is present, so saying so in the signature deletes the
+// non-null assertion every caller would otherwise write beside it.
+export function isExpression(
+  globalsValue: string | undefined,
+): globalsValue is string {
   return globalsValue !== undefined && globalsValue.includes("{{");
 }
 
@@ -210,7 +216,7 @@ export function resolveSelection<T>(
   // precedence — there is no "is there an expression?" branch anywhere deciding
   // whether the rungs above it are honoured.
   const configRung: Selection<T> | null = isExpression(globalsValue)
-    ? { kind: "expression", source: globalsValue! }
+    ? { kind: "expression", source: globalsValue }
     : named(globalsValue ?? floor.name);
   return effectiveGlobal<Selection<T>>(
     stagedName === undefined ? null : named(stagedName),

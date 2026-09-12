@@ -630,7 +630,7 @@ export function registerDslConfig(
   for (const slot of EXPRESSION_SLOTS) {
     const authored = config.globals[slot];
     if (isExpression(authored))
-      globalExpressions.set(slot, parseExpressionSlot(parse, slot, authored!));
+      globalExpressions.set(slot, parseExpressionSlot(parse, slot, authored));
   }
 
   return {
@@ -837,12 +837,14 @@ export function renderDsl(
   // segment), applied at the pagination seam in renderPicker. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
-  // [LAW:one-source-of-truth] `look.effective` is published by whatever FINISHED
-  // the look fold, and nothing else CAN publish it: under an expression nobody
-  // upstream knows the answer, and under a decided name the selection already
-  // carries it. So the payload never carries this field — renderDsl injects it,
-  // exactly as it injects `term.cols`, which is why a `{{ .look.effective }}`
-  // label and the transposed palette cannot disagree (brandon-looks-pe6).
+  // [LAW:one-source-of-truth] `theme.effective` and `look.effective` are each
+  // published by whatever FINISHED that field's fold, and nothing else CAN publish
+  // them: under a rule nobody upstream knows the answer, and under a decided name
+  // the selection already carries it. So the payload never carries either field —
+  // renderDsl injects both, exactly as it injects `term.cols`, which is why a
+  // `{{ .theme.effective }}` / `{{ .look.effective }}` label and the palette the
+  // bar is actually painted from cannot disagree (brandon-looks-pe6,
+  // brandon-themes-dzl).
   const payloadWith = (themeName: string, lookName: string): object => ({
     ...(payload as object),
     term: { cols: opts.width },

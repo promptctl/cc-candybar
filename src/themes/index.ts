@@ -34,7 +34,6 @@ export {
   transposedPalette,
   decideThemeName,
   resolveThemeSelection,
-  themeFloor,
   declaredBasePalette,
 } from "./palette-resolvers.js";
 export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";

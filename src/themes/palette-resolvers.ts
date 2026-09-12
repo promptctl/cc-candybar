@@ -156,10 +156,7 @@ export function decideThemeName(
   onUnresolvable(
     `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme`,
   );
-  // [LAW:no-defensive-null-guards] The floor is installed — it is a registry
-  // palette this package ships — so the non-null assertion states a fact rather
-  // than defending one, and `paletteForThemeName` would throw first if it broke.
-  return namedTheme(THEME_FLOOR)!;
+  return themeFloor();
 }
 
 // The theme a render should use, as far as it can be known before the render
@@ -175,16 +172,18 @@ export function resolveThemeSelection(
     stagedPalette,
     sessionTheme,
     globalsPalette,
-    namedTheme(THEME_FLOOR)!,
+    themeFloor(),
     namedTheme,
   );
 }
 
-// The theme every rung below the floor lands on, as a decided selection: the
-// default `RenderSelection.theme`, and the value `decideThemeName` collapses to.
-// [LAW:no-defensive-null-guards] The floor is a palette this package ships, so
-// the assertion states a fact rather than defending one.
-export function themeFloor(): DecidedTheme {
+// [LAW:one-source-of-truth] THE floor as a decided selection — what
+// `decideThemeName` collapses to, what the rung below every other rung is, and
+// what a compile-only path answers a rule with. Spelled once so the three do not
+// drift, and because the non-null assertion wants stating once: the floor is a
+// palette this package SHIPS, so it asserts a fact rather than defending one (and
+// `paletteForThemeName` would throw loudly first if that ever stopped being true).
+function themeFloor(): DecidedTheme {
   return namedTheme(THEME_FLOOR)!;
 }
 
