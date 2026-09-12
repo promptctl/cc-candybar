@@ -656,7 +656,12 @@ export class GitService {
   // implementation relied on. Returns the full LaunchResult — the typed
   // termination cause `launch` already computed — so `classify` can map it to
   // an Outcome without a thrown Error flattening that information away.
-  private async execGitAsync(
+  // [LAW:locality-or-seam] `protected`, not private: the per-fetch spawn COUNT
+  // is a property this class is now accountable for (brandon-git-cache-y9h), and
+  // the only way to assert it is to be able to see every invocation go past. A
+  // counting subclass in test/git-spawn-budget.test.ts is that seam; the
+  // daemon's own GitDataProvider already extends this class.
+  protected async execGitAsync(
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
@@ -690,19 +695,57 @@ export class GitService {
   }
 
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
-  // repoRoot they'd otherwise have to re-derive. `absent` is rev-parse's
-  // non-zero exit — "not in a git repository", the everyday domain answer.
+  // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
+  // "not in a git repository", the everyday domain answer.
+  //
+  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
+  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
+  // already short-circuit on, now asked at every level instead of only at
+  // `workingDir`. Before this, two resolvers answered one question and disagreed
+  // — measured on a repo whose config sets `core.worktree = /elsewhere`:
+  //
+  //   cwd         git's answer   the short-circuit   the old rev-parse
+  //   /repo       /elsewhere     /repo               /private/tmp/…/elsewhere
+  //   /repo/sub   /elsewhere     (falls through)     /private/tmp/…/elsewhere
+  //
+  // so the bar rendered /repo's state while sitting in /repo and a completely
+  // different tree's state one directory down. `rev-parse` also answers with the
+  // PHYSICAL path where the short-circuit answers with the logical one, so ONE
+  // repo could occupy two cache keys depending on which arm replied. The ascent
+  // collapses both onto the rule the short-circuits already commit to: one
+  // predicate, one spelling of a path.
+  //
+  // [LAW:effects-at-boundaries] Pure fs — the shape `getOngoingOperation` and
+  // `resolveGitDir` in this same class already have. It stays `async` because
+  // that is its contract to `resolveEffectiveGitDir`, `computeGitInfo` and the
+  // test overrides in daemon-git-cache/daemon-watchers; there is simply nothing
+  // left to await. Observable effect: a session whose cwd is outside any repo
+  // spawns no `git` at all, where before it spawned one per render forever —
+  // `getGitInfo`'s `absent` is deliberately not cached, so nothing bounded it.
+  //
+  // Two deliberate differences from `git rev-parse --show-toplevel`, both making
+  // the ascent find MORE repos rather than fewer, neither reachable without an
+  // unusual configuration: `core.worktree` is not honoured (the short-circuit
+  // never honoured it either), and the ascent does not stop at a filesystem
+  // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
+  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
+  // the DAEMON's environment, which describes whichever shell spawned it rather
+  // than the session being rendered.
+  //
+  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
+  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
+  // through `classify(…, "absent")` — a state this never produced, so inventing
+  // one here would be a new answer for an unchanged question.
   async findGitRoot(workingDir: string): Promise<Outcome<string>> {
-    return nonEmpty(
-      classify(
-        "git rev-parse --show-toplevel",
-        await this.execGitAsync(["rev-parse", "--show-toplevel"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
+    let dir = path.resolve(workingDir);
+    for (;;) {
+      if (this.isGitRepo(dir)) return ok(dir);
+      const parent = path.dirname(dir);
+      // `path.dirname` is its own fixed point at the filesystem root, which is
+      // the ascent's termination and the only one it needs.
+      if (parent === dir) return ABSENT;
+      dir = parent;
+    }
   }
 
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
