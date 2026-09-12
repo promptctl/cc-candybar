@@ -1,3 +1,10 @@
+## [1.64.1](https://github.com/promptctl/cc-candybar/compare/v1.64.0...v1.64.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **var-system:** one answer to "did this document change", and an age that means it (brandon-var-system-1tl) ([efa991f](https://github.com/promptctl/cc-candybar/commit/efa991f9dafb5f137d067bc96307f248bf17ebab))
+
 # [1.64.0](https://github.com/promptctl/cc-candybar/compare/v1.63.0...v1.64.0) (2026-09-12)
 
 
