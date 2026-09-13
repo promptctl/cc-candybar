@@ -179,7 +179,10 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     // A vertical body: the button on one row, the report on the next — a long
     // reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
-    expect(lines[toolsRow + 2]).toMatch(/^✗ tmux truecolor/);
+    // Each row of the tools body leads with the body's ✕ (brandon-disclosure-
+    // 43z) as a cell of its own; the report row's text follows the seam.
+    expect(lines[toolsRow + 2]).toMatch(/^✕/);
+    expect(lines[toolsRow + 2]).toContain("✗ tmux truecolor");
     rt.dispose();
   });
 

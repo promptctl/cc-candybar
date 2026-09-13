@@ -1044,9 +1044,17 @@ Opening it shows the always-available functionality:
 
 ```
 ✕
-  ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
-     🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
+✕ ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
+
+Every row an open disclosure drops leads with a `✕` that closes **that**
+disclosure, in the same state colour its trigger wears while open: the first
+row's `✕` closes the menu, the config row's closes `⚙ config` and leaves the
+menu open. Nothing stacks — a row carries the `✕` of the innermost disclosure
+it belongs to, and a picker line keeps the picker's own. This is true of every
+disclosure on the bar (a group body, a `(?)` line), not only this menu; no
+author writes it and no author can decline it.
 
 - **`persist?`** chooses where every setting in the menu is written: unchecked
   (the state you arrive in) the click changes this session only; checked, it
@@ -1436,7 +1444,11 @@ segment. Declared inline in `root`:
   are mutually exclusive. **Nested** groups must use *distinct* keys (a closed
   parent hides its children; child open-state persists invisibly).
 - `open: true` — initially open; at most one group per shared key.
-- `direction` — how the body container stacks (`vertical` default).
+- `direction` — how the body container stacks (`vertical` default). Every
+  row of the open body leads with a `✕` that closes the group (it writes the
+  group's key — the shared `key` for an accordion — back to `"closed"`, the
+  same write the toggle's own click makes); a nested group's rows carry that
+  group's `✕`, not the parent's.
 - `distribution` — how the body container places its children's tints; it is
   the body's field, not the toggle's (the same field a `{ h }`/`{ v }` row
   carries — see `distribution` below).

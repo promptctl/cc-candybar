@@ -104,15 +104,20 @@ export interface Opens {
   readonly body: ContainerNode;
 }
 
-// [LAW:types-are-the-program] One open disclosure, named by the two strings that
-// decide it: the VARIABLE a body reads and the MEMBER value that means "this one
-// is open". They are distinct because a group's variable is per-group
-// (`groups.<name>`) while its state KEY may be shared with accordion siblings —
-// so the pair, never a lone key, is what identifies an open state. It lives
-// here, beside the node that carries it, so the tree type and the disclosure
-// primitive (src/config/disclosure.ts) read one definition.
+// [LAW:types-are-the-program] One open disclosure, named by the three strings
+// that decide it: the VARIABLE a body reads, the state KEY a close writes, and
+// the MEMBER value that means "this one is open". Variable and key are distinct
+// because a group's variable is per-group (`groups.<name>`) while its state
+// key may be shared with accordion siblings — so the triple, never a lone key,
+// is what identifies an open state: the read handle and the write target of
+// one fact, carried together so the ✕ that leads every line of an open body
+// (brandon-disclosure-43z) writes exactly the key the trigger's cycle gates,
+// with no name-join at render to drift from it. It lives here, beside the node
+// that carries it, so the tree type and the disclosure primitive
+// (src/config/disclosure.ts) read one definition.
 export interface DisclosureRef {
   readonly variable: string;
+  readonly key: string;
   readonly member: string;
 }
 

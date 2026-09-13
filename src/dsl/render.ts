@@ -64,6 +64,7 @@ import {
   actionFuncs,
   type ActionRuntime,
 } from "../render/action.js";
+import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import {
   menuFuncs,
@@ -995,6 +996,7 @@ export function renderDsl(
     node: CompiledNode,
     parentVisible: boolean,
     region: Region,
+    lead: readonly RichText[],
   ): RenderedLines => {
     const visible = parentVisible && evaluateWhen(node.when, scope);
     const ctx: NodeRenderCtx = {
@@ -1003,19 +1005,24 @@ export function renderDsl(
       visible,
       padding: opts.padding,
       region,
+      lead,
       perSegmentSink,
       onSegmentError,
       enterSegment,
       exitSegment,
       lookupSegment,
-      renderChild: (child, childVisible, step: AddressStep) =>
-        renderNode(child, childVisible, descend(region, step)),
+      renderChild: (child, childVisible, step: AddressStep, childLead) =>
+        renderNode(child, childVisible, descend(region, step), childLead),
       // A disclosure body starts a NEW region: the root of the band its
       // trigger opens. Depth is a fact of that band — counted up by
       // `decorationFor` each time a band item opens the next — so a nested
-      // `{{ menu }}` inside ☰ → ⚙ lands at depth 2 with no walk state.
-      renderBody: (body, open, band) =>
-        renderNode(body, visible && open, bandRoot(band)),
+      // `{{ menu }}` inside ☰ → ⚙ lands at depth 2 with no walk state. Its
+      // rows lead with the trigger's ✕ — the band's own close, not the bar's.
+      renderBody: (body, open, band, bodyLead) =>
+        renderNode(body, visible && open, bandRoot(band), bodyLead),
+      // [LAW:one-source-of-truth] The row ✕ reads the session id from the
+      // same store every other affordance's URL does.
+      closeDisclosure: (key) => disclosureCloseFragment(store, key),
     };
     return nodeType(node.kind).render(node, ctx);
   };
@@ -1041,7 +1048,7 @@ export function renderDsl(
     );
   }
   return (
-    renderNode(root, true, BAR_ROOT)
+    renderNode(root, true, BAR_ROOT, [])
       // A row's fill demands resolve here and nowhere else: this is the one place a
       // composed row and the width it must fit are both in hand (brandon-layout-0c2).
       .map((line) => renderStripCells(resolveFill(line, opts), opts))

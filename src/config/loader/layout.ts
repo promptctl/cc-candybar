@@ -630,7 +630,7 @@ function lowerGroup(g: GroupNodeInput): LayoutNode {
   const ref = GROUP_NS + g.name;
   return disclosureNode(
     ref,
-    { variable: ref, member: g.name },
+    { variable: ref, key: groupStateKey(g), member: g.name },
     {
       kind: "container",
       direction: g.direction ?? "vertical",
