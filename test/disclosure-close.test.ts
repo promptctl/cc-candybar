@@ -11,7 +11,12 @@
 //     (⚙ config's row carries ⚙'s ✕ and not ☰'s), and a `{{ menu }}` line
 //     dropped inside a body keeps the picker's own ✕ alone;
 //   - a click on the ✕ closes exactly that disclosure — ⚙ closes while ☰
-//     stays open — and the closed body renders no rows, ✕ included.
+//     stays open — and the closed body renders no rows, ✕ included;
+//   - a line that DROPS below a horizontal row of the body (a multi-line
+//     segment's continuation line, a nested vertical container's later rows)
+//     is a row of the same band and is led once too;
+//   - a body whose every child is hidden lays no row and so no ✕ — not on
+//     the bar, and not in the trigger's cell sink.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -26,6 +31,8 @@ import {
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
 import { menuPageKey } from "../src/config/menu-keys";
+import { GROUP_NS } from "../src/config/loader/reserved-namespace";
+import type { RichText } from "@promptctl/rich-js";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -111,9 +118,11 @@ function build(src: string, withDefault: boolean) {
     registerStateValidator(key, spec),
   );
   const ctx: VerbContext = testVerbContext(sessionState);
+  const sink = new Map<string, readonly RichText[]>();
   const render = (): string[] => {
     const errors: string[] = [];
     const out = renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
+      perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
     });
     if (errors.length > 0) throw new Error(errors.join("\n"));
@@ -143,6 +152,7 @@ function build(src: string, withDefault: boolean) {
   };
   return {
     render,
+    sink,
     click,
     clickWriting,
     dispose: () => {
@@ -262,6 +272,78 @@ describe("brandon-disclosure-43z — a group body", () => {
     rt.click(linksOn(lines[4]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
+    rt.dispose();
+  });
+});
+
+// The lines a body can drop below one of its horizontal rows — a multi-line
+// segment's continuation lines, a nested vertical container's later rows — and
+// a body whose only child is hidden.
+const DROPS = `{
+  globals: { palette: '${THEME}' },
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  segments: {
+    a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
+    m: { template: 'M1\\nM2\\nM3' },
+  },
+  root: { v: [
+    { h: ['a'] },
+    { kind: 'group', name: 'wide', label: 'wide', children: [
+      { h: ['m', 'c'] },
+      { h: [{ v: ['b', 'd'] }, 'a'] },
+    ] },
+    { kind: 'group', name: 'bare', label: 'bare', children: [{ seg: 'b', when: 'false' }] },
+  ] },
+}`;
+
+const closeLinks = (line: string): Link[] =>
+  linksOn(line).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
+
+describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
+  test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", () => {
+    const rt = build(DROPS, false);
+    const key = `${GROUP_NS}wide`;
+    let lines = rt.render();
+    expect(lines).toHaveLength(3);
+
+    rt.clickWriting(lines, key, "wide");
+    lines = rt.render();
+    // Bar row, toggle `wide`, then the body: `M1 C` with M2 and M3 dropped
+    // below it, `B A` with D dropped below it; then toggle `bare`.
+    expect(lines).toHaveLength(8);
+    const body = lines.slice(2, 7);
+    expect(body.map((l) => l.replace(/\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g, ""))).toEqual([
+      expect.stringContaining("M1"),
+      expect.stringContaining("M2"),
+      expect.stringContaining("M3"),
+      expect.stringContaining("B"),
+      expect.stringContaining("D"),
+    ]);
+    for (const row of body) {
+      expectLedBy(row, key);
+      expect(closeLinks(row)).toHaveLength(1);
+    }
+    for (const row of [lines[0]!, lines[1]!, lines[7]!]) {
+      expect(closeLinks(row)).toEqual([]);
+    }
+    // The trigger sinks one ✕ per row it led — five — beside its own cells.
+    const leads = rt.sink.get(key)!.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
+    expect(leads).toHaveLength(5);
+    rt.dispose();
+  });
+
+  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", () => {
+    const rt = build(DROPS, false);
+    const key = `${GROUP_NS}bare`;
+    let lines = rt.render();
+    rt.clickWriting(lines, key, "bare");
+    lines = rt.render();
+    // Bar row, toggle `wide`, toggle `bare` — open, with nothing under it.
+    expect(lines).toHaveLength(3);
+    expect(lines.flatMap(closeLinks)).toEqual([]);
+    const cells = rt.sink.get(key)!;
+    expect(cells.length).toBeGreaterThan(0);
+    expect(cells.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     rt.dispose();
   });
 });
