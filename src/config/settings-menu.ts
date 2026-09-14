@@ -141,10 +141,12 @@ const PERSIST_KEY = PERSIST_SEG;
 // it cannot name different variables.
 const SETTINGS_REF: DisclosureRef = {
   variable: SETTINGS_ANCHOR,
+  key: SETTINGS_ANCHOR,
   member: SETTINGS_OPEN,
 };
 const CONFIG_REF: DisclosureRef = {
   variable: CONFIG_SEG,
+  key: CONFIG_SEG,
   member: SETTINGS_OPEN,
 };
 
@@ -160,6 +162,7 @@ const CONFIG_REF: DisclosureRef = {
 const TOOLS_SEG = `${SETTINGS_NS}tools`;
 const TOOLS_REF: DisclosureRef = {
   variable: TOOLS_SEG,
+  key: TOOLS_SEG,
   member: SETTINGS_OPEN,
 };
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;

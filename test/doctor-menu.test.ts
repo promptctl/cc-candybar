@@ -22,7 +22,10 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
-import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
+import {
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSE,
+} from "../src/config/disclosure";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
@@ -179,7 +182,11 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     // A vertical body: the button on one row, the report on the next — a long
     // reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
-    expect(lines[toolsRow + 2]).toMatch(/^✗ tmux truecolor/);
+    // Each row of the tools body leads with the body's ✕ (brandon-disclosure-
+    // 43z) as a cell of its own; the report row's text follows the seam.
+    const report = lines[toolsRow + 2]!;
+    expect(report.slice(0, DISCLOSURE_GLYPH_CLOSE.length)).toBe(DISCLOSURE_GLYPH_CLOSE);
+    expect(report).toContain("✗ tmux truecolor");
     rt.dispose();
   });
 

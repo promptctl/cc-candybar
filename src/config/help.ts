@@ -93,7 +93,7 @@ export function declareHelp(
   within: readonly DisclosureRef[],
   out: HelpArtifacts,
 ): SegmentNode {
-  const self: DisclosureRef = { variable: name, member: HELP_OPEN };
+  const self: DisclosureRef = { variable: name, key: name, member: HELP_OPEN };
   out.variables[name] = disclosureStateVar(name, DISCLOSURE_CLOSED);
   out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
   out.segments[name] = {

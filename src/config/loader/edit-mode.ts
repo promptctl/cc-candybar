@@ -74,6 +74,7 @@ export const EDIT_MODE_OPEN = "open";
 // gate by conjunction with this one, instead of concatenating gate strings.
 export const EDIT_MODE_REF: DisclosureRef = {
   variable: EDIT_MODE_KEY,
+  key: EDIT_MODE_KEY,
   member: EDIT_MODE_OPEN,
 };
 
