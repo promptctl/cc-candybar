@@ -64,6 +64,7 @@ import {
   actionFuncs,
   type ActionRuntime,
 } from "../render/action.js";
+import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import {
   menuFuncs,
@@ -1016,6 +1017,9 @@ export function renderDsl(
       // `{{ menu }}` inside ☰ → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, open, band) =>
         renderNode(body, visible && open, bandRoot(band)),
+      // [LAW:one-source-of-truth] The row ✕ reads the session id from the
+      // same store every other affordance's URL does.
+      closeDisclosure: (key) => disclosureCloseFragment(store, key),
     };
     return nodeType(node.kind).render(node, ctx);
   };
@@ -1044,7 +1048,7 @@ export function renderDsl(
     renderNode(root, true, BAR_ROOT)
       // A row's fill demands resolve here and nowhere else: this is the one place a
       // composed row and the width it must fit are both in hand (brandon-layout-0c2).
-      .map((line) => renderStripCells(resolveFill(line, opts), opts))
+      .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
       .join("\n")
   );
 }
