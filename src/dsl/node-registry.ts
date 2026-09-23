@@ -293,7 +293,9 @@ function composeBlocks(
 }
 
 function settled(lines: RenderedLines): RenderedLines {
-  return lines.map((line) => ({ ...line, span: "shared" }));
+  return lines.map((line) =>
+    line.span === "row" ? { ...line, span: "shared" } : line,
+  );
 }
 
 // ─── The node-type contract + registry ──────────────────────────────────────────
@@ -436,14 +438,22 @@ const segmentType: NodeType<"segment"> = {
         // pagination seam so a padded band still fits the width budget.
         padding: ctx.padding,
       } as const;
+      const bodyLines =
+        node.opens === undefined
+          ? []
+          : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
+      const bodyHead = bodyLines.slice(
+        0,
+        node.opens?.placement === "inline" ? 1 : 0,
+      );
+      const bodyTail = bodyLines.slice(bodyHead.length);
       // The ✕ every row of the body this segment opens leads with
       // (brandon-disclosure-43z): one content-sized cell in the trigger's own
       // state colour — the colour the open trigger wears, so the ✕ on a row
       // and the trigger it answers to read as one affordance — laid through
-      // the same layout as the trigger's cells, so it pads like them. Built
-      // only when there is a body to lead (a closed body has no rows).
+      // the same layout as the trigger's cells, so it pads like them.
       const closeLead =
-        node.opens !== undefined && bodyOpen
+        node.opens !== undefined && bodyTail.some((l) => l.band === "own")
           ? applySegmentLayout(
               fragmentsToCells(
                 [ctx.closeDisclosure(node.opens.key)],
@@ -452,10 +462,6 @@ const segmentType: NodeType<"segment"> = {
               { ...layout, width: "auto", baseStyle: styles.trigger },
             )
           : [];
-      const bodyLines =
-        node.opens === undefined
-          ? []
-          : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
       // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
       // the band this trigger opened gets its ✕; a row of a band hung deeper
       // inside (a `{{ menu }}` body, a nested disclosure's rows) already has
@@ -463,11 +469,6 @@ const segmentType: NodeType<"segment"> = {
       // band, so the band this trigger sits on never leads it again.
       const leadOf = (line: RenderedLine): readonly RichText[] =>
         line.band === "own" ? closeLead : [];
-      const bodyHead = bodyLines.slice(
-        0,
-        node.opens?.placement === "inline" ? 1 : 0,
-      );
-      const bodyTail = bodyLines.slice(bodyHead.length);
       const ledBody: RenderedLines = bodyTail.map((line) => ({
         cells: [...leadOf(line), ...line.cells],
         band: "deeper",
