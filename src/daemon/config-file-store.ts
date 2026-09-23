@@ -84,6 +84,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   charset: "string",
   updateNotice: "boolean",
   colorCompatibility: "string",
+  menuGlyph: "string",
 };
 
 // [LAW:one-source-of-truth] The same four boolean-ish inputs validateBoolean

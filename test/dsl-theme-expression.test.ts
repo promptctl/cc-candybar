@@ -18,7 +18,7 @@
 // for "it changed to the right colour" — the discipline pe6's look-expression
 // tests established one dimension over. And a cell's colour is read BY SEGMENT
 // NAME off the `perSegmentSink` the daemon itself renders with, never as "the
-// first background SGR on the row": every row leads with the synthesized `☰`
+// first background SGR on the row": every row leads with the synthesized `🍫`
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 

@@ -34,7 +34,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
 
-Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous, toolbar) over a status row (model, context, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
+Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous) over a status row (model, context, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
 ## Customization
 
@@ -103,7 +103,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `git` | repo, `⎇` branch, sha, ahead/behind, worktree, upstream, stash, working-tree status | in a repo |
 | `gitaculous` | the same facts in gitaculous's spelling — `(git)`, repo, operation, sha, `S`/`U`/`?`/`!` counts, upstream, stashes, time since the last commit | in a repo |
 | `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
-| `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page, toggle edit mode | always |
+| `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page (also inside the settings menu) | always |
 | `session` | `§` this session's cost and tokens, plus budget status | always |
 | `today` | `☉` today's cost and tokens across sessions, plus budget status | always |
 | `block` | `◱` the 5-hour rate-limit window's utilization | while that window is active |

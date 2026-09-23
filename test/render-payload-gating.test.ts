@@ -16,6 +16,10 @@ import type {
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 import { FLOOR_LOOK } from "./helpers/floor-look";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { PRESET_FLOOR } from "../src/config/presets";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -200,7 +204,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       HOOK_DATA,
       deps,
       undefined,
-      buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
+      buildNeededPrefixes(CONFIG_WITHOUT_METRICS, PRESET_FLOOR),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
     );
@@ -221,7 +225,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       HOOK_DATA,
       deps,
       undefined,
-      buildNeededPrefixes(CONFIG_WITH_METRICS),
+      buildNeededPrefixes(CONFIG_WITH_METRICS, PRESET_FLOOR),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
     );
@@ -258,7 +262,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       helpers: {},
       editGlobals: {},
     };
-    const needed = buildNeededPrefixes(config);
+    const needed = buildNeededPrefixes(config, PRESET_FLOOR);
     // The only declared `git.*` input is `git.branch`; it must be in
     // the closure even though the template references `.git`, not
     // `.git.branch`.
@@ -284,12 +288,37 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       helpers: {},
       editGlobals: {},
     };
-    const needed = buildNeededPrefixes(config);
+    const needed = buildNeededPrefixes(config, PRESET_FLOOR);
     expect(needed.has("metrics.sessionDuration")).toBe(true);
     // `directory`'s own input is reachable too (sanity).
     expect(needed.has("workspace.current_dir")).toBe(true);
     // `tmux`/`git` are referenced by neither the container `when` nor the one
     // rendered segment, so they stay gated out.
     expect(needed.has("tmux.session")).toBe(false);
+  });
+
+  test("a segment reachable only through the synthesized settings menu brings its inputs online", () => {
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(buildNeededPrefixes(config, PRESET_FLOOR).has("git.repoUrl")).toBe(
+      true,
+    );
+  });
+
+  test("a segment only an inactive preset places brings no inputs online", () => {
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(buildNeededPrefixes(config, "verbose").has("git.prUrl")).toBe(true);
+    expect(buildNeededPrefixes(config, PRESET_FLOOR).has("git.prUrl")).toBe(
+      false,
+    );
   });
 });

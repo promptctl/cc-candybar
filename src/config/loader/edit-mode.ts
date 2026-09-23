@@ -39,10 +39,7 @@
 // separation the gate protects still holds exactly where it always mattered:
 // the menu declines to synthesize for a config with no `session.id`
 // (canHostSessionState in settings-menu.ts), which is precisely the static,
-// non-interactive bar this comment was written to keep clean. Production blast
-// radius was nil either way — the bundled default's `toolbar` segment already
-// referenced `edit.toggle`, so every config merging it already demanded edit
-// mode before the menu existed.
+// non-interactive bar this comment was written to keep clean.
 
 import { createEngine } from "@promptctl/go-template-js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";

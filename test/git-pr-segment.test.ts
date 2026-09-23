@@ -41,8 +41,7 @@ function renderGitPr(git: Record<string, unknown>): string {
   // Narrow the spread default to just the gitPr segment so the rendered line is
   // exactly that segment's output.
   //
-  // [LAW:locality-or-seam] `toolbar` references `edit.toggle`
-  // (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
+  // [LAW:locality-or-seam] The settings menu references `edit.toggle`, so `synthesizeEditChrome` (inside
   // `parseAndValidate`, BEFORE this narrowing) has already baked a spliced
   // copy of the full root into `presets.default.root` and per-preset
   // `insertSegmentFrom` actions (`edit.addable.<preset>`) into `actions` —

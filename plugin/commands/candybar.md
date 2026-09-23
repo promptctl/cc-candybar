@@ -150,7 +150,7 @@ Tell the user the previews are in the bash output above, then display:
 ````markdown
 **Presets:**
 
-1. **default** -- Two rows: an identity row (directory, git, toolbar) over a status row (model, context window, cache timer, 5-hour block usage, weekly usage). Good default.
+1. **default** -- Two rows: an identity row (directory, git) over a status row (model, context window, cache timer, 5-hour block usage, weekly usage). Good default.
 2. **compact** -- One row (directory, git, context window) with no cell padding. For narrow terminals and split panes.
 3. **verbose** -- The default's two rows plus pull-request, burn-rate, token-speed and token-sparkline segments. Maximum information.
 ````
@@ -261,7 +261,7 @@ Setup complete.
 
 **What now:**
 1. Restart Claude Code if the statusline does not appear.
-2. The bar has its own settings menu: click `☰ ▸` on the bar to switch theme, look, style, wrap, padding and preset live. Tick `persist?` there to make a choice the durable default.
+2. The bar has its own settings menu: click `🍫` on the bar to switch theme, look, style, wrap, padding and preset live. Tick `persist?` there to make a choice the durable default.
 3. Hand edits to `~/.config/cc-candybar/config.json5` hot-reload; no restart needed.
 4. Run `/candybar` any time to rerun this wizard.
 

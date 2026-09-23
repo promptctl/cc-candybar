@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { RichText } from "@promptctl/rich-js";
-import { buildNeededPrefixes } from "../render-payload.js";
+import { neededPrefixesByPreset } from "../render-payload.js";
 import {
   loadConfig,
   validateConfig,
@@ -110,9 +110,9 @@ export type ReloadedEntry = Readonly<
 // the settings menu (the door back to the file) exists from the first
 // render, through the same synthesis every config gets.
 //
-// `neededInputPaths` is the layout-reachable closure of input paths,
-// computed once at registration. The daemon's payload builder reads it
-// to gate provider invocation.
+// `neededInputPaths` is the layout-reachable closure of input paths for a
+// preset, computed once per preset. The daemon's payload builder reads the
+// active preset's to gate provider invocation.
 //
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that
 // renderDsl writes on each render — pre-layout cells, NOT serialized
@@ -127,7 +127,7 @@ export interface DslRenderState {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
-  readonly neededInputPaths: ReadonlySet<string>;
+  readonly neededInputPaths: (preset: string) => ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
   // FILE authors at the path presetRoot() reports for them (candybar-config-
@@ -572,7 +572,7 @@ export class RenderCache {
       store,
       registry,
       compiled,
-      neededInputPaths: buildNeededPrefixes(config),
+      neededInputPaths: neededPrefixesByPreset(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
       authoredRoots: authoredRoots(merged, raw),

@@ -7,7 +7,7 @@
 //
 // The contract:
 //   - a trigger wears the STATE of the band it opens, at the depth its own
-//     enclosure implies: ☰ on the bar opens depth 0, ⚙ inside it depth 1, a
+//     enclosure implies: 🍫 on the bar opens depth 0, ⚙ inside it depth 1, a
 //     picker control inside that depth 2 — and its drop line sits on that
 //     band's plane;
 //   - the cells of a body are that band's ITEMS, placed by their band-relative
@@ -16,9 +16,8 @@
 //     no depth — the same tree with and without the gate renders byte-identical;
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
-//   - the closed ☰ door on the bar paints `accent` over its address's tint
-//     (the one synthesized cell that authors a `bg:`), while the band it opens
-//     still derives from the hue that address deals — the depth-0 anchor of
+//   - the closed door on the bar wears its address's tint, and the band it
+//     opens derives from the hue that address deals — the depth-0 anchor of
 //     the chain.
 
 import { getThemePalette } from "@promptctl/rich-js";
@@ -254,24 +253,19 @@ function build(src: string, withDefault = false) {
   };
 }
 
-// The bundled default with a two-cell first row: ☰ leads it.
+// The bundled default with a two-cell first row: 🍫 leads it.
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("candybar-render-ai7.9 — the bundled ☰ → ⚙ → picker chain, depth by depth", () => {
+describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, depth by depth", () => {
   test("each trigger wears the state of the band at its depth, and its cells are that band's items", () => {
     const rt = build(BUNDLED, true);
     const { palette, root } = rt;
     rt.render();
     const hue = rt.hueOf(SETTINGS_ANCHOR);
 
-    // Depth-0 anchor: the closed door authors its own background (the palette's
-    // `accent`, measured in test/settings-door.test.ts), so it is the one cell
-    // in this chain whose CLOSED colour is not its tint. What it opens is
-    // unaffected — the band below still derives from the hue its ADDRESS deals,
-    // which is what every assertion from here down measures.
-    expect(rt.bgOf(SETTINGS_ANCHOR)).not.toBe(rt.expectedTint(SETTINGS_ANCHOR));
+    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(rt.expectedTint(SETTINGS_ANCHOR));
 
-    // ☰ open: the trigger wears the depth-0 state; its body row's cells are
+    // 🍫 open: the trigger wears the depth-0 state; its body row's cells are
     // depth-0 items, each placed by its band-relative step, text chosen.
     rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_ANCHOR, "open");
     rt.render();
@@ -280,7 +274,7 @@ describe("candybar-render-ai7.9 — the bundled ☰ → ⚙ → picker chain, de
     const row1 = bodyCellsOf(root, SETTINGS_ANCHOR);
     expect(row1.length).toBeGreaterThan(2);
     const config = row1.find((n) => n.endsWith(".config"));
-    if (config === undefined) throw new Error("no ⚙ config cell in the ☰ body");
+    if (config === undefined) throw new Error("no ⚙ config cell in the 🍫 body");
     for (const [index, name] of row1.entries()) {
       // Band-relative: one step, the cell's index among the row's cells.
       const address = regionAddress(rt, name);

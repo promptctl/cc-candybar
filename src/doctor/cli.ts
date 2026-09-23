@@ -22,7 +22,7 @@ const EXIT_OK = 0;
 const EXIT_FAILED = 1;
 const EXIT_USAGE = 2;
 
-const FIX_HINT = ` (fix: click ${DOOR_GLYPH} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`;
+const FIX_HINT = ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`;
 
 function reportLine({ check, verdict }: CheckReport): string {
   return verdict.ok

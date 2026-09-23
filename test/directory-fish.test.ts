@@ -37,8 +37,7 @@ const dirOnlyRoot = {
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 
-// [LAW:locality-or-seam] `toolbar` references `edit.toggle`
-// (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
+// [LAW:locality-or-seam] The settings menu references `edit.toggle`, so `synthesizeEditChrome` (inside
 // `parseAndValidate`, before any call site here narrows the layout) has
 // already baked a spliced copy of the full root into `presets.default.root`
 // — `registerDslConfig`'s per-preset compile prefers that over a plain

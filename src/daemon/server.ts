@@ -1006,7 +1006,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         req.hookData,
         payloadDeps,
         req.cwd,
-        entry.state.neededInputPaths,
+        entry.state.neededInputPaths(effective.preset),
         effective,
         hints,
       );

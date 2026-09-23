@@ -26,7 +26,7 @@ export const oneSegmentRoot = (segment: string) => ({
 
 // [LAW:locality-or-seam] Narrow an already-VALIDATED config to one segment.
 // Overriding just `root` is not enough once the bundled default references
-// `edit.toggle` (brandon-layout-edit-2gc.4, via the toolbar segment):
+// `edit.toggle` (via the settings menu's `✎ edit`):
 // `synthesizeEditChrome` runs inside `parseAndValidate` — BEFORE any call
 // site here narrows the layout — and, for every preset including the
 // `"default"` floor, bakes a spliced copy of the FULL original root into
@@ -46,8 +46,7 @@ export const oneSegmentRoot = (segment: string) => ({
 // that surface), so the clean narrowing drops every synthesized per-preset
 // `edit.*` chrome artifact too — EXCEPT the two bare, preset-independent
 // names (`edit.mode`/`edit.toggle`) Phase A synthesis writes once, which stay
-// so a narrowed `toolbar` (whose template references `edit.toggle` directly)
-// still compiles.
+// so the settings menu's `✎ edit` still compiles.
 const EDIT_CHROME_NAME = (name: string) =>
   name.startsWith(EDIT_NS) &&
   name !== EDIT_MODE_KEY &&

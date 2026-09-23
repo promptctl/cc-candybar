@@ -145,11 +145,11 @@ function keysWrittenBy(url: string): string[] {
     .filter((k): k is string => k !== undefined);
 }
 
-// The settings menu's OWN surfaces: its `☰` toggle and — the part a substring
-// match on the anchor missed — its hosted preset picker, whose disclosure key
-// is `menus.settings_presets.…` and shares none of the anchor's spelling. A
+// The settings menu's OWN surfaces: its `🍫` toggle and — the part a substring
+// match on the anchor missed — its hosted pickers, whose shared disclosure key
+// is `menus.settings_pickers.…` and shares none of the anchor's spelling. A
 // test that opens the menu before collecting links would otherwise have counted
-// the picker's toggle as one of its fixture's own regions.
+// a picker's toggle as one of its fixture's own regions.
 function isSettingsMenuKey(key: string): boolean {
   return key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}settings_`);
 }

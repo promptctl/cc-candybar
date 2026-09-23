@@ -101,9 +101,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // The bundled default is the maintainer's two always-visible rows — an
-  // identity+actions row (directory, the verbose gitaculous line, the
-  // quick-action tray: copy session id, open project / transcript in the
-  // editor, and the settingsDrawer toggle) over a status row (model, context,
+  // identity row (directory, the verbose gitaculous line, and the
+  // settingsDrawer toggle) over a status row (model, context,
   // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
   // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
   // toggle segment and gated body are part of the static layout tree
@@ -113,7 +112,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // the default bar and which stay declared-but-opt-in — so a future layout
   // edit is a deliberate, reviewed change rather than an accidental drift.
   // block/weekly are IN (their when-gates hide them when no rate-limit window
-  // is active); toolbar is IN (the default's interactivity).
+  // is active).
   //
   // The drawer holds THREE controls, not nine: candybar-settings-ui-aok.3
   // moved every setting with both a session and a durable half
@@ -149,7 +148,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         // at all, so an idle bar is byte-identical to one without it
         // (brandon-activity-ue7).
         "activity",
-        "toolbar",
         "groups.settings",
         "charsetControl",
         "colorCompatControl",
@@ -166,6 +164,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       "tokenSparkline",
       "burnrate",
       "gitPr",
+      "toolbar",
     ]) {
       expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([optIn]);
       expect(laidOut.has(optIn)).toBe(false);
@@ -285,7 +284,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     try {
       // The theme and look controls live in the synthesized settings menu's
       // config row (candybar-settings-ui-aok.3), behind two nested
-      // disclosures — open both with the same clicks a "☰ ▸" then "⚙ config ▸"
+      // disclosures — open both with the same clicks a "🍫 ▸" then "⚙ config ▸"
       // tap would dispatch, so the controls this test exercises render.
       clickUrl(
         effectsUrl([
@@ -395,7 +394,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["host","directory","gitaculous","toolbar", { kind: "group", name: "settings",
+      { h: ["host","directory","gitaculous", { kind: "group", name: "settings",
         label: "⚙ terminal", direction: "horizontal", children: [
           "charsetControl","colorCompatControl",
           "directoryPaletteControl"
