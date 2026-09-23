@@ -42,6 +42,7 @@ import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
+  DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
@@ -212,20 +213,27 @@ describe("the global settings menu is reachable from a user config", () => {
     dispose();
   });
 
-  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode", () => {
+  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and closes the menu", () => {
     const { render, clickWriting, sessionState, dispose } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     clickWriting(render(), EDIT_MODE_KEY, "open");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
-    clickWriting(render(), SETTINGS_ANCHOR, "closed");
+    // The same click closed the menu, so the door's row is back — with its
+    // edit chrome — and no close click is needed to reach it.
+    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
     const editing = linkUrls(render()).filter((u) =>
       u.includes("apply-layout-op"),
     );
     expect(editing.length).toBeGreaterThan(0);
+    // Leaving is the mirror: open the menu, ✎ done, and land on the plain bar.
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     dispose();
   });
 

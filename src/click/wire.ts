@@ -163,6 +163,39 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
   return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 
+// [LAW:single-enforcer] One click's consecutive session writes are one
+// SessionState transaction. A run of ADJACENT set-state effects for one session
+// becomes one batch, which the set-state handler validates whole before writing
+// any of it — so a `do` action's session members, or a picker option and its
+// close writes, land together or not at all, whichever producer built the URL.
+// Only adjacency merges: effects still run in the order the click lists them, so
+// a durable write between two session writes (a dual's release included) keeps
+// its place, and a different session id starts a new run rather than borrowing
+// the previous one's. The tail stays encoded — splitVerb one level down splits
+// `<sid>/<pairs…>`, and joining encoded pair runs is the codec's own join.
+export function batchSessionWrites(
+  effects: readonly ParsedEffect[],
+): ParsedEffect[] {
+  return effects.reduce<ParsedEffect[]>((out, e) => {
+    const prev = out.at(-1);
+    const joined = prev && joinSessionWrites(prev, e);
+    return joined ? [...out.slice(0, -1), joined] : [...out, e];
+  }, []);
+}
+
+// Two effects as one set-state batch, or undefined when they are not two
+// session writes for the same session.
+function joinSessionWrites(
+  a: ParsedEffect,
+  b: ParsedEffect,
+): ParsedEffect | undefined {
+  if (a.verb !== VERB_SET_STATE || b.verb !== VERB_SET_STATE) return undefined;
+  const [x, y] = [splitVerb(a.value), splitVerb(b.value)];
+  return x.verb === y.verb
+    ? { verb: VERB_SET_STATE, value: `${x.verb}/${x.value}/${y.value}` }
+    : undefined;
+}
+
 // [LAW:types-are-the-program] Split a `verb/tail` string at the first `/`. A
 // verb with no args (no slash) yields an empty tail — the degenerate case, not a
 // guard. The tail keeps its slashes (further segments) for the handler to decode.

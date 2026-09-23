@@ -794,8 +794,8 @@ describe("toggle round trip + drop stacking", () => {
     dispose();
   });
 
-  // closeOnPick folds the SAME close pair into the option's apply write — one
-  // atomic pick+close, exercised through the dict option end-to-end.
+  // closeOnPick follows the option's apply write with the SAME close pairs —
+  // one atomic pick+close, exercised through the dict option end-to-end.
   test('(dict "closeOnPick" true): picking an option applies it AND closes the menu', () => {
     const src = MENU_SRC.replace(
       '{{ menu "applyTheme" "▸" "▾" }}',
@@ -805,16 +805,18 @@ describe("toggle round trip + drop stacking", () => {
       buildRuntime(src);
     clickToggle(render(), TKEY, "applyTheme");
     const open = render();
-    const pickUrl = ownUrls(open).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === "theme" && e.args[3] === TKEY),
-    );
+    const pickUrl = ownUrls(open).find((u) => {
+      const e = effectsOf(u);
+      return e[0]?.args[1] === "theme" && e[1]?.args[1] === TKEY;
+    });
     if (!pickUrl) throw new Error("no pick+close option write rendered");
-    const eff = effectsOf(pickUrl)[0]!;
-    // [sessionId, themeKey, option, stateKey, "closed", pageKey, "0"]
-    expect(eff.args.slice(3)).toEqual([TKEY, "closed", PKEY, "0"]);
+    const [pick, close] = effectsOf(pickUrl);
+    // The pick, then the close pairs, as adjacent set-states dispatch joins
+    // into one batch: [sessionId, stateKey, "closed", pageKey, "0"].
+    expect(close!.args.slice(1)).toEqual([TKEY, "closed", PKEY, "0"]);
     click(pickUrl);
     expect(sessionState.get("s1", TKEY)).toBe("closed");
-    expect(sessionState.get("s1", "theme")).toBe(eff.args[2]);
+    expect(sessionState.get("s1", "theme")).toBe(pick!.args[2]);
     expect(stripAnsi(render()).split("\n")).toHaveLength(1); // closed on pick
     dispose();
   });

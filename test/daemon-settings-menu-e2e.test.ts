@@ -74,13 +74,14 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       expect(opened).toContain("✎ edit"); // edit mode
       expect(opened).toContain("▦"); // preset switching
 
-      // 3. Edit mode is genuinely entered from here.
+      // 3. Edit mode is genuinely entered from here, and the same click
+      //    closes the menu: the inline tray hid the door's row, so the row's
+      //    edit chrome is on screen the moment edit mode is — no close click.
       const bodyOut = await render(sockPath, SID, projectDir);
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "open"));
-      const inMenu = await render(sockPath, SID, projectDir);
-      expect(stripAnsi(inMenu)).toContain("✎ done");
-      await click(sockPath, urlWriting(inMenu, SETTINGS_ANCHOR, "closed"));
       const editing = await render(sockPath, SID, projectDir);
+      expect(stripAnsi(editing)).toContain(DOOR_GLYPH);
+      expect(stripAnsi(editing)).not.toContain("✎ done");
       expect(
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,

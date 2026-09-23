@@ -102,7 +102,16 @@ function referencesEditToggle(template: string): boolean {
   }
 }
 
+// A file also wants edit mode when one of its `do` actions fires `edit.toggle`
+// — a click that reaches the toggle without a template naming it.
 function fileWantsEditMode(out: Readonly<RawDslConfig>): boolean {
+  if (
+    Object.values(out.actions ?? {}).some(
+      (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION),
+    )
+  ) {
+    return true;
+  }
   for (const seg of Object.values(out.segments ?? {})) {
     for (const field of [seg.template, seg.bg, seg.fg] as const) {
       if (typeof field === "string" && referencesEditToggle(field)) {

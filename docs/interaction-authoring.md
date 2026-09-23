@@ -74,7 +74,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `doctor` — or, for one control that writes *either* store,
+`reset` / `undo` / `redo` / `doctor` / `do` — or, for one control that writes *either* store,
 `set` and `persist` together with a `persistWhen` selector. A `set`, a
 `persist`, or a dual declares exactly one value source:
 
@@ -91,6 +91,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | releases the session key as part of the same write, so the committed default is visible to the session that committed it |
 | `{ undo: true }` | step the config file's edit history (one stack per file) one entry back — restores whatever a PRIOR `persist`/`reset`/layout edit changed, any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
+| `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
 | `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
@@ -753,6 +754,58 @@ surfaces through), never a silent no-op. A fresh durable write after an
 `undo` abandons whatever was undone (the classic redo-stack branch: `redo`
 truncates rather than staying reachable past a new edit).
 
+### Several effects in one click: `do`
+
+`do` names actions you already declared and fires them all from one click, in
+order. Reach for it when one intent needs two writes — "enter edit mode AND
+close the menu I entered it from" is exactly how the settings menu's `✎ edit`
+is built. It has no gate of its own: each member keeps the gate it already
+derives, so nothing a `do` fires could not be clicked alone.
+
+```json5 check:pass
+{
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    panel: { kind: 'state', key: 'panel', default: 'closed' },
+    focus: { kind: 'state', key: 'focus', default: 'off' },
+  },
+  actions: {
+    toggleFocus: { set: 'focus', cycle: ['off', 'on'] },
+    closePanel: { set: 'panel', to: 'closed' },
+    focusAndClose: { do: ['toggleFocus', 'closePanel'] },
+  },
+  segments: {
+    bar: {
+      template: '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}',
+      fg: "foreground",
+    },
+  },
+  root: "bar",
+}
+```
+
+- **The first member is the click's face.** The region shows the first
+  action's display rule — above, `toggleFocus` is a two-member cycle, so the
+  `do` takes one display per member exactly as `toggleFocus` would — and its
+  current-state mark. A `{{ menu }}`/`{{ picker }}` can apply a `do` whose
+  first member is an option action; each option then also fires the rest.
+- **Only the first member may take its value from the template** (`from`,
+  `int`, `insertSegmentFrom`): the others are handed no value to write, so
+  listing one of them anywhere but first is a load error.
+- **Members fire in the order listed, each against what the bar showed.**
+  Every member computes its write from the state the render displayed, not
+  from the state an earlier member leaves: a cycle writes the successor of
+  the value on screen, and a dual picks its store from the `persist?` box as
+  it was drawn.
+- **Adjacent session writes are one transaction.** Members that write
+  SessionState one after another travel as one batch, checked whole before
+  any of it lands, so that run never half-applies. A durable write
+  (`persist`, `reset`, a layout op) or a stepper runs as its own step in its
+  place in the list — list the session writes together when they must land
+  together.
+- A `do` lists at least two members, none of them twice, and none of them may
+  itself be a `do` — list its members directly instead.
+
 ## Edit mode: `+`/`-` chrome for free
 
 Composing the layout by hand-writing `removeSegment`/`insertSegmentFrom`
@@ -801,8 +854,8 @@ static bar is untouched by the feature's mere existence. Reference it once,
 anywhere, and the whole mechanism switches on for every row in every preset.
 
 In practice you almost never make that reference yourself: the global settings
-menu (below) puts an `✎ edit` entry in every bar it can, and that entry *is* a
-reference to `edit.toggle`. So expect edit mode to be live in any config you
+menu (below) puts an `✎ edit` entry in every bar it can, and that entry
+fires `edit.toggle` (through a `do` that also closes the menu). So expect edit mode to be live in any config you
 write. The gate still does its job at the one edge that matters — the menu is
 not synthesized for a config declaring no `session.id`, which is exactly the
 static, non-interactive bar the gate exists to leave alone.
@@ -866,7 +919,7 @@ itself) are excluded from both halves — removing a group's own toggle or a
 menu's own host segment would strand its synthesized siblings, so edit mode
 only ever touches ordinary content.
 
-**Every bar ships this on**: the global settings menu's `✎ edit` references
+**Every bar ships this on**: the global settings menu's `✎ edit` fires
 `edit.toggle`, so any config that hosts the menu has edit mode. The chrome
 this synthesizes is real, always-compiled tree structure — a test asserting a
 preset's exact segment list needs to filter out `edit.`-namespaced names, the
@@ -1056,7 +1109,9 @@ close.
   cannot write a default from another session.
 - **The preset switcher** and **`✎ edit`** are one click from the toggle,
   because switching arrangement and entering edit mode are what you most often
-  open this menu to do.
+  open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
+  menu in the same click, so you land on the bar you are about to edit — the
+  open menu covers the door's own row, edit chrome included.
 - **`⚙ config`** opens the display settings: theme, look, style, wrap and
   padding, each ONE control that follows the checkbox, each with a `↺` that
   forgets its durable default. `charset` and `colorCompatibility` are
@@ -1832,6 +1887,44 @@ Template references unknown variable ".curent_dir"
 
 ```error
 a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
+```
+
+### A `do` member that takes its value from the template, listed after the first
+
+Only the first member of a `do` is bound the region's display, so a later
+member that writes a template-bound value would have nothing to write:
+
+```json5 check:fail
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    close: { set: 'panel', to: 'closed' },
+    pickTheme: { set: 'theme', from: 'themes' },
+    broken: { do: ['close', 'pickTheme'] },
+  },
+}
+```
+
+```error
+actions.broken do: "pickTheme" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member
+```
+
+### A `do` listing another `do`
+
+```json5 check:fail
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    a: { set: 'x', to: '1' },
+    b: { set: 'y', to: '1' },
+    both: { do: ['a', 'b'] },
+    broken: { do: ['both', 'a'] },
+  },
+}
+```
+
+```error
+actions.broken do: "both" is itself a do action — list its members here instead
 ```
 
 ### Wrong display count on a cycle action

@@ -130,27 +130,28 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     dispose();
   });
 
-  test("clicking a theme applies AND closes (closeOnPick=true): one atomic set-state", () => {
+  test("clicking a theme applies AND closes (closeOnPick=true): adjacent session writes, one batch", () => {
     const { render, click, sessionState, dispose } = buildRuntime(
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
     const themeUrl = linkUrls(open).find((u) => {
-      const e = effectsOf(u)[0]!;
+      const e = effectsOf(u);
       return (
-        e.verb === "set-state" &&
-        e.args.includes("theme-pick") &&
-        e.args.includes("theme-page")
+        e.some((x) => x.args.includes("theme-pick")) &&
+        e.some((x) => x.args.includes("theme-page"))
       );
     });
     expect(themeUrl).toBeDefined();
-    // ONE set-state effect writing BOTH keys (apply + close), atomically.
+    // The apply, then the close, as ADJACENT set-states — the run dispatch
+    // joins into one batch (test/click-wire.test.ts pins the join).
     const eff = effectsOf(themeUrl!);
-    expect(eff).toHaveLength(1);
-    expect(eff[0]!.verb).toBe("set-state");
-    expect(eff[0]!.args.slice(-2)).toEqual(["theme-page", "-1"]);
+    expect(eff.map((e) => e.verb)).toEqual(["set-state", "set-state"]);
+    expect(eff[0]!.args[1]).toBe("theme-pick");
+    expect(eff[1]!.args.slice(-2)).toEqual(["theme-page", "-1"]);
     click(themeUrl!);
+    expect(sessionState.get("s1", "theme-pick")).toBe(eff[0]!.args[2]);
     expect(sessionState.get("s1", "theme-page")).toBe("-1"); // closed
     dispose();
   });
