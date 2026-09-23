@@ -126,9 +126,9 @@ export interface DisclosureRef {
 
 // [LAW:dataflow-not-control-flow] A segment with the body it opens rewritten by
 // `f` — total: a segment that opens nothing is returned as it is. Every tree
-// rewrite that recurses into containers (edit chrome's splice, the settings
-// anchor's expansion) recurses into bodies through this one function, so a
-// body can never be the subtree a rewrite forgot.
+// rewrite that recurses into containers (edit chrome's splice) recurses into
+// bodies through this one function, so a body can never be the subtree a
+// rewrite forgot.
 export function mapOpens(
   node: SegmentNode,
   f: (body: ContainerNode) => ContainerNode,
