@@ -1,3 +1,10 @@
+# [1.73.0](https://github.com/promptctl/cc-candybar/compare/v1.72.0...v1.73.0) (2026-09-23)
+
+
+### Features
+
+* **settings-menu:** visible under every condition, opens inline with ❌ ([#231](https://github.com/promptctl/cc-candybar/issues/231)) ([43b9b30](https://github.com/promptctl/cc-candybar/commit/43b9b30b1c20494d86678673ae1d33ea678f3338))
+
 # [1.72.0](https://github.com/promptctl/cc-candybar/compare/v1.71.1...v1.72.0) (2026-09-23)
 
 
