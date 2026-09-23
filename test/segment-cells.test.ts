@@ -7,6 +7,7 @@ import { fragmentsToCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
 import { RichText, Style } from "@promptctl/rich-js";
 import { definedStyle } from "../src/template-engine/cells.js";
+import { stripAnsi } from "./helpers/ansi";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
 
@@ -23,12 +24,6 @@ function renderCells(cells: readonly RichText[]): string {
 // CSI prefix of an ANSI SGR sequence (ESC + "[").
 const SGR = "\x1b[";
 
-// Strip ANSI SGR escapes so a test can assert the visible text independently of
-// where styling is applied.
-function stripAnsi(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1b\[[0-9;]*m/g, "");
-}
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {

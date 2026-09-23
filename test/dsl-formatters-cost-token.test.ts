@@ -71,9 +71,7 @@ function render(call: string, payload: Record<string, number>): string {
     payload,
     OPTS,
   );
-  return out
-    .replace(/\x1b\]8;[^\x07]*\x07/g, "")
-    .replace(/\x1b\[[0-9;]*m/g, "");
+  return stripAnsi(out);
 }
 
 describe("bdi.3 — formatCost helper (byte-parity with retired JS)", () => {

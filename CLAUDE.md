@@ -245,7 +245,7 @@ Tests live in `test/`. Useful starting points by area:
 - Template engine: `test/template-engine.test.ts`.
 - Variables: `test/var-sources.test.ts`, `test/var-store.test.ts`.
 
-Read rendered bytes through `test/helpers/ansi.ts` (`stripAnsi`, `links`, `linkUrls`, `linkCloseCount`) rather than a regex of your own: it parses OSC-8 with rich-js's exported `OSC8` grammar, the same one the bytes are written with (every link carries an `id=` derived from its URL, so a regex spelling `ESC]8;;` matches nothing). `src/render/ansi.ts` holds the zero-width-escape pattern the fill measure uses.
+Read rendered bytes through `test/helpers/ansi.ts` (`stripAnsi`, `links`, `linkUrls`, `linkCloseCount`) rather than a regex of your own: it reads links with rich-js's `osc8Sequences`, over the same OSC 8 grammar the bytes are written with (every link carries an `id=` derived from its URL, so a regex spelling `ESC]8;;` matches nothing). `src/render/ansi.ts` holds the zero-width-escape pattern the fill measure uses, composed from rich-js's `OSC8`.
 
 Test timeout is 30 s (some tests touch real fs / timing); prefer faking time and fs over real waits when adding new tests.
 
