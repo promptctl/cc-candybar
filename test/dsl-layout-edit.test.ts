@@ -93,7 +93,7 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { ANSI, linkUrls } from "./helpers/ansi";
+import { INVISIBLE, linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -108,7 +108,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -575,7 +575,7 @@ describe("apply-layout-op click → the config file", () => {
   test("a click fires apply-layout-op and removes the segment from the file's root", () => {
     const { render, click, dispose } = buildLayoutRuntime(SRC);
     const original = durable.text()!;
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     expect(effectsOf(urls[0]!)[0]!.verb).toBe("apply-layout-op");
     click(urls[0]!);
     // The file's own root is the edited tree, in the authoring grammar.
@@ -597,7 +597,7 @@ describe("apply-layout-op click → the config file", () => {
 
   test("two clicks COMPOSE — the second edits the tree the first left behind", () => {
     const { render, click, dispose } = buildLayoutRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     click(urls[0]!); // remove directory
     click(urls[1]!); // insert gitPr after git
     expect(durable.parsed().root).toEqual({
@@ -613,7 +613,7 @@ describe("apply-layout-op click → the config file", () => {
   // and touches neither the file nor the history.
   test("a stale target/anchor is a LOUD error from the store, and the file is untouched", () => {
     const { render, click, dispose } = buildLayoutRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     click(urls[0]!); // remove directory
     const afterFirst = durable.text()!;
 
@@ -653,7 +653,7 @@ describe("apply-layout-op click → the config file", () => {
       presets: { mine: { root: { h: ['git', 'bar'] } } },
     }`;
     const { render, click, dispose } = buildLayoutRuntime(SRC_CUSTOM);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     // The hand edit: the preset declaration vanishes; everything else stays.
     durable.write(SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"));
     expect(durable.parsed().presets).toEqual({});
@@ -801,7 +801,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
       undefined,
       { preset: presetName },
     );
-    expect(rendered.replace(ANSI, "")).toContain(`↺ ${presetName} customized`);
+    expect(rendered.replace(INVISIBLE, "")).toContain(`↺ ${presetName} customized`);
     registry.dispose();
   });
 });
@@ -856,7 +856,7 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
         opts(),
         undefined,
         { preset: "gated" },
-      ).replace(ANSI, "");
+      ).replace(INVISIBLE, "");
     } finally {
       registry.dispose();
     }

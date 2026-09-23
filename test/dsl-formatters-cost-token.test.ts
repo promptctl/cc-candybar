@@ -14,6 +14,7 @@
 // helper bodies the shipped statusline uses — not a test-local copy.
 
 import { SessionState } from "../src/daemon/session-state";
+import { stripAnsi } from "./helpers/ansi";
 
 import {
   parseDslConfig,

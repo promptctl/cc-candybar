@@ -8,7 +8,7 @@ import { osc8Sequences, type Osc8Sequence } from "@promptctl/rich-js";
 import { INVISIBLE } from "../../src/render/ansi.js";
 
 /** SGR + OSC 8: every escape that occupies no columns. */
-export const ANSI = INVISIBLE;
+export { INVISIBLE };
 export const stripAnsi = (s: string): string => s.replace(INVISIBLE, "");
 
 export interface Link {
@@ -23,6 +23,9 @@ export function links(rendered: string): Link[] {
   let open: Osc8Sequence | undefined;
   for (const seq of osc8Sequences(rendered)) {
     if (seq.uri !== "") {
+      // Rendered bytes close every link before the next opens; an open over
+      // an open is the unclosed-link bleed, never a link to record.
+      if (open !== undefined) throw new Error(`OSC 8 open at ${seq.index} while ${open.uri} is still open`);
       open = seq;
       continue;
     }

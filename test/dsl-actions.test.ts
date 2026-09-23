@@ -59,7 +59,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The ambient chrome every bar carries (the global settings menu and the
   // edit-mode toggle it reaches) emits its own clickable regions; this file's
@@ -136,7 +136,7 @@ describe("2de.12 — literal set action", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("vanilla 🍫");
-    const urls = extractUrls(out);
+    const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "flavor", "chocolate"] },
@@ -184,7 +184,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
 
   test("the click still passes the baseline theme gate end-to-end", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    const url = extractUrls(render())[0]!;
+    const url = ownUrls(render())[0]!;
     click(url);
     expect(sessionState.get("s1", "theme")).toBe("nord");
     dispose();
@@ -207,7 +207,7 @@ describe("2de.12 — option set action", () => {
 
   test("renders one clickable per option, each binding its value into the set", () => {
     const { render, dispose } = buildRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     expect(urls).toHaveLength(THEMES.length);
     expect(urls.map(effectsOf)).toEqual(
       THEMES.map((t) => [{ verb: "set-state", args: ["s1", "sel", t] }]),
@@ -225,7 +225,7 @@ describe("2de.12 — option set action", () => {
   test("the bound option clicks pass the derived gate and mutate state", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     const target = THEMES[1]!;
-    const url = extractUrls(render()).find((u) =>
+    const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === target),
     )!;
     click(url);
@@ -260,7 +260,7 @@ describe("2de.12 — option set action", () => {
     const { render, click, sessionState, dispose } = buildRuntime(src);
     const out = render();
     expect(stripAnsi(out)).toContain("🎨 fancy");
-    const url = extractUrls(out)[0]!;
+    const url = ownUrls(out)[0]!;
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: ["s1", "sel", target] },
     ]);
@@ -294,7 +294,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 
   test("renders one clickable per inline value, needing no registration", () => {
     const { render, dispose } = buildRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     expect(urls.map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sort-order", "asc"] }],
       [{ verb: "set-state", args: ["s1", "sort-order", "desc"] }],
@@ -314,7 +314,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 
   test("a click on an inline option passes the derived gate and mutates state", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    const url = extractUrls(render()).find((u) =>
+    const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "desc"),
     )!;
     click(url);
@@ -396,7 +396,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
         },
       ]);
       const { render, click, sessionState, dispose } = buildRuntime(src);
-      const url = extractUrls(render()).find((u) =>
+      const url = ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[2] === "green"),
       )!;
       click(url);
@@ -435,7 +435,7 @@ describe("2de.12 — bounded set action", () => {
     const { render, dispose } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("◀ 14 ▶");
-    const urls = extractUrls(out);
+    const urls = ownUrls(out);
     // The link carries the irreducible intent — the signed delta — NOT a value
     // computed from the rendered `current` (the idempotent-absolute bug).
     expect(urls.map(effectsOf)).toEqual([
@@ -449,9 +449,9 @@ describe("2de.12 — bounded set action", () => {
   // renders at DIFFERENT current values — proof it carries no `current` snapshot.
   test("the step-state link is byte-identical across renders at different current values", () => {
     const { render, sessionState, dispose } = buildRuntime(SRC);
-    const at14 = extractUrls(render());
+    const at14 = ownUrls(render());
     sessionState.set("s1", "level", "58");
-    const at58 = extractUrls(render());
+    const at58 = ownUrls(render());
     expect(stripAnsi(render())).toContain("◀ 58 ▶");
     expect(at58).toEqual(at14); // identical link strings despite 14 → 58
     dispose();
@@ -461,7 +461,7 @@ describe("2de.12 — bounded set action", () => {
   // value by N·step — the idempotency is gone (mirror the live repro harness).
   test("three identical clicks with no render between step +3 (idempotency gone)", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    const up = extractUrls(render())[1]!; // ▶, captured once
+    const up = ownUrls(render())[1]!; // ▶, captured once
     click(up);
     click(up);
     click(up); // same URL string, three times, no render between
@@ -472,7 +472,7 @@ describe("2de.12 — bounded set action", () => {
   test("the first click seeds from the variable default (14), not from min", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     expect(sessionState.get("s1", "level")).toBeNull(); // unset
-    click(extractUrls(render())[1]!); // ▶ from a never-written key
+    click(ownUrls(render())[1]!); // ▶ from a never-written key
     expect(sessionState.get("s1", "level")).toBe("16"); // 14+2, NOT 0+2
     dispose();
   });
@@ -480,7 +480,7 @@ describe("2de.12 — bounded set action", () => {
   test("navigation WRAPS past a bound to the other end at apply time", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     sessionState.set("s1", "level", "60"); // max
-    click(extractUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
+    click(ownUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
     expect(sessionState.get("s1", "level")).toBe("0");
     dispose();
   });
@@ -494,7 +494,7 @@ describe("2de.12 — bounded set action", () => {
 
   test("a click steps and the next render shows the new value", () => {
     const { render, click, dispose } = buildRuntime(SRC);
-    click(extractUrls(render())[1]!); // ▶: 14 → 16
+    click(ownUrls(render())[1]!); // ▶: 14 → 16
     expect(stripAnsi(render())).toContain("◀ 16 ▶");
     dispose();
   });
@@ -527,7 +527,7 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   }`;
 
   const urlWriting = (out: string, value: string): string => {
-    const url = extractUrls(out).find((u) =>
+    const url = ownUrls(out).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === "theme-page" && e.args[2] === value,
       ),
@@ -587,7 +587,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
 
   test("copy carries the evaluated template; open carries the evaluated target", () => {
     const { render, click, sideEffects, dispose } = buildRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     expect(urls).toHaveLength(2);
     urls.forEach(click);
     expect(sideEffects).toEqual([
@@ -818,7 +818,7 @@ describe("2de.4 — cycle set action", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("▸ details");
-    const urls = extractUrls(out);
+    const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "1"] },
@@ -828,7 +828,7 @@ describe("2de.4 — cycle set action", () => {
     // Next render flips display AND write target (the toggle round trip).
     const out2 = render();
     expect(stripAnsi(out2)).toContain("▾ details");
-    expect(effectsOf(extractUrls(out2)[0]!)).toEqual([
+    expect(effectsOf(ownUrls(out2)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "0"] },
     ]);
     dispose();
@@ -840,7 +840,7 @@ describe("2de.4 — cycle set action", () => {
     sessionState.set("s1", "details-open", "garbage");
     const out = render();
     expect(stripAnsi(out)).toContain("▸ details");
-    expect(effectsOf(extractUrls(out)[0]!)).toEqual([
+    expect(effectsOf(ownUrls(out)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "1"] },
     ]);
     dispose();
@@ -851,7 +851,7 @@ describe("2de.4 — cycle set action", () => {
     const { render, click, sessionState, dispose } = buildRuntime(src);
     const out = render();
     expect(stripAnsi(out)).toContain("⊕");
-    click(extractUrls(out)[0]!);
+    click(ownUrls(out)[0]!);
     expect(sessionState.get("s1", "details-open")).toBe("1");
     expect(stripAnsi(render())).toContain("⊕");
     dispose();
@@ -898,6 +898,25 @@ describe("2de.4 — cycle set action", () => {
     dispose();
   });
 
+  test("a multi-line error message stays one cell of its row", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: {
+        bar: { template: '{{ cascade 1 "FIRST\\\\nSECOND" }}', bg: 'surface', fg: 'foreground' },
+        ok: { template: 'NEIGHBOUR', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['bar', 'ok'] },
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    const errorRow = stripAnsi(render())
+      .split("\n")
+      .find((line) => line.includes("FIRST"));
+    expect(errorRow).toContain("SECOND");
+    expect(errorRow).toContain("NEIGHBOUR");
+    dispose();
+  });
+
   test("derives an allow-list gate of exactly the members", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
@@ -927,7 +946,7 @@ describe("2de.4 — cycle set action", () => {
     ] as const) {
       const out = render();
       expect(stripAnsi(out)).toContain(display);
-      click(extractUrls(out)[0]!);
+      click(ownUrls(out)[0]!);
       expect(sessionState.get("s1", "mode")).toBe(written);
     }
     dispose();
@@ -961,14 +980,14 @@ describe("2de.4 — cycle set action", () => {
     ]);
     const { render, click, sessionState, dispose } = buildRuntime(src);
     // Open A.
-    click(extractUrls(render())[0]!);
+    click(ownUrls(render())[0]!);
     expect(sessionState.get("s1", "menu")).toBe("a");
     // A renders open; B renders closed (current "a" is outside B's domain) and
     // B's click writes "b" — expand B, auto-closing A.
     const out = render();
     expect(stripAnsi(out)).toContain("▾A");
     expect(stripAnsi(out)).toContain("▸B");
-    click(extractUrls(out)[1]!);
+    click(ownUrls(out)[1]!);
     expect(sessionState.get("s1", "menu")).toBe("b");
     expect(stripAnsi(render())).toContain("▸A");
     expect(stripAnsi(render())).toContain("▾B");

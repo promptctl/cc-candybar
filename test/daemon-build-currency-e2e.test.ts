@@ -17,7 +17,7 @@ import { PACKAGE_VERSION } from "../src/version";
 import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD } from "../src/daemon/update-notice";
 import {
   click,
-  extractUrls,
+  linkUrls,
   findUrl,
   killAndWait,
   render,
@@ -135,7 +135,7 @@ async function withDaemon<T>(
 }
 
 const affordance = (raw: string, verb: string, key?: string): string => {
-  const url = findUrl(extractUrls(raw), (effects) =>
+  const url = findUrl(linkUrls(raw), (effects) =>
     effects.some((e) => e.verb === verb && (key === undefined || e.args[1] === key)),
   );
   if (url === undefined) throw new Error(`no rendered affordance for ${verb} ${key ?? ""}`);

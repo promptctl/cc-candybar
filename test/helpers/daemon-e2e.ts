@@ -19,7 +19,7 @@ import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls } from "./ansi";
-export { stripAnsi } from "./ansi";
+export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
 
@@ -101,10 +101,6 @@ export async function click(sockPath: string, url: string): Promise<void> {
   }
 }
 
-export function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state
 // catches up, or fail loudly at the deadline. A durable (`persist`) write
 // lands in a file that RenderCache reloads through an fs WATCHER, so the
@@ -160,7 +156,7 @@ export function urlWriting(
   key: string,
   value: string,
 ): string {
-  const url = findUrl(extractUrls(rendered), (effects) =>
+  const url = findUrl(linkUrls(rendered), (effects) =>
     effects.some((e) => e.args[1] === key && e.args[2] === value),
   );
   if (url === undefined) {

@@ -124,7 +124,7 @@ function opts() {
   };
 }
 
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -184,7 +184,7 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
     }
   };
   const clickToggle = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
@@ -757,7 +757,7 @@ describe("toggle round trip + drop stacking", () => {
   // (menuPageKey), never from a page-action argument.
   test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
     const { render, dispose } = buildRuntime(MENU_SRC);
-    const url = extractUrls(render()).find((u) =>
+    const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === TKEY),
     );
     if (!url) throw new Error("no disclosure toggle rendered");
@@ -777,7 +777,7 @@ describe("toggle round trip + drop stacking", () => {
     clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     expect(stripAnsi(open).split("\n")).toHaveLength(2);
-    const closeUrl = extractUrls(open).find((u) =>
+    const closeUrl = ownUrls(open).find((u) =>
       effectsOf(u).some(
         (e) =>
           e.args[1] === TKEY &&
@@ -805,7 +805,7 @@ describe("toggle round trip + drop stacking", () => {
       buildRuntime(src);
     clickToggle(render(), TKEY, "applyTheme");
     const open = render();
-    const pickUrl = extractUrls(open).find((u) =>
+    const pickUrl = ownUrls(open).find((u) =>
       effectsOf(u).some((e) => e.args[1] === "theme" && e.args[3] === TKEY),
     );
     if (!pickUrl) throw new Error("no pick+close option write rendered");
@@ -1100,7 +1100,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     expect(closed).not.toContain("buzz");
     expect(closed).not.toContain("silent");
 
-    const toggleUrl = extractUrls(closed).find((u) =>
+    const toggleUrl = ownUrls(closed).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
     );
     expect(toggleUrl).toBeDefined();
@@ -1115,14 +1115,14 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
 
   test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    const toggleUrl = extractUrls(render()).find((u) =>
+    const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
     );
     expect(toggleUrl).toBeDefined();
     click(toggleUrl!);
 
     const opened = render();
-    const buzzUrl = extractUrls(opened).find((u) =>
+    const buzzUrl = ownUrls(opened).find((u) =>
       effectsOf(u).some((e) => e.verb === "set-state" && e.args[2] === "buzz"),
     );
     expect(buzzUrl).toBeDefined();

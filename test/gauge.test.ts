@@ -11,6 +11,7 @@ import { renderToString } from "@promptctl/rich-js";
 
 import { renderGauge } from "../src/template-engine/gauge";
 import { checkText } from "./helpers/check-config";
+import { stripAnsi } from "./helpers/ansi";
 
 const glyphs = { filled: "█", empty: "░" };
 
@@ -123,7 +124,6 @@ describe("renderGauge — painted cells", () => {
 // cell's position. Driven through `checkConfig` — the same entry `cc-candybar check`
 // runs — so a registration that loads but does not render cannot pass.
 describe("{{ gauge }} in a real config", () => {
-  const ANSI = /\x1b\[[0-9;]*m/g;
 
   test("draws the cells a value earns, and paints them from the author's ramp", async () => {
     const clean = await checkText(
@@ -136,7 +136,7 @@ describe("{{ gauge }} in a real config", () => {
       }`,
     );
     // checkPayload puts contextLeft at 24, so two cells of ten are lit.
-    const visible = clean.rendered.replace(ANSI, "");
+    const visible = stripAnsi(clean.rendered);
     expect(visible).toContain("##--------");
     // Painted per cell from the step cascade: both lit cells sit below the 40 stop,
     // so both wear `error` — and the gauge carries a colour of its own at all,
@@ -154,7 +154,7 @@ describe("{{ gauge }} in a real config", () => {
         root: { h: ["g"] },
       }`,
     );
-    expect(clean.rendered.replace(ANSI, "")).toContain("##--------");
+    expect(stripAnsi(clean.rendered)).toContain("##--------");
   });
 
   // [LAW:no-silent-failure] A malformed stop is an authoring mistake and says so

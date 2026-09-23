@@ -86,10 +86,6 @@ async function click(sockPath: string, url: string): Promise<void> {
   }
 }
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 async function killAndWait(daemon: RunningDaemon): Promise<void> {
   const exited = waitForExit(daemon.child);
   daemon.killTree();
@@ -167,7 +163,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       );
 
       const drawerOpen = await render(sockPath, SID, projectDir);
-      const drawerOpenUrls = extractUrls(drawerOpen);
+      const drawerOpenUrls = linkUrls(drawerOpen);
 
       // directoryPaletteControl's `{{ menu }}` has no shared accordion key
       // (unlike theme/look/style's "pickersForever") — it's an independent
@@ -189,7 +185,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       await click(sockPath, menuToggleUrl!);
 
       const opened = await render(sockPath, SID, projectDir);
-      const openedUrls = extractUrls(opened);
+      const openedUrls = linkUrls(opened);
 
       const targetPalette = listResolvablePaletteNames().find(
         (name) => name !== "tokyo-night", // the bundled default's globals.palette

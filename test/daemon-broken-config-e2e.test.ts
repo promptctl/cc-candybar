@@ -29,7 +29,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   click,
-  extractUrls,
+  linkUrls,
   killAndWait,
   render,
   renderUntil,
@@ -100,7 +100,7 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
         "diagnostics",
         `${SID}.txt`,
       );
-      const urls = extractUrls(rendered);
+      const urls = linkUrls(rendered);
       expect(urls).not.toContain(pathToFileURL(dumpPath).href);
       expect(urls).toContain(pathToFileURL(configPath).href);
       // The path is middle-truncated into the row (the URL is whole).
@@ -128,7 +128,7 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
         expect(new RichText(row).cellLength).toBeLessThanOrEqual(58);
       }
       expect(stripRows[2]).toMatch(/^↳ \d+ more rows · open full text · /);
-      expect(extractUrls(narrow)).toContain(pathToFileURL(dumpPath).href);
+      expect(linkUrls(narrow)).toContain(pathToFileURL(dumpPath).href);
 
       // 3. Beneath the error, a working bar: the bundled default, settings
       //    menu included — and its click is honored by the real gate.
@@ -149,7 +149,7 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
         (out) => !stripAnsi(out).includes("trigger needs a display"),
         "the repaired config",
       );
-      expect(extractUrls(repaired)).not.toContain(
+      expect(linkUrls(repaired)).not.toContain(
         pathToFileURL(dumpPath).href,
       );
       expect(existsSync(dumpPath)).toBe(false);

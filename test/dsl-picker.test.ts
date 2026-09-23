@@ -41,10 +41,6 @@ function opts(width: number) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 
 // The standard theme picker: a trigger that opens the menu (literal 0 on the
 // int-gated page key), and a width-gated menu segment. closeOnPick/paged vary.
@@ -118,7 +114,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(closed).not.toContain("✕");
 
     // Open via the trigger (writes theme-page=0 through the int gate).
-    const triggerUrl = extractUrls(render(80)).find((u) =>
+    const triggerUrl = linkUrls(render(80)).find((u) =>
       effectsOf(u).some((e) =>
         e.args.includes("theme-page") && e.args.includes("0"),
       ),
@@ -140,7 +136,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     );
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
-    const themeUrl = extractUrls(open).find((u) => {
+    const themeUrl = linkUrls(open).find((u) => {
       const e = effectsOf(u)[0]!;
       return (
         e.verb === "set-state" &&
@@ -164,7 +160,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       pickerConfig(false, true),
     );
     sessionState.set("s1", "theme-page", "0");
-    const themeUrl = extractUrls(render(80)).find((u) => {
+    const themeUrl = linkUrls(render(80)).find((u) => {
       const e = effectsOf(u)[0]!;
       return e.verb === "set-state" && e.args.includes("theme-pick");
     });
@@ -185,7 +181,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
     expect(stripAnsi(open)).toContain("✕"); // open: the close affordance is present
-    const themeUrl = extractUrls(open).find((u) => {
+    const themeUrl = linkUrls(open).find((u) => {
       const e = effectsOf(u)[0]!;
       return e.verb === "set-state" && e.args.includes("theme-pick");
     });
@@ -207,7 +203,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const shown = THEMES.filter((t) => plain.includes(t));
     expect(shown.length).toBeLessThan(THEMES.length);
     // The → click advances the page cursor by one.
-    const nextUrl = extractUrls(open).find((u) =>
+    const nextUrl = linkUrls(open).find((u) =>
       effectsOf(u).some(
         (e) => e.args.includes("theme-page") && e.args.includes("1"),
       ),

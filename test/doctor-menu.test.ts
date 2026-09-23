@@ -54,10 +54,6 @@ const OPTS = {
 };
 
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 const PAYLOAD = {
   session_id: "s1",
   project_dir: "/tmp/proj",
@@ -118,14 +114,14 @@ function buildRuntime(tmux: TmuxHint | null) {
     }
   };
   const clickWriting = (key: string, value: string): void => {
-    const url = extractUrls(renderRaw()).find((u) =>
+    const url = linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     click(url);
   };
   const urlOfVerb = (verb: string): string | undefined =>
-    extractUrls(renderRaw()).find((u) =>
+    linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.verb === verb),
     );
   const clickVerb = (verb: string): void => {

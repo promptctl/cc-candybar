@@ -15,7 +15,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
-import { ANSI } from "./helpers/ansi";
+import { INVISIBLE } from "./helpers/ansi";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -91,7 +91,7 @@ function renderDir(paths: {
       charset: "ascii",
       width: Number.POSITIVE_INFINITY,
     })
-      .replace(ANSI, "")
+      .replace(INVISIBLE, "")
       .trim();
   } finally {
     registry.dispose();
@@ -215,7 +215,7 @@ describe("configurability seam: user template override restores full path", () =
           width: Number.POSITIVE_INFINITY,
         },
       )
-        .replace(ANSI, "")
+        .replace(INVISIBLE, "")
         .trim();
       expect(line).toBe("/Users/bmf/code/cc-candybar");
     } finally {

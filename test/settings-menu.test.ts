@@ -61,10 +61,6 @@ const OPTS = {
 };
 
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 // The acceptance shape, verbatim: a user file that declares its own `root` of
 // one row of two segments, merged over the BUNDLED default (production's
 // cascade), never over an empty one.
@@ -101,7 +97,7 @@ function buildRuntime(src: string) {
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -183,7 +179,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
-    const editing = extractUrls(render()).filter((u) =>
+    const editing = linkUrls(render()).filter((u) =>
       u.includes("apply-layout-op"),
     );
     expect(editing.length).toBeGreaterThan(0);
@@ -198,7 +194,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // Open the picker's own disclosure, then pick `compact` from its options.
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
-    const pickerUrl = extractUrls(render()).find((u) =>
+    const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1]?.startsWith("menus.settings_")),
     );
     expect(pickerUrl).toBeDefined();

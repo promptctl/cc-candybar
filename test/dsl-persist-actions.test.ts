@@ -75,7 +75,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
 // which only reports the CURRENTLY-SELECTED region, a persist-option/reset
 // link is not always "active" (bold), so tests asserting on the click itself
 // (not the current-selection marking) need every link.
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -447,7 +447,7 @@ describe("persist action click → the config file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC);
     const original = durable.text()!;
     const out = render();
-    const urls = extractUrls(out);
+    const urls = ownUrls(out);
     // The first link is applyTheme bound to "nord" (the display text).
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
@@ -465,7 +465,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking reset deletes the persisted key from the file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ palette: "nord" });
     const resetUrl = urls[1]!;
@@ -496,7 +496,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking a persist-option action over preset writes globals.preset into the config file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
     click(urls[0]!);
@@ -506,7 +506,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking reset deletes the persisted preset from the file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ preset: "compact" });
     const resetUrl = urls[1]!;
@@ -577,14 +577,14 @@ describe("persist action click → the config file", () => {
     };
     try {
       // The disclosure toggle is the menu's OWN SessionState write — open it.
-      const toggleUrl = extractUrls(render()).find(
+      const toggleUrl = ownUrls(render()).find(
         (u) => effectsOf(u)[0]!.verb === "set-state",
       )!;
       click(toggleUrl);
 
       // Opened: this must not throw (the bug threw here) and must list
       // "ascii" as a set-config-backed option, never set-state.
-      const openUrls = extractUrls(render());
+      const openUrls = ownUrls(render());
       const asciiUrl = openUrls.find((u) =>
         effectsOf(u).some(
           (e) => e.verb === "set-config" && e.args[2] === "ascii",
@@ -629,7 +629,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking a persist-literal (to) action writes the fixed value durably", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC2);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     const effect = effectsOf(urls[0]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[0]!);
@@ -639,7 +639,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking a persist-cycle action writes the successor member durably", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC2);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     const effect = effectsOf(urls[1]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[1]!);
@@ -652,7 +652,7 @@ describe("persist action click → the config file", () => {
 
   test("clicking a persist-bounded action steps and persists via stepConfig", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC2);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
     // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar
@@ -710,7 +710,7 @@ describe("persist action click → the config file", () => {
       segments: { bar: { template: '{{ action "toggleWrap" "wrap" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`);
-    const urls = extractUrls(render());
+    const urls = ownUrls(render());
     click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
     expect(globalsInFile()).toEqual({ autoWrap: false });
     dispose();

@@ -40,9 +40,6 @@ async function renderExample(file: string): Promise<string> {
     .rendered;
 }
 
-// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text.
-const visible = stripAnsi;
-
 describe("shipped example configs (examples/*.json5)", () => {
   // Guard against the glob silently matching nothing (a moved directory would
   // make every it.each below vanish and the suite pass vacuously).
@@ -68,7 +65,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   // dotted path, and its `default` (`? · 0 deps`) is what a scan that never
   // landed would render.
   test("demo-variables renders the json document's scanned fields, never its default", async () => {
-    const out = visible(await renderExample("demo-variables.json5"));
+    const out = stripAnsi(await renderExample("demo-variables.json5"));
     expect(out).toContain("📦 cc-candybar · 3 deps");
   });
 });
@@ -112,7 +109,7 @@ describe("a `{ rows }` root merges by name over the bundled default", () => {
       "rows-merge",
       `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
     );
-    const [identity, status, ...rest] = visible(outcome.rendered).split("\n");
+    const [identity, status, ...rest] = stripAnsi(outcome.rendered).split("\n");
     expect(rest).toEqual([]);
     // The bundled identity row, untouched: the fish-abbreviated directory
     // the check payload's cwd renders to.

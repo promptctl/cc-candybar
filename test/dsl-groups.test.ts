@@ -47,10 +47,6 @@ function opts() {
   };
 }
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 
 // Same real-spine harness as dsl-actions: real loader, real render, clicks
 // dispatched through the real daemon verb handlers against the derived gate.
@@ -86,7 +82,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
   const clickToggle = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);

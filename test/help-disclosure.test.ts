@@ -61,10 +61,6 @@ afterEach(() => {
 // points would pass on a line of wide glyphs that visibly overflows.
 const cols = (s: string): number => new RichText(s).cellLength;
 
-function extractUrls(rendered: string): string[] {
-  return linkUrls(rendered);
-}
-
 // The acceptance shape, verbatim — a user file declaring its own `root` of one
 // row of two segments, merged over the BUNDLED default (production's cascade).
 const twoSegmentRoot = (padding = 1): string => `{
@@ -138,7 +134,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
 
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -151,13 +147,13 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // "open". A helper that only found one of those would silently stop being
   // able to close what it opened.
   const toggleHelp = (out: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => helpKeys.has(e.args[1] ?? "")),
     );
     if (!url)
       throw new Error(
         "no (?) affordance rendered; effects were " +
-          JSON.stringify(extractUrls(out).flatMap((u) => effectsOf(u))),
+          JSON.stringify(linkUrls(out).flatMap((u) => effectsOf(u))),
       );
     click(url);
   };

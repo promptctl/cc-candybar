@@ -46,10 +46,10 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
-import { ANSI, linkUrls } from "./helpers/ansi";
+import { INVISIBLE, linkUrls } from "./helpers/ansi";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
-const ANSI_AND_CAPS = new RegExp(`${ANSI.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
+const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -374,7 +374,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           padding,
           charset: "unicode",
           width: Number.POSITIVE_INFINITY,
-        }).replace(ANSI, "");
+        }).replace(INVISIBLE, "");
       } finally {
         registry.dispose();
       }
@@ -1417,7 +1417,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // where the default doesn't — pin that it actually renders NARROWER than
   // the floor at the same width, not merely that it renders.
   test("compact renders a shorter visible line than the default floor", () => {
-    const visible = (s: string): string => s.replace(ANSI, "");
+    const visible = (s: string): string => s.replace(INVISIBLE, "");
     const compactLine = visible(renderPreset("compact", 200).rendered);
     const defaultLine = visible(renderPreset("default", 200).rendered);
     expect(compactLine.length).toBeLessThan(defaultLine.length);
@@ -1439,7 +1439,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         prNumber: 181,
       },
       speed: { history: "10,25,15,30,20" },
-    })).rendered.replace(ANSI, "");
+    })).rendered.replace(INVISIBLE, "");
     expect(line).toContain("⇆ #181"); // gitPr
     expect(line).toContain("to 5h"); // burnrate
     expect(line).toContain("⇅ out"); // speed
@@ -1462,7 +1462,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       200,
       withCustomized,
       editingSession,
-    ).rendered.replace(ANSI, "");
+    ).rendered.replace(INVISIBLE, "");
     expect(editing).toContain("↺ default customized");
 
     // A hand-authored root is "customized" from its first render; outside
@@ -1471,7 +1471,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       "default",
       200,
       withCustomized,
-    ).rendered.replace(ANSI, "");
+    ).rendered.replace(INVISIBLE, "");
     expect(viewing).not.toContain("↺");
 
     const clean = renderPreset(
@@ -1479,7 +1479,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       200,
       undefined,
       editingSession,
-    ).rendered.replace(ANSI, "");
+    ).rendered.replace(INVISIBLE, "");
     expect(clean).not.toContain("↺");
   });
 });

@@ -80,7 +80,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -335,7 +335,7 @@ describe("segment-palette persist action click → the config file", () => {
     const { render, click, dispose } = buildRuntime(SRC);
     const original = durable.text()!;
     const barBefore = fileSegments(durable).bar;
-    const applyUrl = extractUrls(render())[0]!;
+    const applyUrl = ownUrls(render())[0]!;
     click(applyUrl);
 
     expect(fileSegments(durable).sidebar).toEqual({
@@ -363,7 +363,7 @@ describe("segment-palette persist action click → the config file", () => {
 
   test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", () => {
     const { render, click, dispose } = buildRuntime(SRC);
-    const [applyUrl, resetUrl] = extractUrls(render());
+    const [applyUrl, resetUrl] = ownUrls(render());
     click(applyUrl!);
     expect(fileSegments(durable).sidebar!.palette).toBe("nord");
 
@@ -383,7 +383,7 @@ describe("segment-palette persist action click → the config file", () => {
   test("reset over a palette the file never authored changes nothing and records nothing", () => {
     const { render, click, dispose } = buildRuntime(SRC);
     const original = durable.text()!;
-    const resetUrl = extractUrls(render())[1]!;
+    const resetUrl = ownUrls(render())[1]!;
     click(resetUrl);
     expect(durable.text()).toBe(original);
     expect(existsSync(durable.historyPath)).toBe(false);
@@ -417,7 +417,7 @@ describe("segment-palette persist action click → the config file", () => {
     expect(fileSegments(durable).directory).toBeUndefined();
     const original = durable.text()!;
 
-    const [applyUrl, resetUrl] = extractUrls(render());
+    const [applyUrl, resetUrl] = ownUrls(render());
     click(applyUrl!);
     expect(fileSegments(durable).directory).toEqual({ palette: "nord" });
 

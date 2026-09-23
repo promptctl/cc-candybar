@@ -63,7 +63,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
+function ownUrls(rendered: string): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -256,7 +256,7 @@ describe("undo/redo click → the config-file history", () => {
     runtime: ReturnType<typeof buildRuntime>,
     actionName: string,
   ): string {
-    const urls = extractUrls(runtime.render());
+    const urls = ownUrls(runtime.render());
     const idx = [
       "pinDracula",
       "forgetPalette",
