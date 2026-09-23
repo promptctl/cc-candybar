@@ -702,7 +702,10 @@ describe("globals.menuGlyph", () => {
   });
 
   test.each([
-    [`{ globals: { menuGlyph: "" } }`, "globals.menuGlyph: must not be empty"],
+    ...["", " ", "a\nb", "✕"].map((glyph) => [
+      `{ globals: { menuGlyph: ${JSON.stringify(glyph)} } }`,
+      "globals.menuGlyph: must be one line of visible text",
+    ]),
     [
       `{ presets: { compact: { globals: { menuGlyph: "🍬" } } } }`,
       "a preset cannot change the settings menu glyph",

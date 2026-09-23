@@ -39,7 +39,7 @@ import {
   DISCLOSURE_GLYPH_OPEN,
 } from "./disclosure.js";
 import { mergeWithDefault } from "./loader/merge.js";
-import { QUICK_ACTIONS, toolbarTemplate } from "./quick-actions.js";
+import { quickActions } from "./quick-actions.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -957,11 +957,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     toolbar: {
       description:
         "Quick actions: copy the session id, and open the project, transcript or repo.",
-      template: toolbarTemplate({
-        copySession: "copySession",
-        openProject: "openProject",
-        openTranscript: "openTranscript",
-      }),
+      template: quickActions("").template,
       fg: "foreground",
     },
     session: {
@@ -1297,7 +1293,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
   // as a literal filename, not a deep link).
   actions: {
-    ...QUICK_ACTIONS,
+    ...quickActions("").actions,
     copyDir: { copy: "{{ .current_dir }}" },
 
     // [LAW:locality-or-seam] The settings-drawer controls' behaviors

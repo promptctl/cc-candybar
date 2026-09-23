@@ -1041,9 +1041,10 @@ author writes it and no author can decline it.
 
 - **`⎘ id ↗ proj ↗ log ↗ repo`** are the quick actions: copy the session id,
   open the project or the transcript in your editor, open the repo's web page.
-  The same tray is the bundled `toolbar` segment, which any row can place, and
-  its behaviours are the bundled `copySession`/`openProject`/`openTranscript`
-  actions, which any template can bind.
+  The same tray is the bundled `toolbar` segment, which any row can place,
+  bound to the bundled `copySession`/`openProject`/`openTranscript` actions,
+  which any template can bind. The menu's tray binds its own reserved copies,
+  so overriding one of those actions changes `toolbar`, not the menu.
 - **`persist?`** chooses where every setting in the menu is written: unchecked
   (the state you arrive in) the click changes this session only; checked, it
   writes the durable default every session opens with. It is the `persistWhen`
@@ -1155,7 +1156,7 @@ settings menu above is present either way:
 
 ```json5 check:pass
 {
-  root: { rows: { identity: { h: ["directory", "gitaculous", "toolbar"] } } },
+  root: { rows: { identity: { h: ["host", "directory", "gitaculous"] } } },
 }
 ```
 

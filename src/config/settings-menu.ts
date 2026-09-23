@@ -77,11 +77,7 @@ import {
   menuStateKey,
 } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
-import {
-  QUICK_ACTIONS,
-  toolbarTemplate,
-  type QuickActionNames,
-} from "./quick-actions.js";
+import { quickActions } from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import {
@@ -108,11 +104,7 @@ const SETTINGS_OPEN = EDIT_MODE_OPEN;
 // beside them and the config menu below them.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
-const TOOLBAR_ACTIONS: QuickActionNames = {
-  copySession: `${SETTINGS_NS}copySession`,
-  openProject: `${SETTINGS_NS}openProject`,
-  openTranscript: `${SETTINGS_NS}openTranscript`,
-};
+const TOOLBAR = quickActions(SETTINGS_NS);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
@@ -577,9 +569,7 @@ function settingsArtifacts(doorGlyph: string): {
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      [TOOLBAR_ACTIONS.copySession]: QUICK_ACTIONS.copySession,
-      [TOOLBAR_ACTIONS.openProject]: QUICK_ACTIONS.openProject,
-      [TOOLBAR_ACTIONS.openTranscript]: QUICK_ACTIONS.openTranscript,
+      ...TOOLBAR.actions,
       // [LAW:one-source-of-truth] The selector is an ordinary session cycle
       // over the one boolean spelling SessionState uses — off first, because
       // an unwritten key counts as the first member and the menu opens in
@@ -607,7 +597,7 @@ function settingsArtifacts(doorGlyph: string): {
           DISCLOSURE_GLYPH_CLOSE,
         ),
       },
-      [TOOLBAR_SEG]: { template: toolbarTemplate(TOOLBAR_ACTIONS) },
+      [TOOLBAR_SEG]: { template: TOOLBAR.template },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is
       // the whole explanation of where the click below it lands.

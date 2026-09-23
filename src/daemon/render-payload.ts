@@ -24,7 +24,6 @@ import type { DslConfig, Globals, VariableDecl } from "../config/dsl-types.js";
 import {
   effectivePresetName,
   presetGlobals,
-  presetNames,
   presetRoot,
 } from "../config/presets.js";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../config/loader/edit-mode.js";
@@ -741,7 +740,8 @@ function readHost(hints: ClientHints): {
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
-// the active layout. Walk from `config.root` → cells nodes → their segments →
+// the active layout. Walk from the preset's resolved root (`presetRoot`, the
+// same tree renderDsl compiles for it) → its nodes → their segments →
 // their template strings → referenced variable names → recursive expansion through
 // `template`-kind vars. The transitive closure tells us which input paths
 // are actually reachable from a rendered segment; providers feeding paths
@@ -750,10 +750,12 @@ function readHost(hints: ClientHints): {
 // [LAW:single-enforcer] One reachability walk owns "is this provider
 // needed." A declared-but-unreachable input variable (the default config
 // declares every built-in variable for reference completeness) contributes
-// no work to the hot path. Exported so the cache can compute the closure
-// once at registration time (config is stable per cache entry) and reuse
-// it across renders.
-export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
+// no work to the hot path, and neither does a segment only an inactive preset
+// places.
+export function buildNeededPrefixes(
+  config: DslConfig,
+  preset: string,
+): ReadonlySet<string> {
   // 1. Variable name → declaration index for fast lookup. Global vars first;
   //    per-segment vars are namespaced `segName.varName` (same as runtime).
   const allDecls = new Map<string, VariableDecl>();
@@ -778,10 +780,7 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const frontier: string[] = [];
   const visited = new Set<string>();
 
-  const trees = presetNames(config.presets).map(
-    (name) => presetRoot(config, name).node,
-  );
-  for (const node of trees.flatMap((tree) => [...walkNodes(tree)])) {
+  for (const node of walkNodes(presetRoot(config, preset).node)) {
     // A node's `when` references variables too — seed them so a provider feeding
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
     if (node.when)
@@ -829,6 +828,19 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   }
 
   return inputPaths;
+}
+
+export function neededPrefixesByPreset(
+  config: DslConfig,
+): (preset: string) => ReadonlySet<string> {
+  const byPreset = new Map<string, ReadonlySet<string>>();
+  return (preset) => {
+    const cached = byPreset.get(preset);
+    if (cached !== undefined) return cached;
+    const needed = buildNeededPrefixes(config, preset);
+    byPreset.set(preset, needed);
+    return needed;
+  };
 }
 
 // [LAW:single-enforcer] Mirror of the scope proxy's read semantics: a ref
@@ -906,8 +918,8 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  * DSL applies to its input variables.
  *
  * Each provider runs only if its payload prefix sits in the closure
- * computed by `buildNeededPrefixes(config)` — the set of `kind: "input"`
- * paths transitively reachable from a segment in `config.root`. Merely
+ * computed by `buildNeededPrefixes(config, preset)` — the set of `kind: "input"`
+ * paths transitively reachable from a segment in the active preset's root. Merely
  * declaring an input variable does NOT trigger provider work; the variable
  * must actually be referenced by a layout-rendered segment (directly, or
  * via a chain of `template`-kind vars). The default config declares many
