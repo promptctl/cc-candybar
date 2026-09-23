@@ -24,6 +24,7 @@ import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
+import { stripAnsi } from "./helpers/ansi";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -37,17 +38,6 @@ const exampleFiles = fs
 async function renderExample(file: string): Promise<string> {
   return expectClean(file, await checkConfig(path.join(examplesDir, file)))
     .rendered;
-}
-
-// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text. The
-// OSC-8 introducer is terminated by EITHER ST (ESC \) or BEL (\x07) per spec —
-// match both so the helper strips a valid sequence regardless of terminator.
-function visible(line: string): string {
-  return line
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\[[0-9;]*m/g, "")
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g, "");
 }
 
 describe("shipped example configs (examples/*.json5)", () => {
@@ -75,7 +65,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   // dotted path, and its `default` (`? · 0 deps`) is what a scan that never
   // landed would render.
   test("demo-variables renders the json document's scanned fields, never its default", async () => {
-    const out = visible(await renderExample("demo-variables.json5"));
+    const out = stripAnsi(await renderExample("demo-variables.json5"));
     expect(out).toContain("📦 cc-candybar · 3 deps");
   });
 });
@@ -119,7 +109,7 @@ describe("a `{ rows }` root merges by name over the bundled default", () => {
       "rows-merge",
       `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
     );
-    const [identity, status, ...rest] = visible(outcome.rendered).split("\n");
+    const [identity, status, ...rest] = stripAnsi(outcome.rendered).split("\n");
     expect(rest).toEqual([]);
     // The bundled identity row, untouched: the fish-abbreviated directory
     // the check payload's cwd renders to.

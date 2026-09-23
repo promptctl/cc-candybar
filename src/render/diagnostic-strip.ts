@@ -329,9 +329,7 @@ function trailerRow(
     .map((p) =>
       p.truncate(Math.max(1, opts.width - fixedWidth), { mode: "middle" }),
     );
-  const row = RichText.fromFragments([...fixed, ...path]).truncate(opts.width, {
-    overflow: "ellipsis",
-  });
+  const row = RichText.fromFragments([...fixed, ...path]).truncate(opts.width);
   row.noWrap = true;
   return renderStripCells([row], opts);
 }

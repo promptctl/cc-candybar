@@ -39,6 +39,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { DoctorEdge } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const TOOLS_KEY = `${SETTINGS_NS}tools`;
@@ -52,18 +53,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
 
 const PAYLOAD = {
   session_id: "s1",
@@ -125,14 +114,14 @@ function buildRuntime(tmux: TmuxHint | null) {
     }
   };
   const clickWriting = (key: string, value: string): void => {
-    const url = extractUrls(renderRaw()).find((u) =>
+    const url = linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     click(url);
   };
   const urlOfVerb = (verb: string): string | undefined =>
-    extractUrls(renderRaw()).find((u) =>
+    linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.verb === verb),
     );
   const clickVerb = (verb: string): void => {

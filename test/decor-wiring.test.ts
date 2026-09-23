@@ -81,10 +81,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const bgOf = (name: string): string => {
     const cell = sink.get(name)?.[0];
     if (cell === undefined) throw new Error(`segment "${name}" did not render`);
-    return cell.style?.bgcolor?.value?.hex ?? "(no bg)";
+    return definedStyle(cell.style).bgcolor?.value?.hex ?? "(no bg)";
   };
   const fgOf = (name: string): string =>
-    sink.get(name)![0]!.style?.color?.value?.hex ?? "(no fg)";
+    definedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
   const expectedTint = (name: string): string =>
     decorFor(
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
@@ -210,6 +210,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import type { SemanticRole } from "../src/themes/decor";
+import { definedStyle } from "../src/template-engine/cells.js";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.

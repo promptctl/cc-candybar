@@ -496,8 +496,21 @@ const segmentType: NodeType<"segment"> = {
       ctx.onSegmentError?.(node.name, message);
       // The error cell is a row of the band the segment sits on, like any
       // inline line — a broken segment inside an open body still gets its ✕.
+      // A cell is one line: the message's own line breaks (a parse error's
+      // excerpt, a source's stderr) fold to spaces here — the full text went
+      // to onSegmentError above — and the cell is placed whole, never wrapped
+      // inside itself, like every other cell.
+      const oneLine = message.replace(/\s*\n\s*/g, " ");
       return [
-        { cells: [new RichText(`⚠ ${node.name}: ${message}`)], band: "own" },
+        {
+          cells: [
+            new RichText(`⚠ ${node.name}: ${oneLine}`, {
+              end: "",
+              noWrap: true,
+            }),
+          ],
+          band: "own",
+        },
       ];
     }
   },

@@ -37,6 +37,7 @@ import {
   resolveThemeSelection,
   THEME_FLOOR,
 } from "../src/themes";
+import { definedStyle } from "../src/template-engine/cells.js";
 
 const SID = "s-theme-expr";
 // Four visibly different installed themes: the floor, plus three the expression
@@ -127,7 +128,7 @@ function buildRuntime(source = src(RULE)): Runtime {
     const bgs = new Map(
       [...sink].map(([name, cells]) => [
         name,
-        cells[0]?.style?.bgcolor?.value?.hex ?? "(no bg)",
+        (cells[0] && definedStyle(cells[0].style).bgcolor?.value?.hex) ?? "(no bg)",
       ]),
     );
     return {
@@ -326,7 +327,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         OPTS,
         { perSegmentSink: sink },
       );
-      const plainBg = sink.get("plain")![0]!.style!.bgcolor!.value!.hex;
+      const plainBg = definedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
       expect(out).toContain("T=nord");
     } finally {
@@ -355,7 +356,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         OPTS,
         { perSegmentSink: sink },
       );
-      const plainBg = sink.get("plain")![0]!.style!.bgcolor!.value!.hex;
+      const plainBg = definedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
       registry.dispose();

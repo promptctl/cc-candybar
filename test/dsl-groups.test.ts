@@ -32,6 +32,7 @@ import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -46,18 +47,6 @@ function opts() {
   };
 }
 
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
-
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // Same real-spine harness as dsl-actions: real loader, real render, clicks
 // dispatched through the real daemon verb handlers against the derived gate.
@@ -93,7 +82,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
   const clickToggle = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);

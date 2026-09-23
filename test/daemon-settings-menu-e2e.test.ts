@@ -18,7 +18,7 @@ import path from "node:path";
 
 import {
   click,
-  extractUrls,
+  linkUrls,
   killAndWait,
   render,
   stripAnsi,
@@ -80,7 +80,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       const editing = await render(sockPath, SID, projectDir);
       expect(stripAnsi(editing)).toContain("✎ done");
       expect(
-        extractUrls(editing).filter((u) => u.includes("apply-layout-op"))
+        linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,
       ).toBeGreaterThan(0);
     } finally {

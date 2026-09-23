@@ -55,6 +55,7 @@ import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig } from "../src/config/dsl-types";
+import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -91,25 +92,11 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // The OSC-8 spans of a render, paired with the text each one wraps — enough to
 // click an affordance by the label a user would click.
-interface Link {
-  readonly url: string;
-  readonly text: string;
-}
 function links(rendered: string): Link[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\([\s\S]*?)\x1b\]8;;\x1b\\/g;
-  const out: Link[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) {
-    out.push({ url: m[1]!, text: stripAnsi(m[2]!) });
-  }
-  return out;
+  return rawLinks(rendered).map((l) => ({ url: l.url, text: stripAnsi(l.text) }));
 }
 
 // [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own

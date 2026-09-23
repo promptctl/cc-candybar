@@ -19,6 +19,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -33,13 +34,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-function linkUrls(rendered: string): string[] {
-  // matchAll owns its own iterator — no shared, stateful `lastIndex` across
-  // calls. The `+` capture requires a non-empty URL, so OSC-8 closes (empty
-  // URL) never match: every capture is a link OPEN.
-  // eslint-disable-next-line no-control-regex
-  return [...rendered.matchAll(/\x1b\]8;;([^\x1b]+)\x1b\\/g)].map((m) => m[1]!);
-}
 
 function chevronCount(rendered: string): number {
   return rendered.split(CHEVRON).length - 1;

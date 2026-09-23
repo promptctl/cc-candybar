@@ -21,7 +21,7 @@ import {
   type DiagnosticGeometry,
   type DiagnosticLinks,
 } from "../src/render/diagnostic-strip";
-import { extractUrls, stripAnsi } from "./helpers/daemon-e2e";
+import { linkUrls, stripAnsi } from "./helpers/daemon-e2e";
 
 const FULL = "/tmp/state/cc-candybar/diagnostics/sid.txt";
 const CONFIG = "/Users/someone/.config/cc-candybar/config.json5";
@@ -120,12 +120,12 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     const small = collectDiagnostics("one line", [], "")!;
     const out = composeWithDiagnostics("", small, LINKS, geometry(80));
     expect(rowsOf(out)).toEqual(["⚠ one line ", `↳ open ${CONFIG}`]);
-    expect(extractUrls(out)).not.toContain(pathToFileURL(FULL).href);
+    expect(linkUrls(out)).not.toContain(pathToFileURL(FULL).href);
   });
 
   test("the last row links the failing config as a plain file:// URL", () => {
     const out = composeWithDiagnostics("BODY", diag, LINKS, geometry(120));
-    const urls = extractUrls(out);
+    const urls = linkUrls(out);
     expect(urls).toContain(pathToFileURL(CONFIG).href);
     // The message rows themselves still offer the copy-to-clipboard click.
     expect(urls.some((u) => u.startsWith("cc-candybar://"))).toBe(true);
@@ -135,7 +135,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
 
   test("a capped strip links the full text beside the failing config", () => {
     const out = composeWithDiagnostics("BODY", diag, LINKS, geometry(120, 3));
-    expect(extractUrls(out)).toContain(pathToFileURL(FULL).href);
+    expect(linkUrls(out)).toContain(pathToFileURL(FULL).href);
     expect(rowsOf(out).at(-2)).toMatch(/^↳ \d+ more rows · open full text · open /);
   });
 
@@ -144,7 +144,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     const last = rowsOf(out).at(-1)!;
     expect(cellWidth(last)).toBeLessThanOrEqual(50);
     expect(last).toMatch(/^↳ open \/Users\/.*….*config\.json5$/);
-    expect(extractUrls(out)).toContain(pathToFileURL(CONFIG).href);
+    expect(linkUrls(out)).toContain(pathToFileURL(CONFIG).href);
   });
 
   test("a strip that fits with no failed config file has no trailer at all", () => {
@@ -171,7 +171,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       geometry(80, 3),
     );
     expect(rowsOf(out).at(-1)).toMatch(/^↳ \d+ more rows · full text unavailable: ENOSPC: no space$/);
-    expect(extractUrls(out).filter((u) => u.startsWith("file://"))).toEqual([]);
+    expect(linkUrls(out).filter((u) => u.startsWith("file://"))).toEqual([]);
   });
 
   test("error rows precede update rows precede warning rows; one trailer closes the strip", () => {
@@ -191,7 +191,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       "BODY",
     ]);
     // Each span's words carry that span's click.
-    expect(extractUrls(out)).toEqual(
+    expect(linkUrls(out)).toEqual(
       expect.arrayContaining(["cc-candybar://copy/x", "cc-candybar://act/y"]),
     );
   });
@@ -263,7 +263,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       expect(rows).toHaveLength(2);
       for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
       expect(rows.at(-1)).toMatch(/^↳ open \S/);
-      expect(extractUrls(out)).toContain(pathToFileURL(LONG_PATH).href);
+      expect(linkUrls(out)).toContain(pathToFileURL(LONG_PATH).href);
     },
   );
 

@@ -41,6 +41,7 @@ import {
 } from "../src/help-text";
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -54,23 +55,11 @@ afterEach(() => {
   while (openRuntimes.length > 0) openRuntimes.pop()!.dispose();
 });
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
 // `src/render/picker.ts` reserves its pagination seam with. Counting code
 // points would pass on a line of wide glyphs that visibly overflows.
 const cols = (s: string): number => new RichText(s).cellLength;
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
 
 // The acceptance shape, verbatim — a user file declaring its own `root` of one
 // row of two segments, merged over the BUNDLED default (production's cascade).
@@ -145,7 +134,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
 
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -158,13 +147,13 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // "open". A helper that only found one of those would silently stop being
   // able to close what it opened.
   const toggleHelp = (out: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => helpKeys.has(e.args[1] ?? "")),
     );
     if (!url)
       throw new Error(
         "no (?) affordance rendered; effects were " +
-          JSON.stringify(extractUrls(out).flatMap((u) => effectsOf(u))),
+          JSON.stringify(linkUrls(out).flatMap((u) => effectsOf(u))),
       );
     click(url);
   };

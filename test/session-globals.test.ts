@@ -39,6 +39,7 @@ import {
   DEFAULT_PADDING,
   DEFAULT_WRAP,
 } from "../src/themes/policy";
+import { stripAnsi } from "./helpers/ansi";
 
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
@@ -122,9 +123,6 @@ function setState(
   clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]), testVerbContext(sessionState));
 }
 
-const stripAnsi = (s: string): string =>
-  // eslint-disable-next-line no-control-regex
-  s.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
 
 const WIDE = 200;
 // Narrow enough that the row cannot fit on one line, so wrapping is observable

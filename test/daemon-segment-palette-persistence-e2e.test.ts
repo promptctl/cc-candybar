@@ -25,6 +25,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
+import { linkUrls } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
@@ -83,15 +84,6 @@ async function click(sockPath: string, url: string): Promise<void> {
   if (!resp.ok) {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
-}
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
 }
 
 async function killAndWait(daemon: RunningDaemon): Promise<void> {
@@ -171,7 +163,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       );
 
       const drawerOpen = await render(sockPath, SID, projectDir);
-      const drawerOpenUrls = extractUrls(drawerOpen);
+      const drawerOpenUrls = linkUrls(drawerOpen);
 
       // directoryPaletteControl's `{{ menu }}` has no shared accordion key
       // (unlike theme/look/style's "pickersForever") — it's an independent
@@ -193,7 +185,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       await click(sockPath, menuToggleUrl!);
 
       const opened = await render(sockPath, SID, projectDir);
-      const openedUrls = extractUrls(opened);
+      const openedUrls = linkUrls(opened);
 
       const targetPalette = listResolvablePaletteNames().find(
         (name) => name !== "tokyo-night", // the bundled default's globals.palette

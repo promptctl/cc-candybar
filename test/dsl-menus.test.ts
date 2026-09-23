@@ -64,6 +64,8 @@ import {
   textOn,
   type Address,
 } from "../src/themes/decor";
+import { definedStyle } from "../src/template-engine/cells.js";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -122,20 +124,13 @@ function opts() {
   };
 }
 
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+function ownUrls(rendered: string): string[] {
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // The distinct truecolor background SGR codes present in a rendered string —
 // used to prove the focus tint added a NEW background (the lightened surface).
@@ -189,7 +184,7 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
     }
   };
   const clickToggle = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
@@ -697,14 +692,14 @@ describe("toggle round trip + drop stacking", () => {
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
-    expect(trigger.style?.bgcolor?.value?.hex).toBe(band.state.hex);
-    expect(trigger.style?.color?.value?.hex).toBe(textOn(palette, band.state).hex);
+    expect(definedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
+    expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state).hex);
     // The dropped line is the band: its plane. The OPTION cells are not —
     // `themes` is a colour-valued domain, so brandon-picker-31z paints each
     // cell in the theme it names, not in the band (the next describe pins that
     // the band placement is still what a generic domain gets).
     const body = cells[1]!;
-    expect(body.style?.bgcolor?.value?.hex).toBe(band.plane.hex);
+    expect(definedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
     const spans = body.spans.filter(
       (s) => typeof s.style !== "string" && s.style.link !== undefined,
@@ -740,7 +735,7 @@ describe("toggle round trip + drop stacking", () => {
       return new Map(
         [...sink.entries()].map(([name, cells]) => [
           name,
-          cells.map((c) => `${c.plain}|${c.style?.bgcolor?.value?.hex}|${c.style?.color?.value?.hex}`).join("\n"),
+          cells.map((c) => `${c.plain}|${definedStyle(c.style).bgcolor?.value?.hex}|${definedStyle(c.style).color?.value?.hex}`).join("\n"),
         ]),
       );
     };
@@ -762,7 +757,7 @@ describe("toggle round trip + drop stacking", () => {
   // (menuPageKey), never from a page-action argument.
   test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
     const { render, dispose } = buildRuntime(MENU_SRC);
-    const url = extractUrls(render()).find((u) =>
+    const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === TKEY),
     );
     if (!url) throw new Error("no disclosure toggle rendered");
@@ -782,7 +777,7 @@ describe("toggle round trip + drop stacking", () => {
     clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     expect(stripAnsi(open).split("\n")).toHaveLength(2);
-    const closeUrl = extractUrls(open).find((u) =>
+    const closeUrl = ownUrls(open).find((u) =>
       effectsOf(u).some(
         (e) =>
           e.args[1] === TKEY &&
@@ -810,7 +805,7 @@ describe("toggle round trip + drop stacking", () => {
       buildRuntime(src);
     clickToggle(render(), TKEY, "applyTheme");
     const open = render();
-    const pickUrl = extractUrls(open).find((u) =>
+    const pickUrl = ownUrls(open).find((u) =>
       effectsOf(u).some((e) => e.args[1] === "theme" && e.args[3] === TKEY),
     );
     if (!pickUrl) throw new Error("no pick+close option write rendered");
@@ -1105,7 +1100,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     expect(closed).not.toContain("buzz");
     expect(closed).not.toContain("silent");
 
-    const toggleUrl = extractUrls(closed).find((u) =>
+    const toggleUrl = ownUrls(closed).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
     );
     expect(toggleUrl).toBeDefined();
@@ -1120,14 +1115,14 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
 
   test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    const toggleUrl = extractUrls(render()).find((u) =>
+    const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
     );
     expect(toggleUrl).toBeDefined();
     click(toggleUrl!);
 
     const opened = render();
-    const buzzUrl = extractUrls(opened).find((u) =>
+    const buzzUrl = ownUrls(opened).find((u) =>
       effectsOf(u).some((e) => e.verb === "set-state" && e.args[2] === "buzz"),
     );
     expect(buzzUrl).toBeDefined();
@@ -1426,7 +1421,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     floor.clickToggle(floor.render(), LKEY, "applyLook");
     floor.render();
     const trigger = (cells: readonly RichText[]): string | undefined =>
-      cells[0]!.style?.bgcolor?.value?.hex;
+      definedStyle(cells[0]!.style).bgcolor?.value?.hex;
     expect(trigger(sink.get("lookpicker")!)).not.toBe(
       trigger(floor.sink.get("lookpicker")!),
     );

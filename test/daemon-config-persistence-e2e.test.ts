@@ -34,7 +34,7 @@ import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   click,
-  extractUrls,
+  linkUrls,
   findUrl,
   killAndWait,
   render,
@@ -105,7 +105,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // toggle (a set-state write under the reserved menus.* namespace, whose
       // member is the apply action's name) before any per-theme option link
       // exists to click.
-      const themeMenuToggleUrl = findUrl(extractUrls(menuOpen), (effects) =>
+      const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[2] === "settings.apply.theme",
@@ -131,7 +131,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // The checkbox starts unchecked (its state var's default), so this is
       // the state a user arrives in — experimentation, costing nothing.
       const sessionOnly = await render(sockPath, SID, projectDir);
-      const sessionThemeUrl = findUrl(extractUrls(sessionOnly), (effects) =>
+      const sessionThemeUrl = findUrl(linkUrls(sessionOnly), (effects) =>
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[1] === "theme" &&
         effects[0]!.args[2] === sessionTheme,
@@ -140,7 +140,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // …and emits NO durable write at all while unchecked: not a second
       // effect on the same link, and not a second link elsewhere in the row.
       expect(
-        findUrl(extractUrls(sessionOnly), (effects) =>
+        findUrl(linkUrls(sessionOnly), (effects) =>
           effects.some((e) => e.verb === "set-config" && e.args[1] === "palette"),
         ),
       ).toBeUndefined();
@@ -174,7 +174,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
       // ── Check persist?. One click on the checkbox, nothing else about the
       // control changes — same segment, same picker, same options.
-      const persistToggleUrl = findUrl(extractUrls(await render(sockPath, SID, projectDir)), (effects) =>
+      const persistToggleUrl = findUrl(linkUrls(await render(sockPath, SID, projectDir)), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[1] === "settings.persist" &&
@@ -184,7 +184,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(sockPath, persistToggleUrl!);
 
       const opened = await render(sockPath, SID, projectDir);
-      const openedUrls = extractUrls(opened);
+      const openedUrls = linkUrls(opened);
 
       // ── persist? CHECKED: the SAME control now writes the durable key.
       // (set-config on the globals field `palette`, not set-state on the

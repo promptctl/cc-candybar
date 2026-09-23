@@ -21,6 +21,7 @@
 // pinned separately below.
 
 import { SessionState } from "../src/daemon/session-state";
+import { stripAnsi } from "./helpers/ansi";
 
 import {
   parseDslConfig,
@@ -67,9 +68,7 @@ function render(n: number): string {
     { n },
     OPTS,
   );
-  return out
-    .replace(/\x1b\]8;[^\x07]*\x07/g, "")
-    .replace(/\x1b\[[0-9;]*m/g, "");
+  return stripAnsi(out);
 }
 
 describe("bdi.5 — formatInteger retained primitive (production path)", () => {

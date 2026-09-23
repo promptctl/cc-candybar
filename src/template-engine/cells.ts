@@ -12,8 +12,7 @@
 // character styling via spans, and every layout op (truncate / align /
 // pad / slice) preserves spans by construction.
 
-import { RichText } from "@promptctl/rich-js";
-import type { Style } from "@promptctl/rich-js";
+import { RichText, Style } from "@promptctl/rich-js";
 
 /**
  * Convert template-engine fragments (`RichText[]`) into Strip cells
@@ -43,7 +42,9 @@ export function fragmentsToCells(
   };
 
   for (const frag of fragments) {
-    if (frag.style.link) {
+    // definedStyle, not `frag.style.link`: a string style has a `.link` too —
+    // String.prototype.link, a function, which is always truthy.
+    if (definedStyle(frag.style).link) {
       flush();
       const cell = buildCell([frag], baseStyle);
       if (cell.plain.length > 0) cells.push(cell);
@@ -85,6 +86,16 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
 
 function withBaseStyle(f: RichText, base: Style): RichText {
   const copy = f.copy();
-  copy.style = base.add(f.style);
+  copy.style = base.add(definedStyle(f.style));
   return copy;
+}
+
+/**
+ * The `Style` a RichText's stored style stands for. RichText keeps a string as
+ * given ("" for plain text, or a definition like "on blue"); Style.parse reads
+ * definitions only, so a theme NAME throws here — cells are built before any
+ * render exists to resolve a name against.
+ */
+export function definedStyle(style: string | Style): Style {
+  return style instanceof Style ? style : Style.parse(style);
 }

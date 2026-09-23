@@ -42,6 +42,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { links, stripAnsi, type Link } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -71,15 +72,6 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
-// One OSC-8 link as the bar emits it: `ESC ] 8 ; ; url ESC \ text ESC ] 8 ; ; ESC \`.
-const OSC8 = /\x1b\]8;;([^\x1b]*)\x1b\\(.*?)\x1b\]8;;\x1b\\/g;
-interface Link {
-  readonly text: string;
-  readonly url: string;
-}
-const linksOn = (line: string): Link[] =>
-  [...line.matchAll(OSC8)].map((m) => ({ url: m[1]!, text: m[2]! }));
-
 // Whether a link's click is exactly "write `key` closed" — the row ✕'s write.
 const closes = (link: Link, key: string): boolean =>
   effectsOf(link.url).some(
@@ -92,12 +84,12 @@ const closes = (link: Link, key: string): boolean =>
 // The row's lead: its first link must be the ✕ closing `key`, and no other
 // disclosure's ✕ may sit anywhere on the row — one ✕, the innermost band's.
 function expectLedBy(line: string, key: string): void {
-  const links = linksOn(line);
-  const first = links[0];
+  const rowLinks = links(line);
+  const first = rowLinks[0];
   if (first === undefined) throw new Error(`no link on: ${JSON.stringify(line)}`);
   expect(first.text).toBe(DISCLOSURE_GLYPH_CLOSE);
   expect(closes(first, key)).toBe(true);
-  const otherCloses = links
+  const otherCloses = rowLinks
     .slice(1)
     .filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE && closes(l, key));
   expect(otherCloses).toEqual([]);
@@ -143,7 +135,7 @@ function build(src: string, withDefault: boolean) {
   // Click the first link on any rendered line that writes `key` = `value`.
   const clickWriting = (lines: string[], key: string, value: string): void => {
     const link = lines
-      .flatMap(linksOn)
+      .flatMap(links)
       .find((l) =>
         effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
       );
@@ -170,7 +162,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     let lines = rt.render();
     expect(lines).toHaveLength(1);
     // The bar row carries no row ✕: only the door itself, which is a trigger.
-    expect(linksOn(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
@@ -184,11 +176,11 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     expect(lines).toHaveLength(3);
     expectLedBy(lines[1]!, SETTINGS_ANCHOR);
     expectLedBy(lines[2]!, configKey);
-    expect(linksOn(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
+    expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
     // A picker dropped inside ⚙'s body keeps the picker's own ✕ alone: the
     // line is the menu's band, not ⚙'s row.
-    const opener = linksOn(lines[2]!).find((l) =>
+    const opener = links(lines[2]!).find((l) =>
       effectsOf(l.url).some(
         (e) =>
           e.verb === VERB_SET_STATE &&
@@ -201,14 +193,14 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(4);
     const pickerLine = lines[3]!;
-    const [first] = linksOn(pickerLine);
+    const [first] = links(pickerLine);
     expect(first?.text).toBe(DISCLOSURE_GLYPH_CLOSE);
     expect(closes(first!, configKey)).toBe(false);
     expect(closes(first!, SETTINGS_ANCHOR)).toBe(false);
 
     // Clicking ⚙'s row ✕ closes ⚙ (and the picker hanging under it) while 🍫
     // stays open with its own row still led.
-    rt.click(linksOn(lines[2]!)[0]!.url);
+    rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(2);
     expectLedBy(lines[1]!, SETTINGS_ANCHOR);
@@ -222,12 +214,12 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(3);
     expectLedBy(lines[2]!, toolsKey);
-    rt.click(linksOn(lines[2]!)[0]!.url);
+    rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(2);
 
     // And 🍫's row ✕ closes the menu: back to the bar alone.
-    rt.click(linksOn(lines[1]!)[0]!.url);
+    rt.click(links(lines[1]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);
     rt.dispose();
@@ -255,7 +247,7 @@ describe("brandon-disclosure-43z — a group body", () => {
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
-    expect(lines.flatMap(linksOn).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(lines.flatMap(links).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
@@ -263,13 +255,13 @@ describe("brandon-disclosure-43z — a group body", () => {
     expect(lines).toHaveLength(6);
     for (const row of lines.slice(2, 5)) expectLedBy(row, "acc");
     // The nested horizontal row is led once — by the container, not per cell.
-    expect(linksOn(lines[3]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
+    expect(links(lines[3]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
     // Rows outside the body carry none.
     for (const row of [lines[0]!, lines[1]!, lines[5]!]) {
-      expect(linksOn(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+      expect(links(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
-    rt.click(linksOn(lines[4]!)[0]!.url);
+    rt.click(links(lines[4]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
     rt.dispose();
@@ -297,7 +289,7 @@ const DROPS = `{
 }`;
 
 const closeLinks = (line: string): Link[] =>
-  linksOn(line).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
+  links(line).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
 
 describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
   test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", () => {
@@ -312,7 +304,7 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     // below it, `B A` with D dropped below it; then toggle `bare`.
     expect(lines).toHaveLength(8);
     const body = lines.slice(2, 7);
-    expect(body.map((l) => l.replace(/\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g, ""))).toEqual([
+    expect(body.map((l) => stripAnsi(l))).toEqual([
       expect.stringContaining("M1"),
       expect.stringContaining("M2"),
       expect.stringContaining("M3"),

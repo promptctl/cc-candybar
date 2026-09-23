@@ -18,6 +18,8 @@ import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
+import { linkUrls } from "./ansi";
+export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
 
@@ -99,15 +101,6 @@ export async function click(sockPath: string, url: string): Promise<void> {
   }
 }
 
-export function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
-
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state
 // catches up, or fail loudly at the deadline. A durable (`persist`) write
 // lands in a file that RenderCache reloads through an fs WATCHER, so the
@@ -163,7 +156,7 @@ export function urlWriting(
   key: string,
   value: string,
 ): string {
-  const url = findUrl(extractUrls(rendered), (effects) =>
+  const url = findUrl(linkUrls(rendered), (effects) =>
     effects.some((e) => e.args[1] === key && e.args[2] === value),
   );
   if (url === undefined) {
@@ -172,9 +165,6 @@ export function urlWriting(
   return url;
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-export const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // Stop the daemon and wait for it to be gone.
 //

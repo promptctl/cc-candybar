@@ -25,9 +25,8 @@ import { renderStripCells } from "../src/render/strip";
 import { markFill, type CellSizing } from "../src/template-engine/layout";
 import type { BuildLineOptions } from "../src/render/strip";
 import { CHARSETS, STRIP_STYLES } from "../src/themes/policy";
+import { INVISIBLE } from "../src/render/ansi";
 
-// eslint-disable-next-line no-control-regex
-const INVISIBLE = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g;
 const cols = (line: string): number => cellLen(line.replace(INVISIBLE, ""));
 
 const SIZING: CellSizing = {
@@ -48,8 +47,10 @@ function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {
   } as BuildLineOptions;
 }
 
-const fixed = (text: string): RichText => new RichText(text);
-const fill = (text: string): RichText => markFill(new RichText(text), SIZING);
+// A cell is never a line: every producer builds it with `end: ""`, the strip
+// ending the row. A default `end` ("\n") would break the row after each cell.
+const fixed = (text: string): RichText => new RichText(text, { end: "" });
+const fill = (text: string): RichText => markFill(fixed(text), SIZING);
 
 function serialize(
   cells: readonly RichText[],

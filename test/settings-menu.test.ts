@@ -47,6 +47,7 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -59,18 +60,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
 
 // The acceptance shape, verbatim: a user file that declares its own `root` of
 // one row of two segments, merged over the BUNDLED default (production's
@@ -108,7 +97,7 @@ function buildRuntime(src: string) {
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = (out: string, key: string, value: string): void => {
-    const url = extractUrls(out).find((u) =>
+    const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -190,7 +179,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
-    const editing = extractUrls(render()).filter((u) =>
+    const editing = linkUrls(render()).filter((u) =>
       u.includes("apply-layout-op"),
     );
     expect(editing.length).toBeGreaterThan(0);
@@ -205,7 +194,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // Open the picker's own disclosure, then pick `compact` from its options.
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
-    const pickerUrl = extractUrls(render()).find((u) =>
+    const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1]?.startsWith("menus.settings_")),
     );
     expect(pickerUrl).toBeDefined();

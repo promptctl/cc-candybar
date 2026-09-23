@@ -19,7 +19,7 @@ import {
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";
 import { effectsOf } from "./helpers/click";
-import { extractUrls, stripAnsi } from "./helpers/daemon-e2e";
+import { linkUrls, stripAnsi } from "./helpers/daemon-e2e";
 
 const NEWER: SourceStamp = { version: "9.9.9", digest: "abcdef0123456789".repeat(4) };
 const RUNNING: SourceStamp = { version: "1.0.0", digest: "0123456789abcdef".repeat(4) };
@@ -165,7 +165,7 @@ describe("updateNotice", () => {
       "⬆ Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456]. [rebuild] [dismiss] [disable] ",
       "BODY",
     ]);
-    const verbs = extractUrls(out).flatMap((u) => effectsOf(u).map((e) => e.verb));
+    const verbs = linkUrls(out).flatMap((u) => effectsOf(u).map((e) => e.verb));
     expect(new Set(verbs)).toEqual(
       new Set(["show-config-warning", "apply-update", "set-state", "set-config"]),
     );

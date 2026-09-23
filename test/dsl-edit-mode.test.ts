@@ -57,6 +57,7 @@ import {
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -71,20 +72,13 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+function ownUrls(rendered: string): string[] {
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return withoutSettingsLinks(urls);
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 function segmentNamesOf(root: RootFragment): string[] {
   const out: string[] = [];
@@ -418,7 +412,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const before = stripAnsi(render());
     expect(before).not.toContain("-");
 
-    const toggleUrl = extractUrls(render()).find((u) =>
+    const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
       ),
@@ -429,7 +423,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const opened = stripAnsi(render());
     expect(opened).toContain("-");
 
-    const closeUrl = extractUrls(render()).find((u) =>
+    const closeUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
       ),
@@ -444,7 +438,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const original = durable.text()!;
 
     // Open edit mode.
-    const openUrl = extractUrls(render()).find((u) =>
+    const openUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
       ),
@@ -452,7 +446,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     click(openUrl);
 
     // Remove "directory" via its `-`.
-    const removeUrl = extractUrls(render()).find((u) =>
+    const removeUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) =>
           e.verb === "apply-layout-op" &&
@@ -471,7 +465,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // rendered though "directory" is gone from the file — clicking THAT one
     // is exactly the stale-bar case the store refuses loudly (see
     // dsl-layout-edit.test.ts). Anchor on a segment the file still holds.
-    for (const menuOpenUrl of extractUrls(render()).filter((u) =>
+    for (const menuOpenUrl of ownUrls(render()).filter((u) =>
       effectsOf(u).some(
         (e) => e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
       ),
@@ -479,7 +473,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       click(menuOpenUrl);
     }
 
-    const pickUrl = extractUrls(render()).find((u) =>
+    const pickUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) =>
           e.verb === "apply-layout-op" &&
@@ -518,7 +512,7 @@ describe("a segment row's chrome rides its row", () => {
   test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const closed = stripAnsi(render()).split("\n");
-    const toggleUrl = extractUrls(render()).find((u) =>
+    const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
       ),

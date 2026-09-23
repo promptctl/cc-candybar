@@ -13,6 +13,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { linkCloseCount, linkUrls } from "./helpers/ansi";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -25,16 +26,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// OSC-8 open carries a non-empty URL; the close is the same introducer with an
-// EMPTY url. Capturing only non-empty urls means every match is an OPEN.
-// eslint-disable-next-line no-control-regex
-const OSC8_OPEN = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-// eslint-disable-next-line no-control-regex
-const OSC8_CLOSE = "\x1b]8;;\x1b\\";
-
-function linkUrls(rendered: string): string[] {
-  return [...rendered.matchAll(OSC8_OPEN)].map((m) => m[1]!);
-}
 
 function renderGitPr(git: Record<string, unknown>): string {
   const base = parseAndValidate("<default>", SERIALIZED);
@@ -103,9 +94,8 @@ describe("gitPr segment render", () => {
     expect(linkUrls(out)).toEqual([url]);
     // The number is shown; the region closes cleanly (no link bleed).
     expect(out).toContain("#76");
-    expect(out).toContain(OSC8_CLOSE);
     // Exactly one open and one close — the region is balanced.
-    expect(out.split(OSC8_CLOSE).length - 1).toBe(1);
+    expect(linkCloseCount(out)).toBe(1);
   });
 
   test("lookup failed → distinct ⚠ marker, NO link", () => {
