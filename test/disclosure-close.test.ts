@@ -163,6 +163,8 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     const rt = build(BUNDLED, true);
     let lines = rt.render();
     expect(lines).toHaveLength(1);
+    const closedBar = stripAnsi(lines[0]!);
+    expect(closedBar).toMatch(/proj.*Opus/);
     // The bar row carries no row ✕: only the door itself, which is a trigger.
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
@@ -228,6 +230,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(1);
     expect(links(lines[0]!)[0]?.text).toBe(DOOR_GLYPH);
+    expect(stripAnsi(lines[0]!)).toBe(closedBar);
     rt.dispose();
   });
 });
