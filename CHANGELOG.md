@@ -1,3 +1,10 @@
+# [1.72.0](https://github.com/promptctl/cc-candybar/compare/v1.71.1...v1.72.0) (2026-09-23)
+
+
+### Features
+
+* **disclosure:** every row of an open disclosure body leads with a ✕ that closes it ([#229](https://github.com/promptctl/cc-candybar/issues/229)) ([a7a92e2](https://github.com/promptctl/cc-candybar/commit/a7a92e27e22af7397925e3d3b2d05ca52c5968cc))
+
 ## [1.71.1](https://github.com/promptctl/cc-candybar/compare/v1.71.0...v1.71.1) (2026-09-12)
 
 
