@@ -28,6 +28,7 @@ import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
   Direction,
+  Placement,
   SegmentDecl,
 } from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
@@ -66,6 +67,7 @@ export interface CompiledOpens {
   // The state key the body's ✕ writes closed — the ref's own, carried so the
   // row affordance and the trigger's cycle cannot name different keys.
   readonly key: string;
+  readonly placement: Placement;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -117,6 +119,7 @@ export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 export interface RenderedLine {
   readonly cells: readonly RichText[];
   readonly band: "own" | "deeper";
+  readonly span: "shared" | "row";
 }
 export type RenderedLines = readonly RenderedLine[];
 
@@ -270,9 +273,12 @@ function composeBlocks(
       // [[]] here would render as a spurious blank line.
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
       if (height === 0) return [];
-      const row0: RenderedLine = {
+      const row0: RenderedLine = blocks
+        .map((b) => b[0])
+        .find((line) => line?.span === "row") ?? {
         cells: blocks.flatMap((b) => b[0]?.cells ?? []),
         band: "own",
+        span: "shared",
       };
       const drops = blocks.flatMap((b) => b.slice(1));
       return [row0, ...drops];
@@ -342,6 +348,7 @@ const segmentType: NodeType<"segment"> = {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
           body: cctx.compileChild(node.opens.body, `${cctx.path}.opens.body`),
           key: node.opens.ref.key,
+          placement: node.opens.placement,
         },
       }),
     };
@@ -446,9 +453,15 @@ const segmentType: NodeType<"segment"> = {
       // band, so the band this trigger sits on never leads it again.
       const leadOf = (line: RenderedLine): readonly RichText[] =>
         line.band === "own" ? closeLead : [];
-      const ledBody: RenderedLines = bodyLines.map((line) => ({
+      const bodyHead = bodyLines.slice(
+        0,
+        node.opens?.placement === "inline" ? 1 : 0,
+      );
+      const bodyTail = bodyLines.slice(bodyHead.length);
+      const ledBody: RenderedLines = bodyTail.map((line) => ({
         cells: [...leadOf(line), ...line.cells],
         band: "deeper",
+        span: "shared",
       }));
 
       // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
@@ -460,9 +473,13 @@ const segmentType: NodeType<"segment"> = {
       // Each inline line is a ROW of the band this segment sits on.
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
-      ).map((line) => ({
-        cells: applySegmentLayout(line, layout),
+      ).map((line, i) => ({
+        cells: [
+          ...applySegmentLayout(line, layout),
+          ...(i === 0 ? bodyHead.flatMap((head) => head.cells) : []),
+        ],
         band: "own",
+        span: i === 0 && bodyHead.length > 0 ? "row" : "shared",
       }));
       // Each open menu body is one full-width dropped line on the band's
       // PLANE — the recessed floor its items are placed above — stacked after
@@ -475,6 +492,7 @@ const segmentType: NodeType<"segment"> = {
           baseStyle: styles.band,
         }),
         band: "deeper",
+        span: "shared",
       }));
       const laidLines = [...inlineLines, ...dropLines];
 
@@ -485,7 +503,7 @@ const segmentType: NodeType<"segment"> = {
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(node.name, [
           ...laidLines.flatMap((line) => line.cells),
-          ...bodyLines.flatMap(leadOf),
+          ...bodyTail.flatMap(leadOf),
         ]);
       }
       // Below row 0 every line is a drop: menu bands first (template order),
@@ -510,6 +528,7 @@ const segmentType: NodeType<"segment"> = {
             }),
           ],
           band: "own",
+          span: "shared",
         },
       ];
     }

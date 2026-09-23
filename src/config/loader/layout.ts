@@ -637,6 +637,7 @@ function lowerGroup(g: GroupNodeInput): LayoutNode {
       children: g.children,
       ...(g.distribution !== undefined && { distribution: g.distribution }),
     },
+    "drop",
     g.when,
   );
 }

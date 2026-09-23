@@ -32,7 +32,7 @@ import {
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
-  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
 
@@ -69,7 +69,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       //    validators did not admit would fail here rather than no-op.
       await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, "open"));
       const opened = stripAnsi(await render(sockPath, SID, projectDir));
-      expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
+      expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).not.toContain(DOOR_GLYPH);
       expect(opened).toContain("✎ edit"); // edit mode
       expect(opened).toContain("▦"); // preset switching
@@ -77,8 +77,10 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       // 3. Edit mode is genuinely entered from here.
       const bodyOut = await render(sockPath, SID, projectDir);
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "open"));
+      const inMenu = await render(sockPath, SID, projectDir);
+      expect(stripAnsi(inMenu)).toContain("✎ done");
+      await click(sockPath, urlWriting(inMenu, SETTINGS_ANCHOR, "closed"));
       const editing = await render(sockPath, SID, projectDir);
-      expect(stripAnsi(editing)).toContain("✎ done");
       expect(
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,

@@ -1013,7 +1013,7 @@ globals that *do* have one.)
 
 One disclosure is present in **every** bar, whatever the config says: the
 global settings menu, rendered as `🍫`. It is one symbol per state rather than a
-label plus an arrow: `🍫` closed, `✕` open. By default it is the leading cell of
+label plus an arrow: `🍫` closed, `❌` open. By default it is the leading cell of
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
 is shared by every preset). Place the reserved `settings.menu` segment name
@@ -1023,21 +1023,24 @@ yourself to move it anywhere else.
 { globals: { menuGlyph: "🍬" } }
 ```
 
-Opening it shows the always-available functionality:
+Opening it shows the always-available functionality. The menu opens
+**inline**: its first row takes the door's own row, replacing the rest of that
+row while it is open, and the `❌` that leads it closes the menu. Everything it
+opens in turn drops below:
 
 ```
-✕
-✕ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
+❌ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
-disclosure, in the same state colour its trigger wears while open: the first
-row's `✕` closes the menu, the config row's closes `⚙ config` and leaves the
-menu open. Nothing stacks — a row carries the `✕` of the innermost disclosure
-it belongs to, and a picker line keeps the picker's own. This is true of every
-disclosure on the bar (a group body, a `(?)` line), not only this menu; no
-author writes it and no author can decline it.
+disclosure, in the same state colour its trigger wears while open: the config
+row's `✕` closes `⚙ config` and leaves the menu open. Nothing stacks — a row
+carries the `✕` of the innermost disclosure it belongs to, and a picker line
+keeps the picker's own. This is true of every disclosure on the bar (a group
+body, a `(?)` line), not only this menu; no author writes it and no author can
+decline it. The menu's own inline row needs none: the door beside it is its
+close.
 
 - **`⎘ id ↗ proj ↗ log ↗ repo`** are the quick actions: copy the session id,
   open the project or the transcript in your editor, open the repo's web page.
@@ -1106,14 +1109,23 @@ placement would be two toggles fighting over it:
 it may appear at most once per layout
 ```
 
-A `when` on one of your rows never reaches the menu. If the row the default
-placement would land in is gated, the menu takes its own ungated row instead —
-otherwise an ordinary conditional row (a git row you only want inside a repo)
-would take the undeletable door down with it whenever the condition is false.
-Two gates *are* honored, because both are things you said on purpose: a `when`
-on the `root` itself (there is no bar at all under that condition, so there is
-nothing to put a menu on), and a gate on a row where you placed the anchor
-yourself.
+The menu is visible under every condition. A `when` you write — on a row, or
+on the `root` itself — gates your content, never the menu: the default
+placement rides beside a gated node instead of inside it, so a bar gated away
+entirely still shows its door. For the same reason your own placement of the
+anchor may not sit under a `when` or inside a group's body:
+
+```json5 check:fail
+{
+  root: { v: [
+    { h: ["directory", "settings.menu"], when: "{{ ne .git.branch \"\" }}" },
+  ] },
+}
+```
+
+```error
+the menu is visible under every condition, so its placement may not be gated
+```
 
 **The one config that gets no menu** is one that declares no `session.id`
 variable. Every click composes a URL whose first segment is the session id read

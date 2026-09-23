@@ -99,9 +99,12 @@ export interface SegmentNode {
   readonly opens?: Opens;
 }
 
+export type Placement = "drop" | "inline";
+
 export interface Opens {
   readonly ref: DisclosureRef;
   readonly body: ContainerNode;
+  readonly placement: Placement;
 }
 
 // [LAW:types-are-the-program] One open disclosure, named by the three strings

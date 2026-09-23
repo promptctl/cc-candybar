@@ -33,12 +33,16 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
-import { countAnchors, SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import {
+  anchorUnderGate,
+  countAnchors,
+  SETTINGS_ANCHOR,
+} from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
-  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
 import { testVerbContext, effectsOf } from "./helpers/click";
@@ -146,8 +150,8 @@ describe("the global settings menu is reachable from a user config", () => {
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
-    // One symbol per state: the open door is the ✕, and the door glyph is gone.
-    expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
+    // One symbol per state: the open door is the ❌, and the door glyph is gone.
+    expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
     // The two things the ticket's acceptance names: enter edit mode, and switch
     // presets (the picker's own disclosure glyph, hosted by the preset entry).
@@ -156,13 +160,20 @@ describe("the global settings menu is reachable from a user config", () => {
     dispose();
   });
 
-  test("the open body's first row leads with the quick-action tray", () => {
+  test("the menu opens inline: the tray replaces the door's row while open", () => {
     const { render, clickWriting, dispose } = buildRuntime(
-      userConfig(TWO_SEGMENT_ROW),
+      userConfig(`{ v: [${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
-    expect(stripAnsi(render())).not.toContain("⎘ id");
+    const closed = stripAnsi(render()).split("\n");
+    expect(closed[0]).toContain("Opus");
+    expect(closed[0]).not.toContain("⎘ id");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const body = stripAnsi(render()).split("\n")[1]!;
+    const opened = stripAnsi(render()).split("\n");
+    expect(opened).toHaveLength(closed.length);
+    const body = opened[0]!;
+    expect(body.startsWith(DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(body).not.toContain("Opus");
+    expect(opened[1]).toBe(closed[1]);
     expect(body).toContain("↗ proj");
     expect(body).toContain("↗ log");
     expect(body.indexOf("⎘ id")).toBeGreaterThan(-1);
@@ -177,6 +188,7 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     clickWriting(render(), EDIT_MODE_KEY, "open");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
+    clickWriting(render(), SETTINGS_ANCHOR, "closed");
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
     const editing = linkUrls(render()).filter((u) =>
@@ -424,37 +436,55 @@ describe("the default placement never inherits an author's gate", () => {
   test.each([
     ["a bare-segment root", `{ seg: 'directory', when: '${GATE}' }`],
     ["a single-row root", `{ h: ['directory','model'], when: '${GATE}' }`],
-  ])(
-    "a `when` on %s is honored — there is no bar to host a menu on",
-    (_label, root) => {
-      // The exemption, asserted rather than left implicit: gating the ROOT is an
-      // explicit statement that the whole bar is conditional, unlike a gate on
-      // one inner row the default placement merely happened to land in. It is
-      // also what keeps edit chrome's reset banner gated with the content it
-      // describes (see dsl-layout-edit's banner tests, which read this `when`).
-      const config = parseAndValidate(
-        "<user>",
-        withFlag(root),
-        ALLOWED,
-        DEFAULT_DSL_CONFIG,
-      );
-      expect(gatesOverAnchor(resolvedRoot(config))).toContain(GATE);
-    },
-  );
-
-  test("an author who places the anchor inside a gated row keeps it there", () => {
-    // Their placement is their answer — the pass honors the position, gate and
-    // all. Only the DEFAULT placement is lifted out.
+    ["a vertical root", `{ v: [{ h: ['directory'] }], when: '${GATE}' }`],
+  ])("a `when` on %s leaves the menu ungated", (_label, root) => {
     const config = parseAndValidate(
       "<user>",
-      withFlag(
-        `{ v: [{ h: ['directory','${SETTINGS_ANCHOR}'], when: '${GATE}' }] }`,
-      ),
+      withFlag(root),
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    expect(gatesOverAnchor(resolvedRoot(config))).toContain(GATE);
-    expect(countAnchors(resolvedRoot(config))).toBe(1);
+    expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
+  });
+
+  test("a bar gated away entirely still renders its door", () => {
+    const { render, dispose } = buildRuntime(
+      `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
+    );
+    const bar = stripAnsi(render());
+    expect(bar).toContain(DOOR_GLYPH);
+    expect(bar).not.toContain("Opus");
+    dispose();
+  });
+
+  test.each([
+    [
+      "inside a gated row",
+      `{ v: [{ h: ['directory','${SETTINGS_ANCHOR}'], when: '${GATE}' }] }`,
+    ],
+    ["with its own gate", `{ h: ['directory', { seg: '${SETTINGS_ANCHOR}', when: '${GATE}' }] }`],
+    [
+      "inside a group body",
+      `{ h: ['directory', { kind: 'group', name: 'g', label: 'g', children: ['${SETTINGS_ANCHOR}'] }] }`,
+    ],
+  ])("an author placement %s is a load error", (_label, root) => {
+    expect(() =>
+      parseAndValidate("<user>", withFlag(root), ALLOWED, DEFAULT_DSL_CONFIG),
+    ).toThrow(/may not be gated/);
+  });
+
+  test("the gate census sees every gate over the anchor", () => {
+    const anchor: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
+    expect(anchorUnderGate(anchor)).toBe(false);
+    expect(anchorUnderGate({ ...anchor, when: GATE })).toBe(true);
+    expect(
+      anchorUnderGate({
+        kind: "container",
+        direction: "horizontal",
+        when: GATE,
+        children: [anchor],
+      }),
+    ).toBe(true);
   });
 });
 

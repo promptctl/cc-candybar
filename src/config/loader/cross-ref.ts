@@ -37,6 +37,7 @@ import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNode, rootNode } from "../root.js";
 import { segmentReferencesMenu } from "./menu-synth.js";
 import {
+  anchorUnderGate,
   canHostSessionState,
   countAnchors,
   isSettingsAnchor,
@@ -339,6 +340,13 @@ export function validateCrossReferences(
       ctx.issues.push({
         path: layoutKey,
         message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(tree)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
+        line: layoutLine,
+      });
+    }
+    if (anchorUnderGate(tree)) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" under a \`when\` or inside a disclosure body — the menu is visible under every condition, so its placement may not be gated. Move it to an ungated position, or remove it to put the menu at its default position.`,
         line: layoutLine,
       });
     }

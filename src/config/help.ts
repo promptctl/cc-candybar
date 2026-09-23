@@ -125,11 +125,12 @@ export function declareHelp(
     return { kind: "segment", name: lineName };
   });
 
-  return disclosureNode(name, self, {
-    kind: "container",
-    direction: "horizontal",
-    children,
-  });
+  return disclosureNode(
+    name,
+    self,
+    { kind: "container", direction: "horizontal", children },
+    "drop",
+  );
 }
 
 // The enclosing gate as an optional `when` field — the codebase's standard

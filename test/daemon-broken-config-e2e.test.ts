@@ -44,7 +44,7 @@ import {
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { RichText } from "@promptctl/rich-js";
 import {
-  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
 
@@ -135,7 +135,7 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
       expect(text).toContain(DOOR_GLYPH);
       await click(sockPath, urlWriting(rendered, SETTINGS_ANCHOR, "open"));
       const opened = stripAnsi(await render(sockPath, SID, projectDir));
-      expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
+      expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).toContain("▦"); // preset switching is reachable
       expect(opened).toContain("trigger needs a display"); // still loud
 
