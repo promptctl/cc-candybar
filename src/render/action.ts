@@ -214,6 +214,14 @@ export type CompiledActionDecl =
       // The SessionState key the session half writes, carried so a durable
       // click can clear it in the same dispatch (see realize's dual arm).
       readonly sessionKey: string;
+    }
+  // [LAW:composability] Several compiled actions fired by one click. `head` is
+  // the one the region presents as — its display rule, its current-state mark,
+  // and the value a template binds — and `rest` ride along behind it.
+  | {
+      readonly kind: "do";
+      readonly head: CompiledActionDecl;
+      readonly rest: readonly CompiledActionDecl[];
     };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
@@ -311,7 +319,14 @@ export function compileActions(
   for (const [name, action] of Object.entries(actions)) {
     out.set(
       name,
-      compileAction(parse, name, action, stateKeyToVar, perConfigDomains),
+      compileAction(
+        parse,
+        name,
+        action,
+        stateKeyToVar,
+        perConfigDomains,
+        actions,
+      ),
     );
   }
   return out;
@@ -327,6 +342,7 @@ function compileAction(
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+  actions: Readonly<Record<string, ActionDecl>>,
 ): CompiledActionDecl {
   // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
   // the SAME explosion the validator derivations fold over
@@ -338,8 +354,22 @@ function compileAction(
     return compileDual(
       stateKeyToVar.get(action[PERSIST_WHEN]) ?? action[PERSIST_WHEN],
       action.set,
-      compileAction(parse, name, session!, stateKeyToVar, perConfigDomains),
-      compileAction(parse, name, durable!, stateKeyToVar, perConfigDomains),
+      compileAction(
+        parse,
+        name,
+        session!,
+        stateKeyToVar,
+        perConfigDomains,
+        actions,
+      ),
+      compileAction(
+        parse,
+        name,
+        durable!,
+        stateKeyToVar,
+        perConfigDomains,
+        actions,
+      ),
     );
   }
   if ("set" in action) {
@@ -467,7 +497,32 @@ function compileAction(
       ? { kind: "doctor-run" }
       : { kind: "doctor-fix", check: action.check };
   }
-  return "undo" in action ? { kind: "undo" } : { kind: "redo" };
+  if ("undo" in action) return { kind: "undo" };
+  if ("redo" in action) return { kind: "redo" };
+  // [LAW:one-source-of-truth] Members compile from the same table, by the same
+  // fold, as if each were bound alone — a `do` is its members' clicks, so there
+  // is no second statement of what any of them writes. The loader proves every
+  // name resolves; a config assembled past the loader that breaks that is a
+  // wiring bug, reported by name like renderAction's own miss.
+  const [head, ...rest] = action.do.map((member) => {
+    const decl = Object.prototype.hasOwnProperty.call(actions, member)
+      ? actions[member]
+      : undefined;
+    if (decl === undefined) {
+      throw new Error(
+        `action "${name}" fires "${member}", which is not declared in this config`,
+      );
+    }
+    return compileAction(
+      parse,
+      member,
+      decl,
+      stateKeyToVar,
+      perConfigDomains,
+      actions,
+    );
+  });
+  return { kind: "do", head: head!, rest };
 }
 
 // [LAW:one-source-of-truth] A dual control shows ONE current value and writes
@@ -502,8 +557,10 @@ function compileDual(
 // [LAW:dataflow-not-control-flow] THE destination fold: which store a dual
 // action writes is the boolean value of its selector key, read from the same
 // live store the rest of the render reads. Total over every compiled action —
-// a single-destination action IS its own destination — so callers resolve
-// through it unconditionally and never test for the dual kind.
+// a single-destination action IS its own destination, and a `do` presents as
+// its head's — so callers resolve through it unconditionally and never test
+// for the dual or `do` kinds. That is what lets a `do` headed by an option
+// action drive a picker: the grid reads the head, the click realizes the whole.
 //
 // [LAW:one-source-of-truth] `parseSessionBoolean` is the one spelling of a
 // boolean in SessionState (themes/policy.ts), the same parse `autoWrap`'s own
@@ -513,6 +570,7 @@ export function activeDestination(
   c: CompiledActionDecl,
   store: VariableStore,
 ): CompiledActionDecl {
+  if (c.kind === "do") return activeDestination(c.head, store);
   if (c.kind !== "dual") return c;
   return parseSessionBoolean(readVar(store, c.selector)) === true
     ? c.durable
@@ -823,6 +881,21 @@ export function realize(
             active,
           }
         : { effects, active };
+    }
+    case "do": {
+      // [LAW:single-enforcer] The members' effects, head first, concatenated.
+      // Nothing here makes them one transaction: effectsUrl folds every
+      // set-state in a click into one batch, for this producer and every other.
+      const head = realize(c.head, display, boundValue, store, sessionId);
+      return {
+        effects: [
+          ...head.effects,
+          ...c.rest.flatMap(
+            (m) => realize(m, display, undefined, store, sessionId).effects,
+          ),
+        ],
+        active: head.active,
+      };
     }
     case "layout-op-option": {
       const segment = boundValue ?? display;

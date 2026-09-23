@@ -62,6 +62,7 @@ export const ACTION_KEYS = [
   "undo",
   "redo",
   "doctor",
+  "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
 
@@ -102,6 +103,11 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         wire input
 //   redo                — the inverse of undo: re-apply the most recently
 //                         undone entry -> no gate, no key
+//   do                  — fire several declared actions in one click: the
+//                         first is the click's face (its display rule and
+//                         current-state mark are the region's), the rest ride
+//                         along -> no gate of its own: every member is a
+//                         declared action whose gate is already derived
 //   removeSegment       — (persist only) remove the named segment from the
 //                         preset-root the `persist` key addresses
 //                         (`presets.<name>.root`) -> allow-list {one op
@@ -194,6 +200,12 @@ export type ActionDecl =
   // already declared. No `set`, so no validator derives (like copy/open).
   | { readonly doctor: "run" }
   | { readonly doctor: "fix"; readonly check: string }
+  // [LAW:composability] One click, several effects, built from actions that
+  // already exist rather than from a new write vocabulary: entering edit mode
+  // and closing the menu it was entered from is `edit.toggle` and a close,
+  // named together. The tuple type states the one structural fact — there is
+  // always a head, the member whose display the region shows.
+  | { readonly do: readonly [string, ...string[]] }
   | DualActionDecl;
 
 // [LAW:one-source-of-truth] The key whose PRESENCE makes an action
@@ -302,6 +314,16 @@ export function actionDestinations(a: ActionDecl): readonly ActionDecl[] {
     { set: a.set, min: a.min, max: a.max, by: a.by },
     { persist: a.persist, min: a.min, max: a.max, by: a.by },
   ];
+}
+
+// [LAW:types-are-the-program] Does this action take the value it writes from
+// the TEMPLATE (a picker's bound option, a cursor's integer)? Such an action
+// cannot ride behind a `do` head: only the head is bound a display, so a
+// follower would write the head's display as its own value. The loader asks
+// this of every follower (cross-ref.ts), so the case is a load error rather
+// than a wrong write.
+export function actionBindsTemplateValue(a: ActionDecl): boolean {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a;
 }
 
 // [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A

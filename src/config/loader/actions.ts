@@ -145,6 +145,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   undo: markerArm("undo"),
   redo: markerArm("redo"),
   doctor: doctorArm,
+  do: doArm,
 };
 
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
@@ -174,6 +175,7 @@ function actionDeclJson(): JsonNode {
       markerArmJson("undo"),
       markerArmJson("redo"),
       ...doctorArmJson(),
+      DO_ARM_JSON,
     ],
   };
 }
@@ -339,6 +341,50 @@ function doctorArmJson(): readonly JsonNode[] {
     },
   ];
 }
+
+// [LAW:types-are-the-program] `do` names the declared actions one click fires,
+// head first. Two or more: one member is that action itself, and nothing is
+// gained by the indirection. Whether each name resolves, and whether a
+// follower can ride behind a head at all, needs the merged action table, so
+// both are cross-ref concerns (validateCrossReferences). `function`, not a
+// const arrow, so ACTION_ARMS above can reference it directly via hoisting.
+function doArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (k !== "do")
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a do action. Expected only: do`,
+      );
+  }
+  const members = raw.do;
+  if (
+    !Array.isArray(members) ||
+    members.length < 2 ||
+    members.some((m) => typeof m !== "string" || m === "")
+  ) {
+    issue(
+      ctx,
+      `${path}.do`,
+      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`,
+    );
+    return null;
+  }
+  return { do: members as [string, ...string[]] };
+}
+
+const DO_ARM_JSON: JsonNode = {
+  type: "object",
+  properties: {
+    do: { type: "array", items: { type: "string", minLength: 1 }, minItems: 2 },
+  },
+  required: ["do"],
+  additionalProperties: false,
+};
 
 // ─── The `set` value-source sub-union ────────────────────────────────────────
 

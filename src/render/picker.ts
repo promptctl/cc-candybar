@@ -299,36 +299,21 @@ export function renderPicker(
   const closeUrl = effectsUrl([
     { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
   ]);
-  // [LAW:one-source-of-truth] A set-option apply folds its closeOnPick pairs
-  // into ONE set-state batch (setState is variadic — see daemon/verbs).
-  // persist-option and layout-op-option cannot: setConfig/apply-layout-op
-  // each take exactly one (key, value) pair, so their close pairs (always
-  // SessionState — open/page live there regardless of the apply's
-  // durability) ride as a SECOND effect in the same dispatch, still one
-  // atomic click via effectsUrl's array. layout-op-option's "value" is the
-  // ENCODED op (segment=option, anchor/relation from the compiled action),
-  // not the option verbatim — the one place this kind's write differs from
-  // persist-option's.
-  const closeEffect = closeOnPick
+  // [LAW:single-enforcer] A closeOnPick option click is the pick's own effects
+  // followed by the close writes — concatenated, nothing more. effectsUrl folds
+  // every set-state in one click into one atomic batch, so a session pick and
+  // its close land together, and a durable pick (set-config, a layout op, a
+  // dual's release) keeps its own verb with the close beside it. This is the
+  // same concatenation a `do` action's members get: one rule for "several
+  // writes, one click", not one per producer.
+  const closeEffects = closeOnPick
     ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
     : [];
-  const optionUrl = (option: string): string => {
-    const { effects } = realize(declared, option, option, store, sessionId);
-    // [LAW:one-source-of-truth] A plain session pick folds its close pairs into
-    // the SAME set-state (setState is variadic), so closing and applying are
-    // one write. Every other shape — a durable write, a structural op, a dual
-    // carrying its session clear — takes more than one effect already, so its
-    // close rides as its own effect in the same atomic dispatch.
-    const solo = effects.length === 1 ? effects[0]! : undefined;
-    return solo?.verb === VERB_SET_STATE
-      ? effectsUrl([
-          {
-            verb: VERB_SET_STATE,
-            args: [...solo.args, ...(closeOnPick ? closeFlat : [])],
-          },
-        ])
-      : effectsUrl([...effects, ...closeEffect]);
-  };
+  const optionUrl = (option: string): string =>
+    effectsUrl([
+      ...realize(declared, option, option, store, sessionId).effects,
+      ...closeEffects,
+    ]);
 
   const frags: RichText[] = [
     linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),

@@ -21,6 +21,7 @@ import {
   actionBindsReset,
   actionBindsDoctor,
   actionBindsSet,
+  actionBindsTemplateValue,
   actionIsDual,
   PERSIST_WHEN,
   actionBindsUndo,
@@ -202,6 +203,35 @@ export function validateCrossReferences(
         line: findKeyLine(ctx.source, ["actions", name, PERSIST_WHEN]),
       });
     }
+  }
+  // [LAW:no-silent-failure] A `do` action's members resolve against the merged
+  // action table, like every other action reference. Two shapes are refused
+  // here rather than realized wrongly. A member that is itself a `do` gains
+  // nothing a flat list would not say, and admitting it would admit a cycle.
+  // A follower that takes its value from the template would be handed the
+  // head's display as that value, since only the head is bound one.
+  for (const [name, a] of Object.entries(cfg.actions)) {
+    if (!("do" in a)) continue;
+    a.do.forEach((member, i) => {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member)
+        ? cfg.actions[member]!
+        : undefined;
+      const problem =
+        target === undefined
+          ? `references unknown action "${member}"`
+          : "do" in target
+            ? `"${member}" is itself a do action — list its members here instead`
+            : i > 0 && actionBindsTemplateValue(target)
+              ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
+              : undefined;
+      if (problem !== undefined) {
+        ctx.issues.push({
+          path: `actions.${name}.do`,
+          message: `actions.${name} do: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "do"]),
+        });
+      }
+    });
   }
   // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
   // Globals field OR a declared segment's `palette` (candybar-config-engine-

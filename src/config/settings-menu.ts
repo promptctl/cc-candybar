@@ -102,6 +102,7 @@ const SETTINGS_OPEN = EDIT_MODE_OPEN;
 // names — switch presets, enter edit mode; `.3` adds the persist? selector
 // beside them and the config menu below them.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
+const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
 
@@ -574,6 +575,14 @@ function settingsArtifacts(doorGlyph: string): {
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
+      // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
+      // menu: the menu opens inline over the door's row, so edit mode's chrome
+      // for that row is hidden until the menu closes. The edit control is
+      // therefore the toggle and the close fired as one click, composed from
+      // two ordinary actions — the close is a literal write to the key the
+      // door's own cycle writes, so each carries the gate it always carried.
+      [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
+      [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
       // [LAW:one-source-of-truth] The selector is an ordinary session cycle
       // over the one boolean spelling SessionState uses — off first, because
@@ -641,7 +650,7 @@ function settingsArtifacts(doorGlyph: string): {
           `{{ action "${controlReset("padding")}" "↺" }}`,
       },
       [EDIT_SEG]: {
-        template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ edit" "✎ done" }}`,
+        template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
       },
     },
   };
@@ -767,8 +776,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
 // both this pass and synthesizeEditModeToggle produce it by calling the same two
 // disclosure functions on the same two exported constants, so the two mints are
 // the same value by construction and whichever lands first is the only one.
-// Ensuring it here is not an optional courtesy — the EDIT_SEG segment above
-// references `edit.toggle`, and that pass is demand-driven off a scan of the
+// Ensuring it here is not an optional courtesy — the EDIT_SEG action above
+// fires `edit.toggle`, and that pass is demand-driven off a scan of the
 // segments a FILE declared, which cannot see a segment this pass mints later.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
   artifacts.variables[EDIT_MODE_KEY] = disclosureStateVar(

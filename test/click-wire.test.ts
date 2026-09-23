@@ -15,6 +15,7 @@ import {
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_RUN,
   VERB_SET_STATE,
+  VERB_STEP_STATE,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
@@ -136,15 +137,38 @@ describe("parseHandlerUrl — verb split, value raw", () => {
 describe("dispatch verb — run all, aggregate, no nesting", () => {
   test("every effect runs; a later failure does not undo an earlier success", () => {
     const sessionState = new SessionState();
-    // First effect writes a valid key; second names an unknown key (rejected).
+    // First effect writes a valid key; second steps an unknown key (rejected).
+    // Two DIFFERENT verbs: two set-states would be folded into one atomic
+    // batch by effectsUrl (see the next test), which is not this contract.
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
-      { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
+      { verb: VERB_STEP_STATE, args: [SID, "no-such-key", "1"] },
     ]);
     // The aggregated failure surfaces, naming the bad effect...
     expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
     // ...but the earlier effect still committed (run-all, not abort-on-first).
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
+  });
+
+  test("a click's session writes are one batch: all land, or none do", () => {
+    const sessionState = new SessionState();
+    // A `do` action's members, or a picker option plus its close writes, are
+    // separate set-state effects when produced — the URL carries them as ONE.
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
+      { verb: VERB_COPY, args: ["x"] },
+      { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
+    ]);
+    expect(effectsOf(url)).toEqual([
+      {
+        verb: VERB_SET_STATE,
+        args: [SID, "theme", "textual-dark", "no-such-key", "x"],
+      },
+      { verb: VERB_COPY, args: ["x"] },
+    ]);
+    // The batch is validated whole, so the valid write does not land alone.
+    expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
+    expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
   test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {

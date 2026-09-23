@@ -1245,6 +1245,23 @@
               "check"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "do": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 2
+              }
+            },
+            "required": [
+              "do"
+            ],
+            "additionalProperties": false
           }
         ]
       }
