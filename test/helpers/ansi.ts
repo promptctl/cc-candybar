@@ -34,6 +34,7 @@ export function links(rendered: string): Link[] {
     out.push({ url: open.uri, text: rendered.slice(from, seq.index) });
     open = undefined;
   }
+  if (open !== undefined) throw new Error(`OSC 8 open at ${open.index} (${open.uri}) is never closed`);
   return out;
 }
 
