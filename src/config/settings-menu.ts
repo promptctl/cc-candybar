@@ -352,33 +352,31 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 // one position that does not drift as a config's content grows to its right.
 // Total over every tree shape, including the degenerate ones: a bare-segment
 // root (the A-grammar collapses a lone top-level ref) grows a horizontal
-// wrapper, and an empty container simply becomes the row.
+// wrapper, and an empty container renders the door alone.
 //
-// [LAW:no-silent-failure] A gated node is wrapped, never entered: a gate is a
-// statement about the author's content, and the menu takes its own ungated row
-// above that content rather than riding inside it — the root's own `when`
-// included, so a bar gated away entirely still shows its door.
+// [LAW:no-silent-failure] A gated node is wrapped, never entered, so the door
+// never inherits the author's gate. A gated row is led from outside its gate,
+// on the same line. A gated stack gets the door on its own row above it,
+// because leading the stack would put every row under the door's inline claim.
 function prependAnchor(node: LayoutNode): LayoutNode {
   const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
-  if (node.when !== undefined) {
-    return {
-      kind: "container",
-      direction: "vertical",
-      children: [anchorRef, node],
-    };
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first, ...rest] = node.children;
+    return node.when === undefined && first !== undefined
+      ? { ...node, children: [prependAnchor(first), ...rest] }
+      : {
+          kind: "container",
+          direction: "vertical",
+          children: [anchorRef, node],
+        };
   }
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node],
-    };
-  }
-  const [first, ...rest] = node.children;
-  if (node.direction === "vertical" && first !== undefined) {
-    return { ...node, children: [prependAnchor(first), ...rest] };
-  }
-  return { ...node, children: [anchorRef, ...node.children] };
+  return node.kind === "container" && node.when === undefined
+    ? { ...node, children: [anchorRef, ...node.children] }
+    : {
+        kind: "container",
+        direction: "horizontal",
+        children: [anchorRef, node],
+      };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name

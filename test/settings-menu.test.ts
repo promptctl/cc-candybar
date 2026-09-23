@@ -42,6 +42,7 @@ import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
+  DISCLOSURE_GLYPH_CLOSE,
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
@@ -477,6 +478,17 @@ describe("the default placement never inherits an author's gate", () => {
     expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
   });
 
+  test("a gated first row whose gate holds shares the door's line", () => {
+    const { render, dispose } = buildRuntime(
+      `{ globals: {}, root: { v: [{ h: ['directory','model'], when: '{{ eq "a" "a" }}' }] } }`,
+    );
+    const bar = stripAnsi(render());
+    expect(bar.split("\n")).toHaveLength(1);
+    expect(bar).toContain(DOOR_GLYPH);
+    expect(bar).toContain("Opus");
+    dispose();
+  });
+
   test("a bar gated away entirely still renders its door", () => {
     const { render, dispose } = buildRuntime(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
@@ -751,7 +763,14 @@ describe("globals.menuGlyph", () => {
   });
 
   test.each([
-    ...["", " ", "a\nb", DOOR_CLOSE_GLYPH].map((glyph) => [
+    ...[
+      "",
+      " ",
+      "a\nb",
+      DOOR_CLOSE_GLYPH,
+      `${DOOR_CLOSE_GLYPH}\uFE0F`,
+      DISCLOSURE_GLYPH_CLOSE,
+    ].map((glyph) => [
       `{ globals: { menuGlyph: ${JSON.stringify(glyph)} } }`,
       "globals.menuGlyph: must be one line of visible text",
     ]),
