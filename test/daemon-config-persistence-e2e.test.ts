@@ -85,7 +85,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await render(sockPath, SID, projectDir);
 
       // The settings menu and its config row are collapsed by default — open
-      // both, the same two clicks a "☰ ▸" then "⚙ config ▸" tap dispatches.
+      // both, the same two clicks a "🍫 ▸" then "⚙ config ▸" tap dispatches.
       // The disclosure contract (write the disclosure's own name to its own
       // key) is stable synthesis, not render output, so constructing it
       // directly matches test/default-dsl-config.test.ts's own precedent

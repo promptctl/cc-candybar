@@ -16,6 +16,9 @@ import type {
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 import { FLOOR_LOOK } from "./helpers/floor-look";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -291,5 +294,15 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     // `tmux`/`git` are referenced by neither the container `when` nor the one
     // rendered segment, so they stay gated out.
     expect(needed.has("tmux.session")).toBe(false);
+  });
+
+  test("a segment reachable only through the synthesized settings menu brings its inputs online", () => {
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(buildNeededPrefixes(config).has("git.repoUrl")).toBe(true);
   });
 });

@@ -1014,7 +1014,7 @@ export function renderDsl(
       // A disclosure body starts a NEW region: the root of the band its
       // trigger opens. Depth is a fact of that band — counted up by
       // `decorationFor` each time a band item opens the next — so a nested
-      // `{{ menu }}` inside ☰ → ⚙ lands at depth 2 with no walk state.
+      // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, open, band) =>
         renderNode(body, visible && open, bandRoot(band)),
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the

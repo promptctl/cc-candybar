@@ -1,4 +1,4 @@
-// [LAW:verifiable-goals] brandon-doctor-b6a: the `☰ ▸ 🧰 tools ▸ 🩺 doctor`
+// [LAW:verifiable-goals] brandon-doctor-b6a: the `🍫 ▸ 🧰 tools ▸ 🩺 doctor`
 // route, driven through the real loader, the real spine (registerDslConfig +
 // renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
 // probe answers `RGB` and whose settings.json is a temp file. The recorded
@@ -158,7 +158,7 @@ function buildRuntime(tmux: TmuxHint | null) {
   };
 }
 
-describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
+describe("🍫 ▸ 🧰 tools ▸ 🩺 doctor", () => {
   test("the tools disclosure holds the doctor button and no report until it runs", () => {
     const rt = buildRuntime(HINT);
     expect(rt.render()).not.toContain("🩺 doctor");
@@ -254,7 +254,7 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     rt.dispose();
   });
 
-  test("closing ☰ hides the tools body even when it was left open", () => {
+  test("closing 🍫 hides the tools body even when it was left open", () => {
     const rt = buildRuntime(HINT);
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);

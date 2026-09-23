@@ -403,7 +403,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   beforeEach(() => {
     durable = durableConfig("cc-candybar-settings-menu-");
     r = rig(TWO_SEGMENT_ROOT, durable);
-    // Open the menu and its config row — the two clicks a "☰ ▸" then
+    // Open the menu and its config row — the two clicks a "🍫 ▸" then
     // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
     // bytes, never constructed, so this also proves they are REACHABLE.
     const menuToggle = writesTo(r.render(), "settings.menu")[0];

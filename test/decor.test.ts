@@ -588,7 +588,7 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   });
 
   test("a nested band's plane stands off the plane it is nested in", () => {
-    // Covered over the depths a bar reaches: the bundled ☰ → ⚙ → picker is
+    // Covered over the depths a bar reaches: the bundled 🍫 → ⚙ → picker is
     // depth 2, so the adjacent-plane pairs are (0,1) and (1,2). Depth 3 is
     // deliberately NOT covered — BAND_RECESSION.cap leaves 0.05 of recession
     // between depths 2 and 3 while hueAtDepth has wrapped back onto a hue

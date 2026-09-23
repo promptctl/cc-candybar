@@ -866,33 +866,12 @@ itself) are excluded from both halves — removing a group's own toggle or a
 menu's own host segment would strand its synthesized siblings, so edit mode
 only ever touches ordinary content.
 
-**The bundled default ships this on** (brandon-layout-edit-2gc.4): its
-`toolbar` segment's template ends with `{{ action "edit.toggle" "✎ edit"
-"✎ done" }}`, one more clickable glyph alongside the tray's existing
-copy/open actions — not a new segment. Two things fall out of that choice,
-worth knowing before you wire your own trigger:
-
-- **Referencing `edit.toggle` reaches every merged config, not just the file
-  that declares it.** `mergeWithDefault` merges `segments`/`actions`/
-  `variables` by name, so once the bundled default's `toolbar` references
-  the toggle, EVERY user config that doesn't override `toolbar` inherits the
-  reference too — even one whose own `root` never mentions `toolbar` at all.
-  "Anywhere" (above) really does mean anywhere in the merged config, not
-  just your own file. The chrome this synthesizes stays inert for such a
-  config (nothing in it can ever set `edit.mode` to `"open"`), but it is
-  real, always-compiled tree structure — a test asserting a preset's exact
-  segment list needs to filter out `edit.`-namespaced names, the same way a
-  `kind: "group"`-using test already filters `groups.`-namespaced ones.
-- **A trigger hosted on an ordinary segment is exactly as removable as that
-  segment, once edit mode is open.** `toolbar`'s own `-` removes the WHOLE
-  tray — the `edit.toggle` glyph included — same as removing any other
-  segment. This is not a special edit-mode hazard: it is bounded and
-  self-recoverable exactly like every other removal (the tray is still a
-  declared segment, so any `+` elsewhere in the still-open chrome can insert
-  it right back), and folding the trigger into an EXISTING multi-action
-  segment — rather than giving it a dedicated one — means removing it takes
-  a deliberate, legible click ("remove my whole quick-action tray") instead
-  of a single easy-to-fat-finger glyph of its own.
+**Every bar ships this on**: the global settings menu's `✎ edit` references
+`edit.toggle`, so any config that hosts the menu has edit mode. The chrome
+this synthesizes is real, always-compiled tree structure — a test asserting a
+preset's exact segment list needs to filter out `edit.`-namespaced names, the
+same way a `kind: "group"`-using test already filters `groups.`-namespaced
+ones.
 
 ### Knowing when a preset's layout has been edited: `.preset.customized`
 
@@ -1033,18 +1012,22 @@ globals that *do* have one.)
 ### The global settings menu: `settings.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
-global settings menu, rendered as `☰`. It is one symbol per state rather than a
-label plus an arrow: `☰` closed, `✕` open. By default it is the leading cell of
-the bar's first row. Closed, it wears the palette's `accent` so it reads as a
-landmark rather than as one more decorated cell; open, it wears its band's
-state colour like every other trigger. Place the reserved `settings.menu`
-segment name yourself to move it anywhere else.
+global settings menu, rendered as `🍫`. It is one symbol per state rather than a
+label plus an arrow: `🍫` closed, `✕` open. By default it is the leading cell of
+the bar's first row, and it wears the theme's tint like every other cell.
+`globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
+is shared by every preset). Place the reserved `settings.menu` segment name
+yourself to move it anywhere else.
+
+```json5 check:pass
+{ globals: { menuGlyph: "🍬" } }
+```
 
 Opening it shows the always-available functionality:
 
 ```
 ✕
-✕ ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
+✕ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
@@ -1056,6 +1039,11 @@ it belongs to, and a picker line keeps the picker's own. This is true of every
 disclosure on the bar (a group body, a `(?)` line), not only this menu; no
 author writes it and no author can decline it.
 
+- **`⎘ id ↗ proj ↗ log ↗ repo`** are the quick actions: copy the session id,
+  open the project or the transcript in your editor, open the repo's web page.
+  The same tray is the bundled `toolbar` segment, which any row can place, and
+  its behaviours are the bundled `copySession`/`openProject`/`openTranscript`
+  actions, which any template can bind.
 - **`persist?`** chooses where every setting in the menu is written: unchecked
   (the state you arrive in) the click changes this session only; checked, it
   writes the durable default every session opens with. It is the `persistWhen`

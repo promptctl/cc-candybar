@@ -210,8 +210,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
     ALLOWED,
   );
   const store = new VariableStore();
-  // The merged bundled default's `toolbar` references `edit.toggle`
-  // (brandon-layout-edit-2gc.4), so `edit.mode` — a `state` var — is now
+  // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now
   // declared regardless of this file's narrowed `burnrate`-only root; a
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare

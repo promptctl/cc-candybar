@@ -443,6 +443,8 @@ export interface Globals {
   // renderOpts.charset; no SessionState/click half.
   readonly charset?: Charset;
 
+  readonly menuGlyph?: string;
+
   // Whether the daemon renders its update notice — the row saying a newer
   // source tree (a checkout) or a newer published release (an install) exists
   // than the code rendering the bar (src/daemon/update-notice.ts). Default

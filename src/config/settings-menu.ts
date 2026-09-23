@@ -77,6 +77,11 @@ import {
   menuStateKey,
 } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import {
+  QUICK_ACTIONS,
+  toolbarTemplate,
+  type QuickActionNames,
+} from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import {
@@ -102,6 +107,12 @@ const SETTINGS_OPEN = EDIT_MODE_OPEN;
 // names — switch presets, enter edit mode; `.3` adds the persist? selector
 // beside them and the config menu below them.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
+const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
+const TOOLBAR_ACTIONS: QuickActionNames = {
+  copySession: `${SETTINGS_NS}copySession`,
+  openProject: `${SETTINGS_NS}openProject`,
+  openTranscript: `${SETTINGS_NS}openTranscript`,
+};
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
@@ -175,49 +186,6 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // named it as a required use site. Its body says what the NEXT click does, in
 // the same two sentences `--help` prints.
 const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
-
-// [LAW:one-source-of-truth] The door is the ONE cell of this menu that authors
-// colour, and it authors BOTH halves. Every other cell — the controls, the
-// `(?)` and its lines, the ⚙ trigger — sits on the band its trigger opens,
-// where the background is the band item its address selects and the text is
-// CHOSEN against it (`textOn`, the walk's text floor for an unauthored `fg:`;
-// candybar-render-ai7.9). A fixed `foreground` there measures as low as
-// 1.1 : 1 against the pale states and items of the dark themes
-// (atom-one-dark, catppuccin-frappe, solarized-dark), so the body authors
-// nothing and the floor decides.
-//
-// The door's `bg:` is the exception candybar-render-ai7.4 defines: an authored
-// background STATES MEANING and paints over the vocabulary tint. What it states
-// is identity — this is the one control every bar carries, at a fixed corner,
-// and a user has to find it before they can use anything in here. Left
-// undecorated it would wear the tint its address selects, and as the row's
-// leading cell that address is vocabulary index 0: `primary` at the LOWEST
-// amount, the palest entry the decorative vocabulary has. The landmark would be
-// the quietest cell on the bar.
-//
-// `accent` is the palette's own name for the colour that draws the eye, so the
-// door wears it pure — a colour no decorated cell can be dealt, since the
-// vocabulary only ever blends a hue into a base at ≤ 0.30. Measured over every
-// bundled theme it stands ≥ 0.111 ΔE off the nearest of the 18 vocabulary
-// entries (test/settings-door.test.ts), clearing the .10 trigger/plane floor
-// the region model reads by. `lighten (color "accent") 3` was the first cut and
-// is a dark-theme answer: on the five light themes it lands 0.02–0.03 from the
-// tints they already wear, which is a landmark that disappears on a third of
-// the registry.
-//
-// The text is `contrastOn (bgOf)` rather than a fixed pole for the same reason
-// the body's is chosen: `accent` is a light cell on some themes and a dark one
-// on others, and a fixed `foreground` would measure 2.6 : 1 on
-// rose-pine-dawn. Reading it off the background the cell resolved to gives
-// ≥ 4.80 : 1 on every theme.
-//
-// This is the CLOSED cell only. An open door wears its band's state colour like
-// every other trigger (`stateCell`, ai7.9) — the ✕ ties to the panel it opened,
-// which is the one thing on the bar that outranks the door itself.
-const DOOR_COLORS = {
-  bg: '{{ color "accent" }}',
-  fg: "{{ contrastOn (bgOf) }}",
-} as const;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
@@ -466,7 +434,7 @@ export function countAnchors(node: LayoutNode): number {
 // row is a disclosure INSIDE that body — nesting is structure, not a second
 // gate: a config row left open yesterday cannot render beside a closed menu
 // today because it hangs on a trigger the closed menu does not render. The
-// walk colours the body on the ☰ cell's band and the config row on the
+// walk colours the body on the door's band and the config row on the
 // band ⚙ opens one depth further (candybar-render-ai7.9).
 function expandAnchor(
   node: AnchoredRoot | LayoutNode,
@@ -477,13 +445,14 @@ function expandAnchor(
       ? disclosureNode(
           node.name,
           SETTINGS_REF,
-          // What the menu is FOR — the persist? selector that says where every
+          // What the menu is FOR — the quick-action tray, the persist? selector that says where every
           // setting below it lands, the preset switcher, the door into the
           // config menu, and the door into edit mode.
           {
             kind: "container",
             direction: "horizontal",
             children: [
+              { kind: "segment", name: TOOLBAR_SEG },
               { kind: "segment", name: PERSIST_SEG },
               // The `(?)` rides the row that already exists, immediately
               // after the control it explains — so closed help costs no row
@@ -595,7 +564,7 @@ function declareHostedMenu(
 // reference, and a second reference to one declaration is a reuse, not the
 // self-collision a second `kind: "group"` node would be (see the settingsDrawer
 // comment in default-dsl-config.ts for that hazard in its original form).
-function settingsArtifacts(): {
+function settingsArtifacts(doorGlyph: string): {
   artifacts: MenuArtifacts;
   help: SegmentNode;
 } {
@@ -608,6 +577,9 @@ function settingsArtifacts(): {
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
+      [TOOLBAR_ACTIONS.copySession]: QUICK_ACTIONS.copySession,
+      [TOOLBAR_ACTIONS.openProject]: QUICK_ACTIONS.openProject,
+      [TOOLBAR_ACTIONS.openTranscript]: QUICK_ACTIONS.openTranscript,
       // [LAW:one-source-of-truth] The selector is an ordinary session cycle
       // over the one boolean spelling SessionState uses — off first, because
       // an unwritten key counts as the first member and the menu opens in
@@ -621,7 +593,7 @@ function settingsArtifacts(): {
       // [LAW:representation] ONE symbol per state, unlike the labelled toggles
       // below, which are a word plus the ▸/▾ that gates it. The door has no
       // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. `☰` names what it
+      // only thing on the bar that spells its state twice. The door's glyph names what it
       // opens, `✕` names what the click does — the SAME `✕` the picker's close
       // affordance and edit mode's open `+` wear, because it is the one glyph
       // for that one meaning (DISCLOSURE_GLYPH_CLOSE).
@@ -631,11 +603,11 @@ function settingsArtifacts(): {
       [SETTINGS_ANCHOR]: {
         template: disclosureTrigger(
           SETTINGS_ANCHOR,
-          DOOR_GLYPH,
+          doorGlyph,
           DISCLOSURE_GLYPH_CLOSE,
         ),
-        ...DOOR_COLORS,
       },
+      [TOOLBAR_SEG]: { template: toolbarTemplate(TOOLBAR_ACTIONS) },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is
       // the whole explanation of where the click below it lands.
@@ -675,10 +647,6 @@ function settingsArtifacts(): {
           `{{ action "${controlApply("padding")}.up" "▶" }} ` +
           `{{ action "${controlReset("padding")}" "↺" }}`,
       },
-      // The entry point edit mode never had: `edit.toggle` is a reserved action
-      // whose only bundled reference lives in the `toolbar` segment, which a
-      // user config's `root` drops like everything else. Here it is reachable
-      // from a segment no config can drop.
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ edit" "✎ done" }}`,
       },
@@ -855,7 +823,9 @@ export function canHostSessionState(config: DslConfig): boolean {
 // and every name now declares one.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   if (!canHostSessionState(config)) return config;
-  const { artifacts, help } = settingsArtifacts();
+  const { artifacts, help } = settingsArtifacts(
+    config.globals.menuGlyph ?? DOOR_GLYPH,
+  );
   ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {

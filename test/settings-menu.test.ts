@@ -157,13 +157,27 @@ describe("the global settings menu is reachable from a user config", () => {
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
-    // One symbol per state: the open door is the ✕, and the ☰ is gone.
+    // One symbol per state: the open door is the ✕, and the door glyph is gone.
     expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
     expect(opened).not.toContain(DOOR_GLYPH);
     // The two things the ticket's acceptance names: enter edit mode, and switch
     // presets (the picker's own disclosure glyph, hosted by the preset entry).
     expect(opened).toContain("✎ edit");
     expect(opened).toContain("▦");
+    dispose();
+  });
+
+  test("the open body's first row leads with the quick-action tray", () => {
+    const { render, clickWriting, dispose } = buildRuntime(
+      userConfig(TWO_SEGMENT_ROW),
+    );
+    expect(stripAnsi(render())).not.toContain("⎘ id");
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const body = stripAnsi(render()).split("\n")[1]!;
+    expect(body).toContain("↗ proj");
+    expect(body).toContain("↗ log");
+    expect(body.indexOf("⎘ id")).toBeGreaterThan(-1);
+    expect(body.indexOf("⎘ id")).toBeLessThan(body.indexOf("persist?"));
     dispose();
   });
 
@@ -174,9 +188,7 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     clickWriting(render(), EDIT_MODE_KEY, "open");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
-    // Edit mode being ON is what makes the `+`/`-` chrome visible, so this is
-    // the whole route the shadowed `toolbar` trigger used to be the only way
-    // to. Asserted on the affordances' own verb, not on a bare "-" glyph that
+    // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
     const editing = extractUrls(render()).filter((u) =>
       u.includes("apply-layout-op"),
@@ -675,5 +687,29 @@ describe("the menu is chrome-exempt", () => {
       expect(members.length).toBeGreaterThan(0);
       expect(members.filter((n) => n.startsWith(SETTINGS_NS))).toEqual([]);
     }
+  });
+});
+
+describe("globals.menuGlyph", () => {
+  test("a config's glyph is the closed door", () => {
+    const { render, dispose } = buildRuntime(
+      `{ globals: { menuGlyph: "🍬" }, root: ${TWO_SEGMENT_ROW} }`,
+    );
+    const out = stripAnsi(render());
+    expect(out).toContain("🍬");
+    expect(out).not.toContain(DOOR_GLYPH);
+    dispose();
+  });
+
+  test.each([
+    [`{ globals: { menuGlyph: "" } }`, "globals.menuGlyph: must not be empty"],
+    [
+      `{ presets: { compact: { globals: { menuGlyph: "🍬" } } } }`,
+      "a preset cannot change the settings menu glyph",
+    ],
+  ])("%s is a load error", (src, message) => {
+    expect(() =>
+      parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG),
+    ).toThrow(message);
   });
 });

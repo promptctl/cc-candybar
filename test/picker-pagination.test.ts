@@ -346,7 +346,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
           // ambient settings menu is isolated onto its own row precisely so the
           // width math below measures this suite's own cells. Without this, the
           // claim in the next comment silently went stale once already.
-          expect(lines[0]).not.toContain("☰");
+          expect(lines[0]).not.toContain("🍫");
           // The dropped body is the line with the ✕ affordance (row 0 is the
           // inline "L T ▾ S ▸" trigger row and never carries the body).
           const body = lines.find((l) => l.includes("✕")) ?? "";

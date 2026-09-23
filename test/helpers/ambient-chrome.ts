@@ -145,7 +145,7 @@ function keysWrittenBy(url: string): string[] {
     .filter((k): k is string => k !== undefined);
 }
 
-// The settings menu's OWN surfaces: its `☰` toggle and — the part a substring
+// The settings menu's OWN surfaces: its `🍫` toggle and — the part a substring
 // match on the anchor missed — its hosted preset picker, whose disclosure key
 // is `menus.settings_presets.…` and shares none of the anchor's spelling. A
 // test that opens the menu before collecting links would otherwise have counted

@@ -74,8 +74,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       expect(opened).toContain("✎ edit"); // edit mode
       expect(opened).toContain("▦"); // preset switching
 
-      // 3. Edit mode is genuinely entered from here — the route that used to
-      //    exist only through the `toolbar` segment this user's root drops.
+      // 3. Edit mode is genuinely entered from here.
       const bodyOut = await render(sockPath, SID, projectDir);
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "open"));
       const editing = await render(sockPath, SID, projectDir);

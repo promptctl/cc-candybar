@@ -22,7 +22,7 @@
 //     deletes — so each is rooted directly, one per case;
 //   • the four settings-menu picker controls are SYNTHESIZED into every preset
 //     root, so rooting one would place it twice (a load error, by design) —
-//     they are reached the way a user reaches them, by clicking ☰ then ⚙.
+//     they are reached the way a user reaches them, by clicking 🍫 then ⚙.
 
 import { createEngine } from "@promptctl/go-template-js";
 
@@ -248,7 +248,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   // snapshot the last one opened.
   const openConfigMenu = () => {
     const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
-    rig.clickLabel(rig.render(), "☰");
+    rig.clickLabel(rig.render(), "🍫");
     rig.clickLabel(rig.render(), "config");
     return rig;
   };

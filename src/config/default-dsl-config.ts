@@ -39,6 +39,7 @@ import {
   DISCLOSURE_GLYPH_OPEN,
 } from "./disclosure.js";
 import { mergeWithDefault } from "./loader/merge.js";
+import { QUICK_ACTIONS, toolbarTemplate } from "./quick-actions.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -241,8 +242,7 @@ const GIT_TEMPLATE =
 // collapse removed. What is left in this drawer is durable-only by nature,
 // not by omission — there is nothing for a persist? selector to choose.
 //
-// Placed as a sibling in row 1's horizontal container, toggled from beside the
-// quick-action tray — see `root` below.
+// Placed as a sibling in row 1's horizontal container — see `root` below.
 //
 // [LAW:one-source-of-truth] exception: this `kind: "group"` sugar node may
 // appear EXACTLY ONCE in the whole config — group names are a synthesis-wide
@@ -954,55 +954,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       fg: "foreground",
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
-    // Quick-action tray — the default bar's interactivity: copy the session id,
-    // open the project dir / transcript (this session's jsonl) in the editor,
-    // open the repo's web page in the browser, and toggle layout edit mode.
-    // (copyDir — copy the cwd — stays declared as an action below for users who
-    // want a fifth glyph; it is simply not in the default tray.)
-    // [LAW:locality-or-seam] The glyph is the REPRESENTATION; the named action
-    // (below) is the BEHAVIOR; the action name is the seam between them. Re-glyph
-    // without touching behavior; re-target without touching this template. Each
-    // `{{ action … }}` emits one OSC-8 clickable region whose URL the wire codec
-    // owns end-to-end.
-    //
-    // `↗ repo` is the one glyph here that is NOT an action: the daemon already
-    // resolved the remote to an https page, so `{{ link }}` hands that URL
-    // straight to the terminal/OS (same seam the gitPr segment uses) — routing a
-    // public web URL through a cc-candybar:// verb would buy nothing. It is
-    // gated on the VALUE (`ne … ""`), not on a flag: a local-only repo simply
-    // supplies no page and the glyph is absent. [LAW:dataflow-not-control-flow]
-    //
-    // `✎ edit`/`✎ done` (brandon-layout-edit-2gc.4) is the bundled default's
-    // ONLY reference to the reserved `edit.toggle` action — referencing it
-    // anywhere is what opts this config into edit mode (see
-    // docs/interaction-authoring.md's "Edit mode" section), and this tray
-    // segment is where it lives.
-    //
-    // [LAW:carrying-cost] Placement resolves a self-lockout tension .3 flagged
-    // (see the epic's tickets): once edit mode is open, EVERY ordinary segment
-    // gets its own removable `-`, including whichever one hosts the trigger —
-    // a config can, in principle, remove its own way back into edit mode.
-    // Giving the trigger its own standalone segment would make that a one-click
-    // accident. Folding it into `toolbar` instead means removing the trigger
-    // requires removing the WHOLE quick-action tray — the same deliberate,
-    // symmetric risk every other multi-purpose segment already carries, not a
-    // bespoke edit-mode hazard — and it costs the default bar one glyph of
-    // width instead of a whole new segment's cell+padding+joiner overhead. The
-    // risk is bounded either way: `-` only removes the segment from this
-    // preset's tree (`edit.mode` itself is untouched SessionState), so the
-    // rest of the chrome — every remaining `+`/`-` in the bar — stays visible,
-    // and any of them can `+` `toolbar` straight back
-    // (test/dsl-layout-edit.test.ts covers the full round trip through a
-    // real RenderCache reload; test/dsl-edit-mode.test.ts covers the click
-    // itself and that edit.mode survives it).
     toolbar: {
       description:
-        "Quick actions: copy the session id, open the project, transcript or repo, and toggle edit mode.",
-      template:
-        '{{ action "copySession" "⎘ id" }}' +
-        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}' +
-        '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}' +
-        ' {{ action "edit.toggle" "✎ edit" "✎ done" }}',
+        "Quick actions: copy the session id, and open the project, transcript or repo.",
+      template: toolbarTemplate({
+        copySession: "copySession",
+        openProject: "openProject",
+        openTranscript: "openTranscript",
+      }),
       fg: "foreground",
     },
     session: {
@@ -1269,12 +1228,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // base it merges onto, so the canonical shape and the authoring shape are
   // one object by construction.
   //
-  // Two always-visible rows: an IDENTITY + ACTIONS row (where am I / what can I do here — the directory, the verbose
-  // `gitaculous` line, the quick-action tray: copy session id, open project /
-  // transcript in the editor, and the settingsDrawer toggle) over a STATUS row
+  // Two always-visible rows: an IDENTITY row (where am I — the directory, the
+  // verbose `gitaculous` line, and the settingsDrawer toggle) over a STATUS row
   // (what's happening now — model, context-window fill, prompt-cache warmth,
   // and the 5h / 7d rate-limit quotas). The settingsDrawer (candybar-config-
-  // engine-71o.4) sits on the identity row beside the tray — collapsed by
+  // engine-71o.4) sits on the identity row — collapsed by
   // default and visually silent (a single "⚙ settings ▸" cell) — and reveals a
   // third row of every bar-mutable display default (theme, style, look,
   // charset, colorCompatibility, autoWrap, padding) on the line immediately
@@ -1283,12 +1241,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // separates the rows.
   //
   // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
-  // own signal (no repo → the identity row is just the directory + tray; no
+  // own signal (no repo → the identity row is just the directory; no
   // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
   // drops). A row therefore only ever shows the segments that have real data —
   // the layout is chosen by the data, not by branches — so the default never
-  // paints an empty or placeholder cell. The directory and the tray have no
-  // `when`, so row 1 always anchors the bar.
+  // paints an empty or placeholder cell. The directory has no `when`, so row
+  // 1 always anchors the bar.
   root: {
     rows: {
       identity: {
@@ -1303,7 +1261,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "host" },
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
-          { kind: "segment", name: "toolbar" },
           settingsDrawer,
         ],
       },
@@ -1340,10 +1297,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
   // as a literal filename, not a deep link).
   actions: {
-    copySession: { copy: "{{ .session.id }}" },
+    ...QUICK_ACTIONS,
     copyDir: { copy: "{{ .current_dir }}" },
-    openProject: { open: "{{ .project_dir }}" },
-    openTranscript: { open: "{{ .transcript_path }}" },
 
     // [LAW:locality-or-seam] The settings-drawer controls' behaviors
     // (candybar-config-engine-71o.4), decoupled by NAME from
@@ -1525,7 +1480,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
               { kind: "segment", name: "directory" },
               { kind: "segment", name: "gitaculous" },
               { kind: "segment", name: "gitPr" },
-              { kind: "segment", name: "toolbar" },
             ],
           },
           {

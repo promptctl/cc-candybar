@@ -21,7 +21,12 @@ import os from "node:os";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, Globals, VariableDecl } from "../config/dsl-types.js";
-import { effectivePresetName, presetGlobals } from "../config/presets.js";
+import {
+  effectivePresetName,
+  presetGlobals,
+  presetNames,
+  presetRoot,
+} from "../config/presets.js";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../config/loader/edit-mode.js";
 import {
   DEFAULT_CHARSET,
@@ -40,7 +45,6 @@ import {
   type ThemeSelection,
 } from "../themes/palette-resolvers.js";
 import { walkNodes } from "../config/dsl-types.js";
-import { rootNode } from "../config/root.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
@@ -774,7 +778,10 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const frontier: string[] = [];
   const visited = new Set<string>();
 
-  for (const node of walkNodes(rootNode(config.root))) {
+  const trees = presetNames(config.presets).map(
+    (name) => presetRoot(config, name).node,
+  );
+  for (const node of trees.flatMap((tree) => [...walkNodes(tree)])) {
     // A node's `when` references variables too — seed them so a provider feeding
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
     if (node.when)

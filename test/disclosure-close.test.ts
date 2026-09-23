@@ -8,9 +8,9 @@
 //   - a VERTICAL body leads every one of its rows, and an accordion group's ✕
 //     writes the SHARED key it was opened through;
 //   - nesting does not stack: a row is led by the innermost band it sits on
-//     (⚙ config's row carries ⚙'s ✕ and not ☰'s), and a `{{ menu }}` line
+//     (⚙ config's row carries ⚙'s ✕ and not 🍫's), and a `{{ menu }}` line
 //     dropped inside a body keeps the picker's own ✕ alone;
-//   - a click on the ✕ closes exactly that disclosure — ⚙ closes while ☰
+//   - a click on the ✕ closes exactly that disclosure — ⚙ closes while 🍫
 //     stays open — and the closed body renders no rows, ✕ included;
 //   - a line that DROPS below a horizontal row of the body (a multi-line
 //     segment's continuation line, a nested vertical container's later rows)
@@ -164,7 +164,7 @@ function build(src: string, withDefault: boolean) {
 
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("brandon-disclosure-43z — the bundled ☰ → ⚙ → picker chain", () => {
+describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain", () => {
   test("each body row leads with its own disclosure's ✕ and nothing stacks", () => {
     const rt = build(BUNDLED, true);
     let lines = rt.render();
@@ -177,7 +177,7 @@ describe("brandon-disclosure-43z — the bundled ☰ → ⚙ → picker chain", 
     expect(lines).toHaveLength(2);
     expectLedBy(lines[1]!, SETTINGS_ANCHOR);
 
-    // ⚙ config open: its row is led by ⚙'s ✕ — and ☰'s ✕ is not on it.
+    // ⚙ config open: its row is led by ⚙'s ✕ — and 🍫's ✕ is not on it.
     const configKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}config`;
     rt.clickWriting(lines, configKey, "open");
     lines = rt.render();
@@ -206,7 +206,7 @@ describe("brandon-disclosure-43z — the bundled ☰ → ⚙ → picker chain", 
     expect(closes(first!, configKey)).toBe(false);
     expect(closes(first!, SETTINGS_ANCHOR)).toBe(false);
 
-    // Clicking ⚙'s row ✕ closes ⚙ (and the picker hanging under it) while ☰
+    // Clicking ⚙'s row ✕ closes ⚙ (and the picker hanging under it) while 🍫
     // stays open with its own row still led.
     rt.click(linksOn(lines[2]!)[0]!.url);
     lines = rt.render();
@@ -226,7 +226,7 @@ describe("brandon-disclosure-43z — the bundled ☰ → ⚙ → picker chain", 
     lines = rt.render();
     expect(lines).toHaveLength(2);
 
-    // And ☰'s row ✕ closes the menu: back to the bar alone.
+    // And 🍫's row ✕ closes the menu: back to the bar alone.
     rt.click(linksOn(lines[1]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);

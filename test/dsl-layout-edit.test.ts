@@ -906,9 +906,8 @@ function makeCache(reloads?: ReloadSignal): {
   return { cache, sessionState, cleanups };
 }
 
-// [LAW:locality-or-seam] The bundled default's `toolbar` segment references
-// `edit.toggle` (brandon-layout-edit-2gc.4), and `RenderCache` merges every
-// project's config on top of that default — so `edit.mode`/`edit.toggle`
+// [LAW:locality-or-seam] The settings menu's `✎ edit` references
+// `edit.toggle`, and every config `RenderCache` resolves hosts the menu — so `edit.mode`/`edit.toggle`
 // (and, once validateConfig runs, per-preset `-`/`+` chrome) are now present
 // in EVERY resolved preset root this suite builds, `when`-gated shut but
 // structurally always there. This describe block asserts what a layout edit
@@ -1239,19 +1238,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:verifiable-goals] brandon-layout-edit-2gc.4's own done-gate: the
-  // bundled default's `toolbar` segment hosts `edit.toggle`
-  // (docs/interaction-authoring.md's "The bundled default ships this on"),
-  // which raises a self-lockout question .3's handoff flagged explicitly —
-  // does removing the trigger's own host via edit mode's `-` strand a user
-  // with no way back? Proven here through the REAL RenderCache (the ONLY
-  // harness that resolves the file's tree against the bundled default AND
-  // recomputes the `+` picker's addable domain fresh each reload — see
-  // dsl-edit-mode.test.ts's sibling test for why its lighter-weight harness
-  // can prove the click but not this), against a project with NO
-  // hand-authored segments/root/actions of its own, so every artifact here
-  // — `toolbar`, `edit.toggle`, the addable domain, and the gate the clicks
-  // pass — comes from DEFAULT_DSL_CONFIG's own edit chrome alone.
   // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the
   // first merged row holding the segment, bundled rows before the file's own
   // new ones — and the splice must edit THAT row, not the first occurrence in
@@ -1326,35 +1312,35 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  test("toolbar removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
+  test("gitaculous removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
     const bareUserConfig = `{ globals: {}, segments: {} }`;
     durable.write(bareUserConfig);
 
     const { cache, sessionState, cleanups } = makeCache();
     try {
-      // Before any click: toolbar is in the resolved tree, the file authors
+      // Before any click: gitaculous is in the resolved tree, the file authors
       // no root of its own, and the `+` picker's addable domain does NOT yet
-      // offer toolbar (it's already placed).
+      // offer gitaculous (it's already placed).
       const before = cache.getOrCreate(
         durable.projectDir,
         durable.projectDir,
         undefined,
       );
       expect(before.lastError).toBeNull();
-      expect(presetNamesOf(before, "default")).toContain("toolbar");
+      expect(presetNamesOf(before, "default")).toContain("gitaculous");
       expect(before.state.authoredRoots.has("default")).toBe(false);
 
-      // Edit mode's own `-` beside toolbar: the token its synthesized action
+      // Edit mode's own `-` beside gitaculous: the token its synthesized action
       // declares, through the gate this cache entry registered for it.
       fireVerb(
         "apply-layout-op",
         originCtx(sessionState),
         "s1",
         "presets.default.root",
-        encodeLayoutOp({ op: "remove", target: "toolbar" }),
+        encodeLayoutOp({ op: "remove", target: "gitaculous" }),
       );
       // MATERIALIZATION: the file never authored a root, so ONLY the
-      // bundled row holding `toolbar` was copied in (`root.rows.identity`,
+      // bundled row holding `gitaculous` was copied in (`root.rows.identity`,
       // authoring grammar) and then edited — the status row stays inherited,
       // and every other section is untouched.
       const parsed = durable.parsed() as {
@@ -1363,7 +1349,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         segments: unknown;
       };
       expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
-      expect(parsed.root.rows.identity!.h).not.toContain("toolbar");
+      expect(parsed.root.rows.identity!.h).not.toContain("gitaculous");
       expect(parsed.root.rows.identity!.h).toContain("directory");
       expect(parsed.globals).toEqual({});
       expect(parsed.segments).toEqual({});
@@ -1382,9 +1368,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           undefined,
         );
         expect(afterRemove.lastError).toBeNull();
-        expect(presetNamesOf(afterRemove, "default")).not.toContain("toolbar");
+        expect(presetNamesOf(afterRemove, "default")).not.toContain("gitaculous");
         expect(afterRemove.state.authoredRoots.has("default")).toBe(true);
-        // The trigger is gone, but the REST of the preset's chrome is still
+        // The segment is gone, but the REST of the preset's chrome is still
         // there — other `-`/`+` affordances remain, so the bar isn't a dead
         // end (only the render's own `when` gate hides them until a session
         // sets edit.mode open, which this test doesn't need to drive to
@@ -1397,16 +1383,16 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         }
         const remainingChrome = allNames.filter((n) => n.startsWith(EDIT_NS));
         expect(remainingChrome.length).toBeGreaterThan(0);
-        // And "toolbar" is now a legal target of an insertSegmentFrom pick —
+        // And "gitaculous" is now a legal target of an insertSegmentFrom pick —
         // every `+` in this preset ranges the SAME addable domain, computed
         // fresh from the tree above, so any of them offers it back.
         expect(
           addableSegmentDomains(afterRemove.state.config).get(
             addableDomainName("default"),
           )?.members,
-        ).toContain("toolbar");
+        ).toContain("gitaculous");
 
-        // Click that `+` and pick "toolbar": the exact token
+        // Click that `+` and pick "gitaculous": the exact token
         // insertSegmentFrom's real click writes, through the gate this
         // reload derived from that domain.
         fireVerb(
@@ -1416,8 +1402,8 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "presets.default.root",
           encodeLayoutOp({
             op: "insert",
-            segment: "toolbar",
-            anchor: "gitaculous",
+            segment: "gitaculous",
+            anchor: "directory",
             relation: "after",
           }),
         );
@@ -1432,7 +1418,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           expect(restored.lastError).toBeNull();
           // Fully recovered — through clicks the bar itself offered, no
           // hand edit, surviving two full "restarts" along the way.
-          expect(presetNamesOf(restored, "default")).toContain("toolbar");
+          expect(presetNamesOf(restored, "default")).toContain("gitaculous");
         } finally {
           for (const fn of cleanups3) fn();
         }
@@ -1448,7 +1434,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // visible diagnostic and its reset affordance, driven through the REAL
   // RenderCache (authoredRoots is a fact of THIS reload, never re-read), the
   // REAL synthesized reset action (edit-chrome.ts's wrapWithPresetRows,
-  // reached only when DEFAULT_DSL_CONFIG's `toolbar` wires edit.toggle —
+  // reached through the settings menu's edit.toggle —
   // exactly the merged-default path every other test in this describe block
   // already exercises), and the REAL daemon reset-config handler — never a
   // synthetic stand-in for any of the three.

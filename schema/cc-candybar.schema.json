@@ -63,6 +63,10 @@
             "ansi",
             "none"
           ]
+        },
+        "menuGlyph": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false
@@ -1331,6 +1335,10 @@
                   "ansi",
                   "none"
                 ]
+              },
+              "menuGlyph": {
+                "not": {},
+                "description": "not allowed here — a preset cannot change the settings menu glyph"
               }
             },
             "additionalProperties": false
@@ -1398,6 +1406,10 @@
             "ansi",
             "none"
           ]
+        },
+        "menuGlyph": {
+          "not": {},
+          "description": "not allowed here — the editGlobals fragment cannot change the settings menu glyph"
         }
       },
       "additionalProperties": false

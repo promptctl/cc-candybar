@@ -85,6 +85,21 @@ const paletteOrRuleSpec: FieldSpec<string> = {
   },
 };
 
+const menuGlyphSpec: FieldSpec<string> = {
+  required: false,
+  json: { type: "string", minLength: 1 },
+  parse: (ctx, path, field, raw) => {
+    const v = optionalStringField(ctx, path, raw, field);
+    if (v !== "") return v;
+    ctx.issues.push({
+      path: `${path}.${field}`,
+      message: `${path}.${field}: must not be empty — the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path.split("."), field]),
+    });
+    return undefined;
+  },
+};
+
 // [LAW:one-source-of-truth] THE globals field table, declared once. Both the
 // top-level `globals:` schema and the preset-scoped one below are built from
 // this map, so a field added here is automatically settable from a preset —
@@ -131,6 +146,7 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   updateNotice: optionalBooleanSpec(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: colorCompatibilitySpec,
+  menuGlyph: menuGlyphSpec,
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {
@@ -151,24 +167,20 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
 // [LAW:one-type-per-behavior] Both fragments reject the field identically and
 // differ only in the SUBJECT a diagnostic names, so this is one spec taking
 // that noun as data — never two specs that could drift in what they reject.
-function nestedPresetSpec(subject: string): FieldSpec<string> {
+function fragmentRejection(
+  description: string,
+  message: (at: string) => string,
+): FieldSpec<string> {
   return {
     required: false,
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
     // the key at the same moment the validator does.
-    json: {
-      not: {},
-      description: `not allowed here — ${subject} cannot select a preset`,
-    },
+    json: { not: {}, description: `not allowed here — ${description}` },
     parse: (ctx, path, field, raw) => {
       if (raw[field] !== undefined) {
         ctx.issues.push({
           path: `${path}.${field}`,
-          message:
-            `${path}.${field}: ${subject} cannot select a preset. Which preset is active is ` +
-            `resolved once, as session pick over globals.preset over "default"; a fragment ` +
-            `naming another would be a second authority over that. ` +
-            `Set the default arrangement in the top-level globals.preset instead.`,
+          message: message(`${path}.${field}`),
           line: findKeyLine(ctx.source, [...path.split("."), field]),
         });
       }
@@ -177,12 +189,36 @@ function nestedPresetSpec(subject: string): FieldSpec<string> {
   };
 }
 
+function nestedPresetSpec(subject: string): FieldSpec<string> {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) =>
+      `${at}: ${subject} cannot select a preset. Which preset is active is ` +
+      `resolved once, as session pick over globals.preset over "default"; a fragment ` +
+      `naming another would be a second authority over that. ` +
+      `Set the default arrangement in the top-level globals.preset instead.`,
+  );
+}
+
+function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) =>
+      `${at}: ${subject} cannot change the settings menu glyph — one menu is shared by ` +
+      `every preset. Set it in the top-level globals.menuGlyph instead.`,
+  );
+}
+
 // [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
 // field table with exactly one field swapped for its rejection — not a
 // hand-listed subset that a future globals field could be forgotten from.
 const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, preset: nestedPresetSpec("a preset") },
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("a preset"),
+    menuGlyph: nestedMenuGlyphSpec("a preset"),
+  },
 };
 
 // [LAW:one-type-per-behavior] Edit mode's staged globals are the same shape one
@@ -194,6 +230,7 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   fields: {
     ...GLOBALS_FIELDS,
     preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
   },
 };
 

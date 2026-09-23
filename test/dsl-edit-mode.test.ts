@@ -54,10 +54,8 @@ import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
-import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -558,90 +556,5 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     // segment's cells do, since applySegmentLayout pads BEFORE sizing with
     // no knowledge of which segments are "chrome".
     expect(padded2.length).toBeGreaterThan(padded0.length);
-  });
-});
-
-// ─── the bundled default's own trigger — brandon-layout-edit-2gc.4 ────────
-
-// [LAW:verifiable-goals] .4's done-gate: the bundled default's `toolbar`
-// segment hosts `edit.toggle` (docs/interaction-authoring.md's "The bundled
-// default ships this on"), which resolves a self-lockout tension .3's own
-// handoff flagged — removing the trigger's own host segment via edit mode's
-// `-` doesn't strand a user OUTSIDE edit mode (recoverable via any other
-// `+`) and doesn't strand them INSIDE it either (edit.mode is untouched
-// SessionState, so the rest of the chrome stays visible). Proves the claim
-// against the REAL RAW_DEFAULT_DSL_CONFIG source, not a synthetic fixture.
-describe("bundled default: toolbar hosts edit.toggle — brandon-layout-edit-2gc.4", () => {
-  const DEFAULT_SOURCE = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
-
-  test("referencing edit.toggle from toolbar synthesizes the toggle for the whole bundled default", () => {
-    const config = parseAndValidate("<default>", DEFAULT_SOURCE, ALLOWED);
-    expect(config.actions).toHaveProperty([EDIT_TOGGLE_ACTION]);
-    expect(config.variables).toHaveProperty([EDIT_MODE_KEY]);
-    expect(config.segments.toolbar!.template).toContain(EDIT_TOGGLE_ACTION);
-  });
-
-  test("removing the toolbar (the trigger's own host) via `-` doesn't strand edit mode: every other segment's chrome stays live", () => {
-    // [LAW:one-source-of-truth] This lightweight harness compiles ONE tree
-    // from the source and never reloads it from the file a click edits (only
-    // the real daemon's RenderCache does — see test/dsl-layout-edit.test.ts's
-    // "toolbar removed via edit mode is offered back by every remaining `+`,
-    // and a real reload restores it" for the full round trip including the
-    // `+` picker's domain, which is recomputed fresh on EVERY reload and so
-    // cannot be proven against a tree compiled once). What this harness CAN
-    // prove directly: the click edits the file's tree, and removing the
-    // trigger's own host does not also close `edit.mode` — the rest of the
-    // bar's chrome stays live.
-    const { config, render, click, dispose } = buildEditRuntime(DEFAULT_SOURCE);
-    const originalNames = segmentNamesOf(config.presets.default!.root!).filter(
-      (n) => !n.startsWith(EDIT_NS),
-    );
-    expect(originalNames).toContain("toolbar");
-
-    // Open edit mode via toolbar's own trigger — a plain SessionState `set`,
-    // so render() reflects it immediately (unlike the layout-op write
-    // below, which lands in the config file this harness never reloads into
-    // its own compiled tree).
-    const openUrl = extractUrls(render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
-      ),
-    )!;
-    expect(openUrl).toBeDefined();
-    click(openUrl);
-    expect(stripAnsi(render())).toContain("✎ done");
-
-    // Remove "toolbar" via its own `-` — the trigger removes itself along
-    // with the rest of the tray. The write edits the SAME
-    // "presets.default.root" tree removeSegment/insertSegment always target
-    // (2gc.1) — the file a real daemon restart reads.
-    expect(JSON.stringify(durable.parsed().root)).toContain('"toolbar"');
-    const removeUrl = extractUrls(render()).find((u) =>
-      effectsOf(u).some(
-        (e) =>
-          e.verb === "apply-layout-op" &&
-          e.args[2] === encodeLayoutOp({ op: "remove", target: "toolbar" }),
-      ),
-    )!;
-    expect(removeUrl).toBeDefined();
-    click(removeUrl);
-    expect(JSON.stringify(durable.parsed().root)).not.toContain('"toolbar"');
-    expect(durable.history().past).toHaveLength(1);
-
-    // `edit.mode` is untouched SessionState (a `-` click never writes it),
-    // so every OTHER segment's chrome is still compiled and gated open —
-    // there is still a `+` to click, proving the bar isn't stuck with no
-    // way to reach edit mode's own affordances again.
-    const stillOpen = stripAnsi(render());
-    expect(stillOpen).toContain("-");
-    expect(
-      extractUrls(render()).some((u) =>
-        effectsOf(u).some(
-          (e) =>
-            e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
-        ),
-      ),
-    ).toBe(true);
-    dispose();
   });
 });
