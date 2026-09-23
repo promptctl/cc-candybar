@@ -259,23 +259,27 @@ export interface SegmentStyles {
 // band its child gave it — a continuation line of a multi-line segment is that
 // segment's `own` row and is led with row 0, a dropped `{{ menu }}` body stays
 // `deeper` and is not.
+//
+// A child whose row 0 claims the row (an open inline disclosure) replaces its
+// horizontal siblings whole, their drops included. Every container settles the
+// claim, so it never reaches past the nearest enclosing one.
 function composeBlocks(
   direction: Direction,
   blocks: readonly RenderedLines[],
 ): RenderedLines {
   switch (direction) {
     case "vertical":
-      return blocks.flatMap((b) => b);
+      return settled(blocks.flatMap((b) => b));
     case "horizontal": {
+      const claimed = blocks.find((b) => b[0]?.span === "row");
+      if (claimed !== undefined) return settled(claimed);
       // [LAW:dataflow-not-control-flow] height 0 (every child hidden/empty) ⇒ the
       // container contributes NO line — not one empty row. This is the value-driven
       // identity of the fold, preserved from the per-row zip it replaces; a stray
       // [[]] here would render as a spurious blank line.
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
       if (height === 0) return [];
-      const row0: RenderedLine = blocks
-        .map((b) => b[0])
-        .find((line) => line?.span === "row") ?? {
+      const row0: RenderedLine = {
         cells: blocks.flatMap((b) => b[0]?.cells ?? []),
         band: "own",
         span: "shared",
@@ -284,6 +288,10 @@ function composeBlocks(
       return [row0, ...drops];
     }
   }
+}
+
+function settled(lines: RenderedLines): RenderedLines {
+  return lines.map((line) => ({ ...line, span: "shared" }));
 }
 
 // ─── The node-type contract + registry ──────────────────────────────────────────
@@ -473,13 +481,10 @@ const segmentType: NodeType<"segment"> = {
       // Each inline line is a ROW of the band this segment sits on.
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
-      ).map((line, i) => ({
-        cells: [
-          ...applySegmentLayout(line, layout),
-          ...(i === 0 ? bodyHead.flatMap((head) => head.cells) : []),
-        ],
+      ).map((line) => ({
+        cells: applySegmentLayout(line, layout),
         band: "own",
-        span: i === 0 && bodyHead.length > 0 ? "row" : "shared",
+        span: "shared",
       }));
       // Each open menu body is one full-width dropped line on the band's
       // PLANE — the recessed floor its items are placed above — stacked after
@@ -508,7 +513,16 @@ const segmentType: NodeType<"segment"> = {
       }
       // Below row 0 every line is a drop: menu bands first (template order),
       // then the disclosure body, in the order they hang under the trigger.
-      return [...laidLines, ...ledBody];
+      const rows: RenderedLines = laidLines.map((line, i) =>
+        i === 0 && bodyHead.length > 0
+          ? {
+              cells: [...line.cells, ...bodyHead.flatMap((h) => h.cells)],
+              band: "own",
+              span: "row",
+            }
+          : line,
+      );
+      return [...rows, ...ledBody];
     } catch (err) {
       const message = (err as Error).message ?? String(err);
       ctx.onSegmentError?.(node.name, message);

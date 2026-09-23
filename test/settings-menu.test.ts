@@ -181,6 +181,36 @@ describe("the global settings menu is reachable from a user config", () => {
     dispose();
   });
 
+  test("an open sibling's body leaves with its trigger while the menu is open", () => {
+    const { render, clickWriting, dispose } = buildRuntime(
+      userConfig(
+        `{ h: ['directory', { kind: 'group', name: 'g', label: 'more', children: ['model'] }] }`,
+      ),
+    );
+    clickWriting(render(), "groups.g", "g");
+    expect(stripAnsi(render())).toContain("Opus");
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const opened = stripAnsi(render()).split("\n");
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).not.toContain("Opus");
+    clickWriting(render(), SETTINGS_ANCHOR, "closed");
+    expect(stripAnsi(render())).toContain("Opus");
+    dispose();
+  });
+
+  test("the claim stops at the door's own row", () => {
+    const { render, clickWriting, dispose } = buildRuntime(
+      userConfig(
+        `{ h: [{ v: ['${SETTINGS_ANCHOR}', { h: ['directory'] }] }, 'model'] }`,
+      ),
+    );
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const opened = stripAnsi(render());
+    expect(opened).toContain("⎘ id");
+    expect(opened).toContain("Opus");
+    dispose();
+  });
+
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode", () => {
     const { render, clickWriting, sessionState, dispose } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),

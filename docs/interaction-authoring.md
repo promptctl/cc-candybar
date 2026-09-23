@@ -1024,8 +1024,9 @@ yourself to move it anywhere else.
 ```
 
 Opening it shows the always-available functionality. The menu opens
-**inline**: its first row takes the door's own row, replacing the rest of that
-row while it is open, and the `❌` that leads it closes the menu. Everything it
+**inline**: its first row takes the door's own row, replacing every other cell
+of that row — and anything open beneath them — while it is open, and the `❌`
+that leads it closes the menu. Everything it
 opens in turn drops below:
 
 ```
@@ -1111,8 +1112,8 @@ it may appear at most once per layout
 
 The menu is visible under every condition. A `when` you write — on a row, or
 on the `root` itself — gates your content, never the menu: the default
-placement rides beside a gated node instead of inside it, so a bar gated away
-entirely still shows its door. For the same reason your own placement of the
+placement gives the menu its own row above a gated node instead of putting it
+inside, so a bar gated away entirely still shows its door. For the same reason your own placement of the
 anchor may not sit under a `when` or inside a group's body:
 
 ```json5 check:fail

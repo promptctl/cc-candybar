@@ -36,7 +36,6 @@
 
 import type { ActionDecl } from "./action.js";
 import {
-  mapOpens,
   walkNodes,
   type DisclosureRef,
   type DslConfig,
@@ -356,12 +355,19 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 // wrapper, and an empty container simply becomes the row.
 //
 // [LAW:no-silent-failure] A gated node is wrapped, never entered: a gate is a
-// statement about the author's content, and the menu rides beside that content
-// in an ungated wrapper rather than inside it — the root's own `when` included,
-// so a bar gated away entirely still shows its door.
+// statement about the author's content, and the menu takes its own ungated row
+// above that content rather than riding inside it — the root's own `when`
+// included, so a bar gated away entirely still shows its door.
 function prependAnchor(node: LayoutNode): LayoutNode {
   const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
-  if (node.kind === "segment" || node.when !== undefined) {
+  if (node.when !== undefined) {
+    return {
+      kind: "container",
+      direction: "vertical",
+      children: [anchorRef, node],
+    };
+  }
+  if (node.kind === "segment") {
     return {
       kind: "container",
       direction: "horizontal",
@@ -498,10 +504,8 @@ function expandAnchor(
             ],
           },
           "inline",
-          node.when,
         )
-      : // An anchor placed inside a group's body is still the anchor.
-        mapOpens(node, (body) => expandContainer(body, help));
+      : node;
   }
   return expandContainer(node, help);
 }
