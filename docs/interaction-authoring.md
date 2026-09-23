@@ -792,12 +792,19 @@ derives, so nothing a `do` fires could not be clicked alone.
 - **Only the first member may take its value from the template** (`from`,
   `int`, `insertSegmentFrom`): the others are handed no value to write, so
   listing one of them anywhere but first is a load error.
-- **Session writes are one transaction.** Every SessionState write the members
-  make travels as one batch that is checked whole before any of it lands, so
-  a click never half-applies. A durable write (`persist`, `reset`, a layout
-  op) still runs as its own step beside that batch.
-- A `do` lists at least two members, and none of them may itself be a `do` —
-  list its members directly instead.
+- **Members fire in the order listed, each against what the bar showed.**
+  Every member computes its write from the state the render displayed, not
+  from the state an earlier member leaves: a cycle writes the successor of
+  the value on screen, and a dual picks its store from the `persist?` box as
+  it was drawn.
+- **Adjacent session writes are one transaction.** Members that write
+  SessionState one after another travel as one batch, checked whole before
+  any of it lands, so that run never half-applies. A durable write
+  (`persist`, `reset`, a layout op) or a stepper runs as its own step in its
+  place in the list — list the session writes together when they must land
+  together.
+- A `do` lists at least two members, none of them twice, and none of them may
+  itself be a `do` — list its members directly instead.
 
 ## Edit mode: `+`/`-` chrome for free
 

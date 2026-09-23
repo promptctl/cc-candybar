@@ -209,7 +209,9 @@ export function validateCrossReferences(
   // here rather than realized wrongly. A member that is itself a `do` gains
   // nothing a flat list would not say, and admitting it would admit a cycle.
   // A follower that takes its value from the template would be handed the
-  // head's display as that value, since only the head is bound one.
+  // head's display as that value, since only the head is bound one. A member
+  // listed twice is a typo either way: a cycle realized twice against one
+  // render's state toggles once, a stepper twice steps twice.
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!("do" in a)) continue;
     a.do.forEach((member, i) => {
@@ -221,9 +223,11 @@ export function validateCrossReferences(
           ? `references unknown action "${member}"`
           : "do" in target
             ? `"${member}" is itself a do action — list its members here instead`
-            : i > 0 && actionBindsTemplateValue(target)
-              ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
-              : undefined;
+            : a.do.indexOf(member) !== i
+              ? `"${member}" is listed twice — each member fires once per click`
+              : i > 0 && actionBindsTemplateValue(target)
+                ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
+                : undefined;
       if (problem !== undefined) {
         ctx.issues.push({
           path: `actions.${name}.do`,

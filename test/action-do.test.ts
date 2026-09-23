@@ -66,7 +66,7 @@ const FOCUS_AND_CLOSE = `
   focusAndClose: { do: ['toggleFocus', 'closePanel'] },`;
 
 describe("do: several declared actions, one click", () => {
-  test("the head is the face; every member's write rides one set-state batch, through the derived gate", () => {
+  test("the head is the face; every member's write lands, through the derived gate", () => {
     const rt = runtime(
       config(FOCUS_AND_CLOSE, '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}'),
     );
@@ -74,8 +74,11 @@ describe("do: several declared actions, one click", () => {
     // The head is a two-member cycle, so the `do` shows its per-member display.
     expect(stripAnsi(out)).toContain("◎ focus");
     const [url] = linkUrls(out).filter((u) => u.includes("focus"));
+    // Members' effects, head first; the daemon joins the adjacent session
+    // writes into one batch (test/click-wire.test.ts pins that).
     expect(effectsOf(url!)).toEqual([
-      { verb: "set-state", args: ["s1", "focus", "on", "panel", "closed"] },
+      { verb: "set-state", args: ["s1", "focus", "on"] },
+      { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     rt.click(url!);
     expect(rt.sessionState.get("s1", "focus")).toBe("on");
@@ -101,7 +104,8 @@ describe("do: several declared actions, one click", () => {
       effectsOf(u).some((e) => e.args[2] === "dracula"),
     );
     expect(effectsOf(dracula!)).toEqual([
-      { verb: "set-state", args: ["s1", "theme", "dracula", "panel", "closed"] },
+      { verb: "set-state", args: ["s1", "theme", "dracula"] },
+      { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     rt.click(dracula!);
     expect(rt.sessionState.get("s1", "theme")).toBe("dracula");
@@ -130,9 +134,26 @@ describe("do: load errors", () => {
     ["one member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a'] },`, "do must list at least two action names"],
     ["an unknown member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a', 'nope'] },`, 'actions.d do: references unknown action "nope"'],
     ["a nested do", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`, '"ab" is itself a do action'],
+    ["a member listed twice", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`, '"a" is listed twice'],
     ["a template-bound follower", `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`, '"t" takes its value from the template'],
     ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown key "to" on a do action'],
   ])("%s", (_label, actions, message) => {
     expect(loadError(actions)).toContain(message);
+  });
+
+  test("a do that fires edit.toggle is demand enough for edit mode", () => {
+    // No template names edit.toggle, so only the `do` can mint it.
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        config(
+          `closePanel: { set: 'panel', to: 'closed' },
+           editAndClose: { do: ['edit.toggle', 'closePanel'] },`,
+          '{{ action "editAndClose" "✎" }}',
+        ),
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      ),
+    ).not.toThrow();
   });
 });

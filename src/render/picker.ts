@@ -300,10 +300,10 @@ export function renderPicker(
     { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
   ]);
   // [LAW:single-enforcer] A closeOnPick option click is the pick's own effects
-  // followed by the close writes — concatenated, nothing more. effectsUrl folds
-  // every set-state in one click into one atomic batch, so a session pick and
-  // its close land together, and a durable pick (set-config, a layout op, a
-  // dual's release) keeps its own verb with the close beside it. This is the
+  // followed by the close writes — concatenated, nothing more. The daemon's
+  // dispatch joins adjacent session writes into one atomic batch, so a session
+  // pick and its close land together, and a durable pick (set-config, a layout
+  // op, a dual's release) keeps its own verb and its place before the close. This is the
   // same concatenation a `do` action's members get: one rule for "several
   // writes, one click", not one per producer.
   const closeEffects = closeOnPick

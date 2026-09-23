@@ -44,6 +44,7 @@ import { durableConfigPath } from "../../config/loader/discovery";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
+  batchSessionWrites,
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
   VERB_APPLY_UPDATE,
@@ -813,7 +814,9 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
-// dispatcher folds the list, running EVERY effect through the leaf table. The
+// dispatcher folds the list, running EVERY effect through the leaf table, after
+// batchSessionWrites has joined each run of adjacent session writes into the
+// one set-state batch that lands whole or not at all. The
 // effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
 // compound branch. [LAW:no-silent-fallbacks] Every effect runs even if an
 // earlier one failed; failures accumulate in `errors`. An unknown or
@@ -836,7 +839,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
   let sessionId: string | null = null;
-  for (const { verb, value } of parseEffects(rawValue)) {
+  for (const { verb, value } of batchSessionWrites(parseEffects(rawValue))) {
     // Extract session ID from the first session-bearing effect for error
     // display — every SESSION_FIRST_VERBS member carries it as its first
     // segment, so a failing step surfaces in the bar like any other.

@@ -316,17 +316,17 @@ export function compileActions(
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();
-  for (const [name, action] of Object.entries(actions)) {
+  // A `do` is built from its members' compiled entries, so every `do` compiles
+  // after every other action (the loader refuses a `do` member, so one pass of
+  // each suffices) and a member's templates are parsed once, not per `do`.
+  const entries = Object.entries(actions);
+  for (const [name, action] of [
+    ...entries.filter(([, a]) => !("do" in a)),
+    ...entries.filter(([, a]) => "do" in a),
+  ]) {
     out.set(
       name,
-      compileAction(
-        parse,
-        name,
-        action,
-        stateKeyToVar,
-        perConfigDomains,
-        actions,
-      ),
+      compileAction(parse, name, action, stateKeyToVar, perConfigDomains, out),
     );
   }
   return out;
@@ -342,7 +342,7 @@ function compileAction(
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
-  actions: Readonly<Record<string, ActionDecl>>,
+  compiled: CompiledActions,
 ): CompiledActionDecl {
   // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
   // the SAME explosion the validator derivations fold over
@@ -360,7 +360,7 @@ function compileAction(
         session!,
         stateKeyToVar,
         perConfigDomains,
-        actions,
+        compiled,
       ),
       compileAction(
         parse,
@@ -368,7 +368,7 @@ function compileAction(
         durable!,
         stateKeyToVar,
         perConfigDomains,
-        actions,
+        compiled,
       ),
     );
   }
@@ -499,28 +499,19 @@ function compileAction(
   }
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
-  // [LAW:one-source-of-truth] Members compile from the same table, by the same
-  // fold, as if each were bound alone — a `do` is its members' clicks, so there
-  // is no second statement of what any of them writes. The loader proves every
-  // name resolves; a config assembled past the loader that breaks that is a
-  // wiring bug, reported by name like renderAction's own miss.
+  // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
+  // entry compiled for that name, so there is no second statement of what any
+  // of them writes. The loader proves every name resolves; a config assembled
+  // past the loader that breaks that is a wiring bug, reported by name like
+  // renderAction's own miss.
   const [head, ...rest] = action.do.map((member) => {
-    const decl = Object.prototype.hasOwnProperty.call(actions, member)
-      ? actions[member]
-      : undefined;
-    if (decl === undefined) {
+    const c = compiled.get(member);
+    if (c === undefined) {
       throw new Error(
         `action "${name}" fires "${member}", which is not declared in this config`,
       );
     }
-    return compileAction(
-      parse,
-      member,
-      decl,
-      stateKeyToVar,
-      perConfigDomains,
-      actions,
-    );
+    return c;
   });
   return { kind: "do", head: head!, rest };
 }
@@ -884,8 +875,11 @@ export function realize(
     }
     case "do": {
       // [LAW:single-enforcer] The members' effects, head first, concatenated.
-      // Nothing here makes them one transaction: effectsUrl folds every
-      // set-state in a click into one batch, for this producer and every other.
+      // Every member is realized against the state this render shows, not the
+      // state an earlier member will leave: the click delivers what the bar
+      // displayed. Nothing here makes them one transaction — the daemon's
+      // dispatch joins adjacent session writes into one batch, for this
+      // producer and every other.
       const head = realize(c.head, display, boundValue, store, sessionId);
       return {
         effects: [
