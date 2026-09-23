@@ -91,6 +91,7 @@ import {
   type RootFragment,
 } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
@@ -819,7 +820,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
           'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
         },
         segments: {
-          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          directory: { template: 'GATED_CONTENT', bg: 'surface', fg: 'foreground' },
           editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
         },
         root: { h: ['directory', 'editControl'] },
@@ -856,10 +857,16 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     }
   }
 
-  test.each(["{{ false }}", "{{ true }}"])(
-    "the banner shows in edit mode under a root gate of %s",
-    (gate) => {
-      expect(renderGated(buildConfig(gate))).toContain("↺ gated customized");
+  test.each([
+    ["{{ false }}", false],
+    ["{{ true }}", true],
+  ])(
+    "under a root gate of %s the content follows the gate; the door and banner show",
+    (gate, contentShown) => {
+      const rendered = renderGated(buildConfig(gate));
+      expect(rendered.includes("GATED_CONTENT")).toBe(contentShown);
+      expect(rendered).toContain(DOOR_GLYPH);
+      expect(rendered).toContain("↺ gated customized");
     },
   );
 });
