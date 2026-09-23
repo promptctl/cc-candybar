@@ -24,6 +24,7 @@ import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
+import { stripAnsi } from "./helpers/ansi";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -39,16 +40,8 @@ async function renderExample(file: string): Promise<string> {
     .rendered;
 }
 
-// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text. The
-// OSC-8 introducer is terminated by EITHER ST (ESC \) or BEL (\x07) per spec —
-// match both so the helper strips a valid sequence regardless of terminator.
-function visible(line: string): string {
-  return line
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\[[0-9;]*m/g, "")
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g, "");
-}
+// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text.
+const visible = stripAnsi;
 
 describe("shipped example configs (examples/*.json5)", () => {
   // Guard against the glob silently matching nothing (a moved directory would

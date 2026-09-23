@@ -20,13 +20,11 @@ import { renderStripCells, stripChromeCols } from "../src/render/strip";
 import type { Charset, StripStyle } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { CHARSETS, listResolvablePaletteNames } from "../src/themes/policy";
+import { stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 const cw = (s: string): number => new RichText(s).cellLength;
 // Powerline cap glyphs (private-use block) glue to the edge token with no space;
 // strip them ONLY for token membership, never for width (they count toward it).

@@ -497,7 +497,10 @@ const segmentType: NodeType<"segment"> = {
       // The error cell is a row of the band the segment sits on, like any
       // inline line — a broken segment inside an open body still gets its ✕.
       return [
-        { cells: [new RichText(`⚠ ${node.name}: ${message}`)], band: "own" },
+        {
+          cells: [new RichText(`⚠ ${node.name}: ${message}`, { end: "" })],
+          band: "own",
+        },
       ];
     }
   },

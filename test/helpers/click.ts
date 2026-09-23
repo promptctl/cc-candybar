@@ -83,15 +83,7 @@ export function effectsOf(url: string): DecodedEffect[] {
   }));
 }
 
-// Extract the URLs whose OSC-8 open is immediately preceded by a bold SGR
-// (";1m") — the renderer's "current selection" marking.
-export function boldUrls(rendered: string): string[] {
-  const re = /;1m\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const out: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) out.push(m[1]!);
-  return out;
-}
+export { boldUrls } from "./ansi";
 
 // Drive a rendered click URL through the real parse → dispatch path.
 export function clickUrl(url: string, ctx: VerbContext): void {

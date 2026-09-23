@@ -245,6 +245,8 @@ Tests live in `test/`. Useful starting points by area:
 - Template engine: `test/template-engine.test.ts`.
 - Variables: `test/var-sources.test.ts`, `test/var-store.test.ts`.
 
+Read rendered bytes through `test/helpers/ansi.ts` (`stripAnsi`, `links`, `linkUrls`, `linkCloseCount`) rather than a regex of your own: it parses OSC-8 with rich-js's exported `OSC8` grammar, the same one the bytes are written with (every link carries an `id=` derived from its URL, so a regex spelling `ESC]8;;` matches nothing). `src/render/ansi.ts` holds the zero-width-escape pattern the fill measure uses.
+
 Test timeout is 30 s (some tests touch real fs / timing); prefer faking time and fs over real waits when adding new tests.
 
 ## @promptctl/go-template-js API reference

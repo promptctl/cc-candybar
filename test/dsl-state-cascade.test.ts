@@ -18,6 +18,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { resolveThemeSelection } from "../src/themes";
 import { testVerbContext } from "./helpers/click";
+import { stripAnsi } from "./helpers/ansi";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -47,14 +48,6 @@ const CONFIG_SRC = `{
   },
   root: 'themeSeg',
 }`;
-
-// Strip ANSI so assertions can pin on the rendered text alone — color codes
-// vary with palette and would obscure the dataflow assertion we care about.
-function stripAnsi(s: string): string {
-  return s
-    .replace(/\x1b\[[0-9;]*m/g, "")
-    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
-}
 
 describe("DSL state cascade (vhi.1 acceptance)", () => {
   const SESSION_ID = "s-cascade";

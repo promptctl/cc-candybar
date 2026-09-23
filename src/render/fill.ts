@@ -20,9 +20,7 @@ import {
   type CellSizing,
 } from "../template-engine/layout.js";
 import { renderStripCells, type BuildLineOptions } from "./strip.js";
-
-// eslint-disable-next-line no-control-regex
-const INVISIBLE = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g;
+import { INVISIBLE } from "./ansi.js";
 
 // The columns a serialized line actually occupies. SGR and OSC-8 are zero-width,
 // and `cellLen` is the same measure the strip wraps by, so this is the row's own

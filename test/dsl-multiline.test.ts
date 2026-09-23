@@ -17,6 +17,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
+import { stripAnsi } from "./helpers/ansi";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -32,14 +33,6 @@ function buildRuntime(source: string) {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   return { config, compiled, store, registry };
-}
-
-// Strip ANSI for line-shape assertions. Color codes and OSC-8 links live in
-// rendered output but obscure the row-count / row-content checks we want here.
-function stripAnsi(s: string): string {
-  return s
-    .replace(/\x1b\[[0-9;]*m/g, "")
-    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
 }
 
 describe("renderDsl — multi-line layout", () => {

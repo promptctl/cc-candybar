@@ -33,6 +33,7 @@ import {
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveThemeSelection } from "../src/themes";
+import { definedStyle } from "../src/template-engine/cells.js";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
@@ -118,7 +119,7 @@ function buildRuntime() {
     const bgs = new Map(
       [...sink].map(([name, cells]) => [
         name,
-        cells[0]?.style?.bgcolor?.value?.hex,
+        cells[0] && definedStyle(cells[0].style).bgcolor?.value?.hex,
       ]),
     );
     const bgOf = (segment: string): string => {

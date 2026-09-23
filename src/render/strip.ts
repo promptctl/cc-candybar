@@ -198,18 +198,23 @@ export function renderStripCells(
 ): string {
   if (cells.length === 0) return "";
   const joiner = pickJoiner(options.style, options.charset, options.separator);
-  if (options.wrap && Number.isFinite(options.width)) {
-    const flex = new FlexStrip([...cells], { joiner });
-    const out = renderToString(flex, {
-      width: options.width,
-      colorSystem: options.colorCompatibility,
-    });
-    return out.endsWith("\n") ? out.slice(0, -1) : out;
+  const colorSystem = options.colorCompatibility;
+  const out =
+    options.wrap && Number.isFinite(options.width)
+      ? renderToString(new FlexStrip([...cells], { joiner }), {
+          width: options.width,
+          colorSystem,
+        })
+      : renderToString(new Strip([...cells], joiner), { colorSystem });
+  // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
+  // block renderable's contract in rich-js); a row here is a line's CONTENT —
+  // the caller joins rows with "\n" — so the one terminator comes off here.
+  if (!out.endsWith("\n")) {
+    throw new Error(
+      "renderStripCells: rich-js strip output did not end its last line",
+    );
   }
-  const strip = new Strip([...cells], joiner);
-  return renderToString(strip, {
-    colorSystem: options.colorCompatibility,
-  });
+  return out.slice(0, -1);
 }
 
 /**

@@ -93,6 +93,7 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
+import { ANSI, linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -108,11 +109,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);
@@ -757,8 +754,6 @@ describe("apply-layout-op click → the config file", () => {
 // this proves the escape actually holds through real parseAndValidate +
 // registerDslConfig + renderDsl, not just by inspection.
 describe('the "customized" banner escapes quote/backslash preset names', () => {
-  // eslint-disable-next-line no-control-regex
-  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 
   test('a preset named with a " and a \\ compiles and renders the literal label', () => {
     const presetName = 'foo"bar\\baz';
@@ -819,8 +814,6 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
 // synthetic wrapper for a bare-segment root, that shape's own gate never
 // reached the carry-up at all.
 describe("the reset banner respects a preset root's own top-level `when`", () => {
-  // eslint-disable-next-line no-control-regex
-  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 
   function buildConfig(rootWhen: string) {
     return parseAndValidate(

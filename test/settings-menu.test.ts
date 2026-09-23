@@ -47,6 +47,7 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -59,17 +60,9 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  return linkUrls(rendered);
 }
 
 // The acceptance shape, verbatim: a user file that declares its own `root` of

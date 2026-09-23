@@ -56,6 +56,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { definedStyle } from "../src/template-engine/cells.js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -181,9 +182,9 @@ function build(src: string, withDefault = false) {
     return cells;
   };
   const bgOf = (name: string): string =>
-    cellsOf(name)[0]!.style?.bgcolor?.value?.hex ?? "(no bg)";
+    definedStyle(cellsOf(name)[0]!.style).bgcolor?.value?.hex ?? "(no bg)";
   const fgOf = (name: string): string =>
-    cellsOf(name)[0]!.style?.color?.value?.hex ?? "(no fg)";
+    definedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -310,7 +311,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     expect(rt.bgOf(control)).toBe(band2.state.hex);
     const [, drop] = rt.cellsOf(control);
     if (drop === undefined) throw new Error(`"${control}" dropped no line`);
-    expect(drop.style?.bgcolor?.value?.hex).toBe(band2.plane.hex);
+    expect(definedStyle(drop.style).bgcolor?.value?.hex).toBe(band2.plane.hex);
     rt.dispose();
   });
 });
@@ -355,7 +356,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       // `when`s enclose it — and the trigger wears that band's state.
       const band = bandFor(rt.palette, { hue: rt.hueOf("m"), depth: 0 });
       expect(rt.bgOf("m")).toBe(band.state.hex);
-      expect(rt.cellsOf("m")[1]?.style?.bgcolor?.value?.hex).toBe(band.plane.hex);
+      expect(definedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
       return out;
     });

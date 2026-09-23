@@ -11,6 +11,9 @@
 import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
+import { definedStyle } from "../src/template-engine/cells.js";
+// edgeStyle resolves a style name against the render's theme; none is named here.
+const EDGE_OPTS = { maxWidth: 80 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -293,12 +296,12 @@ describe("baseStyle on the merged cell", () => {
     // The cell-level style is the baseStyle, so padding chars (which have
     // no span overlay) render with that style — making the segment bg+fg
     // continuous across the padded gap.
-    expect(result[0]!.style.bgcolor?.name).toBe("blue");
-    expect(result[0]!.style.color?.name).toBe("white");
+    expect(definedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
+    expect(definedStyle(result[0]!.style).color?.name).toBe("white");
     // Edges report the same baseStyle since the kept text fragment carries
     // the same merged style.
-    expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
-    expect(result[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
+    expect(result[0]!.edgeStyle("left", EDGE_OPTS).bgcolor?.name).toBe("blue");
+    expect(result[0]!.edgeStyle("right", EDGE_OPTS).bgcolor?.name).toBe("blue");
   });
 
   test("truncation marker rides on the cell's wrapping style", () => {
@@ -311,7 +314,7 @@ describe("baseStyle on the merged cell", () => {
       baseStyle,
     });
     expect(result[0]!.plain).toBe("hello…");
-    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+    expect(definedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
   });
 });
 
@@ -348,7 +351,7 @@ describe("truncation preserves per-character styling through the cut", () => {
     // span survives — but the kept text retains its base styling. Assert the
     // rendered edge colour (what the joiner reads), not where it is stored:
     // the collapsed cell carries the base bg as a span, not as wrapping style.
-    expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
+    expect(result[0]!.edgeStyle("left", EDGE_OPTS).bgcolor?.name).toBe("blue");
   });
 
   test("left truncation keeps the right side spans", () => {

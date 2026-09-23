@@ -43,6 +43,7 @@ import {
 } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -59,20 +60,13 @@ function opts(width = Number.POSITIVE_INFINITY) {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+  const urls = linkUrls(rendered);
   // The ambient chrome every bar carries (the global settings menu and the
   // edit-mode toggle it reaches) emits its own clickable regions; this file's
   // subject is what a TEMPLATE'S OWN actions click, so they are filtered out.
   return ownLinks(urls);
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 interface SideEffect {
   readonly verb: string;
@@ -879,6 +873,28 @@ describe("2de.4 — cycle set action", () => {
     // rather than crashing the bar — partial rendering keeps other segments alive.
     const out = stripAnsi(render());
     expect(out).toMatch(/⚠.*bar.*cycles 3 members/);
+    dispose();
+  });
+
+  test("the error cell is a cell of its row: a neighbour renders beside it, not below", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        mode: { kind: 'state', key: 'mode', default: 'a' },
+      },
+      actions: { next: { set: 'mode', cycle: ['a', 'b', 'c'] } },
+      segments: {
+        bar: { template: '{{ unregisteredFn }}', bg: 'surface', fg: 'foreground' },
+        ok: { template: 'NEIGHBOUR', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['bar', 'ok'] },
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    const errorRow = stripAnsi(render())
+      .split("\n")
+      .find((line) => line.includes("unregisteredFn"));
+    expect(errorRow).toContain("NEIGHBOUR");
     dispose();
   });
 

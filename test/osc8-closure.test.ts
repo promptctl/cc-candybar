@@ -3,8 +3,8 @@
 // same path the daemon renders through.
 //
 // THE INVARIANT (render-bugs-pdu.1): every clickable region is exactly one
-// self-contained OSC-8 hyperlink — opened with `ESC]8;;URL ST` and closed with
-// the empty `ESC]8;;ST` around its own text — so no text before or after a link
+// self-contained OSC-8 hyperlink — opened with `ESC]8;id=…;URL ST` and closed
+// with the empty `ESC]8;;ST` around its own text — so no text before or after a link
 // is hyperlinked. An UNTERMINATED open is the "link bleed" defect: the terminal
 // keeps every subsequent cell (inside AND outside the statusline) hyperlinked,
 // because an SGR reset does NOT close a hyperlink — only the empty OSC-8 close
@@ -24,15 +24,14 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
+import { OSC8 } from "@promptctl/rich-js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // OSC-8 grammar: open = ESC ] 8 ; <params> ; <URI> ST, close = ESC ] 8 ; ; ST.
-// The close has an EMPTY URI; an open has a non-empty one. ST here is `ESC \`
-// (the form rich-js emits). One regex matches both; the captured URI tells them
-// apart — empty ⇒ close.
-// eslint-disable-next-line no-control-regex
-const OSC8 = /\x1b\]8;;([^\x1b]*)\x1b\\/g;
+// The close has an EMPTY URI; an open has a non-empty one. rich-js's `OSC8`
+// matches both; group 2, the URI, tells them apart — empty ⇒ close.
+const osc8s = (rendered: string) => rendered.matchAll(new RegExp(OSC8.source, "g"));
 
 /**
  * Walk the rendered bytes in order, tracking the terminal's single OSC-8
@@ -49,8 +48,8 @@ function osc8Walk(rendered: string): {
   let opens = 0;
   let closes = 0;
   let linked = false;
-  for (const m of rendered.matchAll(OSC8)) {
-    if (m[1]!.length > 0) {
+  for (const m of osc8s(rendered)) {
+    if (m[2]!.length > 0) {
       opens += 1;
       linked = true;
     } else {
@@ -135,5 +134,35 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     expect(opens).toBe(2);
     expect(closes).toBe(2);
     expect(endsLinked).toBe(false);
+  });
+
+  // A terminal treats cells as ONE hyperlink when they share the URI and the
+  // id; with no id, every open is its own link. The bar has regions that do the
+  // same thing in two places — an open disclosure's trigger and the ✕ leading
+  // its body's row write the same close — so they carry the same URI, and the
+  // shared id makes hovering either one light up both.
+  test("every open of one URL carries the same id, so regions that do one thing hover as one", () => {
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      segments: {
+        bar: { template: '{{ link "same" "A" }} mid {{ link "same" "B" }} {{ link "other" "C" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: 'bar',
+    }`;
+    const out = render(src, {
+      style: "powerline",
+      colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+      width: Number.POSITIVE_INFINITY,
+    });
+    const idsByUrl = new Map<string, string[]>();
+    for (const m of osc8s(out)) {
+      if (m[2] === "") continue;
+      expect(m[1]).toMatch(/^id=\S+$/);
+      idsByUrl.set(m[2]!, [...(idsByUrl.get(m[2]!) ?? []), m[1]!]);
+    }
+    const same = idsByUrl.get("same")!;
+    expect(same).toHaveLength(2);
+    expect(same[1]).toBe(same[0]);
+    expect(idsByUrl.get("other")).toHaveLength(1);
   });
 });

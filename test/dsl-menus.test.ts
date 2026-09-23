@@ -64,6 +64,8 @@ import {
   textOn,
   type Address,
 } from "../src/themes/decor";
+import { definedStyle } from "../src/template-engine/cells.js";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -123,19 +125,12 @@ function opts() {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // The distinct truecolor background SGR codes present in a rendered string —
 // used to prove the focus tint added a NEW background (the lightened surface).
@@ -697,14 +692,14 @@ describe("toggle round trip + drop stacking", () => {
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
-    expect(trigger.style?.bgcolor?.value?.hex).toBe(band.state.hex);
-    expect(trigger.style?.color?.value?.hex).toBe(textOn(palette, band.state).hex);
+    expect(definedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
+    expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state).hex);
     // The dropped line is the band: its plane. The OPTION cells are not —
     // `themes` is a colour-valued domain, so brandon-picker-31z paints each
     // cell in the theme it names, not in the band (the next describe pins that
     // the band placement is still what a generic domain gets).
     const body = cells[1]!;
-    expect(body.style?.bgcolor?.value?.hex).toBe(band.plane.hex);
+    expect(definedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
     const spans = body.spans.filter(
       (s) => typeof s.style !== "string" && s.style.link !== undefined,
@@ -740,7 +735,7 @@ describe("toggle round trip + drop stacking", () => {
       return new Map(
         [...sink.entries()].map(([name, cells]) => [
           name,
-          cells.map((c) => `${c.plain}|${c.style?.bgcolor?.value?.hex}|${c.style?.color?.value?.hex}`).join("\n"),
+          cells.map((c) => `${c.plain}|${definedStyle(c.style).bgcolor?.value?.hex}|${definedStyle(c.style).color?.value?.hex}`).join("\n"),
         ]),
       );
     };
@@ -1426,7 +1421,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     floor.clickToggle(floor.render(), LKEY, "applyLook");
     floor.render();
     const trigger = (cells: readonly RichText[]): string | undefined =>
-      cells[0]!.style?.bgcolor?.value?.hex;
+      definedStyle(cells[0]!.style).bgcolor?.value?.hex;
     expect(trigger(sink.get("lookpicker")!)).not.toBe(
       trigger(floor.sink.get("lookpicker")!),
     );

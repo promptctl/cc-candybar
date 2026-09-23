@@ -6,6 +6,7 @@
 
 import { RichText, Style } from "@promptctl/rich-js";
 import { splitCellsIntoLines } from "../src/render/split-lines";
+import { definedStyle } from "../src/template-engine/cells.js";
 
 // Join a line group's cell texts so assertions read in terms of content.
 const text = (group: RichText[]): string => group.map((c) => c.plain).join("");
@@ -69,13 +70,13 @@ describe("splitCellsIntoLines", () => {
     const styled = new RichText("up\ndn", {
       style: new Style({ color: "#ff0000" }),
     });
-    expect(styled.style.color).toBeDefined();
+    expect(definedStyle(styled.style).color).toBeDefined();
     const lines = splitCellsIntoLines([styled]);
     expect(lines).toHaveLength(2);
     expect(text(lines[0]!)).toBe("up");
     expect(text(lines[1]!)).toBe("dn");
     // Both pieces retain the base color (carried through slice).
-    expect(lines[0]![0]!.style.color).toBeDefined();
-    expect(lines[1]![0]!.style.color).toBeDefined();
+    expect(definedStyle(lines[0]![0]!.style).color).toBeDefined();
+    expect(definedStyle(lines[1]![0]!.style).color).toBeDefined();
   });
 });

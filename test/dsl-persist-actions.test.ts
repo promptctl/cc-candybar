@@ -56,6 +56,7 @@ import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
+import { linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -75,11 +76,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
 // link is not always "active" (bold), so tests asserting on the click itself
 // (not the current-selection marking) need every link.
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);

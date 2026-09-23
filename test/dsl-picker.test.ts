@@ -28,6 +28,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf, boldUrls } from "./helpers/click";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -41,17 +42,9 @@ function opts(width: number) {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  return linkUrls(rendered);
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // The standard theme picker: a trigger that opens the menu (literal 0 on the
 // int-gated page key), and a width-gated menu segment. closeOnPick/paged vary.

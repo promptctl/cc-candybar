@@ -41,6 +41,7 @@ import {
 } from "../src/help-text";
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -54,9 +55,6 @@ afterEach(() => {
   while (openRuntimes.length > 0) openRuntimes.pop()!.dispose();
 });
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
 // `src/render/picker.ts` reserves its pagination seam with. Counting code
@@ -64,12 +62,7 @@ const stripAnsi = (s: string): string => s.replace(ANSI, "");
 const cols = (s: string): number => new RichText(s).cellLength;
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  return linkUrls(rendered);
 }
 
 // The acceptance shape, verbatim — a user file declaring its own `root` of one

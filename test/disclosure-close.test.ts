@@ -42,6 +42,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { links, stripAnsi, type Link } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -71,14 +72,7 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
-// One OSC-8 link as the bar emits it: `ESC ] 8 ; ; url ESC \ text ESC ] 8 ; ; ESC \`.
-const OSC8 = /\x1b\]8;;([^\x1b]*)\x1b\\(.*?)\x1b\]8;;\x1b\\/g;
-interface Link {
-  readonly text: string;
-  readonly url: string;
-}
-const linksOn = (line: string): Link[] =>
-  [...line.matchAll(OSC8)].map((m) => ({ url: m[1]!, text: m[2]! }));
+const linksOn = links;
 
 // Whether a link's click is exactly "write `key` closed" — the row ✕'s write.
 const closes = (link: Link, key: string): boolean =>
@@ -312,7 +306,7 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     // below it, `B A` with D dropped below it; then toggle `bare`.
     expect(lines).toHaveLength(8);
     const body = lines.slice(2, 7);
-    expect(body.map((l) => l.replace(/\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g, ""))).toEqual([
+    expect(body.map((l) => stripAnsi(l))).toEqual([
       expect.stringContaining("M1"),
       expect.stringContaining("M2"),
       expect.stringContaining("M3"),

@@ -46,6 +46,10 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { ANSI, linkUrls } from "./helpers/ansi";
+
+// Visible segment text: every zero-width escape, plus the powerline cap glyphs.
+const ANSI_AND_CAPS = new RegExp(`${ANSI.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -352,8 +356,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
     };
-    // eslint-disable-next-line no-control-regex
-    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const render = (padding: number): string => {
       const store = new VariableStore();
       const registry = new SourceRegistry(
@@ -566,9 +568,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(line).toContain("↗ repo");
       // The URL rides an OSC-8 hyperlink, not the visible text — a click
       // target, not a printed URL cluttering the bar.
-      expect(line).toContain(
-        "\x1b]8;;https://github.com/promptctl/cc-candybar\x1b\\",
-      );
+      expect(linkUrls(line)).toContain("https://github.com/promptctl/cc-candybar");
     });
 
     test("a repo with no browsable remote renders the tray without the glyph", () => {
@@ -634,8 +634,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         // (U+E0B0..U+E0BC range) so assertions can probe visible
         // segment text only.
         return line.replace(
-          // eslint-disable-next-line no-control-regex
-          /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu,
+          ANSI_AND_CAPS,
           "",
         );
       } finally {
@@ -834,9 +833,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // behavior (single-space-separated counts, never concatenated) rather
     // than trusting the analogy in the comment above GIT_WORKTREE.
     test("worktree counts render single-space-separated, never concatenated", () => {
-      const ANSI =
-        /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
-      const visible = renderSegment("git").replace(ANSI, "");
+      const visible = renderSegment("git").replace(ANSI_AND_CAPS, "");
       expect(visible).toContain("+2 ~3 ?4 !1");
       expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
     });
@@ -1011,8 +1008,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
         );
         return line.replace(
-          // eslint-disable-next-line no-control-regex
-          /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu,
+          ANSI_AND_CAPS,
           "",
         );
       } finally {
@@ -1421,8 +1417,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // where the default doesn't — pin that it actually renders NARROWER than
   // the floor at the same width, not merely that it renders.
   test("compact renders a shorter visible line than the default floor", () => {
-    // eslint-disable-next-line no-control-regex
-    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const visible = (s: string): string => s.replace(ANSI, "");
     const compactLine = visible(renderPreset("compact", 200).rendered);
     const defaultLine = visible(renderPreset("default", 200).rendered);
@@ -1437,8 +1431,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // both via `withPayload` rather than either skipping the assertion or
   // mutating the shared fixture other suites assert literal values against.
   test("verbose surfaces every opt-in segment's own content", () => {
-    // eslint-disable-next-line no-control-regex
-    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const line = renderPreset("verbose", 200, (base) => ({
       ...base,
       git: {
@@ -1461,8 +1453,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // with edit mode open AND the preset customized. This pins all three
   // cells that matter: both terms true, and each term alone.
   test("customized preset shows the reset banner in edit mode; not outside it, nor when clean", () => {
-    // eslint-disable-next-line no-control-regex
-    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const withCustomized = (base: Record<string, unknown>) => ({
       ...base,
       preset: { effective: "default", customized: true },

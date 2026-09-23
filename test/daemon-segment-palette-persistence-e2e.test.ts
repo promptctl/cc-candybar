@@ -25,6 +25,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
+import { linkUrls } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
@@ -86,12 +87,7 @@ async function click(sockPath: string, url: string): Promise<void> {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  return linkUrls(rendered);
 }
 
 async function killAndWait(daemon: RunningDaemon): Promise<void> {

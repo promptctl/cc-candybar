@@ -48,6 +48,7 @@ import {
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -63,11 +64,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
 }
 
 function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
+  const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
   return ownLinks(urls);

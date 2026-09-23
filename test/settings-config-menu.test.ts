@@ -49,6 +49,7 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
+import { linkUrls } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -182,12 +183,7 @@ function rig(
 }
 
 function urlsOf(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  return linkUrls(rendered);
 }
 
 // The affordances that write `key`, whatever verb carries them — the question
