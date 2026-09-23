@@ -68,7 +68,7 @@
           "type": "string",
           "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
           "not": {
-            "const": "✕"
+            "const": "❌"
           }
         }
       },

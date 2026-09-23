@@ -751,7 +751,7 @@ describe("globals.menuGlyph", () => {
   });
 
   test.each([
-    ...["", " ", "a\nb", "✕"].map((glyph) => [
+    ...["", " ", "a\nb", DOOR_CLOSE_GLYPH].map((glyph) => [
       `{ globals: { menuGlyph: ${JSON.stringify(glyph)} } }`,
       "globals.menuGlyph: must be one line of visible text",
     ]),

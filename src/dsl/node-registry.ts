@@ -113,9 +113,11 @@ export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 // sits on, still to be led by that band's ✕ where the band is rooted; `deeper`
 // — a row of a band hung under the node (a dropped `{{ menu }}` body, an open
 // disclosure body), already led by its own ✕. The trigger that opened a body
-// leads its `own` lines and returns every line as `deeper` (brandon-
-// disclosure-43z), so a row is led exactly once, by the innermost band it sits
-// on — a fact the line carries, not one a direction or the walk decides.
+// leads its `own` lines and returns them as `deeper` (brandon-disclosure-43z),
+// so a row is led exactly once, by the innermost band it sits on — a fact the
+// line carries, not one a direction or the walk decides. The one exception is
+// an `inline` body's first row: it joins the trigger's own row (`span: "row"`,
+// band `own`) unled, because the trigger beside it is already its close.
 export interface RenderedLine {
   readonly cells: readonly RichText[];
   readonly band: "own" | "deeper";
