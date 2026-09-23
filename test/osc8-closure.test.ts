@@ -24,14 +24,13 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
-import { OSC8 } from "@promptctl/rich-js";
+import { osc8Sequences } from "@promptctl/rich-js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // OSC-8 grammar: open = ESC ] 8 ; <params> ; <URI> ST, close = ESC ] 8 ; ; ST.
-// The close has an EMPTY URI; an open has a non-empty one. rich-js's `OSC8`
-// matches both; group 2, the URI, tells them apart — empty ⇒ close.
-const osc8s = (rendered: string) => rendered.matchAll(new RegExp(OSC8.source, "g"));
+// The close has an EMPTY URI; an open has a non-empty one. rich-js's
+// `osc8Sequences` reads both; the URI tells them apart — empty ⇒ close.
 
 /**
  * Walk the rendered bytes in order, tracking the terminal's single OSC-8
@@ -48,8 +47,8 @@ function osc8Walk(rendered: string): {
   let opens = 0;
   let closes = 0;
   let linked = false;
-  for (const m of osc8s(rendered)) {
-    if (m[2]!.length > 0) {
+  for (const seq of osc8Sequences(rendered)) {
+    if (seq.uri.length > 0) {
       opens += 1;
       linked = true;
     } else {
@@ -155,10 +154,10 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       width: Number.POSITIVE_INFINITY,
     });
     const idsByUrl = new Map<string, string[]>();
-    for (const m of osc8s(out)) {
-      if (m[2] === "") continue;
-      expect(m[1]).toMatch(/^id=\S+$/);
-      idsByUrl.set(m[2]!, [...(idsByUrl.get(m[2]!) ?? []), m[1]!]);
+    for (const seq of osc8Sequences(out)) {
+      if (seq.uri === "") continue;
+      expect(seq.params).toMatch(/^id=[0-9a-f]{8}$/);
+      idsByUrl.set(seq.uri, [...(idsByUrl.get(seq.uri) ?? []), seq.params]);
     }
     const same = idsByUrl.get("same")!;
     expect(same).toHaveLength(2);
