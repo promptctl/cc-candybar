@@ -91,6 +91,7 @@ import {
   type RootFragment,
 } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
@@ -806,15 +807,9 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
   });
 });
 
-// brandon-layout-edit-2gc.5 PR review round 4: a preset's declared root may
-// carry its OWN top-level `when` — including the A-grammar's bare-segment-
-// ref shorthand `{ seg, when }` (loader/layout.ts), NOT only a container.
-// wrapWithPresetRows's when-carry-up only reaches a container's own
-// `when`; without ALSO copying it onto spliceEditChromeForPreset's
-// synthetic wrapper for a bare-segment root, that shape's own gate never
-// reached the carry-up at all.
-describe("the reset banner respects a preset root's own top-level `when`", () => {
-
+// A preset root's own `when` gates the author's content, never the settings
+// menu that leads it nor the edit-mode reset banner reached through it.
+describe("a preset root's own top-level `when` hides content, not the menu or banner", () => {
   function buildConfig(rootWhen: string) {
     return parseAndValidate(
       "<test>",
@@ -825,7 +820,7 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
           'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
         },
         segments: {
-          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          directory: { template: 'GATED_CONTENT', bg: 'surface', fg: 'foreground' },
           editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
         },
         root: { h: ['directory', 'editControl'] },
@@ -862,15 +857,18 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
     }
   }
 
-  test("the banner is hidden when a bare-segment-root's own when is false, even though .preset.customized is true", () => {
-    expect(renderGated(buildConfig("{{ false }}"))).not.toContain("customized");
-  });
-
-  test("the banner still shows when the root's own when is true (sanity: the gate above isn't just always-empty)", () => {
-    expect(renderGated(buildConfig("{{ true }}"))).toContain(
-      "↺ gated customized",
-    );
-  });
+  test.each([
+    ["{{ false }}", false],
+    ["{{ true }}", true],
+  ])(
+    "under a root gate of %s the content follows the gate; the door and banner show",
+    (gate, contentShown) => {
+      const rendered = renderGated(buildConfig(gate));
+      expect(rendered.includes("GATED_CONTENT")).toBe(contentShown);
+      expect(rendered).toContain(DOOR_GLYPH);
+      expect(rendered).toContain("↺ gated customized");
+    },
+  );
 });
 
 // ─── RenderCache integration: the file's tree, reload, restart, reset ───────

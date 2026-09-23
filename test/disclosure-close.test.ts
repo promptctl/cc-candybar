@@ -29,6 +29,8 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
+  DOOR_CLOSE_GLYPH,
+  DOOR_GLYPH,
 } from "../src/config/disclosure";
 import { menuPageKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/loader/reserved-namespace";
@@ -161,26 +163,32 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     const rt = build(BUNDLED, true);
     let lines = rt.render();
     expect(lines).toHaveLength(1);
+    const closedBar = stripAnsi(lines[0]!);
+    expect(closedBar).toMatch(/proj.*Opus/);
     // The bar row carries no row ✕: only the door itself, which is a trigger.
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
+    // The door opens INLINE: its tray takes the door's own row, led by the
+    // door's ❌ and by no row ✕.
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(2);
-    expectLedBy(lines[1]!, SETTINGS_ANCHOR);
+    expect(lines).toHaveLength(1);
+    const [door] = links(lines[0]!);
+    expect(door?.text).toBe(DOOR_CLOSE_GLYPH);
+    expect(closes(door!, SETTINGS_ANCHOR)).toBe(true);
+    expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     // ⚙ config open: its row is led by ⚙'s ✕ — and 🍫's ✕ is not on it.
     const configKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}config`;
     rt.clickWriting(lines, configKey, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(3);
-    expectLedBy(lines[1]!, SETTINGS_ANCHOR);
-    expectLedBy(lines[2]!, configKey);
-    expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
+    expect(lines).toHaveLength(2);
+    expectLedBy(lines[1]!, configKey);
+    expect(links(lines[1]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
     // A picker dropped inside ⚙'s body keeps the picker's own ✕ alone: the
     // line is the menu's band, not ⚙'s row.
-    const opener = links(lines[2]!).find((l) =>
+    const opener = links(lines[1]!).find((l) =>
       effectsOf(l.url).some(
         (e) =>
           e.verb === VERB_SET_STATE &&
@@ -191,19 +199,18 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     if (opener === undefined) throw new Error("⚙'s row hosts no menu opener");
     rt.click(opener.url);
     lines = rt.render();
-    expect(lines).toHaveLength(4);
-    const pickerLine = lines[3]!;
+    expect(lines).toHaveLength(3);
+    const pickerLine = lines[2]!;
     const [first] = links(pickerLine);
     expect(first?.text).toBe(DISCLOSURE_GLYPH_CLOSE);
     expect(closes(first!, configKey)).toBe(false);
     expect(closes(first!, SETTINGS_ANCHOR)).toBe(false);
 
     // Clicking ⚙'s row ✕ closes ⚙ (and the picker hanging under it) while 🍫
-    // stays open with its own row still led.
-    rt.click(links(lines[2]!)[0]!.url);
+    // stays open.
+    rt.click(links(lines[1]!)[0]!.url);
     lines = rt.render();
-    expect(lines).toHaveLength(2);
-    expectLedBy(lines[1]!, SETTINGS_ANCHOR);
+    expect(lines).toHaveLength(1);
 
     // 🧰 tools opens a VERTICAL body whose rows are bare `settings.` segments
     // — chrome-exempt, so no edit-mode row wraps them: the segment itself
@@ -212,16 +219,18 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     const toolsKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tools`;
     rt.clickWriting(lines, toolsKey, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(3);
-    expectLedBy(lines[2]!, toolsKey);
-    rt.click(links(lines[2]!)[0]!.url);
-    lines = rt.render();
     expect(lines).toHaveLength(2);
-
-    // And 🍫's row ✕ closes the menu: back to the bar alone.
+    expectLedBy(lines[1]!, toolsKey);
     rt.click(links(lines[1]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);
+
+    // And the door's ❌ closes the menu: back to the bar alone.
+    rt.click(links(lines[0]!)[0]!.url);
+    lines = rt.render();
+    expect(lines).toHaveLength(1);
+    expect(links(lines[0]!)[0]?.text).toBe(DOOR_GLYPH);
+    expect(stripAnsi(lines[0]!)).toBe(closedBar);
     rt.dispose();
   });
 });

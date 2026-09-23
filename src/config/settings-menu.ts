@@ -36,7 +36,6 @@
 
 import type { ActionDecl } from "./action.js";
 import {
-  mapOpens,
   walkNodes,
   type DisclosureRef,
   type DslConfig,
@@ -48,9 +47,9 @@ import {
 } from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
-  DISCLOSURE_GLYPH_CLOSE,
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
+  DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
   disclosureCycleAction,
   disclosureNode,
@@ -338,13 +337,12 @@ declare const anchored: unique symbol;
 // and no answer-shaped void to return: the only way to obtain this type is to
 // go through `withAnchor`, which establishes the fact by construction.
 //
-// The theorem includes the anchor inheriting no gate the DEFAULT placement
-// descended into — a weaker stamp ("contains an anchor" alone) is what let a
-// `when`-gated first row silently swallow the menu. Two gates are exempt
-// because they are explicit authorial statements rather than accidents: the
-// author's own placement of the anchor (they chose that position, gate and
-// all) and a `when` on the root itself (there is no bar at all under that
-// condition, so there is nothing to host a menu on).
+// The theorem includes the anchor inheriting no gate at all — a weaker stamp
+// ("contains an anchor" alone) is what let a `when`-gated first row silently
+// swallow the menu. The menu is visible under every condition: the default
+// placement wraps a gated node rather than entering it, the root's own `when`
+// included, and cross-ref rejects an authored placement under a gate
+// (`anchorUnderGate`).
 type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 
 // [LAW:dataflow-not-control-flow] The default position, as structural recursion
@@ -354,48 +352,31 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 // one position that does not drift as a config's content grows to its right.
 // Total over every tree shape, including the degenerate ones: a bare-segment
 // root (the A-grammar collapses a lone top-level ref) grows a horizontal
-// wrapper, and an empty container simply becomes the row.
+// wrapper, and an empty container renders the door alone.
+//
+// [LAW:no-silent-failure] A gated node is wrapped, never entered, so the door
+// never inherits the author's gate. A gated row is led from outside its gate,
+// on the same line. A gated stack gets the door on its own row above it,
+// because leading the stack would put every row under the door's inline claim.
 function prependAnchor(node: LayoutNode): LayoutNode {
   const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
-  if (node.kind === "segment") {
-    // [LAW:no-silent-failure] A bare-segment root may carry its OWN `when` — an
-    // author gating their whole bar behind a condition. This wrapper is a brand
-    // new node, so without carrying that gate up, everything spliced beside the
-    // segment (this menu, and the reset banner edit chrome later prepends by
-    // reading `splicedRoot.when`) would render past a gate the author wrote.
-    // The identical carry-up spliceEditChromeForPreset performs, one pass over.
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node],
-      ...(node.when !== undefined && { when: node.when }),
-    };
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first, ...rest] = node.children;
+    return node.when === undefined && first !== undefined
+      ? { ...node, children: [prependAnchor(first), ...rest] }
+      : {
+          kind: "container",
+          direction: "vertical",
+          children: [anchorRef, node],
+        };
   }
-  const [first, ...rest] = node.children;
-  // [LAW:no-silent-failure] Descend only into an UNGATED child. A gate on an
-  // inner row is a statement about that row's content, not about the bar — an
-  // author writing an ordinary conditional first row (a git row shown only
-  // inside a repo) has no idea the default placement attaches the menu there,
-  // and inheriting that gate would silently delete the one surface this pass
-  // exists to make undeletable, under exactly their condition. When the first
-  // row is gated the anchor becomes its own ungated row leading this container
-  // instead, which is a position the author can still override by placing the
-  // anchor themselves.
-  //
-  // The ROOT's own `when` is deliberately NOT lifted out of, here or in the
-  // segment arm above: gating the whole tree is an explicit statement that
-  // there is no bar under this condition, and there is no bar to host a menu
-  // on. That is the same "the author's explicit choice is the answer" rule
-  // that honors an author-placed anchor inside a gated row — and it is what
-  // keeps edit chrome's reset banner gated with the content it describes.
-  if (
-    node.direction === "vertical" &&
-    first !== undefined &&
-    first.when === undefined
-  ) {
-    return { ...node, children: [prependAnchor(first), ...rest] };
-  }
-  return { ...node, children: [anchorRef, ...node.children] };
+  return node.kind === "container" && node.when === undefined
+    ? { ...node, children: [anchorRef, ...node.children] }
+    : {
+        kind: "container",
+        direction: "horizontal",
+        children: [anchorRef, node],
+      };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name
@@ -419,10 +400,25 @@ export function countAnchors(node: LayoutNode): number {
   return n;
 }
 
+// [LAW:single-enforcer] THE gate census for an authored placement: does an
+// anchor sit under a `when` or inside a disclosure body? Read by cross-ref,
+// which rejects it — the menu is visible under every condition.
+export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
+  const here = gated || node.when !== undefined;
+  if (node.kind === "segment") {
+    return (
+      (here && isSettingsAnchor(node.name)) ||
+      (node.opens !== undefined && anchorUnderGate(node.opens.body, true))
+    );
+  }
+  return node.children.some((child) => anchorUnderGate(child, here));
+}
+
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
 // (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
 // the menu's body hung on it, wherever it sits, so the author's chosen
-// position is the menu's position with nothing else moved. The `⚙ config`
+// position is the menu's position with nothing else moved. The door opens
+// INLINE: its body's first row takes the door's own row. The `⚙ config`
 // row is a disclosure INSIDE that body — nesting is structure, not a second
 // gate: a config row left open yesterday cannot render beside a closed menu
 // today because it hangs on a trigger the closed menu does not render. The
@@ -463,42 +459,51 @@ function expandAnchor(
               ),
               // The display settings, behind their own disclosure so the
               // menu opens narrow.
-              disclosureNode(CONFIG_SEG, CONFIG_REF, {
-                kind: "container",
-                direction: "horizontal",
-                children: [
-                  ...CONFIG_CONTROLS.map(
-                    (c): LayoutNode => ({
-                      kind: "segment",
-                      name: controlSeg(c.name),
-                    }),
-                  ),
-                  { kind: "segment", name: WRAP_SEG },
-                  { kind: "segment", name: PADDING_SEG },
-                ],
-              }),
+              disclosureNode(
+                CONFIG_SEG,
+                CONFIG_REF,
+                {
+                  kind: "container",
+                  direction: "horizontal",
+                  children: [
+                    ...CONFIG_CONTROLS.map(
+                      (c): LayoutNode => ({
+                        kind: "segment",
+                        name: controlSeg(c.name),
+                      }),
+                    ),
+                    { kind: "segment", name: WRAP_SEG },
+                    { kind: "segment", name: PADDING_SEG },
+                  ],
+                },
+                "drop",
+              ),
               // The tools, behind their own disclosure: the doctor button,
               // then one row per check once it has run.
-              disclosureNode(TOOLS_SEG, TOOLS_REF, {
-                kind: "container",
-                direction: "vertical",
-                children: [
-                  { kind: "segment", name: DOCTOR_SEG },
-                  ...CHECKS.map(
-                    (c): LayoutNode => ({
-                      kind: "segment",
-                      name: doctorRowSeg(c.name),
-                    }),
-                  ),
-                ],
-              }),
+              disclosureNode(
+                TOOLS_SEG,
+                TOOLS_REF,
+                {
+                  kind: "container",
+                  direction: "vertical",
+                  children: [
+                    { kind: "segment", name: DOCTOR_SEG },
+                    ...CHECKS.map(
+                      (c): LayoutNode => ({
+                        kind: "segment",
+                        name: doctorRowSeg(c.name),
+                      }),
+                    ),
+                  ],
+                },
+                "drop",
+              ),
               { kind: "segment", name: EDIT_SEG },
             ],
           },
-          node.when,
+          "inline",
         )
-      : // An anchor placed inside a group's body is still the anchor.
-        mapOpens(node, (body) => expandContainer(body, help));
+      : node;
   }
   return expandContainer(node, help);
 }
@@ -583,10 +588,8 @@ function settingsArtifacts(doorGlyph: string): {
       // [LAW:representation] ONE symbol per state, unlike the labelled toggles
       // below, which are a word plus the ▸/▾ that gates it. The door has no
       // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. The door's glyph names what it
-      // opens, `✕` names what the click does — the SAME `✕` the picker's close
-      // affordance and edit mode's open `+` wear, because it is the one glyph
-      // for that one meaning (DISCLOSURE_GLYPH_CLOSE).
+      // only thing on the bar that spells its state twice. The door's glyph
+      // names what it opens, `❌` names what the click does.
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values.
@@ -594,7 +597,7 @@ function settingsArtifacts(doorGlyph: string): {
         template: disclosureTrigger(
           SETTINGS_ANCHOR,
           doorGlyph,
-          DISCLOSURE_GLYPH_CLOSE,
+          DOOR_CLOSE_GLYPH,
         ),
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },

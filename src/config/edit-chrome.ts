@@ -378,13 +378,6 @@ function wrapWithPresetRows(
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
     when: CUSTOMIZED_BANNER_GATE,
   };
-  // [LAW:no-silent-failure] A preset's root may carry its OWN top-level
-  // `when` (the A-grammar's container schemas all permit one) — an author
-  // gating the whole preset behind a condition. `spliceContainer` preserves
-  // that onto `splicedRoot` via its `{...node, children}` spread, but this
-  // new OUTER wrapper is a brand-new node with no `when` of its own; without
-  // carrying it up, the reset banner would render even when the author's
-  // own condition is false, leaking past a gate they wrote.
   return {
     kind: "container",
     direction: "vertical",
@@ -394,7 +387,6 @@ function wrapWithPresetRows(
       // disclosure is open, like every other disclosure body in this codebase.
       withTrailingCell(splicedRoot, help),
     ],
-    ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
   };
 }
 

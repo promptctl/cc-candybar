@@ -30,7 +30,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
-import { DISCLOSURE_GLYPH_CLOSE } from "../disclosure.js";
+import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "../disclosure.js";
 
 // [LAW:types-are-the-program] Closed enum like `charset`, plus one
 // migration-pointing rejection: "auto" was the LEGACY default, so migrating
@@ -87,21 +87,25 @@ const paletteOrRuleSpec: FieldSpec<string> = {
 };
 
 const MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
+const CLOSE_GLYPH = new RegExp(
+  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
+  "u",
+);
 
 const menuGlyphSpec: FieldSpec<string> = {
   required: false,
   json: {
     type: "string",
     pattern: MENU_GLYPH.source,
-    not: { const: DISCLOSURE_GLYPH_CLOSE },
+    not: { pattern: CLOSE_GLYPH.source },
   },
   parse: (ctx, path, field, raw) => {
     const v = optionalStringField(ctx, path, raw, field);
-    if (v === undefined || (MENU_GLYPH.test(v) && v !== DISCLOSURE_GLYPH_CLOSE))
+    if (v === undefined || (MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v)))
       return v;
     ctx.issues.push({
       path: `${path}.${field}`,
-      message: `${path}.${field}: must be one line of visible text other than "${DISCLOSURE_GLYPH_CLOSE}" (the open menu's glyph) — the settings menu needs a glyph to click`,
+      message: `${path}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") — the settings menu needs a glyph to click`,
       line: findKeyLine(ctx.source, [...path.split("."), field]),
     });
     return undefined;

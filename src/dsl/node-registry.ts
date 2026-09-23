@@ -28,6 +28,7 @@ import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
   Direction,
+  Placement,
   SegmentDecl,
 } from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
@@ -66,6 +67,7 @@ export interface CompiledOpens {
   // The state key the body's ✕ writes closed — the ref's own, carried so the
   // row affordance and the trigger's cycle cannot name different keys.
   readonly key: string;
+  readonly placement: Placement;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -111,12 +113,15 @@ export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 // sits on, still to be led by that band's ✕ where the band is rooted; `deeper`
 // — a row of a band hung under the node (a dropped `{{ menu }}` body, an open
 // disclosure body), already led by its own ✕. The trigger that opened a body
-// leads its `own` lines and returns every line as `deeper` (brandon-
-// disclosure-43z), so a row is led exactly once, by the innermost band it sits
-// on — a fact the line carries, not one a direction or the walk decides.
+// leads its `own` lines and returns them as `deeper` (brandon-disclosure-43z),
+// so a row is led exactly once, by the innermost band it sits on — a fact the
+// line carries, not one a direction or the walk decides. The one exception is
+// an `inline` body's first row: it joins the trigger's own row (`span: "row"`,
+// band `own`) unled, because the trigger beside it is already its close.
 export interface RenderedLine {
   readonly cells: readonly RichText[];
   readonly band: "own" | "deeper";
+  readonly span: "shared" | "row";
 }
 export type RenderedLines = readonly RenderedLine[];
 
@@ -256,14 +261,20 @@ export interface SegmentStyles {
 // band its child gave it — a continuation line of a multi-line segment is that
 // segment's `own` row and is led with row 0, a dropped `{{ menu }}` body stays
 // `deeper` and is not.
+//
+// A child whose row 0 claims the row (an open inline disclosure) replaces its
+// horizontal siblings whole, their drops included. Every container settles the
+// claim, so it never reaches past the nearest enclosing one.
 function composeBlocks(
   direction: Direction,
   blocks: readonly RenderedLines[],
 ): RenderedLines {
   switch (direction) {
     case "vertical":
-      return blocks.flatMap((b) => b);
+      return settled(blocks.flatMap((b) => b));
     case "horizontal": {
+      const claimed = blocks.find((b) => b[0]?.span === "row");
+      if (claimed !== undefined) return settled(claimed);
       // [LAW:dataflow-not-control-flow] height 0 (every child hidden/empty) ⇒ the
       // container contributes NO line — not one empty row. This is the value-driven
       // identity of the fold, preserved from the per-row zip it replaces; a stray
@@ -273,11 +284,18 @@ function composeBlocks(
       const row0: RenderedLine = {
         cells: blocks.flatMap((b) => b[0]?.cells ?? []),
         band: "own",
+        span: "shared",
       };
       const drops = blocks.flatMap((b) => b.slice(1));
       return [row0, ...drops];
     }
   }
+}
+
+function settled(lines: RenderedLines): RenderedLines {
+  return lines.map((line) =>
+    line.span === "row" ? { ...line, span: "shared" } : line,
+  );
 }
 
 // ─── The node-type contract + registry ──────────────────────────────────────────
@@ -342,6 +360,7 @@ const segmentType: NodeType<"segment"> = {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
           body: cctx.compileChild(node.opens.body, `${cctx.path}.opens.body`),
           key: node.opens.ref.key,
+          placement: node.opens.placement,
         },
       }),
     };
@@ -419,14 +438,22 @@ const segmentType: NodeType<"segment"> = {
         // pagination seam so a padded band still fits the width budget.
         padding: ctx.padding,
       } as const;
+      const bodyLines =
+        node.opens === undefined
+          ? []
+          : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
+      const bodyHead = bodyLines.slice(
+        0,
+        node.opens?.placement === "inline" ? 1 : 0,
+      );
+      const bodyTail = bodyLines.slice(bodyHead.length);
       // The ✕ every row of the body this segment opens leads with
       // (brandon-disclosure-43z): one content-sized cell in the trigger's own
       // state colour — the colour the open trigger wears, so the ✕ on a row
       // and the trigger it answers to read as one affordance — laid through
-      // the same layout as the trigger's cells, so it pads like them. Built
-      // only when there is a body to lead (a closed body has no rows).
+      // the same layout as the trigger's cells, so it pads like them.
       const closeLead =
-        node.opens !== undefined && bodyOpen
+        node.opens !== undefined && bodyTail.some((l) => l.band === "own")
           ? applySegmentLayout(
               fragmentsToCells(
                 [ctx.closeDisclosure(node.opens.key)],
@@ -435,10 +462,6 @@ const segmentType: NodeType<"segment"> = {
               { ...layout, width: "auto", baseStyle: styles.trigger },
             )
           : [];
-      const bodyLines =
-        node.opens === undefined
-          ? []
-          : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
       // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
       // the band this trigger opened gets its ✕; a row of a band hung deeper
       // inside (a `{{ menu }}` body, a nested disclosure's rows) already has
@@ -446,9 +469,10 @@ const segmentType: NodeType<"segment"> = {
       // band, so the band this trigger sits on never leads it again.
       const leadOf = (line: RenderedLine): readonly RichText[] =>
         line.band === "own" ? closeLead : [];
-      const ledBody: RenderedLines = bodyLines.map((line) => ({
+      const ledBody: RenderedLines = bodyTail.map((line) => ({
         cells: [...leadOf(line), ...line.cells],
         band: "deeper",
+        span: "shared",
       }));
 
       // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
@@ -463,6 +487,7 @@ const segmentType: NodeType<"segment"> = {
       ).map((line) => ({
         cells: applySegmentLayout(line, layout),
         band: "own",
+        span: "shared",
       }));
       // Each open menu body is one full-width dropped line on the band's
       // PLANE — the recessed floor its items are placed above — stacked after
@@ -475,6 +500,7 @@ const segmentType: NodeType<"segment"> = {
           baseStyle: styles.band,
         }),
         band: "deeper",
+        span: "shared",
       }));
       const laidLines = [...inlineLines, ...dropLines];
 
@@ -485,12 +511,21 @@ const segmentType: NodeType<"segment"> = {
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(node.name, [
           ...laidLines.flatMap((line) => line.cells),
-          ...bodyLines.flatMap(leadOf),
+          ...bodyTail.flatMap(leadOf),
         ]);
       }
       // Below row 0 every line is a drop: menu bands first (template order),
       // then the disclosure body, in the order they hang under the trigger.
-      return [...laidLines, ...ledBody];
+      const rows: RenderedLines = laidLines.map((line, i) =>
+        i === 0 && bodyHead.length > 0
+          ? {
+              cells: [...line.cells, ...bodyHead.flatMap((h) => h.cells)],
+              band: "own",
+              span: "row",
+            }
+          : line,
+      );
+      return [...rows, ...ledBody];
     } catch (err) {
       const message = (err as Error).message ?? String(err);
       ctx.onSegmentError?.(node.name, message);
@@ -510,6 +545,7 @@ const segmentType: NodeType<"segment"> = {
             }),
           ],
           band: "own",
+          span: "shared",
         },
       ];
     }

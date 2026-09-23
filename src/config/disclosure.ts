@@ -24,6 +24,7 @@ import type { ActionDecl } from "./action.js";
 import type {
   ContainerNode,
   DisclosureRef,
+  Placement,
   SegmentNode,
   VariableDecl,
 } from "./dsl-types.js";
@@ -59,7 +60,7 @@ export const DISCLOSURE_GLYPH_OPEN = "▾";
 export const DISCLOSURE_GLYPH_CLOSE = "✕";
 
 // [LAW:one-source-of-truth] The global settings menu's own glyph — its whole
-// closed display by default, since the door binds a glyph / `✕` rather than a label plus an
+// closed display by default, since the door binds a glyph / `❌` rather than a label plus an
 // arrow: one symbol per state, so the landmark never renders as two.
 //
 // It lives HERE, beside the vocabulary it completes, rather than in
@@ -70,6 +71,7 @@ export const DISCLOSURE_GLYPH_CLOSE = "✕";
 // a cycle [LAW:one-way-deps]. Every consumer already imports this module for
 // the arrows, so this is downhill from all of them.
 export const DOOR_GLYPH = "🍫";
+export const DOOR_CLOSE_GLYPH = "❌";
 
 // [LAW:single-enforcer] THE display rule every multi-state trigger obeys: bind
 // one display per member, or ONE static display that shows in every state. It
@@ -134,12 +136,13 @@ export function disclosureNode(
   name: string,
   ref: DisclosureRef,
   body: ContainerNode,
+  placement: Placement,
   when?: string,
 ): SegmentNode {
   return {
     kind: "segment",
     name,
-    opens: { ref, body },
+    opens: { ref, body, placement },
     ...(when !== undefined && { when }),
   };
 }
