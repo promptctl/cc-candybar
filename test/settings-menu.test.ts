@@ -489,6 +489,23 @@ describe("the default placement never inherits an author's gate", () => {
     dispose();
   });
 
+  test("a gated stack keeps its rows under the open menu", () => {
+    const { render, clickWriting, dispose } = buildRuntime(
+      `{ globals: {}, root: { v: [{ v: [{ h: ['directory'] }, { h: ['model'] }], when: '{{ eq "a" "a" }}' }] } }`,
+    );
+    const closed = stripAnsi(render()).split("\n");
+    expect(closed).toHaveLength(3);
+    expect(closed[0]).toContain(DOOR_GLYPH);
+    expect(closed[0]).not.toContain("proj");
+    expect(closed[2]).toContain("Opus");
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const opened = stripAnsi(render()).split("\n");
+    expect(opened).toHaveLength(3);
+    expect(opened[0]!.startsWith(DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened.slice(1)).toEqual(closed.slice(1));
+    dispose();
+  });
+
   test("a bar gated away entirely still renders its door", () => {
     const { render, dispose } = buildRuntime(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
