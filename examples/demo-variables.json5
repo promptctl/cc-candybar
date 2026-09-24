@@ -293,7 +293,6 @@
     demoIdentity: {
       template: " 👤 {{ .demoIdentity.badge }} ",
       bg: "surface-active",
-      fg: "foreground",
       vars: {
         // Local template var composing three global vars. Only this segment
         // and templates that explicitly write .demoIdentity.badge can see it.
@@ -310,7 +309,6 @@
     demoLiterals: {
       template: " ◈ {{ .demo.label }} v{{ .demo.version }}  ⌗{{ .demo.shortId }} ",
       bg: "surface",
-      fg: "foreground",
       when: '{{ ne .demo.sessionId "" }}',
     },
 
@@ -319,7 +317,6 @@
       // template "orUnset" calls the helper declared above
       template: ' ✎ {{ template "orUnset" .demo.editor }}  🐚 {{ basename .demo.shell }} ',
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── File + shell + width/justify/truncate ─────────────────────────────
@@ -330,7 +327,6 @@
     demoSystem: {
       template: " 🖥  {{ .demo.os }}  {{ .demo.cpus }}× cores  node {{ .demo.nodeVer }} ",
       bg: "surface",
-      fg: "foreground",
       width: "auto",
       justify: "center",
       truncate: "right",
@@ -341,14 +337,12 @@
     demoPkg: {
       template: " 📦 {{ .demo.pkg.name }} · {{ .demo.pkg.deps.runtime }} deps ",
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── Time variables ────────────────────────────────────────────────────
     demoClock: {
       template: " 🕐 {{ .demo.clock }}  {{ .demo.date }} ",
       bg: "surface",
-      fg: "foreground",
     },
 
     // ── Git (native kind) vs input kind ──────────────────────────────────
@@ -357,19 +351,18 @@
     demoGit: {
       template: ' ⎇ {{ .demo.git.branch }}{{ if .demo.git.dirty }} ●{{ end }}{{ if .demo.git.ahead }} ↑{{ .demo.git.ahead }}{{ end }}{{ if gt (int .demo.git.stash) 0 }} ⧇{{ .demo.git.stash }}{{ end }} ',
       bg: "surface-active",
-      fg: "foreground",
       when: '{{ ne .demo.git.branch "" }}',
     },
 
-    // ── Dynamic bg/fg (template expressions in color fields) ─────────────
+    // ── Dynamic bg (template expressions in color fields) ────────────────
     // bg and fg accept the same Go-template syntax as `template` and `when`.
+    // No fg here: text nobody authors is chosen on whichever bg this resolves to.
     // [LAW:dataflow-not-control-flow] The color IS the value — no if-branch
     // in the body, just a different palette spec name flowing through the
     // same render path.
     demoGitStatus: {
       template: ' git: {{ .demo.git.branch }}{{ if .demo.git.dirty }} ● dirty{{ end }} ',
       bg: '{{ if .demo.git.dirty }}warning{{ else }}surface-active{{ end }}',
-      fg: '{{ if .demo.git.dirty }}button-color-foreground{{ else }}foreground{{ end }}',
       when: '{{ ne .demo.git.branch "" }}',
     },
 
@@ -380,7 +373,6 @@
     demoFixed: {
       template: " {{ .demo.cwd }} ",
       bg: "panel",
-      fg: "foreground",
       palette: "catppuccin-latte",  // always catppuccin-latte; ignores session theme
     },
 
@@ -393,14 +385,12 @@
     demoMode: {
       template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
       bg: "panel",
-      fg: "foreground",
     },
 
     // Context percentage: a number → a colour is one `ramp` per slot.
     demoContext: {
       template: ' ◔ {{ .demo.contextLeft }}% left ',
       bg: '{{ ramp .demo.contextLeft "step" 0 "error" .demo.contextWarnAt "warning" .demo.contextCalmAt "surface" }}',
-      fg: '{{ ramp .demo.contextLeft "step" 0 "button-color-foreground" .demo.contextCalmAt "foreground" }}',
       when: '{{ gt (int .demo.contextLeft) 0 }}',
     },
 
@@ -413,7 +403,6 @@
     configSwitcher: {
       template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-variables.json5" .home))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-actions.json5" .home))) "🎬 actions" }} ',
       bg: "surface",
-      fg: "foreground",
     },
   },
 

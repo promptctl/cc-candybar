@@ -16,6 +16,7 @@
 
 import {
   blendRgb,
+  contrastFor,
   contrastRatio,
   ensureContrast,
   type ColorRgba,
@@ -360,27 +361,47 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
 export const TEXT_MIN_CONTRAST = 4.5;
 
 /**
- * The text colour for a cell nobody authored a foreground for: whichever of
- * the theme's two poles reads better on `background`, floored at
+ * The text colour for a cell nobody authored a foreground for: the theme pole
+ * on the side of `background` that can carry text, floored at
  * TEXT_MIN_CONTRAST. Text is chosen, never assumed — a fixed foreground fails
  * on pure hues (design doc, Decisions), and the terminal's own text fails on
- * any cell whose polarity differs from the terminal's. The pole alone is not
- * enough on a MID-luminance cell, where neither pole clears the floor (atom-
- * one-dark's foreground on its lighter tints measured 2.49:1); rich-js
- * `ensureContrast` then slides the better pole's lightness until it does, and
- * returns a pole that already clears unchanged. Symmetric on ties.
+ * any cell whose polarity differs from the terminal's.
+ *
+ * The side is rich-js's to name, not ours: `contrastFor` picks black or white
+ * by the one luminance cutoff where they contrast equally, and `ensureContrast`
+ * slides toward that same pole. So the pole taken is the one nearest
+ * `contrastFor`'s pick, and when it misses the floor on a MID-luminance cell
+ * (atom-one-dark's foreground on its lighter tints measured 2.49:1) it is slid
+ * further the way it already leans — never through the background into the
+ * other polarity, so neighbouring cells do not flip text polarity on a
+ * hairline tint difference. A pole that already clears is returned unchanged.
+ * [LAW:one-source-of-truth]
  */
 export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
-  const poles: readonly ThemePole[] = ["background", "foreground"];
-  const best = poles
-    .map((pole) => paletteRole(palette, pole))
+  let texts = TEXT_MEMO.get(palette);
+  if (texts === undefined) {
+    texts = new Map();
+    TEXT_MEMO.set(palette, texts);
+  }
+  const hit = texts.get(background.hex);
+  if (hit !== undefined) return hit;
+  const side = contrastFor(background);
+  const pole = (["background", "foreground"] as const)
+    .map((role) => paletteRole(palette, role))
     .reduce((best, pole) =>
-      contrastRatio(background, pole) > contrastRatio(background, best)
-        ? pole
-        : best,
+      contrastRatio(side, pole) < contrastRatio(side, best) ? pole : best,
     );
-  return ensureContrast(best, background, TEXT_MIN_CONTRAST);
+  const text = ensureContrast(pole, background, TEXT_MIN_CONTRAST);
+  texts.set(background.hex, text);
+  return text;
 }
+
+// Every cell of every render asks for its text, and the answer is a pure
+// function of (palette, background) — a bisection when the pole misses the
+// floor, measured at 20% of a render before this memo. A palette's distinct
+// backgrounds are its tints, band colours, and the stops its authored ramps
+// reach, so each map stays as small as the colours a bar can wear.
+const TEXT_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 
 // --- Disclosure: bands ---------------------------------------------------------
 

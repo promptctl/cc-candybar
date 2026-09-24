@@ -14,8 +14,8 @@
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
 // whether steps run. An absent bg spec resolves to the region's tint; an
-// absent fg resolves to the region's text floor on the background the cell
-// resolved to (unset on the bar, so cells keep their own).
+// absent fg resolves to `textOn` of the background the cell resolved to, in
+// every region — so a Style always carries both colours.
 
 import {
   Style,

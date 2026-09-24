@@ -353,7 +353,7 @@ value wins, exactly as in `ramp`:
   segments: {
     ctx: {
       template: '◔ {{ .context.contextLeft }}% {{ cascade .context.contextLeft "0:COMPACT!" "25:tight" "60:roomy" }}',
-      fg: '{{ ramp .context.contextLeft "step" 0 "error" 25 "warning" 60 "foreground" }}',
+      bg: '{{ ramp .context.contextLeft "step" 0 "error" 25 "warning" 60 "surface-active" }}',
     },
   },
   root: { rows: { status: { h: ["model", "ctx"] } } },
@@ -920,5 +920,6 @@ In a layout node's `when` the call itself is refused, naming the reason:
 5. Every `ramp` position after `0` that someone might tune is a declared
    numeric variable, and the declared values ascend.
 6. The script prints no colour and the template contains no threshold
-   cascade; the colour is one `ramp` in `bg:` (and `fg:` if the hot
-   background needs it) over one field the script printed.
+   cascade; the colour is one `ramp` in `bg:` over one field the script
+   printed, and there is no `fg:` — the text is chosen on whatever the ramp
+   resolves to.

@@ -100,6 +100,8 @@ const GIT_COLOR = {
   unstaged: "warning",
   untracked: "accent",
   conflicts: "error",
+  dirty: "warning",
+  clean: "success",
   ahead: "success",
   behind: "warning",
   stash: "accent",
@@ -176,12 +178,12 @@ const GIT_WORKTREE =
   `{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}${paint("conflicts", '(printf "!%v" .git.conflicts)')}{{ $first = false }}{{ end }}` +
   "){{ end }}";
 
-// Status icon precedence: conflicts → ⚠ (error), dirty → ● (warning), else
-// clean ✓ (success) — colored to match the state it reports.
+// Status icon precedence: conflicts → ⚠, dirty → ●, else clean ✓ — each
+// painted in its state's GIT_COLOR entry.
 const GIT_STATUS =
-  `{{ if eq .git.status "conflicts" }}${accent("error", '"⚠"')}{{ else }}` +
-  `{{ if eq .git.status "dirty" }}${accent("warning", '"●"')}` +
-  `{{ else }}${accent("success", '"✓"')}{{ end }}{{ end }}`;
+  `{{ if eq .git.status "conflicts" }}${paint("conflicts", '"⚠"')}{{ else }}` +
+  `{{ if eq .git.status "dirty" }}${paint("dirty", '"●"')}` +
+  `{{ else }}${paint("clean", '"✓"')}{{ end }}{{ end }}`;
 
 // Every unpainted token here — the repo name, `⎇`, `♯`, the sha, the worktree
 // parentheses, `→`, the upstream name — renders in the segment's quiet `fg:`
@@ -211,10 +213,11 @@ const GIT_TEMPLATE =
 // `cc-candybar check` fails), never a silently reordered cascade.
 //
 // block/weekly heat as the displayed (rounded) percentage rises: calm to
-// `heatThreshold`, warning to `warningThreshold`, error beyond — and the text
-// flips to the button foreground at the same `heatThreshold`, so bg and fg
-// cannot disagree about where the cell first warms. Both are variables, so
-// the ascending constraint is between two knobs the user can see.
+// `heatThreshold`, warning to `warningThreshold`, error beyond. No `fg:` rides
+// beside the ramp: the text is chosen on whichever stop the cell resolves to
+// (`textOn`), so it cannot disagree with the background about where the cell
+// warms. Both thresholds are variables, so the ascending constraint is between
+// two knobs the user can see.
 
 // ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
 
@@ -863,8 +866,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // hue-ANCHORED palette roots, so it survives every theme and look still
     // reading as an alert. Any other slot could land camouflaged against its
     // neighbours — exactly what a "wrong machine" warning must never do.
-    // `contrastOn (bgOf)` then derives a readable foreground from whatever that
-    // resolves to, rather than betting a fixed `foreground` stays legible.
+    // No `fg:`: the text is chosen on whatever that resolves to, like every
+    // unauthored cell's, rather than betting a fixed `foreground` stays legible.
     //
     // Each half falls back to "?" so a failed hostname/username read renders
     // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
@@ -874,7 +877,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         '⇄ {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
       bg: "warning",
-      fg: "{{ contrastOn (bgOf) }}",
       when: "{{ .host.ssh }}",
     },
     git: {

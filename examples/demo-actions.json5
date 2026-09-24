@@ -146,14 +146,12 @@
     themeControl: {
       template: ' 🎨 {{ if .activeTheme }}{{ .activeTheme }}{{ else }}(default){{ end }} {{ action "openThemeMenu" "▸" }}  ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // ── Style control ──────────────────────────────────────────────────────
     styleControl: {
       template: ' ✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ action "openStyleMenu" "▸" }} ',
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── Theme picker ───────────────────────────────────────────────────────
@@ -182,7 +180,6 @@
     themePicker: {
       template: '{{ picker "applyTheme" "themePage" false true }}',
       bg: "surface",
-      fg: "foreground",
     },
 
     // ── Style picker ───────────────────────────────────────────────────────
@@ -192,7 +189,6 @@
     stylePicker: {
       template: '{{ picker "applyStyle" "stylePage" true false }}',
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── Link (OSC-8 hyperlink) + copy + open actions ───────────────────────
@@ -203,7 +199,6 @@
     toolbar: {
       template: ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "📂" }} {{ action "copySessionId" "⎘ session" }} {{ action "copyDir" "⎘ dir" }} {{ action "openVscode" "↗ vscode" }} {{ action "openGitHub" "↗ github" }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // ── 3-state cycler with per-member display glyphs ─────────────────────
@@ -212,7 +207,6 @@
     modeControl: {
       template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── Accordion body segments ─────────────────────────────────────────────
@@ -220,19 +214,16 @@
     stepperBody: {
       template: ' ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} (bounded stepper demo) ',
       bg: "surface",
-      fg: "foreground",
     },
     modeBody: {
       template: ' Mode: {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
       bg: "panel",
-      fg: "foreground",
     },
 
     // ── Nested group body segments ─────────────────────────────────────────
     innerContent: {
       template: ' 🔧 advanced tools: {{ action "copyDir" "⎘ cwd" }} {{ action "openVscode" "↗" }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // ── Config switcher ───────────────────────────────────────────────────
@@ -242,7 +233,6 @@
     configSwitcher: {
       template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-variables.json5" .home))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-actions.json5" .home))) "🎬 actions" }} ',
       bg: "surface",
-      fg: "foreground",
     },
   },
 
@@ -324,7 +314,6 @@
             label: "stepper",
             key: "controlPanel",       // shared accordion key
             bg: "surface",
-            fg: "foreground",
             children: [
               { kind: "segment", name: "stepperBody" },
             ],
@@ -335,7 +324,6 @@
             label: "mode",
             key: "controlPanel",       // same key → accordion sibling
             bg: "panel",
-            fg: "foreground",
             children: [
               { kind: "segment", name: "modeBody" },
             ],
