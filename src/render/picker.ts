@@ -90,6 +90,22 @@ export function rowBudget(runtime: ActionRuntime): number {
   );
 }
 
+// [LAW:single-enforcer] The width a row may fill when it sits in an open
+// disclosure body: the row budget less the ✕ that body leads every row with
+// (render/disclosure-close.ts), which the walk lays as a cell of its own — its
+// glyph, the padding every cell wears, and the seam the joiner lays before the
+// next cell. Reserved whether or not the row really sits in a body, so a bare
+// row fits the same width a body's would; the template cannot see where it is.
+export function ledRowBudget(runtime: ActionRuntime): number {
+  return Math.max(
+    1,
+    rowBudget(runtime) -
+      (cellWidth(DISCLOSURE_GLYPH_CLOSE) +
+        2 * runtime.padding +
+        runtime.seamCols),
+  );
+}
+
 // [LAW:dataflow-not-control-flow] A pure function of (item widths, available
 // width, reserved width): greedy fill into pages, each reserving room for the
 // ←/→/✕ affordances. The `page` value selects the slice; an oversized lone item
@@ -198,6 +214,7 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
+  helper: "picker" | "menu" | "carousel",
 ): Extract<
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
@@ -218,7 +235,7 @@ export function requireOptionKind(
       action.kind !== "layout-op-option")
   ) {
     throw new Error(
-      `picker references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action ? `a ${action.kind} action` : "no such action"}`,
+      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action ? `a ${action.kind} action` : "no such action"}`,
     );
   }
   return action;
@@ -244,7 +261,7 @@ export function renderPicker(
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
 ): RichText {
-  const apply = requireOptionKind(runtime, applyName);
+  const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the resolved half above (its
   // options, its current-mark); the CLICK is realized from the declaration
   // itself, through the same fold `{{ action }}` uses. That is what carries a
@@ -396,7 +413,7 @@ export function pickerFuncs(
             requireActiveSegment(activeSegment, "{{ picker }}"),
             placedBy(undefined),
             runtime.basePalette,
-            requireOptionKind(runtime, applyName).paletteOf,
+            requireOptionKind(runtime, applyName, "picker").paletteOf,
             activeSegment.drawnAt(),
           ),
         );

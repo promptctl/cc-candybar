@@ -282,6 +282,11 @@ export interface ActionRuntime {
   // segment layout pads every line it emits, so a page packed to the full
   // budget would otherwise be pushed past the width by the pad spaces.
   padding: number;
+  // [LAW:locality-or-seam] The columns one more cell costs the current render's
+  // strip beyond its content (`stripSeamCols`), published beside stripStyle. A
+  // disclosure body leads each row with its ✕ as a cell of its own, so a row
+  // fitted inside a body reserves that cell: its glyph, its padding, this seam.
+  seamCols: number;
   // [LAW:locality-or-seam] The current render's BASE palette — the theme before
   // the look — published per render by renderDsl exactly like stripStyle and
   // padding. A picker over a colour-valued domain paints each option in the

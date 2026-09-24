@@ -15,6 +15,7 @@
 //      plane, the alerts.
 
 import { getThemePalette } from "@promptctl/rich-js";
+import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionState } from "../src/daemon/session-state";
@@ -22,6 +23,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import type { StripStyle } from "../src/themes/policy";
 import {
   resolveThemeSelection,
   transposedPalette,
@@ -48,12 +50,12 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "ef6";
 
-function opts(width: number) {
+function opts(width: number, padding: number, style: StripStyle) {
   return {
-    style: "powerline" as const,
+    style,
     colorCompatibility: "truecolor" as const,
     wrap: true,
-    padding: 0,
+    padding,
     charset: "unicode" as const,
     width,
   };
@@ -63,7 +65,12 @@ function opts(width: number) {
 // settings menu is synthesized), install the derived gates, render through
 // renderDsl with the session's theme and look resolved the way the daemon
 // resolves them, and click through the real verb handlers.
-function rig(source: string, width = 200) {
+function rig(
+  source: string,
+  width = 200,
+  padding = 0,
+  style: StripStyle = "powerline",
+) {
   const config: ValidatedConfig = parseAndValidate(
     "<user>",
     source,
@@ -95,12 +102,12 @@ function rig(source: string, width = 200) {
         model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
         term: { cols: width },
-        style: { effective: sessionState.get(SID, "style") ?? "powerline" },
+        style: { effective: sessionState.get(SID, "style") ?? style },
         preset: { effective: "default" },
         autoWrap: { effective: true },
-        padding: { effective: 0 },
+        padding: { effective: padding },
       },
-      opts(width),
+      opts(width, padding, style),
       { perSegmentSink: sink },
       {
         theme: resolveThemeSelection(
@@ -243,6 +250,47 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
+  test("a value outside the domain rotates from the first option, and nothing reads as current", () => {
+    const rt = rig(CAROUSEL_ONLY);
+    rt.sessionState.set(SID, "pick", "x");
+    rt.render();
+    const ring = rt.sink.get("ring")!;
+    const bold = ring.flatMap((cell) =>
+      cell.spans
+        .filter((span) => typeof span.style === "object" && span.style.bold)
+        .map((span) => cell.plain.slice(span.start, span.end)),
+    );
+    expect(bold).toEqual([]);
+    rt.clickText(CAROUSEL_NEXT);
+    expect(rt.sessionState.get(SID, "pick")).toBe("b");
+    rt.dispose();
+  });
+
+  test("a key no variable reads back is a loud error naming the variable to declare", () => {
+    const rt = rig(`{
+      actions: { choose: { set: 'unread', from: ['a', 'b'] } },
+      segments: { ring: { template: '{{ carousel "choose" }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    expect(stripAnsi(rt.render())).toContain(
+      `declare { kind: "state", key: "unread" }`,
+    );
+    rt.dispose();
+  });
+
+  test("a carousel over the wrong kind of action names the carousel, not the picker", () => {
+    const rt = rig(`{
+      variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
+      actions: { choose: { set: 'pick', cycle: ['a', 'b'] } },
+      segments: { ring: { template: '{{ carousel "choose" }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    expect(stripAnsi(rt.render())).toContain(
+      `carousel references action "choose"`,
+    );
+    rt.dispose();
+  });
+
   test("neighbours come in symmetric pairs, only while they fit, never repeating an option", () => {
     const names = ["aa", "bb", "cc", "dd", "ee", "ff", "gg"];
     const ring = (d: number) => names[((d % 7) + 7) % 7]!;
@@ -276,6 +324,29 @@ describe("the settings menu's theme, look and style controls are carousels", () 
     // page cursor.
     expect(text).not.toMatch(/[←→]/);
     rt.dispose();
+  });
+
+  // The carousel and the preview are the rows of an open body, each led by the
+  // body's ✕ as a cell of its own; both fit the row that ✕ leaves them, at any
+  // padding and any strip shape, so the terminal never breaks a row away from
+  // its ✕.
+  test.each(
+    (["powerline", "capsule", "plain"] as const).flatMap((style) =>
+      [0, 1, 2].map((padding) => [style, padding] as const),
+    ),
+  )("every row of the open theme carousel fits its terminal (%s, padding %i)", (style, padding) => {
+    for (let width = 40; width <= 160; width += 3) {
+      const rt = rig(`{ globals: { palette: 'nord' } }`, width, padding, style);
+      openCarousel(rt, "theme");
+      const lines = stripAnsi(rt.render()).split("\n");
+      const ring = lines.find((l) => l.includes(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
+      const preview = lines.find((l) => l.includes("~/code"));
+      for (const [row, line] of [["ring", ring], ["preview", preview]] as const) {
+        expect([width, row, line !== undefined && /^\W*✕/u.test(line)]).toEqual([width, row, true]);
+        expect([width, row, new RichTextValue(line!).cellLength <= width]).toEqual([width, row, true]);
+      }
+      rt.dispose();
+    }
   });
 
   test("▶ applies the next theme and the whole bar recolours; ◀ takes it back", () => {

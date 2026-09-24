@@ -22,10 +22,8 @@
 // engine by registerDslConfig as data; the generic engine never imports it.
 
 import type { RichText } from "@promptctl/rich-js";
-import { Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl } from "../click/wire.js";
-import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { placedBy } from "../themes/decor.js";
 import {
   linkFragment,
@@ -41,17 +39,15 @@ import { optionItemStyle } from "./band-style.js";
 import {
   assemble,
   cellWidth,
+  ledRowBudget,
   requireOptionKind,
-  rowBudget,
   type ItemStyle,
 } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
 
-// A neighbour is an option you can SEE but have not applied: the same cell the
-// option would wear at the centre, dimmed, so the eye finds the centre first.
-const NEIGHBOUR = new Style({ dim: true });
+type OptionAction = ReturnType<typeof requireOptionKind>;
 
 // [LAW:dataflow-not-control-flow] How many neighbours each side gets is a pure
 // function of widths: whole symmetric levels are added while the row still
@@ -83,65 +79,75 @@ export function neighbourLevels(
 
 export function renderCarousel(
   applyName: string,
+  apply: OptionAction,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
 ): RichText {
-  const apply = requireOptionKind(runtime, applyName);
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
-  // a structural insert (layout-op-option) holds none, so there is no centre to
-  // draw. Loud, naming the shape that works — never a ring centred on nothing.
+  // a structural insert (layout-op-option) holds none, and a key no variable
+  // reads back holds none the render can see — a ring over either would sit
+  // on its first option forever, every ▶ writing the same neighbour. Loud,
+  // naming the shape that works, never a ring centred on nothing.
   if (!("stateVar" in apply)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on — a carousel needs a { set, from } or { persist, from } action`,
     );
   }
-  const declared = runtime.compiled.get(applyName)!;
   const store = runtime.store;
+  if (!store.has(apply.stateVar)) {
+    throw new Error(
+      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
+    );
+  }
+  const declared = runtime.compiled.get(applyName)!;
   const sessionId = readVar(store, "session.id");
   const { options } = apply;
   const count = options.length;
+  const current = readVar(store, apply.stateVar);
   // [LAW:one-source-of-truth] THE "unknown current counts as the first member"
   // rule every enumerated control folds over (render/action.ts cycleIndex), so
-  // a value outside the domain rotates exactly as a cycle over it would.
-  const centre = Math.max(options.indexOf(readVar(store, apply.stateVar)), 0);
+  // a value outside the domain rotates exactly as a cycle over it would. The
+  // centre is then an option, not the value — which is why "current" below is
+  // the picker's own comparison, never "is the centre".
+  const centre = Math.max(options.indexOf(current), 0);
   const indexAt = (offset: number): number =>
     (((centre + offset) % count) + count) % count;
   const ring = (offset: number): string => options[indexAt(offset)]!;
-  const url = (offset: number): string =>
-    effectsUrl(
+  // Each offset's click is realized once: the arrow and the neighbour name
+  // beside it write the same option.
+  const urls = new Map<number, string>();
+  const url = (offset: number): string => {
+    const known = urls.get(offset);
+    if (known !== undefined) return known;
+    const made = effectsUrl(
       realize(declared, ring(offset), ring(offset), store, sessionId).effects,
     );
-  const option = (offset: number, emphasis: Style | undefined): RichText =>
+    urls.set(offset, made);
+    return made;
+  };
+  const option = (offset: number): RichText =>
     linkFragment(
       ring(offset),
       url(offset),
-      offset === 0,
-      Style.combine([
-        itemStyle({ index: indexAt(offset), count }, ring(offset)),
-        emphasis,
-      ]),
+      ring(offset) === current,
+      itemStyle({ index: indexAt(offset), count }, ring(offset)),
     );
 
-  // The row a disclosure body leads with ✕ spends that width before the
-  // carousel's own; reserved whether or not this carousel sits in a body, so a
-  // bare one fits the same row a body's would.
-  const available =
-    rowBudget(runtime) - (cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1);
   const base =
     cellWidth(CAROUSEL_PREV) +
     1 +
     cellWidth(ring(0)) +
     1 +
     cellWidth(CAROUSEL_NEXT);
-  const levels = neighbourLevels(ring, count, base, available);
+  const levels = neighbourLevels(ring, count, base, ledRowBudget(runtime));
   const side = (sign: number): RichText[] =>
-    Array.from({ length: levels }, (_, i) => option(sign * (i + 1), NEIGHBOUR));
+    Array.from({ length: levels }, (_, i) => option(sign * (i + 1)));
 
   return assemble(
     [
       ...side(-1).reverse(),
       linkFragment(CAROUSEL_PREV, url(-1), false),
-      option(0, undefined),
+      option(0),
       linkFragment(CAROUSEL_NEXT, url(1), false),
       ...side(1),
     ],
@@ -158,18 +164,21 @@ export function carouselFuncs(
 ): FuncMap {
   return {
     carousel: {
-      fn: (applyName: string) =>
-        renderCarousel(
+      fn: (applyName: string) => {
+        const apply = requireOptionKind(runtime, applyName, "carousel");
+        return renderCarousel(
           applyName,
+          apply,
           runtime,
           optionItemStyle(
             requireActiveSegment(activeSegment, "{{ carousel }}"),
             placedBy(undefined),
             runtime.basePalette,
-            requireOptionKind(runtime, applyName).paletteOf,
+            apply.paletteOf,
             activeSegment.drawnAt(),
           ),
-        ),
+        );
+      },
       argTypes: ["string"],
       returnType: "T",
     },

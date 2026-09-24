@@ -29,6 +29,7 @@ import {
 import type { ActionRuntime } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 import { stateCell } from "./band-style.js";
+import { ledRowBudget } from "./picker.js";
 
 // What the closed swatches say: words a bar actually carries, so the sample
 // reads as a bar rather than a colour chart. Dealt to the vocabulary in order
@@ -62,23 +63,33 @@ export function previewSwatches(palette: Palette): readonly Swatch[][] {
   ];
 }
 
+// [LAW:dataflow-not-control-flow] The preview fits the row it sits on the way
+// the carousel above it does (`ledRowBudget`): whole swatches, in drawing
+// order, while they fit — a narrow terminal shows fewer swatches, never a line
+// the terminal breaks away from its ✕.
 export function renderThemePreview(
   palette: Palette,
   drawnAt: ColorDepth,
+  available: number,
 ): RichText {
   // Swatches in a group touch, like neighbouring bar cells; groups are set
   // apart by one space of whatever the preview sits on.
-  const groups = previewSwatches(palette).map((group) =>
-    group.map(
-      ({ text, colour }) =>
-        new RichText(` ${text} `, {
-          style: stateCell(palette, colour, drawnAt),
-        }),
-    ),
+  const cells = previewSwatches(palette).flatMap((group, g) =>
+    group.map(({ text, colour }, i) => ({
+      gap: g > 0 && i === 0 ? " " : "",
+      cell: new RichText(` ${text} `, {
+        style: stateCell(palette, colour, drawnAt),
+      }),
+    })),
   );
-  const fragments = groups.flatMap((group, i) =>
-    i === 0 ? group : [new RichText(" "), ...group],
-  );
+  const fragments: RichText[] = [];
+  let width = 0;
+  for (const { gap, cell } of cells) {
+    width += gap.length + cell.cellLength;
+    if (width > available) break;
+    if (gap !== "") fragments.push(new RichText(gap));
+    fragments.push(cell);
+  }
   const preview = RichText.fromFragments(fragments);
   preview.noWrap = true;
   preview.end = "";
@@ -91,7 +102,12 @@ export function themePreviewFuncs(
 ): FuncMap {
   return {
     themePreview: {
-      fn: () => renderThemePreview(runtime.palette, activeSegment.drawnAt()),
+      fn: () =>
+        renderThemePreview(
+          runtime.palette,
+          activeSegment.drawnAt(),
+          ledRowBudget(runtime),
+        ),
       argTypes: [],
       returnType: "T",
     },

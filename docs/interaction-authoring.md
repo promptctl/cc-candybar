@@ -1352,6 +1352,9 @@ applies, that is the theme (or look) at the centre of the ring.
 
 ```json5 check:pass
 {
+  variables: {
+    pickedTheme: { kind: "state", key: "theme", default: "nord" },
+  },
   actions: {
     applyTheme: { set: "theme", from: "themes" },
   },
@@ -1366,10 +1369,15 @@ applies, that is the theme (or look) at the centre of the ring.
 }
 ```
 
-The apply action must hold a value to centre on: a `{ set, from }` or
-`{ persist, from }` action (a dual included). An `insertSegmentFrom` action
-inserts a segment and holds nothing, so a carousel over one is a render error
-naming the action.
+The apply action must hold a value to centre on: a `{ set, from }` action
+whose key a `state` variable reads back, or a `{ persist, from }` action (a dual
+included). Without the `state` variable the carousel could never see what its
+last click wrote, so it is a render error naming the variable to declare,
+`carousel references action "applyTheme", whose key "theme" no variable reads
+back…`. An `insertSegmentFrom` action inserts a segment and holds nothing, so a
+carousel over one is a render error naming the action. A current value outside
+the domain rotates from the domain's first option, and no option reads as
+current.
 
 ## `looks`: named theme adaptations (the third option domain)
 
