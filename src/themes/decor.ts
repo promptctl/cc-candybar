@@ -17,6 +17,7 @@
 import {
   blendRgb,
   contrastRatio,
+  ensureContrast,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
@@ -347,20 +348,35 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
 }
 
 /**
- * The text colour for a state cell: whichever of the theme's two poles reads
- * better on `background`. A fixed foreground measurably fails on pure hues
- * (design doc, Decisions), so text on a state cell is chosen, never assumed.
- * Symmetric on ties; the one pole that clears is the one returned.
+ * The least contrast any text on a cell may have against that cell: WCAG's
+ * 3:1 large-text / UI threshold. The one floor for chosen text (`textOn`) and
+ * for the coloured text the bundled segments author (their `accent` and quiet
+ * git text), so an accent is never quieter than the text beside it.
+ * [LAW:one-source-of-truth]
+ */
+export const TEXT_MIN_CONTRAST = 3;
+
+/**
+ * The text colour for a cell nobody authored a foreground for: whichever of
+ * the theme's two poles reads better on `background`, floored at
+ * TEXT_MIN_CONTRAST. Text is chosen, never assumed — a fixed foreground fails
+ * on pure hues (design doc, Decisions), and the terminal's own text fails on
+ * any cell whose polarity differs from the terminal's. The pole alone is not
+ * enough on a MID-luminance cell, where neither pole clears the floor (atom-
+ * one-dark's foreground on its lighter tints measured 2.49:1); rich-js
+ * `ensureContrast` then slides the better pole's lightness until it does, and
+ * returns a pole that already clears unchanged. Symmetric on ties.
  */
 export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
   const poles: readonly ThemePole[] = ["background", "foreground"];
-  return poles
+  const best = poles
     .map((pole) => paletteRole(palette, pole))
     .reduce((best, pole) =>
       contrastRatio(background, pole) > contrastRatio(background, best)
         ? pole
         : best,
     );
+  return ensureContrast(best, background, TEXT_MIN_CONTRAST);
 }
 
 // --- Disclosure: bands ---------------------------------------------------------
@@ -511,26 +527,13 @@ export const bandRoot = (band: Disclosure): Region => ({
 });
 
 /**
- * The foreground an UNAUTHORED `fg:` wears on `background` — the background
- * the cell actually resolves to, tint or authored `bg:`, so the choice can
- * never be measured against a colour the cell does not paint.
- * [LAW:one-source-of-truth]
- */
-export type TextFloor = (background: ColorRgba) => ColorRgba | undefined;
-
-/** The bar's floor: the terminal keeps its own text, whatever the background. */
-export const TERMINAL_TEXT: TextFloor = () => undefined;
-
-/**
  * What a segment in a region is dealt. `tint` is the colour its CLOSED cell
- * wears; `text` is the floor an UNAUTHORED `fg:` defaults to — the terminal's
- * own on the bar, and on a band the theme pole that reads better on the
- * cell's background, because text on a state-region cell is chosen (design
- * doc, Decisions); `disclosure` is the band the segment opens if it is a trigger.
+ * wears; `disclosure` is the band the segment opens if it is a trigger. Its
+ * text is not dealt: an unauthored `fg:` is `textOn` of whatever background
+ * the cell resolves to, in every region (resolveSegmentColors).
  */
 export interface Decoration {
   readonly tint: ColorRgba;
-  readonly text: TextFloor;
   readonly disclosure: Disclosure;
 }
 
@@ -549,15 +552,12 @@ export function decorationFor(palette: Palette, region: Region): Decoration {
       const entry = decorEntryFor(region.address);
       return {
         tint: decorEntryColour(palette, entry),
-        text: TERMINAL_TEXT,
         disclosure: { hue: entry.hue, depth: 0 },
       };
     }
     case "band": {
-      const tint = bandItemFor(palette, region.band, region.address);
       return {
-        tint,
-        text: (background) => textOn(palette, background),
+        tint: bandItemFor(palette, region.band, region.address),
         disclosure: { hue: region.band.hue, depth: region.band.depth + 1 },
       };
     }

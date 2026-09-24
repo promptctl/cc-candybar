@@ -3,8 +3,13 @@
 // the (user-overridable) warning threshold; burnrate heats as the projected
 // minutes-to-cap fall under the warn/error minutes, with the -1 "cannot
 // project" sentinel calm; context heats as the integer percentage left drops
-// through 40 and 20. Each row says which palette NAME the cell wears, and the
-// expectation reads the live palette, so the pin holds across themes.
+// through 40 and 20. Each row says which palette NAME the cell's background
+// wears, and the expectation reads the live palette, so the pin holds across
+// themes. The text is not a palette name: it is chosen for the background the
+// ramp resolves to, so its contract is legibility — it clears the renderer's
+// text floor on that background at every stop (brandon-theme-picker-bgw.b2g,
+// which removed the hand-paired `button-color-foreground` that measured
+// 1.79:1 on textual-dark's warning).
 //
 // Written against the `if ge … else …` helper cascades BEFORE they became one
 // `ramp` call each (brandon-custom-segments-g5z.2): the ramp is proven
@@ -12,7 +17,13 @@
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
-import { getThemePalette, type Palette } from "@promptctl/rich-js";
+import {
+  contrastRatio,
+  getThemePalette,
+  parseRgbHex,
+  type Palette,
+} from "@promptctl/rich-js";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
@@ -36,11 +47,10 @@ const OPTS = {
 };
 
 // One row: the payload a segment reads, the literal vars it thresholds
-// against, and the palette names its cell must wear.
+// against, and the palette name its cell's background must wear.
 interface Row {
   readonly value: number;
   readonly bg: string;
-  readonly fg: string;
 }
 interface Case {
   readonly segment: string;
@@ -55,53 +65,53 @@ interface Case {
 const BLOCK_LIKE = (threshold: number): readonly Row[] =>
   threshold === 80
     ? [
-        { value: 0, bg: "panel", fg: "foreground" },
-        { value: 49, bg: "panel", fg: "foreground" },
-        { value: 49.6, bg: "warning", fg: "button-color-foreground" },
-        { value: 50, bg: "warning", fg: "button-color-foreground" },
-        { value: 79, bg: "warning", fg: "button-color-foreground" },
-        { value: 79.6, bg: "error", fg: "button-color-foreground" },
-        { value: 80, bg: "error", fg: "button-color-foreground" },
-        { value: 100, bg: "error", fg: "button-color-foreground" },
+        { value: 0, bg: "panel" },
+        { value: 49, bg: "panel" },
+        { value: 49.6, bg: "warning" },
+        { value: 50, bg: "warning" },
+        { value: 79, bg: "warning" },
+        { value: 79.6, bg: "error" },
+        { value: 80, bg: "error" },
+        { value: 100, bg: "error" },
       ]
     : [
         // threshold 50: the warning band collapses — 50 is already error.
-        { value: 0, bg: "panel", fg: "foreground" },
-        { value: 49, bg: "panel", fg: "foreground" },
-        { value: 50, bg: "error", fg: "button-color-foreground" },
-        { value: 79, bg: "error", fg: "button-color-foreground" },
-        { value: 100, bg: "error", fg: "button-color-foreground" },
+        { value: 0, bg: "panel" },
+        { value: 49, bg: "panel" },
+        { value: 50, bg: "error" },
+        { value: 79, bg: "error" },
+        { value: 100, bg: "error" },
       ];
 
 // Nearer-is-hotter over minutes-to-cap; -1 is "cannot project" and calm.
 const ETA_HEAT: readonly Row[] = [
-  { value: -1, bg: "panel", fg: "foreground" },
-  { value: 0, bg: "error", fg: "button-color-foreground" },
-  { value: 29, bg: "error", fg: "button-color-foreground" },
-  { value: 30, bg: "warning", fg: "button-color-foreground" },
-  { value: 59, bg: "warning", fg: "button-color-foreground" },
-  { value: 60, bg: "panel", fg: "foreground" },
-  { value: 120, bg: "panel", fg: "foreground" },
+  { value: -1, bg: "panel" },
+  { value: 0, bg: "error" },
+  { value: 29, bg: "error" },
+  { value: 30, bg: "warning" },
+  { value: 59, bg: "warning" },
+  { value: 60, bg: "panel" },
+  { value: 120, bg: "panel" },
 ];
 
 // Less-left-is-hotter over an integer percentage (src/segments/context.ts
 // rounds it), so 20/21 and 40/41 are the exact edges.
 const CONTEXT_LEFT: readonly Row[] = [
-  { value: 0, bg: "error", fg: "button-color-foreground" },
-  { value: 20, bg: "error", fg: "button-color-foreground" },
-  { value: 21, bg: "warning", fg: "button-color-foreground" },
-  { value: 40, bg: "warning", fg: "button-color-foreground" },
-  { value: 41, bg: "surface-active", fg: "foreground" },
-  { value: 100, bg: "surface-active", fg: "foreground" },
+  { value: 0, bg: "error" },
+  { value: 20, bg: "error" },
+  { value: 21, bg: "warning" },
+  { value: 40, bg: "warning" },
+  { value: 41, bg: "surface-active" },
+  { value: 100, bg: "surface-active" },
 ];
 
-// A lowered heat threshold moves BOTH the first warm colour and the text flip
-// — one variable feeds the bg and the fg ramp, so they cannot disagree.
+// A lowered heat threshold moves the first warm colour, and the text follows
+// the background it lands on.
 const HEAT_LOW: readonly Row[] = [
-  { value: 19, bg: "panel", fg: "foreground" },
-  { value: 20, bg: "warning", fg: "button-color-foreground" },
-  { value: 79, bg: "warning", fg: "button-color-foreground" },
-  { value: 80, bg: "error", fg: "button-color-foreground" },
+  { value: 19, bg: "panel" },
+  { value: 20, bg: "warning" },
+  { value: 79, bg: "warning" },
+  { value: 80, bg: "error" },
 ];
 
 const CASES: readonly Case[] = [
@@ -231,16 +241,10 @@ function cellColors(
   return { fg: out.fg!, bg: out.bg! };
 }
 
-// What the renderer paints for a (fg name, bg name) pair: the bg verbatim,
-// the fg composited over it — `button-color-foreground` carries alpha
-// (`#ffffffdd`), and rich-js's render flattens alpha over the cell's own bg.
-// `compositeOver` is identity at alpha 1, so every row goes through it.
-function expected(palette: Palette, row: Row): { fg: string; bg: string } {
+function expectedBg(palette: Palette, row: Row): string {
   const bg = palette.get(row.bg);
-  const fg = palette.get(row.fg);
   expect(bg).toBeDefined();
-  expect(fg).toBeDefined();
-  return { fg: fg!.compositeOver(bg!).hex, bg: bg!.hex };
+  return bg!.hex;
 }
 
 describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
@@ -250,10 +254,13 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
       .map(([k, v]) => `${k}=${v}`)
       .join(" ");
     test.each(c.rows)(
-      `${c.segment} ${varLabel} at $value wears bg=$bg fg=$fg`,
+      `${c.segment} ${varLabel} at $value wears bg=$bg, text legible on it`,
       (row) => {
-        const rendered = renderOne(c, row.value, paletteName);
-        expect(cellColors(rendered, c.glyph)).toEqual(expected(palette, row));
+        const { fg, bg } = cellColors(renderOne(c, row.value, paletteName), c.glyph);
+        expect(bg).toBe(expectedBg(palette, row));
+        expect(
+          contrastRatio(parseRgbHex(fg.slice(1)), parseRgbHex(bg.slice(1))),
+        ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
       },
     );
   }

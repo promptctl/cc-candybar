@@ -25,7 +25,7 @@ import {
 import { createActiveSegmentRef } from "../src/render/active-segment";
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
-import { TERMINAL_TEXT, type Disclosure, type TextFloor } from "../src/themes/decor";
+import type { Disclosure } from "../src/themes/decor";
 import {
   transposedPalette,
   paletteForThemeName,
@@ -44,6 +44,8 @@ function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
     ["success", parseRgbHex("44cc88")],
     ["surface", parseRgbHex("1a1a2e")],
     ["text", parseRgbHex("eeeeee")],
+    // The two poles `textOn` chooses an unauthored foreground between.
+    ["foreground", parseRgbHex("eeeeee")],
     // transposePalette derives the dark flag from "background" (required for
     // any non-identity key); real registry palettes always carry it.
     ["background", parseRgbHex("12121a")],
@@ -77,7 +79,6 @@ function resolve(
   bg: Template<RichText> | undefined,
   fg: Template<RichText> | undefined,
   scope: object = {},
-  text: TextFloor = TERMINAL_TEXT,
 ): Style {
   return resolveSegmentColors(
     h.ref,
@@ -85,7 +86,6 @@ function resolve(
     palette,
     DISCLOSURE,
     TINT,
-    text,
     bg,
     fg,
     scope,
@@ -97,17 +97,21 @@ const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");
-// A band's floor, standing in for `textOn`: the text IS the background it was
-// asked about, so the assertion sees which background the floor was handed.
-const TEXT_IS_BG: TextFloor = (background) => background;
+// The pole `textOn` picks on each background below, measured by hand so the
+// expectation is not the implementation's own answer: on the dark TINT the
+// foreground reads (14.2:1 vs 1.1:1), on the `error` red the background does
+// (5.5:1 vs 2.9:1). Two different answers are what let an assertion see WHICH
+// background the text was chosen on.
+const TEXT_ON_TINT = "#eeeeee";
+const TEXT_ON_ERROR = "#12121a";
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. No bg template → the tint IS the background (a segment always has one);
-//    no fg template → no foreground override.
+//    no fg template → the theme pole that reads on that background.
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("no bg/fg templates → the tint, and no foreground", () => {
-  test("undefined bg → the address's tint; undefined fg → color unset", () => {
+describe("no bg/fg templates → the tint, and text chosen on it", () => {
+  test("undefined bg → the address's tint; undefined fg → the pole that reads on it", () => {
     const style = resolve(
       makeHarness(),
       makeTestPalette(),
@@ -115,7 +119,7 @@ describe("no bg/fg templates → the tint, and no foreground", () => {
       undefined,
     );
     expect(style.bgcolor?.value?.hex).toBe(TINT.hex);
-    expect(style.color).toBeUndefined();
+    expect(style.color?.value?.hex).toBe(TEXT_ON_TINT);
   });
 
   test("an authored bg paints over the tint — meaning outranks decoration", () => {
@@ -124,27 +128,15 @@ describe("no bg/fg templates → the tint, and no foreground", () => {
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
-  test("undefined fg → the region's floor, chosen on the tint when no bg is authored", () => {
-    const style = resolve(
-      makeHarness(),
-      makeTestPalette(),
-      undefined,
-      undefined,
-      {},
-      TEXT_IS_BG,
-    );
-    expect(style.color?.value?.hex).toBe(TINT.hex);
+  test("undefined fg → text chosen on the AUTHORED bg, never the tint it painted over", () => {
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), h.parse("error"), undefined);
+    expect(style.color?.value?.hex).toBe(TEXT_ON_ERROR);
   });
 
-  test("undefined fg → the floor chosen on the AUTHORED bg, never the tint it painted over", () => {
+  test("an authored fg paints over the chosen text", () => {
     const h = makeHarness();
-    const style = resolve(h, makeTestPalette(), h.parse("error"), undefined, {}, TEXT_IS_BG);
-    expect(style.color?.value?.hex).toBe("#ff4444");
-  });
-
-  test("an authored fg paints over the region's floor", () => {
-    const h = makeHarness();
-    const style = resolve(h, makeTestPalette(), undefined, h.parse("error"), {}, TEXT_IS_BG);
+    const style = resolve(h, makeTestPalette(), undefined, h.parse("error"));
     expect(style.color?.value?.hex).toBe("#ff4444");
   });
 

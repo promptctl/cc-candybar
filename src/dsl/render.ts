@@ -950,8 +950,8 @@ export function renderDsl(
   // goes through the first, every path that finishes goes through the second.
   //
   // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
-  // read of its region (src/themes/decor.ts): the tint its closed cell wears,
-  // the text an unauthored `fg:` defaults to, and the disclosure it opens —
+  // read of its region (src/themes/decor.ts): the tint its closed cell wears
+  // and the disclosure it opens —
   // so the cell, the band it drops, and the body hung under it cannot disagree
   // about their hue.
   const enterSegment = (
@@ -961,14 +961,13 @@ export function renderDsl(
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles => {
-    const { tint, text, disclosure } = decorationFor(palette, region);
+    const { tint, disclosure } = decorationFor(palette, region);
     const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
       palette,
       disclosure,
       tint,
-      text,
       bgTemplate,
       fgTemplate,
       scope,
