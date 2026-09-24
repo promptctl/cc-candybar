@@ -105,7 +105,7 @@ export function resolveSegmentColors(
   const fgColor =
     fgSpec !== undefined
       ? resolveRef(palette, fgSpec, "fg")
-      : textOn(palette, bgColor);
+      : textOn(palette, bgColor, ref.drawnAt());
 
   return new Style({
     bgcolor: ColorSpec.fromRgba(bgColor),

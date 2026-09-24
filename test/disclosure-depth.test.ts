@@ -20,6 +20,7 @@
 //     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
 //     anchor of the chain.
 
+import { ColorDepth } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -277,7 +278,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
       expect(address).toMatchObject([{ index, count: row1.length }]);
       const item = bandItemFor(palette, band0, address);
       expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
-      expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item).hex]);
+      expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
     }
 
     // ⚙ open: a trigger INSIDE the depth-0 band opens depth 1 — the hue's next
@@ -292,7 +293,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name))).hex,
+        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name)), ColorDepth.TRUECOLOR).hex,
       ]);
     }
 
@@ -395,7 +396,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
     // Text on a band cell is chosen unless authored: `b` authors `error`.
-    expect(rt.fgOf("c")).toBe(textOn(palette, decorationFor(palette, regionOf(rt.root, palette, "c")).tint).hex);
+    expect(rt.fgOf("c")).toBe(textOn(palette, decorationFor(palette, regionOf(rt.root, palette, "c")).tint, ColorDepth.TRUECOLOR).hex);
     expect(rt.fgOf("b")).toBe(palette.get("error")!.hex);
 
     // Closing again returns the toggle to its tint — the state is a VALUE the
@@ -413,10 +414,10 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.render();
     const authored = palette.get("error")!;
     expect(rt.bgOf("e")).toBe(authored.hex);
-    expect(rt.fgOf("e")).toBe(textOn(palette, authored).hex);
+    expect(rt.fgOf("e")).toBe(textOn(palette, authored, ColorDepth.TRUECOLOR).hex);
     // The case is only a case because the two poles differ here.
     const tint = decorationFor(palette, regionOf(rt.root, palette, "e")).tint;
-    expect(textOn(palette, authored).hex).not.toBe(textOn(palette, tint).hex);
+    expect(textOn(palette, authored, ColorDepth.TRUECOLOR).hex).not.toBe(textOn(palette, tint, ColorDepth.TRUECOLOR).hex);
     rt.dispose();
   });
 

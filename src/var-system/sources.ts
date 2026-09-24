@@ -13,7 +13,8 @@ import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import { setInterval, clearInterval } from "timers";
-import { reaction, type IReactionDisposer } from "mobx";
+import { observable, reaction, type IReactionDisposer } from "mobx";
+import { ColorDepth } from "@promptctl/rich-js";
 import {
   typeOf,
   toString,
@@ -597,10 +598,22 @@ export class SourceRegistry {
   // run cannot outlive the registry that started it (RenderCache's
   // dispose-before-swap contract reaches the children too).
   private readonly abort = new AbortController();
+  // [LAW:one-source-of-truth] The depth the terminal draws the current render
+  // at — the one clock every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Observable, because the depth is
+  // a per-render fact (edit mode stages it over the config's own): a template
+  // variable whose `readableOn` read it recomputes when it moves rather than
+  // keeping the answer it measured at the previous depth.
+  private readonly drawn = observable.box(ColorDepth.TRUECOLOR);
+  readonly drawnAt = (): ColorDepth => this.drawn.get();
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  private readonly engine = createCcCandybarEngine();
+  private readonly engine = createCcCandybarEngine(
+    undefined,
+    undefined,
+    this.drawnAt,
+  );
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
@@ -1098,6 +1111,11 @@ export class SourceRegistry {
         }
       }
     });
+  }
+
+  // Called by the render beside applyInput: the depth this render draws at.
+  drawAt(depth: ColorDepth): void {
+    this.store.runInAction(() => this.drawn.set(depth));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────

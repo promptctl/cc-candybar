@@ -1,3 +1,4 @@
+import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -1018,6 +1019,25 @@ describe("SourceRegistry — template: basic", () => {
     registry.declareLiteral("x", "val");
     registry.declareTemplate("t", "{{ .x }}");
     expect(store.getType("t")).toBe("string");
+    registry.dispose();
+  });
+
+  it("a readableOn re-measures when the drawn depth moves", () => {
+    // Magenta on plum: legible in truecolor, lost once both colours round to
+    // 256, so the two depths give different answers. The depth is a per-render
+    // fact, and a template variable is a cached derivation — it must observe it.
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    registry.declareTemplate("ink", `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`);
+    const [fg, bg] = [parseRgbHex("e72abb"), parseRgbHex("2e082f")];
+    const at = (d: ColorDepth) => ensureContrast(fg, bg, 4.5, d).hex;
+    expect(at(ColorDepth.EIGHT_BIT)).not.toBe(at(ColorDepth.TRUECOLOR));
+
+    expect(store.read("ink")).toBe(at(ColorDepth.TRUECOLOR));
+    registry.drawAt(ColorDepth.EIGHT_BIT);
+    expect(store.read("ink")).toBe(at(ColorDepth.EIGHT_BIT));
+    registry.drawAt(ColorDepth.TRUECOLOR);
+    expect(store.read("ink")).toBe(at(ColorDepth.TRUECOLOR));
     registry.dispose();
   });
 

@@ -150,7 +150,7 @@ const paint = (fact: keyof typeof GIT_COLOR, content: string): string =>
 // test/default-dsl-config.test.ts rather than eyeballed on one.
 // [LAW:verifiable-goals]
 const GIT_QUIET_PCT = 60;
-const GIT_QUIET_MIN_CONTRAST = 3;
+export const GIT_QUIET_MIN_CONTRAST = 3;
 const GIT_QUIET_FG =
   `{{ readableOn (mix (color "foreground") (bgOf) ${GIT_QUIET_PCT}) (bgOf) ` +
   `${GIT_QUIET_MIN_CONTRAST} }}`;

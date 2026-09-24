@@ -16,7 +16,7 @@
 // the background is the thing being computed. Readers get a message naming the
 // phase instead of a plausible-looking wrong color.
 
-import type { ColorRgba, Palette } from "@promptctl/rich-js";
+import type { ColorDepth, ColorRgba, Palette } from "@promptctl/rich-js";
 import type { Disclosure } from "../themes/decor.js";
 
 export interface ActiveSegment {
@@ -62,10 +62,19 @@ export interface ActiveSegment {
 /** The published pointer. Null between segments. */
 export interface ActiveSegmentRef {
   current: ActiveSegment | null;
+  /**
+   * The depth this render draws at — every text colour chosen for a segment
+   * (its own, its band's, its picker's) is floored on the colours the terminal
+   * will actually draw. A reader of the registry's one clock
+   * (`SourceRegistry.drawnAt`), never a copy of it.
+   */
+  readonly drawnAt: () => ColorDepth;
 }
 
-export function createActiveSegmentRef(): ActiveSegmentRef {
-  return { current: null };
+export function createActiveSegmentRef(
+  drawnAt: () => ColorDepth,
+): ActiveSegmentRef {
+  return { current: null, drawnAt };
 }
 
 /**

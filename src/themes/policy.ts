@@ -13,7 +13,13 @@
 // darken/contrast, hue/transpose) lives in rich-js, as does the semantic/anchor
 // knowledge of which tokens keep their hue (ANCHORED_ROOTS).
 
-import { IDENTITY, listThemePalettes, type ThemeKey } from "@promptctl/rich-js";
+import {
+  ColorDepth,
+  resolveColorSystem,
+  IDENTITY,
+  listThemePalettes,
+  type ThemeKey,
+} from "@promptctl/rich-js";
 import type { ColorSystemSpec } from "@promptctl/rich-js/widgets";
 
 // --- Theme name aliasing ---
@@ -412,6 +418,17 @@ export const COLOR_COMPATIBILITIES = [
   "none",
 ] as const satisfies readonly ColorSystemSpec[];
 export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
+
+// [LAW:one-source-of-truth] The depth a setting draws at, which is what a
+// contrast floor has to be measured on (rich-js `ensureContrast`'s `drawnAt`):
+// at 256 the terminal rounds text and background independently, so text chosen
+// in truecolor is re-measured on the drawn pair. rich-js's `resolveColorSystem`
+// is the mapping its SGR writer draws by, so the floor is measured at exactly
+// the depth the bytes are written at; `none` draws no colour (null there), so
+// no floor is measurable and DEFAULT says so.
+export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
+  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
+}
 
 // --- Layout globals (autoWrap, padding) ---
 //

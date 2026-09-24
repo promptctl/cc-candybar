@@ -44,7 +44,7 @@ import {
   sprigConversions,
   sprigDicts,
 } from "@promptctl/go-template-js";
-import { RichText } from "@promptctl/rich-js";
+import { RichText, type ColorDepth } from "@promptctl/rich-js";
 import { richTextFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
@@ -62,9 +62,12 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // time-dependent evaluation in this engine reads from one seam. Defaulted here
 // so the default literal `() => new Date()` lives in exactly one place; callers
 // that omit it (and forwarders passing `undefined`) inherit it unchanged.
+// `drawnAt` is forwarded as given to rich-js `richTextFuncs`, whose own default
+// (truecolor) is the one default: the depth `readableOn` floors text at.
 export function createCcCandybarEngine(
   extraFuncs?: FuncMap,
   clock: () => Date = () => new Date(),
+  drawnAt?: () => ColorDepth,
 ): Engine<RichText> {
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
@@ -92,7 +95,7 @@ export function createCcCandybarEngine(
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...richTextFuncs(),
+      ...richTextFuncs(drawnAt),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`

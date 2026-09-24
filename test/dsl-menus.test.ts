@@ -24,6 +24,7 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
+import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
 import {
   ensureContrast,
@@ -690,7 +691,7 @@ describe("toggle round trip + drop stacking", () => {
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
     expect(definedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
-    expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state).hex);
+    expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
     // The dropped line is the band: its plane. The OPTION cells are not —
     // `themes` is a colour-valued domain, so brandon-picker-31z paints each
     // cell in the theme it names, not in the band (the next describe pins that

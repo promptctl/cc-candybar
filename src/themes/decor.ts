@@ -23,6 +23,7 @@ import {
   contrastFor,
   contrastRatio,
   ensureContrast,
+  type ColorDepth,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
@@ -521,15 +522,23 @@ export const TEXT_MIN_CONTRAST = 4.5;
  * further the way it already leans — never through the background into the
  * other polarity, so neighbouring cells do not flip text polarity on a
  * hairline tint difference. A pole that already clears is returned unchanged.
+ * The floor is measured at `drawnAt`, the depth the terminal draws the pair at
+ * (at 256 colours both halves are rounded, and the rounded pair is what must
+ * clear it).
  * [LAW:one-source-of-truth]
  */
-export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
+export function textOn(
+  palette: Palette,
+  background: ColorRgba,
+  drawnAt: ColorDepth,
+): ColorRgba {
   let texts = TEXT_MEMO.get(palette);
   if (texts === undefined) {
     texts = new Map();
     TEXT_MEMO.set(palette, texts);
   }
-  const hit = texts.get(background.hex);
+  const key = `${background.hex}|${drawnAt}`;
+  const hit = texts.get(key);
   if (hit !== undefined) return hit;
   const side = contrastFor(background);
   const pole = (["background", "foreground"] as const)
@@ -537,13 +546,13 @@ export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
     .reduce((best, pole) =>
       contrastRatio(side, pole) < contrastRatio(side, best) ? pole : best,
     );
-  const text = ensureContrast(pole, background, TEXT_MIN_CONTRAST);
-  texts.set(background.hex, text);
+  const text = ensureContrast(pole, background, TEXT_MIN_CONTRAST, drawnAt);
+  texts.set(key, text);
   return text;
 }
 
 // Every cell of every render asks for its text, and the answer is a pure
-// function of (palette, background) — a bisection when the pole misses the
+// function of (palette, background, drawnAt) — a bisection when the pole misses the
 // floor, measured at 20% of a render before this memo. A palette's distinct
 // backgrounds are its tints, band colours, and the stops its authored ramps
 // reach, so each map stays as small as the colours a bar can wear.

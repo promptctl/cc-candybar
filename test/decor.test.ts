@@ -4,6 +4,7 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
+import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
 import {
   blendRgb,
   ColorRgba,
@@ -87,6 +88,12 @@ function colourMap(shape: Shape, distribution: Distribution): Map<string, string
 const VDC = DISTRIBUTIONS["van-der-corput"];
 const row = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "row" });
 const cell = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "cell" });
+
+
+// A cell as the SGR writer draws it: a translucent colour composited over
+// black, the writer's substrate. Text is chosen against this, so it is what a
+// floor is measured on.
+const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0, 0, 0));
 
 describe("the vocabulary", () => {
   test("is bar hues × tones, every entry the theme's own", () => {
@@ -456,7 +463,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       for (const hue of DECOR_HUES) {
         const state = stateFor(palette, hue);
-        const text = textOn(palette, state);
+        const text = textOn(palette, state, ColorDepth.TRUECOLOR);
         const side = contrastFor(state);
         const bestPole = poles.reduce((a, b) =>
           contrastRatio(side, b) < contrastRatio(side, a) ? b : a,
@@ -464,14 +471,14 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
         // The text lies on the side the max-contrast pick names — a light cell
         // gets darker text, a dark cell lighter — so a slide never carries it
         // through the background into the other polarity.
-        const lighter = relativeLuminance(text) > relativeLuminance(state);
+        const lighter = relativeLuminance(text) > relativeLuminance(drawnGround(state));
         expect([palette.name, hue, lighter]).toEqual([palette.name, hue, side.hex === "#ffffff"]);
         // A pole that already clears is returned untouched — the floor never
         // transforms text that was already legible.
-        if (contrastRatio(state, bestPole) >= TEXT_MIN_CONTRAST) {
+        if (contrastRatio(drawnGround(state), bestPole) >= TEXT_MIN_CONTRAST) {
           expect([palette.name, hue, text.hex]).toEqual([palette.name, hue, bestPole.hex]);
         }
-        expect([palette.name, hue, contrastRatio(state, text) >= TEXT_MIN_CONTRAST]).toEqual([
+        expect([palette.name, hue, contrastRatio(drawnGround(state), text) >= TEXT_MIN_CONTRAST]).toEqual([
           palette.name,
           hue,
           true,
@@ -505,7 +512,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
         const pole = Oklch.fromRgba(
           poles.reduce((a, b) => (contrastRatio(side, b) < contrastRatio(side, a) ? b : a)),
         );
-        const text = Oklch.fromRgba(textOn(palette, cell));
+        const text = Oklch.fromRgba(textOn(palette, cell, ColorDepth.TRUECOLOR));
         // Toward white or black the sRGB gamut narrows, so a slide can only
         // LOSE chroma (atom-one-dark's foreground keeps .003 of its .020 at the
         // top); hue is only a fact where both colours still carry some.
@@ -677,7 +684,27 @@ describe("a band is a plane", () => {
           ),
         ];
         for (const cell of cells) {
-          const ratio = contrastRatio(cell, textOn(palette, cell));
+          const ratio = contrastRatio(drawnGround(cell), textOn(palette, cell, ColorDepth.TRUECOLOR));
+          expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
+            ratio >= TEXT_FLOOR ? /./ : /^$/,
+          );
+        }
+      }
+    }
+  });
+
+  test("at 256 colours the drawn text clears the band floor on the drawn cell", () => {
+    // Both halves are rounded to the xterm cube independently; the pair the
+    // terminal draws is what must clear the floor.
+    const drawn = (c: ColorRgba) =>
+      ColorSpec.fromRgba(c).downgrade(ColorDepth.EIGHT_BIT).getTruecolor();
+    for (const { palette, hue } of LINEAGES) {
+      for (const depth of DEPTHS) {
+        const disclosure = { hue, depth };
+        const { plane, state } = bandFor(palette, disclosure);
+        for (const cell of [plane, state]) {
+          const text = textOn(palette, cell, ColorDepth.EIGHT_BIT);
+          const ratio = contrastRatio(drawn(text), drawn(drawnGround(cell)));
           expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
             ratio >= TEXT_FLOOR ? /./ : /^$/,
           );
