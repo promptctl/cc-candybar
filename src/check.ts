@@ -35,11 +35,16 @@ import {
   expandHome,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
+import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
-import { registerDslConfig, renderDsl } from "./dsl/render.js";
+import {
+  registerDslConfig,
+  renderDsl,
+  type CompiledConfig,
+} from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
 import {
   resolveEffectiveGlobals,
@@ -299,16 +304,25 @@ export async function checkConfig(
   }
 }
 
-// The buildState + per-request-render mirror: every call below is the function
-// the daemon calls, in the daemon's order [LAW:single-enforcer]. Returns the
-// rendered line; appends the register pass's advisory `loadWarnings` (partial
-// declaration failures) to `warnings` — the same channel RenderCache merges
-// them into.
-async function loadRegisterRender(
+// A config loaded, validated, registered, and settled — the daemon's
+// buildState, in the daemon's order [LAW:single-enforcer]. `check` renders its
+// verdict on it and the gallery renders every theme on it, so neither can
+// drift into a partial copy of the other. The caller owns `registry` and
+// disposes it; the register pass's advisory `loadWarnings` (partial
+// declaration failures) and any source still running at the deadline land in
+// `warnings` — the same channel RenderCache merges them into.
+export interface PreparedConfig {
+  readonly config: ValidatedConfig;
+  readonly compiled: CompiledConfig;
+  readonly store: VariableStore;
+  readonly registry: SourceRegistry;
+}
+
+export async function prepareConfig(
   configPath: string | null,
   cwd: string,
   warnings: string[],
-): Promise<string> {
+): Promise<PreparedConfig> {
   const {
     config: merged,
     source,
@@ -328,8 +342,6 @@ async function loadRegisterRender(
   );
   try {
     const compiled = registerDslConfig(config, registry, { cwd });
-    // Registered before the validator pass so a derive throw (a key-kind
-    // clash) still carries the partial-load warnings into the fatal outcome.
     warnings.push(...compiled.loadWarnings);
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
     // or file read, a git subscription's first delivery — completes after
@@ -344,6 +356,80 @@ async function loadRegisterRender(
         `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
+    return { config, compiled, store, registry };
+  } catch (e) {
+    registry.dispose();
+    throw e;
+  }
+}
+
+// [LAW:no-silent-failure] A segment whose template THROWS while evaluating
+// (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
+// partially-declared variable) renders as a visible ⚠ error cell — partial
+// rendering, the daemon's channel for a human looking at the bar. The blind
+// authoring agent is not looking at the bar; check collects the same errors
+// through the render's observer seam — a segment's ⚠, and a globals rule the
+// render could not honour (brandon-themes-dzl) — and fails the verdict, so
+// exit 0 never blesses a bar the daemon would render a complaint on.
+export function renderEffective(
+  { config, compiled, store, registry }: PreparedConfig,
+  effective: EffectiveGlobals,
+  width: number,
+): { rendered: string; failures: Map<string, string> } {
+  // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
+  // appended to a list — each can fail at most once per pass, so this is the
+  // strongest true shape (dedupe-by-construction within one pass) and what
+  // makes deduping ACROSS the two passes below a plain key check rather than
+  // a message-text comparison. The key carries WHAT failed because two
+  // different domains report here — a segment, or a globals slot whose rule
+  // the render could not honour — and a bare name could not tell them apart
+  // (nor stop a segment named `globals.palette` from displacing the slot).
+  const failures = new Map<string, string>();
+  const rendered = renderDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    checkPayload(effective),
+    {
+      style: effective.style,
+      separator: effective.separator,
+      width,
+      colorCompatibility: effective.colorCompatibility,
+      wrap: effective.autoWrap,
+      padding: effective.padding,
+      charset: effective.charset,
+    },
+    {
+      onSegmentError: (segName: string, message: string) =>
+        failures.set(`segment "${segName}"`, message),
+      // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
+      // installed theme is a real finding for a headless pass: the bar would
+      // render, in the wrong theme, with nobody watching the strip. Reported
+      // under the slot as its "segment" name so it dedupes and prints through
+      // the one channel every other finding does.
+      onRenderWarning: (message: string) =>
+        failures.set("globals.palette", message),
+    },
+    {
+      theme: effective.theme,
+      look: effective.look,
+      preset: effective.preset,
+    },
+  );
+  return { rendered, failures };
+}
+
+// The verdict: the prepared config rendered for a fresh session, every render
+// error a failure. Returns the rendered line.
+async function loadRegisterRender(
+  configPath: string | null,
+  cwd: string,
+  warnings: string[],
+): Promise<string> {
+  const prepared = await prepareConfig(configPath, cwd, warnings);
+  const { config } = prepared;
+  try {
     // Derivation only (the throw-on-clash coherence pass over the action
     // table); the daemon additionally registers the results in its global
     // validator registry, which a one-shot check has no wire to serve.
@@ -371,60 +457,8 @@ async function loadRegisterRender(
       // gets checked — just not through this value.
       () => false,
     );
-    // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
-    // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
-    // partially-declared variable) renders as a visible ⚠ error cell — partial
-    // rendering, the daemon's channel for a human looking at the bar. The blind
-    // authoring agent is not looking at the bar; check collects the same errors
-    // through the render's observer seam — a segment's ⚠, and a globals rule the
-    // render could not honour (brandon-themes-dzl) — and fails the verdict, so
-    // exit 0 never blesses a bar the daemon would render a complaint on.
-    const renderOnce = (
-      payloadEffective: EffectiveGlobals,
-    ): { rendered: string; failures: Map<string, string> } => {
-      // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
-      // appended to a list — each can fail at most once per pass, so this is the
-      // strongest true shape (dedupe-by-construction within one pass) and what
-      // makes deduping ACROSS the two passes below a plain key check rather than
-      // a message-text comparison. The key carries WHAT failed because two
-      // different domains report here — a segment, or a globals slot whose rule
-      // the render could not honour — and a bare name could not tell them apart
-      // (nor stop a segment named `globals.palette` from displacing the slot).
-      const failures = new Map<string, string>();
-      const rendered = renderDsl(
-        config,
-        compiled,
-        store,
-        registry,
-        checkPayload(payloadEffective),
-        {
-          style: payloadEffective.style,
-          separator: payloadEffective.separator,
-          width: CHECK_WIDTH,
-          colorCompatibility: payloadEffective.colorCompatibility,
-          wrap: payloadEffective.autoWrap,
-          padding: payloadEffective.padding,
-          charset: payloadEffective.charset,
-        },
-        {
-          onSegmentError: (segName: string, message: string) =>
-            failures.set(`segment "${segName}"`, message),
-          // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
-          // installed theme is a real finding for a headless pass: the bar would
-          // render, in the wrong theme, with nobody watching the strip. Reported
-          // under the slot as its "segment" name so it dedupes and prints through
-          // the one channel every other finding does.
-          onRenderWarning: (message: string) =>
-            failures.set("globals.palette", message),
-        },
-        {
-          theme: payloadEffective.theme,
-          look: payloadEffective.look,
-          preset: payloadEffective.preset,
-        },
-      );
-      return { rendered, failures };
-    };
+    const renderOnce = (payloadEffective: EffectiveGlobals) =>
+      renderEffective(prepared, payloadEffective, CHECK_WIDTH);
 
     const primary = renderOnce(effective);
     // [LAW:verifiable-goals] `.preset.customized` is the ONE gate this
@@ -478,7 +512,7 @@ async function loadRegisterRender(
     // [LAW:single-enforcer] The registry owns every async handle the config
     // declared (timers, fs watchers, git subscriptions); a one-shot check must
     // not leak them past the verdict.
-    registry.dispose();
+    prepared.registry.dispose();
   }
 }
 

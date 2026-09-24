@@ -101,7 +101,6 @@
     trigger: {
       template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
       bg: "surface",
-      fg: "foreground",
     },
 
     // The style control — the theme control's twin over the 'styles' domain, also
@@ -114,7 +113,6 @@
     styleControl: {
       template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" "▸" "▾" }}',
       bg: "surface",
-      fg: "foreground",
     },
 
     // Work-mode chip: one cycle action, one display glyph per member. The glyph
@@ -122,7 +120,6 @@
     modeControl: {
       template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // Quick actions — copy the session id / cwd, open the project dir / transcript
@@ -131,7 +128,6 @@
     toolbar: {
       template: ' {{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }} {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // Verbose session info — too noisy for the always-on rows, surfaced on demand
@@ -139,14 +135,12 @@
     sessionDetails: {
       template: ' 🪪 {{ trunc 8 .session.id }}   📂 {{ .project_dir }}   📄 {{ .transcript_path }} ',
       bg: "surface",
-      fg: "foreground",
     },
 
     // A small links panel for the "links" accordion sibling.
     links: {
       template: ' {{ link "https://github.com/promptctl/cc-candybar" "↗ repo" }}   {{ link "https://code.claude.com/docs/en/statusline" "↗ statusline docs" }} ',
       bg: "surface",
-      fg: "foreground",
     },
   },
 

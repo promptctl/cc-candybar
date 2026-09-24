@@ -7,11 +7,13 @@
 import {
   blendRgb,
   ColorRgba,
+  contrastFor,
   contrastRatio,
   getThemePalette,
   listThemePalettes,
   Oklch,
   Palette,
+  relativeLuminance,
 } from "@promptctl/rich-js";
 import {
   BAND_RECESSION,
@@ -35,6 +37,7 @@ import {
   paletteRole,
   stateFor,
   textOn,
+  TEXT_MIN_CONTRAST,
   vocabularySelect,
   type Address,
   type AddressStep,
@@ -367,21 +370,73 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
   });
 });
 
-describe("done-when: text on a state cell is contrast-chosen and clears 3:1 on every pair", () => {
-  test("is the better of the theme's two poles, and clears 3:1 over the whole registry", () => {
+describe("done-when: text on a state cell is contrast-chosen and clears the text floor on every pair", () => {
+  test("is the theme pole on the side contrastFor names, slid that way only when it misses the floor", () => {
     for (const palette of REGISTRY) {
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       for (const hue of DECOR_HUES) {
         const state = stateFor(palette, hue);
         const text = textOn(palette, state);
-        const best = Math.max(...poles.map((pole) => contrastRatio(state, pole)));
-        expect(poles.map((p) => p.hex)).toContain(text.hex);
-        expect([palette.name, hue, contrastRatio(state, text)]).toEqual([palette.name, hue, best]);
-        expect([palette.name, hue, contrastRatio(state, text) >= 3]).toEqual([
+        const side = contrastFor(state);
+        const bestPole = poles.reduce((a, b) =>
+          contrastRatio(side, b) < contrastRatio(side, a) ? b : a,
+        );
+        // The text lies on the side the max-contrast pick names — a light cell
+        // gets darker text, a dark cell lighter — so a slide never carries it
+        // through the background into the other polarity.
+        const lighter = relativeLuminance(text) > relativeLuminance(state);
+        expect([palette.name, hue, lighter]).toEqual([palette.name, hue, side.hex === "#ffffff"]);
+        // A pole that already clears is returned untouched — the floor never
+        // transforms text that was already legible.
+        if (contrastRatio(state, bestPole) >= TEXT_MIN_CONTRAST) {
+          expect([palette.name, hue, text.hex]).toEqual([palette.name, hue, bestPole.hex]);
+        }
+        expect([palette.name, hue, contrastRatio(state, text) >= TEXT_MIN_CONTRAST]).toEqual([
           palette.name,
           hue,
           true,
         ]);
+      }
+    }
+  });
+
+  // A slide keeps its colour's OKLCH chroma and hue and moves only lightness, so
+  // text carries the lineage of the pole it was slid from. On a mid-luminance
+  // cell the pole that merely measures better can sit on the far side of the
+  // background (39 of the registry's tints and band colours); sliding IT would
+  // wear that pole's hue at the other polarity. The text must descend from the
+  // pole on the side the max-contrast pick names — the theme's own dark or
+  // light, only deepened.
+  test("descends from the side's own pole: same chroma and hue, on every tint and band colour", () => {
+    const hueGap = (a: number, b: number): number => Math.abs(((a - b + 540) % 360) - 180);
+    for (const palette of REGISTRY) {
+      const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
+      const cells = [
+        ...DECOR_BASES.flatMap((base) =>
+          DECOR_HUES.flatMap((hue) =>
+            DECOR_AMTS.map((amount) => decorEntryColour(palette, { base, hue, amount })),
+          ),
+        ),
+        ...DECOR_HUES.flatMap((hue) =>
+          [0, 1, 2].flatMap((depth) => {
+            const band = bandFor(palette, { hue, depth });
+            return [band.state, band.plane];
+          }),
+        ),
+      ];
+      for (const cell of cells) {
+        const side = contrastFor(cell);
+        const pole = Oklch.fromRgba(
+          poles.reduce((a, b) => (contrastRatio(side, b) < contrastRatio(side, a) ? b : a)),
+        );
+        const text = Oklch.fromRgba(textOn(palette, cell));
+        // Toward white or black the sRGB gamut narrows, so a slide can only
+        // LOSE chroma (atom-one-dark's foreground keeps .003 of its .020 at the
+        // top); hue is only a fact where both colours still carry some.
+        const sameLineage =
+          text.c <= pole.c + 0.005 &&
+          (text.c < 0.02 || pole.c < 0.02 || hueGap(text.h, pole.h) < 6);
+        expect([palette.name, cell.hex, sameLineage]).toEqual([palette.name, cell.hex, true]);
       }
     }
   });
@@ -527,10 +582,10 @@ describe("a band is a plane", () => {
     }
   });
 
-  // Registry minimum: solarized-dark/accent's depth-1 plane (#3b5f6b) reads at
-  // 2.188 against its better pole — the band floor sits just under STATE_FLOOR
-  // (2.2), which governs the trigger, not the plane.
-  const TEXT_FLOOR = 2.15;
+  // Band text is chosen by the same textOn every cell uses, so it clears the
+  // one text floor. (Before brandon-theme-picker-bgw.b2g floored the pick, the
+  // registry minimum was solarized-dark/accent's depth-1 plane at 2.188.)
+  const TEXT_FLOOR = TEXT_MIN_CONTRAST;
 
   test("text on every band cell is contrast-chosen and clears the band floor on every theme", () => {
     for (const { palette, hue } of LINEAGES) {

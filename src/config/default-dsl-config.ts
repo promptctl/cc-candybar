@@ -40,6 +40,9 @@ import {
 } from "./disclosure.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { quickActions } from "./quick-actions.js";
+// [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
+// same one the renderer holds chosen text to (textOn).
+import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -97,21 +100,29 @@ const GIT_COLOR = {
   unstaged: "warning",
   untracked: "accent",
   conflicts: "error",
+  dirty: "warning",
+  clean: "success",
   ahead: "success",
   behind: "warning",
   stash: "accent",
 } as const;
 
+// Text in a semantic palette colour, floored at TEXT_MIN_CONTRAST to stay
+// legible on the cell it sits on. A theme's `success`/`warning`/`accent` is designed against its own
+// background, not against the vocabulary tint a bar cell wears, so the raw
+// role measured 1.01:1 on `light` and 1.2–1.6:1 across the light themes
+// (brandon-theme-picker-bgw.b2g). `readableOn` moves the colour in OKLCH
+// lightness only, so the hue — the thing that says "staged" or "conflicts" —
+// survives; a colour that already clears the floor is returned unchanged.
+const accent = (role: string, content: string): string =>
+  `{{ fg (readableOn (color "${role}") (bgOf) ${TEXT_MIN_CONTRAST}) ${content} }}`;
+
 // Paint one git fact in its semantic color. The table above holds palette
-// *variable names* (data), and this is the one place a name becomes a template
-// call, so the fact→color decision and its spelling stay separate concerns.
+// *variable names* (data), and this is the one place a fact becomes an accent,
+// so the fact→color decision and its spelling stay separate concerns.
 // [LAW:one-source-of-truth]
-//
-// Note the shape: `fg (color "…")`, which is also what a composed color looks
-// like — `fg (darken (color "…") 1)`. A template that wants to adjust one of
-// these later wraps the color expression instead of rewriting the call.
 const paint = (fact: keyof typeof GIT_COLOR, content: string): string =>
-  `{{ fg (color "${GIT_COLOR[fact]}") ${content} }}`;
+  accent(GIT_COLOR[fact], content);
 
 // How far the two git segments' *structural* text — labels, punctuation,
 // brackets, the sha, the upstream name, the elapsed-time annotation — sits
@@ -167,12 +178,12 @@ const GIT_WORKTREE =
   `{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}${paint("conflicts", '(printf "!%v" .git.conflicts)')}{{ $first = false }}{{ end }}` +
   "){{ end }}";
 
-// Status icon precedence: conflicts → ⚠ (error), dirty → ● (warning), else
-// clean ✓ (success) — colored to match the state it reports.
+// Status icon precedence: conflicts → ⚠, dirty → ●, else clean ✓ — each
+// painted in its state's GIT_COLOR entry.
 const GIT_STATUS =
-  '{{ if eq .git.status "conflicts" }}{{ fg (color "error") "⚠" }}{{ else }}' +
-  '{{ if eq .git.status "dirty" }}{{ fg (color "warning") "●" }}' +
-  '{{ else }}{{ fg (color "success") "✓" }}{{ end }}{{ end }}';
+  `{{ if eq .git.status "conflicts" }}${paint("conflicts", '"⚠"')}{{ else }}` +
+  `{{ if eq .git.status "dirty" }}${paint("dirty", '"●"')}` +
+  `{{ else }}${paint("clean", '"✓"')}{{ end }}{{ end }}`;
 
 // Every unpainted token here — the repo name, `⎇`, `♯`, the sha, the worktree
 // parentheses, `→`, the upstream name — renders in the segment's quiet `fg:`
@@ -202,10 +213,11 @@ const GIT_TEMPLATE =
 // `cc-candybar check` fails), never a silently reordered cascade.
 //
 // block/weekly heat as the displayed (rounded) percentage rises: calm to
-// `heatThreshold`, warning to `warningThreshold`, error beyond — and the text
-// flips to the button foreground at the same `heatThreshold`, so bg and fg
-// cannot disagree about where the cell first warms. Both are variables, so
-// the ascending constraint is between two knobs the user can see.
+// `heatThreshold`, warning to `warningThreshold`, error beyond. No `fg:` rides
+// beside the ramp: the text is chosen on whichever stop the cell resolves to
+// (`textOn`), so it cannot disagree with the background about where the cell
+// warms. Both thresholds are variables, so the ascending constraint is between
+// two knobs the user can see.
 
 // ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
 
@@ -819,30 +831,25 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       description:
         "The current directory, shortened fish-style — `~` under home, project-relative inside the project.",
       template: DIR_TEMPLATE,
-      fg: "foreground",
     },
     model: {
       description: "The active model's display name.",
       template: "✱ {{ formatModelName .model.display_name }}",
-      fg: "foreground",
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
       description: "The session id, truncated to 8 characters.",
       template: "⌗{{ trunc 8 .session.id }}",
-      fg: "foreground",
       when: '{{ ne .session.id "" }}',
     },
     version: {
       description: "The Claude Code version reported in the hook payload.",
       template: "◈ v{{ .version }}",
-      fg: "foreground",
       when: '{{ ne .version "" }}',
     },
     tmux: {
       description: "The tmux session name; hidden when not inside tmux.",
       template: 'tmux:{{ .tmux.session | default "none" }}',
-      fg: "foreground",
       when: '{{ ne .tmux.session "" }}',
     },
     // "You are not on your own machine." Modelled on the git-taculous zsh
@@ -859,8 +866,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // hue-ANCHORED palette roots, so it survives every theme and look still
     // reading as an alert. Any other slot could land camouflaged against its
     // neighbours — exactly what a "wrong machine" warning must never do.
-    // `contrastOn (bgOf)` then derives a readable foreground from whatever that
-    // resolves to, rather than betting a fixed `foreground` stays legible.
+    // No `fg:`: the text is chosen on whatever that resolves to, like every
+    // unauthored cell's, rather than betting a fixed `foreground` stays legible.
     //
     // Each half falls back to "?" so a failed hostname/username read renders
     // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
@@ -870,7 +877,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         '⇄ {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
       bg: "warning",
-      fg: "{{ contrastOn (bgOf) }}",
       when: "{{ .host.ssh }}",
     },
     git: {
@@ -951,14 +957,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '{{ if ne .git.prUrl "" }}' +
         '{{ link .git.prUrl (printf "⇆ #%v" .git.prNumber) }}' +
         "{{ else }}⚠ PR{{ end }}",
-      fg: "foreground",
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
     toolbar: {
       description:
         "Quick actions: copy the session id, and open the project, transcript or repo.",
       template: quickActions("").template,
-      fg: "foreground",
     },
     session: {
       description:
@@ -966,7 +970,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .session.budget.amount "warn" .session.budget.warningThreshold) }}',
-      fg: "foreground",
     },
     today: {
       description:
@@ -974,7 +977,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         '☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }}',
-      fg: "foreground",
     },
     block: {
       description:
@@ -983,7 +985,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
       bg: '{{ ramp (round .block.nativeUtilization) "step" 0 "panel" .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
-      fg: '{{ ramp (round .block.nativeUtilization) "step" 0 "foreground" .block.budget.heatThreshold "button-color-foreground" }}',
+      // No `fg:`: an unauthored foreground is the theme pole that reads on the
+      // background this ramp resolves to, at every stop. The hand-paired
+      // `button-color-foreground` it replaces measured 1.55:1 on rose-pine's
+      // warning (brandon-theme-picker-bgw.b2g).
       // Hide unless we have a five-hour-window snapshot.
       when: "{{ gt .block.resetsAt 0 }}",
     },
@@ -994,7 +999,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
       bg: '{{ ramp (round .weekly.percentage) "step" 0 "panel" .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
-      fg: '{{ ramp (round .weekly.percentage) "step" 0 "foreground" .weekly.budget.heatThreshold "button-color-foreground" }}',
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
@@ -1012,7 +1016,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
         '{{ template "formatEta" .weekly.etaMinutes }} to wk',
       bg: '{{ ramp .block.etaMinutes "step" -1 "panel" 0 "error" .burn.eta.errorMinutes "warning" .burn.eta.warnMinutes "panel" }}',
-      fg: '{{ ramp .block.etaMinutes "step" -1 "foreground" 0 "button-color-foreground" .burn.eta.warnMinutes "foreground" }}',
       when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
     },
     // Token throughput for the active turn — output / input / total tok/s, each a
@@ -1030,7 +1033,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '⇅ out {{ template "formatSpeed" .speed.output }} · ' +
         'in {{ template "formatSpeed" .speed.input }} · ' +
         'tot {{ template "formatSpeed" .speed.total }}',
-      fg: "foreground",
       when: "{{ gt .session.tokens 0 }}",
     },
     // Burn-rate sparkline: the recent total-lane tok/s trend as a unicode
@@ -1045,7 +1047,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     tokenSparkline: {
       description: "A sparkline of recent token throughput.",
       template: "⚡ {{ sparkline .speed.history 24 }}",
-      fg: "foreground",
       when: '{{ ne .speed.history "" }}',
     },
     // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
@@ -1068,9 +1069,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // numbers here the way the block/weekly `bg:` cascades are. The bands are the
       // chain's own: <= 8 error, <= 20 warning, above that foreground
       // (test/cascade.test.ts pins the two against each other at every boundary).
+      // The cascade picks the role; the floor keeps it legible on this cell's
+      // tint, exactly as a git accent is (`accent` above).
       fg:
-        '{{ cascade (minutesUntilReset .cache.expiresAt) "0:error" ' +
-        '"9:warning" "21:foreground" }}',
+        '{{ readableOn (color (cascade (minutesUntilReset .cache.expiresAt) "0:error" ' +
+        `"9:warning" "21:foreground")) (bgOf) ${TEXT_MIN_CONTRAST} }}`,
       when: "{{ gt .cache.expiresAt 0 }}",
     },
     context: {
@@ -1081,7 +1084,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // contextLeft is an integer (src/segments/context.ts rounds it), so the
       // "≤ 20 / ≤ 40" edges are the stops at 21 and 41 exactly.
       bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 "surface-active" }}',
-      fg: '{{ ramp .context.contextLeft "step" 0 "button-color-foreground" 41 "foreground" }}',
       when: "{{ gt .context.totalTokens 0 }}",
     },
     metrics: {
@@ -1109,7 +1111,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ if .metrics.messageCount }} ◆ {{ .metrics.messageCount }}{{ end }}" +
         "{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}" +
         "{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ",
-      fg: "foreground",
       // [LAW:no-silent-failure] Each arm is a BOOLEAN, not the value itself.
       // `evaluateWhen` hides a segment only on the literal text "false", so
       // `{{ or <numbers> }}` over all-zero fields renders "0" — visible, an empty
@@ -1142,7 +1143,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ end }}" +
         '{{ if .activity.tool.running }} ⟳ {{ template "formatToolTally" .activity.tool.running }}{{ end }}' +
         '{{ if .activity.tool.done }} ✓ {{ template "formatToolTally" .activity.tool.done }}{{ end }} ',
-      fg: "foreground",
       // Boolean arms, for the reason spelled on `metrics` above: a `when` is
       // hidden only by the literal text "false".
       when:
@@ -1166,7 +1166,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ .charset.effective }} " +
         `{{ menu "applyCharsetForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetCharset" "↺" }}',
-      fg: "foreground",
     },
     colorCompatControl: {
       description:
@@ -1175,7 +1174,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ .colorCompatibility.effective }} " +
         `{{ menu "applyColorCompatForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetColorCompat" "↺" }}',
-      fg: "foreground",
     },
     // [LAW:verifiable-goals] candybar-config-engine-71o.6's own acceptance
     // bar, mirrored from .3/.5: at least ONE segment-scoped field must be
@@ -1205,7 +1203,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "🎨 directory " +
         `{{ menu "applyDirectoryPaletteForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetDirectoryPalette" "↺" }}',
-      fg: "foreground",
     },
   },
 
