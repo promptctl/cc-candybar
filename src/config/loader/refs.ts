@@ -54,16 +54,17 @@ export function extractActionRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:dataflow-not-control-flow] Extract the action names a `picker` OR `menu`
-// call references, for the load-time existence check. A `picker` binds an
-// (apply, page) action pair as its first two string-literal args
+// [LAW:dataflow-not-control-flow] Extract the action names a `picker`, `menu`
+// or `carousel` call references, for the load-time existence check. A `picker`
+// binds an (apply, page) action pair as its first two string-literal args
 // (`{{ picker "applyTheme" "themePage" true true }}`); a `menu` binds ONLY its
 // apply action (`{{ menu "applyTheme" (dict …) }}`) — its page cursor is
 // synthesized from identity, and the dict's option-name literals must never be
-// misread as action refs. A menu's body IS a picker, so the existence check is
-// identical; one extractor arms on either keyword with the keyword's own arg
-// count [LAW:single-enforcer]. Same code/string-span walk as extractActionRefs.
-const PICKER_OR_MENU_ARG_RE = /\b(picker|menu)\s+$/;
+// misread as action refs — and a `carousel` binds only its apply action too.
+// All three lay out one option domain, so the existence check is identical;
+// one extractor arms on any keyword with the keyword's own arg count
+// [LAW:single-enforcer]. Same code/string-span walk as extractActionRefs.
+const PICKER_OR_MENU_ARG_RE = /\b(picker|menu|carousel)\s+$/;
 export function extractPickerMenuRefs(template: string): Set<string> {
   const refs = new Set<string>();
   TEMPLATE_BLOCK_RE.lastIndex = 0;

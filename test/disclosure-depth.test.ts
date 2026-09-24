@@ -33,7 +33,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   BAR_ROOT,
@@ -298,16 +298,18 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     }
 
     // A picker control open: the ticket's Done-when, verbatim — its trigger
-    // is `bandFor(palette, { hue, depth: 2 }).state`, its drop line sits on
-    // that band's `plane`, and its options are depth-2 items.
+    // is `bandFor(palette, { hue, depth: 2 }).state`, and the carousel it
+    // opens (brandon-theme-picker-bgw.ef6) is a depth-2 item of that band.
     const control = row2[0]!;
-    rt.openMenuIn(control);
+    const pickers = sharedMenuStateKey("settings.pickers");
+    rt.clickWriting(control, pickers, "settings.apply.theme");
     rt.render();
-    const band2 = bandFor(palette, { hue, depth: 2 });
-    expect(rt.bgOf(control)).toBe(band2.state.hex);
-    const [, drop] = rt.cellsOf(control);
-    if (drop === undefined) throw new Error(`"${control}" dropped no line`);
-    expect(definedStyle(drop.style).bgcolor?.value?.hex).toBe(band2.plane.hex);
+    const band2: Disclosure = { hue, depth: 2 };
+    expect(rt.bgOf(control)).toBe(bandFor(palette, band2).state.hex);
+    const ring = "settings.carousel.theme";
+    expect(rt.bgOf(ring)).toBe(
+      bandItemFor(palette, band2, regionAddress(rt, ring)).hex,
+    );
     rt.dispose();
   });
 });

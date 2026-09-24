@@ -360,7 +360,7 @@ export function decorEntryFor(address: Address): DecorEntry {
  */
 export function paletteRole(
   palette: Palette,
-  role: "surface" | DecorHue | ThemePole,
+  role: "surface" | DecorHue | ThemePole | SemanticRole,
 ): ColorRgba {
   const colour = palette.get(role);
   if (colour === undefined) {

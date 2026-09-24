@@ -56,7 +56,9 @@ One rule, applied once per interactive element:
 
 - **Pick a value from an option domain** (theme, style, look) → `{{ menu "applyAction" "▸" "▾" }}`
   in a segment template. One call = a clickable trigger whose text you write +
-  drop-below picker + all backing state, synthesized.
+  drop-below picker + all backing state, synthesized. When trying the options
+  one after another is the point, `{{ carousel "applyAction" }}` is the same
+  pick as a ring whose every click applies (see its section below).
 - **Collapse/reveal arbitrary layout** (a details drawer, a links panel) →
   `{ kind: "group", … }` in `root`.
 - **A single click effect** (copy, open, cycle, step) → `{{ action "name" … }}`
@@ -1114,10 +1116,15 @@ close.
   `cc-candybar doctor` runs the same checks from a shell, with the exit code as
   the verdict.
 
-Every picker in the menu shares one accordion key, so opening the look picker
-closes the theme picker: the panel is narrow, and two open drop-downs would
-overflow it. A pick leaves its picker open, on its page, so you can try
-several themes in a row and watch the bar recolour; `✕` closes it.
+Theme, look and style each open a **carousel** under the config row — `◀` and
+`▶` beside the current value, its neighbours either side as the width
+allows — and every click in it applies, so rotating through themes recolours the
+bar at each step. The theme and look carousels carry `{{ themePreview }}` in the
+row beneath. The preset control opens a paged picker. Every one of these shares
+one accordion key, so opening the look carousel closes the theme carousel: the
+panel is narrow, and two open drop-downs would overflow it. A pick leaves its
+drop-down open, so you can try several in a row; the `✕` leading each of its
+rows closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `settings.menu` in your
@@ -1312,6 +1319,66 @@ menu:
   ] },
 }
 ```
+
+## `{{ carousel "applyAction" }}` — the ring picker
+
+The same pick as a `{{ menu }}`'s grid — one option-domain action, the same
+domain, the same gated click — laid out as a ring centred on the value the
+action's key holds now:
+
+```text
+dracula flexoki ◀ gruvbox ▶ monokai nord
+```
+
+Every cell applies the option it points at: `▶` writes the option after the
+centre, `◀` the one before it (both wrap round the ends), and a neighbour's name
+writes that neighbour. There is no highlight to move and confirm — a rotation
+IS a pick, so the bar recolours on every click and the ring re-centres on what
+you picked. Neighbours are shown in symmetric pairs, dimmed, as many as the row
+has room for; a narrow terminal shows `◀ gruvbox ▶` alone. Options are coloured
+by the one rule a picker uses (a colour-valued domain paints each name in its
+own palette).
+
+A carousel owns no state of its own — its centre is the action's current value —
+so the call is the whole declaration. It is a picker, not a disclosure: put it
+in the body of a `kind: "group"` (or anywhere else a row belongs) when it should
+open and close.
+
+`{{ themePreview }}` is its companion: a strip sampling the palette the bar is
+drawn in right now — each tint a closed cell can wear, the colour an open
+disclosure's trigger wears beside its plane, and the `warning`/`error` alerts —
+each drawn by the same function the bar draws that cell with, so it cannot show
+a colour the bar under that theme would not. Under a carousel whose every click
+applies, that is the theme (or look) at the centre of the ring.
+
+```json5 check:pass
+{
+  variables: {
+    pickedTheme: { kind: "state", key: "theme", default: "nord" },
+  },
+  actions: {
+    applyTheme: { set: "theme", from: "themes" },
+  },
+  segments: {
+    themeRing: { template: '{{ carousel "applyTheme" }}' },
+    themeSample: { template: "{{ themePreview }}" },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { kind: "group", name: "themes", label: "🎨 theme", children: ["themeRing", "themeSample"] },
+  ] },
+}
+```
+
+The apply action must hold a value to centre on: a `{ set, from }` action
+whose key a `state` variable reads back, or a `{ persist, from }` action (a dual
+included). Without the `state` variable the carousel could never see what its
+last click wrote, so it is a render error naming the variable to declare,
+`carousel references action "applyTheme", whose key "theme" no variable reads
+back…`. An `insertSegmentFrom` action inserts a segment and holds nothing, so a
+carousel over one is a render error naming the action. A current value outside
+the domain rotates from the domain's first option, and no option reads as
+current.
 
 ## `looks`: named theme adaptations (the third option domain)
 

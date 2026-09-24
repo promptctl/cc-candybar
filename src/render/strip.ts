@@ -171,6 +171,40 @@ export function stripChromeCols(style: StripStyle): number {
   }
 }
 
+// [LAW:single-enforcer] What one MORE cell costs a row beyond its own content:
+// the seam the joiner lays between it and its neighbour (powerline's arrow,
+// capsule's facing caps and the gap between them, plain's separator text).
+// MEASURED through the joiner that will draw the row rather than declared like
+// stripChromeCols, because plain's seam is the author's separator and rich-js
+// keeps its default private — a declared table would restate that default and
+// drift from it. Memoised per joiner shape: a render asks once per shape.
+const seamMemo = new Map<string, number>();
+export function stripSeamCols(
+  options: Pick<BuildLineOptions, "style" | "charset" | "separator">,
+): number {
+  const key = JSON.stringify([
+    options.style,
+    options.charset,
+    options.separator ?? null,
+  ]);
+  const known = seamMemo.get(key);
+  if (known !== undefined) return known;
+  const joiner = pickJoiner(options.style, options.charset, options.separator);
+  const cell = (bgcolor: string): RichText =>
+    new RichText("x", { end: "", noWrap: true, style: new Style({ bgcolor }) });
+  const width = (cells: RichText[]): number =>
+    new RichText(
+      renderToString(new Strip(cells, joiner), { colorSystem: null }).replace(
+        /\n$/,
+        "",
+      ),
+    ).cellLength;
+  const seam =
+    width([cell("#101010"), cell("#202020")]) - width([cell("#101010")]) - 1;
+  seamMemo.set(key, seam);
+  return seam;
+}
+
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {
   // [LAW:one-source-of-truth] Intra-cell padding derives from the one resolved
   // globals.padding value on BuildLineOptions — the joiners sit between cells;

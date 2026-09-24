@@ -35,7 +35,12 @@ import {
 import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
-import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
+import {
+  DEFAULT_CHARSET,
+  DEFAULT_PADDING,
+  renderStripCells,
+  stripSeamCols,
+} from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
 import {
   decideLookName,
@@ -67,6 +72,8 @@ import {
 } from "../render/action.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
+import { carouselFuncs } from "../render/carousel.js";
+import { themePreviewFuncs } from "../render/theme-preview.js";
 import {
   menuFuncs,
   collectMenuDrops,
@@ -374,6 +381,7 @@ export function registerDslConfig(
   // registry declares into and the renderer reads back — sourced from the registry
   // itself, not a redundant opts field a caller could forget (or pass a divergent
   // store for). Every config has a registry, so the action store is never null.
+  const floorPalette = declaredBasePalette(config.globals.palette);
   const actionRuntime: ActionRuntime = {
     store: registry.variableStore,
     compiled: new Map(),
@@ -389,10 +397,15 @@ export function registerDslConfig(
     // must go through `declaredBasePalette` rather than the raw name, because that
     // slot may hold a RULE (brandon-themes-dzl) and `paletteForThemeName` of a
     // template would throw at LOAD for a config that renders perfectly well.
-    basePalette: declaredBasePalette(config.globals.palette),
+    basePalette: floorPalette,
+    // The compile-only floor for the drawn palette: the base under no look.
+    palette: floorPalette,
     // Same contract as stripStyle: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
+    // Same contract again: the compile-only floor is the registration-time
+    // style's seam under the default charset.
+    seamCols: stripSeamCols({ style: "powerline", charset: DEFAULT_CHARSET }),
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -436,6 +449,8 @@ export function registerDslConfig(
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime, activeSegment),
+      ...themePreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
       // segment currently rendering — the same palette its `bg:`/`fg:` resolve
@@ -882,6 +897,8 @@ export function renderDsl(
   // style: the picker reserves 2×padding at its pagination seam, the same seam
   // that reserves the joiner chrome — one resolved value, read where needed.
   compiled.menuRuntime.action.padding = opts.padding;
+  // The seam one more cell costs, from the same options the rows serialize by.
+  compiled.menuRuntime.action.seamCols = stripSeamCols(opts);
   const scope = buildScope(store);
   // The other half of each fold, which could only ever happen here: a rule reads
   // the store the push above just filled with this render's values. A decided
@@ -926,6 +943,7 @@ export function renderDsl(
   // this one object, so a look click recolours the whole bar from one
   // transposition, not one per segment.
   const palette = transposedPalette(basePalette, look.value);
+  compiled.menuRuntime.action.palette = palette;
 
   perSegmentSink?.clear();
 

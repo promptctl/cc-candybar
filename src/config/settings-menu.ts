@@ -74,6 +74,7 @@ import {
   menuMember,
   menuPageKey,
   menuStateKey,
+  sharedMenuStateKey,
 } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
@@ -203,7 +204,26 @@ interface SettingControl {
   readonly effectiveVar: string;
   readonly glyph: string;
   readonly domain: OptionDomain;
+  readonly affordance: Affordance;
 }
+
+// [LAW:one-type-per-behavior] How a control OFFERS its domain — one behaviour
+// (pick a member, applied through the control's one dual action), two shapes.
+// A `menu` drops the picker grid (`{{ menu }}`); a `carousel` opens a ring
+// centred on the current value where every click applies
+// (brandon-theme-picker-bgw.ef6), with `beneath` the rows under it — each a
+// template, so what sits under a ring is data a control carries, not a kind of
+// control.
+type Affordance =
+  | { readonly kind: "menu" }
+  | { readonly kind: "carousel"; readonly beneath: readonly string[] };
+
+// The theme and look carousels share one preview: both choose the palette the
+// bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
+const PALETTE_CAROUSEL: Affordance = {
+  kind: "carousel",
+  beneath: ["{{ themePreview }}"],
+};
 
 // [LAW:one-type-per-behavior] Four settings, one control shape: a glyph, the
 // current value, a picker over a domain, and the ↺ that forgets the durable
@@ -228,6 +248,7 @@ const PRIMARY_CONTROLS: readonly SettingControl[] = [
     effectiveVar: "preset.effective",
     glyph: "▦",
     domain: "presets",
+    affordance: { kind: "menu" },
   },
 ];
 
@@ -239,6 +260,7 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
     effectiveVar: "theme.effective",
     glyph: "🎨",
     domain: "themes",
+    affordance: PALETTE_CAROUSEL,
   },
   {
     name: "look",
@@ -247,6 +269,7 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
     effectiveVar: "look.effective",
     glyph: "◐",
     domain: "looks",
+    affordance: PALETTE_CAROUSEL,
   },
   {
     name: "style",
@@ -255,6 +278,7 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
     effectiveVar: "style.effective",
     glyph: "✦",
     domain: "styles",
+    affordance: { kind: "carousel", beneath: [] },
   },
 ];
 
@@ -319,6 +343,49 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
 const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
+const controlCarousel = (name: string): string =>
+  `${SETTINGS_NS}carousel.${name}`;
+const controlBeneath = (name: string, row: number): string =>
+  `${controlCarousel(name)}.${row}`;
+
+// [LAW:one-source-of-truth] The one accordion every control's drop-down joins,
+// as a disclosure ref per member: a `{{ menu }}` derives this same state key from
+// the same shared key (menuStateKey), so a carousel and a grid picker are
+// mutually exclusive through one key rather than two conventions.
+const PICKERS_STATE_KEY = sharedMenuStateKey(PICKER_KEY);
+const controlRef = (c: SettingControl): DisclosureRef => ({
+  variable: PICKERS_STATE_KEY,
+  key: PICKERS_STATE_KEY,
+  member: menuMember(controlApply(c.name)),
+});
+
+// [LAW:dataflow-not-control-flow] A control's place in the tree, read off its
+// affordance: a grid menu hangs its body from inside its own template, so the
+// control is a bare segment; a carousel hangs its rows on the control through
+// the one disclosure lowering, dropped below the row the control sits in.
+function controlNode(c: SettingControl): LayoutNode {
+  const seg: SegmentNode = { kind: "segment", name: controlSeg(c.name) };
+  return c.affordance.kind === "menu"
+    ? seg
+    : disclosureNode(
+        seg.name,
+        controlRef(c),
+        {
+          kind: "container",
+          direction: "vertical",
+          children: [
+            { kind: "segment", name: controlCarousel(c.name) },
+            ...c.affordance.beneath.map(
+              (_, row): LayoutNode => ({
+                kind: "segment",
+                name: controlBeneath(c.name, row),
+              }),
+            ),
+          ],
+        },
+        "drop",
+      );
+}
 
 // [LAW:single-enforcer] The one answer to "is this segment reference the global
 // menu's anchor". cross-ref.ts asks it to accept an authored placement of a name
@@ -452,12 +519,7 @@ function expandAnchor(
               // the bar around it, and the adjacency IS the affordance. Its
               // body drops below this row, before the config row's.
               help,
-              ...PRIMARY_CONTROLS.map(
-                (c): LayoutNode => ({
-                  kind: "segment",
-                  name: controlSeg(c.name),
-                }),
-              ),
+              ...PRIMARY_CONTROLS.map(controlNode),
               // The display settings, behind their own disclosure so the
               // menu opens narrow.
               disclosureNode(
@@ -467,12 +529,7 @@ function expandAnchor(
                   kind: "container",
                   direction: "horizontal",
                   children: [
-                    ...CONFIG_CONTROLS.map(
-                      (c): LayoutNode => ({
-                        kind: "segment",
-                        name: controlSeg(c.name),
-                      }),
-                    ),
+                    ...CONFIG_CONTROLS.map(controlNode),
                     { kind: "segment", name: WRAP_SEG },
                     { kind: "segment", name: PADDING_SEG },
                   ],
@@ -710,9 +767,9 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 }
 
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
-// table that describes them. A picker control is a glyph, its live value, a
-// `{{ menu }}` over its domain, and the ↺ that forgets its durable default;
-// wrap and padding differ only in affordance. Every apply action here is DUAL
+// table that describes them. A picker control is a glyph, its live value, the
+// toggle that opens its affordance over its domain, and the ↺ that forgets its
+// durable default; wrap and padding differ only in affordance. Every apply action here is DUAL
 // — one declaration naming both destination keys and the selector that chooses
 // between them — so the panel spells each setting exactly once and the click
 // carries the destination as data [LAW:dataflow-not-control-flow].
@@ -733,15 +790,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // surface is byte-for-byte what it was when the drawer spelled both halves.
 function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of PICKER_CONTROLS) {
-    const seg = controlSeg(c.name);
     const apply = controlApply(c.name);
-    artifacts.segments[seg] = {
-      template:
-        `${c.glyph} {{ .${c.effectiveVar} }} ` +
-        `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
-        `(dict "key" "${PICKER_KEY}") }} ` +
-        `{{ action "${controlReset(c.name)}" "↺" }}`,
-    };
     artifacts.actions[apply] = {
       set: c.sessionKey,
       persist: c.configKey,
@@ -754,7 +803,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     // writes, read from the same record, so the two can never name different
     // settings.
     artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
-    declareHostedMenu(seg, apply, artifacts, PICKER_KEY);
+    declareAffordance(c, artifacts);
   }
   artifacts.actions[controlApply(WRAP.name)] = {
     set: WRAP.sessionKey,
@@ -779,6 +828,41 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
   }
   artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
+}
+
+// [LAW:one-type-per-behavior] Both affordances mint the same control row — the
+// glyph, the value the bar is rendering with, the toggle, the ↺ — and differ in
+// what the toggle opens. A grid menu's toggle is its `{{ menu }}`, which
+// derives its own artifacts; a carousel's toggle is a disclosure trigger on the
+// shared accordion key, and its rows are segments of their own.
+function declareAffordance(c: SettingControl, artifacts: MenuArtifacts): void {
+  const apply = controlApply(c.name);
+  const row = (toggle: string): SegmentDecl => ({
+    template:
+      `${c.glyph} {{ .${c.effectiveVar} }} ${toggle} ` +
+      `{{ action "${controlReset(c.name)}" "↺" }}`,
+  });
+  if (c.affordance.kind === "menu") {
+    artifacts.segments[controlSeg(c.name)] = row(
+      `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
+        `(dict "key" "${PICKER_KEY}") }}`,
+    );
+    declareHostedMenu(controlSeg(c.name), apply, artifacts, PICKER_KEY);
+    return;
+  }
+  const ref = controlRef(c);
+  const toggle = menuActionName(ref.key, ref.member);
+  artifacts.variables[ref.key] = disclosureStateVar(ref.key, DISCLOSURE_CLOSED);
+  artifacts.actions[toggle] = disclosureCycleAction(ref.key, ref.member);
+  artifacts.segments[controlSeg(c.name)] = row(
+    disclosureTrigger(toggle, DISCLOSURE_GLYPH_CLOSED, DISCLOSURE_GLYPH_OPEN),
+  );
+  artifacts.segments[controlCarousel(c.name)] = {
+    template: `{{ carousel "${apply}" }}`,
+  };
+  c.affordance.beneath.forEach((template, i) => {
+    artifacts.segments[controlBeneath(c.name, i)] = { template };
+  });
 }
 
 // [LAW:one-source-of-truth] Edit mode's toggle, ensured rather than duplicated:

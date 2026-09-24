@@ -32,7 +32,7 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { menuPageKey } from "../src/config/menu-keys";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/loader/reserved-namespace";
 import type { RichText } from "@promptctl/rich-js";
 import {
@@ -186,27 +186,20 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     expectLedBy(lines[1]!, configKey);
     expect(links(lines[1]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
-    // A picker dropped inside ⚙'s body keeps the picker's own ✕ alone: the
-    // line is the menu's band, not ⚙'s row.
-    const opener = links(lines[1]!).find((l) =>
-      effectsOf(l.url).some(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
-          e.args[2] !== DISCLOSURE_CLOSED,
-      ),
-    );
-    if (opener === undefined) throw new Error("⚙'s row hosts no menu opener");
-    rt.click(opener.url);
+    // A carousel opened inside ⚙'s body is its own disclosure's body
+    // (brandon-theme-picker-bgw.ef6): each of its rows — the ring and the
+    // preview under it — is led by that disclosure's ✕ alone, never ⚙'s or 🍫's.
+    const pickers = sharedMenuStateKey("settings.pickers");
+    rt.clickWriting(lines, pickers, "settings.apply.theme");
     lines = rt.render();
-    expect(lines).toHaveLength(3);
-    const pickerLine = lines[2]!;
-    const [first] = links(pickerLine);
-    expect(first?.text).toBe(DISCLOSURE_GLYPH_CLOSE);
-    expect(closes(first!, configKey)).toBe(false);
-    expect(closes(first!, SETTINGS_ANCHOR)).toBe(false);
+    expect(lines).toHaveLength(4);
+    for (const row of lines.slice(2)) {
+      expectLedBy(row, pickers);
+      expect(links(row).some((l) => closes(l, configKey))).toBe(false);
+      expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
+    }
 
-    // Clicking ⚙'s row ✕ closes ⚙ (and the picker hanging under it) while 🍫
+    // Clicking ⚙'s row ✕ closes ⚙ (and the carousel hanging under it) while 🍫
     // stays open.
     rt.click(links(lines[1]!)[0]!.url);
     lines = rt.render();

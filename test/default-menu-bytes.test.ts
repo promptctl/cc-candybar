@@ -20,9 +20,10 @@
 //   • the drawer controls (charset / colorCompatibility / directory palette)
 //     live under the bundled `settingsDrawer` group, which a user `root`
 //     deletes — so each is rooted directly, one per case;
-//   • the four settings-menu picker controls are SYNTHESIZED into every preset
-//     root, so rooting one would place it twice (a load error, by design) —
-//     they are reached the way a user reaches them, by clicking 🍫 then ⚙.
+//   • the settings menu's grid picker control (preset — theme, look and style
+//     open carousels, test/theme-carousel.test.ts) is SYNTHESIZED into every
+//     preset root, so rooting it would place it twice (a load error, by
+//     design) — it is reached the way a user reaches it, by clicking 🍫 then ⚙.
 
 import { createEngine } from "@promptctl/go-template-js";
 
@@ -229,7 +230,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     });
   });
 
-  // The four settings-menu picker controls, reached the way a user reaches
+  // The settings menu's grid picker controls, reached the way a user reaches
   // them. They share one accordion key, so each open state gets its own
   // runtime — one key holds one open member, and a shared rig would only ever
   // snapshot the last one opened.
@@ -240,10 +241,10 @@ describe("every {{ menu }} the bundled default renders", () => {
     return rig;
   };
 
-  test("the config menu with all four pickers closed: exact bytes", () => {
+  test("the config menu with every picker closed: exact bytes", () => {
     const rig = openConfigMenu();
     const out = rig.render();
-    // Four controls, four closed disclosures — the shape the per-picker cases
+    // One closed disclosure per grid picker — the shape the per-picker cases
     // below each open one of.
     expect(
       menuOpeners(out)

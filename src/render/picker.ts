@@ -66,8 +66,44 @@ const PICKER_NEXT = "→";
 // [LAW:single-enforcer] One display-width measure — rich-js's cellLength, the
 // same algebra FlexStrip wraps by — so pagination fits the line the strip
 // produces. No second width function.
-function cellWidth(text: string): number {
+export function cellWidth(text: string): number {
   return new RichText(text).cellLength;
+}
+
+// [LAW:single-enforcer] The width one option row may fill: term.cols less what
+// the row's own segment spends around it. term.cols is the raw usable width the
+// strip wraps to; the row is itself a styled strip segment, so the joiner
+// brackets it with end-caps (powerline's trailing separator, capsule's two
+// caps) painted OUTSIDE that width, and the segment layout pads every line it
+// emits by the render's intra-cell padding on both sides. A row packed to the
+// full term.cols is pushed past it by both — the maximally-packed middle pages
+// once overflowed and the terminal ate the trailing →. Reserved HERE, at the
+// row-fitting seam, rather than by shrinking the shared term.cols every
+// template reads; stripChromeCols owns the per-style geometry. The picker and
+// the carousel both fit a row by this one budget.
+export function rowBudget(runtime: ActionRuntime): number {
+  return Math.max(
+    1,
+    toNumber(runtime.store.read(TERM_COLS_VAR)) -
+      stripChromeCols(runtime.stripStyle) -
+      2 * runtime.padding,
+  );
+}
+
+// [LAW:single-enforcer] The width a row may fill when it sits in an open
+// disclosure body: the row budget less the ✕ that body leads every row with
+// (render/disclosure-close.ts), which the walk lays as a cell of its own — its
+// glyph, the padding every cell wears, and the seam the joiner lays before the
+// next cell. Reserved whether or not the row really sits in a body, so a bare
+// row fits the same width a body's would; the template cannot see where it is.
+export function ledRowBudget(runtime: ActionRuntime): number {
+  return Math.max(
+    1,
+    rowBudget(runtime) -
+      (cellWidth(DISCLOSURE_GLYPH_CLOSE) +
+        2 * runtime.padding +
+        runtime.seamCols),
+  );
 }
 
 // [LAW:dataflow-not-control-flow] A pure function of (item widths, available
@@ -110,7 +146,7 @@ export function paginate(
 // must emit one value; the option/affordance cells ride as spans on it). `noWrap`
 // is the `paged` value: a paged page is one line that must not wrap; a wrap-mode
 // run is the long line FlexStrip is ALLOWED to break across lines.
-function assemble(frags: readonly RichText[], paged: boolean): RichText {
+export function assemble(frags: readonly RichText[], paged: boolean): RichText {
   const spaced: RichText[] = [];
   for (const frag of frags) {
     if (spaced.length > 0) spaced.push(new RichText(" "));
@@ -178,6 +214,7 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
+  helper: "picker" | "menu" | "carousel",
 ): Extract<
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
@@ -198,7 +235,7 @@ export function requireOptionKind(
       action.kind !== "layout-op-option")
   ) {
     throw new Error(
-      `picker references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action ? `a ${action.kind} action` : "no such action"}`,
+      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action ? `a ${action.kind} action` : "no such action"}`,
     );
   }
   return action;
@@ -224,7 +261,7 @@ export function renderPicker(
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
 ): RichText {
-  const apply = requireOptionKind(runtime, applyName);
+  const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the resolved half above (its
   // options, its current-mark); the CLICK is realized from the declaration
   // itself, through the same fold `{{ action }}` uses. That is what carries a
@@ -246,29 +283,10 @@ export function renderPicker(
   // ✕ is always present; ←/→ appear only on a multi-page menu. Reserve arrow
   // space only after a first pass proves it overflows — reserving it
   // unconditionally is self-fulfilling (a run that fits with just ✕ could be
-  // forced to split, making arrows appear unnecessarily). In wrap mode
-  // (available = Infinity) paginate yields one page, so neither pass splits.
-  //
-  // [LAW:locality-or-seam] term.cols is the raw usable width the strip wraps to;
-  // the picker's row is itself a styled strip segment, so the joiner brackets it
-  // with end-caps (powerline's trailing separator, capsule's two caps) painted
-  // OUTSIDE that width. A page packed to the full term.cols is pushed past it by
-  // the caps — the maximally-packed middle pages overflowed and the terminal ate
-  // the trailing → (page 0 fit, page N did not). Reserve the chrome HERE, at the
-  // pagination seam, rather than shrinking the shared term.cols every template
-  // reads. stripChromeCols owns the per-style geometry; Infinity − chrome stays
-  // Infinity, so wrap mode is unaffected.
-  // The pad spaces the segment layout synthesizes around the picker's line
-  // (2 × the render's intra-cell padding) consume the same width budget the
-  // joiner chrome does — reserve both here, at the pagination seam.
-  const available = paged
-    ? Math.max(
-        1,
-        toNumber(store.read(TERM_COLS_VAR)) -
-          stripChromeCols(runtime.stripStyle) -
-          2 * runtime.padding,
-      )
-    : Infinity;
+  // forced to split, making arrows appear unnecessarily).
+  // In wrap mode (available = Infinity) paginate yields one page, so neither
+  // pass splits.
+  const available = paged ? rowBudget(runtime) : Infinity;
   const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
   const firstPass = paginate(widths, available, closeReserve);
@@ -395,7 +413,7 @@ export function pickerFuncs(
             requireActiveSegment(activeSegment, "{{ picker }}"),
             placedBy(undefined),
             runtime.basePalette,
-            requireOptionKind(runtime, applyName).paletteOf,
+            requireOptionKind(runtime, applyName, "picker").paletteOf,
             activeSegment.drawnAt(),
           ),
         );
