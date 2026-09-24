@@ -717,9 +717,11 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // between them — so the panel spells each setting exactly once and the click
 // carries the destination as data [LAW:dataflow-not-control-flow].
 //
-// A pick leaves its picker open, on its page (brandon-theme-picker-bgw.etd):
-// choosing a theme is trying several, so each try must not cost a reopen and
-// a page hunt; ✕ closes. That holds for a preset pick too, whose click swaps
+// A pick leaves its picker open with its page cursor kept
+// (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
+// try must not cost a reopen and a page hunt; ✕ closes. (A pick that changes
+// the pagination itself — a style or padding change — lands on the kept
+// cursor clamped into the new page set, which renderPicker owns.) That holds for a preset pick too, whose click swaps
 // the whole root — the menu survives it because every preset root references
 // this one anchor and both open states are session keys, not tree positions.
 //

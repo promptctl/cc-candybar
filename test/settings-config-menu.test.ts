@@ -592,6 +592,7 @@ describe("a pick leaves the picker open", () => {
     const page = r.render();
     const options = themeOptions(page);
     expect(options.map((o) => o.theme)).not.toEqual(pageOne.map((o) => o.theme));
+    expect(options.length).toBeGreaterThanOrEqual(2); // two picks on this page
     const [first, second] = options;
 
     r.click(first!.url);
