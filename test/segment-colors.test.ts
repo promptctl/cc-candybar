@@ -396,6 +396,7 @@ describe("segment color functions in the engine", () => {
       palette: makeTestPalette(),
       disclosure: DISCLOSURE,
       tint: TINT,
+      drawnAt: ref.drawnAt,
       bg: undefined,
     };
     const fragments = tpl.evaluate({});

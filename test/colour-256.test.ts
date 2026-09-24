@@ -6,13 +6,16 @@
 // own pipeline — once truecolor, once at 256 — and each text character is
 // measured on the colours the terminal will actually draw: 38;5;n decoded
 // through the fixed xterm cube and grey ramp. A character may not land on
-// ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists) and may not
-// read worse than it did in truecolor, up to the 4.5:1 AA floor.
+// ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
+// the highest floor it cleared in truecolor, and an arrow must stay the
+// colour of the cell it continues.
 
 import { listThemePalettes } from "@promptctl/rich-js";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import type { ColorCompatibility } from "../src/themes/policy";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { GIT_QUIET_MIN_CONTRAST } from "../src/config/default-dsl-config";
 
 type Rgb = readonly [number, number, number];
 type Drawn = Rgb | { readonly ansi: number };
@@ -40,19 +43,22 @@ const ratio = (a: Rgb, b: Rgb): number => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-// A solid joiner's fg is its neighbour's bg: a shape, not text.
 const JOINERS = new Set(["", "", "", "", ">", "(", ")"]);
 
-/** Every non-space, non-joiner character with the fg and bg it is drawn in. */
-function drawnChars(rendered: string): { ch: string; fg?: Drawn; bg?: Drawn }[] {
+/**
+ * Every non-space character with the fg and bg it is drawn in. Solid joiners
+ * are kept (`joiner: true`): their fg is a neighbour's bg, a shape to keep
+ * seamless, not text to keep legible.
+ */
+function drawnChars(rendered: string): { ch: string; fg?: Drawn; bg?: Drawn; joiner: boolean }[] {
   // eslint-disable-next-line no-control-regex
   const token = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
-  const out: { ch: string; fg?: Drawn; bg?: Drawn }[] = [];
+  const out: { ch: string; fg?: Drawn; bg?: Drawn; joiner: boolean }[] = [];
   let fg: Drawn | undefined;
   let bg: Drawn | undefined;
   let pos = 0;
   const text = (t: string) => {
-    for (const ch of t) if (ch.trim() !== "" && !JOINERS.has(ch)) out.push({ ch, fg, bg });
+    for (const ch of t) if (ch.trim() !== "") out.push({ ch, fg, bg, joiner: JOINERS.has(ch) });
   };
   for (const m of rendered.matchAll(token)) {
     text(rendered.slice(pos, m.index));
@@ -84,6 +90,11 @@ function drawnChars(rendered: string): { ch: string; fg?: Drawn; bg?: Drawn }[] 
 
 const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 
+// The floors the bar's text is chosen by, highest first: body text at AA, and
+// the quiet git structure at 3:1. A character keeps the highest floor it
+// cleared in truecolor.
+const FLOORS = [TEXT_MIN_CONTRAST, GIT_QUIET_MIN_CONTRAST];
+
 test("every bundled theme's text reads at 256 colours as it does in truecolor", async () => {
   const prepared = await prepareConfig(null, process.cwd(), []);
   try {
@@ -111,9 +122,19 @@ test("every bundled theme's text reads at 256 colours as it does in truecolor", 
         theme,
         truecolor.map((c) => c.ch).join(""),
       ]);
-      truecolor.forEach(({ ch, fg, bg }, i) => {
+      quantized.forEach(({ ch, fg, joiner }, i) => {
+        // An arrow continues the cell before it: wherever truecolor draws it
+        // in that cell's background, 256 does too, so the seam stays one shape.
+        const left = quantized[i - 1];
+        const seamless = (c: typeof truecolor, k: number) =>
+          JSON.stringify(c[k]!.fg) === JSON.stringify(c[k - 1]!.bg);
+        if (!joiner || "()>".includes(ch) || left === undefined || !seamless(truecolor, i)) return;
+        if (!seamless(quantized, i))
+          failures.push(`${theme} ${ch}: arrow ${JSON.stringify(fg)} after a cell on ${JSON.stringify(left.bg)}`);
+      });
+      truecolor.forEach(({ ch, fg, bg, joiner }, i) => {
         const q = quantized[i]!;
-        if (!isRgb(fg) || !isRgb(bg)) return;
+        if (joiner || !isRgb(fg) || !isRgb(bg)) return;
         measured++;
         if (!isRgb(q.fg) || !isRgb(q.bg)) {
           failures.push(`${theme} ${ch}: drawn in terminal-defined ANSI colours`);
@@ -121,8 +142,9 @@ test("every bundled theme's text reads at 256 colours as it does in truecolor", 
         }
         const before = ratio(fg, bg);
         const after = ratio(q.fg, q.bg);
-        if (after < Math.min(before, 4.5) - 0.01)
-          failures.push(`${theme} ${ch}: ${before.toFixed(2)} -> ${after.toFixed(2)}`);
+        const floor = FLOORS.find((f) => before >= f) ?? 0;
+        if (after < floor)
+          failures.push(`${theme} ${ch}: ${before.toFixed(2)} -> ${after.toFixed(2)} (floor ${floor})`);
       });
     }
     // Non-vacuous: the whole bar, every theme.

@@ -43,6 +43,7 @@ import {
   EXPRESSION_SLOTS,
   finishSelection,
   declaredBasePalette,
+  DRAWN_AT,
   isExpression,
   LOOK_FLOOR,
   paletteForThemeName,
@@ -812,6 +813,9 @@ export function renderDsl(
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
+  // [LAW:one-source-of-truth] The depth this render draws at, published once
+  // before the walk: every text colour chosen below is floored on it.
+  compiled.activeSegment.drawnAt = DRAWN_AT[opts.colorCompatibility];
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
@@ -975,8 +979,8 @@ export function renderDsl(
     const band = bandFor(palette, disclosure);
     return {
       closed,
-      trigger: stateCell(palette, band.state),
-      band: stateCell(palette, band.plane),
+      trigger: stateCell(palette, band.state, compiled.activeSegment.drawnAt),
+      band: stateCell(palette, band.plane, compiled.activeSegment.drawnAt),
       disclosure,
     };
   };

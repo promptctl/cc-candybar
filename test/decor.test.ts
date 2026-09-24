@@ -4,6 +4,7 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
+import { ColorDepth } from "@promptctl/rich-js";
 import {
   blendRgb,
   ColorRgba,
@@ -456,7 +457,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       for (const hue of DECOR_HUES) {
         const state = stateFor(palette, hue);
-        const text = textOn(palette, state);
+        const text = textOn(palette, state, ColorDepth.TRUECOLOR);
         const side = contrastFor(state);
         const bestPole = poles.reduce((a, b) =>
           contrastRatio(side, b) < contrastRatio(side, a) ? b : a,
@@ -505,7 +506,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
         const pole = Oklch.fromRgba(
           poles.reduce((a, b) => (contrastRatio(side, b) < contrastRatio(side, a) ? b : a)),
         );
-        const text = Oklch.fromRgba(textOn(palette, cell));
+        const text = Oklch.fromRgba(textOn(palette, cell, ColorDepth.TRUECOLOR));
         // Toward white or black the sRGB gamut narrows, so a slide can only
         // LOSE chroma (atom-one-dark's foreground keeps .003 of its .020 at the
         // top); hue is only a fact where both colours still carry some.
@@ -677,7 +678,7 @@ describe("a band is a plane", () => {
           ),
         ];
         for (const cell of cells) {
-          const ratio = contrastRatio(cell, textOn(palette, cell));
+          const ratio = contrastRatio(cell, textOn(palette, cell, ColorDepth.TRUECOLOR));
           expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
             ratio >= TEXT_FLOOR ? /./ : /^$/,
           );

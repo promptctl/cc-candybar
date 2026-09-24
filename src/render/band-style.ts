@@ -4,7 +4,12 @@
 // policy; this module only lifts a colour into the Style a cell wears.
 // [LAW:one-way-deps] Imports flow themes → here → the walk and the picker.
 
-import { ColorSpec, ensureContrast, Style } from "@promptctl/rich-js";
+import {
+  ColorSpec,
+  ensureContrast,
+  Style,
+  type ColorDepth,
+} from "@promptctl/rich-js";
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import {
   bandItemFor,
@@ -25,10 +30,14 @@ import type { ActiveSegment } from "./active-segment.js";
  * spelling, so a trigger, a band's floor and a band's items agree on how text
  * meets a state colour.
  */
-export function stateCell(palette: Palette, background: ColorRgba): Style {
+export function stateCell(
+  palette: Palette,
+  background: ColorRgba,
+  drawnAt: ColorDepth,
+): Style {
   return new Style({
     bgcolor: ColorSpec.fromRgba(background),
-    color: ColorSpec.fromRgba(textOn(palette, background)),
+    color: ColorSpec.fromRgba(textOn(palette, background, drawnAt)),
   });
 }
 
@@ -41,6 +50,7 @@ export function bandItemStyle(active: ActiveSegment, step: PlacedStep): Style {
   return stateCell(
     active.palette,
     bandItemFor(active.palette, active.disclosure, [step]),
+    active.drawnAt,
   );
 }
 
@@ -71,7 +81,8 @@ export function optionItemStyle(
   if (paletteOf === undefined) {
     return (position) => bandItemStyle(active, { ...position, distribution });
   }
-  return (_position, option) => appliedCell(paletteOf(option, base));
+  return (_position, option) =>
+    appliedCell(paletteOf(option, base), active.drawnAt);
 }
 
 /**
@@ -102,7 +113,7 @@ const OPTION_TEXT_RATIO = 4.5;
  * colour is itself information, so the hue must survive and only its lightness
  * may move.
  */
-function appliedCell(applied: Palette): Style {
+function appliedCell(applied: Palette, drawnAt: ColorDepth): Style {
   const ground = paletteRole(applied, "background");
   return new Style({
     bgcolor: ColorSpec.fromRgba(ground),
@@ -111,6 +122,7 @@ function appliedCell(applied: Palette): Style {
         paletteRole(applied, "primary"),
         ground,
         OPTION_TEXT_RATIO,
+        drawnAt,
       ),
     ),
   });
