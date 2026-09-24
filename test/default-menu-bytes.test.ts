@@ -16,14 +16,11 @@
 // coverage by existing [LAW:dataflow-not-control-flow]; it cannot be forgotten,
 // because adding one fails the coverage snapshot until it is acknowledged.
 //
-// The two reachable families need two roots, for a structural reason:
-//   • the drawer controls (charset / colorCompatibility / directory palette)
-//     live under the bundled `settingsDrawer` group, which a user `root`
-//     deletes — so each is rooted directly, one per case;
-//   • the settings menu's grid picker control (preset — theme, look and style
-//     open carousels, test/theme-carousel.test.ts) is SYNTHESIZED into every
-//     preset root, so rooting it would place it twice (a load error, by
-//     design) — it is reached the way a user reaches it, by clicking 🍫 then ⚙.
+// The reachable menus are the drawer controls (charset / colorCompatibility /
+// directory palette). They live under the bundled `settingsDrawer` group,
+// which a user `root` deletes, so each is rooted directly, one per case. The
+// settings menu hosts none: its preset, theme, look and style controls open
+// carousels (test/theme-carousel.test.ts).
 
 import { createEngine } from "@promptctl/go-template-js";
 
