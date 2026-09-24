@@ -380,7 +380,7 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
       for (const hue of DECOR_HUES) {
         const state = stateFor(palette, hue, ColorDepth.TRUECOLOR);
         for (const [i, tint] of barTints(palette).entries()) {
-          const ratio = contrastRatio(state, tint);
+          const ratio = contrastRatio(state, drawnGround(tint));
           expect([palette.name, hue, DECOR_VOCABULARY[i], ratio >= STATE_FLOOR]).toEqual([
             palette.name,
             hue,
@@ -403,7 +403,7 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
       const shown = (c: ColorRgba): ColorRgba =>
         drawnAt === ColorDepth.EIGHT_BIT
           ? ColorSpec.fromRgba(drawnGround(c)).downgrade(ColorDepth.EIGHT_BIT).getTruecolor()
-          : c;
+          : drawnGround(c);
       const wrong: string[] = [];
       for (const [look, key] of Object.entries(DEFAULT_DSL_CONFIG.looks)) {
         for (const base of REGISTRY) {
@@ -450,9 +450,10 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
     let untouched = 0;
     for (const palette of REGISTRY) {
       for (const hue of DECOR_HUES) {
-        const pure = pureHue(palette, hue);
+        // As drawn: a translucent theme's colours are shown over black.
+        const pure = drawnGround(pureHue(palette, hue));
         const clears = barTints(palette).every(
-          (tint) => contrastRatio(pure, tint) >= STATE_FLOOR,
+          (tint) => contrastRatio(pure, drawnGround(tint)) >= STATE_FLOOR,
         );
         if (!clears) continue;
         untouched++;

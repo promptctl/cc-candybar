@@ -26,6 +26,7 @@ import {
   contrastRatio,
   ensureContrast,
   ensureDrawn,
+  drawnColour,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
@@ -471,8 +472,11 @@ export function stateFor(
   hue: DecorHue,
   drawnAt: ColorDepth,
 ): ColorRgba {
+  // Measured as drawn: a translucent theme's tints and candidates are shown
+  // composited over the terminal's black, and a raw-RGBA ratio reads colours
+  // drawn nowhere (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
   const tints = DECOR_VOCABULARY.map((entry) =>
-    decorEntryColour(palette, entry),
+    drawnColour(decorEntryColour(palette, entry), ColorDepth.TRUECOLOR),
   );
   const pure = blendRgb(
     paletteRole(palette, "surface"),
@@ -497,7 +501,11 @@ export function stateFor(
     ),
     beyond,
   ].find((candidate) =>
-    tints.every((tint) => contrastRatio(candidate, tint) >= STATE_FLOOR),
+    tints.every(
+      (tint) =>
+        contrastRatio(drawnColour(candidate, ColorDepth.TRUECOLOR), tint) >=
+        STATE_FLOOR,
+    ),
   );
   if (state === undefined) {
     throw new Error(
@@ -684,12 +692,8 @@ export function bandFor(
     hueAtDepth(disclosure.hue, disclosure.depth),
     drawnAt,
   );
-  const recession = Math.min(
-    BAND_RECESSION.cap,
-    BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
-  );
   const plane = ensureDrawn(
-    blendRgb(state, paletteRole(palette, "background"), recession),
+    planeOf(palette, state, disclosure.depth),
     drawnAt,
     (candidate, drawn) =>
       planeNeighbours(palette, disclosure, state, drawnAt).every(
@@ -709,6 +713,16 @@ export function bandFor(
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
+// The plane a band at `depth` recedes to from its trigger's `state`: the
+// colour `bandFor` starts from before any drawn rounding repairs it.
+function planeOf(palette: Palette, state: ColorRgba, depth: number): ColorRgba {
+  const recession = Math.min(
+    BAND_RECESSION.cap,
+    BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
+  );
+  return blendRgb(state, paletteRole(palette, "background"), recession);
+}
+
 // What a band's plane must stand off, each with the floor it keeps there: its
 // own trigger, the trigger of the band nested in it, and — below depth 0,
 // whose enclosing surface is the bar and is the state floor's to keep — the
@@ -721,14 +735,19 @@ function planeNeighbours(
   drawnAt: ColorDepth,
 ): ReadonlyArray<readonly [ColorRgba, number]> {
   const { hue, depth } = disclosure;
-  const truecolor = (d: number): Band =>
-    bandFor(palette, { hue, depth: d }, ColorDepth.TRUECOLOR);
-  const plane = truecolor(depth).plane;
+  // The truecolor band is the unrepaired one — its state and `planeOf` it —
+  // so no floor asks `bandFor` for the band it is computing.
+  const trueState = (d: number): ColorRgba =>
+    stateFor(palette, hueAtDepth(hue, d), ColorDepth.TRUECOLOR);
+  const truePlane = (d: number): ColorRgba => planeOf(palette, trueState(d), d);
+  const shown = (c: ColorRgba): ColorRgba =>
+    drawnColour(c, ColorDepth.TRUECOLOR);
+  const plane = truePlane(depth);
   const kept = (floor: number, other: ColorRgba): number =>
-    deltaE(plane, other) >= floor ? floor : 0;
+    deltaE(shown(plane), shown(other)) >= floor ? floor : 0;
   const nested = hueAtDepth(hue, depth + 1);
   return [
-    [state, kept(BAND_FLOORS.triggerPlane, truecolor(depth).state)],
+    [state, kept(BAND_FLOORS.triggerPlane, trueState(depth))],
     [
       stateFor(palette, nested, drawnAt),
       kept(
@@ -740,7 +759,7 @@ function planeNeighbours(
       ? [
           [
             bandFor(palette, { hue, depth: depth - 1 }, drawnAt).plane,
-            kept(BAND_FLOORS.nestedPlane, truecolor(depth - 1).plane),
+            kept(BAND_FLOORS.nestedPlane, truePlane(depth - 1)),
           ] as const,
         ]
       : []),
