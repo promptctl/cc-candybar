@@ -1,3 +1,10 @@
+## [1.74.2](https://github.com/promptctl/cc-candybar/compare/v1.74.1...v1.74.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **themes:** legible text on every theme; a gallery to see them all ([#235](https://github.com/promptctl/cc-candybar/issues/235)) ([3bd6484](https://github.com/promptctl/cc-candybar/commit/3bd6484fa0cb11f7c939e8bb4b087537d93f43e3))
+
 ## [1.74.1](https://github.com/promptctl/cc-candybar/compare/v1.74.0...v1.74.1) (2026-09-24)
 
 
