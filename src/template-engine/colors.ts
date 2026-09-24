@@ -61,8 +61,8 @@ export class ColorSpecError extends Error {
  * segment type is the discriminator: no segment is asked whether it "looks
  * decorative", the absence of an authored spec IS the decorated case. The
  * foreground has the same kind of floor: an unauthored `fg:` is the theme
- * pole that reads better on the background phase 1 resolved — tint, band
- * item, or an authored threshold colour alike. The cell paints its own
+ * pole that reads better on the background phase 1 resolved (tint, band
+ * item, or an authored threshold colour alike), floored at TEXT_MIN_CONTRAST. The cell paints its own
  * background, so the terminal's own text cannot be assumed to read on it: it
  * measured 1.05:1 on the dark themes under a light terminal and on the light
  * themes under a dark one (brandon-theme-picker-bgw.b2g).

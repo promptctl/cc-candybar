@@ -395,9 +395,11 @@ knob, the warning colour from there:
 
 The complete budget bar, placed in the full bundled status row — the pattern
 the bundled `block` and `weekly` segments use: two knobs, a `bg:` cascade
-calm → `warning` → `error`, an `fg:` that flips to the button foreground at
-the first knob because the theme's `foreground` is not guaranteed readable on
-`warning`/`error`, and the `when` gate from Step 4:
+calm → `warning` → `error`, and the `when` gate from Step 4. Leave `fg:` off.
+Text nobody authored is chosen for whatever background the cascade lands on,
+and held to 4.5:1 against it. A hand-picked text colour per stop is a guess that
+some theme breaks (the bundled segments' own guess measured 1.55:1 on
+rose-pine's `warning`):
 
 ```json5 check:pass
 {
@@ -416,7 +418,6 @@ the first knob because the theme's `foreground` is not guaranteed readable on
     budget: {
       template: '{{ .budget.period }} ${{ printf "%.2f" .budget.spent }}/{{ .budget.limit }} · {{ .budget.spentPct }}% spent · {{ .budget.timePct }}% elapsed{{ if gt .budget.spentPct .budget.timePct }} ⚑{{ end }}',
       bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budgetHeatAt "warning" .budgetWarnAt "error" }}',
-      fg: '{{ ramp .budget.spentPct "step" 0 "foreground" .budgetHeatAt "button-color-foreground" }}',
       when: "{{ gt .budget.limit 0 }}",
     },
   },

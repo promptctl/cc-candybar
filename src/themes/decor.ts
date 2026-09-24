@@ -348,13 +348,16 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
 }
 
 /**
- * The least contrast any text on a cell may have against that cell: WCAG's
- * 3:1 large-text / UI threshold. The one floor for chosen text (`textOn`) and
- * for the coloured text the bundled segments author (their `accent` and quiet
- * git text), so an accent is never quieter than the text beside it.
+ * The least contrast information-bearing text may have against its cell:
+ * WCAG AA for normal text, 4.5:1 — a statusline is small monospace, and the
+ * large-text 3:1 measured legible but looked washed out on the saturated
+ * threshold colours (catppuccin-latte's warning). The one floor for chosen
+ * text (`textOn`) and for the semantic accents the bundled segments author,
+ * so an accent reads as well as the text beside it. Deliberately quiet text
+ * (the git segments' structure) is held to its own, lower floor.
  * [LAW:one-source-of-truth]
  */
-export const TEXT_MIN_CONTRAST = 3;
+export const TEXT_MIN_CONTRAST = 4.5;
 
 /**
  * The text colour for a cell nobody authored a foreground for: whichever of

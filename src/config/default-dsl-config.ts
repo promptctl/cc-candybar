@@ -148,9 +148,10 @@ const paint = (fact: keyof typeof GIT_COLOR, content: string): string =>
 // test/default-dsl-config.test.ts rather than eyeballed on one.
 // [LAW:verifiable-goals]
 const GIT_QUIET_PCT = 60;
+const GIT_QUIET_MIN_CONTRAST = 3;
 const GIT_QUIET_FG =
   `{{ readableOn (mix (color "foreground") (bgOf) ${GIT_QUIET_PCT}) (bgOf) ` +
-  `${TEXT_MIN_CONTRAST} }}`;
+  `${GIT_QUIET_MIN_CONTRAST} }}`;
 
 // Git working-tree counts — each present count renders in its own semantic
 // palette color (GIT_COLOR above) so a dirty tree reads at a glance,
