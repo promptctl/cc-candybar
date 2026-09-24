@@ -230,10 +230,10 @@ describe("every {{ menu }} the bundled default renders", () => {
     });
   });
 
-  // The settings menu's grid picker controls, reached the way a user reaches
-  // them. They share one accordion key, so each open state gets its own
-  // runtime — one key holds one open member, and a shared rig would only ever
-  // snapshot the last one opened.
+  // The settings menu, reached the way a user reaches it. Its controls open
+  // carousels rather than `{{ menu }}` grids (brandon-theme-picker-bgw.ef6,
+  // .x2m), so it hosts no menu of its own; test/theme-carousel.test.ts pins
+  // what each carousel does.
   const openConfigMenu = () => {
     const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
     rig.clickLabel(rig.render(), "🍫");
@@ -244,13 +244,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   test("the config menu with every picker closed: exact bytes", () => {
     const rig = openConfigMenu();
     const out = rig.render();
-    // One closed disclosure per grid picker — the shape the per-picker cases
-    // below each open one of.
-    expect(
-      menuOpeners(out)
-        .map((o) => o.member)
-        .sort(),
-    ).toMatchSnapshot("openable members");
+    expect(menuOpeners(out)).toEqual([]);
     expect(out).toMatchSnapshot("closed");
     rig.dispose();
   });
@@ -317,24 +311,5 @@ describe("every {{ menu }} the bundled default renders", () => {
       expect(openRow).not.toBe(closedRow);
       rig.dispose();
     });
-  });
-
-  test("each picker control, opened: exact bytes", () => {
-    const members = (() => {
-      const rig = openConfigMenu();
-      const found = menuOpeners(rig.render()).map((o) => o.member);
-      rig.dispose();
-      return found;
-    })();
-    expect(members.length).toBeGreaterThan(0);
-
-    for (const member of members) {
-      const rig = openConfigMenu();
-      const opener = menuOpeners(rig.render()).find((o) => o.member === member);
-      if (!opener) throw new Error(`opener for "${member}" vanished`);
-      rig.click(opener.url);
-      expect(rig.render()).toMatchSnapshot(member);
-      rig.dispose();
-    }
   });
 });

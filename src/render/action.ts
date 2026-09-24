@@ -20,6 +20,7 @@
 // injected into the engine by the caller (registerDslConfig hands the action
 // FuncMap in as data). The generic engine never imports this module.
 
+import type { PreviewRows } from "./layout-preview.js";
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
@@ -244,7 +245,7 @@ const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
   // [LAW:one-source-of-truth] `preset` earns its entry here the moment a DUAL
   // control writes it: compileDual makes BOTH halves read back through this
   // map, so a field missing from it loses its current-selection mark on the
-  // session side too — and the preset picker sits on the settings menu's
+  // session side too — and the preset carousel sits on the settings menu's
   // always-visible first row, where "which arrangement am I in" is the whole
   // question the control answers.
   ["preset", "preset.effective"],
@@ -302,6 +303,11 @@ export interface ActionRuntime {
   // segment colours from — published at the same site. `{{ themePreview }}`
   // samples it, so a preview cannot show a palette the bar is not wearing.
   palette: Palette;
+  // [LAW:one-source-of-truth] The rows the bar lays its closed segments out in
+  // THIS render — `layoutRows` of the compiled tree the walk renders, under the
+  // walk's own visibility — published by renderDsl at the same site, lazily,
+  // since only `{{ layoutPreview }}` asks.
+  layout: () => PreviewRows;
 }
 
 // ─── Compilation ───────────────────────────────────────────────────────────────

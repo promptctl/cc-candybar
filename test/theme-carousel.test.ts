@@ -14,7 +14,7 @@
 //      (and under that look): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
-import { getThemePalette } from "@promptctl/rich-js";
+import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -44,7 +44,14 @@ import {
   neighbourLevels,
 } from "../src/render/carousel";
 import { previewSwatches } from "../src/render/theme-preview";
+import {
+  blockLabel,
+  labelBudget,
+  renderLayoutPreview,
+} from "../src/render/layout-preview";
+import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { effectivePresetName } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -90,6 +97,11 @@ function rig(
   const render = (): string => {
     const lookName = sessionState.get(SID, "look");
     const lookKey = lookName == null ? undefined : config.looks[lookName];
+    const preset = effectivePresetName(
+      sessionState.get(SID, "preset"),
+      config.globals.preset,
+      config.presets,
+    );
     last = renderDsl(
       config,
       compiled,
@@ -103,7 +115,7 @@ function rig(
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
         term: { cols: width },
         style: { effective: sessionState.get(SID, "style") ?? style },
-        preset: { effective: "default" },
+        preset: { effective: preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
       },
@@ -115,6 +127,7 @@ function rig(
           sessionState.get(SID, "theme"),
           config.globals.palette,
         ),
+        preset,
         ...(lookKey !== undefined && {
           look: { kind: "decided" as const, name: lookName!, value: lookKey },
         }),
@@ -316,12 +329,17 @@ describe("the carousel rotates by applying", () => {
   });
 });
 
+// The ring's line: one value between the arrows — the padding stepper's
+// "◀ padding 0 ▶" carries two.
+const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
+
 // The door, then ⚙ config, then one control's carousel.
 const PICKERS = sharedMenuStateKey("settings.pickers");
 function openCarousel(rt: ReturnType<typeof rig>, control: string): void {
   rt.render();
   rt.clickText("🍫");
-  rt.clickText("⚙ config ▸");
+  // The preset control sits on the tray itself; the rest behind ⚙ config.
+  if (control !== "preset") rt.clickText("⚙ config ▸");
   rt.clickWriting(PICKERS, `settings.apply.${control}`);
 }
 
@@ -338,25 +356,26 @@ describe("the settings menu's theme, look and style controls are carousels", () 
     rt.dispose();
   });
 
-  // The carousel and the preview are the rows of an open body, each led by the
-  // body's ✕ as a cell of its own; both fit the row that ✕ leaves them, at any
-  // padding and any strip shape, so the terminal never breaks a row away from
-  // its ✕.
+  // The carousel and the rows beneath it are the rows of an open body, each
+  // led by the body's ✕ as a cell of its own; all of them fit the row that ✕
+  // leaves them, at any padding and any strip shape, so the terminal never
+  // breaks a row away from its ✕ — and nothing else on the bar overflows.
   test.each(
-    (["powerline", "capsule", "plain"] as const).flatMap((style) =>
-      [0, 1, 2].map((padding) => [style, padding] as const),
+    (["theme", "preset"] as const).flatMap((control) =>
+      (["powerline", "capsule", "plain"] as const).flatMap((style) =>
+        [0, 1, 2].map((padding) => [control, style, padding] as const),
+      ),
     ),
-  )("every row of the open theme carousel fits its terminal (%s, padding %i)", (style, padding) => {
+  )("every row of the open %s carousel fits its terminal (%s, padding %i)", (control, style, padding) => {
     for (let width = 40; width <= 160; width += 3) {
       const rt = rig(`{ globals: { palette: 'nord' } }`, width, padding, style);
-      openCarousel(rt, "theme");
+      openCarousel(rt, control);
       const lines = stripAnsi(rt.render()).split("\n");
-      const ring = lines.find((l) => l.includes(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
-      const preview = lines.find((l) => l.includes("~/code"));
-      for (const [row, line] of [["ring", ring], ["preview", preview]] as const) {
-        expect([width, row, line !== undefined && /^\W*✕/u.test(line)]).toEqual([width, row, true]);
-        expect([width, row, new RichTextValue(line!).cellLength <= width]).toEqual([width, row, true]);
-      }
+      const ring = lines.findIndex((l) => RING.test(l));
+      const led = (i: number) => /^\W*✕/u.test(lines[i] ?? "");
+      expect([width, led(ring), led(ring + 1)]).toEqual([width, true, true]);
+      const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
+      expect([width, over]).toEqual([width, []]);
       rt.dispose();
     }
   });
@@ -374,6 +393,113 @@ describe("the settings menu's theme, look and style controls are carousels", () 
     rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe("nord");
     rt.dispose();
+  });
+});
+
+// The preview's rows, as the labels each draws: the lines after the ring, led
+// by the body's ✕, up to the next line the body does not lead.
+function previewLabels(rendered: string): string[][] {
+  const lines = stripAnsi(rendered).split("\n");
+  const ring = lines.findIndex((l) => RING.test(l));
+  const rows: string[][] = [];
+  for (const line of lines.slice(ring + 1)) {
+    if (!/^\W*✕/u.test(line)) break;
+    rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
+  }
+  return rows;
+}
+
+describe("the preset control is a carousel with the layout beneath it", () => {
+  test("every bundled preset's rows, from its resolved root", () => {
+    const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
+    const registry = new SourceRegistry(new VariableStore(), "", undefined);
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    // Every segment but edit mode's chrome, which edit mode alone shows.
+    const content = (node: CompiledNode): boolean =>
+      node.kind === "container" || !node.name.startsWith("edit.");
+    const rows = Object.fromEntries(
+      [...compiled.roots].map(([name, root]) => [
+        name,
+        layoutRows(root, content).map((row) => row.map((s) => s.name)),
+      ]),
+    );
+    expect(rows).toEqual({
+      default: [
+        ["settings.menu", "host", "directory", "gitaculous", "groups.settings"],
+        ["model", "context", "cacheTimer", "block", "weekly", "activity"],
+      ],
+      compact: [["settings.menu", "directory", "git", "context"]],
+      verbose: [
+        ["settings.menu", "directory", "gitaculous", "gitPr"],
+        ["model", "context", "cacheTimer", "block", "weekly", "burnrate"],
+        ["speed", "tokenSparkline"],
+      ],
+    });
+    registry.dispose();
+  });
+
+  test.each(["default", "compact", "verbose"])(
+    "%s: the preview draws the segments the closed bar draws, row for row, in the colours they wear",
+    (preset) => {
+      const rt = rig(`{}`);
+      rt.sessionState.set(SID, "preset", preset);
+      const closed = rt.render();
+      const drawn = [...rt.sink.keys()];
+      const closedStyle = (name: string) => bgHex(rt.sink.get(name)![0]!.style);
+      const tints = Object.fromEntries(drawn.map((n) => [blockLabel(n), closedStyle(n)]));
+      openCarousel(rt, "preset");
+      const labels = previewLabels(rt.render());
+      expect(labels.flat()).toEqual(drawn.map(blockLabel));
+      expect(labels).toHaveLength(stripAnsi(closed).split("\n").length);
+      // Each block wears what its segment wears on the closed bar; every
+      // segment here authors no `bg:` under this payload's calm values.
+      const preview = rt.sink.get("settings.carousel.preset.0")!;
+      const blockBg = Object.fromEntries(
+        preview.flatMap((cell) =>
+          cell.spans.map((span) => [
+            cell.plain.slice(span.start, span.end).trim(),
+            bgHex(span.style),
+          ]),
+        ),
+      );
+      for (const label of labels.flat()) {
+        expect([label, blockBg[label]]).toEqual([label, tints[label]]);
+      }
+      rt.dispose();
+    },
+  );
+
+  test("▶ rotates through every preset and wraps, the preview following the preset it applied", () => {
+    const rt = rig(`{}`);
+    openCarousel(rt, "preset");
+    const seen: string[] = [];
+    const firstRows: string[][] = [];
+    for (let i = 0; i < 3; i++) {
+      rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
+      seen.push(rt.sessionState.get(SID, "preset")!);
+      firstRows.push(previewLabels(rt.render())[0]!);
+    }
+    expect(seen).toEqual(["compact", "verbose", "default"]);
+    expect(firstRows.map((row) => row.includes("gitaculous") || row.includes("settings"))).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    rt.dispose();
+  });
+
+  test("labels shrink alike, down to one column, for a row that does not fit", () => {
+    const row = ["settings.menu", "directory", "gitaculous"].map((name) => ({
+      name,
+      address: [],
+      palette: getThemePalette("nord")!,
+    }));
+    // Full labels: menu(4) directory(9) gitaculous(10), each +2 = 29.
+    expect(labelBudget([row], 29)).toBe(10);
+    expect(labelBudget([row], 28)).toBe(9);
+    expect(labelBudget([row], 3)).toBe(1);
+    const text = renderLayoutPreview([row], ColorDepth.TRUECOLOR, 20).plain;
+    expect(text).toBe(" menu  dire…  gita… ");
   });
 });
 

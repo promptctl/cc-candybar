@@ -36,6 +36,7 @@ import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
   placedBy,
+  type Address,
   type AddressStep,
   type Disclosure,
   type Distribution,
@@ -289,6 +290,43 @@ function composeBlocks(
       };
       const drops = blocks.flatMap((b) => b.slice(1));
       return [row0, ...drops];
+    }
+  }
+}
+
+// A segment the bar would draw, by name and the address the walk would place
+// it at — the layout's own facts, before any template is evaluated.
+export interface PlacedSegment {
+  readonly name: string;
+  readonly address: Address;
+}
+
+// [LAW:one-source-of-truth] The rows a compiled tree lays its CLOSED segments
+// out in, composed exactly as `composeBlocks` composes rendered lines: a
+// vertical container stacks its children's rows, a horizontal one joins every
+// child's first row into one and drops the rest below it, and a node `shown`
+// refuses contributes no row. A disclosure body is not a child, so a closed
+// bar has none of it. Addresses come from the one `childStep` the walk
+// extends every address through. `{{ layoutPreview }}` draws these rows; a
+// test holds them against the rows the bar actually renders, so the two
+// compositions cannot drift apart.
+export function layoutRows(
+  node: CompiledNode,
+  shown: (node: CompiledNode) => boolean,
+  address: Address = [],
+): PlacedSegment[][] {
+  if (!shown(node)) return [];
+  if (node.kind === "segment") return [[{ name: node.name, address }]];
+  const blocks = node.children.map((child, index) =>
+    layoutRows(child, shown, [...address, childStep(node, index)]),
+  );
+  switch (node.direction) {
+    case "vertical":
+      return blocks.flat();
+    case "horizontal": {
+      const row0 = blocks.flatMap((b) => b[0] ?? []);
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return row0.length === 0 && drops.length === 0 ? [] : [row0, ...drops];
     }
   }
 }

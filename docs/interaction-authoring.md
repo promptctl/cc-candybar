@@ -1116,12 +1116,14 @@ close.
   `cc-candybar doctor` runs the same checks from a shell, with the exit code as
   the verdict.
 
-Theme, look and style each open a **carousel** under the config row — `◀` and
-`▶` beside the current value, its neighbours either side as the width
+Preset, theme, look and style each open a **carousel** under their row — `◀`
+and `▶` beside the current value, its neighbours either side as the width
 allows — and every click in it applies, so rotating through themes recolours the
 bar at each step. The theme and look carousels carry `{{ themePreview }}` in the
-row beneath. The preset control opens a paged picker. Every one of these shares
-one accordion key, so opening the look carousel closes the theme carousel: the
+row beneath; the preset carousel carries `{{ layoutPreview }}`, the whole
+arrangement drawn small, because the open menu takes over the door's row and
+the bar cannot show that row itself. Every one of these shares one accordion
+key, so opening the look carousel closes the theme carousel: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
 drop-down open, so you can try several in a row; the `✕` leading each of its
 rows closes it.
@@ -1350,6 +1352,14 @@ disclosure's trigger wears beside its plane, and the `warning`/`error` alerts �
 each drawn by the same function the bar draws that cell with, so it cannot show
 a colour the bar under that theme would not. Under a carousel whose every click
 applies, that is the theme (or look) at the centre of the ring.
+
+`{{ layoutPreview }}` is the same idea for the arrangement: one line per row of
+the layout the bar is in, each segment a block labelled with its name (less any
+namespace) in the tint its place deals it. It shows exactly the segments the
+bar draws — a segment its `when` hides has no block — and cuts every label
+alike, down to one column, until each row fits. An authored `bg:` is not what a
+block wears: that colour states a fact about live data, not about where the
+segment sits.
 
 ```json5 check:pass
 {
