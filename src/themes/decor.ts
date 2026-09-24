@@ -779,6 +779,10 @@ function planeNeighbours(
   const plane = truePlane(depth);
   const kept = (floor: number, other: ColorRgba): number =>
     deltaE(shown(plane), shown(other)) >= floor ? floor : 0;
+  // Asking for the nested trigger widens no failure: whether `stateFor` finds
+  // a colour does not depend on the hue (its last candidate, and every drawn
+  // replacement, are judged against the bar's tints alone), so a nested hue
+  // throws only where this band's own trigger already has.
   const nested = hueAtDepth(hue, depth + 1);
   return [
     [state, kept(BAND_FLOORS.triggerPlane, trueState(depth))],
