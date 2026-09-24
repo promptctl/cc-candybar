@@ -190,6 +190,13 @@ describe("the colour is a tone of the row's hue", () => {
     expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => BAR_HUES[i % 2]));
   });
 
+  test("a stack of rows inside a row restarts the alternation: siblings alternate, not lines", () => {
+    // root { v: [ { v: [x, y] }, z ] }: y is the second of its stack, z the
+    // second of the bar's, so the two lines touch in one hue. Stated, not
+    // hidden — see decorEntryFor.
+    expect(decorEntryFor([row(0, 2), row(1, 2)]).hue).toBe(decorEntryFor([row(1, 2)]).hue);
+  });
+
   test("the root selects entry 0", () => {
     // The empty address has no step to place, so no distribution can reach it.
     expect(decorEntryFor([])).toEqual(DECOR_VOCABULARY[0]);

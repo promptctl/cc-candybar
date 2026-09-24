@@ -333,6 +333,13 @@ export function vocabularySelect<T extends {}>(
  * what must differ, and the loader refuses a `distribution` authored inside a
  * cell, where it could place nothing. A bar with no vertical container is one
  * row and wears one hue.
+ *
+ * Rows alternate among SIBLINGS. A row that is itself a stack of rows restarts
+ * the alternation inside it, so its last line can wear the hue of the row
+ * after it: which line is next to which is a fact about the rendered bar, and
+ * reading it would make a node's colour depend on its neighbours' shapes — the
+ * pre-order cursor's flaw, where hiding one segment recoloured others. The
+ * bundled bar stacks no rows inside a row.
  */
 export function decorEntryFor(address: Address): DecorEntry {
   const cell = address.findIndex((step) => step.axis === "cell");
