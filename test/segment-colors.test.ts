@@ -272,6 +272,9 @@ describe("phase ordering — palette, then bg, then fg", () => {
     expect(() => h.parse("{{ bgOf }}").evaluate({})).toThrow(
       /no active segment/,
     );
+    expect(() => h.parse("{{ tint }}").evaluate({})).toThrow(
+      /no active segment/,
+    );
     expect(() => h.parse('{{ color "primary" }}').evaluate({})).toThrow(
       /no active segment/,
     );
@@ -410,6 +413,12 @@ describe("segment color functions in the engine", () => {
     const engine = createCcCandybarEngine();
     const tpl = engine.parse("{{ bgOf }}");
     expect(() => tpl.evaluate({})).toThrow(/"bgOf" is not registered/);
+  });
+
+  test("an engine built without segmentColorFuncs has no `tint` function", () => {
+    const engine = createCcCandybarEngine();
+    const tpl = engine.parse("{{ tint }}");
+    expect(() => tpl.evaluate({})).toThrow(/"tint" is not registered/);
   });
 });
 
