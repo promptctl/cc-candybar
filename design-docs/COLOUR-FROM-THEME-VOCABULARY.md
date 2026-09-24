@@ -158,7 +158,7 @@ The change was expected to be net-subtractive, with the design counted wrong if 
 
 ## The demo
 
-`design-docs/colour-demo.html` predates brandon-theme-picker-bgw.8fp and renders the superseded per-cell vocabulary (every hue × three bases); it is kept as the evidence the ai7 rule was chosen with. It renders all 23 themes through the real rich-js palettes under the rule above; the separations, contrasts and spreads quoted here were measured with it while the rule was being chosen.
+`design-docs/colour-demo.html` predates brandon-theme-picker-bgw.8fp and renders the superseded per-cell vocabulary (every hue × three bases); it is kept as the evidence the ai7 rule was chosen with, rendering all 23 themes through the real rich-js palettes under that superseded rule, and the ai7-era separations, contrasts and spreads quoted here were measured with it. The 8fp measurements in "A row is one hue; its cells differ by tone" come from the bundled bar rendered through `renderDsl`, which `test/theme-identity.test.ts` re-measures on every run.
 
 Its rich-js browser bundle is gitignored. Regenerate it from the repo root with:
 
