@@ -110,8 +110,9 @@ no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
 
 No example below authors `bg:` or `fg:`. A segment with no `bg:` wears a tint
-the theme derives from the segment's position in its row, so neighbours differ
-without anyone choosing colours, and a segment with no `fg:` gets text chosen
+the theme derives from its position: each row wears one of the theme's
+branding hues (`primary`, then `secondary`) and each cell of the row one of
+three tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
 to read on whatever its background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
 tint.
@@ -1516,7 +1517,13 @@ or not any group/menu exists in your config.
 ## `distribution` — how a placer spreads its cells' tints
 
 A segment with no `bg:` wears a tint selected from the theme's vocabulary by
-its position among its siblings (the convention stated above every example).
+its position (the convention stated above every example): the placement of
+its row among the rows chooses the hue, and its placement among the cells of
+that row chooses the tone. A container nested inside a cell does not re-place
+the bar — everything in it wears that cell's hue and tone, so a `distribution`
+there is a load error (`sets "distribution" on a container inside a bar cell`)
+— though inside a disclosure body every level still places its cells along
+the band.
 `distribution` is the one field that says *how* a placer spreads those
 positions across the vocabulary. There are two kinds of placer and one field:
 
@@ -1539,7 +1546,7 @@ its own placement.
 | `van-der-corput` (default) | no | bit-reversal sequence 0, ½, ¼, ¾, ⅛, … — neighbours land far apart |
 | `golden-angle` | no | index × φ mod 1 — the same isolation, a different spread |
 | `uniform` | no | every child at ½ — one tint for the whole row |
-| `monotonic` | yes | evenly spaced positions in declaration order — through hues and bases together, not a one-hue lightness ramp |
+| `monotonic` | yes | evenly spaced positions in declaration order — a row steps through its three tones in order and wraps (four cells: deep, mid, tinted, deep), so past three cells some neighbours share a tone |
 | `ends-interleaved` | yes | evenly spaced, alternating from both ends inward |
 
 Isolation is a property of the distribution you chose, not of the system.

@@ -25,7 +25,7 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
-import type { DistributionName } from "../themes/decor.js";
+import type { Axis, DistributionName } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -69,6 +69,17 @@ import type { JsonValue } from "../var-system/types.js";
 // forces a matching render arm).
 export const DIRECTIONS = ["vertical", "horizontal"] as const;
 export type Direction = (typeof DIRECTIONS)[number];
+
+// [LAW:one-source-of-truth] What a container's children are to the bar's
+// colour: a vertical container stacks ROWS (which choose the hue), a
+// horizontal one lines up the CELLS of a row (which choose the tone). Read by
+// the address builder (`childStep`) and by the loader's refusal of a
+// `distribution` inside a cell. [LAW:types-are-the-program] Total over
+// Direction, so a new direction is a compile error here.
+export const AXIS_OF: Readonly<Record<Direction, Axis>> = {
+  vertical: "row",
+  horizontal: "cell",
+};
 
 // [LAW:one-type-per-behavior] THE unit of rendering: a ref into the named
 // `segments` block. A segment IS a single template (text, state-driven display,

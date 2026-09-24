@@ -9,6 +9,7 @@ import JSON5 from "json5";
 import {
   hasCacheField,
   walkNodes,
+  AXIS_OF,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -384,6 +385,13 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
+    if (distributionInsideCell(tree)) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} sets "distribution" on a container inside a bar cell — everything inside a cell wears that cell's hue and tone, so it would place nothing. Set it on the row whose children are the cells (the horizontal container) or on the root, which places the rows.`,
+        line: layoutLine,
+      });
+    }
     const placements = new Map<string, number>();
     for (const node of walkNodes(tree)) {
       if (node.kind === "segment") {
@@ -400,6 +408,23 @@ export function validateCrossReferences(
       }
     }
   };
+  // [LAW:no-silent-failure] The bar reads two steps of an address — the
+  // innermost row, and the cell of that row (decorEntryFor) — so a container
+  // nested inside a cell has no step the bar reads, and its `distribution`
+  // would be accepted and ignored. A disclosure body is a band, whose items
+  // are placed by every step (bandAxis), so the walk stops at `opens`.
+  function distributionInsideCell(node: LayoutNode, inCell = false): boolean {
+    if (node.kind === "segment") return false;
+    return (
+      (inCell && node.distribution !== undefined) ||
+      node.children.some((child) =>
+        distributionInsideCell(
+          child,
+          inCell || AXIS_OF[node.direction] === "cell",
+        ),
+      )
+    );
+  }
   // Walks what the author WROTE at this key (a whole tree, or the rows a
   // fragment names), so an unknown segment is reported against the layout
   // that names it rather than against a row it inherited.

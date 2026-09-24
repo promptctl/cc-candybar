@@ -17,8 +17,8 @@
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
 //   - the closed door on the bar wears its address's tint, and the band it
-//     opens derives from the hue that address deals — the depth-0 anchor of
-//     the chain.
+//     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
+//     anchor of the chain.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -26,7 +26,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import type { CompiledContainerNode, CompiledNode } from "../src/dsl/node-registry";
+import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
@@ -39,7 +39,6 @@ import {
   bandFor,
   bandItemFor,
   bandRoot,
-  decorEntryFor,
   decorFor,
   decorationFor,
   descend,
@@ -110,11 +109,7 @@ function regionOf(root: CompiledNode, palette: Palette, name: string): Region {
     for (const [index, child] of node.children.entries()) {
       const found = walk(
         child,
-        descend(region, {
-          index,
-          count: node.children.length,
-          distribution: node.distribution,
-        }),
+        descend(region, childStep(node, index)),
       );
       if (found !== undefined) return found;
     }
@@ -234,7 +229,7 @@ function build(src: string, withDefault = false) {
   const hueOf = (name: string): Disclosure["hue"] => {
     const region = regionOf(root, palette, name);
     if (region.kind !== "bar") throw new Error(`"${name}" is not on the bar`);
-    return decorEntryFor(region.address).hue;
+    return decorationFor(palette, region).disclosure.hue;
   };
   return {
     palette,
@@ -372,7 +367,7 @@ const GROUP_SRC = `{
     b: { template: 'B', fg: 'error' },
     c: { template: 'C' },
     d: { template: 'D' },
-    e: { template: 'E', bg: 'warning' },
+    e: { template: 'E', bg: 'error' },
   },
   root: { v: [
     { h: ['a'] },
@@ -416,7 +411,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.render();
     rt.clickWriting("groups.outer", "groups.outer", "outer");
     rt.render();
-    const authored = palette.get("warning")!;
+    const authored = palette.get("error")!;
     expect(rt.bgOf("e")).toBe(authored.hex);
     expect(rt.fgOf("e")).toBe(textOn(palette, authored).hex);
     // The case is only a case because the two poles differ here.

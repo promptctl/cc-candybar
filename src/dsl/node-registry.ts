@@ -31,6 +31,7 @@ import type {
   Placement,
   SegmentDecl,
 } from "../config/dsl-types.js";
+import { AXIS_OF } from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -317,6 +318,23 @@ export interface NodeType<K extends NodeKind> {
   ): RenderedLines;
 }
 
+// [LAW:one-source-of-truth] THE address step of a container's `index`th child:
+// which child of how many, placed by the container's distribution, along the
+// axis its direction lays children out on. The walk extends every address
+// through this, so a test that computes an expected colour from an address
+// calls it too rather than re-spelling the step.
+export function childStep(
+  node: CompiledContainerNode,
+  index: number,
+): AddressStep {
+  return {
+    index,
+    count: node.children.length,
+    distribution: node.distribution,
+    axis: AXIS_OF[node.direction],
+  };
+}
+
 const containerType: NodeType<"container"> = {
   compile(node, cctx) {
     return {
@@ -337,11 +355,7 @@ const containerType: NodeType<"container"> = {
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
-        ctx.renderChild(child, ctx.visible, {
-          index,
-          count: node.children.length,
-          distribution: node.distribution,
-        }),
+        ctx.renderChild(child, ctx.visible, childStep(node, index)),
       ),
     );
   },
