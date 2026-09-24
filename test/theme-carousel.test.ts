@@ -52,6 +52,7 @@ import {
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { effectivePresetName } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
@@ -417,7 +418,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>
-      node.kind === "container" || !node.name.startsWith("edit.");
+      node.kind === "container" || !node.name.startsWith(EDIT_NS);
     const rows = Object.fromEntries(
       [...compiled.roots].map(([name, root]) => [
         name,
@@ -477,7 +478,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
     const rendered = rt.render();
     // Edit mode is on: its chrome is on the bar the preview describes.
-    expect([...rt.sink.keys()].some((name) => name.startsWith("edit."))).toBe(true);
+    expect([...rt.sink.keys()].some((name) => name.startsWith(EDIT_NS))).toBe(true);
     expect(previewLabels(rendered)).toEqual(outside);
     rt.dispose();
   });
@@ -493,7 +494,9 @@ describe("the preset control is a carousel with the layout beneath it", () => {
       firstRows.push(previewLabels(rt.render())[0]!);
     }
     expect(seen).toEqual(["compact", "verbose", "default"]);
-    expect(firstRows.map((row) => row.includes("gitaculous") || row.includes("settings"))).toEqual([
+    // Only the default preset's first row carries the settings group — a fact
+    // of the layout, unlike gitaculous, whose gate reads the cwd's git state.
+    expect(firstRows.map((row) => row.includes("settings"))).toEqual([
       false,
       false,
       true,

@@ -20,7 +20,7 @@
 // injected into the engine by the caller (registerDslConfig hands the action
 // FuncMap in as data). The generic engine never imports this module.
 
-import type { PreviewRows } from "./layout-preview.js";
+import type { PlacedSegment } from "../dsl/node-registry.js";
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
@@ -309,6 +309,14 @@ export interface ActionRuntime {
   // since only `{{ layoutPreview }}` asks.
   layout: () => PreviewRows;
 }
+
+/** A segment the layout places, with the palette it renders in. */
+export interface PreviewSegment extends PlacedSegment {
+  readonly palette: Palette;
+}
+
+/** The layout's rows, top to bottom, each its segments left to right. */
+export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 
 // ─── Compilation ───────────────────────────────────────────────────────────────
 

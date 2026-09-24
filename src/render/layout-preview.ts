@@ -18,22 +18,13 @@
 // registerDslConfig; the generic engine never imports it.
 
 import { RichText } from "@promptctl/rich-js";
-import type { ColorDepth, Palette } from "@promptctl/rich-js";
+import type { ColorDepth } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import type { PlacedSegment } from "../dsl/node-registry.js";
 import { decorationFor } from "../themes/decor.js";
-import type { ActionRuntime } from "./action.js";
+import type { ActionRuntime, PreviewRows } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 import { stateCell } from "./band-style.js";
 import { cellWidth, ledRowBudget } from "./picker.js";
-
-/** A segment the preview draws: where the layout puts it, and the palette it renders in. */
-export interface PreviewSegment extends PlacedSegment {
-  readonly palette: Palette;
-}
-
-/** The preview's rows, top to bottom, each its segments left to right. */
-export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 
 // What a block says: the segment's own name, less any namespace — the door is
 // `settings.menu`, and "menu" is what it is.
