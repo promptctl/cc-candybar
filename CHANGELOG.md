@@ -1,3 +1,10 @@
+# [1.75.0](https://github.com/promptctl/cc-candybar/compare/v1.74.5...v1.75.0) (2026-09-24)
+
+
+### Features
+
+* **settings:** theme carousel — arrows rotate by applying, a palette preview beneath ([#239](https://github.com/promptctl/cc-candybar/issues/239)) ([77d4580](https://github.com/promptctl/cc-candybar/commit/77d4580de17cec6a08c9fc6ae359e07d61e9fac1))
+
 ## [1.74.5](https://github.com/promptctl/cc-candybar/compare/v1.74.4...v1.74.5) (2026-09-24)
 
 
