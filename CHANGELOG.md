@@ -1,3 +1,10 @@
+## [1.74.1](https://github.com/promptctl/cc-candybar/compare/v1.74.0...v1.74.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **settings-menu:** a pick leaves its picker open ([#234](https://github.com/promptctl/cc-candybar/issues/234)) ([0de9efc](https://github.com/promptctl/cc-candybar/commit/0de9efcf8ce33be6bd04477171d97cc460683465))
+
 # [1.74.0](https://github.com/promptctl/cc-candybar/compare/v1.73.0...v1.74.0) (2026-09-23)
 
 
