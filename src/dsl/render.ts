@@ -993,7 +993,8 @@ export function renderDsl(
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles => {
-    const { tint, disclosure } = decorationFor(palette, region);
+    const drawnAt = registry.drawnAt();
+    const { tint, disclosure } = decorationFor(palette, region, drawnAt);
     const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
@@ -1004,11 +1005,11 @@ export function renderDsl(
       fgTemplate,
       scope,
     );
-    const band = bandFor(palette, disclosure);
+    const band = bandFor(palette, disclosure, drawnAt);
     return {
       closed,
-      trigger: stateCell(palette, band.state, registry.drawnAt()),
-      band: stateCell(palette, band.plane, registry.drawnAt()),
+      trigger: stateCell(palette, band.state, drawnAt),
+      band: stateCell(palette, band.plane, drawnAt),
       disclosure,
     };
   };

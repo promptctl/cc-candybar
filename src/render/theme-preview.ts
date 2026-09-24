@@ -45,8 +45,11 @@ export interface Swatch {
 // [LAW:dataflow-not-control-flow] The preview as data, in the order it is
 // drawn: one group per kind of cell. Exported so a test can hold every swatch
 // against the cell the bar renders, rather than re-reading them off bytes.
-export function previewSwatches(palette: Palette): readonly Swatch[][] {
-  const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 });
+export function previewSwatches(
+  palette: Palette,
+  drawnAt: ColorDepth,
+): readonly Swatch[][] {
+  const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 }, drawnAt);
   return [
     DECOR_VOCABULARY.map((entry, i) => ({
       text: BAR_WORDS[i % BAR_WORDS.length]!,
@@ -74,7 +77,7 @@ export function renderThemePreview(
 ): RichText {
   // Swatches in a group touch, like neighbouring bar cells; groups are set
   // apart by one space of whatever the preview sits on.
-  const cells = previewSwatches(palette).flatMap((group, g) =>
+  const cells = previewSwatches(palette, drawnAt).flatMap((group, g) =>
     group.map(({ text, colour }, i) => ({
       gap: g > 0 && i === 0 ? " " : "",
       cell: new RichText(` ${text} `, {

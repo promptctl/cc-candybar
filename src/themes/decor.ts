@@ -14,16 +14,18 @@
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
 // imports only rich-js, which owns every colour operation used (`mixAxes`,
-// `blendRgb`, `ensureContrast`, `contrastFor`, `contrastRatio`); cc-candybar keeps the POLICY (which roles, which tones, which address
+// `blendRgb`, `ensureContrast`, `ensureDrawn`, `contrastFor`, `contrastRatio`,
+// `Oklch.deltaE`); cc-candybar keeps the POLICY (which roles, which tones, which address
 // formula) and no colour arithmetic of its own.
 
 import {
   blendRgb,
+  ColorDepth,
   Oklch,
   contrastFor,
   contrastRatio,
   ensureContrast,
-  type ColorDepth,
+  ensureDrawn,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
@@ -453,12 +455,22 @@ const STATE_STEPS = 12;
  * clears at step zero is byte-unchanged — the enforcement is a floor, not a
  * transform.
  *
+ * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
+ * trigger and every tint are rounded independently, and a trigger whose
+ * rounding lands too near a rounded tint is replaced by the nearest drawn
+ * colour that clears the floor against all of them (rich-js `ensureDrawn`).
+ *
  * [LAW:dataflow-not-control-flow] Fourteen candidates, one predicate, the
  * first that passes; the values decide, not a branch per theme.
- * [LAW:no-silent-failure] A hue that cannot clear even beyond `foreground` throws
- * naming palette and hue — never a quieter colour.
+ * [LAW:no-silent-failure] A hue that cannot clear even beyond `foreground`, or
+ * whose drawn colour nothing at `drawnAt` repairs, throws naming palette and
+ * hue — never a quieter colour.
  */
-export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
+export function stateFor(
+  palette: Palette,
+  hue: DecorHue,
+  drawnAt: ColorDepth,
+): ColorRgba {
   const tints = DECOR_VOCABULARY.map((entry) =>
     decorEntryColour(palette, entry),
   );
@@ -492,7 +504,15 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
       `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even beyond foreground`,
     );
   }
-  return state;
+  const drawnState = ensureDrawn(state, drawnAt, (candidate, drawn) =>
+    tints.every((tint) => contrastRatio(candidate, drawn(tint)) >= STATE_FLOOR),
+  );
+  if (drawnState === undefined) {
+    throw new Error(
+      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor on the colours drawn at depth ${ColorDepth[drawnAt]}`,
+    );
+  }
+  return drawnState;
 }
 
 /**
@@ -603,6 +623,21 @@ export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
 }
 
 /**
+ * How far apart (ΔE in OKLab) the colours of nested bands stand, the eye's
+ * ~.02 threshold of a visible difference being the unit: a trigger off the
+ * plane it opens, a plane off the plane it is nested in, and a nested
+ * trigger off the plane it sits on. They hold over the depths a bar reaches
+ * (0–2; depth 3 is the model's limit, see BAND_RECESSION) in truecolor by the
+ * construction below — `test/decor.test.ts` pins the measured minima — and
+ * `bandFor` holds each one again on the colours drawn at 256.
+ */
+export const BAND_FLOORS = {
+  triggerPlane: 0.1,
+  nestedPlane: 0.035,
+  nestedTriggerPlane: 0.08,
+} as const;
+
+/**
  * A disclosure's band: two colours of one hue. `state` is its peak — the
  * colour the trigger that opened it wears, so a trigger is drawn from what it
  * OPENS, not from where it sits — and `plane` is its floor, the state receded
@@ -619,12 +654,24 @@ export interface Band {
  * depth's recession. The trigger of the band and the band itself are the SAME
  * value read twice, so they cannot disagree about which hue they share.
  *
- * Memoised per (palette, hue, depth): the render walk asks for every segment's
- * band on every render, and palettes are memoised objects (transposedPalette),
- * so the key is stable and the search in `stateFor` runs once per palette.
+ * Both colours are the ones the terminal draws at `drawnAt`: the state is
+ * `stateFor`'s at that depth, and a plane whose rounding breaks a
+ * `BAND_FLOORS` distance its truecolor colours kept is replaced by the
+ * nearest drawn colour that keeps it (`ensureDrawn`). A distance truecolor
+ * itself misses (depth 3) is not one rounding broke, so it is not asked of
+ * the drawn colours either.
+ *
+ * Memoised per (palette, hue, depth, drawnAt): the render walk asks for every
+ * segment's band on every render, and palettes are memoised objects
+ * (transposedPalette), so the key is stable and the search in `stateFor` runs
+ * once per palette and depth.
  */
-export function bandFor(palette: Palette, disclosure: Disclosure): Band {
-  const key = `${disclosure.hue}|${disclosure.depth}`;
+export function bandFor(
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): Band {
+  const key = `${disclosure.hue}|${disclosure.depth}|${drawnAt}`;
   let bands = BAND_MEMO.get(palette);
   if (bands === undefined) {
     bands = new Map();
@@ -632,17 +679,72 @@ export function bandFor(palette: Palette, disclosure: Disclosure): Band {
   }
   const hit = bands.get(key);
   if (hit !== undefined) return hit;
-  const state = stateFor(palette, hueAtDepth(disclosure.hue, disclosure.depth));
+  const state = stateFor(
+    palette,
+    hueAtDepth(disclosure.hue, disclosure.depth),
+    drawnAt,
+  );
   const recession = Math.min(
     BAND_RECESSION.cap,
     BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
   );
-  const band = {
-    state,
-    plane: blendRgb(state, paletteRole(palette, "background"), recession),
-  };
+  const plane = ensureDrawn(
+    blendRgb(state, paletteRole(palette, "background"), recession),
+    drawnAt,
+    (candidate, drawn) =>
+      planeNeighbours(palette, disclosure, state, drawnAt).every(
+        ([other, floor]) => deltaE(candidate, drawn(other)) >= floor,
+      ),
+  );
+  if (plane === undefined) {
+    throw new Error(
+      `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
+    );
+  }
+  const band = { state, plane };
   bands.set(key, band);
   return band;
+}
+
+const deltaE = (a: ColorRgba, b: ColorRgba): number =>
+  Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
+
+// What a band's plane must stand off, each with the floor it keeps there: its
+// own trigger, the trigger of the band nested in it, and — below depth 0,
+// whose enclosing surface is the bar and is the state floor's to keep — the
+// plane it is nested in. Each floor is the one its truecolor pair already
+// kept, and none where truecolor missed it.
+function planeNeighbours(
+  palette: Palette,
+  disclosure: Disclosure,
+  state: ColorRgba,
+  drawnAt: ColorDepth,
+): ReadonlyArray<readonly [ColorRgba, number]> {
+  const { hue, depth } = disclosure;
+  const truecolor = (d: number): Band =>
+    bandFor(palette, { hue, depth: d }, ColorDepth.TRUECOLOR);
+  const plane = truecolor(depth).plane;
+  const kept = (floor: number, other: ColorRgba): number =>
+    deltaE(plane, other) >= floor ? floor : 0;
+  const nested = hueAtDepth(hue, depth + 1);
+  return [
+    [state, kept(BAND_FLOORS.triggerPlane, truecolor(depth).state)],
+    [
+      stateFor(palette, nested, drawnAt),
+      kept(
+        BAND_FLOORS.nestedTriggerPlane,
+        stateFor(palette, nested, ColorDepth.TRUECOLOR),
+      ),
+    ],
+    ...(depth > 0
+      ? [
+          [
+            bandFor(palette, { hue, depth: depth - 1 }, drawnAt).plane,
+            kept(BAND_FLOORS.nestedPlane, truecolor(depth - 1).plane),
+          ] as const,
+        ]
+      : []),
+  ];
 }
 const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 
@@ -660,8 +762,9 @@ export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
   address: readonly PlacedStep[],
+  drawnAt: ColorDepth,
 ): ColorRgba {
-  const { state, plane } = bandFor(palette, disclosure);
+  const { state, plane } = bandFor(palette, disclosure, drawnAt);
   return blendRgb(
     plane,
     state,
@@ -724,7 +827,11 @@ export interface Decoration {
  * lineage: the band's own hue one depth further — a natural counted up from
  * the band it stands on, never arithmetic back from a position.
  */
-export function decorationFor(palette: Palette, region: Region): Decoration {
+export function decorationFor(
+  palette: Palette,
+  region: Region,
+  drawnAt: ColorDepth,
+): Decoration {
   switch (region.kind) {
     case "bar": {
       return {
@@ -734,7 +841,7 @@ export function decorationFor(palette: Palette, region: Region): Decoration {
     }
     case "band": {
       return {
-        tint: bandItemFor(palette, region.band, region.address),
+        tint: bandItemFor(palette, region.band, region.address, drawnAt),
         disclosure: { hue: region.band.hue, depth: region.band.depth + 1 },
       };
     }

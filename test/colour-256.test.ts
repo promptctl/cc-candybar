@@ -1,4 +1,6 @@
 // brandon-theme-picker-bgw.fe0 — text keeps its contrast at 256 colours.
+// brandon-theme-picker-bgw.ddk — so does every seam, and at ansi nothing is
+// drawn on its own ground's index.
 //
 // [LAW:verifiable-goals] The floors (TEXT_MIN_CONTRAST, the quiet git floor)
 // are chosen on truecolor values; the terminal draws what the 256 downgrade
@@ -8,9 +10,16 @@
 // through the fixed xterm cube and grey ramp. A character may not land on
 // ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
 // the highest floor it cleared in truecolor, and an arrow must stay the
-// colour of the cell it continues.
+// colour of the cell it continues and stand visibly off the cell it enters.
+// At ansi no ratio exists, and the one floor that does is measured instead:
+// nothing is drawn on its own ground's index.
 
-import { listThemePalettes } from "@promptctl/rich-js";
+import {
+  listThemePalettes,
+  Oklch,
+  ColorRgba,
+  SEAM_MIN_DELTA_E,
+} from "@promptctl/rich-js";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import {
@@ -62,12 +71,20 @@ const ratio = (a: Rgb, b: Rgb): number => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
 };
+const deltaE = (a: Rgb, b: Rgb): number =>
+  Oklch.fromRgba(new ColorRgba(...a)).deltaE(Oklch.fromRgba(new ColorRgba(...b)));
 
 // The unicode charset's joiners — every render here uses it, so the ascii
 // glyphs (`>`, `(`, `)`) are text and are measured like any other. The thin
-// dividers (U+E0B1, U+E0B3) are the seam rich-js draws between two cells on
-// one background: a shape whose visibility is a seam floor, not a text floor.
-const JOINERS = new Set(["", "", "", "", "", ""]);
+// dividers (U+E0B1, U+E0B3) are not joiners here: rich-js draws a divider in
+// the left cell's text colour on the left cell's own ground, so it IS that
+// cell's text and is measured as text. Whether a seam is an arrow or a
+// divider is decided on the drawn colours, so a seam is compared as one
+// position, whichever glyph each depth drew there.
+const ARROWS = new Set(["", ""]);
+const JOINERS = new Set([...ARROWS, "", ""]);
+const DIVIDERS: Readonly<Record<string, string>> = { "": "", "": "" };
+const seamAsOne = (ch: string): string => DIVIDERS[ch] ?? ch;
 
 /**
  * Every non-space character with the fg and bg it is drawn in. Solid joiners
@@ -105,8 +122,10 @@ function drawnChars(rendered: string): { ch: string; fg?: Drawn; bg?: Drawn; joi
         if (p === 38) fg = c;
         else bg = c;
         i += 2;
-      } else if ((p >= 30 && p <= 37) || (p >= 90 && p <= 97)) fg = { ansi: p };
-      else if ((p >= 40 && p <= 47) || (p >= 100 && p <= 107)) bg = { ansi: p };
+      } else if (p >= 30 && p <= 37) fg = { ansi: p - 30 };
+      else if (p >= 90 && p <= 97) fg = { ansi: p - 90 + 8 };
+      else if (p >= 40 && p <= 47) bg = { ansi: p - 40 };
+      else if (p >= 100 && p <= 107) bg = { ansi: p - 100 + 8 };
     }
   }
   text(rendered.slice(pos));
@@ -117,37 +136,45 @@ const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 
 // The floors the bar's text is chosen by, highest first: body text at AA, and
 // the quiet git structure at 3:1. A character keeps the highest floor it
-// cleared in truecolor.
+// cleared in truecolor; a divider — its cell's text — holds at least the
+// lowest of them.
 const FLOORS = [TEXT_MIN_CONTRAST, GIT_QUIET_MIN_CONTRAST];
+const DIVIDER_FLOOR = Math.min(...FLOORS);
 
 type Chars = ReturnType<typeof drawnChars>;
 
 /**
  * Every way `quantized` (the 256 render) fails `truecolor` (the same bar, same
- * state): an arrow no longer continuing its cell, a character drawn in ANSI
- * 0–15, or a character below the highest floor it cleared in truecolor.
- * Returns how many characters were measured, so a caller can refuse a vacuous
- * pass.
+ * state): an arrow no longer continuing its cell or no longer standing off
+ * the cell it enters, a divider under the lowest text floor, a character
+ * drawn in ANSI 0–15, or a character below the highest floor it cleared in
+ * truecolor. Returns how many characters were measured, so a caller can
+ * refuse a vacuous pass.
  */
 function compare(label: string, truecolor: Chars, quantized: Chars, failures: string[]): number {
-  expect([label, quantized.map((c) => c.ch).join("")]).toEqual([
+  expect([label, quantized.map((c) => seamAsOne(c.ch)).join("")]).toEqual([
     label,
-    truecolor.map((c) => c.ch).join(""),
+    truecolor.map((c) => seamAsOne(c.ch)).join(""),
   ]);
-  quantized.forEach(({ ch, fg, joiner }, i) => {
+  quantized.forEach(({ ch, fg, bg, joiner }, i) => {
     // An arrow continues the cell before it: wherever truecolor draws it in
     // that cell's background, 256 does too, so the seam stays one shape.
     const left = quantized[i - 1];
-    const seamless = (c: Chars, k: number) =>
+    const continues = (c: Chars, k: number) =>
       JSON.stringify(c[k]!.fg) === JSON.stringify(c[k - 1]!.bg);
-    if (!joiner || left === undefined || !seamless(truecolor, i)) return;
-    if (!seamless(quantized, i))
+    if (joiner && left !== undefined && truecolor[i]!.joiner && continues(truecolor, i) && !continues(quantized, i))
       failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} after a cell on ${JSON.stringify(left.bg)}`);
+    // An arrow drawn in the colour of the cell it enters is no seam at all.
+    if (ARROWS.has(ch) && isRgb(fg) && isRgb(bg) && deltaE(fg, bg) < SEAM_MIN_DELTA_E)
+      failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} vanishes into ${JSON.stringify(bg)}`);
+    if (ch in DIVIDERS && isRgb(fg) && isRgb(bg) && ratio(fg, bg) < DIVIDER_FLOOR)
+      failures.push(`${label} ${ch}: divider ${ratio(fg, bg).toFixed(2)} (floor ${DIVIDER_FLOOR})`);
   });
   let measured = 0;
   truecolor.forEach(({ ch, fg, bg, joiner }, i) => {
     const q = quantized[i]!;
-    if (joiner || !isRgb(fg) || !isRgb(bg)) return;
+    // A seam that is an arrow at either depth is a shape, held above.
+    if (joiner || q.joiner || !isRgb(fg) || !isRgb(bg)) return;
     measured++;
     if (!isRgb(q.fg) || !isRgb(q.bg)) {
       failures.push(`${label} ${ch}: drawn in terminal-defined ANSI colours`);
@@ -162,10 +189,29 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
   return measured;
 }
 
-test("every bundled theme's text reads at 256 colours as it does in truecolor", async () => {
+/**
+ * Every character at ansi drawn on its own ground's index: text, divider or
+ * arrow, it is the ground's colour in every terminal theme. Returns how many
+ * were measured.
+ */
+function sameIndex(label: string, ansi: Chars, failures: string[]): number {
+  let measured = 0;
+  for (const { ch, fg, bg } of ansi) {
+    if (fg === undefined || bg === undefined || isRgb(fg) || isRgb(bg)) continue;
+    measured++;
+    if (fg.ansi === bg.ansi) failures.push(`${label} '${ch}': index ${fg.ansi} on ${bg.ansi}`);
+  }
+  return measured;
+}
+
+// The closed bar, as `check` renders it, for a theme at a depth.
+async function closedBars(): Promise<{
+  render: (theme: string, colorCompatibility: ColorCompatibility) => Chars;
+  dispose: () => void;
+}> {
   const prepared = await prepareConfig(null, process.cwd(), []);
-  try {
-    const render = (theme: string, colorCompatibility: ColorCompatibility) =>
+  return {
+    render: (theme, colorCompatibility) =>
       drawnChars(
         renderEffective(
           prepared,
@@ -179,27 +225,20 @@ test("every bundled theme's text reads at 256 colours as it does in truecolor", 
           },
           200,
         ).rendered,
-      );
-    const failures: string[] = [];
-    let measured = 0;
-    for (const theme of listThemePalettes()) {
-      measured += compare(theme, render(theme, "truecolor"), render(theme, "256"), failures);
-    }
-    // Non-vacuous: the whole bar, every theme.
-    expect(measured).toBeGreaterThan(listThemePalettes().length * 50);
-    expect(failures).toEqual([]);
-  } finally {
-    prepared.registry.dispose();
-  }
-});
+      ),
+    dispose: () => prepared.registry.dispose(),
+  };
+}
 
 // The open states, reached by the clicks a user makes: the 🍫 door (its tray
 // and the preset picker's band items), ⚙ config (its controls), and the theme
-// picker, whose options wear the palette each would apply. Every text colour
-// chosen there — a trigger's state cell, a band plane, a band item, an applied
-// option — is floored at the drawn depth, so each stage is measured as the
-// closed bar is.
-test("every open settings band and picker reads at 256 colours as it does in truecolor", () => {
+// picker, whose options wear the palette each would apply. Each stage is
+// handed a render of the bar in that state at any depth.
+const STAGE_NAMES = ["closed", "door", "preset picker", "config", "theme picker"] as const;
+function forEachStage(
+  theme: string,
+  measure: (stage: string, render: (colorCompatibility: ColorCompatibility) => Chars) => void,
+): void {
   const OPTS = {
     style: "powerline" as const,
     wrap: true,
@@ -228,46 +267,86 @@ test("every open settings band and picker reads at 256 colours as it does in tru
     if (url === undefined) throw new Error(`nothing on the bar opens ${key}`);
     return url;
   };
-  const STAGES: readonly [string, (rendered: string) => string | null][] = [
-    ["closed", () => null],
-    ["door", (r) => opener(r, SETTINGS_ANCHOR, () => true)],
-    ["preset picker", (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("preset"))],
-    ["config", (r) => opener(r, "settings.config", () => true)],
-    ["theme picker", (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("theme"))],
-  ];
-  const allowed = new Set(listResolvablePaletteNames());
+  const STAGES: Record<(typeof STAGE_NAMES)[number], (rendered: string) => string | null> = {
+    closed: () => null,
+    door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
+    "preset picker": (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("preset")),
+    config: (r) => opener(r, "settings.config", () => true),
+    "theme picker": (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("theme")),
+  };
+  const config = parseAndValidate(
+    "<test>",
+    `{ globals: { palette: '${theme}' } }`,
+    new Set(listResolvablePaletteNames()),
+    DEFAULT_DSL_CONFIG,
+  );
+  const sessionState = new SessionState();
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
+    registerStateValidator(key, spec),
+  );
+  try {
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+    const ctx = testVerbContext(sessionState);
+    const render = (colorCompatibility: ColorCompatibility) =>
+      renderDsl(config, compiled, store, registry, PAYLOAD, { ...OPTS, colorCompatibility });
+    for (const stage of STAGE_NAMES) {
+      const url = STAGES[stage](render("truecolor"));
+      if (url !== null) clickUrl(url, ctx);
+      measure(stage, (colorCompatibility) => drawnChars(render(colorCompatibility)));
+    }
+  } finally {
+    disposers.forEach((d) => d());
+    registry.dispose();
+  }
+}
+
+test("every bundled theme's text reads at 256 colours as it does in truecolor", async () => {
+  const bars = await closedBars();
+  try {
+    const failures: string[] = [];
+    let measured = 0;
+    for (const theme of listThemePalettes()) {
+      measured += compare(theme, bars.render(theme, "truecolor"), bars.render(theme, "256"), failures);
+    }
+    // Non-vacuous: the whole bar, every theme.
+    expect(measured).toBeGreaterThan(listThemePalettes().length * 50);
+    expect(failures).toEqual([]);
+  } finally {
+    bars.dispose();
+  }
+});
+
+// Every text colour chosen in an open state — a trigger's state cell, a band
+// plane, a band item, an applied option — is floored at the drawn depth, so
+// each stage is measured as the closed bar is.
+test("every open settings band and picker reads at 256 colours as it does in truecolor", () => {
   const failures: string[] = [];
   let measured = 0;
   for (const theme of listThemePalettes()) {
-    const config = parseAndValidate(
-      "<test>",
-      `{ globals: { palette: '${theme}' } }`,
-      allowed,
-      DEFAULT_DSL_CONFIG,
-    );
-    const sessionState = new SessionState();
-    const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
-    try {
-      const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-      const ctx = testVerbContext(sessionState);
-      const render = (colorCompatibility: ColorCompatibility) =>
-        renderDsl(config, compiled, store, registry, PAYLOAD, { ...OPTS, colorCompatibility });
-      for (const [stage, click] of STAGES) {
-        const url = click(render("truecolor"));
-        if (url !== null) clickUrl(url, ctx);
-        const truecolor = drawnChars(render("truecolor"));
-        const quantized = drawnChars(render("256"));
-        measured += compare(`${theme} [${stage}]`, truecolor, quantized, failures);
-      }
-    } finally {
-      disposers.forEach((d) => d());
-      registry.dispose();
-    }
+    forEachStage(theme, (stage, render) => {
+      measured += compare(`${theme} [${stage}]`, render("truecolor"), render("256"), failures);
+    });
   }
-  expect(measured).toBeGreaterThan(listThemePalettes().length * STAGES.length * 50);
+  expect(measured).toBeGreaterThan(listThemePalettes().length * STAGE_NAMES.length * 50);
   expect(failures).toEqual([]);
+});
+
+test("at ansi nothing — text, divider or arrow — is drawn on its own ground's index", async () => {
+  const bars = await closedBars();
+  try {
+    const failures: string[] = [];
+    let measured = 0;
+    for (const theme of listThemePalettes()) {
+      measured += sameIndex(theme, bars.render(theme, "ansi"), failures);
+      forEachStage(theme, (stage, render) => {
+        measured += sameIndex(`${theme} [${stage}]`, render("ansi"), failures);
+      });
+    }
+    expect(measured).toBeGreaterThan(listThemePalettes().length * (1 + STAGE_NAMES.length) * 50);
+    expect(failures).toEqual([]);
+  } finally {
+    bars.dispose();
+  }
 });
