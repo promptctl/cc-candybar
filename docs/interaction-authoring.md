@@ -109,9 +109,10 @@ action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
 
-Every example below authors `fg:` and no `bg:`. A segment with no `bg:` wears
-a tint the theme derives from the segment's position in its row, so neighbours
-differ without anyone choosing colours. An authored `bg:` is reserved for
+No example below authors `bg:` or `fg:`. A segment with no `bg:` wears a tint
+the theme derives from the segment's position in its row, so neighbours differ
+without anyone choosing colours, and a segment with no `fg:` gets text chosen
+to read on whatever its background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
 tint.
 
