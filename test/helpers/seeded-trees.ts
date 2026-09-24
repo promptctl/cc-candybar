@@ -71,7 +71,9 @@ export function allNodes(
     node.children.forEach((child, index) =>
       walk(child, [...path, index], [
         ...address,
-        { index, count: node.children.length, distribution },
+        // Levels alternate rows and cells, the way a bar's vertical and
+        // horizontal containers nest.
+        { index, count: node.children.length, distribution, axis: path.length % 2 === 0 ? "row" : "cell" },
       ]),
     );
   };

@@ -40,8 +40,10 @@ export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";
 
 export {
   DECOR_HUES,
-  DECOR_BASES,
-  DECOR_AMTS,
+  BAR_HUES,
+  OPEN_HUE,
+  DECOR_TONES,
+  TONE_TINT,
   DECOR_VOCABULARY,
   DECOR_CHROMA_SHARE,
   DISTRIBUTIONS,
@@ -55,13 +57,15 @@ export {
 } from "./decor.js";
 export type {
   DecorHue,
-  DecorBase,
-  DecorAmount,
+  BarHue,
+  DecorTone,
   DecorEntry,
   SemanticRole,
   Distribution,
   DistributionName,
   Position,
+  PlacedStep,
+  Axis,
   AddressStep,
   Address,
 } from "./decor.js";

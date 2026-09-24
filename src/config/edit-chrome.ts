@@ -303,23 +303,23 @@ function spliceContainer(
           ]
         : []),
     ];
-    // [LAW:one-type-per-behavior] A segment child of a VERTICAL container is a
-    // one-cell row (presetRoot stacks every root's rows vertically, so a bare
-    // `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this way);
-    // its chrome joins that row rather than becoming three rows of its own,
-    // under the row's own gate so the chrome hides with it.
-    children.push(
-      ...(node.direction === "vertical"
-        ? [
-            {
-              kind: "container" as const,
-              direction: "horizontal" as const,
-              children: cells,
-              ...(child.when !== undefined && { when: child.when }),
-            },
-          ]
-        : cells),
-    );
+    // [LAW:one-type-per-behavior] A content segment and its affordances are
+    // ONE unit of the row: a horizontal container holding them, so the row
+    // places its content cells and nothing else. Each child's position in its
+    // parent is what its colour derives from (src/themes/decor.ts); chrome
+    // spliced in as SIBLINGS took two of every three positions, so visible
+    // neighbours were never consecutive and the row's tones collided
+    // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the unit is
+    // also a one-cell row (presetRoot stacks every root's rows vertically, so
+    // a bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive
+    // this way), under the row's own gate so the chrome hides with it.
+    children.push({
+      kind: "container",
+      direction: "horizontal",
+      children: cells,
+      ...(node.direction === "vertical" &&
+        child.when !== undefined && { when: child.when }),
+    });
   }
   return { ...node, children };
 }

@@ -20,7 +20,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import type { CompiledNode } from "../src/dsl/node-registry";
+import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -47,7 +47,7 @@ function addressOf(root: CompiledNode, name: string): Address {
     for (const [index, child] of node.children.entries()) {
       const found = walk(child, [
         ...address,
-        { index, count: node.children.length, distribution: node.distribution },
+        childStep(node, index),
       ]);
       if (found !== undefined) return found;
     }
@@ -312,12 +312,13 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     rt.render();
     const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
     for (const name of ["a", "b", "c"]) {
+      // The row places its cells at the step after the row's own; edit mode
+      // wraps each cell with its `+`/`-`, whose placer is not the row's.
       const address = addressOf(plain.root, name);
-      const own = address[address.length - 1]!;
-      const rePlaced: Address = [
-        ...address.slice(0, -1),
-        { ...own, distribution: DISTRIBUTIONS.monotonic },
-      ];
+      const own = address.findLastIndex((step) => step.axis === "row") + 1;
+      const rePlaced: Address = address.map((step, i) =>
+        i === own ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
+      );
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, rePlaced).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
@@ -351,7 +352,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       );
       expect([name, moved]).toEqual([
         name,
-        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.monotonic }],
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.monotonic, axis: "row" }],
       ]);
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, authored).hex]);
     }

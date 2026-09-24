@@ -2,10 +2,11 @@
 // of the theme's own decorative vocabulary. Rationale, measurements and the
 // rejected alternatives: design-docs/COLOUR-FROM-THEME-VOCABULARY.md.
 //
-// The rule: a segment's decorative background is the theme's `base` mixed
-// toward the theme's `hue` — lightness `amount` of the way, chroma
-// `DECOR_CHROMA_SHARE` of the way, the hue's own angle — with the entry chosen
-// by the node's position in the tree. Every coordinate is one the theme
+// The rule, in Textual's colour roles: a row of the bar wears the theme's
+// `primary` or `secondary`, and each cell of the row one TONE of that hue —
+// a depth between the theme's `background` and its `surface` pulled toward
+// the hue — with the row and the tone chosen by the node's position in the
+// tree. `accent` is kept for what is open. Every coordinate is one the theme
 // already contains or lies between two it contains: it SELECTS from the theme;
 // it never synthesises saturation the theme lacks.
 //
@@ -13,7 +14,7 @@
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
 // imports only rich-js, which owns every colour operation used (`mixAxes`,
-// `blendRgb`, `ensureContrast`, `contrastFor`, `contrastRatio`); cc-candybar keeps the POLICY (which roles, which amounts, which address
+// `blendRgb`, `ensureContrast`, `contrastFor`, `contrastRatio`); cc-candybar keeps the POLICY (which roles, which tones, which address
 // formula) and no colour arithmetic of its own.
 
 import {
@@ -29,46 +30,95 @@ import {
 // --- The vocabulary -----------------------------------------------------------
 
 /**
- * The three non-semantic root hues. `error`/`success`/`warning` are
- * deliberately NOT here: decoration cannot collide with meaning because
- * meaning is not in the set — strictly stronger than hue-anchoring, which
- * only stopped the semantic colours from moving while leaving decoration free
- * to arrive at them.
+ * The three non-semantic root hues, in the order a disclosure lineage advances
+ * through them (`hueAtDepth`). `error`/`success`/`warning` are deliberately NOT
+ * here: decoration cannot collide with meaning because meaning is not in the
+ * set — strictly stronger than hue-anchoring, which only stopped the semantic
+ * colours from moving while leaving decoration free to arrive at them.
  */
 export const DECOR_HUES = ["primary", "secondary", "accent"] as const;
 export type DecorHue = (typeof DECOR_HUES)[number];
 
-/** The theme's neutral surfaces, each carrying its own lightness. */
-export const DECOR_BASES = ["surface", "panel", "surface-lighten-1"] as const;
-export type DecorBase = (typeof DECOR_BASES)[number];
-
 /**
- * How far a tint's LIGHTNESS moves from its base toward its hue. Decoration
- * never moves further than the largest — that bound is the tint region's edge,
- * and it is a lightness bound because every floor the regions are held to
- * (state over tint, trigger over plane, text over cell) is a contrast ratio,
- * which lightness decides.
+ * The hues the closed bar wears, one per ROW, in the roles Textual gives them:
+ * `primary` is the theme's branding colour and `secondary` its alternative,
+ * "to differentiate from primary" — so a second row reads as a different part
+ * of the bar, while the cells inside one row share a hue and differ by tone.
+ * Hue changing at every cell reads as team colours, not as the theme
+ * (brandon-theme-picker-bgw.8fp); a row is the coarsest level a bar has.
  */
-export const DECOR_AMTS = [0.16, 0.3] as const;
-export type DecorAmount = (typeof DECOR_AMTS)[number];
+export const BAR_HUES = [
+  "primary",
+  "secondary",
+] as const satisfies readonly DecorHue[];
+export type BarHue = (typeof BAR_HUES)[number];
 
 /**
- * How far a tint's CHROMA moves from its base toward its hue: most of the way.
+ * The hue an open disclosure wears: Textual's `accent`, "used sparingly to
+ * draw attention". It appears exactly while something is open, which is when
+ * there is something to attend to.
+ */
+export const OPEN_HUE = "accent" satisfies DecorHue;
+
+/** The roles whose meaning decoration must never borrow. */
+export type SemanticRole = "error" | "success" | "warning";
+
+// [LAW:types-are-the-program] Two exclusions, checked by the compiler rather
+// than a review: no semantic role is a decorative hue, and the closed bar never
+// wears the open hue — so an open trigger cannot be mistaken for a closed cell
+// by hue alone. (test/decor.test.ts asserts both at runtime too.)
+const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
+  ? true
+  : never = true;
+const _barNeverWearsTheOpenHue: Extract<BarHue, typeof OPEN_HUE> extends never
+  ? true
+  : never = true;
+void _decorHuesAreNonSemantic;
+void _barNeverWearsTheOpenHue;
+
+/**
+ * Where a cell sits on its row's tone axis, from the theme's `surface` receded
+ * `TONE_RECESS` toward `background` (0) to its `surface` pulled `TONE_TINT`
+ * of the way toward the row's hue (1).
+ * Three tones, not a continuum: a row's neighbours are placed by its
+ * distribution, and van der Corput's first six cells land on 0, 1, ½, 1, 0, 1
+ * of three tones — never one tone twice in a row, and never less than half
+ * the axis apart. A continuous axis gives neighbours a quarter of it (cells
+ * 1 and 2 sit at ½ and ¼), which measured under the seam floor in 42 of 46
+ * theme × hue rows.
+ */
+export const DECOR_TONES = [0, 0.5, 1] as const;
+export type DecorTone = (typeof DECOR_TONES)[number];
+
+/**
+ * How far the tinted end of the tone axis moves `surface`'s LIGHTNESS toward
+ * the row's hue. With `TONE_RECESS` it sets the width of the bar's tonal range
+ * — and every floor the regions are held to (state over tint, text over cell)
+ * is a contrast ratio, which lightness decides. It is the largest pull tried
+ * (0.45, 0.4, 0.35) that the state floor allows: at 0.4, solarized-dark's dim
+ * foreground no longer clears 2.2 against its most-tinted cell, and its three
+ * open states collapse onto one colour past the pole.
+ */
+export const TONE_TINT = 0.35;
+
+/**
+ * How far the deep end of the tone axis moves `surface`'s lightness toward
+ * `background`: halfway, so the deepest cell stays apart from a terminal
+ * painted in the theme's own background.
+ */
+export const TONE_RECESS = 0.5;
+
+/**
+ * How far every tone's CHROMA moves toward the row's hue: most of the way.
  * Chroma is the axis a theme's identity is carried on and the contrast floors
- * barely read, so it is decoupled from `amount` rather than dragged along with
- * it. Tied to the lightness amount, the bar wore 19–57% of each theme's accent
- * chroma and distinct themes converged (dracula ~ rose-pine-moon ΔE .006);
- * raising the amount instead pulled tints onto the state region and broke its
- * floors (brandon-theme-picker-bgw.8fp). Below 1, so a tint stays quieter than
- * the accent it is drawn from; the sRGB gamut lowers it further on pale bases,
- * which is the most a light theme's surface can hold.
+ * barely read, so it is decoupled from lightness rather than dragged along
+ * with it. Tied to lightness, the bar wore 19–57% of each theme's accent
+ * chroma and distinct themes converged (dracula ~ rose-pine-moon ΔE .006;
+ * brandon-theme-picker-bgw.8fp). Below 1, so a tint stays quieter than the
+ * hue it is drawn from; the sRGB gamut lowers it further at the lightness
+ * ends, which is the most those lightnesses can hold.
  */
 export const DECOR_CHROMA_SHARE = 0.8;
-
-/** The tint region's edge: the most-tinted cell any hue can produce. Derived, never restated. */
-export const DECOR_MAX_AMOUNT: DecorAmount = DECOR_AMTS.reduce((a, b) =>
-  b > a ? b : a,
-);
 
 /**
  * The theme's two poles. Directional cues are mixes toward them — active
@@ -77,45 +127,15 @@ export const DECOR_MAX_AMOUNT: DecorAmount = DECOR_AMTS.reduce((a, b) =>
  */
 export type ThemePole = "foreground" | "background";
 
-/** The roles whose meaning decoration must never borrow. */
-export type SemanticRole = "error" | "success" | "warning";
-
-// [LAW:types-are-the-program] The exclusion is a theorem about the constant,
-// checked by the compiler: adding a semantic role to DECOR_HUES fails
-// `pnpm typecheck`, not a review. (test/decor.test.ts asserts it at runtime too.)
-const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
-  ? true
-  : never = true;
-void _decorHuesAreNonSemantic;
-
+/** One closed bar cell's decoration: its row's hue, at its own tone. */
 export interface DecorEntry {
-  readonly base: DecorBase;
-  readonly hue: DecorHue;
-  readonly amount: DecorAmount;
+  readonly hue: BarHue;
+  readonly tone: DecorTone;
 }
 
-/**
- * The decorative vocabulary, ORDERED: amount-major, then base, then hue, so
- * consecutive indices walk the HUES before changing base, and the whole
- * lighter set precedes the whole deeper set. 2 × 3 × 3 = 18 entries, all of
- * them the theme's own. An address selects an entry; it never synthesises.
- *
- * Hue is the fastest axis because it is the one a theme is recognised by. A
- * cell's address step moves the index by only a few entries against its
- * row's, so the fastest axis is the one neighbours most often differ in:
- * base-fastest spent the theme's hues on ROWS and left the bundled bar's
- * neighbouring cells a surface lightness apart (ΔE ~.04, a whole row one hue
- * — brandon-theme-picker-bgw.8fp). It is not a guarantee: a step of a whole
- * hue period (3 entries — van-der-corput's half step at cell weight is 3.3)
- * keeps the hue and changes only the base, so cells 0/1, 2/3 and 4/5 of a flat
- * row share a hue. The bundled bar's seams are measured, not assumed
- * (test/theme-identity.test.ts).
- */
-export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_AMTS.flatMap(
-  (amount) =>
-    DECOR_BASES.flatMap((base) =>
-      DECOR_HUES.map((hue) => ({ base, hue, amount })),
-    ),
+/** Every decoration the closed bar can wear: 2 hues × 3 tones, all the theme's own. */
+export const DECOR_VOCABULARY: readonly DecorEntry[] = BAR_HUES.flatMap((hue) =>
+  DECOR_TONES.map((tone) => ({ hue, tone })),
 );
 
 // --- Distributions ------------------------------------------------------------
@@ -201,14 +221,26 @@ export interface Position {
 }
 
 /**
- * One step down the tree: a position, placed by the PARENT's distribution —
- * the one field every placer carries, read here at every level of the tree.
- * [LAW:dataflow-not-control-flow] A step carries the function it is placed by,
- * so the fold below calls whatever each level was handed; a tree mixing five
- * distributions is five values, not five code paths.
+ * A position placed by its parent's distribution — the one field every placer
+ * carries, read here at every level of the tree. A band's items are addressed
+ * by these alone. [LAW:dataflow-not-control-flow] A step carries the function
+ * it is placed by, so a fold calls whatever each level was handed; a tree
+ * mixing five distributions is five values, not five code paths.
  */
-export interface AddressStep extends Position {
+export interface PlacedStep extends Position {
   readonly distribution: Distribution;
+}
+
+/**
+ * What a container's children are to the bar: its ROWS (a vertical container)
+ * or the CELLS of one row (a horizontal one). Rows choose the hue and cells
+ * the tone, so a hue can only change where the bar itself changes row.
+ */
+export type Axis = "row" | "cell";
+
+/** One step down the bar's tree: a placed position, and which axis it steps along. */
+export interface AddressStep extends PlacedStep {
+  readonly axis: Axis;
 }
 
 /** The steps from the root to a node. The root's address is empty. */
@@ -229,7 +261,7 @@ export const LEVEL_DECAY = 0.37;
  * uniform bar. `vocabularySelect` is the sole caller and owns the size ≥ 1
  * precondition.
  */
-function vocabularyIndex(address: Address, size: number): number {
+function vocabularyIndex(address: readonly PlacedStep[], size: number): number {
   let value = 0;
   let weight = 1;
   for (const { index, count, distribution } of address) {
@@ -252,7 +284,7 @@ function vocabularyIndex(address: Address, size: number): number {
  * the sum, and reassociating that product would move bytes in every
  * committed snapshot for no gain.
  */
-function bandAxis(address: Address): number {
+function bandAxis(address: readonly PlacedStep[]): number {
   let value = 0;
   let weight = 1;
   for (const { index, count, distribution } of address) {
@@ -273,7 +305,7 @@ function bandAxis(address: Address): number {
  */
 export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
-  address: Address,
+  address: readonly PlacedStep[],
 ): T {
   const entry = vocabulary[vocabularyIndex(address, vocabulary.length)];
   if (entry === undefined)
@@ -281,9 +313,24 @@ export function vocabularySelect<T extends {}>(
   return entry;
 }
 
-/** The decorative entry a node's address selects. */
-export const decorEntryFor = (address: Address): DecorEntry =>
-  vocabularySelect(DECOR_VOCABULARY, address);
+/**
+ * The decorative entry a bar node's address selects, read off two steps: its
+ * ROW — the nearest row step, so a row stacked above the whole bar (edit
+ * mode's reset banner) recolours no row beneath it — chooses the hue, and its
+ * place IN that row — the step right after — chooses the tone. Anything nested
+ * deeper inside a cell (edit mode's `+`/`-` around it, an authored `{ h }`)
+ * wears that cell's tone: a row's cells are what sit side by side, so they are
+ * what must differ, and van der Corput over three tones gives no two of a
+ * row's first eight cells the same one. A bar with no vertical container is
+ * one row and wears one hue.
+ */
+export function decorEntryFor(address: Address): DecorEntry {
+  const row = address.findLastIndex((step) => step.axis === "row");
+  return {
+    hue: vocabularySelect(BAR_HUES, address.slice(row, row + 1)),
+    tone: vocabularySelect(DECOR_TONES, address.slice(row + 1, row + 2)),
+  };
+}
 
 /**
  * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
@@ -294,7 +341,7 @@ export const decorEntryFor = (address: Address): DecorEntry =>
  */
 export function paletteRole(
   palette: Palette,
-  role: DecorBase | DecorHue | ThemePole,
+  role: "surface" | DecorHue | ThemePole,
 ): ColorRgba {
   const colour = palette.get(role);
   if (colour === undefined) {
@@ -306,13 +353,14 @@ export function paletteRole(
 }
 
 /**
- * The colour of one vocabulary entry in `palette`: the theme's `base` moved
- * toward the theme's `hue` in OKLCH — lightness `amount` of the way, chroma
- * `DECOR_CHROMA_SHARE` of the way, onto the hue's own angle, keeping the
- * base's opacity. [LAW:one-source-of-truth] The one place the rule is spelled
- * — `decorFor` renders through it and `stateFor` measures against it, so the
- * floor is enforced against the very bytes a tint cell will show, not a second
- * transcription of the formula.
+ * The colour of one vocabulary entry in `palette`: a point on the row hue's
+ * tone axis. The axis runs in OKLCH from the theme's `background` to its
+ * `surface` pulled `TONE_TINT` of the way toward the hue, and both ends carry
+ * the hue's own angle and `DECOR_CHROMA_SHARE` of its chroma, so every tone is
+ * the same hue at a different depth. [LAW:one-source-of-truth] The one place
+ * the rule is spelled — `decorFor` renders through it and `stateFor` measures
+ * against it, so the floor is enforced against the very bytes a tint cell will
+ * show, not a second transcription of the formula.
  */
 export function decorEntryColour(
   palette: Palette,
@@ -323,14 +371,22 @@ export function decorEntryColour(
     colours = new Map();
     DECOR_MEMO.set(palette, colours);
   }
-  const key = `${entry.base}|${entry.hue}|${entry.amount}`;
+  const key = `${entry.hue}|${entry.tone}`;
   const hit = colours.get(key);
   if (hit !== undefined) return hit;
-  const colour = Oklch.fromRgba(paletteRole(palette, entry.base))
-    .mixAxes(Oklch.fromRgba(paletteRole(palette, entry.hue)), {
-      l: entry.amount,
-      c: DECOR_CHROMA_SHARE,
-      h: 1,
+  const hue = Oklch.fromRgba(paletteRole(palette, entry.hue));
+  const surface = Oklch.fromRgba(paletteRole(palette, "surface"));
+  const carry = (from: Oklch, l: number): Oklch =>
+    from.mixAxes(hue, { l, c: DECOR_CHROMA_SHARE, h: 1, alpha: 0 });
+  const deep = surface.mixAxes(
+    Oklch.fromRgba(paletteRole(palette, "background")),
+    { l: TONE_RECESS, c: 0, h: 0, alpha: 0 },
+  );
+  const colour = carry(deep, 0)
+    .mixAxes(carry(surface, TONE_TINT), {
+      l: entry.tone,
+      c: entry.tone,
+      h: entry.tone,
       alpha: 0,
     })
     .toRgba();
@@ -339,10 +395,10 @@ export function decorEntryColour(
 }
 
 // Every segment of every render asks for its tint, and the answer is a pure
-// function of (palette, entry) — two OKLCH conversions, a mix, and a possible
+// function of (palette, entry) — OKLCH conversions, three mixes, and a possible
 // gamut bisection, ~5% of a render before this memo. Keyed by the entry's
-// VALUE, whose domain is DECOR_AMTS × DECOR_BASES × DECOR_HUES, so each map
-// holds at most 18 colours whoever built the entry.
+// VALUE, whose domain is BAR_HUES × DECOR_TONES, so each map holds at most six
+// colours whoever built the entry.
 const DECOR_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 
 /** A node's decorative background: the colour of the entry its address selects. */
@@ -372,9 +428,10 @@ const STATE_STEPS = 12;
  * The state colour of `hue`: an open disclosure's trigger is drawn here. The
  * pure form of the hue, pushed toward `foreground` in twelfths — and past it,
  * along its own lightness, when the pole itself falls short — until it clears
- * `STATE_FLOOR` against the most-tinted cell that hue produces on EVERY base.
- * A hue that already clears at step zero is byte-unchanged — the enforcement
- * is a floor, not a transform.
+ * `STATE_FLOOR` against EVERY colour the closed bar can wear, since an open
+ * trigger stands among closed cells of any row and tone. A hue that already
+ * clears at step zero is byte-unchanged — the enforcement is a floor, not a
+ * transform.
  *
  * [LAW:dataflow-not-control-flow] Fourteen candidates, one predicate, the
  * first that passes; the values decide, not a branch per theme.
@@ -382,9 +439,9 @@ const STATE_STEPS = 12;
  * naming palette and hue — never a quieter colour.
  */
 export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
-  const tintEdge = DECOR_VOCABULARY.filter(
-    (entry) => entry.hue === hue && entry.amount === DECOR_MAX_AMOUNT,
-  ).map((entry) => decorEntryColour(palette, entry));
+  const tints = DECOR_VOCABULARY.map((entry) =>
+    decorEntryColour(palette, entry),
+  );
   const pure = blendRgb(
     paletteRole(palette, "surface"),
     paletteRole(palette, hue),
@@ -392,13 +449,13 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
   );
   const foreground = paletteRole(palette, "foreground");
   // Past the pole: `foreground` slid on in OKLCH lightness until it clears
-  // every tint of the hue. A look can pull the pole itself under the floor
-  // (atom-one-dark's foreground under `dim` measured 2.19 against its primary
-  // tints), and the palette holds no stronger role to reach for. The tints of
-  // one hue share a polarity, so each slide moves the same way and never
-  // undoes the one before it; when they straddle the cutoff it can, and the
-  // check below still refuses.
-  const beyond = tintEdge.reduce(
+  // every tint. A look can pull the pole itself under the floor (atom-one-
+  // dark's foreground under `dim` measured 2.19 against its primary tints),
+  // and the palette holds no stronger role to reach for. The bar's tints run
+  // from `background` toward `surface` and share its polarity, so each slide
+  // moves the same way and never undoes the one before it; when they straddle
+  // the cutoff it can, and the check below still refuses.
+  const beyond = tints.reduce(
     (candidate, tint) => ensureContrast(candidate, tint, STATE_FLOOR),
     foreground,
   );
@@ -408,7 +465,7 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
     ),
     beyond,
   ].find((candidate) =>
-    tintEdge.every((tint) => contrastRatio(candidate, tint) >= STATE_FLOOR),
+    tints.every((tint) => contrastRatio(candidate, tint) >= STATE_FLOOR),
   );
   if (state === undefined) {
     throw new Error(
@@ -476,12 +533,11 @@ const TEXT_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 // --- Disclosure: bands ---------------------------------------------------------
 
 /**
- * Where a disclosure sits in the colour model: the vocabulary hue of the bar
- * cell that roots it, and how many bands deep it is. `depth` 0 is a bar cell's
- * own band; a disclosure opened from inside that band is depth 1, and so on.
+ * Where a disclosure sits in the colour model: the hue its lineage is at, and
+ * how many bands deep it is. `depth` 0 is a bar cell's own band, opened in
+ * `OPEN_HUE`; a disclosure opened from inside that band is depth 1, and so on.
  * The address never enters here — a band is NOT a tree position, it is a
- * plane hung under a trigger, so the only positional fact it needs is the hue
- * its root cell was dealt.
+ * plane hung under a trigger.
  */
 export interface Disclosure {
   readonly hue: DecorHue;
@@ -575,7 +631,7 @@ const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
-  address: Address,
+  address: readonly PlacedStep[],
 ): ColorRgba {
   const { state, plane } = bandFor(palette, disclosure);
   return blendRgb(
@@ -633,20 +689,19 @@ export interface Decoration {
 
 /**
  * [LAW:one-source-of-truth] ONE read per segment, projected two ways. On the
- * bar, one vocabulary entry gives both the tint and the hue of the band the
- * cell opens (at depth 0), so a cell and the band it drops cannot disagree
- * about their hue. On a band, the item is placed by its address and OPENS the
- * next band of the same lineage: the band's own hue one depth further — the
- * demo's `menuPlane(host, depth + 1)` — a natural counted up from the band it
- * stands on, never arithmetic back from a position.
+ * bar, the vocabulary entry its address selects is the closed cell's tint, and
+ * what it opens is the depth-0 band in `OPEN_HUE` — every bar trigger opens
+ * the same accent, because an open disclosure is what the accent is for. On a
+ * band, the item is placed by its address and OPENS the next band of the same
+ * lineage: the band's own hue one depth further — a natural counted up from
+ * the band it stands on, never arithmetic back from a position.
  */
 export function decorationFor(palette: Palette, region: Region): Decoration {
   switch (region.kind) {
     case "bar": {
-      const entry = decorEntryFor(region.address);
       return {
-        tint: decorEntryColour(palette, entry),
-        disclosure: { hue: entry.hue, depth: 0 },
+        tint: decorFor(palette, region.address),
+        disclosure: { hue: OPEN_HUE, depth: 0 },
       };
     }
     case "band": {

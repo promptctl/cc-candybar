@@ -20,12 +20,14 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   BAND_RECESSION,
   BAND_WINDOW,
-  DECOR_AMTS,
-  DECOR_BASES,
+  BAR_HUES,
   DECOR_HUES,
-  DECOR_MAX_AMOUNT,
+  DECOR_TONES,
   DECOR_VOCABULARY,
   DECOR_CHROMA_SHARE,
+  OPEN_HUE,
+  TONE_RECESS,
+  TONE_TINT,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
   LEVEL_DECAY,
@@ -36,6 +38,7 @@ import {
   decorEntryColour,
   decorEntryFor,
   decorFor,
+  decorationFor,
   hueAtDepth,
   paletteRole,
   stateFor,
@@ -44,6 +47,7 @@ import {
   vocabularySelect,
   type Address,
   type AddressStep,
+  type PlacedStep,
   type DecorHue,
   type Distribution,
   type DistributionName,
@@ -78,12 +82,14 @@ function colourMap(shape: Shape, distribution: Distribution): Map<string, string
   );
 }
 
+const VDC = DISTRIBUTIONS["van-der-corput"];
+const row = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "row" });
+const cell = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "cell" });
+
 describe("the vocabulary", () => {
-  test("is bases × hues × amounts, every entry the theme's own", () => {
-    expect(DECOR_VOCABULARY).toHaveLength(
-      DECOR_BASES.length * DECOR_HUES.length * DECOR_AMTS.length,
-    );
-    const seen = new Set(DECOR_VOCABULARY.map((e) => `${e.base}|${e.hue}|${e.amount}`));
+  test("is bar hues × tones, every entry the theme's own", () => {
+    expect(DECOR_VOCABULARY).toHaveLength(BAR_HUES.length * DECOR_TONES.length);
+    const seen = new Set(DECOR_VOCABULARY.map((e) => `${e.hue}|${e.tone}`));
     expect(seen.size).toBe(DECOR_VOCABULARY.length);
   });
 
@@ -95,10 +101,16 @@ describe("the vocabulary", () => {
     }
   });
 
+  test("the closed bar never wears the open hue", () => {
+    // Runtime half of the module's compile-time theorem.
+    expect(BAR_HUES).not.toContain(OPEN_HUE);
+    expect(DECOR_HUES).toContain(OPEN_HUE);
+  });
+
   test("every shipped theme carries every role the vocabulary names", () => {
     for (const name of listThemePalettes()) {
       const palette = getThemePalette(name);
-      for (const role of [...DECOR_BASES, ...DECOR_HUES, "foreground", "background"] as const) {
+      for (const role of ["surface", ...DECOR_HUES, "foreground", "background"] as const) {
         expect(() => paletteRole(palette, role)).not.toThrow();
       }
     }
@@ -111,64 +123,73 @@ describe("the vocabulary", () => {
   });
 });
 
-describe("the colour is the base mixed toward the hue, per axis, for the selected entry", () => {
-  test("matches rich-js mixAxes of the theme's own two colours: lightness by amount, chroma by the share", () => {
-    for (const { shape } of SHAPES.slice(0, 5)) {
-      for (const { address } of allNodes(shape, DISTRIBUTIONS[DEFAULT_DISTRIBUTION])) {
-        const { base, hue, amount } = decorEntryFor(address);
-        const expected = Oklch.fromRgba(paletteRole(DRACULA, base))
-          .mixAxes(Oklch.fromRgba(paletteRole(DRACULA, hue)), {
-            l: amount,
-            c: DECOR_CHROMA_SHARE,
-            h: 1,
-            alpha: 0,
-          })
-          .toRgba();
-        expect(decorFor(DRACULA, address).hex).toBe(expected.hex);
+describe("the colour is a tone of the row's hue", () => {
+  test("matches rich-js mixAxes: surface receded toward background, to surface pulled toward the hue", () => {
+    // The rule, stated once more in the test's own words: both ends of the
+    // tone axis carry the hue's angle and the chroma share; the tone places
+    // the cell between them.
+    for (const palette of [DRACULA, getThemePalette("catppuccin-latte")]) {
+      const O = (role: "surface" | "background" | DecorHue) => Oklch.fromRgba(paletteRole(palette, role));
+      for (const entry of DECOR_VOCABULARY) {
+        const hue = O(entry.hue);
+        const deep = O("surface")
+          .mixAxes(O("background"), { l: TONE_RECESS, c: 0, h: 0, alpha: 0 })
+          .mixAxes(hue, { l: 0, c: DECOR_CHROMA_SHARE, h: 1, alpha: 0 });
+        const tinted = O("surface").mixAxes(hue, { l: TONE_TINT, c: DECOR_CHROMA_SHARE, h: 1, alpha: 0 });
+        const t = entry.tone;
+        const expected = deep.mixAxes(tinted, { l: t, c: t, h: t, alpha: 0 }).toRgba();
+        expect([palette.name, entry, decorEntryColour(palette, entry).hex]).toEqual([
+          palette.name,
+          entry,
+          expected.hex,
+        ]);
       }
     }
   });
 
-  test("ports the demo's pick formula: row then cell, decaying weight, rounded", () => {
-    // The pinned index is the demo's value at the demo's vocabulary size; a
-    // resized vocabulary fails here first, naming the drift.
-    const DEMO_SIZE = 18;
-    expect(DECOR_VOCABULARY).toHaveLength(DEMO_SIZE);
-    // Row 0 of 2 (vdc 0 -> 0), cell 3 of 6 (vdc 0.75 × 0.37 × 18 = 4.995 -> 5):
-    // entry 5 is amount-major index 0, base 1, hue 2 — hue is the fastest axis.
-    const vdc = DISTRIBUTIONS["van-der-corput"];
-    const address: Address = [
-      { index: 0, count: 2, distribution: vdc },
-      { index: 3, count: 6, distribution: vdc },
-    ];
-    expect(decorEntryFor(address)).toBe(DECOR_VOCABULARY[5]);
-    expect(decorEntryFor(address)).toEqual({
-      base: "panel",
-      hue: "accent",
-      amount: 0.16,
-    });
+  test("the row chooses the hue and the place in the row chooses the tone", () => {
+    // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75 × 3 =
+    // 2.25 -> tone 1).
+    expect(decorEntryFor([row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", tone: 1 });
+    // Only the NEAREST row counts: a row stacked above the whole bar (edit
+    // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
+    expect(decorEntryFor([row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", tone: 1 });
+    // Anything nested inside a cell wears the cell's tone: edit mode's `+`/`-`
+    // wrap each content cell as the middle of three.
+    expect(decorEntryFor([row(0, 2), cell(3, 6), cell(1, 3)])).toEqual(
+      decorEntryFor([row(0, 2), cell(3, 6)]),
+    );
+    // A bar with no vertical container is one row, in the first bar hue.
+    expect(decorEntryFor([cell(1, 4)])).toEqual({ hue: BAR_HUES[0], tone: 1 });
   });
 
-  test("each step is placed by its OWN distribution: a heterogeneous address folds per step", () => {
-    // Row 0 of 2 under monotonic (0.25), cell 3 of 6 under vdc (0.75):
-    // round(0.25·18 + 0.75·0.37·18) = round(9.495) = 9. A fold reusing one
-    // function for every step lands elsewhere — 5 with vdc for both, 8 with
-    // monotonic for both — so the per-step property is what this pins.
-    const vdc = DISTRIBUTIONS["van-der-corput"];
-    const mixed: Address = [
-      { index: 0, count: 2, distribution: DISTRIBUTIONS.monotonic },
-      { index: 3, count: 6, distribution: vdc },
-    ];
-    expect(decorEntryFor(mixed)).toBe(DECOR_VOCABULARY[9]);
-    const uniformly = (distribution: Distribution): Address =>
-      mixed.map((step) => ({ ...step, distribution }));
-    expect(decorEntryFor(uniformly(vdc))).toBe(DECOR_VOCABULARY[5]);
-    expect(decorEntryFor(uniformly(DISTRIBUTIONS.monotonic))).toBe(DECOR_VOCABULARY[8]);
+  test("the tone step is placed by its OWN distribution", () => {
+    // Cell 1 of 4: vdc 0.5 × 3 = 1.5 -> tone 1; monotonic 0.375 × 3 = 1.125 -> tone ½.
+    expect(decorEntryFor([cell(1, 4)]).tone).toBe(1);
+    expect(
+      decorEntryFor([{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).tone,
+    ).toBe(0.5);
+  });
+
+  test("no two of a row's first eight cells side by side share a tone", () => {
+    // The reason there are three tones: van der Corput lands a row's first
+    // eight cells on 0, 1, ½, 1, 0, 1, ½, 0 of them.
+    const tones = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor([row(0, 2), cell(i, 8)]).tone);
+    expect(tones).toEqual([0, 1, 0.5, 1, 0, 1, 0.5, 0]);
   });
 
   test("the root selects entry 0", () => {
     // The empty address has no step to place, so no distribution can reach it.
-    expect(decorEntryFor([])).toBe(DECOR_VOCABULARY[0]);
+    expect(decorEntryFor([])).toEqual(DECOR_VOCABULARY[0]);
+  });
+
+  test("an open bar trigger opens the accent, whatever its row", () => {
+    for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
+      expect(decorationFor(DRACULA, { kind: "bar", address }).disclosure).toEqual({
+        hue: OPEN_HUE,
+        depth: 0,
+      });
+    }
   });
 });
 
@@ -289,7 +310,7 @@ describe("done-when: permuting an unrelated subtree", () => {
 
 describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
   test("every address selects the one entry under every distribution", () => {
-    const only = { base: "surface", hue: "primary", amount: 0.16 } as const;
+    const only = { hue: "primary", tone: 0 } as const;
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
         for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
@@ -310,11 +331,9 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 // theme-specific (textual-dark, textual-ansi, solarized-dark), so a sample
 // proves nothing.
 
-/** The most-tinted cell `hue` produces on each base — the tint region's edge. */
-function tintEdge(palette: Palette, hue: DecorHue) {
-  return DECOR_BASES.map((base) =>
-    decorEntryColour(palette, { base, hue, amount: DECOR_MAX_AMOUNT }),
-  );
+/** Every colour the closed bar can wear: what an open trigger must stand off. */
+function barTints(palette: Palette) {
+  return DECOR_VOCABULARY.map((entry) => decorEntryColour(palette, entry));
 }
 
 /** The pure form of `hue`: where the search starts. */
@@ -324,17 +343,17 @@ function pureHue(palette: Palette, hue: DecorHue) {
 
 const REGISTRY = listThemePalettes().map((name) => getThemePalette(name));
 
-describe("done-when: contrast(state, decorMax) >= 2.2 for every theme × hue × base", () => {
+describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × hue", () => {
   test("holds over the whole registry", () => {
     for (const palette of REGISTRY) {
       for (const hue of DECOR_HUES) {
         const state = stateFor(palette, hue);
-        for (const [i, tint] of tintEdge(palette, hue).entries()) {
+        for (const [i, tint] of barTints(palette).entries()) {
           const ratio = contrastRatio(state, tint);
-          expect([palette.name, hue, DECOR_BASES[i], ratio >= STATE_FLOOR]).toEqual([
+          expect([palette.name, hue, DECOR_VOCABULARY[i], ratio >= STATE_FLOOR]).toEqual([
             palette.name,
             hue,
-            DECOR_BASES[i],
+            DECOR_VOCABULARY[i],
             true,
           ]);
         }
@@ -351,27 +370,33 @@ describe("done-when: contrast(state, decorMax) >= 2.2 for every theme × hue × 
         const palette = transposePalette(base, key);
         for (const hue of DECOR_HUES) {
           const state = stateFor(palette, hue);
-          const worst = Math.min(...tintEdge(palette, hue).map((t) => contrastRatio(state, t)));
+          const worst = Math.min(...barTints(palette).map((t) => contrastRatio(state, t)));
           expect([base.name, look, hue, worst >= STATE_FLOOR]).toEqual([base.name, look, hue, true]);
         }
       }
     }
   });
 
-  test("the search reaches foreground itself: solarized-dark's secondary lands on the pole", () => {
-    const palette = getThemePalette("solarized-dark");
-    expect(stateFor(palette, "secondary").hex).toBe(paletteRole(palette, "foreground").hex);
+  test("the search reaches foreground itself when only the pole clears", () => {
+    // Every tint black; the foreground a grey that clears 2.2 against black
+    // (2.41) where its eleven-twelfths blend toward black does not (2.18).
+    const black = new ColorRgba(0, 0, 0);
+    const roles = new Map<string, ColorRgba>([
+      ...["background", "surface", ...DECOR_HUES].map((role) => [role, black] as const),
+      ["foreground", new ColorRgba(75, 75, 75)],
+    ]);
+    const dim = new Palette("dim-pole", true, roles);
+    expect(stateFor(dim, "accent").hex).toBe(paletteRole(dim, "foreground").hex);
   });
 
   test("a hue that cannot clear even beyond foreground throws, naming palette and hue", () => {
-    // The hue's tints straddle the luminance cutoff — one base black, one white,
-    // the hue grey — so sliding away from one tint slides toward the other.
+    // The bar's tints straddle the luminance cutoff — the deep end near black,
+    // the tinted end near white — so sliding away from one slides toward the other.
     const grey = new ColorRgba(128, 128, 128);
-    const [dark, light, ...rest] = DECOR_BASES;
     const roles = new Map<string, ColorRgba>([
-      [dark, new ColorRgba(0, 0, 0)],
-      [light, new ColorRgba(255, 255, 255)],
-      ...[...rest, ...DECOR_HUES, "foreground", "background"].map((role) => [role, grey] as const),
+      ["background", new ColorRgba(0, 0, 0)],
+      ["surface", new ColorRgba(255, 255, 255)],
+      ...[...DECOR_HUES, "foreground"].map((role) => [role, grey] as const),
     ]);
     const straddling = new Palette("straddling", true, roles);
     expect(() => stateFor(straddling, "primary")).toThrow(/"straddling".*"primary".*foreground/);
@@ -384,7 +409,7 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
     for (const palette of REGISTRY) {
       for (const hue of DECOR_HUES) {
         const pure = pureHue(palette, hue);
-        const clears = tintEdge(palette, hue).every(
+        const clears = barTints(palette).every(
           (tint) => contrastRatio(pure, tint) >= STATE_FLOOR,
         );
         if (!clears) continue;
@@ -396,7 +421,7 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
         ]);
       }
     }
-    // The measured registry: 30 of 69 pairs stay the pure mix. At least one
+    // The measured registry: 41 of 69 pairs stay the pure mix. At least one
     // must, or the "floor not transform" clause is vacuous.
     expect(untouched).toBeGreaterThan(0);
   });
@@ -444,11 +469,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
     for (const palette of REGISTRY) {
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       const cells = [
-        ...DECOR_BASES.flatMap((base) =>
-          DECOR_HUES.flatMap((hue) =>
-            DECOR_AMTS.map((amount) => decorEntryColour(palette, { base, hue, amount })),
-          ),
-        ),
+        ...barTints(palette),
         ...DECOR_HUES.flatMap((hue) =>
           [0, 1, 2].flatMap((depth) => {
             const band = bandFor(palette, { hue, depth });
@@ -572,13 +593,13 @@ describe("a band is a plane", () => {
 
   test("a nested address folds the same way: each level decayed, the sum taken modulo 1", () => {
     const disclosure = { hue: "primary", depth: 0 } as const;
-    const step = (index: number): AddressStep => ({
+    const step = (index: number): PlacedStep => ({
       index,
       count: 4,
       distribution: DISTRIBUTIONS.monotonic,
     });
     // The documented fold, stated once: `d0 + d1·LEVEL_DECAY`, modulo 1.
-    const expected = (palette: Palette, address: Address) => {
+    const expected = (palette: Palette, address: readonly PlacedStep[]) => {
       const { state, plane } = bandFor(palette, disclosure);
       const axis =
         address.reduce(

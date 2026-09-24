@@ -10,7 +10,7 @@ import {
   bandItemFor,
   paletteRole,
   textOn,
-  type AddressStep,
+  type PlacedStep,
   type Distribution,
   type Position,
 } from "../themes/decor.js";
@@ -37,7 +37,7 @@ export function stateCell(palette: Palette, background: ColorRgba): Style {
  * an instance, so the step arrives placed by the instance's own distribution —
  * the `{{ menu }}`'s authored `distribution` option, or the default.
  */
-export function bandItemStyle(active: ActiveSegment, step: AddressStep): Style {
+export function bandItemStyle(active: ActiveSegment, step: PlacedStep): Style {
   return stateCell(
     active.palette,
     bandItemFor(active.palette, active.disclosure, [step]),

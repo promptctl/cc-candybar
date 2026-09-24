@@ -36,6 +36,7 @@ import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
   placedBy,
   type AddressStep,
+  type Axis,
   type Disclosure,
   type Distribution,
   type Region,
@@ -317,6 +318,32 @@ export interface NodeType<K extends NodeKind> {
   ): RenderedLines;
 }
 
+// What a container's children are to the bar's colour: a vertical container
+// stacks ROWS (which choose the hue), a horizontal one lines up the CELLS of a
+// row (which choose the tone). [LAW:types-are-the-program] Total over
+// Direction, so a new direction is a compile error here.
+const AXIS_OF: Record<Direction, Axis> = {
+  vertical: "row",
+  horizontal: "cell",
+};
+
+// [LAW:one-source-of-truth] THE address step of a container's `index`th child:
+// which child of how many, placed by the container's distribution, along the
+// axis its direction lays children out on. The walk extends every address
+// through this, so a test that computes an expected colour from an address
+// calls it too rather than re-spelling the step.
+export function childStep(
+  node: CompiledContainerNode,
+  index: number,
+): AddressStep {
+  return {
+    index,
+    count: node.children.length,
+    distribution: node.distribution,
+    axis: AXIS_OF[node.direction],
+  };
+}
+
 const containerType: NodeType<"container"> = {
   compile(node, cctx) {
     return {
@@ -337,11 +364,7 @@ const containerType: NodeType<"container"> = {
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
-        ctx.renderChild(child, ctx.visible, {
-          index,
-          count: node.children.length,
-          distribution: node.distribution,
-        }),
+        ctx.renderChild(child, ctx.visible, childStep(node, index)),
       ),
     );
   },

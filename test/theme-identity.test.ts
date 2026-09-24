@@ -170,7 +170,9 @@ describe("a tint carries its theme's colour", () => {
     const palette = getThemePalette(name)!;
     for (const entry of DECOR_VOCABULARY) {
       const tint = oklch(decorEntryColour(palette, entry));
-      const base = oklch(paletteRole(palette, entry.base));
+      // Both ends of the tone axis keep `surface`'s chroma and move it the
+      // share of the way to the hue's, so every tone aims at the same chroma.
+      const base = oklch(paletteRole(palette, "surface"));
       const hue = oklch(paletteRole(palette, entry.hue));
       const target = base.c + (hue.c - base.c) * DECOR_CHROMA_SHARE;
       // The most chroma sRGB can show at this lightness and hue: rich-js
@@ -223,31 +225,27 @@ describe("no two neighbouring cells blur", () => {
     }
   });
 
-  // A theme folds two of its decorative hues when their tints on one base and
-  // amount sit closer than the eye resolves: `default` declares its accent AS
-  // its primary; catppuccin-latte's secondary and accent sit 10° apart and
-  // meet on its pale surface. Neighbours of those two hues share a
-  // background because the THEME says so, and the divider keeps that seam.
-  const foldsHues = (name: string): boolean => {
+  // A theme folds its tones when two of one hue sit closer than the eye
+  // resolves: the tone axis runs from `surface` receded toward `background`
+  // to `surface` pulled toward the hue, so a theme whose hue sits at its
+  // surface's lightness (textual-ansi) has almost no axis to spread over.
+  // Neighbours share a background because the THEME says so, and the divider
+  // keeps that seam.
+  const foldsTones = (name: string): boolean => {
     const palette = getThemePalette(name)!;
     return DECOR_VOCABULARY.some((a) =>
       DECOR_VOCABULARY.some(
         (b) =>
-          a.hue !== b.hue &&
-          a.base === b.base &&
-          a.amount === b.amount &&
+          a.hue === b.hue &&
+          a.tone !== b.tone &&
           dE(decorEntryColour(palette, a), decorEntryColour(palette, b)) < SEAM_MIN_DELTA_E,
       ),
     );
   };
 
-  test("a divider joins only backgrounds the eye cannot, in a theme whose own hues fold", () => {
-    const dividers = all().filter((s) => s.glyph === DIVIDER);
-    // The bundled bar reaches a folding theme (default, catppuccin-latte), so
-    // this is not vacuous.
-    expect(dividers.length).toBeGreaterThan(0);
-    for (const s of dividers) {
-      expect([s.theme, s.left.hex, s.right.hex, dE(s.left, s.right) < SEAM_MIN_DELTA_E, foldsHues(s.theme)])
+  test("a divider joins only backgrounds the eye cannot, in a theme whose own tones fold", () => {
+    for (const s of all().filter((s) => s.glyph === DIVIDER)) {
+      expect([s.theme, s.left.hex, s.right.hex, dE(s.left, s.right) < SEAM_MIN_DELTA_E, foldsTones(s.theme)])
         .toEqual([s.theme, s.left.hex, s.right.hex, true, true]);
     }
   });
