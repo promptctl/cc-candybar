@@ -35,6 +35,7 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
+import { boldUrls } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
@@ -91,6 +92,53 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       removeTmpDirs();
       // removeTmpDirs only clears what prepareIsolatedDaemonEnv created; this
       // dir is ours, so orphaning it would leak one temp dir per run.
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// [LAW:verifiable-goals] brandon-theme-picker-bgw.etd's preset decision, on
+// the only path that can decide it: a preset pick swaps the WHOLE root, which
+// the daemon resolves per render. The picker may stay open across that swap
+// only if the menu survives it — so two picks in a row, each through the real
+// click gate, must each come back to an open picker marking the new preset.
+describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", () => {
+  test("pick compact, then default: open after each, the pick current", async () => {
+    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-preset-stays-open",
+    );
+    const projectDir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-preset-stays-open-project-"),
+    );
+    let daemon: RunningDaemon | undefined;
+    try {
+      daemon = await spawnDaemonWithEnv(env);
+      const SID = "preset-stays-open-1";
+      const bar = (): Promise<string> => render(sockPath, SID, projectDir);
+
+      await click(sockPath, urlWriting(await bar(), SETTINGS_ANCHOR, "open"));
+      await click(
+        sockPath,
+        urlWriting(
+          await bar(),
+          "menus.settings_pickers",
+          "settings.apply.preset",
+        ),
+      );
+
+      for (const preset of ["compact", "default"]) {
+        const pick = urlWriting(await bar(), "preset", preset);
+        await click(sockPath, pick);
+        const after = await bar();
+        expect(stripAnsi(after)).toContain(`▦ ${preset}`);
+        // Still open: the other preset's option is on screen, clickable.
+        const other = preset === "compact" ? "default" : "compact";
+        expect(() => urlWriting(after, "preset", other)).not.toThrow();
+        expect(boldUrls(after)).toContain(urlWriting(after, "preset", preset));
+      }
+    } finally {
+      if (daemon) await killAndWait(daemon);
+      removeTmpDirs();
       rmSync(projectDir, { recursive: true, force: true });
     }
   });

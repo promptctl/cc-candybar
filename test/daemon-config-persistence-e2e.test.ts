@@ -152,7 +152,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // proves nothing about what another session renders.
       await click(sockPath, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
-      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+      expect(await render(sockPath, SID, projectDir)).toContain(`🎨 ${sessionTheme}`);
       // Open the other session's menu to the same depth BEFORE asserting it
       // does not show the pick. A closed menu renders no theme name at all, so
       // asserting on a collapsed bar would pass whether or not the pick
@@ -168,9 +168,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       const otherBar = await render(sockPath, OTHER_SID, projectDir);
       expect(otherBar).toContain("🎨 tokyo-night"); // its own default, shown
       expect(otherBar).not.toContain(sessionTheme);
-
-      // Re-open the theme picker: the pick above closed it (closeOnPick).
-      await click(sockPath, themeMenuToggleUrl!);
 
       // ── Check persist?. One click on the checkbox, nothing else about the
       // control changes — same segment, same picker, same options.
@@ -204,7 +201,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // The session pick from before is untouched by checking the box —
       // toggling persist? moves where the NEXT write goes, never values
       // already written.
-      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+      expect(await render(sockPath, SID, projectDir)).toContain(`🎨 ${sessionTheme}`);
 
       // The padding stepper's ▶ is a bounded step over the same durable
       // field while persist? is checked (render/action.ts's persist-bounded
@@ -257,10 +254,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         OTHER_SID,
         projectDir,
-        (out) => out.includes(targetTheme),
+        (out) => out.includes(`🎨 ${targetTheme}`),
         `the persisted theme "${targetTheme}" on a session that never picked one`,
       );
-      expect(afterClicks).toContain(targetTheme);
+      expect(afterClicks).toContain(`🎨 ${targetTheme}`);
 
       // …and the COMMITTING session shows the committed value too, because the
       // durable click cleared the session pick that would otherwise outrank it
@@ -271,10 +268,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         SID,
         projectDir,
-        (out) => out.includes(targetTheme),
+        (out) => out.includes(`🎨 ${targetTheme}`),
         `the committed theme "${targetTheme}" on the session that committed it`,
       );
-      expect(committing).not.toContain(sessionTheme);
+      expect(committing).not.toContain(`🎨 ${sessionTheme}`);
 
       // [LAW:verifiable-goals] The ticket's acceptance: the hand-authored file
       // is byte-identical OUTSIDE the two value spans the clicks replaced —
@@ -316,10 +313,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         FRESH_SID,
         projectDir,
-        (out) => out.includes(targetTheme),
+        (out) => out.includes(`🎨 ${targetTheme}`),
         `the persisted theme "${targetTheme}" for a fresh session`,
       );
-      expect(freshOut).toContain(targetTheme);
+      expect(freshOut).toContain(`🎨 ${targetTheme}`);
 
       // The file is STILL exactly the two-span edit after the restart — a
       // restart reads it, never rewrites it.

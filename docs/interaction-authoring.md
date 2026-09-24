@@ -1131,7 +1131,8 @@ close.
 
 Every picker in the menu shares one accordion key, so opening the look picker
 closes the theme picker: the panel is narrow, and two open drop-downs would
-overflow it.
+overflow it. A pick leaves its picker open, on its page, so you can try
+several themes in a row and watch the bar recolour; `✕` closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `settings.menu` in your

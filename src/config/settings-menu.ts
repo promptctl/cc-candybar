@@ -717,6 +717,15 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // between them — so the panel spells each setting exactly once and the click
 // carries the destination as data [LAW:dataflow-not-control-flow].
 //
+// A pick leaves its picker open with its page cursor kept
+// (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
+// try must not cost a reopen and a page hunt; ✕ closes. That holds for a
+// preset pick too, whose click swaps the whole root — the menu survives it
+// because every preset root references this one anchor and both open states
+// are session keys, not tree positions. A pick that changes the pagination
+// itself (a style or padding change) lands on the kept cursor clamped into
+// the new page set, which renderPicker owns.
+//
 // [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
 // and `deriveConfigActionValidators` each explode these dual declarations
 // (actionDestinations) and derive the same specs they would have derived from
@@ -730,7 +739,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       template:
         `${c.glyph} {{ .${c.effectiveVar} }} ` +
         `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
-        `(dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
+        `(dict "key" "${PICKER_KEY}") }} ` +
         `{{ action "${controlReset(c.name)}" "↺" }}`,
     };
     artifacts.actions[apply] = {

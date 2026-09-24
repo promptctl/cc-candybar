@@ -49,7 +49,7 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { linkUrls } from "./helpers/ansi";
+import { boldUrls, linkUrls, links } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -63,14 +63,14 @@ const TWO_SEGMENT_ROOT = `{
   root: { h: ['directory', 'model'] },
 }`;
 
-function opts() {
+function opts(width: number) {
   return {
     style: "powerline" as const,
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
     charset: "unicode" as const,
-    width: Number.POSITIVE_INFINITY,
+    width,
   };
 }
 
@@ -85,6 +85,7 @@ function opts() {
 function rig(
   source: string,
   durable?: DurableConfig,
+  width: number = Number.POSITIVE_INFINITY,
 ): {
   config: ValidatedConfig;
   render: () => string;
@@ -155,7 +156,7 @@ function rig(
             ),
           },
         },
-        opts(),
+        opts(width),
         undefined,
         {
           theme: resolveThemeSelection(
@@ -549,6 +550,62 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(checked).toContain("☑ persist?");
     expect(unchecked).toContain("☐ persist?");
     expect(checked.replace("☑ persist?", "☐ persist?")).toBe(unchecked);
+  });
+});
+
+// [LAW:verifiable-goals] brandon-theme-picker-bgw.etd: choosing a theme is
+// trying several, so a pick must leave the picker open, on the page it was
+// on, with the new pick marked current. Driven the way a user drives it: two
+// option clicks found in the rendered bytes and dispatched through the real
+// verb handlers, at a width narrow enough that the theme list pages — so
+// "same page" is a claim about a second page, not the only one.
+describe("a pick leaves the picker open", () => {
+  let r: ReturnType<typeof rig>;
+  beforeEach(() => {
+    r = rig(TWO_SEGMENT_ROOT, undefined, 80);
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(
+      writesTo(r.render(), "menus.settings_pickers").find((u) =>
+        effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
+      )!,
+    );
+  });
+  afterEach(() => r.dispose());
+
+  // Each rendered theme option: the name it writes and the URL that writes it.
+  const themeOptions = (rendered: string): { theme: string; url: string }[] =>
+    urlsOf(rendered).flatMap((url) => {
+      const write = effectsOf(url).find(
+        (e) => e.verb === "set-state" && e.args[1] === "theme",
+      );
+      return write ? [{ theme: write.args[2]!, url }] : [];
+    });
+
+  test("two picks in a row: still open, same page, the second pick current", () => {
+    const pageOne = themeOptions(r.render());
+    expect(pageOne.length).toBeGreaterThan(1);
+    const next = links(r.render()).find((l) => stripAnsi(l.text) === "→");
+    expect(next).toBeDefined(); // the list pages at 80 columns
+    r.click(next!.url);
+
+    const page = r.render();
+    const options = themeOptions(page);
+    expect(options.map((o) => o.theme)).not.toEqual(pageOne.map((o) => o.theme));
+    expect(options.length).toBeGreaterThanOrEqual(2); // two picks on this page
+    const [first, second] = options;
+
+    r.click(first!.url);
+    const afterFirst = r.render();
+    expect(themeOptions(afterFirst)).toEqual(options);
+    expect(plain(afterFirst)).toContain(`🎨 ${first!.theme}`);
+
+    r.click(second!.url);
+    const afterSecond = r.render();
+    expect(themeOptions(afterSecond)).toEqual(options);
+    expect(plain(afterSecond)).toContain(`🎨 ${second!.theme}`);
+    expect(boldUrls(afterSecond)).toContain(second!.url);
+    expect(boldUrls(afterSecond)).not.toContain(first!.url);
   });
 });
 
