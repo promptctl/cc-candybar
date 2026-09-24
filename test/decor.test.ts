@@ -23,6 +23,7 @@ import {
   DECOR_HUES,
   DECOR_MAX_AMOUNT,
   DECOR_VOCABULARY,
+  DECOR_CHROMA_SHARE,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
   LEVEL_DECAY,
@@ -108,12 +109,19 @@ describe("the vocabulary", () => {
   });
 });
 
-describe("the colour is mix(base, hue, amount) for the selected entry", () => {
-  test("matches rich-js blendRgb of the theme's own two colours", () => {
+describe("the colour is the base mixed toward the hue, per axis, for the selected entry", () => {
+  test("matches rich-js mixAxes of the theme's own two colours: lightness by amount, chroma by the share", () => {
     for (const { shape } of SHAPES.slice(0, 5)) {
       for (const { address } of allNodes(shape, DISTRIBUTIONS[DEFAULT_DISTRIBUTION])) {
         const { base, hue, amount } = decorEntryFor(address);
-        const expected = blendRgb(paletteRole(DRACULA, base), paletteRole(DRACULA, hue), amount);
+        const expected = Oklch.fromRgba(paletteRole(DRACULA, base))
+          .mixAxes(Oklch.fromRgba(paletteRole(DRACULA, hue)), {
+            l: amount,
+            c: DECOR_CHROMA_SHARE,
+            h: 1,
+            alpha: 0,
+          })
+          .toRgba();
         expect(decorFor(DRACULA, address).hex).toBe(expected.hex);
       }
     }
@@ -125,7 +133,7 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
     const DEMO_SIZE = 18;
     expect(DECOR_VOCABULARY).toHaveLength(DEMO_SIZE);
     // Row 0 of 2 (vdc 0 -> 0), cell 3 of 6 (vdc 0.75 × 0.37 × 18 = 4.995 -> 5):
-    // entry 5 is amount-major index 0, hue 1, base 2.
+    // entry 5 is amount-major index 0, base 1, hue 2 — hue is the fastest axis.
     const vdc = DISTRIBUTIONS["van-der-corput"];
     const address: Address = [
       { index: 0, count: 2, distribution: vdc },
@@ -133,8 +141,8 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
     ];
     expect(decorEntryFor(address)).toBe(DECOR_VOCABULARY[5]);
     expect(decorEntryFor(address)).toEqual({
-      base: "surface-lighten-1",
-      hue: "secondary",
+      base: "panel",
+      hue: "accent",
       amount: 0.16,
     });
   });

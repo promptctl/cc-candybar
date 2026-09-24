@@ -65,8 +65,8 @@ interface Case {
 const BLOCK_LIKE = (threshold: number): readonly Row[] =>
   threshold === 80
     ? [
-        { value: 0, bg: "panel" },
-        { value: 49, bg: "panel" },
+        { value: 0, bg: "tint" },
+        { value: 49, bg: "tint" },
         { value: 49.6, bg: "warning" },
         { value: 50, bg: "warning" },
         { value: 79, bg: "warning" },
@@ -76,8 +76,8 @@ const BLOCK_LIKE = (threshold: number): readonly Row[] =>
       ]
     : [
         // threshold 50: the warning band collapses — 50 is already error.
-        { value: 0, bg: "panel" },
-        { value: 49, bg: "panel" },
+        { value: 0, bg: "tint" },
+        { value: 49, bg: "tint" },
         { value: 50, bg: "error" },
         { value: 79, bg: "error" },
         { value: 100, bg: "error" },
@@ -85,13 +85,13 @@ const BLOCK_LIKE = (threshold: number): readonly Row[] =>
 
 // Nearer-is-hotter over minutes-to-cap; -1 is "cannot project" and calm.
 const ETA_HEAT: readonly Row[] = [
-  { value: -1, bg: "panel" },
+  { value: -1, bg: "tint" },
   { value: 0, bg: "error" },
   { value: 29, bg: "error" },
   { value: 30, bg: "warning" },
   { value: 59, bg: "warning" },
-  { value: 60, bg: "panel" },
-  { value: 120, bg: "panel" },
+  { value: 60, bg: "tint" },
+  { value: 120, bg: "tint" },
 ];
 
 // Less-left-is-hotter over an integer percentage (src/segments/context.ts
@@ -101,14 +101,14 @@ const CONTEXT_LEFT: readonly Row[] = [
   { value: 20, bg: "error" },
   { value: 21, bg: "warning" },
   { value: 40, bg: "warning" },
-  { value: 41, bg: "surface-active" },
-  { value: 100, bg: "surface-active" },
+  { value: 41, bg: "tint" },
+  { value: 100, bg: "tint" },
 ];
 
 // A lowered heat threshold moves the first warm colour, and the text follows
 // the background it lands on.
 const HEAT_LOW: readonly Row[] = [
-  { value: 19, bg: "panel" },
+  { value: 19, bg: "tint" },
   { value: 20, bg: "warning" },
   { value: 79, bg: "warning" },
   { value: 80, bg: "error" },
@@ -180,13 +180,23 @@ function renderOne(
   value: number,
   themeName: string,
   onSegmentError?: (segName: string, message: string) => void,
+  undecorated = false,
 ): string {
   const narrowed = narrowToSegment(
     parseAndValidate("<default>", SERIALIZED),
     c.segment,
   );
+  // `undecorated` renders the same cell with its `bg:` removed — the colour an
+  // absent `bg:` resolves to at this address, which a calm arm names as `(tint)`.
+  const segments = undecorated
+    ? {
+        ...narrowed.segments,
+        [c.segment]: { ...narrowed.segments[c.segment]!, bg: undefined },
+      }
+    : narrowed.segments;
   const one = {
     ...narrowed,
+    segments,
     variables: {
       ...narrowed.variables,
       ...Object.fromEntries(
@@ -241,7 +251,12 @@ function cellColors(
   return { fg: out.fg!, bg: out.bg! };
 }
 
-function expectedBg(palette: Palette, row: Row): string {
+// A calm row wears the cell's own decoration: what the same cell renders with
+// no `bg:` at all. Every other row names the palette role it heats to.
+function expectedBg(palette: Palette, row: Row, c: Case, paletteName: string): string {
+  if (row.bg === "tint") {
+    return cellColors(renderOne(c, row.value, paletteName, undefined, true), c.glyph).bg;
+  }
   const bg = palette.get(row.bg);
   expect(bg).toBeDefined();
   return bg!.hex;
@@ -257,7 +272,7 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
       `${c.segment} ${varLabel} at $value wears bg=$bg, text legible on it`,
       (row) => {
         const { fg, bg } = cellColors(renderOne(c, row.value, paletteName), c.glyph);
-        expect(bg).toBe(expectedBg(palette, row));
+        expect(bg).toBe(expectedBg(palette, row, c, paletteName));
         expect(
           contrastRatio(parseRgbHex(fg.slice(1)), parseRgbHex(bg.slice(1))),
         ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);

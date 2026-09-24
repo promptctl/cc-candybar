@@ -17,7 +17,7 @@ import {
 } from "./active-segment.js";
 
 /**
- * Bind `color`, `ramp` and `bgOf` to the segment the walk has published.
+ * Bind `color`, `ramp`, `bgOf` and `tint` to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
@@ -64,6 +64,18 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       }
       return active.bg.hex;
     }) as TemplateFunc["fn"],
+    argTypes: [],
+    returnType: "string",
+  };
+
+  // [LAW:one-source-of-truth] The decoration the walk dealt this segment — the
+  // same colour an absent `bg:` resolves to. A threshold names it as its calm
+  // arm (`ramp … 0 (tint) heat "warning" …`): a calm cell states nothing, so it
+  // wears decoration like any cell that states nothing, rather than a fixed
+  // role two neighbours would share.
+  const tint: TemplateFunc = {
+    fn: (() =>
+      requireActiveSegment(ref, "{{ tint }}").tint.hex) as TemplateFunc["fn"],
     argTypes: [],
     returnType: "string",
   };
@@ -121,7 +133,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  return { ...palette, bgOf, gauge };
+  return { ...palette, bgOf, tint, gauge };
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

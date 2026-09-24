@@ -122,6 +122,14 @@ describe("no bg/fg templates → the tint, and text chosen on it", () => {
     expect(style.color?.value?.hex).toBe(TEXT_ON_TINT);
   });
 
+  test("{{ tint }} is the dealt decoration, readable inside bg: itself — a threshold's calm arm", () => {
+    const h = makeHarness();
+    const calm = resolve(h, makeTestPalette(), h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'), undefined);
+    expect(calm.bgcolor?.value?.hex).toBe(TINT.hex);
+    const hot = resolve(h, makeTestPalette(), h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'), undefined);
+    expect(hot.bgcolor?.value?.hex).toBe("#ff4444");
+  });
+
   test("an authored bg paints over the tint — meaning outranks decoration", () => {
     const h = makeHarness();
     const style = resolve(h, makeTestPalette(), h.parse("error"), undefined);
@@ -384,6 +392,7 @@ describe("segment color functions in the engine", () => {
       segName: SEG,
       palette: makeTestPalette(),
       disclosure: DISCLOSURE,
+      tint: TINT,
       bg: undefined,
     };
     const fragments = tpl.evaluate({});

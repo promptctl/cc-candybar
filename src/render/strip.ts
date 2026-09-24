@@ -94,7 +94,7 @@ export interface BuildLineOptions {
 // [LAW:dataflow-not-control-flow] Charset variability lives in these VALUES,
 // not in branches: per style, each charset names the joiner-construction
 // options. The unicode entries are empty on purpose — rich-js owns its
-// canonical powerline glyphs (U+E0B0 / U+E0B6+U+E0B4) and restating them here
+// canonical powerline glyphs (U+E0B0 / U+E0B1 / U+E0B6+U+E0B4) and restating them here
 // would be a second source that could drift [LAW:one-source-of-truth]. The
 // ascii glyphs are DELIBERATELY single-column (same display width as the
 // unicode caps) so stripChromeCols stays charset-invariant; the
@@ -102,7 +102,9 @@ export interface BuildLineOptions {
 // style × charset. Widen a glyph and that pin fails loudly.
 const POWERLINE_GLYPHS: Record<Charset, PowerlineJoinerOptions> = {
   unicode: {},
-  ascii: { glyph: ">" },
+  // The divider is drawn between neighbours whose backgrounds match, where the
+  // arrow would vanish; `|` is its single-column ascii form.
+  ascii: { glyph: ">", divider: "|" },
 };
 const CAPSULE_GLYPHS: Record<Charset, CapsuleJoinerOptions> = {
   unicode: {},

@@ -2,20 +2,24 @@
 // of the theme's own decorative vocabulary. Rationale, measurements and the
 // rejected alternatives: design-docs/COLOUR-FROM-THEME-VOCABULARY.md.
 //
-// The rule: a segment's decorative background is `mix(base, themeHue, amount)`
-// — both operands colours the theme already contains — with the entry chosen
-// by the node's position in the tree. It SELECTS from the theme; it never
-// synthesises a colour.
+// The rule: a segment's decorative background is the theme's `base` mixed
+// toward the theme's `hue` — lightness `amount` of the way, chroma
+// `DECOR_CHROMA_SHARE` of the way, the hue's own angle — with the entry chosen
+// by the node's position in the tree. Every coordinate is one the theme
+// already contains or lies between two it contains: it SELECTS from the theme;
+// it never synthesises saturation the theme lacks.
 //
 // [LAW:effects-at-boundaries] Pure. No renderer wiring, no I/O, no traversal
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
-// imports only rich-js, which owns the one colour operation used (`blendRgb`);
+// imports only rich-js, which owns every colour operation used (`mixAxes`,
+// `blendRgb`);
 // cc-candybar keeps the POLICY (which roles, which amounts, which address
 // formula) and no colour arithmetic of its own.
 
 import {
   blendRgb,
+  Oklch,
   contrastFor,
   contrastRatio,
   ensureContrast,
@@ -39,9 +43,28 @@ export type DecorHue = (typeof DECOR_HUES)[number];
 export const DECOR_BASES = ["surface", "panel", "surface-lighten-1"] as const;
 export type DecorBase = (typeof DECOR_BASES)[number];
 
-/** Tint amounts. Decoration never exceeds the largest — that bound is the tint region's edge. */
+/**
+ * How far a tint's LIGHTNESS moves from its base toward its hue. Decoration
+ * never moves further than the largest — that bound is the tint region's edge,
+ * and it is a lightness bound because every floor the regions are held to
+ * (state over tint, trigger over plane, text over cell) is a contrast ratio,
+ * which lightness decides.
+ */
 export const DECOR_AMTS = [0.16, 0.3] as const;
 export type DecorAmount = (typeof DECOR_AMTS)[number];
+
+/**
+ * How far a tint's CHROMA moves from its base toward its hue: most of the way.
+ * Chroma is the axis a theme's identity is carried on and the contrast floors
+ * barely read, so it is decoupled from `amount` rather than dragged along with
+ * it. Tied to the lightness amount, the bar wore 19–57% of each theme's accent
+ * chroma and distinct themes converged (dracula ~ rose-pine-moon ΔE .006);
+ * raising the amount instead pulled tints onto the state region and broke its
+ * floors (brandon-theme-picker-bgw.8fp). Below 1, so a tint stays quieter than
+ * the accent it is drawn from; the sRGB gamut lowers it further on pale bases,
+ * which is the most a light theme's surface can hold.
+ */
+export const DECOR_CHROMA_SHARE = 0.8;
 
 /** The tint region's edge: the most-tinted cell any hue can produce. Derived, never restated. */
 export const DECOR_MAX_AMOUNT: DecorAmount = DECOR_AMTS.reduce((a, b) =>
@@ -73,15 +96,21 @@ export interface DecorEntry {
 }
 
 /**
- * The decorative vocabulary, ORDERED: amount-major, then hue, then base, so
- * consecutive indices walk the bases of one hue before changing hue, and the
- * whole lighter set precedes the whole deeper set. 2 × 3 × 3 = 18 entries, all
- * of them the theme's own. An address selects an entry; it never synthesises.
+ * The decorative vocabulary, ORDERED: amount-major, then base, then hue, so
+ * consecutive indices walk the HUES before changing base, and the whole
+ * lighter set precedes the whole deeper set. 2 × 3 × 3 = 18 entries, all of
+ * them the theme's own. An address selects an entry; it never synthesises.
+ *
+ * Hue is the fastest axis because it is the one a theme is recognised by. A
+ * cell's address step moves the index by only a few entries against its
+ * row's, so the fastest axis is the one neighbours differ in: base-fastest
+ * spent the theme's hues on ROWS and left neighbouring cells a surface
+ * lightness apart (ΔE ~.04, a whole row one hue — brandon-theme-picker-bgw.8fp).
  */
 export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_AMTS.flatMap(
   (amount) =>
-    DECOR_HUES.flatMap((hue) =>
-      DECOR_BASES.map((base) => ({ base, hue, amount })),
+    DECOR_BASES.flatMap((base) =>
+      DECOR_HUES.map((hue) => ({ base, hue, amount })),
     ),
 );
 
@@ -273,21 +302,26 @@ export function paletteRole(
 }
 
 /**
- * The colour of one vocabulary entry in `palette`: the theme's `base` tinted
- * toward the theme's `hue` by `amount`. [LAW:one-source-of-truth] The one
- * place the rule is spelled — `decorFor` renders through it and `stateFor`
- * measures against it, so the floor is enforced against the very bytes a tint
- * cell will show, not a second transcription of the formula.
+ * The colour of one vocabulary entry in `palette`: the theme's `base` moved
+ * toward the theme's `hue` in OKLCH — lightness `amount` of the way, chroma
+ * `DECOR_CHROMA_SHARE` of the way, onto the hue's own angle, keeping the
+ * base's opacity. [LAW:one-source-of-truth] The one place the rule is spelled
+ * — `decorFor` renders through it and `stateFor` measures against it, so the
+ * floor is enforced against the very bytes a tint cell will show, not a second
+ * transcription of the formula.
  */
 export function decorEntryColour(
   palette: Palette,
   { base, hue, amount }: DecorEntry,
 ): ColorRgba {
-  return blendRgb(
-    paletteRole(palette, base),
-    paletteRole(palette, hue),
-    amount,
-  );
+  return Oklch.fromRgba(paletteRole(palette, base))
+    .mixAxes(Oklch.fromRgba(paletteRole(palette, hue)), {
+      l: amount,
+      c: DECOR_CHROMA_SHARE,
+      h: 1,
+      alpha: 0,
+    })
+    .toRgba();
 }
 
 /** A node's decorative background: the colour of the entry its address selects. */

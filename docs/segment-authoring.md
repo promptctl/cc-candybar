@@ -353,7 +353,7 @@ value wins, exactly as in `ramp`:
   segments: {
     ctx: {
       template: '◔ {{ .context.contextLeft }}% {{ cascade .context.contextLeft "0:COMPACT!" "25:tight" "60:roomy" }}',
-      bg: '{{ ramp .context.contextLeft "step" 0 "error" 25 "warning" 60 "surface-active" }}',
+      bg: '{{ ramp .context.contextLeft "step" 0 "error" 25 "warning" 60 (tint) }}',
     },
   },
   root: { rows: { status: { h: ["model", "ctx"] } } },
@@ -368,8 +368,11 @@ Every position anyone might tune is a **declared variable** riding in the
 position slot; the only literal positions are the fixed ends of the value's
 domain (`0`, and `100` for a percentage). The knob is then one number to
 edit, and `check` refuses a descending pair loudly instead of sorting the
-stops into a ramp you did not write. The one-threshold form — calm until the
-knob, the warning colour from there:
+stops into a ramp you did not write. The calm stop is `(tint)`: the
+decoration the segment would wear with no `bg:` at all. A calm cell states
+nothing, so it wears what every cell that states nothing wears. A fixed role
+such as `panel` there paints two calm neighbours as one slab. The
+one-threshold form — calm until the knob, the warning colour from there:
 
 ```json5 check:pass
 {
@@ -386,7 +389,7 @@ knob, the warning colour from there:
   segments: {
     budget: {
       template: "{{ .budget.period }} ${{ .budget.spent }}/{{ .budget.limit }} · {{ .budget.spentPct }}% spent · {{ .budget.timePct }}% elapsed",
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budgetWarnAt "warning" }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) .budgetWarnAt "warning" }}',
     },
   },
   root: { rows: { status: { h: ["model", "context", "budget"] } } },
@@ -417,7 +420,7 @@ rose-pine's `warning`):
   segments: {
     budget: {
       template: '{{ .budget.period }} ${{ printf "%.2f" .budget.spent }}/{{ .budget.limit }} · {{ .budget.spentPct }}% spent · {{ .budget.timePct }}% elapsed{{ if gt .budget.spentPct .budget.timePct }} ⚑{{ end }}',
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budgetHeatAt "warning" .budgetWarnAt "error" }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) .budgetHeatAt "warning" .budgetWarnAt "error" }}',
       when: "{{ gt .budget.limit 0 }}",
     },
   },
@@ -736,7 +739,7 @@ field, which the script does not print. Move the knob out of the namespace
   segments: {
     budget: {
       template: "{{ .budget.spentPct }}% spent",
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budget.warnAt "error" }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) .budget.warnAt "error" }}',
     },
   },
   root: { rows: { status: { h: ["model", "budget"] } } },
@@ -767,7 +770,7 @@ arguments from 1 — `arg 5` is the second stop's position, the knob:
   segments: {
     budget: {
       template: "{{ .budget.spentPct }}% spent",
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budgetWarnAt "error" }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) .budgetWarnAt "error" }}',
     },
   },
   root: { rows: { status: { h: ["model", "budget"] } } },
@@ -802,7 +805,7 @@ makes a descending pair the user cannot repair from the knob:
   segments: {
     budget: {
       template: "{{ .budget.spentPct }}% spent",
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" 50 "warning" .budgetWarnAt "error" }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) 50 "warning" .budgetWarnAt "error" }}',
     },
   },
   root: { rows: { status: { h: ["model", "budget"] } } },
@@ -830,7 +833,7 @@ ColorRamp stops must be in ascending position order; stop 2 at 40 follows stop 1
   segments: {
     budget: {
       template: "{{ .budget.spentPct }}% spent",
-      bg: '{{ ramp .budget.spentPct "step" 0 "panel" .budgetWarnAt }}',
+      bg: '{{ ramp .budget.spentPct "step" 0 (tint) .budgetWarnAt }}',
     },
   },
   root: { rows: { status: { h: ["model", "budget"] } } },

@@ -89,6 +89,7 @@ export function resolveSegmentColors(
     segName,
     palette,
     disclosure,
+    tint,
     bg: undefined as ColorRgba | undefined,
   };
   ref.current = active;

@@ -8,7 +8,9 @@ Tracking tickets: the epic `candybar-render-ai7` and its children. The tickets a
 
 ## The rule
 
-> A segment's decorative background is `mix(base, themeHue, amount)` — both operands colours the theme already contains — with the entry chosen by the node's address in the layout tree.
+> A segment's decorative background is the theme's `base` mixed toward the theme's `hue` in OKLCH — lightness `amount` of the way, chroma `DECOR_CHROMA_SHARE` (0.8) of the way, onto the hue's own angle — with the entry chosen by the node's address in the layout tree.
+
+(Until brandon-theme-picker-bgw.8fp this was one sRGB `mix(base, hue, amount)`, which moved chroma and lightness together; see Decisions.)
 
 It **selects** from the theme; it never **synthesizes** a new colour. Everything below is why that sentence is the whole design, and what had to be measured before it could be written.
 
@@ -66,7 +68,7 @@ Confusion got solved three separate times by the same move: give each concern it
 
 | region | occupant | boundary |
 |---|---|---|
-| tint (`mix <= 0.30`) | ordinary bar segments | decoration never exceeds 0.30 |
+| tint (lightness pull `<= 0.30`) | ordinary bar segments | decoration never moves lightness more than 0.30 toward its hue |
 | state | an open disclosure's trigger | enforced ≥ 2.2 contrast above tint |
 | state, plane 1 | that trigger's band | trigger's hue, recessed toward `background` |
 | state, plane 2..N | nested submenus | next hue in the vocabulary, recessed further |
@@ -119,6 +121,14 @@ Each of these was considered and measured. They are recorded with their reasons 
 **Scope is backgrounds only.** `fg:` specs and `GIT_QUIET_FG` are authorial de-emphasis, not decoration, and stay as they are. One exception: text on a state cell is contrast-chosen, because a fixed foreground measurably fails on pure hues — AA on dark themes, AA-large on light, with solarized-light the floor at 3.13:1.
 
 **Text nobody authored is chosen on every cell, not only state cells** (brandon-theme-picker-bgw.b2g; this supersedes the text half of the decision above — state cells included, so solarized-light's 3.13:1 is gone). Bar cells used to keep the terminal's own text, on the premise that it reads on whatever the theme paints behind it. A contrast audit of every bundled theme under a dark and a light terminal measured that premise false in every theme for one polarity or the other: 1.05:1 for the dark themes under a light terminal, and the same for the light themes under a dark one. The bar paints its own background, so its text must come from the same place. An unauthored `fg:` is now `textOn` of the background the cell resolves to, in every region. `textOn` floors its pick at `TEXT_MIN_CONTRAST`, WCAG AA's 4.5:1 for normal text, because on a mid-luminance tint neither pole clears (atom-one-dark's foreground measured 2.49:1). The pole taken is the one on the side rich-js `contrastFor` names, and a slide deepens it that way: the pole that merely measures better can sit on the far side of the background (39 of the registry's 828 tints and band colours), and sliding it would carry its hue through the background into the other polarity. 3:1 was tried first; it passed the audit but looked washed out on the saturated threshold colours, and a statusline is small text. Authored semantic text in the bundled segments (git accents, the cache timer) goes through `readableOn` at the same floor, which moves lightness only and so keeps the hue that carries the meaning. Quiet git structure keeps its own 3:1: it is meant to recede. `pnpm gallery` renders every theme with one payload for looking at this again.
+
+**A tint carries its theme's chroma, not its surface's** (brandon-theme-picker-bgw.8fp). One `mix(base, hue, amount)` with `amount ≤ 0.30` made every tint 70–84% surface. Measured with `pnpm gallery` and ΔE_OK: the bar wore 19–57% of each theme's accent chroma, and two distinct themes' bars sat as close as ΔE .018 cell by cell (dracula and rose-pine-moon), under what the eye resolves. Raising the amount moved lightness toward the hue too, onto the state region, and broke 13 of the floors below. Three changes fixed it, and every floor in `test/decor.test.ts` held unchanged:
+
+- **Chroma is decoupled from lightness.** A tint is `base.mixAxes(hue, { l: amount, c: 0.8, h: 1, alpha: 0 })` (rich-js `Oklch.mixAxes`). Every floor here is a contrast ratio, and lightness decides contrast, so the floors see what they saw before while the tint carries 0.8 of the hue's chroma, or all the sRGB gamut holds at that lightness on pale light-theme surfaces. The minimum cell-wise distance between two themes rose from .018 to .029, between rose-pine and rose-pine-moon, two variants of one family.
+- **Hue is the vocabulary's fastest axis.** A cell's address step moves the index only a couple of entries against its row's, so the fastest axis is the one neighbours differ in. Base-fastest spent the theme's hues on rows: a whole row was one hue, and neighbours differed by surface lightness alone (ΔE ~.04, and nothing at all on textual-ansi, whose surfaces are one colour).
+- **A threshold's calm arm is the tint.** `{{ tint }}` returns the decoration the segment's region dealt it, available in `bg:` itself, and the bundled cascades end their calm arm on `(tint)`. A calm cell states nothing, so it wears decoration. The fixed `panel` it replaces painted the calm block and weekly as one slab.
+
+Where a theme's own roles coincide, neighbours still share a background: `default` declares its accent as its primary, and catppuccin-latte's secondary and accent sit 10° apart and fold together on its pale surface. No selection by address can prevent that without reading who is visible next to whom, which the isolation guarantee rules out. The joiner, which does know the neighbours, draws the powerline divider (U+E0B1, in the left cell's text colour) wherever two backgrounds sit within ΔE .04 (rich-js `SEAM_MIN_DELTA_E`), so the seam stays visible. `test/theme-identity.test.ts` pins all three facts over the bundled bar, hot and calm: the chroma share, the theme-to-theme floor (.025), and every arrow seam at or above .04, with dividers only in themes whose own hues fold.
 
 **Truecolor is the target.** `colorCompatibility` is an explicit setting and the daemon cannot detect client depth — which is why `"auto"` is deliberately unrepresentable. At 256 and ansi the vocabulary degrades toward flat, which is the floor the design already guarantees.
 
