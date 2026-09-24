@@ -719,11 +719,12 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 //
 // A pick leaves its picker open with its page cursor kept
 // (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
-// try must not cost a reopen and a page hunt; ✕ closes. (A pick that changes
-// the pagination itself — a style or padding change — lands on the kept
-// cursor clamped into the new page set, which renderPicker owns.) That holds for a preset pick too, whose click swaps
-// the whole root — the menu survives it because every preset root references
-// this one anchor and both open states are session keys, not tree positions.
+// try must not cost a reopen and a page hunt; ✕ closes. That holds for a
+// preset pick too, whose click swaps the whole root — the menu survives it
+// because every preset root references this one anchor and both open states
+// are session keys, not tree positions. A pick that changes the pagination
+// itself (a style or padding change) lands on the kept cursor clamped into
+// the new page set, which renderPicker owns.
 //
 // [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
 // and `deriveConfigActionValidators` each explode these dual declarations
