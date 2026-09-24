@@ -103,9 +103,14 @@ export interface DecorEntry {
  *
  * Hue is the fastest axis because it is the one a theme is recognised by. A
  * cell's address step moves the index by only a few entries against its
- * row's, so the fastest axis is the one neighbours differ in: base-fastest
- * spent the theme's hues on ROWS and left neighbouring cells a surface
- * lightness apart (ΔE ~.04, a whole row one hue — brandon-theme-picker-bgw.8fp).
+ * row's, so the fastest axis is the one neighbours most often differ in:
+ * base-fastest spent the theme's hues on ROWS and left the bundled bar's
+ * neighbouring cells a surface lightness apart (ΔE ~.04, a whole row one hue
+ * — brandon-theme-picker-bgw.8fp). It is not a guarantee: a step of a whole
+ * hue period (3 entries — van-der-corput's half step at cell weight is 3.3)
+ * keeps the hue and changes only the base, so cells 0/1, 2/3 and 4/5 of a flat
+ * row share a hue. The bundled bar's seams are measured, not assumed
+ * (test/theme-identity.test.ts).
  */
 export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_AMTS.flatMap(
   (amount) =>
@@ -312,17 +317,33 @@ export function paletteRole(
  */
 export function decorEntryColour(
   palette: Palette,
-  { base, hue, amount }: DecorEntry,
+  entry: DecorEntry,
 ): ColorRgba {
-  return Oklch.fromRgba(paletteRole(palette, base))
-    .mixAxes(Oklch.fromRgba(paletteRole(palette, hue)), {
-      l: amount,
+  let colours = DECOR_MEMO.get(palette);
+  if (colours === undefined) {
+    colours = new Map();
+    DECOR_MEMO.set(palette, colours);
+  }
+  const hit = colours.get(entry);
+  if (hit !== undefined) return hit;
+  const colour = Oklch.fromRgba(paletteRole(palette, entry.base))
+    .mixAxes(Oklch.fromRgba(paletteRole(palette, entry.hue)), {
+      l: entry.amount,
       c: DECOR_CHROMA_SHARE,
       h: 1,
       alpha: 0,
     })
     .toRgba();
+  colours.set(entry, colour);
+  return colour;
 }
+
+// Every segment of every render asks for its tint, and the answer is a pure
+// function of (palette, entry) — two OKLCH conversions, a mix, and a possible
+// gamut bisection, ~5% of a render before this memo. Keyed by the entry's
+// identity: an address selects an element OF DECOR_VOCABULARY, so each map
+// holds at most its 18 colours.
+const DECOR_MEMO = new WeakMap<Palette, Map<DecorEntry, ColorRgba>>();
 
 /** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (palette: Palette, address: Address): ColorRgba =>
@@ -349,14 +370,15 @@ const STATE_STEPS = 12;
 
 /**
  * The state colour of `hue`: an open disclosure's trigger is drawn here. The
- * pure form of the hue, pushed toward `foreground` in twelfths until it clears
+ * pure form of the hue, pushed toward `foreground` in twelfths — and past it,
+ * along its own lightness, when the pole itself falls short — until it clears
  * `STATE_FLOOR` against the most-tinted cell that hue produces on EVERY base.
  * A hue that already clears at step zero is byte-unchanged — the enforcement
  * is a floor, not a transform.
  *
- * [LAW:dataflow-not-control-flow] Thirteen candidates, one predicate, the
+ * [LAW:dataflow-not-control-flow] Fourteen candidates, one predicate, the
  * first that passes; the values decide, not a branch per theme.
- * [LAW:no-silent-failure] A hue that cannot clear even at `foreground` throws
+ * [LAW:no-silent-failure] A hue that cannot clear even beyond `foreground` throws
  * naming palette and hue — never a quieter colour.
  */
 export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
@@ -369,14 +391,28 @@ export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
     STATE_PURE_AMOUNT,
   );
   const foreground = paletteRole(palette, "foreground");
-  const state = Array.from({ length: STATE_STEPS + 1 }, (_, k) =>
-    blendRgb(pure, foreground, k / STATE_STEPS),
-  ).find((candidate) =>
+  // Past the pole: `foreground` slid on in OKLCH lightness until it clears
+  // every tint of the hue. A look can pull the pole itself under the floor
+  // (atom-one-dark's foreground under `dim` measured 2.19 against its primary
+  // tints), and the palette holds no stronger role to reach for. The tints of
+  // one hue share a polarity, so each slide moves the same way and never
+  // undoes the one before it; when they straddle the cutoff it can, and the
+  // check below still refuses.
+  const beyond = tintEdge.reduce(
+    (candidate, tint) => ensureContrast(candidate, tint, STATE_FLOOR),
+    foreground,
+  );
+  const state = [
+    ...Array.from({ length: STATE_STEPS + 1 }, (_, k) =>
+      blendRgb(pure, foreground, k / STATE_STEPS),
+    ),
+    beyond,
+  ].find((candidate) =>
     tintEdge.every((tint) => contrastRatio(candidate, tint) >= STATE_FLOOR),
   );
   if (state === undefined) {
     throw new Error(
-      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even at foreground`,
+      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even beyond foreground`,
     );
   }
   return state;

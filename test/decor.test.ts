@@ -14,7 +14,9 @@ import {
   Oklch,
   Palette,
   relativeLuminance,
+  transposePalette,
 } from "@promptctl/rich-js";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   BAND_RECESSION,
   BAND_WINDOW,
@@ -340,17 +342,39 @@ describe("done-when: contrast(state, decorMax) >= 2.2 for every theme × hue × 
     }
   });
 
+  // A look is a palette the user can pick at runtime, and bandFor runs for every
+  // segment, so a throw here is a ⚠ in every cell. dim pulls some themes'
+  // foreground itself under the floor (atom-one-dark primary: 2.19).
+  test("holds under every bundled look, where the pole alone can fall short", () => {
+    for (const [look, key] of Object.entries(DEFAULT_DSL_CONFIG.looks)) {
+      for (const base of REGISTRY) {
+        const palette = transposePalette(base, key);
+        for (const hue of DECOR_HUES) {
+          const state = stateFor(palette, hue);
+          const worst = Math.min(...tintEdge(palette, hue).map((t) => contrastRatio(state, t)));
+          expect([base.name, look, hue, worst >= STATE_FLOOR]).toEqual([base.name, look, hue, true]);
+        }
+      }
+    }
+  });
+
   test("the search reaches foreground itself: solarized-dark's secondary lands on the pole", () => {
     const palette = getThemePalette("solarized-dark");
     expect(stateFor(palette, "secondary").hex).toBe(paletteRole(palette, "foreground").hex);
   });
 
-  test("a hue that cannot clear even at foreground throws, naming palette and hue", () => {
-    // Every role one grey: every candidate sits at contrast 1 against every tint.
+  test("a hue that cannot clear even beyond foreground throws, naming palette and hue", () => {
+    // The hue's tints straddle the luminance cutoff — one base black, one white,
+    // the hue grey — so sliding away from one tint slides toward the other.
     const grey = new ColorRgba(128, 128, 128);
-    const roles = [...DECOR_BASES, ...DECOR_HUES, "foreground", "background"] as const;
-    const flat = new Palette("flat", true, new Map(roles.map((role) => [role, grey])));
-    expect(() => stateFor(flat, "primary")).toThrow(/"flat".*"primary".*foreground/);
+    const [dark, light, ...rest] = DECOR_BASES;
+    const roles = new Map<string, ColorRgba>([
+      [dark, new ColorRgba(0, 0, 0)],
+      [light, new ColorRgba(255, 255, 255)],
+      ...[...rest, ...DECOR_HUES, "foreground", "background"].map((role) => [role, grey] as const),
+    ]);
+    const straddling = new Palette("straddling", true, roles);
+    expect(() => stateFor(straddling, "primary")).toThrow(/"straddling".*"primary".*foreground/);
   });
 });
 
