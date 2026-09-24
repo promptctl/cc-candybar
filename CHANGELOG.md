@@ -1,3 +1,10 @@
+## [1.74.3](https://github.com/promptctl/cc-candybar/compare/v1.74.2...v1.74.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* **themes:** every theme's bar carries its own accents; neighbours never blur ([#236](https://github.com/promptctl/cc-candybar/issues/236)) ([6673b67](https://github.com/promptctl/cc-candybar/commit/6673b67e978e1af0cc4ce52b15d6254f4a23468b))
+
 ## [1.74.2](https://github.com/promptctl/cc-candybar/compare/v1.74.1...v1.74.2) (2026-09-24)
 
 
