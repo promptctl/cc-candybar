@@ -1,3 +1,10 @@
+## [1.74.5](https://github.com/promptctl/cc-candybar/compare/v1.74.4...v1.74.5) (2026-09-24)
+
+
+### Bug Fixes
+
+* **themes:** text floors hold at 256 colours ([#238](https://github.com/promptctl/cc-candybar/issues/238)) ([8520ee9](https://github.com/promptctl/cc-candybar/commit/8520ee9c322539acd1e4566a2c41e07a74e53d54))
+
 ## [1.74.4](https://github.com/promptctl/cc-candybar/compare/v1.74.3...v1.74.4) (2026-09-24)
 
 
