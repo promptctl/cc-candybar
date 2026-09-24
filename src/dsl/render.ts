@@ -67,6 +67,8 @@ import {
 } from "../render/action.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
+import { carouselFuncs } from "../render/carousel.js";
+import { themePreviewFuncs } from "../render/theme-preview.js";
 import {
   menuFuncs,
   collectMenuDrops,
@@ -390,6 +392,8 @@ export function registerDslConfig(
     // slot may hold a RULE (brandon-themes-dzl) and `paletteForThemeName` of a
     // template would throw at LOAD for a config that renders perfectly well.
     basePalette: declaredBasePalette(config.globals.palette),
+    // The compile-only floor for the drawn palette: the base under no look.
+    palette: declaredBasePalette(config.globals.palette),
     // Same contract as stripStyle: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -436,6 +440,8 @@ export function registerDslConfig(
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime, activeSegment),
+      ...themePreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
       // segment currently rendering — the same palette its `bg:`/`fg:` resolve
@@ -926,6 +932,7 @@ export function renderDsl(
   // this one object, so a look click recolours the whole bar from one
   // transposition, not one per segment.
   const palette = transposedPalette(basePalette, look.value);
+  compiled.menuRuntime.action.palette = palette;
 
   perSegmentSink?.clear();
 

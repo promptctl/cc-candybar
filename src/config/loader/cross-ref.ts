@@ -562,7 +562,7 @@ export function validateCrossReferences(
         if (!Object.prototype.hasOwnProperty.call(cfg.actions, pref)) {
           ctx.issues.push({
             path: `segments.${segName}.${field}`,
-            message: `${field} references unknown action "${pref}" (in a picker or menu)`,
+            message: `${field} references unknown action "${pref}" (in a picker, menu or carousel)`,
             line: findKeyLine(ctx.source, ["segments", segName, field]),
           });
         }

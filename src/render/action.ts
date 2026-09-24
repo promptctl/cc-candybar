@@ -292,6 +292,11 @@ export interface ActionRuntime {
   // A picked theme or look recolours the WHOLE bar, so the render-wide base is
   // also the honest input even inside a `palette:`-pinned segment.
   basePalette: Palette;
+  // [LAW:one-source-of-truth] The palette the bar is DRAWN in this render — the
+  // base above transposed by the render's look, the one object every unpinned
+  // segment colours from — published at the same site. `{{ themePreview }}`
+  // samples it, so a preview cannot show a palette the bar is not wearing.
+  palette: Palette;
 }
 
 // ─── Compilation ───────────────────────────────────────────────────────────────
