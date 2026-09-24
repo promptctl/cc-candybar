@@ -562,7 +562,7 @@ export interface Decoration {
 }
 
 /**
- * [LAW:one-source-of-truth] ONE read per segment, projected three ways. On the
+ * [LAW:one-source-of-truth] ONE read per segment, projected two ways. On the
  * bar, one vocabulary entry gives both the tint and the hue of the band the
  * cell opens (at depth 0), so a cell and the band it drops cannot disagree
  * about their hue. On a band, the item is placed by its address and OPENS the
