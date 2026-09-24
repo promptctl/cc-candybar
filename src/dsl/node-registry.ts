@@ -36,6 +36,7 @@ import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
   placedBy,
+  type Address,
   type AddressStep,
   type Disclosure,
   type Distribution,
@@ -119,11 +120,12 @@ export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 // line carries, not one a direction or the walk decides. The one exception is
 // an `inline` body's first row: it joins the trigger's own row (`span: "row"`,
 // band `own`) unled, because the trigger beside it is already its close.
-export interface RenderedLine {
-  readonly cells: readonly RichText[];
+export interface Line<C> {
+  readonly cells: readonly C[];
   readonly band: "own" | "deeper";
   readonly span: "shared" | "row";
 }
+export type RenderedLine = Line<RichText>;
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -266,10 +268,13 @@ export interface SegmentStyles {
 // A child whose row 0 claims the row (an open inline disclosure) replaces its
 // horizontal siblings whole, their drops included. Every container settles the
 // claim, so it never reaches past the nearest enclosing one.
-function composeBlocks(
+//
+// [LAW:one-source-of-truth] Generic over what a line's cells ARE, so the walk's
+// rendered cells and `layoutRows`' placed segments are composed by this one rule.
+function composeBlocks<C>(
   direction: Direction,
-  blocks: readonly RenderedLines[],
-): RenderedLines {
+  blocks: ReadonlyArray<ReadonlyArray<Line<C>>>,
+): ReadonlyArray<Line<C>> {
   switch (direction) {
     case "vertical":
       return settled(blocks.flatMap((b) => b));
@@ -282,7 +287,7 @@ function composeBlocks(
       // [[]] here would render as a spurious blank line.
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
       if (height === 0) return [];
-      const row0: RenderedLine = {
+      const row0: Line<C> = {
         cells: blocks.flatMap((b) => b[0]?.cells ?? []),
         band: "own",
         span: "shared",
@@ -293,7 +298,45 @@ function composeBlocks(
   }
 }
 
-function settled(lines: RenderedLines): RenderedLines {
+// A segment the bar would draw, by name and the address the walk would place
+// it at — the layout's own facts, before any template is evaluated.
+export interface PlacedSegment {
+  readonly name: string;
+  readonly address: Address;
+}
+
+// [LAW:one-source-of-truth] The rows a compiled tree lays its CLOSED segments
+// out in, composed by the walk's own `composeBlocks` over lines whose cells
+// are placed segments, and addressed through the one `childStep` the walk
+// extends every address by. A node `shown` refuses contributes no row, and a
+// disclosure body is not a child, so a closed bar has none of it. This is the
+// ARRANGEMENT — no template is evaluated, so a segment is one block wherever
+// the layout places it, however many lines (or none) its template renders.
+export function layoutRows(
+  node: CompiledNode,
+  shown: (node: CompiledNode) => boolean,
+): PlacedSegment[][] {
+  const lines = (
+    n: CompiledNode,
+    address: Address,
+  ): ReadonlyArray<Line<PlacedSegment>> => {
+    if (!shown(n)) return [];
+    if (n.kind === "segment") {
+      return [
+        { cells: [{ name: n.name, address }], band: "own", span: "shared" },
+      ];
+    }
+    return composeBlocks(
+      n.direction,
+      n.children.map((child, index) =>
+        lines(child, [...address, childStep(n, index)]),
+      ),
+    );
+  };
+  return lines(node, []).map((line) => [...line.cells]);
+}
+
+function settled<C>(lines: ReadonlyArray<Line<C>>): ReadonlyArray<Line<C>> {
   return lines.map((line) =>
     line.span === "row" ? { ...line, span: "shared" } : line,
   );

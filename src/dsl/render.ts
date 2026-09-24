@@ -25,6 +25,7 @@ import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { addableSegmentDomains } from "../config/edit-chrome.js";
+import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -74,6 +75,7 @@ import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
+import { layoutPreviewFuncs } from "../render/layout-preview.js";
 import {
   menuFuncs,
   collectMenuDrops,
@@ -99,6 +101,7 @@ import {
 // render.ts threads the recursion (compileChild/renderChild) in as
 // capabilities; it never re-switches on node kind.
 import {
+  layoutRows,
   nodeType,
   type Compiled,
   type CompiledNode,
@@ -406,6 +409,8 @@ export function registerDslConfig(
     // Same contract again: the compile-only floor is the registration-time
     // style's seam under the default charset.
     seamCols: stripSeamCols({ style: "powerline", charset: DEFAULT_CHARSET }),
+    // Same contract again: with no render there is no walk, and no rows.
+    layout: () => [],
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -451,6 +456,7 @@ export function registerDslConfig(
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime, activeSegment),
       ...themePreviewFuncs(actionRuntime, activeSegment),
+      ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
       // segment currently rendering — the same palette its `bg:`/`fg:` resolve
@@ -1069,6 +1075,29 @@ export function renderDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
+  // [LAW:one-source-of-truth] The rows `{{ layoutPreview }}` draws, from the
+  // tree about to be walked and the walk's own visibility: a node's `when`,
+  // then a segment's own — and a segment whose `when` throws is SHOWN, because
+  // the walk draws an error cell exactly there. Edit mode's `+`/`-` and reset
+  // banner are affordances over the arrangement, not part of it. Each segment
+  // keeps the palette the walk colours it in, pin included.
+  const shown = (node: CompiledNode): boolean => {
+    if (!evaluateWhen(node.when, scope)) return false;
+    if (node.kind === "container") return true;
+    if (node.name.startsWith(EDIT_NS)) return false;
+    try {
+      return evaluateWhen(compiled.segments[node.name]!.when, scope);
+    } catch {
+      return true;
+    }
+  };
+  compiled.menuRuntime.action.layout = () =>
+    layoutRows(root, shown).map((row) =>
+      row.map((placed) => ({
+        ...placed,
+        palette: compiled.segments[placed.name]!.palette ?? palette,
+      })),
+    );
   return (
     renderNode(root, true, BAR_ROOT)
       // A row's fill demands resolve here and nowhere else: this is the one place a
