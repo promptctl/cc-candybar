@@ -1,3 +1,10 @@
+## [1.74.4](https://github.com/promptctl/cc-candybar/compare/v1.74.3...v1.74.4) (2026-09-24)
+
+
+### Bug Fixes
+
+* **themes:** decoration follows Textual's colour roles — a row is one hue, its cells differ by tone ([#237](https://github.com/promptctl/cc-candybar/issues/237)) ([768485c](https://github.com/promptctl/cc-candybar/commit/768485ceffb03e89a64d73f42112b7ec53a47871))
+
 ## [1.74.3](https://github.com/promptctl/cc-candybar/compare/v1.74.2...v1.74.3) (2026-09-24)
 
 
