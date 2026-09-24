@@ -19,12 +19,13 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { linkUrls } from "./helpers/ansi";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // U+E0B0 — the powerline right-arrow the PowerlineJoiner paints between items.
 const CHEVRON = "\uE0B0";
+const DIVIDER = "\uE0B1";
 
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
@@ -91,9 +92,8 @@ describe("segment is the rendering unit (2de.10)", () => {
 
   test("two adjacent same-bg segments read as TWO units — the structural chevron survives equal bg", () => {
     // `a` and `b` author the same bg spec against the same palette, so they
-    // resolve to the SAME background. The mid-join
-    // between them must still be painted (it would be invisible, equal fg/bg,
-    // but it is a real cell): the boundary is structural, not bg-decided.
+    // resolve to the SAME background. The mid-join between them must still be
+    // painted: the boundary is structural, not bg-decided.
     const src = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -107,11 +107,14 @@ describe("segment is the rendering unit (2de.10)", () => {
     }`;
     const out = render(src, { session_id: "s1" });
 
-    // Two items ⇒ one mid-join + one end-cap = two chevrons. Pre-fix the equal
-    // bg suppressed the mid-join, collapsing the count to one. The third
-    // chevron is the join to the global settings menu, which every bar carries
-    // (candybar-settings-ui-aok.1); the assertion here is that a↔b is painted.
-    expect(chevronCount(out)).toBe(3);
+    // Two items ⇒ one mid-join + one end-cap. Pre-fix the equal bg suppressed
+    // the mid-join. The a↔b join is now the DIVIDER — the arrow would be drawn
+    // in the shared background and vanish (rich-js PowerlineJoiner) — so the
+    // arrows are the end cap and the join to the global settings menu every
+    // bar carries (candybar-settings-ui-aok.1), and a↔b is the one divider.
+    expect(chevronCount(out)).toBe(2);
+    expect(out.split(DIVIDER).length - 1).toBe(1);
+    expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${DIVIDER}\\s*BBB`));
     expect(out).toContain("AAA");
     expect(out).toContain("BBB");
   });

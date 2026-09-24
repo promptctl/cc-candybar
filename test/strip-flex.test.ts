@@ -177,7 +177,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     // the ascii renders must contain NONE, not merely different caps.
     const PUA = /[\u{E000}-\u{F8FF}]/u;
 
-    it("powerline + ascii joins and caps with '>' and emits no private-use glyphs", () => {
+    it("powerline + ascii joins and caps with '>' (or '|' between a shared background) and emits no private-use glyphs", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb")], {
         style: "powerline",
         colorCompatibility: "none",
@@ -186,7 +186,9 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         charset: "ascii",
         width: 200,
       });
-      expect(out).toBe(" aaa > bbb >");
+      // Both cells share #445566, where the arrow would vanish: the seam is the
+      // divider, the end cap still the arrow.
+      expect(out).toBe(" aaa | bbb >");
       expect(PUA.test(out)).toBe(false);
     });
 

@@ -212,6 +212,12 @@ const GIT_TEMPLATE =
 // is a loud render error (stops must ascend — the segment shows ⚠ and
 // `cc-candybar check` fails), never a silently reordered cascade.
 //
+// The calm arm of every cascade is `(tint)`, the decoration the cell's address
+// was dealt: a calm cell states nothing, so it wears what every cell that
+// states nothing wears, and calm neighbours differ as decorated neighbours do.
+// A fixed role here (`panel`) painted the calm block and weekly as one slab
+// (brandon-theme-picker-bgw.8fp).
+//
 // block/weekly heat as the displayed (rounded) percentage rises: calm to
 // `heatThreshold`, warning to `warningThreshold`, error beyond. No `fg:` rides
 // beside the ramp: the text is chosen on whichever stop the cell resolves to
@@ -984,7 +990,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
-      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 "panel" .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
+      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
       // No `fg:`: an unauthored foreground is the theme pole that reads on the
       // background this ramp resolves to, at every stop. The hand-paired
       // `button-color-foreground` it replaces measured 1.55:1 on rose-pine's
@@ -998,7 +1004,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
-      bg: '{{ ramp (round .weekly.percentage) "step" 0 "panel" .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
+      bg: '{{ ramp (round .weekly.percentage) "step" 0 (tint) .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
@@ -1015,7 +1021,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
         '{{ template "formatEta" .weekly.etaMinutes }} to wk',
-      bg: '{{ ramp .block.etaMinutes "step" -1 "panel" 0 "error" .burn.eta.errorMinutes "warning" .burn.eta.warnMinutes "panel" }}',
+      bg: '{{ ramp .block.etaMinutes "step" -1 (tint) 0 "error" .burn.eta.errorMinutes "warning" .burn.eta.warnMinutes (tint) }}',
       when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
     },
     // Token throughput for the active turn — output / input / total tok/s, each a
@@ -1083,7 +1089,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
       // contextLeft is an integer (src/segments/context.ts rounds it), so the
       // "≤ 20 / ≤ 40" edges are the stops at 21 and 41 exactly.
-      bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 "surface-active" }}',
+      bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}',
       when: "{{ gt .context.totalTokens 0 }}",
     },
     metrics: {

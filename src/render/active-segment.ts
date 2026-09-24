@@ -41,6 +41,14 @@ export interface ActiveSegment {
    */
   readonly palette: Palette;
   /**
+   * The decoration the segment's region dealt it — the vocabulary tint on the
+   * bar, the band item on a band. Known before any of the segment's templates
+   * run, so `{{ tint }}` is available in `bg:` itself: a threshold's calm arm
+   * names the decoration rather than a fixed role, and neighbouring calm cells
+   * differ as every other decorated cell does.
+   */
+  readonly tint: ColorRgba;
+  /**
    * The segment's resolved background, once known: the authored `bg:`, else
    * the tint its address was dealt.
    *

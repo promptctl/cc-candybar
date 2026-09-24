@@ -4,9 +4,10 @@
 // rich-js owns every color operation and knows nothing about segments;
 // cc-candybar owns segments and performs no color arithmetic of its own
 // [LAW:rich-js-owns-color-math]. This module is exactly the join: it supplies
-// rich-js's `color` and `ramp` with *which* palette, and adds the one function
+// rich-js's `color` and `ramp` with *which* palette, and adds the two functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
-// currently rendering. [LAW:one-way-deps]
+// currently rendering, and `tint`, the decoration its region dealt it.
+// [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
@@ -17,7 +18,7 @@ import {
 } from "./active-segment.js";
 
 /**
- * Bind `color`, `ramp` and `bgOf` to the segment the walk has published.
+ * Bind `color`, `ramp`, `bgOf` and `tint` to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
@@ -64,6 +65,18 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       }
       return active.bg.hex;
     }) as TemplateFunc["fn"],
+    argTypes: [],
+    returnType: "string",
+  };
+
+  // [LAW:one-source-of-truth] The decoration the walk dealt this segment — the
+  // same colour an absent `bg:` resolves to. A threshold names it as its calm
+  // arm (`ramp … 0 (tint) heat "warning" …`): a calm cell states nothing, so it
+  // wears decoration like any cell that states nothing, rather than a fixed
+  // role two neighbours would share.
+  const tint: TemplateFunc = {
+    fn: (() =>
+      requireActiveSegment(ref, "{{ tint }}").tint.hex) as TemplateFunc["fn"],
     argTypes: [],
     returnType: "string",
   };
@@ -121,7 +134,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  return { ...palette, bgOf, gauge };
+  return { ...palette, bgOf, tint, gauge };
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

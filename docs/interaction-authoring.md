@@ -1539,7 +1539,7 @@ its own placement.
 | `van-der-corput` (default) | no | bit-reversal sequence 0, ½, ¼, ¾, ⅛, … — neighbours land far apart |
 | `golden-angle` | no | index × φ mod 1 — the same isolation, a different spread |
 | `uniform` | no | every child at ½ — one tint for the whole row |
-| `monotonic` | yes | an evenly spaced ramp in declaration order |
+| `monotonic` | yes | evenly spaced positions in declaration order — through hues and bases together, not a one-hue lightness ramp |
 | `ends-interleaved` | yes | evenly spaced, alternating from both ends inward |
 
 Isolation is a property of the distribution you chose, not of the system.

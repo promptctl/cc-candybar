@@ -56,7 +56,7 @@ export class ColorSpecError extends Error {
  * A segment always has a background. `tint` is the decorative one its region
  * dealt it — a vocabulary entry on the bar, a band item under a trigger — the
  * floor every segment wears; an authored `bg:` states MEANING (a threshold's
- * `error`, a context's `surface-active`) and paints over it.
+ * `error`, a host's `warning`) and paints over it.
  * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
  * segment type is the discriminator: no segment is asked whether it "looks
  * decorative", the absence of an authored spec IS the decorated case. The
@@ -89,6 +89,7 @@ export function resolveSegmentColors(
     segName,
     palette,
     disclosure,
+    tint,
     bg: undefined as ColorRgba | undefined,
   };
   ref.current = active;
