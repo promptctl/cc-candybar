@@ -1117,13 +1117,14 @@ close.
   the verdict.
 
 Theme, look and style each open a **carousel** under the config row — `◀` and
-`▶` beside the current value, its neighbours dimmed either side as the width
+`▶` beside the current value, its neighbours either side as the width
 allows — and every click in it applies, so rotating through themes recolours the
 bar at each step. The theme and look carousels carry `{{ themePreview }}` in the
 row beneath. The preset control opens a paged picker. Every one of these shares
 one accordion key, so opening the look carousel closes the theme carousel: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
-drop-down open, so you can try several in a row; `✕` closes it.
+drop-down open, so you can try several in a row; the `✕` leading each of its
+rows closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `settings.menu` in your

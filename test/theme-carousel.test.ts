@@ -278,6 +278,18 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
+  test("a carousel naming an undeclared action is a load error, not a render surprise", () => {
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        `{ segments: { ring: { template: '{{ carousel "noSuchApply" }}' } },
+           root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } } }`,
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      ),
+    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu or carousel\)/);
+  });
+
   test("a carousel over the wrong kind of action names the carousel, not the picker", () => {
     const rt = rig(`{
       variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
