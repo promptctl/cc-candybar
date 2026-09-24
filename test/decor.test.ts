@@ -471,14 +471,14 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
         // The text lies on the side the max-contrast pick names — a light cell
         // gets darker text, a dark cell lighter — so a slide never carries it
         // through the background into the other polarity.
-        const lighter = relativeLuminance(text) > relativeLuminance(state);
+        const lighter = relativeLuminance(text) > relativeLuminance(drawnGround(state));
         expect([palette.name, hue, lighter]).toEqual([palette.name, hue, side.hex === "#ffffff"]);
         // A pole that already clears is returned untouched — the floor never
         // transforms text that was already legible.
-        if (contrastRatio(state, bestPole) >= TEXT_MIN_CONTRAST) {
+        if (contrastRatio(drawnGround(state), bestPole) >= TEXT_MIN_CONTRAST) {
           expect([palette.name, hue, text.hex]).toEqual([palette.name, hue, bestPole.hex]);
         }
-        expect([palette.name, hue, contrastRatio(state, text) >= TEXT_MIN_CONTRAST]).toEqual([
+        expect([palette.name, hue, contrastRatio(drawnGround(state), text) >= TEXT_MIN_CONTRAST]).toEqual([
           palette.name,
           hue,
           true,
