@@ -360,8 +360,9 @@ value wins, exactly as in `ramp`:
 }
 ```
 
-Write the two with the same stop positions and the word and the colour change
-together. A descending pair is a loud error in both, because a silently sorted
+The calm stop `(tint)` is the decoration the segment would wear with no `bg:`
+at all (more on it below). Write the two with the same stop positions and the
+word and the colour change together. A descending pair is a loud error in both, because a silently sorted
 cascade is a different cascade than the one you wrote.
 
 Every position anyone might tune is a **declared variable** riding in the

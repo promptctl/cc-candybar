@@ -13,8 +13,7 @@
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
 // imports only rich-js, which owns every colour operation used (`mixAxes`,
-// `blendRgb`);
-// cc-candybar keeps the POLICY (which roles, which amounts, which address
+// `blendRgb`, `ensureContrast`, `contrastFor`, `contrastRatio`); cc-candybar keeps the POLICY (which roles, which amounts, which address
 // formula) and no colour arithmetic of its own.
 
 import {
