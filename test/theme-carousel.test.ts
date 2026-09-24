@@ -51,6 +51,7 @@ import {
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { effectivePresetName } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
@@ -468,6 +469,18 @@ describe("the preset control is a carousel with the layout beneath it", () => {
       rt.dispose();
     },
   );
+
+  test("edit mode's +/- and reset banner are not part of the arrangement the preview draws", () => {
+    const rt = rig(`{}`);
+    openCarousel(rt, "preset");
+    const outside = previewLabels(rt.render());
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    const rendered = rt.render();
+    // Edit mode is on: its chrome is on the bar the preview describes.
+    expect([...rt.sink.keys()].some((name) => name.startsWith("edit."))).toBe(true);
+    expect(previewLabels(rendered)).toEqual(outside);
+    rt.dispose();
+  });
 
   test("▶ rotates through every preset and wraps, the preview following the preset it applied", () => {
     const rt = rig(`{}`);

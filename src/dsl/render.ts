@@ -25,6 +25,7 @@ import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { addableSegmentDomains } from "../config/edit-chrome.js";
+import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -1077,11 +1078,13 @@ export function renderDsl(
   // [LAW:one-source-of-truth] The rows `{{ layoutPreview }}` draws, from the
   // tree about to be walked and the walk's own visibility: a node's `when`,
   // then a segment's own — and a segment whose `when` throws is SHOWN, because
-  // the walk draws an error cell exactly there. Each segment keeps the palette
-  // the walk colours it in, pin included.
+  // the walk draws an error cell exactly there. Edit mode's `+`/`-` and reset
+  // banner are affordances over the arrangement, not part of it. Each segment
+  // keeps the palette the walk colours it in, pin included.
   const shown = (node: CompiledNode): boolean => {
     if (!evaluateWhen(node.when, scope)) return false;
     if (node.kind === "container") return true;
+    if (node.name.startsWith(EDIT_NS)) return false;
     try {
       return evaluateWhen(compiled.segments[node.name]!.when, scope);
     } catch {

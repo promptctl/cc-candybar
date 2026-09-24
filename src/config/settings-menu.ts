@@ -14,7 +14,7 @@
 // [LAW:one-type-per-behavior] Nothing here is a new render or interaction
 // concept. The menu is the disclosure primitive's fourth instance, alongside
 // group sugar, `{{ menu }}`, and edit mode's toggle: it calls the SAME
-// `disclosureStateVar`/`disclosureCycleAction`/`menuStateKey` functions those
+// `disclosureStateVar`/`disclosureCycleAction` functions those
 // three call, so a synthesized global menu and a hand-authored group are
 // indistinguishable to the render walk.
 //
@@ -198,7 +198,7 @@ interface SettingControl {
   readonly effectiveVar: string;
   readonly glyph: string;
   readonly domain: OptionDomain;
-  // Every control offers its domain as a carousel — a ring centred on the
+  // [LAW:one-type-per-behavior] Every control offers its domain as a carousel — a ring centred on the
   // current value where every click applies (brandon-theme-picker-bgw.ef6) —
   // and `beneath` are the rows under the ring, each a template: what sits under
   // a ring is data a control carries, not a kind of control.
@@ -346,9 +346,10 @@ const controlRef = (c: SettingControl): DisclosureRef => ({
   member: menuMember(controlApply(c.name)),
 });
 
-// A control's place in the tree: its segment, with the carousel and the rows
-// beneath it hung on it through the one disclosure lowering, dropped below the
-// row the control sits in.
+// [LAW:dataflow-not-control-flow] Every control takes one place in the tree:
+// its segment, with the carousel and the rows beneath it hung on it through
+// the one disclosure lowering, dropped below the row the control sits in —
+// what differs between controls is the record, never the shape.
 function controlNode(c: SettingControl): LayoutNode {
   return disclosureNode(
     controlSeg(c.name),
@@ -721,20 +722,18 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
 // table that describes them. A picker control is a glyph, its live value, the
-// toggle that opens its affordance over its domain, and the ↺ that forgets its
-// durable default; wrap and padding differ only in affordance. Every apply action here is DUAL
+// toggle that opens its carousel over its domain, and the ↺ that forgets its
+// durable default; wrap and padding are a cycle and a stepper instead. Every apply action here is DUAL
 // — one declaration naming both destination keys and the selector that chooses
 // between them — so the panel spells each setting exactly once and the click
 // carries the destination as data [LAW:dataflow-not-control-flow].
 //
-// A pick leaves its picker open with its page cursor kept
+// A pick leaves its carousel open, re-centred on what it applied
 // (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
-// try must not cost a reopen and a page hunt; ✕ closes. That holds for a
-// preset pick too, whose click swaps the whole root — the menu survives it
-// because every preset root references this one anchor and both open states
-// are session keys, not tree positions. A pick that changes the pagination
-// itself (a style or padding change) lands on the kept cursor clamped into
-// the new page set, which renderPicker owns.
+// try must not cost a reopen; ✕ closes. That holds for a preset pick too,
+// whose click swaps the whole root — the menu survives it because every
+// preset root references this one anchor and both open states are session
+// keys, not tree positions.
 //
 // [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
 // and `deriveConfigActionValidators` each explode these dual declarations
@@ -756,7 +755,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     // writes, read from the same record, so the two can never name different
     // settings.
     artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
-    declareAffordance(c, artifacts);
+    declareControlRow(c, artifacts);
   }
   artifacts.actions[controlApply(WRAP.name)] = {
     set: WRAP.sessionKey,
@@ -783,10 +782,11 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
   artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
 }
 
-// A control's row — the glyph, the value the bar is rendering with, the toggle
-// that opens its carousel on the shared accordion key, the ↺ — and the
-// carousel's own rows as segments of their own.
-function declareAffordance(c: SettingControl, artifacts: MenuArtifacts): void {
+// [LAW:one-type-per-behavior] Every picker control mints the same row — the
+// glyph, the value the bar is rendering with, the toggle that opens its
+// carousel on the shared accordion key, the ↺ — and the carousel's own rows as
+// segments of their own.
+function declareControlRow(c: SettingControl, artifacts: MenuArtifacts): void {
   const apply = controlApply(c.name);
   const ref = controlRef(c);
   const toggle = menuActionName(ref.key, ref.member);

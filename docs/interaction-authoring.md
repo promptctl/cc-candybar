@@ -1355,9 +1355,11 @@ applies, that is the theme (or look) at the centre of the ring.
 
 `{{ layoutPreview }}` is the same idea for the arrangement: one line per row of
 the layout the bar is in, each segment a block labelled with its name (less any
-namespace) in the tint its place deals it. It shows exactly the segments the
-bar draws — a segment its `when` hides has no block — and cuts every label
-alike, down to one column, until each row fits. An authored `bg:` is not what a
+namespace) in the tint its place deals it. It draws the arrangement, not the
+content: every segment the layout places is one block — a segment its `when`
+hides has none, and no template is evaluated, so a segment that renders two
+lines or nothing is still one block — and edit mode's `+`/`-` are not part of
+it. Every label is cut alike, down to one column, until each row fits. An authored `bg:` is not what a
 block wears: that colour states a fact about live data, not about where the
 segment sits.
 

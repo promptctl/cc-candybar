@@ -40,36 +40,32 @@ export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 export const blockLabel = (name: string): string =>
   name.slice(name.lastIndexOf(".") + 1);
 
-// A label cut to `most` columns, the cut marked so a clipped name never reads
-// as a whole one.
-const clip = (label: string, most: number): string =>
-  cellWidth(label) <= most
-    ? label
-    : most <= 1
-      ? label.slice(0, most)
-      : `${label.slice(0, most - 1)}…`;
-
-// A row's width with every label cut to `most`: each block is its label with
-// one space either side, and blocks touch like neighbouring bar cells.
-const rowWidth = (row: readonly PreviewSegment[], most: number): number =>
-  row.reduce(
-    (sum, { name }) => sum + Math.min(cellWidth(blockLabel(name)), most) + 2,
-    0,
-  );
+// A block's label cut to `most` columns by the cell-aware truncation every
+// sized cell uses, the cut marked so a clipped name never reads as a whole one.
+const clippedLabel = (name: string, most: number): string => {
+  const label = new RichText(blockLabel(name));
+  label.truncate(most, { marker: "…" });
+  return label.plain;
+};
 
 // [LAW:dataflow-not-control-flow] Scaling is ONE number for the whole preview —
 // the longest a label may be — so every row is cut alike and blocks stay
 // comparable across rows: the largest length at which every row fits, down to
 // one column. A row too long even then keeps its blocks in order while they fit.
+// Each label is measured once; a row's width at `most` is then arithmetic —
+// every block is its label with one space either side, touching its neighbours
+// like bar cells.
 export function labelBudget(rows: PreviewRows, available: number): number {
-  const longest = Math.max(
-    1,
-    ...rows.flat().map(({ name }) => cellWidth(blockLabel(name))),
+  const widths = rows.map((row) =>
+    row.map(({ name }) => cellWidth(blockLabel(name))),
   );
-  let most = longest;
-  while (most > 1 && rows.some((row) => rowWidth(row, most) > available)) {
-    most -= 1;
-  }
+  const fits = (most: number): boolean =>
+    widths.every(
+      (row) =>
+        row.reduce((sum, w) => sum + Math.min(w, most) + 2, 0) <= available,
+    );
+  let most = Math.max(1, ...widths.flat());
+  while (most > 1 && !fits(most)) most -= 1;
   return most;
 }
 
@@ -83,7 +79,7 @@ export function renderLayoutPreview(
     const blocks: RichText[] = [];
     let width = 0;
     for (const { name, address, palette } of row) {
-      const block = new RichText(` ${clip(blockLabel(name), most)} `, {
+      const block = new RichText(` ${clippedLabel(name, most)} `, {
         style: stateCell(
           palette,
           decorationFor(palette, { kind: "bar", address }).tint,
