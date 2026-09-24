@@ -374,8 +374,12 @@ describe("the settings menu's theme, look and style controls are carousels", () 
       openCarousel(rt, control);
       const lines = stripAnsi(rt.render()).split("\n");
       const ring = lines.findIndex((l) => RING.test(l));
-      const led = (i: number) => /^\W*✕/u.test(lines[i] ?? "");
-      expect([width, led(ring), led(ring + 1)]).toEqual([width, true, true]);
+      // The ring, then every line the rows beneath it draw (the preset
+      // preview draws one per row of the layout), each led by the ✕.
+      const beneath = rt.sink.get(`settings.carousel.${control}.0`)!.length;
+      const body = lines.slice(ring, ring + 1 + beneath);
+      expect([width, body.filter((l) => !/^\W*✕/u.test(l))]).toEqual([width, []]);
+      expect(body).toHaveLength(1 + beneath);
       const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
       expect([width, over]).toEqual([width, []]);
       rt.dispose();
@@ -449,10 +453,21 @@ describe("the preset control is a carousel with the layout beneath it", () => {
       const drawn = [...rt.sink.keys()];
       const closedStyle = (name: string) => bgHex(rt.sink.get(name)![0]!.style);
       const tints = Object.fromEntries(drawn.map((n) => [blockLabel(n), closedStyle(n)]));
+      // Which line of the closed bar each drawn segment sits on: segments are
+      // drawn in order, so each is found at or after the one before it.
+      const barLines = stripAnsi(closed).split("\n");
+      const barRows: string[][] = barLines.map(() => []);
+      let line = 0;
+      let col = 0;
+      for (const name of drawn) {
+        const text = rt.sink.get(name)!.map((c) => c.plain).join("").trim();
+        while (barLines[line]!.indexOf(text, col) < 0) [line, col] = [line + 1, 0];
+        col = barLines[line]!.indexOf(text, col) + text.length;
+        barRows[line]!.push(blockLabel(name));
+      }
       openCarousel(rt, "preset");
       const labels = previewLabels(rt.render());
-      expect(labels.flat()).toEqual(drawn.map(blockLabel));
-      expect(labels).toHaveLength(stripAnsi(closed).split("\n").length);
+      expect(labels).toEqual(barRows);
       // Each block wears what its segment wears on the closed bar; every
       // segment here authors no `bg:` under this payload's calm values.
       const preview = rt.sink.get("settings.carousel.preset.0")!;
