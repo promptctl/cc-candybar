@@ -8,7 +8,7 @@ Tracking tickets: the epic `candybar-render-ai7` and its children. The tickets a
 
 ## The rule
 
-> A row of the bar wears one of the theme's branding hues — `primary`, then `secondary` — and each cell of the row one of three tones of that hue: a lightness between the theme's `surface` receded toward `background` and its `surface` pulled toward the hue, carrying the hue's own angle and `DECOR_CHROMA_SHARE` (0.8) of its chroma. The row is the cell's nearest row step in its address; the tone is its place in that row. `accent` is kept for what is open.
+> A row of the bar wears one of the theme's branding hues — `primary`, then `secondary` — and each cell of the row one of three tones of that hue: a lightness between the theme's `surface` receded toward `background` and its `surface` pulled toward the hue, carrying the hue's own angle and `DECOR_CHROMA_SHARE` (0.8) of its chroma. The row is the innermost of the rows the cell's address stacks through; the tone is its place in that row, and anything nested inside a cell wears the cell's colour. `accent` is kept for what is open.
 
 The roles are Textual's, and the themes are Textual themes: *primary* is the branding colour, *secondary* an alternative "to differentiate from primary", *accent* is "used sparingly to draw attention", *surface* the default widget background. (Until brandon-theme-picker-bgw.8fp this was one sRGB `mix(base, hue, amount)` over all three hues, chosen per cell; see Decisions.)
 
@@ -68,7 +68,7 @@ Confusion got solved three separate times by the same move: give each concern it
 
 | region | occupant | boundary |
 |---|---|---|
-| tint (lightness pull `<= 0.30`) | ordinary bar segments | decoration never moves lightness more than 0.30 toward its hue |
+| tint (lightness pull `<= TONE_TINT`, 0.35) | ordinary bar segments | decoration never moves `surface`'s lightness more than 0.35 toward its hue |
 | state | an open disclosure's trigger | `accent` on the bar; enforced ≥ 2.2 contrast above every tint |
 | state, plane 1 | that trigger's band | trigger's hue, recessed toward `background` |
 | state, plane 2..N | nested submenus | next hue in the vocabulary, recessed further |
@@ -82,7 +82,7 @@ The state boundary had to be enforced rather than assumed, because "the pure hue
 
 **A band is a plane.** Its items are distributed around their trigger's state colour, pulled toward `background`.
 
-**Depth advances the hue.** Every bar trigger opens in `accent`. A nested disclosure takes the *next* vocabulary hue (`accent` → `primary` → `secondary`) and recedes one step further (`0.42 + 0.14 * depth`, capped at 0.75). Two cues move together across every depth the bar reaches: the bundled ☰ → ⚙ → picker is depth 2, and adjacent planes at depths 0→1 and 1→2 stay at least .035 ΔE apart on every theme × hue. Depth 3 is the limit. The cap leaves only .05 of recession between depths 2 and 3 while the hue has wrapped onto one already used, and 20 of the 69 theme × hue lineages fall to .016–.034. A trigger still stands off its plane there; adjacent planes do not, and nothing shipped reaches depth 3. `test/decor.test.ts` pins the covered depths and records the limit.
+**Depth advances the hue.** Every bar trigger opens in `accent`. A nested disclosure takes the *next* vocabulary hue (`accent` → `primary` → `secondary`) and recedes one step further (`0.42 + 0.14 * depth`, capped at 0.75). Two cues move together across every depth the bar reaches: the bundled ☰ → ⚙ → picker is depth 2, and adjacent planes at depths 0→1 and 1→2 stay at least .035 ΔE apart on every theme × hue. Depth 3 is the limit. The cap leaves only .05 of recession between depths 2 and 3 while the hue has wrapped onto one already used, and 20 of the 69 theme × hue lineages fall to .016–.034 — 4 of them (.021–.031: atom-one-dark, catppuccin-latte, nord, solarized-dark) among the 23 accent-rooted lineages the bar can actually reach, since every bar trigger opens `accent`. A trigger still stands off its plane there; adjacent planes do not, and nothing shipped reaches depth 3. `test/decor.test.ts` pins the covered depths and records the limit.
 
 **A trigger is drawn from what it opens, not from where it sits.** It takes the peak of its children's region. Without this, a submenu's parent is coloured as one of its siblings and nothing connects it to the thing it opened. In code a node's position is a `Region` (`src/themes/decor.ts`): on the bar, an address into the vocabulary; on a band, the `Disclosure` its trigger was dealt plus the steps since the body's root — so a body needs nothing of its trigger's position, only what the trigger opened, which is why the body hangs on the trigger node rather than beside it.
 
@@ -92,7 +92,7 @@ Placement inside a region is a single per-instance field: the instance's **distr
 
 Five distributions ship — van der Corput (the default), golden angle, monotonic, ends-interleaved, and `uniform`, the constant where every item is identical. This is one type with five instances, not five code paths: the distribution is a value the instance carries, so adding a fifth is data, not structure.
 
-Measured across 6 items, a monotonic ramp spreads lightness by 40 (dracula) / 50 (latte), and reads as a directional wedge — an ordering the items may or may not have. That was measured over the old 18-entry vocabulary; on the bar a row's cells now choose among three tones, so a monotonic row walks deep → mid → tinted once.
+Measured across 6 items, a monotonic ramp spreads lightness by 40 (dracula) / 50 (latte), and reads as a directional wedge — an ordering the items may or may not have. That was measured over the old 18-entry vocabulary; on the bar a row's cells now choose among three tones, read round a circle, so a monotonic row steps through them in order and wraps: four cells land deep, mid, tinted, deep, and past three cells some neighbours share a tone.
 
 **Isolation is a property of the chosen distribution, not of the system.** `vdc(i)` is bit reversal (0, .5, .25, .75, .125, …) and never reads `n`, the sibling count; golden angle doesn't either. Under those two, adding, removing or hiding a sibling moves nobody — verified by adding 25 menu entries and watching zero bar cells change. `monotonic` = `(i+0.5)/n` and `ends-interleaved` both read `n`, so choosing either forfeits isolation for that instance: one new sibling re-spaces every existing one in it.
 
@@ -130,9 +130,9 @@ Each of these was considered and measured. They are recorded with their reasons 
 
 **A row is one hue; its cells differ by tone** (brandon-theme-picker-bgw.8fp, second pass). Hue at every cell alternated two saturated hues seam by seam, and Brandon rejected it on sight: "you end up with this 'sports team' sort of look … like im either a college or an NFL team." Decoration now follows the Textual roles the themes were written with:
 
-- **The bar hues are `primary` and `secondary`, one per row.** A row is the nearest vertical container's placement in the address, so a row stacked above the whole bar (edit mode's reset banner) recolours no row beneath it, and a bar with no vertical container is one row in `primary`. The compiler proves `accent` is not a bar hue.
-- **A cell's tone is its place in its row.** Three tones, because a row's neighbours are placed by van der Corput: its first eight cells land on tones 0, 1, ½, 1, 0, 1, ½, 0, so no two side by side share one and neighbours sit at least half the axis apart. A continuous axis gives neighbours a quarter of it (cells 1 and 2 sit at ½ and ¼), and measured under the seam floor in 42 of 46 theme × hue rows. Anything nested inside a cell wears the cell's tone.
-- **Edit chrome is part of its cell.** The `+`/`-` affordances were spliced as siblings, so they took two of every three positions in a row and visible neighbours were never consecutive: the calm context and cache timer landed on one tone. Each content cell and its chrome is now one horizontal unit, and the row places content only.
+- **The bar hues are `primary` and `secondary`, one per row.** A row is the innermost of the rows an address stacks through before it reaches a cell, so a row stacked above the whole bar (edit mode's reset banner) recolours no row beneath it, a `{ v }` nested inside a cell stacks no bar rows, and a bar with no vertical container is one row in `primary`. The row's hue is the half its placement falls in: van der Corput's first bit, so rows alternate however many the bar stacks. Rounding to the nearer of the two hues (the tone's rule) ties at every odd quarter, and gave a three-row bar `primary, secondary, secondary`. The compiler proves `accent` is not a bar hue.
+- **A cell's tone is its place in its row.** Three tones, because a row's neighbours are placed by van der Corput: its first eight cells land on tones 0, 1, ½, 1, 0, 1, ½, 0, so no two side by side share one and neighbours sit at least half the axis apart. A continuous axis gives neighbours a quarter of it (cells 1 and 2 sit at ½ and ¼), and measured under the seam floor in 42 of 46 theme × hue rows. Anything nested inside a cell wears the cell's hue and tone, and the loader refuses a `distribution` authored there, where it could place nothing. The tone rounds to the nearest of three points; taking the third a placement falls in (the hue's rule) would put cells 5 and 6 of a row — inside the bundled status row — on one tone.
+- **Edit chrome is part of its cell.** The `+`/`-` affordances were spliced as siblings, so they took two of every three positions in a row and visible neighbours were never consecutive: the calm context and cache timer landed on one tone. Each content cell and its chrome is now one horizontal unit, and the row places content only; a content segment that is a whole row becomes the one cell of that row, so its chrome shares its colour there too.
 - **The tone axis** runs from `surface` receded 0.5 toward `background` to `surface` pulled 0.35 toward the hue. Receding the deep end all the way to `background` sank the deepest cells into a terminal painted in the theme's own background. The tinted end is the largest pull tried (0.45, 0.4, 0.35) that the state floor allows: at 0.4 solarized-dark's dim foreground no longer clears 2.2 against its most-tinted cell, and its three open states collapsed onto one colour past the pole.
 - **The open state is `accent`**, floored at 2.2 against every tint the bar can wear rather than against its own hue's, because an open trigger stands in either row at any tone. 41 of the 69 theme × hue states clear at step zero and are the pure mix.
 
@@ -158,7 +158,7 @@ The change was expected to be net-subtractive, with the design counted wrong if 
 
 ## The demo
 
-`design-docs/colour-demo.html` renders all 23 themes through the real rich-js palettes under the rule above; the separations, contrasts and spreads quoted here were measured with it while the rule was being chosen.
+`design-docs/colour-demo.html` predates brandon-theme-picker-bgw.8fp and renders the superseded per-cell vocabulary (every hue × three bases); it is kept as the evidence the ai7 rule was chosen with. It renders all 23 themes through the real rich-js palettes under the rule above; the separations, contrasts and spreads quoted here were measured with it while the rule was being chosen.
 
 Its rich-js browser bundle is gitignored. Regenerate it from the repo root with:
 

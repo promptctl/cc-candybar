@@ -244,7 +244,11 @@ describe("no two neighbouring cells blur", () => {
   };
 
   test("a divider joins only backgrounds the eye cannot, in a theme whose own tones fold", () => {
-    for (const s of all().filter((s) => s.glyph === DIVIDER)) {
+    const dividers = all().filter((s) => s.glyph === DIVIDER);
+    // Non-vacuous: some bundled theme (textual-ansi) folds its tones, so the
+    // loop below has seams to judge.
+    expect(dividers.length).toBeGreaterThan(0);
+    for (const s of dividers) {
       expect([s.theme, s.left.hex, s.right.hex, dE(s.left, s.right) < SEAM_MIN_DELTA_E, foldsTones(s.theme)])
         .toEqual([s.theme, s.left.hex, s.right.hex, true, true]);
     }

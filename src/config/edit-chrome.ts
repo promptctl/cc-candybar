@@ -309,17 +309,27 @@ function spliceContainer(
     // parent is what its colour derives from (src/themes/decor.ts); chrome
     // spliced in as SIBLINGS took two of every three positions, so visible
     // neighbours were never consecutive and the row's tones collided
-    // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the unit is
-    // also a one-cell row (presetRoot stacks every root's rows vertically, so
-    // a bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive
-    // this way), under the row's own gate so the chrome hides with it.
-    children.push({
+    // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the content
+    // was a whole row (presetRoot stacks every root's rows vertically, so a
+    // bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this
+    // way): the unit becomes that row's one CELL, so the content keeps the
+    // tone a one-cell row wears outside edit mode, and the row carries the
+    // content's own gate so the chrome hides with it.
+    const unit: LayoutNode = {
       kind: "container",
       direction: "horizontal",
       children: cells,
-      ...(node.direction === "vertical" &&
-        child.when !== undefined && { when: child.when }),
-    });
+    };
+    children.push(
+      node.direction === "vertical"
+        ? {
+            kind: "container",
+            direction: "horizontal",
+            children: [unit],
+            ...(child.when !== undefined && { when: child.when }),
+          }
+        : unit,
+    );
   }
   return { ...node, children };
 }

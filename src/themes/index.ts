@@ -44,6 +44,7 @@ export {
   OPEN_HUE,
   DECOR_TONES,
   TONE_TINT,
+  TONE_RECESS,
   DECOR_VOCABULARY,
   DECOR_CHROMA_SHARE,
   DISTRIBUTIONS,
@@ -51,6 +52,8 @@ export {
   DEFAULT_DISTRIBUTION,
   placedBy,
   vocabularySelect,
+  inBin,
+  nearestPoint,
   decorEntryFor,
   paletteRole,
   decorFor,
@@ -68,4 +71,5 @@ export type {
   Axis,
   AddressStep,
   Address,
+  Quantize,
 } from "./decor.js";

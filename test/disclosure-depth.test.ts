@@ -17,8 +17,8 @@
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
 //   - the closed door on the bar wears its address's tint, and the band it
-//     opens derives from the hue that address deals — the depth-0 anchor of
-//     the chain.
+//     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
+//     anchor of the chain.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";

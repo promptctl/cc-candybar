@@ -26,6 +26,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
+import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { decorFor, DISTRIBUTIONS, type Address } from "../src/themes/decor";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -58,10 +59,20 @@ function addressOf(root: CompiledNode, name: string): Address {
   return found;
 }
 
+/** Every segment of a compiled tree, with its address. */
+function segmentAddresses(root: CompiledNode): { name: string; address: Address }[] {
+  const walk = (node: CompiledNode, address: Address): { name: string; address: Address }[] =>
+    node.kind === "segment"
+      ? [{ name: node.name, address }]
+      : node.children.flatMap((child, index) => walk(child, [...address, childStep(node, index)]));
+  return walk(root, []);
+}
+
 function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const sessionState = new SessionState();
+  const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}): string =>
@@ -90,7 +101,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
       addressOf(root, name),
     ).hex;
-  return { render, root, bgOf, fgOf, expectedTint, dispose: () => registry.dispose() };
+  return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
 }
 
 const IDENTITY_KEY: ThemeKey = {
@@ -177,6 +188,37 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       return bg;
     };
     expect(rowTwoFirst("'a'")).toBe(rowTwoFirst("'a', 'x', 'y'"));
+  });
+
+  test("edit chrome wears its content cell's colour, in a row of many or a row of one", () => {
+    // Edit chrome wraps each content cell with its `+`/`-` as ONE unit that
+    // sits where the cell sat, so the unit is one colour, whatever the row.
+    // `solo` is a middle row: the first row gains the settings door and the
+    // last the `(?)`, either of which would make a one-cell row two cells.
+    const rt = build(`{
+      globals: { palette: '${THEME}' },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' }, solo: { template: 'S' }, c: { template: 'C' } },
+      root: { v: [ { h: ['a', 'b'] }, 'solo', { h: ['c'] } ] },
+    }`);
+    rt.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    rt.render();
+    const sameStep = (x: Address[number], y: Address[number]): boolean =>
+      x.index === y.index && x.count === y.count && x.axis === y.axis;
+    for (const content of ["a", "solo"]) {
+      const unit = addressOf(rt.root, content).slice(0, -1);
+      const members = segmentAddresses(rt.root).filter(
+        ({ address }) =>
+          address.length === unit.length + 1 &&
+          unit.every((step, i) => sameStep(step, address[i]!)),
+      );
+      // `+`, the content, `-` (and the row's closing `+`).
+      expect(members.length).toBeGreaterThanOrEqual(3);
+      for (const { name } of members) {
+        expect([content, name, rt.bgOf(name)]).toEqual([content, name, rt.bgOf(content)]);
+      }
+    }
+    rt.dispose();
   });
 
   test("the render's look reaches the tint: it is read from the one transposed palette", () => {
@@ -334,7 +376,9 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
 
   test("a whole-tree root's authored distribution places the ROWS: one placer in every cell's lineage moves, the one placing the authored rows", () => {
     const plain = build(tree(""));
-    const rt = build(tree("", ", distribution: 'monotonic'"));
+    // `uniform` places both rows in one half, so both wear one hue where the
+    // default alternates them.
+    const rt = build(tree("", ", distribution: 'uniform'"));
     rt.render();
     plain.render();
     const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
@@ -352,7 +396,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       );
       expect([name, moved]).toEqual([
         name,
-        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.monotonic, axis: "row" }],
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row" }],
       ]);
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, authored).hex]);
     }
@@ -366,6 +410,19 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   test("an unknown name is a load error naming the five", () => {
     expect(() => build(tree(", distribution: 'spiral'"))).toThrow(
       /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
+    );
+  });
+
+  test("a distribution inside a bar cell is a load error: the cell's contents wear its tone", () => {
+    const nested = (field: string): string => `{
+      globals: { palette: '${THEME}' },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
+      root: { v: [ { h: ['a', { h: ['b', 'c']${field} }] } ] },
+    }`;
+    build(nested("")).dispose();
+    expect(() => build(nested(", distribution: 'monotonic'"))).toThrow(
+      /sets "distribution" on a container inside a bar cell/,
     );
   });
 

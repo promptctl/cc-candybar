@@ -4,9 +4,9 @@
 //
 // The rule, in Textual's colour roles: a row of the bar wears the theme's
 // `primary` or `secondary`, and each cell of the row one TONE of that hue —
-// a depth between the theme's `background` and its `surface` pulled toward
-// the hue — with the row and the tone chosen by the node's position in the
-// tree. `accent` is kept for what is open. Every coordinate is one the theme
+// a depth between the theme's `surface` receded toward its `background` and
+// its `surface` pulled toward the hue — with the row and the tone chosen by
+// the node's position in the tree. `accent` is kept for what is open. Every coordinate is one the theme
 // already contains or lies between two it contains: it SELECTS from the theme;
 // it never synthesises saturation the theme lacks.
 //
@@ -247,42 +247,20 @@ export interface AddressStep extends PlacedStep {
 export type Address = readonly AddressStep[];
 
 /**
- * Each level's contribution to the selection decays by this factor, so the
- * row decides the coarse position and the cell refines it. The value the
- * evidence demo was validated with; the doc's separations were measured under it.
+ * Each level's contribution to a band item's place decays by this factor, so
+ * an item's outermost step decides the coarse position and every step nested
+ * under it refines it. The value the evidence demo was validated with; the
+ * doc's band separations were measured under it.
  */
 export const LEVEL_DECAY = 0.37;
 
 /**
- * The index into a vocabulary of `size` entries that `address` selects: a
- * weighted fold of the per-level positions — each level placed by its own
- * step's distribution — rounded, taken modulo the size. A size of 1 selects
- * entry 0 for every address, which is what makes a one-entry vocabulary a
- * uniform bar. `vocabularySelect` is the sole caller and owns the size ≥ 1
- * precondition.
- */
-function vocabularyIndex(address: readonly PlacedStep[], size: number): number {
-  let value = 0;
-  let weight = 1;
-  for (const { index, count, distribution } of address) {
-    value += distribution(index, count) * weight * size;
-    weight *= LEVEL_DECAY;
-  }
-  const raw = Math.round(value) % size;
-  return raw < 0 ? raw + size : raw;
-}
-
-/**
- * Where `address` lands on a band's plane→state axis, in [0, 1): the same
- * weighted fold `vocabularyIndex` runs — each level placed by its own step's
- * distribution, decaying by `LEVEL_DECAY` — taken modulo 1 instead of
- * rounded into a vocabulary. One step yields exactly that step's placement
- * (`d % 1 === d` for `d` in [0, 1)), so a picker's options, one step each
- * under their trigger, land where they always did; the empty address (the
- * band's root) lands at 0. The two folds are kept as two spellings rather
- * than one shared helper because `vocabularyIndex` scales by `size` INSIDE
- * the sum, and reassociating that product would move bytes in every
- * committed snapshot for no gain.
+ * Where `address` lands on a band's plane→state axis, in [0, 1): a weighted
+ * fold of the per-level positions — each level placed by its own step's
+ * distribution, decaying by `LEVEL_DECAY` — taken modulo 1. One step yields
+ * exactly that step's placement (`d % 1 === d` for `d` in [0, 1)), so a
+ * picker's options, one step each under their trigger, land at their own
+ * placement; the empty address (the band's root) lands at 0.
  */
 function bandAxis(address: readonly PlacedStep[]): number {
   let value = 0;
@@ -295,40 +273,73 @@ function bandAxis(address: readonly PlacedStep[]): number {
 }
 
 /**
- * The entry of `vocabulary` that `address` selects. Generic over the entry
- * type so the selection is testable over any vocabulary — a one-entry one
- * must yield that entry everywhere.
+ * How a placement in [0, 1) picks one of `size` entries. Each bar vocabulary
+ * is read with the rule under which van der Corput's neighbours never land on
+ * the same entry — the two sizes the bar has need different rules, so the rule
+ * is a value the vocabulary is read with, not a branch on its size.
+ */
+export type Quantize = (placement: number, size: number) => number;
+
+/**
+ * The equal bin the placement falls in. Over two entries a van der Corput
+ * placement's first bit IS its bin, so any number of rows alternates. The
+ * nearest-point rule ties there: ¼ and ¾ sit midway between the two points,
+ * both round to the second, and rows 1 and 2 of a three-row bar shared a hue.
+ */
+export const inBin: Quantize = (placement, size) =>
+  Math.floor(placement * size);
+
+/**
+ * The nearest of `size` points spaced evenly round the circle from 0. Over
+ * three tones a row's first eight cells land on 0, 1, ½, 1, 0, 1, ½, 0: no two
+ * neighbours alike, never less than half the axis apart. The bin rule puts
+ * cells 5 and 6 on one tone, inside the bundled status row.
+ */
+export const nearestPoint: Quantize = (placement, size) =>
+  Math.round(placement * size) % size;
+
+/**
+ * The entry of `vocabulary` that `step` selects under `quantize`. An absent
+ * step is a node alone on that axis — a bar with no vertical container, a
+ * one-cell row — and is placed where a first child is, at 0. Generic over the
+ * entry type so the selection is testable over any vocabulary — a one-entry
+ * one must yield that entry everywhere.
  *
- * [LAW:no-silent-failure] `vocabularyIndex` lands in `[0, size)` by
- * construction and `T` is non-nullable, so an undefined read here is exactly
- * an empty vocabulary — nothing to select — and throws rather than returning it.
+ * [LAW:no-silent-failure] Both quantizers land in `[0, size)` for a placement
+ * in `[0, 1)` and `T` is non-nullable, so an undefined read here is exactly an
+ * empty vocabulary — nothing to select — and throws rather than returning it.
  */
 export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
-  address: readonly PlacedStep[],
+  step: PlacedStep | undefined,
+  quantize: Quantize,
 ): T {
-  const entry = vocabulary[vocabularyIndex(address, vocabulary.length)];
+  const placement =
+    step === undefined ? 0 : step.distribution(step.index, step.count);
+  const entry = vocabulary[quantize(placement, vocabulary.length)];
   if (entry === undefined)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
 }
 
 /**
- * The decorative entry a bar node's address selects, read off two steps: its
- * ROW — the nearest row step, so a row stacked above the whole bar (edit
- * mode's reset banner) recolours no row beneath it — chooses the hue, and its
- * place IN that row — the step right after — chooses the tone. Anything nested
- * deeper inside a cell (edit mode's `+`/`-` around it, an authored `{ h }`)
- * wears that cell's tone: a row's cells are what sit side by side, so they are
- * what must differ, and van der Corput over three tones gives no two of a
- * row's first eight cells the same one. A bar with no vertical container is
- * one row and wears one hue.
+ * The decorative entry a bar node's address selects. An address reads as the
+ * rows it stacks through, then the cell of the innermost of them, then
+ * whatever is nested inside that cell: the last of those rows chooses the hue,
+ * so a row stacked above the whole bar (edit mode's reset banner) recolours no
+ * row beneath it, and the cell chooses the tone. Anything nested inside a cell
+ * — edit mode's `+`/`-` around it, an authored `{ h }` or `{ v }` — wears the
+ * cell's hue and tone: a row's cells are what sit side by side, so they are
+ * what must differ, and the loader refuses a `distribution` authored inside a
+ * cell, where it could place nothing. A bar with no vertical container is one
+ * row and wears one hue.
  */
 export function decorEntryFor(address: Address): DecorEntry {
-  const row = address.findLastIndex((step) => step.axis === "row");
+  const cell = address.findIndex((step) => step.axis === "cell");
+  const rows = cell === -1 ? address : address.slice(0, cell);
   return {
-    hue: vocabularySelect(BAR_HUES, address.slice(row, row + 1)),
-    tone: vocabularySelect(DECOR_TONES, address.slice(row + 1, row + 2)),
+    hue: vocabularySelect(BAR_HUES, rows.at(-1), inBin),
+    tone: vocabularySelect(DECOR_TONES, address[rows.length], nearestPoint),
   };
 }
 
@@ -354,8 +365,9 @@ export function paletteRole(
 
 /**
  * The colour of one vocabulary entry in `palette`: a point on the row hue's
- * tone axis. The axis runs in OKLCH from the theme's `background` to its
- * `surface` pulled `TONE_TINT` of the way toward the hue, and both ends carry
+ * tone axis. The axis runs in OKLCH from the theme's `surface` receded
+ * `TONE_RECESS` toward its `background` to its `surface` pulled `TONE_TINT`
+ * of the way toward the hue, and both ends carry
  * the hue's own angle and `DECOR_CHROMA_SHARE` of its chroma, so every tone is
  * the same hue at a different depth. [LAW:one-source-of-truth] The one place
  * the rule is spelled — `decorFor` renders through it and `stateFor` measures
@@ -395,7 +407,7 @@ export function decorEntryColour(
 }
 
 // Every segment of every render asks for its tint, and the answer is a pure
-// function of (palette, entry) — OKLCH conversions, three mixes, and a possible
+// function of (palette, entry) — OKLCH conversions, four mixes, and a possible
 // gamut bisection, ~5% of a render before this memo. Keyed by the entry's
 // VALUE, whose domain is BAR_HUES × DECOR_TONES, so each map holds at most six
 // colours whoever built the entry.

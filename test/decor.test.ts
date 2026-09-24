@@ -45,6 +45,8 @@ import {
   textOn,
   TEXT_MIN_CONTRAST,
   vocabularySelect,
+  inBin,
+  nearestPoint,
   type Address,
   type AddressStep,
   type PlacedStep,
@@ -151,14 +153,17 @@ describe("the colour is a tone of the row's hue", () => {
     // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75 × 3 =
     // 2.25 -> tone 1).
     expect(decorEntryFor([row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", tone: 1 });
-    // Only the NEAREST row counts: a row stacked above the whole bar (edit
+    // Only the innermost row counts: a row stacked above the whole bar (edit
     // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
     expect(decorEntryFor([row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", tone: 1 });
-    // Anything nested inside a cell wears the cell's tone: edit mode's `+`/`-`
-    // wrap each content cell as the middle of three.
-    expect(decorEntryFor([row(0, 2), cell(3, 6), cell(1, 3)])).toEqual(
-      decorEntryFor([row(0, 2), cell(3, 6)]),
-    );
+    // Anything nested inside a cell wears the cell's hue and tone: edit mode's
+    // `+`/`-` wrap each content cell as the middle of three, and a `{ v }`
+    // inside a cell stacks rows that are not the bar's.
+    for (const nested of [[cell(1, 3)], [row(0, 2)], [row(0, 2), cell(2, 3)]]) {
+      expect(decorEntryFor([row(1, 2), cell(3, 6), ...nested])).toEqual(
+        decorEntryFor([row(1, 2), cell(3, 6)]),
+      );
+    }
     // A bar with no vertical container is one row, in the first bar hue.
     expect(decorEntryFor([cell(1, 4)])).toEqual({ hue: BAR_HUES[0], tone: 1 });
   });
@@ -176,6 +181,13 @@ describe("the colour is a tone of the row's hue", () => {
     // eight cells on 0, 1, ½, 1, 0, 1, ½, 0 of them.
     const tones = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor([row(0, 2), cell(i, 8)]).tone);
     expect(tones).toEqual([0, 1, 0.5, 1, 0, 1, 0.5, 0]);
+  });
+
+  test("no two rows side by side share a hue", () => {
+    // Rows land at 0, ½, ¼, ¾, … and a row's hue is the half it falls in, so
+    // the first bit alternates them however many rows the bar stacks.
+    const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor([row(i, 8)]).hue);
+    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => BAR_HUES[i % 2]));
   });
 
   test("the root selects entry 0", () => {
@@ -314,14 +326,18 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
         for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
-          expect(vocabularySelect([only], address)).toBe(only);
+          for (const step of [undefined, ...address]) {
+            for (const quantize of [inBin, nearestPoint]) {
+              expect(vocabularySelect([only], step, quantize)).toBe(only);
+            }
+          }
         }
       }
     }
   });
 
   test("an empty vocabulary has nothing to select and says so", () => {
-    expect(() => vocabularySelect([], [])).toThrow(/empty vocabulary/);
+    expect(() => vocabularySelect([], undefined, nearestPoint)).toThrow(/empty vocabulary/);
   });
 });
 
