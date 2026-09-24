@@ -9,6 +9,7 @@ import JSON5 from "json5";
 import {
   hasCacheField,
   walkNodes,
+  AXIS_OF,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -419,7 +420,7 @@ export function validateCrossReferences(
       node.children.some((child) =>
         distributionInsideCell(
           child,
-          inCell || node.direction === "horizontal",
+          inCell || AXIS_OF[node.direction] === "cell",
         ),
       )
     );

@@ -31,12 +31,12 @@ import type {
   Placement,
   SegmentDecl,
 } from "../config/dsl-types.js";
+import { AXIS_OF } from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
   placedBy,
   type AddressStep,
-  type Axis,
   type Disclosure,
   type Distribution,
   type Region,
@@ -317,15 +317,6 @@ export interface NodeType<K extends NodeKind> {
     ctx: NodeRenderCtx,
   ): RenderedLines;
 }
-
-// What a container's children are to the bar's colour: a vertical container
-// stacks ROWS (which choose the hue), a horizontal one lines up the CELLS of a
-// row (which choose the tone). [LAW:types-are-the-program] Total over
-// Direction, so a new direction is a compile error here.
-const AXIS_OF: Record<Direction, Axis> = {
-  vertical: "row",
-  horizontal: "cell",
-};
 
 // [LAW:one-source-of-truth] THE address step of a container's `index`th child:
 // which child of how many, placed by the container's distribution, along the
