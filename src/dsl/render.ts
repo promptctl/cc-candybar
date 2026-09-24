@@ -43,7 +43,7 @@ import {
   EXPRESSION_SLOTS,
   finishSelection,
   declaredBasePalette,
-  DRAWN_AT,
+  drawnDepth,
   isExpression,
   LOOK_FLOOR,
   paletteForThemeName,
@@ -406,7 +406,7 @@ export function registerDslConfig(
   // per-feature pointer would let two features disagree about which segment is
   // current. Built before the engine so the funcs can close over it; `current`
   // stays null until a render walk publishes one.
-  const activeSegment = createActiveSegmentRef();
+  const activeSegment = createActiveSegmentRef(registry.drawnAt);
   // [LAW:locality-or-seam] The menu runtime shares the action runtime (a menu's
   // glyph + body resolve from the same compiled table + store) and reads the
   // active segment through the shared record above.
@@ -460,6 +460,9 @@ export function registerDslConfig(
       presets: { fn: () => presetOptions, argTypes: [] },
     },
     opts?.clock,
+    // [LAW:one-source-of-truth] The registry's drawn-depth clock: this
+    // engine's `readableOn` floors at the same depth its variables' do.
+    registry.drawnAt,
   );
   // [LAW:single-enforcer] THE one parse path for this config: every template —
   // segment template/when/bg/fg, node `when`, and action copy/open — inherits
@@ -814,8 +817,9 @@ export function renderDsl(
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   // [LAW:one-source-of-truth] The depth this render draws at, published once
-  // before the walk: every text colour chosen below is floored on it.
-  compiled.activeSegment.drawnAt = DRAWN_AT[opts.colorCompatibility];
+  // before the walk into the registry's one clock: every text colour chosen
+  // below — and every variable template's `readableOn` — is floored on it.
+  registry.drawAt(drawnDepth(opts.colorCompatibility));
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
@@ -979,8 +983,8 @@ export function renderDsl(
     const band = bandFor(palette, disclosure);
     return {
       closed,
-      trigger: stateCell(palette, band.state, compiled.activeSegment.drawnAt),
-      band: stateCell(palette, band.plane, compiled.activeSegment.drawnAt),
+      trigger: stateCell(palette, band.state, registry.drawnAt()),
+      band: stateCell(palette, band.plane, registry.drawnAt()),
       disclosure,
     };
   };

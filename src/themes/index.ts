@@ -19,7 +19,7 @@ export {
   isStripStyle,
   listResolvablePaletteNames,
   STRIP_STYLES,
-  DRAWN_AT,
+  drawnDepth,
 } from "./policy.js";
 export type {
   StripStyle,

@@ -16,7 +16,7 @@
 // the background is the thing being computed. Readers get a message naming the
 // phase instead of a plausible-looking wrong color.
 
-import { ColorDepth, type ColorRgba, type Palette } from "@promptctl/rich-js";
+import type { ColorDepth, ColorRgba, Palette } from "@promptctl/rich-js";
 import type { Disclosure } from "../themes/decor.js";
 
 export interface ActiveSegment {
@@ -49,13 +49,6 @@ export interface ActiveSegment {
    */
   readonly tint: ColorRgba;
   /**
-   * The depth the terminal draws this segment at — the render's
-   * `ActiveSegmentRef.drawnAt`, carried so every text colour chosen for the
-   * segment (its own, its band's, its picker's) is floored on the colours the
-   * terminal will actually draw.
-   */
-  readonly drawnAt: ColorDepth;
-  /**
    * The segment's resolved background, once known: the authored `bg:`, else
    * the tint its address was dealt.
    *
@@ -70,15 +63,18 @@ export interface ActiveSegment {
 export interface ActiveSegmentRef {
   current: ActiveSegment | null;
   /**
-   * The depth this render draws at, published by `renderDsl` before its walk
-   * from the render's `colorCompatibility` (DRAWN_AT). `readableOn` reads it
-   * wherever it is evaluated; a segment carries its own copy.
+   * The depth this render draws at — every text colour chosen for a segment
+   * (its own, its band's, its picker's) is floored on the colours the terminal
+   * will actually draw. A reader of the registry's one clock
+   * (`SourceRegistry.drawnAt`), never a copy of it.
    */
-  drawnAt: ColorDepth;
+  readonly drawnAt: () => ColorDepth;
 }
 
-export function createActiveSegmentRef(): ActiveSegmentRef {
-  return { current: null, drawnAt: ColorDepth.TRUECOLOR };
+export function createActiveSegmentRef(
+  drawnAt: () => ColorDepth,
+): ActiveSegmentRef {
+  return { current: null, drawnAt };
 }
 
 /**

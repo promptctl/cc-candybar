@@ -10,10 +10,7 @@
 // [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
-import {
-  paletteFuncs,
-  readableOnFunc,
-} from "@promptctl/rich-js/template-bindings";
+import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { renderGauge } from "../template-engine/gauge.js";
 import {
   requireActiveSegment,
@@ -137,11 +134,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  // [LAW:one-source-of-truth] rich-js's own `readableOn`, measuring at the
-  // depth this render draws at — the same floor `textOn` and every band cell
-  // are chosen by, so authored readable text survives 256 colours too.
-  const readableOn = readableOnFunc(() => ref.drawnAt);
-  return { ...palette, bgOf, tint, gauge, readableOn };
+  return { ...palette, bgOf, tint, gauge };
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

@@ -396,6 +396,7 @@ export function pickerFuncs(
             placedBy(undefined),
             runtime.basePalette,
             requireOptionKind(runtime, applyName).paletteOf,
+            activeSegment.drawnAt(),
           ),
         );
       },

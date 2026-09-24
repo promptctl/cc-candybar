@@ -16,6 +16,7 @@ import {
   darken,
   blendRgb,
   contrastFor,
+  ColorDepth,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import {
@@ -68,7 +69,7 @@ interface Harness {
 }
 
 function makeHarness(): Harness {
-  const ref = createActiveSegmentRef();
+  const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
   const engine = createCcCandybarEngine(segmentColorFuncs(ref));
   return { ref, parse: (src: string) => engine.parse(src) };
 }
@@ -388,7 +389,7 @@ describe("invalid color reference → ColorSpecError", () => {
 
 describe("segment color functions in the engine", () => {
   test('{{ fg (color "primary") … }} paints the palette color', () => {
-    const ref = createActiveSegmentRef();
+    const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
     const engine = createCcCandybarEngine(segmentColorFuncs(ref));
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
     ref.current = {
@@ -396,7 +397,6 @@ describe("segment color functions in the engine", () => {
       palette: makeTestPalette(),
       disclosure: DISCLOSURE,
       tint: TINT,
-      drawnAt: ref.drawnAt,
       bg: undefined,
     };
     const fragments = tpl.evaluate({});

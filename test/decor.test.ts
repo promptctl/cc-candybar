@@ -4,7 +4,7 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
-import { ColorDepth } from "@promptctl/rich-js";
+import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
 import {
   blendRgb,
   ColorRgba,
@@ -88,6 +88,12 @@ function colourMap(shape: Shape, distribution: Distribution): Map<string, string
 const VDC = DISTRIBUTIONS["van-der-corput"];
 const row = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "row" });
 const cell = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "cell" });
+
+
+// A cell as the SGR writer draws it: a translucent colour composited over
+// black, the writer's substrate. Text is chosen against this, so it is what a
+// floor is measured on.
+const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0, 0, 0));
 
 describe("the vocabulary", () => {
   test("is bar hues × tones, every entry the theme's own", () => {
@@ -678,7 +684,27 @@ describe("a band is a plane", () => {
           ),
         ];
         for (const cell of cells) {
-          const ratio = contrastRatio(cell, textOn(palette, cell, ColorDepth.TRUECOLOR));
+          const ratio = contrastRatio(drawnGround(cell), textOn(palette, cell, ColorDepth.TRUECOLOR));
+          expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
+            ratio >= TEXT_FLOOR ? /./ : /^$/,
+          );
+        }
+      }
+    }
+  });
+
+  test("at 256 colours the drawn text clears the band floor on the drawn cell", () => {
+    // Both halves are rounded to the xterm cube independently; the pair the
+    // terminal draws is what must clear the floor.
+    const drawn = (c: ColorRgba) =>
+      ColorSpec.fromRgba(c).downgrade(ColorDepth.EIGHT_BIT).getTruecolor();
+    for (const { palette, hue } of LINEAGES) {
+      for (const depth of DEPTHS) {
+        const disclosure = { hue, depth };
+        const { plane, state } = bandFor(palette, disclosure);
+        for (const cell of [plane, state]) {
+          const text = textOn(palette, cell, ColorDepth.EIGHT_BIT);
+          const ratio = contrastRatio(drawn(text), drawn(drawnGround(cell)));
           expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
             ratio >= TEXT_FLOOR ? /./ : /^$/,
           );

@@ -552,7 +552,7 @@ export function textOn(
 }
 
 // Every cell of every render asks for its text, and the answer is a pure
-// function of (palette, background) — a bisection when the pole misses the
+// function of (palette, background, drawnAt) — a bisection when the pole misses the
 // floor, measured at 20% of a render before this memo. A palette's distinct
 // backgrounds are its tints, band colours, and the stops its authored ramps
 // reach, so each map stays as small as the colours a bar can wear.

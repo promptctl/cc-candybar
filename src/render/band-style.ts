@@ -46,11 +46,15 @@ export function stateCell(
  * an instance, so the step arrives placed by the instance's own distribution —
  * the `{{ menu }}`'s authored `distribution` option, or the default.
  */
-export function bandItemStyle(active: ActiveSegment, step: PlacedStep): Style {
+export function bandItemStyle(
+  active: ActiveSegment,
+  step: PlacedStep,
+  drawnAt: ColorDepth,
+): Style {
   return stateCell(
     active.palette,
     bandItemFor(active.palette, active.disclosure, [step]),
-    active.drawnAt,
+    drawnAt,
   );
 }
 
@@ -77,12 +81,13 @@ export function optionItemStyle(
   distribution: Distribution,
   base: Palette,
   paletteOf: OptionPalette | undefined,
+  drawnAt: ColorDepth,
 ): (position: Position, option: string) => Style {
   if (paletteOf === undefined) {
-    return (position) => bandItemStyle(active, { ...position, distribution });
+    return (position) =>
+      bandItemStyle(active, { ...position, distribution }, drawnAt);
   }
-  return (_position, option) =>
-    appliedCell(paletteOf(option, base), active.drawnAt);
+  return (_position, option) => appliedCell(paletteOf(option, base), drawnAt);
 }
 
 /**
