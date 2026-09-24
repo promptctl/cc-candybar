@@ -4,9 +4,10 @@
 // rich-js owns every color operation and knows nothing about segments;
 // cc-candybar owns segments and performs no color arithmetic of its own
 // [LAW:rich-js-owns-color-math]. This module is exactly the join: it supplies
-// rich-js's `color` and `ramp` with *which* palette, and adds the one function
+// rich-js's `color` and `ramp` with *which* palette, and adds the two functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
-// currently rendering. [LAW:one-way-deps]
+// currently rendering, and `tint`, the decoration its region dealt it.
+// [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
