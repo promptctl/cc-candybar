@@ -323,7 +323,8 @@ export function decorEntryColour(
     colours = new Map();
     DECOR_MEMO.set(palette, colours);
   }
-  const hit = colours.get(entry);
+  const key = `${entry.base}|${entry.hue}|${entry.amount}`;
+  const hit = colours.get(key);
   if (hit !== undefined) return hit;
   const colour = Oklch.fromRgba(paletteRole(palette, entry.base))
     .mixAxes(Oklch.fromRgba(paletteRole(palette, entry.hue)), {
@@ -333,16 +334,16 @@ export function decorEntryColour(
       alpha: 0,
     })
     .toRgba();
-  colours.set(entry, colour);
+  colours.set(key, colour);
   return colour;
 }
 
 // Every segment of every render asks for its tint, and the answer is a pure
 // function of (palette, entry) — two OKLCH conversions, a mix, and a possible
 // gamut bisection, ~5% of a render before this memo. Keyed by the entry's
-// identity: an address selects an element OF DECOR_VOCABULARY, so each map
-// holds at most its 18 colours.
-const DECOR_MEMO = new WeakMap<Palette, Map<DecorEntry, ColorRgba>>();
+// VALUE, whose domain is DECOR_AMTS × DECOR_BASES × DECOR_HUES, so each map
+// holds at most 18 colours whoever built the entry.
+const DECOR_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 
 /** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (palette: Palette, address: Address): ColorRgba =>
