@@ -4,7 +4,7 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
-import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
+import { ColorDepth, ColorSpec, drawnColour } from "@promptctl/rich-js";
 import {
   blendRgb,
   ColorRgba,
@@ -397,13 +397,10 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
   // foreground itself under the floor (atom-one-dark primary: 2.19). At 256
   // colours the trigger and every tint are each rounded to the xterm cube,
   // and the floor holds on what is drawn (brandon-theme-picker-bgw.ddk).
-  test.each([ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT])(
+  test.each([ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD])(
     "holds under every bundled look, where the pole alone can fall short, on the colours drawn at depth %s",
     (drawnAt) => {
-      const shown = (c: ColorRgba): ColorRgba =>
-        drawnAt === ColorDepth.EIGHT_BIT
-          ? ColorSpec.fromRgba(drawnGround(c)).downgrade(ColorDepth.EIGHT_BIT).getTruecolor()
-          : drawnGround(c);
+      const shown = (c: ColorRgba): ColorRgba => drawnColour(c, drawnAt);
       const wrong: string[] = [];
       for (const [look, key] of Object.entries(DEFAULT_DSL_CONFIG.looks)) {
         for (const base of REGISTRY) {
@@ -734,13 +731,13 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   // primary). Each is measured on the colours the terminal draws: at 256 the
   // band's colours are rounded to the xterm cube, and bandFor holds the same
   // floors there (brandon-theme-picker-bgw.ddk).
-  const DRAWN = [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT] as const;
+  // At ansi the floors are measured on the ANSI table's nominal colours, as
+  // rich-js `drawnColour` rounds them.
+  const DRAWN = [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD] as const;
   const shownAt =
     (drawnAt: ColorDepth) =>
     (c: ColorRgba): ColorRgba =>
-      drawnAt === ColorDepth.EIGHT_BIT
-        ? ColorSpec.fromRgba(drawnGround(c)).downgrade(ColorDepth.EIGHT_BIT).getTruecolor()
-        : c;
+      drawnColour(c, drawnAt);
 
   /** Every (lineage, depth) whose pair, as drawn at `drawnAt`, falls below `floor`, named. */
   function below(
@@ -797,6 +794,23 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
         bandFor(p, { hue, depth }, drawnAt).plane,
       ]),
     ).toEqual([]);
+  });
+
+  test.each(DRAWN)("a band item is drawn as neither its plane nor its trigger (depth %s)", (drawnAt) => {
+    const shown = shownAt(drawnAt);
+    const wrong = LINEAGES.flatMap(({ palette, hue, name }) =>
+      DEPTHS.flatMap((depth) => {
+        const band = bandFor(palette, { hue, depth }, drawnAt);
+        return Array.from({ length: 6 }, (_, index) =>
+          shown(bandItemFor(palette, { hue, depth }, [{ index, count: 6, distribution: DISTRIBUTIONS["van-der-corput"] }], drawnAt)),
+        ).flatMap((item, index) =>
+          item.hex === shown(band.plane).hex || item.hex === shown(band.state).hex
+            ? [`${name} depth ${depth} item ${index}`]
+            : [],
+        );
+      }),
+    );
+    expect(wrong).toEqual([]);
   });
 
   test("distinct hues yield distinct triggers; a theme whose vocabulary repeats a colour repeats its trigger", () => {

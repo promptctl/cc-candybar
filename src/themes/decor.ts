@@ -472,6 +472,28 @@ export function stateFor(
   hue: DecorHue,
   drawnAt: ColorDepth,
 ): ColorRgba {
+  let states = STATE_MEMO.get(palette);
+  if (states === undefined) {
+    states = new Map();
+    STATE_MEMO.set(palette, states);
+  }
+  const key = `${hue}|${drawnAt}`;
+  const hit = states.get(key);
+  if (hit !== undefined) return hit;
+  const state = searchState(palette, hue, drawnAt);
+  states.set(key, state);
+  return state;
+}
+
+// Memoised per palette like the band: a band's floors ask for the states of
+// its neighbours at two depths, and the render walk asks for every band.
+const STATE_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
+
+function searchState(
+  palette: Palette,
+  hue: DecorHue,
+  drawnAt: ColorDepth,
+): ColorRgba {
   // Measured as drawn: a translucent theme's tints and candidates are shown
   // composited over the terminal's black, and a raw-RGBA ratio reads colours
   // drawn nowhere (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
@@ -692,11 +714,14 @@ export function bandFor(
     hueAtDepth(disclosure.hue, disclosure.depth),
     drawnAt,
   );
+  // The plane is the truecolor plane as drawn — rounded once, from the
+  // theme's own colours, never blended from a state already rounded.
+  const neighbours = planeNeighbours(palette, disclosure, state, drawnAt);
   const plane = ensureDrawn(
-    planeOf(palette, state, disclosure.depth),
+    trueBand(palette, disclosure).plane,
     drawnAt,
     (candidate, drawn) =>
-      planeNeighbours(palette, disclosure, state, drawnAt).every(
+      neighbours.every(
         ([other, floor]) => deltaE(candidate, drawn(other)) >= floor,
       ),
   );
@@ -713,14 +738,22 @@ export function bandFor(
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
-// The plane a band at `depth` recedes to from its trigger's `state`: the
-// colour `bandFor` starts from before any drawn rounding repairs it.
-function planeOf(palette: Palette, state: ColorRgba, depth: number): ColorRgba {
+// The band as truecolor draws it — the colours every depth rounds from, and
+// the pair whose floors decide which floors a drawn band is held to.
+function trueBand(palette: Palette, disclosure: Disclosure): Band {
+  const state = stateFor(
+    palette,
+    hueAtDepth(disclosure.hue, disclosure.depth),
+    ColorDepth.TRUECOLOR,
+  );
   const recession = Math.min(
     BAND_RECESSION.cap,
-    BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
+    BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
   );
-  return blendRgb(state, paletteRole(palette, "background"), recession);
+  return {
+    state,
+    plane: blendRgb(state, paletteRole(palette, "background"), recession),
+  };
 }
 
 // What a band's plane must stand off, each with the floor it keeps there: its
@@ -735,11 +768,12 @@ function planeNeighbours(
   drawnAt: ColorDepth,
 ): ReadonlyArray<readonly [ColorRgba, number]> {
   const { hue, depth } = disclosure;
-  // The truecolor band is the unrepaired one — its state and `planeOf` it —
+  // The truecolor band is the unrepaired one (`trueBand`),
   // so no floor asks `bandFor` for the band it is computing.
   const trueState = (d: number): ColorRgba =>
-    stateFor(palette, hueAtDepth(hue, d), ColorDepth.TRUECOLOR);
-  const truePlane = (d: number): ColorRgba => planeOf(palette, trueState(d), d);
+    trueBand(palette, { hue, depth: d }).state;
+  const truePlane = (d: number): ColorRgba =>
+    trueBand(palette, { hue, depth: d }).plane;
   const shown = (c: ColorRgba): ColorRgba =>
     drawnColour(c, ColorDepth.TRUECOLOR);
   const plane = truePlane(depth);
@@ -783,12 +817,27 @@ export function bandItemFor(
   address: readonly PlacedStep[],
   drawnAt: ColorDepth,
 ): ColorRgba {
-  const { state, plane } = bandFor(palette, disclosure, drawnAt);
-  return blendRgb(
-    plane,
-    state,
-    BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address),
+  const band = bandFor(palette, disclosure, drawnAt);
+  const truecolor = trueBand(palette, disclosure);
+  const item = ensureDrawn(
+    blendRgb(
+      truecolor.plane,
+      truecolor.state,
+      BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address),
+    ),
+    drawnAt,
+    // An item is never the plane it sits on and never its own trigger — as
+    // drawn, where a rounding can land it on either.
+    (candidate, drawn) =>
+      candidate.hex !== drawn(band.plane).hex &&
+      candidate.hex !== drawn(band.state).hex,
   );
+  if (item === undefined) {
+    throw new Error(
+      `palette "${palette.name}": a ${disclosure.hue} band item at depth ${disclosure.depth} is drawn as its plane or its trigger at depth ${ColorDepth[drawnAt]}, and nothing that depth draws is neither`,
+    );
+  }
+  return item;
 }
 
 // --- Regions -------------------------------------------------------------------
