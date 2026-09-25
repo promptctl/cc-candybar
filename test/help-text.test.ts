@@ -9,7 +9,7 @@ describe("HELP_TEXT", () => {
   // landed. The glyph is read from the synthesis that renders it, not spelled
   // again here — a renamed anchor must break this loudly.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
-    expect(HELP_TEXT).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
+    expect(HELP_TEXT).toMatch(/theme\/look\/style\/charset\/colour-depth\/wrap\/padding\s+controls/i);
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/persist\?/);
   });

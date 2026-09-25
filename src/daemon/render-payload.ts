@@ -28,15 +28,13 @@ import {
 } from "../config/presets.js";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../config/loader/edit-mode.js";
 import {
-  DEFAULT_CHARSET,
-  DEFAULT_COLOR_COMPATIBILITY,
-} from "../render/strip.js";
-import {
   effectiveAutoWrap,
   resolveLookSelection,
   type LookSelection,
   effectivePadding,
   effectiveStripStyle,
+  effectiveCharset,
+  effectiveColorCompatibility,
   DEFAULT_UPDATE_NOTICE,
 } from "../themes/policy.js";
 import {
@@ -75,13 +73,11 @@ import type {
 // BuildLineOptions), so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
 // theme/look already followed, generalized to every globals field a menu or
-// stepper can persist. `theme`/`look`/`style`/`autoWrap`/`padding` compose
-// SessionState over the config default (a session pick can diverge from the
-// persisted default for its own session); `charset` and `colorCompatibility`
-// have no SessionState half — they describe the terminal (glyph coverage,
-// colour depth) rather than a per-session taste, so the resolved config global
-// over its floor constant is their whole resolution. See CHARSETS in
-// themes/policy.ts for why that is a decision rather than a gap.
+// stepper can persist. Every one of them composes SessionState over the config
+// default (a session pick can diverge from the persisted default for its own
+// session) — `charset` and `colorCompatibility` included, because a session
+// runs in one terminal and those two describe it (see CHARSETS in
+// themes/policy.ts).
 export interface EffectiveGlobals {
   // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
   // (brandon-themes-dzl) — `look`'s twin one dimension over, and for the same
@@ -124,8 +120,8 @@ export interface EffectiveGlobals {
   // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
   // pickJoiner already reads undefined as "use the class default", so naming a
   // floor here would be a second copy of a constant that lives in rich-js.
-  // Like charset it has no SessionState half — the config global (as staged by
-  // whatever fragment is on top) is its whole resolution.
+  // It has no SessionState half — the config global (as staged by whatever
+  // fragment is on top) is its whole resolution.
   readonly separator: string | undefined;
   readonly charset: Charset;
   readonly colorCompatibility: ColorCompatibility;
@@ -205,13 +201,18 @@ export function resolveEffectiveGlobals(
       sessionPick("padding"),
       globals.padding,
     ),
-    charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
+    charset: effectiveCharset(
+      staged.charset,
+      sessionPick("charset"),
+      globals.charset,
+    ),
     updateNotice:
       staged.updateNotice ?? globals.updateNotice ?? DEFAULT_UPDATE_NOTICE,
-    colorCompatibility:
-      staged.colorCompatibility ??
-      globals.colorCompatibility ??
-      DEFAULT_COLOR_COMPATIBILITY,
+    colorCompatibility: effectiveColorCompatibility(
+      staged.colorCompatibility,
+      sessionPick("colorCompatibility"),
+      globals.colorCompatibility,
+    ),
   };
 }
 
