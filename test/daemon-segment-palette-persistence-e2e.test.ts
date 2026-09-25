@@ -128,7 +128,6 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       path.join(os.tmpdir(), "cc-candybar-seg-palette-e2e-project-"),
     );
     const userConfigPath = path.join(projectDir, ".cc-candybar.json5");
-    // The control lives on its own row, so the status row stays the last line.
     const control = {
       template: '🎨 directory {{ menu "applyDirectoryPalette" "▸" "▾" }}',
     };
