@@ -460,6 +460,28 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
       bandItemFor(degenerate, { hue: "accent", depth: 0 }, [first], ColorDepth.TRUECOLOR),
     ).toThrow(/"degenerate".*accent band item at depth 0 is drawn as its plane or its trigger/);
   });
+
+  test("a band whose nested hue has no state still opens; the nested band throws only when it is asked for", () => {
+    // Whether a hue finds a state depends on the hue: this accent clears on
+    // its pure mix, while the primary nested under it clears nowhere. The
+    // depth-0 band every closed cell deals must not inherit that refusal.
+    const roles = new Map<string, ColorRgba>([
+      ["background", new ColorRgba(110, 14, 61)],
+      ["surface", new ColorRgba(59, 105, 208)],
+      ["foreground", new ColorRgba(99, 36, 231)],
+      ["primary", new ColorRgba(244, 76, 127)],
+      ["secondary", new ColorRgba(37, 185, 27)],
+      ["accent", new ColorRgba(93, 254, 37)],
+    ]);
+    const lopsided = new Palette("lopsided", true, roles);
+    const nested = hueAtDepth(OPEN_HUE, 1);
+    for (const drawnAt of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
+      expect(() => bandFor(lopsided, { hue: OPEN_HUE, depth: 0 }, drawnAt)).not.toThrow();
+      expect(() => bandFor(lopsided, { hue: OPEN_HUE, depth: 1 }, drawnAt)).toThrow(
+        new RegExp(`"lopsided".*"${nested}".*state floor`),
+      );
+    }
+  });
 });
 
 describe("done-when: the enforcement is a floor, not a transform", () => {

@@ -473,6 +473,25 @@ export function stateFor(
   hue: DecorHue,
   drawnAt: ColorDepth,
 ): ColorRgba {
+  const search = stateSearch(palette, hue, drawnAt);
+  if ("refused" in search) throw new Error(search.refused);
+  return search.state;
+}
+
+/**
+ * The state search's outcome as a value: the colour, or why no colour clears.
+ * Whether a hue finds one depends on the hue (its pure mix may clear where
+ * `foreground` beyond cannot), so a caller that needs a NEIGHBOUR's state
+ * reads the refusal rather than inheriting its throw — a band that can never
+ * be drawn is nothing to stand off, and it still throws when it is opened.
+ */
+type StateSearch = { state: ColorRgba } | { refused: string };
+
+function stateSearch(
+  palette: Palette,
+  hue: DecorHue,
+  drawnAt: ColorDepth,
+): StateSearch {
   let states = STATE_MEMO.get(palette);
   if (states === undefined) {
     states = new Map();
@@ -481,20 +500,20 @@ export function stateFor(
   const key = `${hue}|${drawnAt}`;
   const hit = states.get(key);
   if (hit !== undefined) return hit;
-  const state = searchState(palette, hue, drawnAt);
-  states.set(key, state);
-  return state;
+  const search = searchState(palette, hue, drawnAt);
+  states.set(key, search);
+  return search;
 }
 
 // Memoised per palette like the band: a band's floors ask for the states of
 // its neighbours at two depths, and the render walk asks for every band.
-const STATE_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
+const STATE_MEMO = new WeakMap<Palette, Map<string, StateSearch>>();
 
 function searchState(
   palette: Palette,
   hue: DecorHue,
   drawnAt: ColorDepth,
-): ColorRgba {
+): StateSearch {
   // Measured as drawn: a translucent theme's tints and candidates are shown
   // composited over the terminal's black, and a raw-RGBA ratio reads colours
   // drawn nowhere (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
@@ -531,19 +550,19 @@ function searchState(
     ),
   );
   if (state === undefined) {
-    throw new Error(
-      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even beyond foreground`,
-    );
+    return {
+      refused: `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even beyond foreground`,
+    };
   }
   const drawnState = ensureDrawn(state, drawnAt, (candidate, drawn) =>
     tints.every((tint) => contrastRatio(candidate, drawn(tint)) >= STATE_FLOOR),
   );
   if (drawnState === undefined) {
-    throw new Error(
-      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor on the colours drawn at depth ${ColorDepth[drawnAt]}`,
-    );
+    return {
+      refused: `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor on the colours drawn at depth ${ColorDepth[drawnAt]}`,
+    };
   }
-  return drawnState;
+  return { state: drawnState };
 }
 
 /**
@@ -797,20 +816,22 @@ function planeNeighbours(
   const plane = truePlane(depth);
   const kept = (floor: number, other: ColorRgba): number =>
     deltaE(shown(plane), shown(other)) >= floor ? floor : 0;
-  // Asking for the nested trigger widens no failure: whether `stateFor` finds
-  // a colour does not depend on the hue (its last candidate, and every drawn
-  // replacement, are judged against the bar's tints alone), so a nested hue
-  // throws only where this band's own trigger already has.
+  // The nested trigger is a neighbour only where it can be drawn: a hue with
+  // no state is a band that throws when opened, and must not take this band —
+  // and every closed cell that deals it — down with it.
   const nested = hueAtDepth(hue, depth + 1);
+  const nestedDrawn = stateSearch(palette, nested, drawnAt);
+  const nestedTrue = stateSearch(palette, nested, ColorDepth.TRUECOLOR);
   return [
     [state, kept(BAND_FLOORS.triggerPlane, trueState(depth))],
-    [
-      stateFor(palette, nested, drawnAt),
-      kept(
-        BAND_FLOORS.nestedTriggerPlane,
-        stateFor(palette, nested, ColorDepth.TRUECOLOR),
-      ),
-    ],
+    ...("state" in nestedDrawn && "state" in nestedTrue
+      ? [
+          [
+            nestedDrawn.state,
+            kept(BAND_FLOORS.nestedTriggerPlane, nestedTrue.state),
+          ] as const,
+        ]
+      : []),
     ...(depth > 0
       ? [
           [
