@@ -4,7 +4,7 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
-import { ColorDepth, ColorSpec, drawnColour } from "@promptctl/rich-js";
+import { ColorDepth, drawnColour } from "@promptctl/rich-js";
 import {
   blendRgb,
   ColorRgba,
@@ -724,17 +724,17 @@ describe("a band is a plane", () => {
   });
 
   test("at 256 colours the drawn text clears the band floor on the drawn cell", () => {
-    // Both halves are rounded to the xterm cube independently; the pair the
+    // The band as 256 draws it — repaired where rounding broke a floor — and
+    // both halves rounded to the xterm cube independently; the pair the
     // terminal draws is what must clear the floor.
-    const drawn = (c: ColorRgba) =>
-      ColorSpec.fromRgba(c).downgrade(ColorDepth.EIGHT_BIT).getTruecolor();
+    const drawn = (c: ColorRgba) => drawnColour(c, ColorDepth.EIGHT_BIT);
     for (const { palette, hue } of LINEAGES) {
       for (const depth of DEPTHS) {
         const disclosure = { hue, depth };
-        const { plane, state } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+        const { plane, state } = bandFor(palette, disclosure, ColorDepth.EIGHT_BIT);
         for (const cell of [plane, state]) {
           const text = textOn(palette, cell, ColorDepth.EIGHT_BIT);
-          const ratio = contrastRatio(drawn(text), drawn(drawnGround(cell)));
+          const ratio = contrastRatio(drawn(text), drawn(cell));
           expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
             ratio >= TEXT_FLOOR ? /./ : /^$/,
           );

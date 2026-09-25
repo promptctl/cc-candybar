@@ -660,7 +660,7 @@ export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
  * trigger off the plane it sits on. They hold over the depths a bar reaches
  * (0–2; depth 3 is the model's limit, see BAND_RECESSION) in truecolor by the
  * construction below — `test/decor.test.ts` pins the measured minima — and
- * `bandFor` holds each one again on the colours drawn at 256.
+ * `bandFor` holds each one again on the colours drawn at 256 and ansi.
  */
 export const BAND_FLOORS = {
   triggerPlane: 0.1,
@@ -694,8 +694,8 @@ export interface Band {
  *
  * Memoised per (palette, hue, depth, drawnAt): the render walk asks for every
  * segment's band on every render, and palettes are memoised objects
- * (transposedPalette), so the key is stable and the search in `stateFor` runs
- * once per palette and depth.
+ * (transposedPalette), so the key is stable and each band is computed once
+ * per palette, hue, depth and drawn depth.
  */
 export function bandFor(
   palette: Palette,
