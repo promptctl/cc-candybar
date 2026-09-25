@@ -14,7 +14,7 @@
 //   - the render's look reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
-import { getThemePalette } from "@promptctl/rich-js";
+import { ColorRgba, getThemePalette, Palette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -449,5 +449,52 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
     plain.dispose();
     rt.dispose();
+  });
+});
+
+describe("a band whose nested hue has no state", () => {
+  // This accent clears the state floor on its pure mix; the primary nested
+  // under it clears nowhere. Every cell of an open depth-0 body deals that
+  // nested band, but only a cell with something open under it may draw it.
+  const lopsided = new Palette(
+    "lopsided",
+    true,
+    new Map<string, ColorRgba>([
+      ["background", new ColorRgba(110, 14, 61)],
+      ["surface", new ColorRgba(59, 105, 208)],
+      ["foreground", new ColorRgba(99, 36, 231)],
+      ["primary", new ColorRgba(244, 76, 127)],
+      ["secondary", new ColorRgba(37, 185, 27)],
+      ["accent", new ColorRgba(93, 254, 37)],
+    ]),
+  );
+
+  test("renders the bar and an open body without an error", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        segments: { inner: { template: 'INNER-BODY' } },
+        root: { v: [ { kind: 'group', name: 'details', label: 'details', open: true, children: ['inner'] } ] },
+      }`,
+      ALLOWED,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const compiled = registerDslConfig(config, registry);
+    const errors: string[] = [];
+    const out = renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s1" },
+      OPTS,
+      { onSegmentError: (name, message) => errors.push(`${name}: ${message}`) },
+      { theme: { kind: "decided", name: "lopsided", value: lopsided } },
+    );
+    expect(errors).toEqual([]);
+    expect(out).toContain("INNER-BODY");
+    registry.dispose();
   });
 });
