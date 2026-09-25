@@ -1,3 +1,15 @@
+# [1.76.0](https://github.com/promptctl/cc-candybar/compare/v1.75.0...v1.76.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **themes:** state, band and seam floors hold on the colours drawn at 256 and ansi ([#241](https://github.com/promptctl/cc-candybar/issues/241)) ([42caf67](https://github.com/promptctl/cc-candybar/commit/42caf67c0724b20248094af8c6d503e700e529e7))
+
+
+### Features
+
+* **settings:** preset carousel with the layout drawn beneath it ([#240](https://github.com/promptctl/cc-candybar/issues/240)) ([0a6f75c](https://github.com/promptctl/cc-candybar/commit/0a6f75c66040985810524fc9d3bcd61132b9991e))
+
 # [1.75.0](https://github.com/promptctl/cc-candybar/compare/v1.74.5...v1.75.0) (2026-09-24)
 
 
