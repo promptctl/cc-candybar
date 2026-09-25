@@ -481,10 +481,10 @@ export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
 
 // --- Layout globals (autoWrap, padding) ---
 //
-// These two DO have a session half, unlike charset/colorCompatibility above:
-// wrapping and cell padding are how much bar you want on your screen right now
+// Wrapping and cell padding are how much bar you want on your screen right now
 // — a taste that legitimately differs between one session in a wide terminal
-// and another in a split pane. Their floors and domains live here, beside the
+// and another in a split pane, so, like charset and colorCompatibility above,
+// each resolves a session pick over the config default. Their floors and domains live here, beside the
 // other globals vocabularies, because both the config loader (range validation,
 // JSON-schema emit) and the render layer need them and config must not import
 // render [LAW:one-way-deps]. src/render/strip.ts re-exports them so render-layer

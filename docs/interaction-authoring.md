@@ -1039,10 +1039,9 @@ is a load error naming the one way an absent template is legal. `reset`
 removes the `palette` line, and the `model: {}` it leaves empty goes with
 it, so the segment tracks the bundled declaration again.
 
-Like `charset` and `colorCompatibility` above, a segment's `palette:` has no
-SessionState half — `persist` is its only seam, so there is no session
-`set` twin to pair it with. (`autoWrap` and `padding` are the two display
-globals that *do* have one.)
+A segment's `palette:` has no SessionState half — `persist` is its only seam,
+so there is no session `set` twin to pair it with. (The display globals
+`charset`, `colorCompatibility`, `autoWrap` and `padding` do have one.)
 
 ### The global settings menu: `settings.menu`
 
