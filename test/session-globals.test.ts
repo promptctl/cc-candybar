@@ -29,11 +29,9 @@ import {
   resolveLookSelection,
   effectivePadding,
   effectiveStripStyle,
-} from "../src/themes";
-import {
   effectiveCharset,
   effectiveColorCompatibility,
-} from "../src/themes/policy";
+} from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
 import type { PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";
