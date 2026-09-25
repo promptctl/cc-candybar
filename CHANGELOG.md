@@ -1,3 +1,10 @@
+# [1.77.0](https://github.com/promptctl/cc-candybar/compare/v1.76.0...v1.77.0) (2026-09-25)
+
+
+### Features
+
+* **settings:** charset and colour depth move from the bar into the settings menu ([#242](https://github.com/promptctl/cc-candybar/issues/242)) ([64a8234](https://github.com/promptctl/cc-candybar/commit/64a8234295503c66214264a8e543c0efa6871524))
+
 # [1.76.0](https://github.com/promptctl/cc-candybar/compare/v1.75.0...v1.76.0) (2026-09-25)
 
 
