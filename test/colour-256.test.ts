@@ -166,6 +166,10 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
       JSON.stringify(c[k]!.fg) === JSON.stringify(c[k - 1]!.bg);
     if (joiner && left !== undefined && truecolor[i]!.joiner && continues(truecolor, i) && !continues(quantized, i))
       failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} after a cell on ${JSON.stringify(left.bg)}`);
+    // A seam glyph is measured on colours only while 256 draws them from its
+    // own table: one in ANSI 0–15 is whatever the terminal's theme makes it.
+    if ((ARROWS.has(ch) || ch in DIVIDERS) && fg !== undefined && bg !== undefined && (!isRgb(fg) || !isRgb(bg)))
+      failures.push(`${label} ${ch}: seam drawn in terminal-defined ANSI colours`);
     // An arrow drawn in the colour of the cell it enters is no seam at all.
     if (ARROWS.has(ch) && isRgb(fg) && isRgb(bg) && deltaE(fg, bg) < SEAM_MIN_DELTA_E)
       failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} vanishes into ${JSON.stringify(bg)}`);
@@ -199,8 +203,13 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
 function sameIndex(label: string, ansi: Chars, failures: string[]): number {
   let measured = 0;
   for (const { ch, fg, bg } of ansi) {
-    if (fg === undefined || bg === undefined || isRgb(fg) || isRgb(bg)) continue;
+    if (fg === undefined || bg === undefined) continue;
     measured++;
+    // At ansi every colour is an index; an RGB one is a writer that ignored the depth.
+    if (isRgb(fg) || isRgb(bg)) {
+      failures.push(`${label} '${ch}': RGB drawn at ansi`);
+      continue;
+    }
     if (fg.ansi === bg.ansi) failures.push(`${label} '${ch}': index ${fg.ansi} on ${bg.ansi}`);
   }
   return measured;
