@@ -28,16 +28,8 @@
 // loader's own synthesis pass (see the bottom of this file) — a `DslConfig`,
 // the same effective shape every user config resolves to.
 
-import type { DslConfig, LayoutNode, SegmentDecl } from "./dsl-types.js";
+import type { DslConfig, SegmentDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
-// [LAW:one-source-of-truth] The bundled drawer's menus author their own
-// disclosure glyphs now that `{{ menu }}` appends none. Interpolating the
-// shared constants keeps the stdlib bar reading like every other disclosure
-// without restating the vocabulary in three string literals.
-import {
-  DISCLOSURE_GLYPH_CLOSED,
-  DISCLOSURE_GLYPH_OPEN,
-} from "./disclosure.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { quickActions } from "./quick-actions.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
@@ -224,61 +216,6 @@ const GIT_TEMPLATE =
 // (`textOn`), so it cannot disagree with the background about where the cell
 // warms. Both thresholds are variables, so the ascending constraint is between
 // two knobs the user can see.
-
-// ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
-
-// [LAW:one-source-of-truth] exception: `kind: "group"` is authoring-grammar
-// sugar the loader lowers at parse time (src/config/loader/layout.ts) —
-// deliberately NOT a member of the canonical LayoutNode union DslConfig.root
-// requires (arranging + gating are behaviors `container` already has; "group"
-// is only a spelling), so a plain `satisfies DslConfig` cannot type-check it
-// inline below. Hand-lowering it here instead (writing the toggle segment +
-// gated body container by hand, under the reserved `groups.` namespace) is
-// NOT an option: reservedNamespaceCollisions rejects any USER-authored
-// variables/actions/segments name starting with `groups.` before synthesis
-// ever runs, so a hand-authored `groups.settings` segment would be rejected
-// as squatting the very namespace it's trying to populate — the sugar node is
-// the only legal way to populate it. This literal is unconditionally
-// round-tripped through the real parseDslConfig pipeline below (see the
-// module-load parse near the bottom of this file) exactly like a user's
-// hand-authored JSON5, so a malformed group is still caught loudly at import
-// time — the type safety net just moves from tsc to that parse, never lost.
-//
-// One collapsed-by-default drawer holding what the SESSION-scoped settings
-// menu deliberately does not: `charset` and `colorCompatibility` — terminal
-// capability facts (glyph coverage, colour depth) rather than tastes that
-// vary session to session, so they have no session half to choose between —
-// and one segment-scoped persist control (directoryPaletteControl, a
-// per-segment palette pin rather than a whole-bar default).
-//
-// [LAW:one-source-of-truth] candybar-settings-ui-aok.3 moved every setting
-// with BOTH halves — theme/style/look/preset/autoWrap/padding — out of this
-// drawer and into the synthesized settings menu, where each is ONE control
-// whose destination the `persist?` selector chooses. They used to be spelled
-// twice here (`{{ menu "applyTheme" }}` beside `📌{{ menu
-// "applyThemeForever" }}`), which is exactly the second representation that
-// collapse removed. What is left in this drawer is durable-only by nature,
-// not by omission — there is nothing for a persist? selector to choose.
-//
-// Placed as a sibling in row 1's horizontal container — see `root` below.
-//
-// [LAW:one-source-of-truth] exception: this `kind: "group"` sugar node may
-// appear EXACTLY ONCE in the whole config — group names are a synthesis-wide
-// namespace (synthesizeGroupDecls collects every group across every preset's
-// root too), so a second `settingsDrawer` reference embedded in a preset's
-// own root would be a SECOND declaration of "settings" and collide with
-// itself, not a reuse of the first. It stays only in the default `root`
-// below; the library presets under `presets:` reach it by switching back to
-// the "default" preset from the GLOBAL settings menu, which
-// synthesizeSettingsMenu splices into every preset root
-// (src/config/settings-menu.ts) — never by re-embedding this group.
-const settingsDrawer = {
-  kind: "group",
-  name: "settings",
-  label: "⚙ terminal",
-  direction: "horizontal",
-  children: ["charsetControl", "colorCompatControl", "directoryPaletteControl"],
-} as unknown as LayoutNode;
 
 // ─── The default config ──────────────────────────────────────────────────────
 
@@ -1155,69 +1092,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '{{ or (ne .activity.command "") (gt .activity.todo.total 0)' +
         ' (ne .activity.tool.running "") (ne .activity.tool.done "") }}',
     },
-    // ── The TWO globals steppers left in this drawer. `charset` and
-    // `colorCompatibility` have no SessionState half at all — they describe
-    // the terminal, not a taste that varies per session — so `persist` is
-    // genuinely their only seam and there is no destination for a `persist?`
-    // selector to choose between. Everything with both halves
-    // (theme/style/look/preset/autoWrap/padding) moved to the synthesized
-    // settings menu as ONE dual control each (candybar-settings-ui-aok.3).
-    // Each pairs a `persist` control with a `↺` reset (docs' persist/reset
-    // convention); labels read `.field.effective` (the daemon-resolved value
-    // BuildLineOptions actually rendered with), never a restated literal.
-    charsetControl: {
-      description:
-        "The `⚙ terminal` drawer's control for `globals.charset` — the joiner glyph vocabulary.",
-      template:
-        "{{ .charset.effective }} " +
-        `{{ menu "applyCharsetForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
-        '{{ action "resetCharset" "↺" }}',
-    },
-    colorCompatControl: {
-      description:
-        "The `⚙ terminal` drawer's control for `globals.colorCompatibility` — the colour depth.",
-      template:
-        "{{ .colorCompatibility.effective }} " +
-        `{{ menu "applyColorCompatForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
-        '{{ action "resetColorCompat" "↺" }}',
-    },
-    // [LAW:verifiable-goals] candybar-config-engine-71o.6's own acceptance
-    // bar, mirrored from .3/.5: at least ONE segment-scoped field must be
-    // menu-able from the BUNDLED default with no hand-authored actions.
-    // `directory` is the demo target — always visible, palette-driven
-    // bg/fg, so an override is immediately legible. The persist/reset pair
-    // below targets `segments.directory.palette` (not a Globals field),
-    // proving the option-domain-as-data seam generalizes to segment-scoped
-    // keys with zero engine edits beyond opening the key namespace itself
-    // (loader/persist-target.ts) — the SAME `from: "themes"` domain
-    // applyThemeForever already uses.
-    // [LAW:one-source-of-truth] exception: unlike charsetControl/
-    // the other controls' `.field.effective` labels, there is no
-    // `segments.directory.palette.effective` payload projection — adding one
-    // would require threading the full DslConfig through
-    // buildRenderPayload's signature (today built from EffectiveGlobals
-    // alone), a change with no other motivation than this one label. The
-    // control still writes/persists/resets correctly without it: per
-    // render/action.ts's CONFIG_KEY_TO_EFFECTIVE_VAR, a persist key with no
-    // effective-var entry writes fine and only loses the picker's "current
-    // selection" highlight — a documented, already-accepted degrade path,
-    // not a bug.
-    directoryPaletteControl: {
-      description:
-        "The `⚙ terminal` drawer's control pinning the directory segment's own palette.",
-      template:
-        "🎨 directory " +
-        `{{ menu "applyDirectoryPaletteForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
-        '{{ action "resetDirectoryPalette" "↺" }}',
-    },
   },
 
   // Default layout — the canonical Root: a map of NAMED rows (`satisfies
   // DslConfig` requires the lowered node form inside each row; the terse
   // Option-A `{ h/v/seg }` grammar is the loader's authoring surface for user
-  // JSON, not this typed literal — the one exception being `settingsDrawer`
-  // above, whose `kind: "group"` sugar has no canonical-form equivalent it
-  // could be hand-lowered to; see its own comment).
+  // JSON, not this typed literal).
   //
   // [LAW:one-source-of-truth] The row NAMES are the merge keys. A user file's
   // `root: { rows: { status: { h: [...] } } }` replaces exactly the row it
@@ -1227,17 +1107,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // base it merges onto, so the canonical shape and the authoring shape are
   // one object by construction.
   //
-  // Two always-visible rows: an IDENTITY row (where am I — the directory, the
-  // verbose `gitaculous` line, and the settingsDrawer toggle) over a STATUS row
-  // (what's happening now — model, context-window fill, prompt-cache warmth,
-  // and the 5h / 7d rate-limit quotas). The settingsDrawer (candybar-config-
-  // engine-71o.4) sits on the identity row — collapsed by
-  // default and visually silent (a single "⚙ settings ▸" cell) — and reveals a
-  // third row of every bar-mutable display default (theme, style, look,
-  // charset, colorCompatibility, autoWrap, padding) on the line immediately
-  // below row 1 when opened, exactly where a `{{ menu }}`'s own picker body
-  // would drop. Each row zips its segments through the powerline joiner; `\n`
-  // separates the rows.
+  // Two always-visible rows: an IDENTITY row (where am I — the host, the
+  // directory and the verbose `gitaculous` line) over a STATUS row (what's
+  // happening now — model, context-window fill, prompt-cache warmth, and the
+  // 5h / 7d rate-limit quotas). Every setting lives behind the settings-menu
+  // door the loader leads the first row with (src/config/settings-menu.ts),
+  // not on the bar. Each row zips its segments through the powerline joiner;
+  // `\n` separates the rows.
   //
   // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
   // own signal (no repo → the identity row is just the directory; no
@@ -1260,7 +1136,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "host" },
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
-          settingsDrawer,
         ],
       },
       status: {
@@ -1298,43 +1173,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   actions: {
     ...quickActions("").actions,
     copyDir: { copy: "{{ .current_dir }}" },
-
-    // [LAW:locality-or-seam] The settings-drawer controls' behaviors
-    // (candybar-config-engine-71o.4), decoupled by NAME from
-    // charsetControl/colorCompatControl below. These are durable-only by
-    // NATURE, not by omission: `charset` and `colorCompatibility` describe the
-    // terminal (glyph coverage, colour depth) rather than a taste that varies
-    // between sessions, so they have no SessionState half for a `persist?`
-    // selector to choose between — which is exactly why
-    // candybar-settings-ui-aok.3 left them here while moving every
-    // both-halves setting into the settings menu as one dual control. Each
-    // writes the config DEFAULT into the config file itself (candybar-
-    // config-dqe: the file is the one durable store), gated by the SAME
-    // deriveConfigActionValidators pass, and is paired with a `reset` so a
-    // drawer choice is always undoable from the bar.
-    applyCharsetForever: { persist: "charset", from: "charsets" },
-    resetCharset: { reset: "charset" },
-    applyColorCompatForever: {
-      persist: "colorCompatibility",
-      from: "colorCompatibilities",
-    },
-    resetColorCompat: { reset: "colorCompatibility" },
-
-    // [LAW:locality-or-seam] The segment-palette control's behavior
-    // (candybar-config-engine-71o.6), decoupled by NAME from
-    // directoryPaletteControl below. The target key is `segments.directory.
-    // palette` — NOT a Globals field — so it rides the SAME generic
-    // `from`/`reset` machinery every other persist pair here uses, over a
-    // key namespace loader/persist-target.ts opened alongside the pre-
-    // existing Globals-field one. Like charset/colorCompatibility, this field has
-    // no SessionState half at all: a per-segment `palette:` is a static pin
-    // that ignores the session theme by design (src/dsl/render.ts), so
-    // `persist` is its only seam.
-    applyDirectoryPaletteForever: {
-      persist: "segments.directory.palette",
-      from: "themes",
-    },
-    resetDirectoryPalette: { reset: "segments.directory.palette" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────

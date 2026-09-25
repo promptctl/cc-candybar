@@ -507,11 +507,10 @@ The bundled default ships two ready-made presets on top of its own two-row
 — one row (directory, git, context) at `padding: 0`, for narrow terminals and
 split panes — and `"verbose"` — the default's own rows plus a third,
 surfacing every segment the default declares but leaves opt-in (`gitPr`,
-`burnrate`, `speed`, `tokenSparkline`). Both carry a standalone `▦` preset
-picker in place of the default's full settings drawer, so switching to either
-never strands a session without a way back. Try them without writing a config
-at all — click `▦` beside the settings drawer — or pin one as your default
-with `globals: { preset: "compact" }`.
+`burnrate`, `speed`, `tokenSparkline`). Every preset carries the settings-menu
+door, so switching to either never strands a session without a way back. Try
+them without writing a config at all — open the door and click `▦` — or pin
+one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass
 {
@@ -1070,7 +1069,7 @@ that leads it closes the menu. Everything it
 opens in turn drops below:
 
 ```
-❌ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
+❌ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🖥 glyphs & colour depth ▸   🧰 tools ▸   ✎ edit
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
@@ -1101,10 +1100,12 @@ close.
   open menu covers the door's own row, edit chrome included.
 - **`⚙ config`** opens the display settings: theme, look, style, wrap and
   padding, each ONE control that follows the checkbox, each with a `↺` that
-  forgets its durable default. `charset` and `colorCompatibility` are
-  deliberately absent — they describe your terminal rather than a taste that
-  varies session to session, so they have no session half to choose between and
-  stay config-file settings.
+  forgets its durable default.
+- **`🖥 glyphs & colour depth`** opens `charset` (the joiner glyphs: `unicode`
+  or `ascii`) and `colorCompatibility` (the colour depth: `truecolor`, `256`,
+  `ansi`, `none`), each a carousel with a `↺`. They describe your terminal
+  rather than a taste that varies session to session, so they have no session
+  half: every click writes the config file, whatever `persist?` says.
 - **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look
@@ -1193,43 +1194,6 @@ the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
 reserved namespace" below). Edit mode also treats those names as structural: no
 `-` affordance is offered beside the menu, so the way back into edit mode cannot
 be edited away.
-
-### The bundled settings drawer
-
-The bundled default (`DEFAULT_DSL_CONFIG`) ships one more group beside the
-global menu: a `kind: "group"` named `settings`, sitting on the identity row
-next to the quick-action tray, collapsed by default (`⚙ terminal ▸`, visually
-silent until clicked). It holds the three controls the settings menu does not:
-`charsetControl` and `colorCompatControl` (terminal capability facts, with no
-session half to offer a choice over) and `directoryPaletteControl` (the
-`segments.directory.palette` demo from the section above — a per-segment pin,
-not a whole-bar default). The group's own synthesized toggle lives under the
-reserved name `groups.settings` — see the `kind: "group"` section below for
-what a group name reserves.
-
-Everything with BOTH halves — theme, look, style, preset, wrap, padding — lives
-in the global settings menu instead, as one dual control each. That is the
-difference between the two surfaces: the menu is where a setting you can try
-per-session lives, and it cannot be deleted; the drawer is ordinary authored
-layout holding the durable-only knobs, and a row you author by name replaces
-it like any other segment.
-
-Removing the drawer is replacing the `identity` row by name; the global
-settings menu above is present either way:
-
-```json5 check:pass
-{
-  root: { rows: { identity: { h: ["host", "directory", "gitaculous"] } } },
-}
-```
-
-The three constituent segments (`charsetControl` / `colorCompatControl` /
-`directoryPaletteControl`) and their backing actions (`applyCharsetForever` +
-`resetCharset`, `applyColorCompatForever` + `resetColorCompat`,
-`applyDirectoryPaletteForever` + `resetDirectoryPalette`) stay declared in the
-merged config either way — merge-by-name lets you keep the drawer but swap one
-control's behavior (e.g. override `actions.applyCharsetForever` to bind a
-different domain) without touching `root` at all.
 
 ## `{{ menu "applyAction" "▸" "▾" }}` — the picker disclosure
 
@@ -2136,7 +2100,7 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
    action: read examples/demo-actions.json5 for the raw mechanism before
    inventing a new shape.
 5. If you added a `persist` action, you paired it with a `reset` (the
-   drawer's convention — an undoable default is always undoable from the
+   settings menu's convention — an undoable default is always undoable from the
    bar itself), and you verified it by clicking it and reading the diff:
    `git diff` (or a before/after copy) of the config file the session
    rendered shows exactly one value changed and nothing else touched, and

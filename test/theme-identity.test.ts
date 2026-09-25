@@ -38,10 +38,13 @@ import {
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 
-// The measured minimum over the registry is .029, between rose-pine and
-// rose-pine-moon — two variants of one family sharing their accents. Before
-// 8fp, dracula and rose-pine-moon sat at .018, under the eye's resolution.
-const THEME_FLOOR = 0.025;
+// The eye's resolution: two bars closer than ~.02 read as one theme. The
+// measured minimum over the registry is .024, between rose-pine and
+// rose-pine-moon — two variants of one family sharing their accents — on the
+// seven-cell bundled bar (it was .029 while the bar carried an eighth cell, the
+// settings drawer that moved into the menu). Before 8fp, dracula and
+// rose-pine-moon sat at .018, under it.
+const THEME_FLOOR = 0.02;
 
 const ARROW = "\u{e0b0}";
 const DIVIDER = "\u{e0b1}";

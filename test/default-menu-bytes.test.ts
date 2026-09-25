@@ -16,11 +16,10 @@
 // coverage by existing [LAW:dataflow-not-control-flow]; it cannot be forgotten,
 // because adding one fails the coverage snapshot until it is acknowledged.
 //
-// The reachable menus are the drawer controls (charset / colorCompatibility /
-// directory palette). They live under the bundled `settingsDrawer` group,
-// which a user `root` deletes, so each is rooted directly, one per case. The
-// settings menu hosts none: its preset, theme, look and style controls open
-// carousels (test/theme-carousel.test.ts).
+// The bundled default hosts none today: every settings-menu control — preset,
+// theme, look, style, charset, colour depth — opens a carousel
+// (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
+// menus left to pin are edit mode's `+` insert affordances.
 
 import { createEngine } from "@promptctl/go-template-js";
 
@@ -204,27 +203,6 @@ describe("every {{ menu }} the bundled default renders", () => {
     const { config, dispose } = buildRuntime(`{ h: ['model'] }`);
     expect(menuHostingSegments(config)).toMatchSnapshot();
     dispose();
-  });
-
-  // The drawer controls: durable-only settings (terminal capability facts and
-  // one segment-scoped palette pin), each rooted on its own because the group
-  // that normally holds them is not in a user root.
-  describe.each([
-    ["charsetControl"],
-    ["colorCompatControl"],
-    ["directoryPaletteControl"],
-  ])("%s", (segName) => {
-    test("closed, then open: exact bytes", () => {
-      const { render, click, dispose } = buildRuntime(`{ h: ['${segName}'] }`);
-      const closed = render();
-      expect(closed).toMatchSnapshot("closed");
-
-      const openers = menuOpeners(closed);
-      expect(openers).toHaveLength(1);
-      click(openers[0]!.url);
-      expect(render()).toMatchSnapshot("open");
-      dispose();
-    });
   });
 
   // The settings menu, reached the way a user reaches it. Its controls open

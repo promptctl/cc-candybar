@@ -120,6 +120,8 @@ function rig(
         preset: { effective: preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
+        charset: { effective: "unicode" },
+        colorCompatibility: { effective: "truecolor" },
       },
       opts(width, padding, style),
       { perSegmentSink: sink },
@@ -402,6 +404,37 @@ describe("the settings menu's theme, look and style controls are carousels", () 
   });
 });
 
+describe("glyphs and colour depth sit in the settings menu, not on the bar", () => {
+  test("the bar carries no terminal drawer; the menu's own disclosure holds both controls", () => {
+    const rt = rig(`{}`);
+    expect(stripAnsi(rt.render())).not.toContain("terminal");
+    rt.clickText("🍫");
+    rt.clickText("🖥 glyphs & colour depth ▸");
+    const text = stripAnsi(rt.render());
+    expect(text).toContain("🔣 unicode");
+    expect(text).toContain("🌈 truecolor");
+    rt.dispose();
+  });
+
+  // They describe the terminal, not a taste, so they have no session half:
+  // with persist? unchecked — the floor, where every other control writes the
+  // session — a click is still one durable write, as the drawer's was.
+  test.each([
+    ["charset", "unicode", "ascii"],
+    ["colorCompatibility", "truecolor", "256"],
+  ])("%s's ▶ writes the config file even with persist? unchecked", (key, current, next) => {
+    const rt = rig(`{}`);
+    rt.render();
+    rt.clickText("🍫");
+    rt.clickText("🖥 glyphs & colour depth ▸");
+    rt.clickWriting(PICKERS, `settings.apply.${key}`);
+    expect(stripAnsi(rt.render())).toMatch(new RegExp(`${CAROUSEL_PREV} ${current} ${CAROUSEL_NEXT}`));
+    const effects = effectsOf(rt.linkOn(key, CAROUSEL_NEXT).url);
+    expect(effects.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([["set-config", key, next]]);
+    rt.dispose();
+  });
+});
+
 // The preview's rows, as the labels each draws: the lines after the ring, led
 // by the body's ✕, up to the next line the body does not lead.
 function previewLabels(rendered: string): string[][] {
@@ -431,7 +464,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["settings.menu", "host", "directory", "gitaculous", "groups.settings"],
+        ["settings.menu", "host", "directory", "gitaculous"],
         ["model", "context", "cacheTimer", "block", "weekly", "activity"],
       ],
       compact: [["settings.menu", "directory", "git", "context"]],
@@ -502,20 +535,17 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     const rt = rig(`{}`);
     openCarousel(rt, "preset");
     const seen: string[] = [];
-    const firstRows: string[][] = [];
+    const rowCounts: number[] = [];
     for (let i = 0; i < 3; i++) {
       rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
       seen.push(rt.sessionState.get(SID, "preset")!);
-      firstRows.push(previewLabels(rt.render())[0]!);
+      rowCounts.push(previewLabels(rt.render()).length);
     }
     expect(seen).toEqual(["compact", "verbose", "default"]);
-    // Only the default preset's first row carries the settings group — a fact
-    // of the layout, unlike gitaculous, whose gate reads the cwd's git state.
-    expect(firstRows.map((row) => row.includes("settings"))).toEqual([
-      false,
-      false,
-      true,
-    ]);
+    // Compact is one row; the others stack status under identity (verbose's
+    // third row is gated off by this payload). The full per-preset layouts are
+    // pinned by "every bundled preset's rows" above.
+    expect(rowCounts).toEqual([1, 2, 2]);
     rt.dispose();
   });
 

@@ -103,7 +103,7 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
-// [LAW:one-source-of-truth] ONE control per setting. The drawer used to spell
+// [LAW:one-source-of-truth] ONE control per setting. The bar's old drawer spelled
 // each of theme/style/look/preset TWICE — `{{ menu "applyTheme" }}` for the
 // session beside `📌{{ menu "applyThemeForever" }}` for the durable default —
 // two controls a reader had to reconcile at every glance, and two declarations
@@ -120,12 +120,14 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 // The selector sits in the menu's FIRST row, above and beside every control it
 // governs, so it never stands over a row it cannot affect: every setting under
 // it — preset here, theme/look/style/wrap/padding in the config row — is dual.
-// `charset` and `colorCompatibility` are deliberately absent: they describe the
-// TERMINAL (glyph coverage, colour depth), not a taste that varies between
-// sessions, so they have no session half to choose and stay config-file
-// settings (see CHARSETS in themes/policy.ts).
+// `charset` and `colorCompatibility` are deliberately not under it: they
+// describe the TERMINAL (glyph coverage, colour depth), not a taste that varies
+// between sessions, so they have no session half to choose and write the config
+// file on every click, from their own disclosure beside `⚙ config` (see
+// TERMINAL_CONTROLS below and CHARSETS in themes/policy.ts).
 const PERSIST_SEG = `${SETTINGS_NS}persist`;
 const CONFIG_SEG = `${SETTINGS_NS}config`;
+const TERMINAL_SEG = `${SETTINGS_NS}terminal`;
 
 // The selector's own state key, session-scoped and unchecked by default: you
 // arrive in experimentation mode, and committing a value to every future
@@ -145,6 +147,11 @@ const SETTINGS_REF: DisclosureRef = {
 const CONFIG_REF: DisclosureRef = {
   variable: CONFIG_SEG,
   key: CONFIG_SEG,
+  member: SETTINGS_OPEN,
+};
+const TERMINAL_REF: DisclosureRef = {
+  variable: TERMINAL_SEG,
+  key: TERMINAL_SEG,
   member: SETTINGS_OPEN,
 };
 
@@ -189,7 +196,10 @@ const PICKER_KEY = `${SETTINGS_NS}pickers`;
 // "palette"), the variable whose value it displays, and its value source.
 interface SettingControl {
   readonly name: string;
-  readonly sessionKey: string;
+  // `null` is a setting with no session half — a fact about the terminal, not a
+  // taste — so its click is durable alone and the persist? selector has nothing
+  // to choose for it.
+  readonly sessionKey: string | null;
   readonly configKey: string;
   // The `.effective` projection the daemon resolved for this render — the
   // value the bar is ACTUALLY rendering with, whatever produced it. A control
@@ -269,6 +279,29 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
   },
 ];
 
+// What the terminal can draw: the joiner glyphs and the colour depth. The
+// same control shape as the rows above, one destination instead of two.
+const TERMINAL_CONTROLS: readonly SettingControl[] = [
+  {
+    name: "charset",
+    sessionKey: null,
+    configKey: "charset",
+    effectiveVar: "charset.effective",
+    glyph: "🔣",
+    domain: "charsets",
+    beneath: [],
+  },
+  {
+    name: "colorCompatibility",
+    sessionKey: null,
+    configKey: "colorCompatibility",
+    effectiveVar: "colorCompatibility.effective",
+    glyph: "🌈",
+    domain: "colorCompatibilities",
+    beneath: [],
+  },
+];
+
 // The two settings whose affordance is not a picker: wrapping is a toggle (two
 // members, so a menu would be a drop-down over a binary) and padding is a
 // stepper over a range (16 picker cells for a value you nudge). Both are dual
@@ -306,6 +339,7 @@ const PADDING_SEG = `${SETTINGS_NS}${PADDING.name}`;
 const PICKER_CONTROLS: readonly SettingControl[] = [
   ...PRIMARY_CONTROLS,
   ...CONFIG_CONTROLS,
+  ...TERMINAL_CONTROLS,
 ];
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — both
@@ -317,10 +351,9 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
 // authorship check (test/helpers/ambient-chrome.ts) can never drift from what
 // the synthesis actually declares.
 export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
-  [...PICKER_CONTROLS, WRAP, PADDING].flatMap((c) => [
-    c.sessionKey,
-    c.configKey,
-  ]),
+  [...PICKER_CONTROLS, WRAP, PADDING].flatMap((c) =>
+    c.sessionKey === null ? [c.configKey] : [c.sessionKey, c.configKey],
+  ),
 );
 
 // [LAW:one-source-of-truth] A control's three names, derived from its one
@@ -520,6 +553,19 @@ function expandAnchor(
                 },
                 "drop",
               ),
+              // What the terminal can draw, behind a disclosure of its own:
+              // these write the config file on every click, so they sit
+              // beside the display settings rather than under persist?.
+              disclosureNode(
+                TERMINAL_SEG,
+                TERMINAL_REF,
+                {
+                  kind: "container",
+                  direction: "horizontal",
+                  children: TERMINAL_CONTROLS.map(controlNode),
+                },
+                "drop",
+              ),
               // The tools, behind their own disclosure: the doctor button,
               // then one row per check once it has run.
               disclosureNode(
@@ -571,8 +617,9 @@ interface MenuArtifacts {
 // merely REFERENCED from each preset root. This is what makes the pass
 // idempotent across N presets for free: a preset root carries a segment
 // reference, and a second reference to one declaration is a reuse, not the
-// self-collision a second `kind: "group"` node would be (see the settingsDrawer
-// comment in default-dsl-config.ts for that hazard in its original form).
+// self-collision a second `kind: "group"` node would be: group names are one
+// synthesis-wide namespace, so a group embedded in two preset roots declares
+// itself twice.
 function settingsArtifacts(doorGlyph: string): {
   artifacts: MenuArtifacts;
   help: SegmentNode;
@@ -584,6 +631,7 @@ function settingsArtifacts(doorGlyph: string): {
     actions: {
       [SETTINGS_ANCHOR]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
+      [TERMINAL_SEG]: disclosureCycleAction(TERMINAL_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
@@ -634,6 +682,13 @@ function settingsArtifacts(doorGlyph: string): {
           `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
         ),
       },
+      [TERMINAL_SEG]: {
+        template: disclosureTrigger(
+          TERMINAL_SEG,
+          `🖥 glyphs & colour depth ${DISCLOSURE_GLYPH_CLOSED}`,
+          `🖥 glyphs & colour depth ${DISCLOSURE_GLYPH_OPEN}`,
+        ),
+      },
       [TOOLS_SEG]: {
         template: disclosureTrigger(
           TOOLS_SEG,
@@ -672,6 +727,10 @@ function settingsArtifacts(doorGlyph: string): {
   };
   artifacts.variables[CONFIG_SEG] = disclosureStateVar(
     CONFIG_SEG,
+    DISCLOSURE_CLOSED,
+  );
+  artifacts.variables[TERMINAL_SEG] = disclosureStateVar(
+    TERMINAL_SEG,
     DISCLOSURE_CLOSED,
   );
   artifacts.variables[TOOLS_SEG] = disclosureStateVar(
@@ -739,16 +798,19 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // and `deriveConfigActionValidators` each explode these dual declarations
 // (actionDestinations) and derive the same specs they would have derived from
 // the pair of single-destination actions this replaces — so the writable-key
-// surface is byte-for-byte what it was when the drawer spelled both halves.
+// surface is byte-for-byte what it was when a drawer spelled both halves.
 function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of PICKER_CONTROLS) {
     const apply = controlApply(c.name);
-    artifacts.actions[apply] = {
-      set: c.sessionKey,
-      persist: c.configKey,
-      persistWhen: PERSIST_KEY,
-      from: c.domain,
-    };
+    artifacts.actions[apply] =
+      c.sessionKey === null
+        ? { persist: c.configKey, from: c.domain }
+        : {
+            set: c.sessionKey,
+            persist: c.configKey,
+            persistWhen: PERSIST_KEY,
+            from: c.domain,
+          };
     // [LAW:one-source-of-truth] ↺ clears the DURABLE default only — the one
     // write the user cannot otherwise take back, since a session value dies
     // with the session. Its target is the config key the dual's durable half

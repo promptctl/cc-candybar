@@ -726,15 +726,6 @@
         },
         "activity": {
           "$ref": "#/definitions/SegmentDelta"
-        },
-        "charsetControl": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
-        "colorCompatControl": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
-        "directoryPaletteControl": {
-          "$ref": "#/definitions/SegmentDelta"
         }
       },
       "additionalProperties": {
