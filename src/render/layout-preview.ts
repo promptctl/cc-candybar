@@ -73,7 +73,7 @@ export function renderLayoutPreview(
       const block = new RichText(` ${clippedLabel(name, most)} `, {
         style: stateCell(
           palette,
-          decorationFor(palette, { kind: "bar", address }).tint,
+          decorationFor(palette, { kind: "bar", address }, drawnAt).tint,
           drawnAt,
         ),
       });

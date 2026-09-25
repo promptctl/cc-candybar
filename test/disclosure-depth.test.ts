@@ -104,7 +104,7 @@ function regionOf(root: CompiledNode, palette: Palette, name: string): Region {
         ? undefined
         : walk(
             node.opens.body,
-            bandRoot(decorationFor(palette, region).disclosure),
+            bandRoot(decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure),
           );
     }
     for (const [index, child] of node.children.entries()) {
@@ -226,11 +226,11 @@ function build(src: string, withDefault = false) {
     click(url);
   };
   const expectedTint = (name: string): string =>
-    decorationFor(palette, regionOf(root, palette, name)).tint.hex;
+    decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR).tint.hex;
   const hueOf = (name: string): Disclosure["hue"] => {
     const region = regionOf(root, palette, name);
     if (region.kind !== "bar") throw new Error(`"${name}" is not on the bar`);
-    return decorationFor(palette, region).disclosure.hue;
+    return decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure.hue;
   };
   return {
     palette,
@@ -267,7 +267,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_ANCHOR, "open");
     rt.render();
     const band0: Disclosure = { hue, depth: 0 };
-    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(bandFor(palette, band0).state.hex);
+    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(bandFor(palette, band0, ColorDepth.TRUECOLOR).state.hex);
     const row1 = bodyCellsOf(root, SETTINGS_ANCHOR);
     expect(row1.length).toBeGreaterThan(2);
     const config = row1.find((n) => n.endsWith(".config"));
@@ -276,7 +276,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
       // Band-relative: one step, the cell's index among the row's cells.
       const address = regionAddress(rt, name);
       expect(address).toMatchObject([{ index, count: row1.length }]);
-      const item = bandItemFor(palette, band0, address);
+      const item = bandItemFor(palette, band0, address, ColorDepth.TRUECOLOR);
       expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
       expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
     }
@@ -286,29 +286,29 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     rt.clickWriting(config, config, "open");
     rt.render();
     const band1: Disclosure = { hue, depth: 1 };
-    expect(rt.bgOf(config)).toBe(bandFor(palette, band1).state.hex);
+    expect(rt.bgOf(config)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
     const row2 = bodyCellsOf(root, config);
     expect(row2.length).toBeGreaterThan(2);
     for (const name of row2) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name)), ColorDepth.TRUECOLOR).hex,
+        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name), ColorDepth.TRUECOLOR), ColorDepth.TRUECOLOR).hex,
       ]);
     }
 
     // A picker control open: the ticket's Done-when, verbatim — its trigger
-    // is `bandFor(palette, { hue, depth: 2 }).state`, and the carousel it
+    // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the carousel it
     // opens (brandon-theme-picker-bgw.ef6) is a depth-2 item of that band.
     const control = row2[0]!;
     const pickers = sharedMenuStateKey("settings.pickers");
     rt.clickWriting(control, pickers, "settings.apply.theme");
     rt.render();
     const band2: Disclosure = { hue, depth: 2 };
-    expect(rt.bgOf(control)).toBe(bandFor(palette, band2).state.hex);
+    expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const ring = "settings.carousel.theme";
     expect(rt.bgOf(ring)).toBe(
-      bandItemFor(palette, band2, regionAddress(rt, ring)).hex,
+      bandItemFor(palette, band2, regionAddress(rt, ring), ColorDepth.TRUECOLOR).hex,
     );
     rt.dispose();
   });
@@ -352,7 +352,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       const out = rt.render();
       // The menu's band is depth 0 — the trigger sits on the bar, whatever
       // `when`s enclose it — and the trigger wears that band's state.
-      const band = bandFor(rt.palette, { hue: rt.hueOf("m"), depth: 0 });
+      const band = bandFor(rt.palette, { hue: rt.hueOf("m"), depth: 0 }, ColorDepth.TRUECOLOR);
       expect(rt.bgOf("m")).toBe(band.state.hex);
       expect(definedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
@@ -392,13 +392,13 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.clickWriting(toggle, toggle, "outer");
     rt.render();
     const hue = rt.hueOf(toggle);
-    expect(rt.bgOf(toggle)).toBe(bandFor(palette, { hue, depth: 0 }).state.hex);
+    expect(rt.bgOf(toggle)).toBe(bandFor(palette, { hue, depth: 0 }, ColorDepth.TRUECOLOR).state.hex);
     // The body: three cells of a horizontal band, placed by their own step.
     for (const name of ["b", "groups.inner", "c"]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
     // Text on a band cell is chosen unless authored: `b` authors `error`.
-    expect(rt.fgOf("c")).toBe(textOn(palette, decorationFor(palette, regionOf(rt.root, palette, "c")).tint, ColorDepth.TRUECOLOR).hex);
+    expect(rt.fgOf("c")).toBe(textOn(palette, decorationFor(palette, regionOf(rt.root, palette, "c"), ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex);
     expect(rt.fgOf("b")).toBe(palette.get("error")!.hex);
 
     // Closing again returns the toggle to its tint — the state is a VALUE the
@@ -418,7 +418,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     expect(rt.bgOf("e")).toBe(authored.hex);
     expect(rt.fgOf("e")).toBe(textOn(palette, authored, ColorDepth.TRUECOLOR).hex);
     // The case is only a case because the two poles differ here.
-    const tint = decorationFor(palette, regionOf(rt.root, palette, "e")).tint;
+    const tint = decorationFor(palette, regionOf(rt.root, palette, "e"), ColorDepth.TRUECOLOR).tint;
     expect(textOn(palette, authored, ColorDepth.TRUECOLOR).hex).not.toBe(textOn(palette, tint, ColorDepth.TRUECOLOR).hex);
     rt.dispose();
   });
@@ -434,11 +434,11 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.clickWriting("groups.inner", "groups.inner", "inner");
     rt.render();
     const hue = rt.hueOf("groups.outer");
-    const band1 = bandFor(palette, { hue, depth: 1 });
+    const band1 = bandFor(palette, { hue, depth: 1 }, ColorDepth.TRUECOLOR);
     expect(rt.bgOf("groups.inner")).toBe(band1.state.hex);
     expect(rt.bgOf("d")).toBe(rt.expectedTint("d"));
     expect(rt.bgOf("d")).toBe(
-      bandItemFor(palette, { hue, depth: 1 }, regionAddress(rt, "d")).hex,
+      bandItemFor(palette, { hue, depth: 1 }, regionAddress(rt, "d"), ColorDepth.TRUECOLOR).hex,
     );
     rt.dispose();
   });

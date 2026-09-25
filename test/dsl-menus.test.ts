@@ -685,8 +685,8 @@ describe("toggle round trip + drop stacking", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", address });
-    const band = bandFor(palette, disclosure);
+    const { disclosure } = decorationFor(palette, { kind: "bar", address }, ColorDepth.TRUECOLOR);
+    const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
@@ -718,7 +718,7 @@ describe("toggle round trip + drop stacking", () => {
             count: options.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
           },
-        ]).hex,
+        ], ColorDepth.TRUECOLOR).hex,
       );
     }
     dispose();
@@ -1241,7 +1241,7 @@ describe("a menu's `distribution` option places its band", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", address });
+    const { disclosure } = decorationFor(palette, { kind: "bar", address }, ColorDepth.TRUECOLOR);
     const body = sink.get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
@@ -1258,13 +1258,13 @@ describe("a menu's `distribution` option places its band", () => {
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, [{ ...step, distribution: DISTRIBUTIONS.monotonic }]).hex,
+        bandItemFor(palette, disclosure, [{ ...step, distribution: DISTRIBUTIONS.monotonic }], ColorDepth.TRUECOLOR).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
         bandItemFor(palette, disclosure, [
           { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
-        ]).hex
+        ], ColorDepth.TRUECOLOR).hex
       )
         differsFromDefault++;
     }
@@ -1487,7 +1487,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", address });
+    const { disclosure } = decorationFor(palette, { kind: "bar", address }, ColorDepth.TRUECOLOR);
     const cells = optionCells(sink, "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {
@@ -1498,7 +1498,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
             count: WORDS.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
           },
-        ]).hex,
+        ], ColorDepth.TRUECOLOR).hex,
       );
     }
     dispose();

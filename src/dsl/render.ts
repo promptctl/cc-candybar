@@ -993,7 +993,8 @@ export function renderDsl(
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles => {
-    const { tint, disclosure } = decorationFor(palette, region);
+    const drawnAt = registry.drawnAt();
+    const { tint, disclosure } = decorationFor(palette, region, drawnAt);
     const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
@@ -1004,11 +1005,25 @@ export function renderDsl(
       fgTemplate,
       scope,
     );
-    const band = bandFor(palette, disclosure);
+    // Read only where something hangs open under the segment: a band that can
+    // never be drawn (a hue with no state) throws when it is opened, never
+    // from a closed cell or a body cell that merely deals it.
     return {
       closed,
-      trigger: stateCell(palette, band.state, registry.drawnAt()),
-      band: stateCell(palette, band.plane, registry.drawnAt()),
+      get trigger() {
+        return stateCell(
+          palette,
+          bandFor(palette, disclosure, drawnAt).state,
+          drawnAt,
+        );
+      },
+      get band() {
+        return stateCell(
+          palette,
+          bandFor(palette, disclosure, drawnAt).plane,
+          drawnAt,
+        );
+      },
       disclosure,
     };
   };

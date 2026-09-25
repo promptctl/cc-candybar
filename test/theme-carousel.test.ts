@@ -562,7 +562,7 @@ describe("the preview is the bar's own colours", () => {
       openCarousel(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
       const swatches = new Set(
-        previewSwatches(palette).flat().map((s) => s.colour.hex),
+        previewSwatches(palette, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
       );
       // What the preview segment actually drew is the swatch set.
       const drawn = backgrounds(rt.sink.get("settings.carousel.theme.0")!);
@@ -591,7 +591,7 @@ describe("the preview is the bar's own colours", () => {
       rt.config.looks[look]!,
     );
     const swatches = new Set(
-      previewSwatches(palette).flat().map((s) => s.colour.hex),
+      previewSwatches(palette, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
     );
     const drawn = backgrounds(rt.sink.get("settings.carousel.look.0")!);
     expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
