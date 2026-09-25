@@ -136,8 +136,10 @@ const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 
 // The floors the bar's text is chosen by, highest first: body text at AA, and
 // the quiet git structure at 3:1. A character keeps the highest floor it
-// cleared in truecolor; a divider — its cell's text — holds at least the
-// lowest of them.
+// cleared in truecolor, and a divider — its cell's text — is a character like
+// any other. Where 256 draws a divider in a seam truecolor drew as an arrow,
+// there was no truecolor text there to keep a floor from, so that divider is
+// held to the lowest of them.
 const FLOORS = [TEXT_MIN_CONTRAST, GIT_QUIET_MIN_CONTRAST];
 const DIVIDER_FLOOR = Math.min(...FLOORS);
 
@@ -146,7 +148,7 @@ type Chars = ReturnType<typeof drawnChars>;
 /**
  * Every way `quantized` (the 256 render) fails `truecolor` (the same bar, same
  * state): an arrow no longer continuing its cell or no longer standing off
- * the cell it enters, a divider under the lowest text floor, a character
+ * the cell it enters, any divider under the lowest text floor, a character
  * drawn in ANSI 0–15, or a character below the highest floor it cleared in
  * truecolor. Returns how many characters were measured, so a caller can
  * refuse a vacuous pass.

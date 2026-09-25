@@ -440,6 +440,26 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
     const straddling = new Palette("straddling", true, roles);
     expect(() => stateFor(straddling, "primary", ColorDepth.TRUECOLOR)).toThrow(/"straddling".*"primary".*foreground/);
   });
+
+  test("a band item drawn as its own plane throws, naming palette, hue and depth", () => {
+    // The accent's state (#a3ad71) lands beside this background (#ada472), so
+    // the plane receded from it is the state again within a few units, and the
+    // first item, placed just above the plane, rounds onto it. Truecolor draws
+    // from no table, so there is nothing to repair it to.
+    const roles = new Map<string, ColorRgba>([
+      ["background", new ColorRgba(0xad, 0xa4, 0x72)],
+      ["surface", new ColorRgba(0x13, 0x3a, 0x6c)],
+      ["foreground", new ColorRgba(0xa6, 0xbb, 0x67)],
+      ["primary", new ColorRgba(0xfa, 0xbc, 0x8a)],
+      ["secondary", new ColorRgba(0x2d, 0x16, 0x5f)],
+      ["accent", new ColorRgba(0x87, 0x0b, 0xe8)],
+    ]);
+    const degenerate = new Palette("degenerate", true, roles);
+    const first: PlacedStep = { index: 0, count: 3, distribution: DISTRIBUTIONS["van-der-corput"] };
+    expect(() =>
+      bandItemFor(degenerate, { hue: "accent", depth: 0 }, [first], ColorDepth.TRUECOLOR),
+    ).toThrow(/"degenerate".*accent band item at depth 0 is drawn as its plane or its trigger/);
+  });
 });
 
 describe("done-when: the enforcement is a floor, not a transform", () => {
