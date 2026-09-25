@@ -298,7 +298,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     }
 
     // A picker control open: the ticket's Done-when, verbatim — its trigger
-    // is `bandFor(palette, { hue, depth: 2 }).state`, and the carousel it
+    // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the carousel it
     // opens (brandon-theme-picker-bgw.ef6) is a depth-2 item of that band.
     const control = row2[0]!;
     const pickers = sharedMenuStateKey("settings.pickers");

@@ -453,7 +453,8 @@ const STATE_STEPS = 12;
  * along its own lightness, when the pole itself falls short — until it clears
  * `STATE_FLOOR` against EVERY colour the closed bar can wear, since an open
  * trigger stands among closed cells of any row and tone. A hue that already
- * clears at step zero is byte-unchanged — the enforcement is a floor, not a
+ * clears at step zero is its pure form as drawn (composited over black, which
+ * leaves an opaque colour byte-unchanged) — the enforcement is a floor, not a
  * transform.
  *
  * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
@@ -741,6 +742,23 @@ const deltaE = (a: ColorRgba, b: ColorRgba): number =>
 // The band as truecolor draws it — the colours every depth rounds from, and
 // the pair whose floors decide which floors a drawn band is held to.
 function trueBand(palette: Palette, disclosure: Disclosure): Band {
+  // Memoised beside the drawn bands: every band's floors and every band item
+  // round from it, so the render walk asks for it once per item.
+  const key = `${disclosure.hue}|${disclosure.depth}`;
+  let bands = TRUE_BAND_MEMO.get(palette);
+  if (bands === undefined) {
+    bands = new Map();
+    TRUE_BAND_MEMO.set(palette, bands);
+  }
+  const hit = bands.get(key);
+  if (hit !== undefined) return hit;
+  const band = computeTrueBand(palette, disclosure);
+  bands.set(key, band);
+  return band;
+}
+const TRUE_BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
+
+function computeTrueBand(palette: Palette, disclosure: Disclosure): Band {
   const state = stateFor(
     palette,
     hueAtDepth(disclosure.hue, disclosure.depth),
