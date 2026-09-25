@@ -2,12 +2,14 @@
 // proven the SAME way 71o.5 proved the epic's headline composition (click,
 // gate, persistent write, watcher reload, re-render, daemon restart, fresh
 // session) — but over `segments.directory.palette` instead of a Globals
-// field, against a REAL `cc-candybar daemon` subprocess over a REAL socket,
-// using the BUNDLED DEFAULT (DEFAULT_DSL_CONFIG) with no hand-authored
-// actions: "from the bundled default with no hand-authored actions, a user
-// picks a different bundled palette for one specific segment via a menu;
-// the choice persists across a daemon restart and appears in new sessions,
-// and every other segment's palette is unaffected."
+// field, against a REAL `cc-candybar daemon` subprocess over a REAL socket:
+// "a user picks a different bundled palette for one specific segment via a
+// menu; the choice persists across a daemon restart and appears in new
+// sessions, and every other segment's palette is unaffected." The bundled
+// default no longer carries a control for it (brandon-menu-ia-q30.42a deleted
+// the drawer's directory pin — nothing else in the settings menu is
+// per-segment), so the menu here is the user's own: one `{ persist, from }`
+// action over the segment key, the same seam any config can author.
 
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -16,7 +18,6 @@ import path from "node:path";
 import JSON5 from "json5";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
@@ -119,7 +120,7 @@ async function waitForRenderChange(
 }
 
 describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
-  test("bundled default: clicking directory's palette-forever menu, over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
+  test("a user's directory-palette menu, clicked over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
     const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-seg-palette-e2e",
     );
@@ -127,9 +128,20 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       path.join(os.tmpdir(), "cc-candybar-seg-palette-e2e-project-"),
     );
     const userConfigPath = path.join(projectDir, ".cc-candybar.json5");
-    // No hand-authored actions — proves the criterion against the BUNDLED
-    // DEFAULT, not a config built to exercise the mechanism.
-    const userConfigBody = JSON.stringify({ globals: {}, segments: {} });
+    const control = {
+      template: '🎨 directory {{ menu "applyDirectoryPalette" "▸" "▾" }}',
+    };
+    const userConfigBody = JSON.stringify({
+      globals: {},
+      actions: {
+        applyDirectoryPalette: {
+          persist: "segments.directory.palette",
+          from: "themes",
+        },
+      },
+      segments: { directoryPaletteControl: control },
+      root: { rows: { palettes: { h: ["directoryPaletteControl"] } } },
+    });
     writeFileSync(userConfigPath, userConfigBody);
 
     let daemon: RunningDaemon | undefined;
@@ -142,40 +154,24 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       const before = await render(sockPath, SID, projectDir);
       // The status row (model/context/cacheTimer/block/weekly) never reads
       // `directory`'s palette — the untouched baseline every "other segment
-      // unaffected" assertion below compares against. It's always the LAST
-      // physical line: `root` vertically STACKS row1 then row2, and row1's
-      // OWN line count varies (a {{ menu }}/group drop inserts an extra
-      // physical line "immediately below row 1" via FlexStrip's stack-full-
-      // width wrap — see src/dsl/render.ts) depending on whether the
-      // settingsDrawer is open, so indexing from the end (not a fixed
-      // index) stays correct whether the drawer this test opens has landed
-      // its extra line yet or not.
-      const statusRowBefore = before.split("\n").at(-1);
+      // unaffected" assertion below compares against. The rows stack
+      // identity, status, then the control's own row, whose open menu drops a
+      // line beneath it; the status row is the one line no click here moves,
+      // so it is found by content rather than by index.
+      const statusRow = (out: string): string | undefined =>
+        out.split("\n").find((line) => line.includes("Opus 4.7"));
+      const statusRowBefore = statusRow(before);
       expect(statusRowBefore).toBeDefined();
 
-      // Open the settingsDrawer (candybar-config-engine-71o.4's collapsed
-      // "⚙ settings ▸" toggle) — directoryPaletteControl lives inside it.
-      await click(
-        sockPath,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "groups.settings", "settings"] },
-        ]),
-      );
-
-      const drawerOpen = await render(sockPath, SID, projectDir);
-      const drawerOpenUrls = linkUrls(drawerOpen);
-
-      // directoryPaletteControl's `{{ menu }}` has no shared accordion key
-      // (unlike theme/look/style's "pickersForever") — it's an independent
-      // disclosure. Find and click its OWN toggle before its per-theme
-      // option links exist to click.
-      const menuToggleUrl = drawerOpenUrls.find((u) => {
+      // The menu's own toggle, before its per-theme option links exist to
+      // click.
+      const menuToggleUrl = linkUrls(before).find((u) => {
         try {
           const effects = effectsOf(u);
           return (
             effects.length === 1 &&
             effects[0]!.verb === "set-state" &&
-            effects[0]!.args[2] === "applyDirectoryPaletteForever"
+            effects[0]!.args[2] === "applyDirectoryPalette"
           );
         } catch {
           return false;
@@ -197,7 +193,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
         );
       }
 
-      // applyDirectoryPaletteForever is a persist-option action targeting
+      // applyDirectoryPalette is a persist-option action targeting
       // `segments.directory.palette` (verb set-config, args = [sessionId,
       // "segments.directory.palette", value]), rendered as one link per
       // theme name.
@@ -221,12 +217,12 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // Live re-render, same session, no daemon restart — the persisted
       // palette rides the config file's own watcher, which reloads
       // asynchronously (see waitForRenderChange). `opened` (captured right
-      // after the drawer was opened, same drawer-open state as the
-      // post-click render, but BEFORE the click) is the right baseline for
-      // "did the click visibly change anything" — a `before`-vs-post-click
-      // diff would be trivially true regardless of the palette, since
-      // `before` was rendered with the drawer CLOSED. With drawer state
-      // held constant, this proves the persisted palette actually reached
+      // after the menu was opened, same menu-open state as the post-click
+      // render, but BEFORE the click) is the right baseline for "did the
+      // click visibly change anything" — a `before`-vs-post-click diff would
+      // be trivially true regardless of the palette, since `before` was
+      // rendered with the menu CLOSED. With menu state held constant, this
+      // proves the persisted palette actually reached
       // the rendered `directory` segment's colors — not just that the
       // config file was written (asserted below): a broken reload of
       // the file's own declaration would time out here.
@@ -239,20 +235,21 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       expect(afterClick).not.toBe(opened);
       // The status row — nothing to do with `directory` — is byte-identical:
       // the override changed exactly one segment's palette, nothing else.
-      expect(afterClick.split("\n").at(-1)).toBe(statusRowBefore);
+      expect(statusRow(afterClick)).toBe(statusRowBefore);
 
       // [LAW:one-source-of-truth] The config FILE is the durable store
       // (candybar-config-dqe). `segments` merge by name then by field, so
       // pinning a palette on a segment the file does not declare writes
       // exactly `directory: { palette }` — a delta over the bundled
-      // declaration — and nothing else: no template, no globals field, no
-      // other segment.
+      // declaration — beside the file's own control, and nothing else: no
+      // template, no globals field, no other segment.
       const written = JSON5.parse(readFileSync(userConfigPath, "utf8")) as {
         globals: Record<string, unknown>;
         segments: Record<string, { template?: string; palette?: string }>;
       };
       expect(written.globals).toEqual({});
       expect(written.segments).toEqual({
+        directoryPaletteControl: control,
         directory: { palette: targetPalette },
       });
       const afterFirstWrite = readFileSync(userConfigPath, "utf8");
@@ -270,7 +267,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // construction — the status row is the untouched control).
       const FRESH_SID = "seg-e2e-session-2-fresh";
       const freshOut = await render(sockPath, FRESH_SID, projectDir);
-      expect(freshOut.split("\n").at(-1)).toBe(statusRowBefore);
+      expect(statusRow(freshOut)).toBe(statusRowBefore);
 
       // The file is STILL exactly what the click wrote — a restart reads it,
       // never rewrites it.

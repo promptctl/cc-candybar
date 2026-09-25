@@ -52,9 +52,10 @@ Configuration:
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
-  quick actions, preset switching, edit mode, and a config menu
-  of clickable theme/look/style/wrap/padding controls. The \`persist?\`
-  checkbox there chooses where a change lands: ${PERSIST_HELP.join(", ")}.
+  quick actions, preset switching, edit mode, and a config menu of
+  clickable theme/look/style/charset/colour-depth/wrap/padding controls. The
+  \`persist?\` checkbox there chooses where a change lands:
+  ${PERSIST_HELP.join(", ")}.
   Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a
   failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
 

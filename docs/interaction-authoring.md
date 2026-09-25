@@ -380,17 +380,7 @@ lie the panel tells.
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
 
-`charset` and `colorCompatibility` have no SessionState half. That is a
-decision, not a gap: they describe the **terminal** — whether its font carries
-the powerline glyphs, and how many colours it can render — rather than a taste,
-and neither varies session-to-session on one machine. A per-session override for
-them would be a knob whose only honest setting is the one already in the config.
-So `persist` is their ONLY seam, and `charsets`/`colorCompatibilities` are
-registered domains exactly like `themes`/`styles`, sourced from the same enums
-the loader validates `globals.charset`/`globals.colorCompatibility` against (no
-second list to drift out of sync).
-
-`updateNotice` is config-only in the same way, for a different reason. It is
+`updateNotice` has no SessionState half. It is
 the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
 [dismiss] [disable]` row the daemon shows above the bar when the bundle
 rendering it was built from source other than the `src/` beside it — an
@@ -405,12 +395,18 @@ something newer appears. There is no `updateNotices` domain and no
 `.effective` projection to label a control with: the row itself is the
 only display the field has.
 
-`autoWrap` and `padding` DO have a session half, because how much bar fits on
-your screen right now is a taste that legitimately differs between a wide
-terminal and a split pane. Both spellings are available for them: `persist:`
-writes the durable default every session sees, `set:` writes only the clicking
-session's. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is
-a bounded range, so it takes a stepper pair — neither needs a registered domain.
+`charset`, `colorCompatibility`, `autoWrap` and `padding` each have a session
+half, because each describes the terminal a session runs in — whether its font
+carries the powerline glyphs, how many colours it draws (a pane inside tmux can
+draw 256 while its neighbour draws truecolor), how much bar fits in it — and
+two sessions on one machine can sit in two different terminals. Both spellings
+are available for them: `persist:` writes the durable default every session
+sees, `set:` writes only the clicking session's. `charsets` and
+`colorCompatibilities` are registered domains exactly like `themes`/`styles`,
+sourced from the same enums the loader validates `globals.charset` and
+`globals.colorCompatibility` against, so there is no second list to drift out of
+sync. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is a
+bounded range, so it takes a stepper pair — neither needs a registered domain.
 
 They resolve like every other pickable global: **the session's own pick, over
 the persisted default, over the config file's value, over the built-in floor.**
@@ -507,11 +503,10 @@ The bundled default ships two ready-made presets on top of its own two-row
 — one row (directory, git, context) at `padding: 0`, for narrow terminals and
 split panes — and `"verbose"` — the default's own rows plus a third,
 surfacing every segment the default declares but leaves opt-in (`gitPr`,
-`burnrate`, `speed`, `tokenSparkline`). Both carry a standalone `▦` preset
-picker in place of the default's full settings drawer, so switching to either
-never strands a session without a way back. Try them without writing a config
-at all — click `▦` beside the settings drawer — or pin one as your default
-with `globals: { preset: "compact" }`.
+`burnrate`, `speed`, `tokenSparkline`). Every preset carries the settings-menu
+door, so switching to either never strands a session without a way back. Try
+them without writing a config at all — open the door and click `▦` — or pin
+one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass
 {
@@ -1044,10 +1039,9 @@ is a load error naming the one way an absent template is legal. `reset`
 removes the `palette` line, and the `model: {}` it leaves empty goes with
 it, so the segment tracks the bundled declaration again.
 
-Like `charset` and `colorCompatibility` above, a segment's `palette:` has no
-SessionState half — `persist` is its only seam, so there is no session
-`set` twin to pair it with. (`autoWrap` and `padding` are the two display
-globals that *do* have one.)
+A segment's `palette:` has no SessionState half — `persist` is its only seam,
+so there is no session `set` twin to pair it with. (The display globals
+`charset`, `colorCompatibility`, `autoWrap` and `padding` do have one.)
 
 ### The global settings menu: `settings.menu`
 
@@ -1071,7 +1065,7 @@ opens in turn drops below:
 
 ```
 ❌ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1099,12 +1093,10 @@ close.
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
   menu in the same click, so you land on the bar you are about to edit — the
   open menu covers the door's own row, edit chrome included.
-- **`⚙ config`** opens the display settings: theme, look, style, wrap and
-  padding, each ONE control that follows the checkbox, each with a `↺` that
-  forgets its durable default. `charset` and `colorCompatibility` are
-  deliberately absent — they describe your terminal rather than a taste that
-  varies session to session, so they have no session half to choose between and
-  stay config-file settings.
+- **`⚙ config`** opens the display settings: theme, look, style, charset (the
+  joiner glyphs: `unicode` or `ascii`), colour depth (`truecolor`, `256`,
+  `ansi`, `none`), wrap and padding, each ONE control that follows the
+  checkbox, each with a `↺` that forgets its durable default.
 - **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look
@@ -1193,43 +1185,6 @@ the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
 reserved namespace" below). Edit mode also treats those names as structural: no
 `-` affordance is offered beside the menu, so the way back into edit mode cannot
 be edited away.
-
-### The bundled settings drawer
-
-The bundled default (`DEFAULT_DSL_CONFIG`) ships one more group beside the
-global menu: a `kind: "group"` named `settings`, sitting on the identity row
-next to the quick-action tray, collapsed by default (`⚙ terminal ▸`, visually
-silent until clicked). It holds the three controls the settings menu does not:
-`charsetControl` and `colorCompatControl` (terminal capability facts, with no
-session half to offer a choice over) and `directoryPaletteControl` (the
-`segments.directory.palette` demo from the section above — a per-segment pin,
-not a whole-bar default). The group's own synthesized toggle lives under the
-reserved name `groups.settings` — see the `kind: "group"` section below for
-what a group name reserves.
-
-Everything with BOTH halves — theme, look, style, preset, wrap, padding — lives
-in the global settings menu instead, as one dual control each. That is the
-difference between the two surfaces: the menu is where a setting you can try
-per-session lives, and it cannot be deleted; the drawer is ordinary authored
-layout holding the durable-only knobs, and a row you author by name replaces
-it like any other segment.
-
-Removing the drawer is replacing the `identity` row by name; the global
-settings menu above is present either way:
-
-```json5 check:pass
-{
-  root: { rows: { identity: { h: ["host", "directory", "gitaculous"] } } },
-}
-```
-
-The three constituent segments (`charsetControl` / `colorCompatControl` /
-`directoryPaletteControl`) and their backing actions (`applyCharsetForever` +
-`resetCharset`, `applyColorCompatForever` + `resetColorCompat`,
-`applyDirectoryPaletteForever` + `resetDirectoryPalette`) stay declared in the
-merged config either way — merge-by-name lets you keep the drawer but swap one
-control's behavior (e.g. override `actions.applyCharsetForever` to bind a
-different domain) without touching `root` at all.
 
 ## `{{ menu "applyAction" "▸" "▾" }}` — the picker disclosure
 
@@ -2136,7 +2091,7 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
    action: read examples/demo-actions.json5 for the raw mechanism before
    inventing a new shape.
 5. If you added a `persist` action, you paired it with a `reset` (the
-   drawer's convention — an undoable default is always undoable from the
+   settings menu's convention — an undoable default is always undoable from the
    bar itself), and you verified it by clicking it and reading the diff:
    `git diff` (or a before/after copy) of the config file the session
    rendered shows exactly one value changed and nothing else touched, and

@@ -97,7 +97,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind !== "segment") continue;
-      // Array form: a synthesized group toggle's name (e.g. "groups.settings")
+      // Array form: a synthesized segment's name (e.g. "settings.menu")
       // contains a literal dot, which toHaveProperty's default dotted-path
       // string form would otherwise misread as nested access.
       expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([node.name]);
@@ -105,32 +105,24 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // The bundled default is the maintainer's two always-visible rows — an
-  // identity row (directory, the verbose gitaculous line, and the
-  // settingsDrawer toggle) over a status row (model, context,
-  // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
-  // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
-  // toggle segment and gated body are part of the static layout tree
-  // regardless of the toggle's current open/closed value (walkNodes visits
-  // unconditionally; only the render-time `when` hides the body while
-  // closed). This pins the chosen segment set — which segments graduated into
-  // the default bar and which stay declared-but-opt-in — so a future layout
-  // edit is a deliberate, reviewed change rather than an accidental drift.
-  // block/weekly are IN (their when-gates hide them when no rate-limit window
-  // is active).
+  // identity row (host, directory, the verbose gitaculous line) over a status
+  // row (model, context, prompt-cache warmth, the 5h/7d rate-limit quotas,
+  // activity). This pins the chosen segment set — which segments graduated
+  // into the default bar and which stay declared-but-opt-in — so a future
+  // layout edit is a deliberate, reviewed change rather than an accidental
+  // drift. block/weekly are IN (their when-gates hide them when no rate-limit
+  // window is active).
   //
-  // The drawer holds THREE controls, not nine: candybar-settings-ui-aok.3
-  // moved every setting with both a session and a durable half
-  // (theme/style/look/preset/autoWrap/padding) into the synthesized settings
-  // menu, where each is ONE control whose destination a `persist?` checkbox
-  // chooses. What is left here is durable-only by nature — charset and
-  // colorCompatibility describe the terminal, and directoryPaletteControl is
-  // a per-segment pin. Those `settings.*` segments are NOT in this list
-  // because this walks DEFAULT_DSL_CONFIG.root, the AUTHORED tree, and the
-  // menu is spliced in later by validateConfig (see the settings-menu tests).
+  // No setting sits on the bar: every one lives behind the settings-menu door
+  // (brandon-menu-ia-q30.42a moved the last of them, charset and colour depth,
+  // out of a `⚙ terminal` drawer on the identity row). The `settings.*`
+  // segments are NOT in this list because this walks DEFAULT_DSL_CONFIG.root,
+  // the AUTHORED tree, and the menu is spliced in later by validateConfig (see
+  // the settings-menu tests).
   //
   // The cost segments (session/today) and the speed/sparkline/burnrate
   // telemetry stay opt-in.
-  test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
+  test("default root renders exactly the two-row identity+status segment set", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind === "segment") laidOut.add(node.name);
@@ -152,10 +144,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         // at all, so an idle bar is byte-identical to one without it
         // (brandon-activity-ue7).
         "activity",
-        "groups.settings",
-        "charsetControl",
-        "colorCompatControl",
-        "directoryPaletteControl",
       ].sort(),
     );
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
@@ -388,19 +376,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
-  // default's two informational rows (identity row, status row) plus the
-  // settingsDrawer group sugar must lower to a root producing byte-identical
-  // ANSI to DEFAULT_DSL_CONFIG.root (the canonical container tree, hand-lowered
-  // via `settingsDrawer`'s `kind: "group"` sugar — see its own comment for why
-  // it can't be authored in canonical form). Spelling differs; render does not.
+  // default's two informational rows (identity row, status row) must lower to
+  // a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the
+  // canonical container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["host","directory","gitaculous", { kind: "group", name: "settings",
-        label: "⚙ terminal", direction: "horizontal", children: [
-          "charsetControl","colorCompatControl",
-          "directoryPaletteControl"
-        ] } ] },
+      { h: ["host","directory","gitaculous"] },
       { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);

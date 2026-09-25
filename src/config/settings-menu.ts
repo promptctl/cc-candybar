@@ -103,7 +103,7 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
-// [LAW:one-source-of-truth] ONE control per setting. The drawer used to spell
+// [LAW:one-source-of-truth] ONE control per setting. The bar's old drawer spelled
 // each of theme/style/look/preset TWICE — `{{ menu "applyTheme" }}` for the
 // session beside `📌{{ menu "applyThemeForever" }}` for the durable default —
 // two controls a reader had to reconcile at every glance, and two declarations
@@ -119,11 +119,8 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 //
 // The selector sits in the menu's FIRST row, above and beside every control it
 // governs, so it never stands over a row it cannot affect: every setting under
-// it — preset here, theme/look/style/wrap/padding in the config row — is dual.
-// `charset` and `colorCompatibility` are deliberately absent: they describe the
-// TERMINAL (glyph coverage, colour depth), not a taste that varies between
-// sessions, so they have no session half to choose and stay config-file
-// settings (see CHARSETS in themes/policy.ts).
+// it — preset here, theme/look/style/charset/colour depth/wrap/padding in the
+// config row — is dual.
 const PERSIST_SEG = `${SETTINGS_NS}persist`;
 const CONFIG_SEG = `${SETTINGS_NS}config`;
 
@@ -187,10 +184,7 @@ const PICKER_KEY = `${SETTINGS_NS}pickers`;
 // once. A control names the two keys its dual action writes (they differ where
 // history made them differ — SessionState "theme" over globals field
 // "palette"), the variable whose value it displays, and its value source.
-interface SettingControl {
-  readonly name: string;
-  readonly sessionKey: string;
-  readonly configKey: string;
+interface SettingControl extends KeyedSetting {
   // The `.effective` projection the daemon resolved for this render — the
   // value the bar is ACTUALLY rendering with, whatever produced it. A control
   // labels itself with this rather than with its own session key, so the label
@@ -198,10 +192,11 @@ interface SettingControl {
   readonly effectiveVar: string;
   readonly glyph: string;
   readonly domain: OptionDomain;
-  // [LAW:one-type-per-behavior] Every control offers its domain as a carousel — a ring centred on the
-  // current value where every click applies (brandon-theme-picker-bgw.ef6) —
-  // and `beneath` are the rows under the ring, each a template: what sits under
-  // a ring is data a control carries, not a kind of control.
+  // [LAW:one-type-per-behavior] Every control offers its domain as a carousel
+  // — a ring centred on the current value where every click applies
+  // (brandon-theme-picker-bgw.ef6) — and `beneath` are the rows under the
+  // ring, each a template: what sits under a ring is data a control carries,
+  // not a kind of control.
   readonly beneath: readonly string[];
 }
 
@@ -209,11 +204,11 @@ interface SettingControl {
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
 const PALETTE_PREVIEW = ["{{ themePreview }}"];
 
-// [LAW:one-type-per-behavior] Four settings, one control shape: a glyph, the
-// current value, a picker over a domain, and the ↺ that forgets the durable
+// [LAW:one-type-per-behavior] Every picker setting, one control shape: a glyph,
+// the current value, a picker over a domain, and the ↺ that forgets the durable
 // default. They differ only in which keys they write and which domain they
-// range — configuration, so they are four VALUES of one synthesis, not four
-// hand-written segments. `theme`'s two keys differ (SessionState "theme" over
+// range — configuration, so they are VALUES of one synthesis, not hand-written
+// segments. `theme`'s two keys differ (SessionState "theme" over
 // globals field "palette") for the historical reason recorded in
 // state-validators.ts's baseline table; carrying BOTH keys as data is what
 // makes that difference expressible without a special case.
@@ -265,6 +260,24 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
     effectiveVar: "style.effective",
     glyph: "✦",
     domain: "styles",
+    beneath: [],
+  },
+  {
+    name: "charset",
+    sessionKey: "charset",
+    configKey: "charset",
+    effectiveVar: "charset.effective",
+    glyph: "🔣",
+    domain: "charsets",
+    beneath: [],
+  },
+  {
+    name: "colorCompatibility",
+    sessionKey: "colorCompatibility",
+    configKey: "colorCompatibility",
+    effectiveVar: "colorCompatibility.effective",
+    glyph: "🌈",
+    domain: "colorCompatibilities",
     beneath: [],
   },
 ];
@@ -571,8 +584,9 @@ interface MenuArtifacts {
 // merely REFERENCED from each preset root. This is what makes the pass
 // idempotent across N presets for free: a preset root carries a segment
 // reference, and a second reference to one declaration is a reuse, not the
-// self-collision a second `kind: "group"` node would be (see the settingsDrawer
-// comment in default-dsl-config.ts for that hazard in its original form).
+// self-collision a second `kind: "group"` node would be: group names are one
+// synthesis-wide namespace, so a group embedded in two preset roots declares
+// itself twice.
 function settingsArtifacts(doorGlyph: string): {
   artifacts: MenuArtifacts;
   help: SegmentNode;
@@ -739,7 +753,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // and `deriveConfigActionValidators` each explode these dual declarations
 // (actionDestinations) and derive the same specs they would have derived from
 // the pair of single-destination actions this replaces — so the writable-key
-// surface is byte-for-byte what it was when the drawer spelled both halves.
+// surface is byte-for-byte what it was when a drawer spelled both halves.
 function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of PICKER_CONTROLS) {
     const apply = controlApply(c.name);

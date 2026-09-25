@@ -101,8 +101,8 @@ describe("README describes the code it ships with", () => {
   // The documented surface is every bundled segment a user may REFERENCE, which
   // is every name outside the reserved namespaces: `DEFAULT_DSL_CONFIG` is the
   // authored literal run through the loader's synthesis pass, so its segments
-  // also carry what the sugar wrote (`groups.settings`, the settings drawer's
-  // own toggle). [LAW:one-source-of-truth] That line is drawn by the loader's own
+  // also carry what the synthesis wrote (the settings menu's `settings.`
+  // segments). [LAW:one-source-of-truth] That line is drawn by the loader's own
   // `isReservedName` — the predicate whose comment states membership proves
   // "synthesized, not declared" — and never by a prefix re-spelled here or an
   // exclusion list maintained by hand, either of which would be a second answer

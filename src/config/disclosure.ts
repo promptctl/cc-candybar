@@ -41,9 +41,9 @@ export const DISCLOSURE_CLOSED = "closed";
 //
 // [LAW:one-source-of-truth] These are the AUTHORED default, never an emission.
 // Every disclosure splices them into the template it synthesizes — group sugar
-// (loader/layout.ts), the settings menu (settings-menu.ts), the bundled drawer
-// — and a hand-authored config writes whichever glyph it likes, because the
-// trigger's text is a display bound at the call site like any other. Until
+// (loader/layout.ts), the settings menu (settings-menu.ts) — and a
+// hand-authored config writes whichever glyph it likes, because the trigger's
+// text is a display bound at the call site like any other. Until
 // candybar-settings-ui-aok.4 `{{ menu }}` was the exception, appending ▸/▾ from
 // its own runtime where no author could see or decline it, which is how edit
 // mode's `+` came to render `+▸`.

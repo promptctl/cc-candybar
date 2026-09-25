@@ -384,15 +384,39 @@ export function effectiveStripStyle(
 // powerline-private-use cap glyphs (U+E0Bx — tofu without a Nerd Font) for
 // plain-ASCII equivalents; it is orthogonal to StripStyle: style picks the
 // joiner SHAPE, charset picks the glyph VALUES fed to it.
-// [config-only] Unlike STRIP_STYLES there is no SessionState/click half, so no
-// narrowing guard or effective* resolver — the config global over the default
-// is the whole resolution. That is a decision, not a gap: charset describes the
-// TERMINAL (does its font carry the powerline private-use glyphs), not a taste.
-// It does not vary session-to-session on one machine, so a per-session override
-// would be a knob whose only honest setting is the one already in the config.
-// Same for COLOR_COMPATIBILITIES below.
+// It is STRIP_STYLES' twin in resolution too: a session pick over the config
+// default. Charset describes the TERMINAL (does its font carry the powerline
+// private-use glyphs), and a Claude Code session runs in ONE terminal — two
+// sessions on one machine can sit in two terminals with two fonts, so the
+// session is exactly the scope that fact varies over, and the config file is
+// the default every terminal starts from. Same for COLOR_COMPATIBILITIES below
+// (a pane inside tmux draws at 256 while its neighbour draws truecolor).
 export const CHARSETS = ["unicode", "ascii"] as const;
 export type Charset = (typeof CHARSETS)[number];
+
+// [LAW:one-source-of-truth] The one statement of the globals.charset default
+// (powerline unicode glyphs, matching the legacy display.charset).
+export const DEFAULT_CHARSET: Charset = "unicode";
+
+export function isCharset(value: string): value is Charset {
+  return (CHARSETS as readonly string[]).includes(value);
+}
+
+// [LAW:one-type-per-behavior] effectiveStripStyle's twin: the narrowing guard
+// IS the parse, and a stale session entry falls through to the config default.
+export function effectiveCharset(
+  stagedCharset: Charset | undefined,
+  sessionCharset: string | null,
+  globalsCharset: Charset | undefined,
+): Charset {
+  return effectiveGlobal(
+    stagedCharset,
+    sessionCharset,
+    globalsCharset,
+    DEFAULT_CHARSET,
+    (raw) => (isCharset(raw) ? raw : null),
+  );
+}
 
 // --- Color-depth identifiers ---
 
@@ -419,6 +443,31 @@ export const COLOR_COMPATIBILITIES = [
 ] as const satisfies readonly ColorSystemSpec[];
 export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
 
+// [LAW:one-source-of-truth] The one statement of the globals.colorCompatibility
+// default (truecolor — deliberately NOT the legacy "auto", which would change
+// rendering for existing users).
+export const DEFAULT_COLOR_COMPATIBILITY: ColorCompatibility = "truecolor";
+
+export function isColorCompatibility(
+  value: string,
+): value is ColorCompatibility {
+  return (COLOR_COMPATIBILITIES as readonly string[]).includes(value);
+}
+
+export function effectiveColorCompatibility(
+  stagedDepth: ColorCompatibility | undefined,
+  sessionDepth: string | null,
+  globalsDepth: ColorCompatibility | undefined,
+): ColorCompatibility {
+  return effectiveGlobal(
+    stagedDepth,
+    sessionDepth,
+    globalsDepth,
+    DEFAULT_COLOR_COMPATIBILITY,
+    (raw) => (isColorCompatibility(raw) ? raw : null),
+  );
+}
+
 // [LAW:one-source-of-truth] The depth a setting draws at, which is what a
 // contrast floor has to be measured on (rich-js `ensureContrast`'s `drawnAt`):
 // at 256 the terminal rounds text and background independently, so text chosen
@@ -432,10 +481,10 @@ export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
 
 // --- Layout globals (autoWrap, padding) ---
 //
-// These two DO have a session half, unlike charset/colorCompatibility above:
-// wrapping and cell padding are how much bar you want on your screen right now
+// Wrapping and cell padding are how much bar you want on your screen right now
 // — a taste that legitimately differs between one session in a wide terminal
-// and another in a split pane. Their floors and domains live here, beside the
+// and another in a split pane, so, like charset and colorCompatibility above,
+// each resolves a session pick over the config default. Their floors and domains live here, beside the
 // other globals vocabularies, because both the config loader (range validation,
 // JSON-schema emit) and the render layer need them and config must not import
 // render [LAW:one-way-deps]. src/render/strip.ts re-exports them so render-layer

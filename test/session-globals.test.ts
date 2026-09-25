@@ -9,10 +9,9 @@
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
 //
-// `charset` and `colorCompatibility` deliberately have NO session half — they
-// describe the terminal (glyph coverage, colour depth), not a per-session taste
-// — so there is nothing here for them, and the comment on CHARSETS in
-// themes/policy.ts is where that decision is recorded.
+// brandon-menu-ia-q30.42a gives `charset` and `colorCompatibility` the same
+// half: they describe the terminal a session runs in, and two sessions on one
+// machine can sit in two terminals (see CHARSETS in themes/policy.ts).
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -30,6 +29,8 @@ import {
   resolveLookSelection,
   effectivePadding,
   effectiveStripStyle,
+  effectiveCharset,
+  effectiveColorCompatibility,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
 import type { PresetDecl } from "../src/config/dsl-types";
@@ -52,10 +53,14 @@ const src = (padding: number): string => `{
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     sessionPadding: { kind: 'state', key: 'padding', default: '' },
     sessionWrap: { kind: 'state', key: 'autoWrap', default: '' },
+    sessionCharset: { kind: 'state', key: 'charset', default: '' },
+    sessionDepth: { kind: 'state', key: 'colorCompatibility', default: '' },
   },
   actions: {
     padUp: { set: 'padding', min: ${PADDING_RANGE.min}, max: ${PADDING_RANGE.max}, by: 1 },
     toggleWrap: { set: 'autoWrap', cycle: ['true', 'false'] },
+    pickCharset: { set: 'charset', from: 'charsets' },
+    pickDepth: { set: 'colorCompatibility', from: 'colorCompatibilities' },
   },
   segments: {
     a: { template: 'AAAA', bg: 'surface', fg: 'foreground' },
@@ -91,8 +96,16 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       { session_id: sid },
       {
         style: "powerline" as const,
-        colorCompatibility: "truecolor" as const,
-        charset: "unicode" as const,
+        colorCompatibility: effectiveColorCompatibility(
+          undefined,
+          sessionState.get(sid, "colorCompatibility"),
+          config.globals.colorCompatibility,
+        ),
+        charset: effectiveCharset(
+          undefined,
+          sessionState.get(sid, "charset"),
+          config.globals.charset,
+        ),
         wrap: effectiveAutoWrap(undefined, 
           sessionState.get(sid, "autoWrap"),
           config.globals.autoWrap,
@@ -196,6 +209,38 @@ describe("an autoWrap click changes one session's bar", () => {
   });
 });
 
+describe("a terminal click changes one session's bar", () => {
+  // The powerline joiner between the two cells: a private-use glyph under
+  // `unicode`, a plain ASCII one under `ascii`.
+  const POWERLINE_ARROW = "\ue0b0";
+
+  it("an ascii pick swaps the joiner glyphs for that session only", () => {
+    const { sessionState, render, dispose } = buildRuntime();
+    try {
+      expect(render("s-glyph", WIDE)).toContain(POWERLINE_ARROW);
+      setState(sessionState, "s-glyph", "charset", "ascii");
+      expect(render("s-glyph", WIDE)).not.toContain(POWERLINE_ARROW);
+      expect(render("s-other", WIDE)).toContain(POWERLINE_ARROW);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("a colour depth of none drops every colour for that session only", () => {
+    const { sessionState, render, dispose } = buildRuntime();
+    // A truecolor foreground or background SGR parameter.
+    const TRUECOLOR = /\x1b\[[0-9;]*[34]8;2;/;
+    try {
+      expect(render("s-depth", WIDE)).toMatch(TRUECOLOR);
+      setState(sessionState, "s-depth", "colorCompatibility", "none");
+      expect(render("s-depth", WIDE)).not.toMatch(TRUECOLOR);
+      expect(render("s-other", WIDE)).toMatch(TRUECOLOR);
+    } finally {
+      dispose();
+    }
+  });
+});
+
 describe("a session value outside the domain is not a session value", () => {
   // Every case here is a stale SessionState entry — written when the config's
   // range or vocabulary was wider, or by a hand-edited state file. The contract
@@ -273,6 +318,15 @@ describe("a stale session pick falls to the config default, not the floor", () =
     muted: IDENTITY,
   };
   const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
+
+  it("charset and colour depth: a stale pick yields the configured value", () => {
+    expect(effectiveCharset(undefined, "wide", "ascii")).toBe("ascii");
+    expect(effectiveCharset(undefined, "wide", undefined)).toBe("unicode");
+    expect(effectiveColorCompatibility(undefined, "auto", "256")).toBe("256");
+    expect(effectiveColorCompatibility(undefined, "auto", undefined)).toBe(
+      "truecolor",
+    );
+  });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {
     expect(effectiveStripStyle(undefined, "no-such-style", "capsule")).toBe("capsule");

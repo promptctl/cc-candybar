@@ -22,8 +22,16 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { listResolvablePaletteNames } from "../src/themes/policy";
-import type { StripStyle } from "../src/themes/policy";
+import {
+  effectiveCharset,
+  effectiveColorCompatibility,
+  listResolvablePaletteNames,
+} from "../src/themes/policy";
+import type {
+  Charset,
+  ColorCompatibility,
+  StripStyle,
+} from "../src/themes/policy";
 import {
   resolveThemeSelection,
   transposedPalette,
@@ -59,15 +67,14 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "ef6";
 
-function opts(width: number, padding: number, style: StripStyle) {
-  return {
-    style,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding,
-    charset: "unicode" as const,
-    width,
-  };
+function opts(
+  width: number,
+  padding: number,
+  style: StripStyle,
+  charset: Charset = "unicode",
+  colorCompatibility: ColorCompatibility = "truecolor",
+) {
+  return { style, colorCompatibility, wrap: true, padding, charset, width };
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
@@ -104,6 +111,16 @@ function rig(
       config.globals.preset,
       config.presets,
     );
+    const charset = effectiveCharset(
+      undefined,
+      sessionState.get(SID, "charset"),
+      config.globals.charset,
+    );
+    const depth = effectiveColorCompatibility(
+      undefined,
+      sessionState.get(SID, "colorCompatibility"),
+      config.globals.colorCompatibility,
+    );
     last = renderDsl(
       config,
       compiled,
@@ -120,8 +137,10 @@ function rig(
         preset: { effective: preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
+        charset: { effective: charset },
+        colorCompatibility: { effective: depth },
       },
-      opts(width, padding, style),
+      opts(width, padding, style, charset, depth),
       { perSegmentSink: sink },
       {
         theme: resolveThemeSelection(
@@ -402,6 +421,72 @@ describe("the settings menu's theme, look and style controls are carousels", () 
   });
 });
 
+describe("glyphs and colour depth sit in the settings menu, not on the bar", () => {
+  test("the bar carries no terminal drawer; ⚙ config holds both controls", () => {
+    const rt = rig(`{}`);
+    expect(stripAnsi(rt.render())).not.toContain("terminal");
+    rt.clickText("🍫");
+    rt.clickText("⚙ config ▸");
+    const text = stripAnsi(rt.render());
+    expect(text).toContain("🔣 unicode");
+    expect(text).toContain("🌈 truecolor");
+    rt.dispose();
+  });
+
+  // They describe the terminal a session runs in, so they follow persist?
+  // like every control beside them: unchecked, ▶ tries the next value in this
+  // session alone and the bar re-centres on it; checked, the same ▶ writes the
+  // config file and releases the session's pick.
+  test.each([
+    // [key, current, the trial ▶, the committing ▶ from the trial value]
+    ["charset", "unicode", "ascii", "unicode"],
+    ["colorCompatibility", "truecolor", "256", "ansi"],
+  ])(
+    "%s follows persist?",
+    (key, current, next, after) => {
+      const rt = rig(`{}`);
+      rt.render();
+      rt.clickText("🍫");
+      rt.clickText("⚙ config ▸");
+      rt.clickWriting(PICKERS, `settings.apply.${key}`);
+      expect(stripAnsi(rt.render())).toMatch(
+        new RegExp(`${CAROUSEL_PREV} ${current} ${CAROUSEL_NEXT}`),
+      );
+      const trial = effectsOf(rt.linkOn(key, CAROUSEL_NEXT).url);
+      expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
+        ["set-state", key, next],
+      ]);
+      rt.clickWriting(key, next);
+      expect(stripAnsi(rt.render())).toMatch(
+        new RegExp(`${CAROUSEL_PREV} ${next} ${CAROUSEL_NEXT}`),
+      );
+      rt.clickWriting("settings.persist", "true");
+      const commit = effectsOf(rt.linkOn(key, CAROUSEL_NEXT).url);
+      expect(
+        commit.map((e) => [e.verb, e.args[1], e.args[2], e.args[3]]),
+      ).toEqual([["set-config", key, after, key]]);
+      rt.dispose();
+    },
+  );
+
+  test.each(["charset", "colorCompatibility"])(
+    "%s's ↺ forgets the durable default",
+    (key) => {
+      const rt = rig(`{}`);
+      rt.render();
+      rt.clickText("🍫");
+      rt.clickText("⚙ config ▸");
+      const reset = links(rt.render()).filter((l) =>
+        effectsOf(l.url).some(
+          (e) => e.verb === "reset-config" && e.args[1] === key,
+        ),
+      );
+      expect(reset.map((l) => stripAnsi(l.text))).toEqual(["↺"]);
+      rt.dispose();
+    },
+  );
+});
+
 // The preview's rows, as the labels each draws: the lines after the ring, led
 // by the body's ✕, up to the next line the body does not lead.
 function previewLabels(rendered: string): string[][] {
@@ -431,7 +516,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["settings.menu", "host", "directory", "gitaculous", "groups.settings"],
+        ["settings.menu", "host", "directory", "gitaculous"],
         ["model", "context", "cacheTimer", "block", "weekly", "activity"],
       ],
       compact: [["settings.menu", "directory", "git", "context"]],
@@ -502,20 +587,17 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     const rt = rig(`{}`);
     openCarousel(rt, "preset");
     const seen: string[] = [];
-    const firstRows: string[][] = [];
+    const rowCounts: number[] = [];
     for (let i = 0; i < 3; i++) {
       rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
       seen.push(rt.sessionState.get(SID, "preset")!);
-      firstRows.push(previewLabels(rt.render())[0]!);
+      rowCounts.push(previewLabels(rt.render()).length);
     }
     expect(seen).toEqual(["compact", "verbose", "default"]);
-    // Only the default preset's first row carries the settings group — a fact
-    // of the layout, unlike gitaculous, whose gate reads the cwd's git state.
-    expect(firstRows.map((row) => row.includes("settings"))).toEqual([
-      false,
-      false,
-      true,
-    ]);
+    // Compact is one row; the others stack status under identity (verbose's
+    // third row is gated off by this payload). The full per-preset layouts are
+    // pinned by "every bundled preset's rows" above.
+    expect(rowCounts).toEqual([1, 2, 2]);
     rt.dispose();
   });
 

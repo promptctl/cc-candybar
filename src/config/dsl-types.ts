@@ -436,16 +436,16 @@ export interface Globals {
   // The legacy display.autoWrap knob: whether FlexStrip soft-wraps a root
   // row that exceeds the usable width. Default true (current behavior);
   // false renders each row as one unbounded line, overflow off-screen.
-  // [config-only] Unlike palette/style there is no SessionState/click half —
-  // the daemon resolves `globals.autoWrap ?? true` into renderOpts.wrap.
+  // The config default; a session pick (the settings menu) overrides it for
+  // that session — `effectiveAutoWrap` resolves both into renderOpts.wrap.
   readonly autoWrap?: boolean;
 
   // The legacy display.padding knob: spaces synthesized INSIDE each segment
   // cell per side (intra-cell, within the bg fill — not rich-js FlexStrip's
   // inter-item gap). Default 1 (current behavior). Templates author content;
   // this chrome is applied structurally at the cell-formation seam.
-  // [config-only] The daemon resolves `globals.padding ?? 1` into
-  // renderOpts.padding; no SessionState/click half.
+  // The config default under a session pick — `effectivePadding` resolves
+  // both into renderOpts.padding.
   readonly padding?: number;
 
   // The legacy display.charset knob: which glyph vocabulary the strip joiners
@@ -453,8 +453,8 @@ export interface Globals {
   // caps, U+E0Bx). "ascii" swaps the caps for single-column ASCII glyphs so
   // terminals/fonts without powerline glyphs render cleanly instead of tofu.
   // Orthogonal to `style`: style picks the joiner shape, charset the glyphs.
-  // [config-only] The daemon resolves `globals.charset ?? "unicode"` into
-  // renderOpts.charset; no SessionState/click half.
+  // The config default under a session pick — `effectiveCharset` resolves
+  // both into renderOpts.charset.
   readonly charset?: Charset;
 
   readonly menuGlyph?: string;
@@ -473,8 +473,8 @@ export interface Globals {
   // legacy "auto" default, which would change rendering for existing users).
   // The type excludes "auto" entirely: the daemon is detached, so env
   // detection would read the wrong terminal — see COLOR_COMPATIBILITIES.
-  // [config-only] The daemon resolves `globals.colorCompatibility ??
-  // "truecolor"` into renderOpts.colorCompatibility; no SessionState/click half.
+  // The config default under a session pick — `effectiveColorCompatibility`
+  // resolves both into renderOpts.colorCompatibility.
   readonly colorCompatibility?: ColorCompatibility;
 }
 

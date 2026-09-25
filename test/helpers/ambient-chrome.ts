@@ -66,8 +66,8 @@ function isReservedChromeKey(key: string): boolean {
 }
 
 // The reserved keys, plus the plain keys the settings menu's own controls
-// write — `preset`/`theme`/`palette`/`look`/`style`/`autoWrap`/`padding`, both
-// destinations of every dual control (candybar-settings-ui-aok.3). Those are
+// write — both destinations of every dual control, `theme` and `palette`
+// among them (candybar-settings-ui-aok.3). Those are
 // bare words an author CAN own, which is why every consumer of this predicate
 // must pair it with an authorship check. The set is IMPORTED from the synthesis
 // that writes them, never re-spelled here.

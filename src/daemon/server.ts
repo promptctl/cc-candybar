@@ -1282,10 +1282,9 @@ const DEBUG_RENDER_OPTS: BuildLineOptions = {
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
 // [LAW:one-source-of-truth] The joiner glyph vocabulary and the color depth
-// are serialization-time choices, and both are config-only (no SessionState
-// half) — so the faithful values are fully derivable from the sampled entry's
-// config, unlike style, whose live session-over-config resolution needs a
-// session a debug request doesn't carry. The caller threads the
+// are serialization-time choices. A debug request carries no session, so the
+// sampled entry's CONFIG values are the ones it can state — a session's own
+// pick, like its style, is not visible here. The caller threads the
 // entry-resolved values; this serializer never re-defaults them.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
