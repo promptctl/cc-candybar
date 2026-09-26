@@ -702,6 +702,11 @@ describe("the preview is the bar's own colours", () => {
 // never by position in the bar (every row leads with the settings door).
 describe("the bundled themeSwitcher segment steps the session theme on the bar", () => {
   const THEMES = listResolvablePaletteNames();
+  // The theme `k` steps from the first, wrapping both ways — the ring's own
+  // arithmetic, so no test depends on where nord happens to sit in the list.
+  const themeAt = (k: number): string =>
+    THEMES[((k % THEMES.length) + THEMES.length) % THEMES.length]!;
+  const NORD = THEMES.indexOf("nord");
   // Placed on the status row, so it stays on the bar while the settings menu
   // opens inline over the door's (identity) row.
   const PLACED = `{ globals: { palette: 'nord' },
@@ -726,25 +731,23 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
     // nord is not the first theme, so a ring centred on no value would show
     // THEMES[0] instead.
     expect(THEMES[0]).not.toBe("nord");
-    const i = THEMES.indexOf("nord");
     expect(switcher(rt)).toEqual({
       text: `${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`,
-      prev: [["theme", THEMES[i - 1]!]],
-      next: [["theme", THEMES[i + 1]!]],
+      prev: [["theme", themeAt(NORD - 1)]],
+      next: [["theme", themeAt(NORD + 1)]],
     });
     rt.dispose();
   });
 
   test("◀ writes the previous theme and ▶ the next, wrapping at the first and last", () => {
     const rt = rig(PLACED);
-    const n = THEMES.length;
-    for (const i of [0, 1, n - 1]) {
+    for (const i of [0, 1, THEMES.length - 1]) {
       rt.sessionState.set(SID, "theme", THEMES[i]!);
       rt.render();
       expect(switcher(rt)).toEqual({
         text: `${CAROUSEL_PREV} ${THEMES[i]} ${CAROUSEL_NEXT}`,
-        prev: [["theme", THEMES[(i - 1 + n) % n]!]],
-        next: [["theme", THEMES[(i + 1) % n]!]],
+        prev: [["theme", themeAt(i - 1)]],
+        next: [["theme", themeAt(i + 1)]],
       });
     }
     rt.dispose();
@@ -753,11 +756,10 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
   test("a click applies through the real gate and re-centres, opening nothing", () => {
     const rt = rig(PLACED);
     const rows = stripAnsi(rt.render()).split("\n").length;
-    const i = THEMES.indexOf("nord");
     rt.click(linkAt(bytesOf(rt, "themeSwitcher"), CAROUSEL_NEXT).url);
-    expect(rt.sessionState.get(SID, "theme")).toBe(THEMES[i + 1]);
+    expect(rt.sessionState.get(SID, "theme")).toBe(themeAt(NORD + 1));
     expect(switcher(rt).text).toBe(
-      `${CAROUSEL_PREV} ${THEMES[i + 1]} ${CAROUSEL_NEXT}`,
+      `${CAROUSEL_PREV} ${themeAt(NORD + 1)} ${CAROUSEL_NEXT}`,
     );
     // Nothing opened: the bar has exactly as many rows as before the click.
     expect(stripAnsi(rt.render()).split("\n").length).toBe(rows);
@@ -769,7 +771,7 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
     openCarousel(rt, "theme");
     rt.click(linkAt(bytesOf(rt, "settings.carousel.theme"), CAROUSEL_NEXT).url);
     const picked = rt.sessionState.get(SID, "theme")!;
-    expect(picked).toBe(THEMES[THEMES.indexOf("nord") + 1]);
+    expect(picked).toBe(themeAt(NORD + 1));
     expect(switcher(rt).text).toBe(
       `${CAROUSEL_PREV} ${picked} ${CAROUSEL_NEXT}`,
     );
