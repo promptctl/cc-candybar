@@ -47,6 +47,7 @@ import {
 } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
 import {
+  effectiveInputs,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./daemon/render-payload.js";
@@ -140,25 +141,10 @@ export function checkPayload(
     // RENDERS and its template gets checked. A local-looking fixture would
     // gate the host segment off and let a typo inside it ship.
     host: { name: "tester-box", user: "tester", ssh: true },
-    // No `theme` or `look` — renderDsl injects both `.effective` fields, because
-    // under a rule it is the only thing that knows the answer (brandon-looks-pe6,
-    // brandon-themes-dzl).
-    // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
-    // already carried `preset` — a pre-existing gap this ticket's own fixture
-    // needs closed: a preset trigger's `.preset.effective` label and
-    // brandon-layout-edit-2gc.5's `.preset.customized` gate both silently
-    // fell back to their declared defaults ("" / false) rather than the
-    // resolved value, exactly the drift the sibling `*.effective` fields
-    // already guard against.
-    preset: {
-      effective: effective.preset,
-      customized: effective.presetCustomized,
-    },
-    style: { effective: effective.style },
-    charset: { effective: effective.charset },
-    colorCompatibility: { effective: effective.colorCompatibility },
-    autoWrap: { effective: effective.autoWrap },
-    padding: { effective: effective.padding },
+    // [LAW:one-source-of-truth] The daemon's own projection of the resolved
+    // globals, so a `.preset.effective`/`.style.effective` label is checked
+    // against the value it will actually show, never its declared default.
+    ...effectiveInputs(effective),
   };
 }
 

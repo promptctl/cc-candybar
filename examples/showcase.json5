@@ -42,9 +42,10 @@
     // The session powerline shape, written by applyStyle (from: "styles" ⇒ the
     // STRIP_STYLES domain: powerline/capsule/plain). The daemon resolves it per
     // render via effectiveStripStyle (session-over-globals.style-over-floor,
-    // exactly like the theme), so a style click reshapes the bar live. Empty
-    // default renders as "(default)" and leaves the "powerline" floor in effect.
-    activeStyle: { kind: "state", key: "style", default: "" },
+    // exactly like the theme), so a style click reshapes the bar live. Like the
+    // theme it needs no state var: the label reads `style.effective` (bundled
+    // default), the style the bar is drawn in, which the menu's current-option
+    // mark reads too.
 
     // ── Work-mode chip (the cycle-action showcase) ──────────────────────────
     // A 3-state status the cycleMode action advances; the glyph names the
@@ -111,7 +112,7 @@
     // exclusive, give each the same key: {{ menu "applyStyle" "▸" "▾" (dict "key"
     // "pickers") }}; to wrap instead of paginate: (dict "paged" false).)
     styleControl: {
-      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" "▸" "▾" }}',
+      template: '✦ {{ .style.effective }} {{ menu "applyStyle" "▸" "▾" }}',
       bg: "surface",
     },
 

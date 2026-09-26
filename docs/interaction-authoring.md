@@ -1296,6 +1296,31 @@ has room for; a narrow terminal shows `◀ gruvbox ▶` alone. Options are colou
 by the one rule a picker uses (a colour-valued domain paints each name in its
 own palette).
 
+A second argument caps how many neighbours each side may show:
+`{{ carousel "applyAction" 0 }}` is the bare stepper `◀ gruvbox ▶` at any
+width — the shape a cell on the bar wants, since the neighbours are what make
+the ring wide. Width still decides within the cap (`2` shows at most two a
+side, fewer when they do not fit), and a cap that is not a whole number ≥ 0 is
+a render error, `carousel "applyAction": neighbours must be a whole number ≥
+0…`. The bundled `themeSwitcher` segment is exactly this over
+`{ set: "theme", from: "themes" }`; name it in a row to place it. Its clicks
+write the session's `theme`, the key the settings menu's `🎨 theme` control
+writes unsaved, so the two always show the same theme:
+
+```json5 check:pass
+{
+  globals: { palette: "nord" },
+  actions: { stepMyTheme: { set: "theme", from: "themes" } },
+  segments: { myThemeStepper: { template: '{{ carousel "stepMyTheme" 0 }}' } },
+  root: { rows: { identity: { h: ["model"] }, status: { h: ["myThemeStepper"] } } },
+}
+```
+
+```render
+ 🍫  ✱ Opus 4.8 
+ ◀ nord ▶ 
+```
+
 A carousel owns no state of its own — its centre is the action's current value —
 so the call is the whole declaration. It is a picker, not a disclosure: put it
 in the body of a `kind: "group"` (or anywhere else a row belongs) when it should
@@ -1320,9 +1345,6 @@ segment sits.
 
 ```json5 check:pass
 {
-  variables: {
-    pickedTheme: { kind: "state", key: "theme", default: "nord" },
-  },
   actions: {
     applyTheme: { set: "theme", from: "themes" },
   },
@@ -1339,9 +1361,15 @@ segment sits.
 
 The apply action must hold a value to centre on: a `{ set, from }` action
 whose key a `state` variable reads back, or a `{ persist, from }` action (a dual
-included). Without the `state` variable the carousel could never see what its
-last click wrote, so it is a render error naming the variable to declare,
-`carousel references action "applyTheme", whose key "theme" no variable reads
+included). A settings key the daemon resolves every render — `theme`, `look`,
+`preset`, `style`, `charset`, `colorCompatibility`, `autoWrap`, `padding` —
+needs no `state` variable: it reads back through its `.effective` projection
+(`theme.effective`), which wins over a `state` variable on the same key, so the
+centre is the value the bar is rendering with even before the session picks
+one, and it agrees with the settings menu's control for that key. For any other
+key, without the `state` variable the carousel could never see what its last
+click wrote, so it is a render error naming the variable to declare,
+`carousel references action "choose", whose key "pick" no variable reads
 back…`. An `insertSegmentFrom` action inserts a segment and holds nothing, so a
 carousel over one is a render error naming the action. A current value outside
 the domain rotates from the domain's first option, and no option reads as

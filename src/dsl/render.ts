@@ -69,6 +69,7 @@ import {
 import {
   compileActions,
   actionFuncs,
+  SESSION_KEY_TO_EFFECTIVE_VAR,
   type ActionRuntime,
 } from "../render/action.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
@@ -493,11 +494,23 @@ export function registerDslConfig(
   // a helper could fail to be visible). The helpers are parsed ONCE here.
   const helpers = compileHelpers(engine, config.helpers);
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
-  // [LAW:one-source-of-truth] Map each SessionState key → the variable that
-  // reads it, so an option picker marks its current selection by reading the
-  // SAME value the templates read — independent of whether the config named the
-  // variable after the key. State vars are the single read path for SessionState.
+  // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
+  // on it reads back, so an option picker marks its current selection by
+  // reading the SAME value the templates read — independent of whether the
+  // config named the variable after the key. For an ordinary key that is the
+  // `state` variable over it.
+  //
+  // A settings key the daemon resolves per render (theme, look, preset, …)
+  // reads back through its `.effective` projection FIRST, ahead of any `state`
+  // variable over the same key: the current value of a setting is the one the
+  // bar is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
+  // centres on the theme the bar wears even when the session never picked one
+  // — the read-back compileDual gives the settings menu's controls, so a bar
+  // control and the menu cannot disagree (brandon-theme-picker-bgw.exj).
   const stateKeyToVar = new Map<string, string>();
+  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
+    if (name in config.variables) stateKeyToVar.set(key, name);
+  }
   for (const [name, decl] of Object.entries(config.variables)) {
     if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
       stateKeyToVar.set(decl.key, name);
