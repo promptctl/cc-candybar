@@ -39,6 +39,7 @@ import {
   type ResolvedDomain,
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
+import { SETTING_PROJECTIONS } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
 import {
@@ -227,64 +228,15 @@ export type CompiledActionDecl =
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
-// [LAW:one-source-of-truth] Every setting whose CURRENT resolved value the
-// daemon publishes once per render as an `.effective` projection
-// (src/daemon/render-payload.ts), with both keys that write it: the config
-// field a `persist` writes and the SessionState key a `set` writes. They
-// differ where history made them differ (`palette` is `theme` in the
-// session), so each row spells all three rather than deriving one from
-// another's spelling. The current value of a setting is the one the bar is
-// rendering with — whichever rung (staged, session, config, floor) produced
-// it — so a `persist` and a `set` on one of these keys both read back through
-// its projection. A `persist` on a field with no row reads back through a var
+// [LAW:one-source-of-truth] The current value of a setting is the one the bar
+// is rendering with — whichever rung (staged, session, config, floor) produced
+// it — so a `persist` and a `set` on a key in SETTING_PROJECTIONS both read
+// back through its `.effective` projection. The table is the settings menu's
+// too (src/config/setting-projections.ts), so every dual control it mints has
+// a row here. A `persist` on a field with no row reads back through a var
 // named after the field, which none is, so its current-selection mark is
 // inert (readVar yields ""); a `set` on a key with no row reads back through
 // the `state` variable over that key.
-const SETTING_PROJECTIONS: ReadonlyArray<{
-  readonly configKey: string;
-  readonly sessionKey: string;
-  readonly effectiveVar: string;
-}> = [
-  {
-    configKey: "palette",
-    sessionKey: "theme",
-    effectiveVar: "theme.effective",
-  },
-  // [LAW:one-source-of-truth] `preset` earns its row the moment a DUAL control
-  // writes it: compileDual makes BOTH halves read back through this table, so
-  // a field missing from it loses its current-selection mark on the session
-  // side too — and the preset carousel sits on the settings menu's
-  // always-visible first row, where "which arrangement am I in" is the whole
-  // question the control answers.
-  {
-    configKey: "preset",
-    sessionKey: "preset",
-    effectiveVar: "preset.effective",
-  },
-  { configKey: "look", sessionKey: "look", effectiveVar: "look.effective" },
-  { configKey: "style", sessionKey: "style", effectiveVar: "style.effective" },
-  {
-    configKey: "charset",
-    sessionKey: "charset",
-    effectiveVar: "charset.effective",
-  },
-  {
-    configKey: "colorCompatibility",
-    sessionKey: "colorCompatibility",
-    effectiveVar: "colorCompatibility.effective",
-  },
-  {
-    configKey: "autoWrap",
-    sessionKey: "autoWrap",
-    effectiveVar: "autoWrap.effective",
-  },
-  {
-    configKey: "padding",
-    sessionKey: "padding",
-    effectiveVar: "padding.effective",
-  },
-];
-
 const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
   SETTING_PROJECTIONS.map((p) => [p.configKey, p.effectiveVar]),
 );
@@ -582,7 +534,7 @@ function compileAction(
 // [LAW:one-source-of-truth] A dual control shows ONE current value and writes
 // relative to the value it showed — so both destinations read back through the
 // DURABLE half's variable, which is the `.effective` projection the daemon
-// resolved for this render (SETTING_PROJECTIONS above): the value the
+// resolved for this render (SETTING_PROJECTIONS): the value the
 // bar is actually rendering with, whatever chain produced it. Reading the
 // session key instead would let a cycle's glyph name the effective state while
 // its click stepped from an unwritten session key — the toggle would render

@@ -54,6 +54,8 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { actionIsDual, type DualActionDecl } from "../src/config/action";
+import { SETTING_PROJECTIONS } from "../src/config/setting-projections";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -808,4 +810,40 @@ describe("globals.menuGlyph", () => {
       parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG),
     ).toThrow(message);
   });
+});
+
+// [LAW:one-source-of-truth] Every dual control the menu mints writes the two
+// keys of one SETTING_PROJECTIONS row, so the render knows how to read its
+// current value back, through a variable the bundled default declares. The
+// menu spreads its keys from that table, so this holds by construction for the
+// controls built from it; the test also covers a dual written any other way.
+describe("every dual control in the settings menu has a setting projection", () => {
+  const config = parseAndValidate(
+    "<user>",
+    userConfig(TWO_SEGMENT_ROW),
+    ALLOWED,
+    DEFAULT_DSL_CONFIG,
+  );
+  const duals = Object.entries(config.actions).filter(
+    (entry): entry is [string, DualActionDecl] => actionIsDual(entry[1]),
+  );
+
+  test("the menu mints a dual for every setting in the table", () => {
+    expect(new Set(duals.map(([, a]) => a.set))).toEqual(
+      new Set(SETTING_PROJECTIONS.map((p) => p.sessionKey)),
+    );
+  });
+
+  test.each(duals)("%s writes the two keys of one projection", (_name, a) => {
+    expect(SETTING_PROJECTIONS).toContainEqual(
+      expect.objectContaining({ sessionKey: a.set, configKey: a.persist }),
+    );
+  });
+
+  test.each(SETTING_PROJECTIONS.map((p) => [p.effectiveVar]))(
+    "%s is declared in the bundled default",
+    (effectiveVar) => {
+      expect(DEFAULT_DSL_CONFIG.variables[effectiveVar]).toBeDefined();
+    },
+  );
 });
