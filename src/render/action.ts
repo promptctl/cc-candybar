@@ -257,6 +257,23 @@ const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
   ["padding", "padding.effective"],
 ]);
 
+// [LAW:one-source-of-truth] The same projections, keyed by the SESSION key a
+// `set` writes rather than the config field a `persist` writes. Every
+// projection is spelled `<sessionKey>.effective` (the session key is `theme`
+// where the config field is `palette`), so this is derived from the table
+// above, never listed twice. registerDslConfig reads a `set` action's key back
+// through these: the current value of a setting is the one the bar is
+// rendering with, not the raw session pick — an unpicked session has no pick,
+// yet the bar still wears a theme (brandon-theme-picker-bgw.exj).
+const EFFECTIVE_SUFFIX = ".effective";
+export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
+  new Map(
+    [...CONFIG_KEY_TO_EFFECTIVE_VAR.values()].map((v) => [
+      v.slice(0, -EFFECTIVE_SUFFIX.length),
+      v,
+    ]),
+  );
+
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
 // engine, the compiled actions reference the engine — the holder breaks the
