@@ -52,6 +52,7 @@ import {
   neighbourLevels,
 } from "../src/render/carousel";
 import { previewSwatches } from "../src/render/theme-preview";
+import { renderStripCells } from "../src/render/strip";
 import {
   blockLabel,
   labelBudget,
@@ -341,12 +342,16 @@ describe("the carousel rotates by applying", () => {
     const names = ["aa", "bb", "cc", "dd", "ee", "ff", "gg"];
     const ring = (d: number) => names[((d % 7) + 7) % 7]!;
     // ◀ aa ▶ = 6 cols; each level adds two names and two spaces = 6.
-    expect(neighbourLevels(ring, 7, 6, 6)).toBe(0);
-    expect(neighbourLevels(ring, 7, 6, 11)).toBe(0);
-    expect(neighbourLevels(ring, 7, 6, 12)).toBe(1);
-    expect(neighbourLevels(ring, 7, 6, 1000)).toBe(3);
+    expect(neighbourLevels(ring, 7, 6, 6, Infinity)).toBe(0);
+    expect(neighbourLevels(ring, 7, 6, 11, Infinity)).toBe(0);
+    expect(neighbourLevels(ring, 7, 6, 12, Infinity)).toBe(1);
+    expect(neighbourLevels(ring, 7, 6, 1000, Infinity)).toBe(3);
     // Two options: the one neighbour is both ◀ and ▶, so the ring shows none.
-    expect(neighbourLevels(ring, 2, 6, 1000)).toBe(0);
+    expect(neighbourLevels(ring, 2, 6, 1000, Infinity)).toBe(0);
+    // The author's cap bounds the levels; width still decides within it.
+    expect(neighbourLevels(ring, 7, 6, 1000, 0)).toBe(0);
+    expect(neighbourLevels(ring, 7, 6, 1000, 2)).toBe(2);
+    expect(neighbourLevels(ring, 7, 6, 12, 2)).toBe(1);
   });
 });
 
@@ -686,6 +691,117 @@ describe("the preview is the bar's own colours", () => {
     openCarousel(rt, "style");
     expect(rt.sink.has("settings.carousel.style")).toBe(true);
     expect(rt.sink.has("settings.carousel.style.0")).toBe(false);
+    rt.dispose();
+  });
+});
+
+// [LAW:verifiable-goals] brandon-theme-picker-bgw.exj — the bundled
+// `themeSwitcher` segment: `◀ <theme> ▶` on the bar itself, so the whole bar
+// stays visible while stepping through themes. Read by segment name off the
+// per-segment sink and serialized through the strip serializer the bar uses,
+// never by position in the bar (every row leads with the settings door).
+describe("the bundled themeSwitcher segment steps the session theme on the bar", () => {
+  const THEMES = listResolvablePaletteNames();
+  // The theme `k` steps from the first, wrapping both ways — the ring's own
+  // arithmetic, so no test depends on where nord happens to sit in the list.
+  const themeAt = (k: number): string =>
+    THEMES[((k % THEMES.length) + THEMES.length) % THEMES.length]!;
+  const NORD = THEMES.indexOf("nord");
+  // Placed on the status row, so it stays on the bar while the settings menu
+  // opens inline over the door's (identity) row.
+  const PLACED = `{ globals: { palette: 'nord' },
+    root: { rows: { status: { h: ['model', 'themeSwitcher'] } } } }`;
+
+  const bytesOf = (rt: ReturnType<typeof rig>, segment: string): string =>
+    renderStripCells(rt.sink.get(segment)!, opts(200, 0, "powerline"));
+  const linkAt = (bytes: string, glyph: string) =>
+    links(bytes).find((l) => stripAnsi(l.text) === glyph)!;
+  const switcher = (rt: ReturnType<typeof rig>) => {
+    const bytes = bytesOf(rt, "themeSwitcher");
+    return {
+      text: rt.sink.get("themeSwitcher")!.map((cell) => cell.plain).join(""),
+      prev: writesOf(linkAt(bytes, CAROUSEL_PREV).url),
+      next: writesOf(linkAt(bytes, CAROUSEL_NEXT).url),
+    };
+  };
+
+  test("with no session pick it shows the theme the bar wears, not the domain's first", () => {
+    const rt = rig(PLACED);
+    rt.render();
+    // nord is not the first theme, so a ring centred on no value would show
+    // THEMES[0] instead.
+    expect(THEMES[0]).not.toBe("nord");
+    expect(switcher(rt)).toEqual({
+      text: `${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`,
+      prev: [["theme", themeAt(NORD - 1)]],
+      next: [["theme", themeAt(NORD + 1)]],
+    });
+    rt.dispose();
+  });
+
+  test("◀ writes the previous theme and ▶ the next, wrapping at the first and last", () => {
+    const rt = rig(PLACED);
+    for (const i of [0, 1, THEMES.length - 1]) {
+      rt.sessionState.set(SID, "theme", THEMES[i]!);
+      rt.render();
+      expect(switcher(rt)).toEqual({
+        text: `${CAROUSEL_PREV} ${THEMES[i]} ${CAROUSEL_NEXT}`,
+        prev: [["theme", themeAt(i - 1)]],
+        next: [["theme", themeAt(i + 1)]],
+      });
+    }
+    rt.dispose();
+  });
+
+  test("a click applies through the real gate and re-centres, opening nothing", () => {
+    const rt = rig(PLACED);
+    const rows = stripAnsi(rt.render()).split("\n").length;
+    rt.click(linkAt(bytesOf(rt, "themeSwitcher"), CAROUSEL_NEXT).url);
+    expect(rt.sessionState.get(SID, "theme")).toBe(themeAt(NORD + 1));
+    expect(switcher(rt).text).toBe(
+      `${CAROUSEL_PREV} ${themeAt(NORD + 1)} ${CAROUSEL_NEXT}`,
+    );
+    // Nothing opened: the bar has exactly as many rows as before the click.
+    expect(stripAnsi(rt.render()).split("\n").length).toBe(rows);
+    rt.dispose();
+  });
+
+  test("a theme picked through the settings menu is the theme the segment shows", () => {
+    const rt = rig(PLACED);
+    openCarousel(rt, "theme");
+    rt.click(linkAt(bytesOf(rt, "settings.carousel.theme"), CAROUSEL_NEXT).url);
+    const picked = rt.sessionState.get(SID, "theme")!;
+    expect(picked).toBe(themeAt(NORD + 1));
+    expect(switcher(rt).text).toBe(
+      `${CAROUSEL_PREV} ${picked} ${CAROUSEL_NEXT}`,
+    );
+    rt.dispose();
+  });
+
+  test("the bundled segment is the carousel asked for no neighbours, over a plain session set", () => {
+    expect(DEFAULT_DSL_CONFIG.segments.themeSwitcher!.template).toBe(
+      '{{ carousel "stepTheme" 0 }}',
+    );
+    expect(DEFAULT_DSL_CONFIG.actions.stepTheme).toEqual({
+      set: "theme",
+      from: "themes",
+    });
+  });
+
+  test.each([
+    ["-1", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got -1"],
+    // Not truncated to 1: the engine's int gate would, silently.
+    ["1.5", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got 1.5"],
+    // Not dropped: the engine repeats a trailing slot.
+    ["0 2", "takes at most one neighbours count after the action name, got 2"],
+  ])("neighbours %s is a loud render error", (args, message) => {
+    const rt = rig(`{
+      variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
+      actions: { choose: { set: 'pick', from: ['a', 'b', 'c'] } },
+      segments: { ring: { template: '{{ carousel "choose" ${args} }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    expect(stripAnsi(rt.render()).replace(/\s+/g, " ")).toContain(message);
     rt.dispose();
   });
 });

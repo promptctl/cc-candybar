@@ -24,8 +24,8 @@
 //       hand (Theme/Style picker sections below).
 //     • steppers ({set,min,max,by}) and cyclers ({set,cycle}) as bare {{ action }}.
 //
-// Point CC_CANDYBAR_CONFIG at this file to try it:
-//   CC_CANDYBAR_CONFIG=examples/demo-actions.json5 pnpm demo
+// Render it with the demo (which takes the config path as its argument):
+//   pnpm demo examples/demo-actions.json5
 //
 // What to try:
 //   Click "▸ theme"  → open the theme picker; click any theme to apply.
@@ -53,10 +53,10 @@
     // The `key` field names the SessionState slot.
     // The `default` is the value before any click has fired.
 
-    // Active theme and style. Written by applyTheme/applyStyle (from:).
-    // Used in the themeControl/styleControl segment templates.
-    "activeTheme": { kind: "state", key: "theme",       default: "" },
-    "activeStyle": { kind: "state", key: "style",       default: "" },
+    // No state var for the active theme or style: applyTheme/applyStyle write
+    // the session's `theme`/`style`, and the themeControl/styleControl labels
+    // read `theme.effective`/`style.effective` (bundled default) — the values
+    // the bar is drawn in, which the pickers' current-option marks read too.
 
     // Detail level (0..3). Written by detailUp/detailDown (bounded).
     // [LAW:types-are-the-program] Declared as `state` here (not `literal`)
@@ -144,13 +144,13 @@
     // set-literal (openThemeMenu), bounded steppers (detailUp/detailDown) in one row.
     // {{ action "name" "display" }} — single display for all states.
     themeControl: {
-      template: ' 🎨 {{ if .activeTheme }}{{ .activeTheme }}{{ else }}(default){{ end }} {{ action "openThemeMenu" "▸" }}  ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} ',
+      template: ' 🎨 {{ .theme.effective }} {{ action "openThemeMenu" "▸" }}  ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} ',
       bg: "surface",
     },
 
     // ── Style control ──────────────────────────────────────────────────────
     styleControl: {
-      template: ' ✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ action "openStyleMenu" "▸" }} ',
+      template: ' ✦ {{ .style.effective }} {{ action "openStyleMenu" "▸" }} ',
       bg: "panel",
     },
 

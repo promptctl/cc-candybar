@@ -907,6 +907,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "Quick actions: copy the session id, and open the project, transcript or repo.",
       template: quickActions("").template,
     },
+    // Declared-but-opt-in: a theme stepper that lives ON the bar, so the whole
+    // bar stays visible in each theme while stepping through them — the
+    // settings menu's theme control opens inline over the door's row, hiding
+    // that row while a theme is being judged (brandon-theme-picker-bgw.exj).
+    // Kept out of the bundled rows because every setting lives behind the
+    // door by default; place it by naming it in a row.
+    //
+    // [LAW:one-type-per-behavior] Not a second theme picker: it is the
+    // settings menu's own `{{ carousel }}` asked for zero neighbours, over a
+    // plain `{ set: "theme", from: "themes" }` — the session key the menu's
+    // theme control writes unsaved, read back through `theme.effective` (the
+    // theme the bar wears), so the two can never disagree about the current
+    // theme. Nothing here a user config could not author itself.
+    themeSwitcher: {
+      description:
+        "`◀ <theme> ▶`: the theme the bar is wearing; ◀ and ▶ switch this session to the previous or next theme, wrapping at the ends.",
+      template: '{{ carousel "stepTheme" 0 }}',
+    },
     session: {
       description:
         "This session's cost and token total, with a budget warning once a budget is configured.",
@@ -1173,6 +1191,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   actions: {
     ...quickActions("").actions,
     copyDir: { copy: "{{ .current_dir }}" },
+    // The `themeSwitcher` segment's click: each arrow writes the theme it
+    // points at into this session. Gated by the themes domain it names, the
+    // same allow-list the settings menu's theme control derives.
+    stepTheme: { set: "theme", from: "themes" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────

@@ -74,6 +74,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
+import { SETTINGS, type SettingProjection } from "./setting-projections.js";
 import {
   BOOLEAN_FALSE,
   BOOLEAN_MEMBERS,
@@ -184,12 +185,11 @@ const PICKER_KEY = `${SETTINGS_NS}pickers`;
 // once. A control names the two keys its dual action writes (they differ where
 // history made them differ — SessionState "theme" over globals field
 // "palette"), the variable whose value it displays, and its value source.
+//
+// A control labels itself with its `effectiveVar` — the value the bar is
+// ACTUALLY rendering with, whatever produced it — rather than with its own
+// session key, so the label can never name a value the bar is not in.
 interface SettingControl extends KeyedSetting {
-  // The `.effective` projection the daemon resolved for this render — the
-  // value the bar is ACTUALLY rendering with, whatever produced it. A control
-  // labels itself with this rather than with its own session key, so the label
-  // can never name a value the bar is not in.
-  readonly effectiveVar: string;
   readonly glyph: string;
   readonly domain: OptionDomain;
   // [LAW:one-type-per-behavior] Every control offers its domain as a carousel
@@ -222,9 +222,7 @@ const PALETTE_PREVIEW = ["{{ themePreview }}"];
 const PRIMARY_CONTROLS: readonly SettingControl[] = [
   {
     name: "preset",
-    sessionKey: "preset",
-    configKey: "preset",
-    effectiveVar: "preset.effective",
+    ...SETTINGS.preset,
     glyph: "▦",
     domain: "presets",
     // A preset changes the arrangement, and the tray this menu opens takes
@@ -237,45 +235,35 @@ const PRIMARY_CONTROLS: readonly SettingControl[] = [
 const CONFIG_CONTROLS: readonly SettingControl[] = [
   {
     name: "theme",
-    sessionKey: "theme",
-    configKey: "palette",
-    effectiveVar: "theme.effective",
+    ...SETTINGS.theme,
     glyph: "🎨",
     domain: "themes",
     beneath: PALETTE_PREVIEW,
   },
   {
     name: "look",
-    sessionKey: "look",
-    configKey: "look",
-    effectiveVar: "look.effective",
+    ...SETTINGS.look,
     glyph: "◐",
     domain: "looks",
     beneath: PALETTE_PREVIEW,
   },
   {
     name: "style",
-    sessionKey: "style",
-    configKey: "style",
-    effectiveVar: "style.effective",
+    ...SETTINGS.style,
     glyph: "✦",
     domain: "styles",
     beneath: [],
   },
   {
     name: "charset",
-    sessionKey: "charset",
-    configKey: "charset",
-    effectiveVar: "charset.effective",
+    ...SETTINGS.charset,
     glyph: "🔣",
     domain: "charsets",
     beneath: [],
   },
   {
     name: "colorCompatibility",
-    sessionKey: "colorCompatibility",
-    configKey: "colorCompatibility",
-    effectiveVar: "colorCompatibility.effective",
+    ...SETTINGS.colorCompatibility,
     glyph: "🌈",
     domain: "colorCompatibilities",
     beneath: [],
@@ -293,22 +281,16 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
 // declaration. When these two were string literals repeated across the set,
 // the segment and the action, a rename in one place would have silently
 // misclassified the key rather than failing.
-interface KeyedSetting {
+//
+// Every control's keys are a row of SETTINGS (src/config/setting-projections.ts)
+// spread in, never spelled here: the render derives its read-back from the same
+// row, so a control cannot write a key whose current value nothing reads back.
+interface KeyedSetting extends SettingProjection {
   readonly name: string;
-  readonly sessionKey: string;
-  readonly configKey: string;
 }
 
-const WRAP: KeyedSetting = {
-  name: "wrap",
-  sessionKey: "autoWrap",
-  configKey: "autoWrap",
-};
-const PADDING: KeyedSetting = {
-  name: "padding",
-  sessionKey: "padding",
-  configKey: "padding",
-};
+const WRAP: KeyedSetting = { name: "wrap", ...SETTINGS.autoWrap };
+const PADDING: KeyedSetting = { name: "padding", ...SETTINGS.padding };
 
 const WRAP_SEG = `${SETTINGS_NS}${WRAP.name}`;
 const PADDING_SEG = `${SETTINGS_NS}${PADDING.name}`;
@@ -670,7 +652,7 @@ function settingsArtifacts(doorGlyph: string): {
       [PADDING_SEG]: {
         template:
           `{{ action "${controlApply("padding")}.down" "◀" }} ` +
-          "padding {{ .padding.effective }} " +
+          `padding {{ .${PADDING.effectiveVar} }} ` +
           `{{ action "${controlApply("padding")}.up" "▶" }} ` +
           `{{ action "${controlReset("padding")}" "↺" }}`,
       },

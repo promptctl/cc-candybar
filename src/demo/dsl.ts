@@ -25,7 +25,10 @@ import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
-import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
+import {
+  effectiveInputs,
+  resolveEffectiveGlobals,
+} from "../daemon/render-payload.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
@@ -51,19 +54,6 @@ const { config: merged, source } = loadConfig(
 );
 const config = validateConfig(merged, configPath, source, ALLOWED);
 
-// One Claude Code status-line hook event, faked. The `input` vars in the
-// config (cwd, model, session) read their values out of this object.
-const payload = {
-  hook_event_name: "Status",
-  session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
-  cwd: process.cwd(),
-  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-  workspace: {
-    current_dir: process.cwd(),
-    project_dir: process.cwd(),
-  },
-};
-
 // The demo has no SessionState, so every resolution below is the config default
 // over its floor. The PRESET resolves first — its fragment supplies the display
 // globals every other option reads — the same preset-first order server.ts and
@@ -79,6 +69,23 @@ const effective = resolveEffectiveGlobals(
   () => null,
   () => false,
 );
+
+// One Claude Code status-line hook event, faked. The `input` vars in the
+// config (cwd, model, session) read their values out of this object, and the
+// resolved globals ride on it exactly as they do on the daemon's payload.
+// [LAW:one-source-of-truth] `effectiveInputs` is the daemon's own projection,
+// so a `.style.effective` label shows the style the demo renders in.
+const payload = {
+  hook_event_name: "Status",
+  session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+  cwd: process.cwd(),
+  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+  workspace: {
+    current_dir: process.cwd(),
+    project_dir: process.cwd(),
+  },
+  ...effectiveInputs(effective),
+};
 
 // A fresh store + registry for this run. (A hot-reloading daemon would
 // dispose() the old pair and build new ones — see registerDslConfig's docs.)

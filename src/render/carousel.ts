@@ -51,7 +51,8 @@ type OptionAction = ReturnType<typeof requireOptionKind>;
 
 // [LAW:dataflow-not-control-flow] How many neighbours each side gets is a pure
 // function of widths: whole symmetric levels are added while the row still
-// fits, never more than the ring holds without showing one option twice.
+// fits, never more than the ring holds without showing one option twice, and
+// never more than the author's `cap` (Infinity when none was asked for).
 // `ring(d)` is the option d steps from the centre (negative = before it).
 // Exported for unit testing.
 export function neighbourLevels(
@@ -59,8 +60,9 @@ export function neighbourLevels(
   count: number,
   base: number,
   available: number,
+  cap: number,
 ): number {
-  const most = Math.floor((count - 1) / 2);
+  const most = Math.min(Math.floor((count - 1) / 2), cap);
   let width = base;
   let levels = 0;
   while (levels < most) {
@@ -82,6 +84,7 @@ export function renderCarousel(
   apply: OptionAction,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
+  neighbours: number,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
   // a structural insert (layout-op-option) holds none, and a key no variable
@@ -139,7 +142,13 @@ export function renderCarousel(
     cellWidth(ring(0)) +
     1 +
     cellWidth(CAROUSEL_NEXT);
-  const levels = neighbourLevels(ring, count, base, ledRowBudget(runtime));
+  const levels = neighbourLevels(
+    ring,
+    count,
+    base,
+    ledRowBudget(runtime),
+    neighbours,
+  );
   const side = (sign: number): RichText[] =>
     Array.from({ length: levels }, (_, i) => option(sign * (i + 1)));
 
@@ -164,7 +173,31 @@ export function carouselFuncs(
 ): FuncMap {
   return {
     carousel: {
-      fn: (applyName: string) => {
+      // `neighbours` caps how many options each side of the centre may show;
+      // width still decides within the cap. `0` is the bare stepper
+      // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
+      // neighbours are what makes it wide. Omitted = as many as fit.
+      //
+      // [LAW:no-silent-failure] The slot is `float`, not `int`: the engine's
+      // `int` gate truncates 1.5 to 1 before this body runs, so a cap that is
+      // not a count of levels would become some other ring silently. And the
+      // engine repeats the trailing slot, so a third argument would be
+      // accepted and dropped — both are refused here, by name.
+      fn: (applyName: string, neighbours?: number, ...extra: number[]) => {
+        if (extra.length > 0) {
+          throw new Error(
+            `carousel "${applyName}": takes at most one neighbours count after the action name, got ${1 + extra.length}`,
+          );
+        }
+        if (
+          neighbours !== undefined &&
+          !(Number.isInteger(neighbours) && neighbours >= 0)
+        ) {
+          throw new Error(
+            `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
+          );
+        }
+        const cap = neighbours ?? Infinity;
         const apply = requireOptionKind(runtime, applyName, "carousel");
         return renderCarousel(
           applyName,
@@ -177,9 +210,10 @@ export function carouselFuncs(
             apply.paletteOf,
             activeSegment.drawnAt(),
           ),
+          cap,
         );
       },
-      argTypes: ["string"],
+      argTypes: ["string", "float"],
       returnType: "T",
     },
   };

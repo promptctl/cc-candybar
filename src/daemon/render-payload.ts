@@ -216,6 +216,31 @@ export function resolveEffectiveGlobals(
   };
 }
 
+// The `.effective` inputs a render reads back — the resolved globals, as the
+// payload fields a settings label or a carousel centre reads. No `theme` or
+// `look`: renderDsl injects both, because under a rule only it knows the answer.
+// [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
+// and the demo's payload all spread THIS, so a caller cannot render a label
+// blank by forgetting a field the daemon's payload carries.
+export type EffectiveInputs = Pick<
+  RenderPayload,
+  "preset" | "style" | "charset" | "colorCompatibility" | "autoWrap" | "padding"
+>;
+
+export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
+  return {
+    preset: {
+      effective: effective.preset,
+      customized: effective.presetCustomized,
+    },
+    style: { effective: effective.style },
+    charset: { effective: effective.charset },
+    colorCompatibility: { effective: effective.colorCompatibility },
+    autoWrap: { effective: effective.autoWrap },
+    padding: { effective: effective.padding },
+  };
+}
+
 // ─── Augmented payload shape ─────────────────────────────────────────────────
 
 // [LAW:types-are-the-program] The RenderPayload extends ClaudeHookData with
@@ -1180,18 +1205,7 @@ export async function buildRenderPayload(
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
     // hand) and a config reading e.g. `.padding.effective` must always find it.
-    // No `theme` or `look` here on purpose: renderDsl injects both `.effective`
-    // fields because it is the only thing that knows the answer under a rule, and
-    // one producer per fact is the whole point [LAW:one-source-of-truth].
-    preset: {
-      effective: effective.preset,
-      customized: effective.presetCustomized,
-    },
-    style: { effective: effective.style },
-    charset: { effective: effective.charset },
-    colorCompatibility: { effective: effective.colorCompatibility },
-    autoWrap: { effective: effective.autoWrap },
-    padding: { effective: effective.padding },
+    ...effectiveInputs(effective),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),
