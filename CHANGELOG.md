@@ -1,3 +1,10 @@
+# [1.78.0](https://github.com/promptctl/cc-candybar/compare/v1.77.0...v1.78.0) (2026-09-26)
+
+
+### Features
+
+* **themes:** themeSwitcher segment steps through themes on the bar ([#243](https://github.com/promptctl/cc-candybar/issues/243)) ([c452816](https://github.com/promptctl/cc-candybar/commit/c45281643e9aef19acbee4d8b22a6cad75ae38f1))
+
 # [1.77.0](https://github.com/promptctl/cc-candybar/compare/v1.76.0...v1.77.0) (2026-09-25)
 
 
