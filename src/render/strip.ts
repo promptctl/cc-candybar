@@ -87,7 +87,7 @@ export interface BuildLineOptions {
 // [LAW:dataflow-not-control-flow] Charset variability lives in these VALUES,
 // not in branches: per style, each charset names the joiner-construction
 // options. The unicode entries are rich-js's own — it owns the canonical
-// powerline glyphs (U+E0B0 / U+E0B1 / U+E0B6+U+E0B4), and restating them here
+// powerline glyphs (U+E0B0 / U+E0B1 / U+E0B2 / U+E0B6+U+E0B4), and restating them here
 // would be a second source that could drift [LAW:one-source-of-truth]. The
 // ascii glyphs are DELIBERATELY single-column (same display width as the
 // unicode caps) so stripChromeCols stays charset-invariant; the
@@ -96,8 +96,9 @@ export interface BuildLineOptions {
 const POWERLINE_GLYPHS: Record<Charset, PowerlineJoinerOptions> = {
   unicode: POWERLINE_JOINER_GLYPHS,
   // The divider is drawn between neighbours whose backgrounds match, where the
-  // arrow would vanish; `|` is its single-column ascii form.
-  ascii: { glyph: ">", divider: "|" },
+  // arrow would vanish; `|` is its single-column ascii form. `<` leads a row
+  // and `>` tails it, so the ascii row has the same shape at both ends.
+  ascii: { glyph: ">", divider: "|", lead: "<", tail: ">" },
 };
 const CAPSULE_GLYPHS: Record<Charset, CapsuleJoinerOptions> = {
   unicode: {},
@@ -141,8 +142,8 @@ function pickJoiner(
 // [LAW:dataflow-not-control-flow] / [LAW:types-are-the-program] Total over
 // StripStyle — the `never` default makes adding a STRIP_STYLES member a compile
 // error here until its chrome is declared, the same guard pickJoiner carries. The
-// numbers are the cap glyphs pickJoiner constructs: powerline appends ONE
-// trailing separator (1 col); capsule brackets BOTH edges (2 cols); plain has no
+// numbers are the cap glyphs pickJoiner constructs: powerline leads and tails
+// each row with one (2 cols); capsule brackets BOTH edges (2 cols); plain has no
 // caps. Charset does NOT change these — both glyph vocabularies use
 // single-column caps by construction (see the glyph tables above), which is why
 // this stays total over StripStyle alone. test/picker-pagination.test.ts
@@ -151,7 +152,7 @@ function pickJoiner(
 export function stripChromeCols(style: StripStyle): number {
   switch (style) {
     case "powerline":
-      return 1;
+      return 2;
     case "capsule":
       return 2;
     case "plain":

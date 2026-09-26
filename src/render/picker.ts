@@ -73,7 +73,7 @@ export function cellWidth(text: string): number {
 // [LAW:single-enforcer] The width one option row may fill: term.cols less what
 // the row's own segment spends around it. term.cols is the raw usable width the
 // strip wraps to; the row is itself a styled strip segment, so the joiner
-// brackets it with end-caps (powerline's trailing separator, capsule's two
+// brackets it with end-caps (powerline's lead and tail, capsule's two
 // caps) painted OUTSIDE that width, and the segment layout pads every line it
 // emits by the render's intra-cell padding on both sides. A row packed to the
 // full term.cols is pushed past it by both — the maximally-packed middle pages

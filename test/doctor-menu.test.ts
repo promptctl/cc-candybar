@@ -6,6 +6,7 @@
 // the facts of the session's "last render" exactly as production does.
 
 import fs from "node:fs";
+import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
 import os from "node:os";
 import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -172,9 +173,10 @@ describe("🍫 ▸ 🧰 tools ▸ 🩺 doctor", () => {
     // reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
     // Each row of the tools body leads with the body's ✕ (brandon-disclosure-
-    // 43z) as a cell of its own; the report row's text follows the seam.
+    // 43z) as a cell of its own, right after the row's lead cap; the report
+    // row's text follows the seam.
     const report = lines[toolsRow + 2]!;
-    expect(report.slice(0, DISCLOSURE_GLYPH_CLOSE.length)).toBe(DISCLOSURE_GLYPH_CLOSE);
+    expect(report.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
     expect(report).toContain("✗ tmux truecolor");
     rt.dispose();
   });

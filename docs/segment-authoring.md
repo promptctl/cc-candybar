@@ -116,12 +116,12 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫  ⇄ tester@tester-box  ~/c/c/src  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m 
- ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
+ 🍫  ⇄ tester@tester-box  ~/c/c/src  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m 
+ ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
 The bundled `identity` row is above and this config's `status` row below it,
-with the budget segment last; the `` between cells is the powerline joiner,
+with the budget segment last; the `` between cells and the `` that opens each row are the powerline joiner,
 and `check` renders the settings door (`🍫`) into the first row exactly as the
 daemon does — so what you read there is the whole bar, chrome included.
 

@@ -20,6 +20,7 @@
 //      back into edit mode.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -175,7 +176,7 @@ describe("the global settings menu is reachable from a user config", () => {
     const opened = stripAnsi(render()).split("\n");
     expect(opened).toHaveLength(closed.length);
     const body = opened[0]!;
-    expect(body.startsWith(DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(body.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(body).not.toContain("Opus");
     expect(opened[1]).toBe(closed[1]);
     expect(body).toContain("↗ proj");
@@ -511,7 +512,7 @@ describe("the default placement never inherits an author's gate", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
     expect(opened).toHaveLength(3);
-    expect(opened[0]!.startsWith(DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened[0]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(opened.slice(1)).toEqual(closed.slice(1));
     dispose();
   });
