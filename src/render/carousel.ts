@@ -177,15 +177,27 @@ export function carouselFuncs(
       // width still decides within the cap. `0` is the bare stepper
       // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
       // neighbours are what makes it wide. Omitted = as many as fit.
-      fn: (applyName: string, neighbours?: number | bigint) => {
-        const cap = neighbours === undefined ? Infinity : Number(neighbours);
-        // [LAW:no-silent-failure] A cap that is not a count of levels would
-        // otherwise be rounded or clamped into some other ring silently.
-        if (!(cap === Infinity || (Number.isInteger(cap) && cap >= 0))) {
+      //
+      // [LAW:no-silent-failure] The slot is `float`, not `int`: the engine's
+      // `int` gate truncates 1.5 to 1 before this body runs, so a cap that is
+      // not a count of levels would become some other ring silently. And the
+      // engine repeats the trailing slot, so a third argument would be
+      // accepted and dropped — both are refused here, by name.
+      fn: (applyName: string, neighbours?: number, ...extra: number[]) => {
+        if (extra.length > 0) {
+          throw new Error(
+            `carousel "${applyName}": takes at most one neighbours count after the action name, got ${1 + extra.length}`,
+          );
+        }
+        if (
+          neighbours !== undefined &&
+          !(Number.isInteger(neighbours) && neighbours >= 0)
+        ) {
           throw new Error(
             `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
           );
         }
+        const cap = neighbours ?? Infinity;
         const apply = requireOptionKind(runtime, applyName, "carousel");
         return renderCarousel(
           applyName,
@@ -201,7 +213,7 @@ export function carouselFuncs(
           cap,
         );
       },
-      argTypes: ["string", "int"],
+      argTypes: ["string", "float"],
       returnType: "T",
     },
   };

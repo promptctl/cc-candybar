@@ -786,16 +786,20 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
     });
   });
 
-  test("a neighbours count that is not a whole number ≥ 0 is a loud render error", () => {
+  test.each([
+    ["-1", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got -1"],
+    // Not truncated to 1: the engine's int gate would, silently.
+    ["1.5", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got 1.5"],
+    // Not dropped: the engine repeats a trailing slot.
+    ["0 2", "takes at most one neighbours count after the action name, got 2"],
+  ])("neighbours %s is a loud render error", (args, message) => {
     const rt = rig(`{
       variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
       actions: { choose: { set: 'pick', from: ['a', 'b', 'c'] } },
-      segments: { ring: { template: '{{ carousel "choose" -1 }}' } },
+      segments: { ring: { template: '{{ carousel "choose" ${args} }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
-    expect(stripAnsi(rt.render())).toContain(
-      "neighbours must be a whole number",
-    );
+    expect(stripAnsi(rt.render()).replace(/\s+/g, " ")).toContain(message);
     rt.dispose();
   });
 });

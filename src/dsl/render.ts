@@ -494,10 +494,11 @@ export function registerDslConfig(
   // a helper could fail to be visible). The helpers are parsed ONCE here.
   const helpers = compileHelpers(engine, config.helpers);
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
-  // [LAW:one-source-of-truth] Map each SessionState key → the variable that
-  // reads it, so an option picker marks its current selection by reading the
-  // SAME value the templates read — independent of whether the config named the
-  // variable after the key. State vars are the single read path for SessionState.
+  // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
+  // on it reads back, so an option picker marks its current selection by
+  // reading the SAME value the templates read — independent of whether the
+  // config named the variable after the key. For an ordinary key that is the
+  // `state` variable over it.
   //
   // A settings key the daemon resolves per render (theme, look, preset, …)
   // reads back through its `.effective` projection FIRST, ahead of any `state`

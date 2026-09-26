@@ -227,52 +227,73 @@ export type CompiledActionDecl =
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
-// [LAW:one-source-of-truth] Globals fields whose CURRENT resolved value is
-// exposed to templates under a different var name than the field itself (the
-// daemon publishes this resolution once per render — e.g. `theme.effective`
-// for `palette`, src/daemon/render-payload.ts). A `persist` action with no
-// entry here reads back through its own key name as an input var (mirrors
-// compileActions' stateKeyToVar fallback), so every persistable globals field
-// needs an entry unless its `.effective` projection happens to be named
-// exactly the bare field (none are — every projection carries the
-// `.effective` suffix). Every field with a projection is listed
-// (candybar-config-engine-71o.3 added style/charset/colorCompatibility/
-// autoWrap/padding to palette/look's original two); a field with no entry
-// here still writes correctly on `persist` — only its "current selection"
-// highlight is inert (readVar falls back to "" since no such var exists).
-const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
-  ["palette", "theme.effective"],
-  // [LAW:one-source-of-truth] `preset` earns its entry here the moment a DUAL
-  // control writes it: compileDual makes BOTH halves read back through this
-  // map, so a field missing from it loses its current-selection mark on the
-  // session side too — and the preset carousel sits on the settings menu's
+// [LAW:one-source-of-truth] Every setting whose CURRENT resolved value the
+// daemon publishes once per render as an `.effective` projection
+// (src/daemon/render-payload.ts), with both keys that write it: the config
+// field a `persist` writes and the SessionState key a `set` writes. They
+// differ where history made them differ (`palette` is `theme` in the
+// session), so each row spells all three rather than deriving one from
+// another's spelling. The current value of a setting is the one the bar is
+// rendering with — whichever rung (staged, session, config, floor) produced
+// it — so a `persist` and a `set` on one of these keys both read back through
+// its projection. A `persist` on a field with no row reads back through a var
+// named after the field, which none is, so its current-selection mark is
+// inert (readVar yields ""); a `set` on a key with no row reads back through
+// the `state` variable over that key.
+const SETTING_PROJECTIONS: ReadonlyArray<{
+  readonly configKey: string;
+  readonly sessionKey: string;
+  readonly effectiveVar: string;
+}> = [
+  {
+    configKey: "palette",
+    sessionKey: "theme",
+    effectiveVar: "theme.effective",
+  },
+  // [LAW:one-source-of-truth] `preset` earns its row the moment a DUAL control
+  // writes it: compileDual makes BOTH halves read back through this table, so
+  // a field missing from it loses its current-selection mark on the session
+  // side too — and the preset carousel sits on the settings menu's
   // always-visible first row, where "which arrangement am I in" is the whole
   // question the control answers.
-  ["preset", "preset.effective"],
-  ["look", "look.effective"],
-  ["style", "style.effective"],
-  ["charset", "charset.effective"],
-  ["colorCompatibility", "colorCompatibility.effective"],
-  ["autoWrap", "autoWrap.effective"],
-  ["padding", "padding.effective"],
-]);
+  {
+    configKey: "preset",
+    sessionKey: "preset",
+    effectiveVar: "preset.effective",
+  },
+  { configKey: "look", sessionKey: "look", effectiveVar: "look.effective" },
+  { configKey: "style", sessionKey: "style", effectiveVar: "style.effective" },
+  {
+    configKey: "charset",
+    sessionKey: "charset",
+    effectiveVar: "charset.effective",
+  },
+  {
+    configKey: "colorCompatibility",
+    sessionKey: "colorCompatibility",
+    effectiveVar: "colorCompatibility.effective",
+  },
+  {
+    configKey: "autoWrap",
+    sessionKey: "autoWrap",
+    effectiveVar: "autoWrap.effective",
+  },
+  {
+    configKey: "padding",
+    sessionKey: "padding",
+    effectiveVar: "padding.effective",
+  },
+];
 
-// [LAW:one-source-of-truth] The same projections, keyed by the SESSION key a
-// `set` writes rather than the config field a `persist` writes. Every
-// projection is spelled `<sessionKey>.effective` (the session key is `theme`
-// where the config field is `palette`), so this is derived from the table
-// above, never listed twice. registerDslConfig reads a `set` action's key back
-// through these: the current value of a setting is the one the bar is
-// rendering with, not the raw session pick — an unpicked session has no pick,
-// yet the bar still wears a theme (brandon-theme-picker-bgw.exj).
-const EFFECTIVE_SUFFIX = ".effective";
+const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
+  SETTING_PROJECTIONS.map((p) => [p.configKey, p.effectiveVar]),
+);
+
+// registerDslConfig seeds its key → read-back map from this, ahead of any
+// `state` variable over the same key: an unpicked session has no pick, yet the
+// bar still wears a theme (brandon-theme-picker-bgw.exj).
 export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
-  new Map(
-    [...CONFIG_KEY_TO_EFFECTIVE_VAR.values()].map((v) => [
-      v.slice(0, -EFFECTIVE_SUFFIX.length),
-      v,
-    ]),
-  );
+  new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
@@ -340,9 +361,10 @@ export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 // Pre-parse the copy/open templates for every action once, at config
 // registration; set actions stay literal. [LAW:one-source-of-truth] parse-once,
 // evaluate-many — renderAction only evaluates. `stateKeyToVar` maps a
-// SessionState key → the variable that reads it (same map widgets use), so a
-// set action reads its current/active value from the SAME value the templates
-// read, regardless of whether the config named the variable after the key.
+// SessionState key → the variable a `set` on it reads back: a setting's
+// `.effective` projection (SESSION_KEY_TO_EFFECTIVE_VAR), else the `state`
+// variable over the key — so a set action reads its current/active value from
+// the SAME value the templates read, whatever the config named the variable.
 // [LAW:single-enforcer] `parse` is the config's ONE helper-aware parse closure
 // (registerDslConfig owns it), not a bare engine — action copy/open templates
 // resolve the same shared `{{ template "name" }}` helpers every segment does,
@@ -560,7 +582,7 @@ function compileAction(
 // [LAW:one-source-of-truth] A dual control shows ONE current value and writes
 // relative to the value it showed — so both destinations read back through the
 // DURABLE half's variable, which is the `.effective` projection the daemon
-// resolved for this render (CONFIG_KEY_TO_EFFECTIVE_VAR above): the value the
+// resolved for this render (SETTING_PROJECTIONS above): the value the
 // bar is actually rendering with, whatever chain produced it. Reading the
 // session key instead would let a cycle's glyph name the effective state while
 // its click stepped from an unwritten session key — the toggle would render
