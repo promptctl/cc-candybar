@@ -1,3 +1,10 @@
+# [1.79.0](https://github.com/promptctl/cc-candybar/compare/v1.78.0...v1.79.0) (2026-09-27)
+
+
+### Features
+
+* **strip:** every powerline row opens with a lead cap ([#244](https://github.com/promptctl/cc-candybar/issues/244)) ([181e8a4](https://github.com/promptctl/cc-candybar/commit/181e8a41bce723b89b8d7725996ede7a7639bd62))
+
 # [1.78.0](https://github.com/promptctl/cc-candybar/compare/v1.77.0...v1.78.0) (2026-09-26)
 
 
