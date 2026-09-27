@@ -49,7 +49,7 @@ import {
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
-const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
+const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}\\u{E0D7}]`, "gu");
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -613,7 +613,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           width: Number.POSITIVE_INFINITY,
         });
         // Strip ANSI escapes AND the Powerline joiner glyphs
-        // (U+E0B0..U+E0BC range) so assertions can probe visible
+        // (U+E0B0..U+E0BC, and the U+E0D7 lead) so assertions can probe visible
         // segment text only.
         return line.replace(
           ANSI_AND_CAPS,

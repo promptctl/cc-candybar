@@ -162,10 +162,10 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // Every row, continuations included, is led in by U+E0B2 and tailed out
+      // Every row, continuations included, is led in by U+E0D7 and tailed out
       // by U+E0B0 — a wrapped row has the same shape at both ends as the first.
       for (const row of rows) {
-        expect(row.startsWith("\uE0B2")).toBe(true);
+        expect(row.startsWith("\uE0D7")).toBe(true);
         expect(row.endsWith("\uE0B0")).toBe(true);
       }
     });

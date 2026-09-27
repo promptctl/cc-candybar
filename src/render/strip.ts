@@ -87,7 +87,7 @@ export interface BuildLineOptions {
 // [LAW:dataflow-not-control-flow] Charset variability lives in these VALUES,
 // not in branches: per style, each charset names the joiner-construction
 // options. The unicode entries are rich-js's own — it owns the canonical
-// powerline glyphs (U+E0B0 / U+E0B1 / U+E0B2 / U+E0B6+U+E0B4), and restating them here
+// powerline glyphs (U+E0B0 / U+E0B1 / U+E0D7 / U+E0B6+U+E0B4), and restating them here
 // would be a second source that could drift [LAW:one-source-of-truth]. The
 // ascii glyphs are single-column, the same display width as the unicode caps;
 // the strip's geometry is measured per charset (stripGeometry below), so a

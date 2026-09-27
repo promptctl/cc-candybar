@@ -81,9 +81,9 @@ const deltaE = (a: Rgb, b: Rgb): number =>
 // cell's text and is measured as text. Whether a seam is an arrow or a
 // divider is decided on the drawn colours, so a seam is compared as one
 // position, whichever glyph each depth drew there.
-const ARROWS = new Set(["", ""]);
+const ARROWS = new Set(["", ""]);
 const JOINERS = new Set([...ARROWS, "", ""]);
-const DIVIDERS: Readonly<Record<string, string>> = { "": "", "": "" };
+const DIVIDERS: Readonly<Record<string, string>> = { "": "", "": "" };
 const seamAsOne = (ch: string): string => DIVIDERS[ch] ?? ch;
 
 /**

@@ -1317,8 +1317,8 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 
- ◀ nord ▶ 
+ 🍫  ✱ Opus 4.8 
+ ◀ nord ▶ 
 ```
 
 A carousel owns no state of its own — its centre is the action's current value —
