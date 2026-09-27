@@ -822,14 +822,18 @@ synthesizes:
   trigger to it, or copy `editControl` above verbatim.
 - For **every** preset (the `"default"` floor included) and every ordinary
   segment in its resolved root: a `-` (a synthesized `removeSegment` action
-  behind `{{ action }}`) immediately after it, and a `+` (a synthesized
-  `insertSegmentFrom` action behind `{{ menu }}`, ranging every declared
-  segment not already in that preset's tree) before and after each run —
-  so N segments in a row read `+ [seg1 -] + [seg2 -] + … + [segN -] +`.
-  Every affordance is gated on edit mode being open — the same disclosure
-  predicate a group body or a `{{ menu }}` gates on, over the `edit.mode`
-  key — so each is invisible until the toggle opens, and present in the
-  compiled tree either way.
+  behind `{{ action }}`) immediately after it, sharing one cell with a `+`
+  (a synthesized `insertSegmentFrom` action behind `{{ menu }}`, ranging
+  every declared segment not already in that preset's tree) that inserts
+  after it, plus one `+` leading each run — so N segments in a row read
+  `+ seg1 [- +] seg2 [- +] … segN [- +]`. Every affordance is gated on edit
+  mode being open — the same disclosure predicate a group body or a
+  `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
+  until the toggle opens, and present in the compiled tree either way.
+- While edit mode is open each segment reads as its **name**, whether or not
+  its own `when` would show it, so a segment hidden right now can still be
+  found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
+  `(?)`) puts the live output back.
 
 **This is demand-driven, not automatic — but the demand is usually already
 there.** A config that never references `edit.toggle` gets none of this — no
