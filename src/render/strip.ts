@@ -89,10 +89,9 @@ export interface BuildLineOptions {
 // options. The unicode entries are rich-js's own — it owns the canonical
 // powerline glyphs (U+E0B0 / U+E0B1 / U+E0B2 / U+E0B6+U+E0B4), and restating them here
 // would be a second source that could drift [LAW:one-source-of-truth]. The
-// ascii glyphs are DELIBERATELY single-column (same display width as the
-// unicode caps) so stripChromeCols stays charset-invariant; the
-// measured-chrome pin in test/picker-pagination.test.ts checks that for every
-// style × charset. Widen a glyph and that pin fails loudly.
+// ascii glyphs are single-column, the same display width as the unicode caps;
+// the strip's geometry is measured per charset (stripGeometry below), so a
+// wider glyph would cost its real width rather than break a declared one.
 const POWERLINE_GLYPHS: Record<Charset, PowerlineJoinerOptions> = {
   unicode: POWERLINE_JOINER_GLYPHS,
   // The divider is drawn between neighbours whose backgrounds match, where the
@@ -132,55 +131,22 @@ function pickJoiner(
   }
 }
 
-// [LAW:single-enforcer] Strip geometry has one owner — this module builds every
-// joiner (pickJoiner) and so alone knows the structural chrome a styled row costs
-// beyond its content: the joiner's end-caps, which FlexStrip paints OUTSIDE the
-// width budget. A single full-width row's content can occupy only `width - chrome`
-// before the caps push the line past `width`. Returned per style so a width-fit
-// widget (the picker) can reserve it and never overflow the wrapped line.
-//
-// [LAW:dataflow-not-control-flow] / [LAW:types-are-the-program] Total over
-// StripStyle — the `never` default makes adding a STRIP_STYLES member a compile
-// error here until its chrome is declared, the same guard pickJoiner carries. The
-// numbers are the cap glyphs pickJoiner constructs: powerline leads and tails
-// each row with one (2 cols); capsule brackets BOTH edges (2 cols); plain has no
-// caps. Charset does NOT change these — both glyph vocabularies use
-// single-column caps by construction (see the glyph tables above), which is why
-// this stays total over StripStyle alone. test/picker-pagination.test.ts
-// measures the real rendered chrome against these for every style × charset so
-// the declaration cannot drift from rich-js or from the ascii glyph choice.
-export function stripChromeCols(style: StripStyle): number {
-  switch (style) {
-    case "powerline":
-      return 2;
-    case "capsule":
-      return 2;
-    case "plain":
-      return 0;
-    default: {
-      const _exhaustive: never = style;
-      return _exhaustive;
-    }
-  }
-}
+type StripShape = Pick<BuildLineOptions, "style" | "charset" | "separator">;
 
-// [LAW:single-enforcer] What one MORE cell costs a row beyond its own content:
-// the seam the joiner lays between it and its neighbour (powerline's arrow,
-// capsule's facing caps and the gap between them, plain's separator text).
-// MEASURED through the joiner that will draw the row rather than declared like
-// stripChromeCols, because plain's seam is the author's separator and rich-js
-// keeps its default private — a declared table would restate that default and
-// drift from it. Memoised per joiner shape: a render asks once per shape.
-const seamMemo = new Map<string, number>();
-export function stripSeamCols(
-  options: Pick<BuildLineOptions, "style" | "charset" | "separator">,
-): number {
+// [LAW:single-enforcer] Strip geometry has one owner — this module builds every
+// joiner (pickJoiner), so it alone measures what a styled row costs beyond its
+// content. Both costs below are MEASURED through the joiner that will draw the
+// row rather than declared: a declared table restates rich-js's glyphs (and, for
+// plain, its private default separator) and has to be re-synced by hand every
+// time a joiner changes. Memoised per joiner shape: a render asks once per shape.
+const geometryMemo = new Map<string, { chrome: number; seam: number }>();
+function stripGeometry(options: StripShape): { chrome: number; seam: number } {
   const key = JSON.stringify([
     options.style,
     options.charset,
     options.separator ?? null,
   ]);
-  const known = seamMemo.get(key);
+  const known = geometryMemo.get(key);
   if (known !== undefined) return known;
   const joiner = pickJoiner(options.style, options.charset, options.separator);
   const cell = (bgcolor: string): RichText =>
@@ -192,10 +158,29 @@ export function stripSeamCols(
         "",
       ),
     ).cellLength;
-  const seam =
-    width([cell("#101010"), cell("#202020")]) - width([cell("#101010")]) - 1;
-  seamMemo.set(key, seam);
-  return seam;
+  const one = width([cell("#101010")]);
+  const geometry = {
+    chrome: one - 1,
+    seam: width([cell("#101010"), cell("#202020")]) - one - 1,
+  };
+  geometryMemo.set(key, geometry);
+  return geometry;
+}
+
+// The columns a row costs beyond its content however many cells it holds: the
+// joiner's caps (powerline's lead and tail, capsule's two caps, nothing for
+// plain). FlexStrip counts them INSIDE the width it wraps to, so a single
+// full-width row's content can occupy only `width - chrome` — a width-fit widget
+// (the picker) reserves it so a packed row never wraps.
+export function stripChromeCols(options: StripShape): number {
+  return stripGeometry(options).chrome;
+}
+
+// What one MORE cell costs a row beyond its own content: the seam the joiner
+// lays between it and its neighbour (powerline's arrow, capsule's facing caps
+// and the gap between them, plain's separator text).
+export function stripSeamCols(options: StripShape): number {
+  return stripGeometry(options).seam;
 }
 
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {

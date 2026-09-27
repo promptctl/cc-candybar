@@ -41,7 +41,7 @@ import {
 import { pickCycleDisplay } from "../config/disclosure.js";
 import { SETTING_PROJECTIONS } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
-import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
+import { parseSessionBoolean } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -260,26 +260,26 @@ export interface ActionRuntime {
   // values from the same store the renderer reads.
   store: VariableStore;
   compiled: CompiledActions;
-  // [LAW:locality-or-seam] The current render's strip style, published per render
-  // by renderDsl. The picker reads it to reserve the joiner's end-cap chrome at
-  // its pagination seam — the one place that needs strip geometry, kept off the
-  // shared `term.cols` budget. Defaulted at registration; renders are sequential
-  // and synchronous, so the per-render write never leaks across renders.
-  // [LAW:no-ambient-temporal-coupling]
-  stripStyle: StripStyle;
+  // [LAW:locality-or-seam] The columns the current render's strip spends on a
+  // row's caps (`stripChromeCols`), published per render by renderDsl. The picker
+  // reserves them at its pagination seam — the one place that needs strip
+  // geometry, kept off the shared `term.cols` budget. Defaulted at registration;
+  // renders are sequential and synchronous, so the per-render write never leaks
+  // across renders. [LAW:no-ambient-temporal-coupling]
+  chromeCols: number;
   // [LAW:locality-or-seam] The current render's intra-cell padding (resolved
   // globals.padding), published per render by renderDsl exactly like
-  // stripStyle. The picker reserves 2×padding at its pagination seam — the
+  // chromeCols. The picker reserves 2×padding at its pagination seam — the
   // segment layout pads every line it emits, so a page packed to the full
   // budget would otherwise be pushed past the width by the pad spaces.
   padding: number;
   // [LAW:locality-or-seam] The columns one more cell costs the current render's
-  // strip beyond its content (`stripSeamCols`), published beside stripStyle. A
+  // strip beyond its content (`stripSeamCols`), published beside chromeCols. A
   // disclosure body leads each row with its ✕ as a cell of its own, so a row
   // fitted inside a body reserves that cell: its glyph, its padding, this seam.
   seamCols: number;
   // [LAW:locality-or-seam] The current render's BASE palette — the theme before
-  // the look — published per render by renderDsl exactly like stripStyle and
+  // the look — published per render by renderDsl exactly like chromeCols and
   // padding. A picker over a colour-valued domain paints each option in the
   // palette picking it would put in force, and a look's answer is the base
   // transposed by that look's key. It must be the base and not the segment's own

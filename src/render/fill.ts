@@ -41,8 +41,8 @@ function visibleCols(serialized: string): number {
  * MEASURED, not modelled: the row is serialized once as it stands, through the very
  * function that will serialize it for real, and each fill grows by its share of the
  * difference. A model of the joiner chrome would be a second theory of the strip's
- * geometry — and the numbers differ per style (powerline costs nothing inside the
- * budget, capsule and plain cost per seam) and for `plain` depend on the author's
+ * geometry — and the numbers differ per style (caps per row for powerline and
+ * capsule, a cost per seam for every style) and for `plain` depend on the author's
  * own separator text, so the theory would have to track user data to stay true.
  */
 export function resolveFill(
@@ -58,9 +58,9 @@ export function resolveFill(
   if (!Number.isFinite(options.width)) return cells;
 
   // The row AS IT STANDS, through the very function that will serialize it for
-  // real. No stand-in cell and no chrome model: whatever the joiner costs — nothing
-  // inside the budget for powerline, per seam for capsule, the author's own
-  // separator text for plain — it is already in this number.
+  // real. No stand-in cell and no chrome model: whatever the joiner costs — caps
+  // and seams for powerline and capsule, the author's own separator text for
+  // plain — it is already in this number.
   //
   // An emptied stand-in was the first attempt and was wrong in a way only
   // measurement would have caught: FlexStrip FOLDS THE LINE at a zero-width cell,

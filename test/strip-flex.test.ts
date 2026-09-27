@@ -149,7 +149,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
   });
 
   describe("powerline style", () => {
-    it("narrow width breaks across rows with arrow caps on every row", () => {
+    it("narrow width breaks across rows with a lead and a tail cap on every row", () => {
       // The powerline cap is painted in the segment's bg (the colour bleeding
       // out), so the segments must carry a bg for a cap to exist \u2014 a fg-only
       // segment has no colour to paint and correctly gets no arrow.
@@ -162,8 +162,10 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // PowerlineJoiner end-cap: every row ends with the arrow glyph U+E0B0.
+      // Every row, continuations included, is led in by U+E0B2 and tailed out
+      // by U+E0B0 — a wrapped row has the same shape at both ends as the first.
       for (const row of rows) {
+        expect(row.startsWith("\uE0B2")).toBe(true);
         expect(row.endsWith("\uE0B0")).toBe(true);
       }
     });
