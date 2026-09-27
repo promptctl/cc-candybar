@@ -910,9 +910,9 @@ export function renderDsl(
       provisionalName(selectedLook, LOOK_FLOOR),
     ),
   );
-  // [LAW:single-enforcer] Publish the render's strip style onto the shared action
-  // runtime so the picker can reserve the joiner's end-cap chrome at its
-  // pagination seam (the menu body renders through the same renderPicker). Set
+  // [LAW:single-enforcer] Publish the columns the render's strip spends on a
+  // row's caps onto the shared action runtime, so the picker can reserve them at
+  // its pagination seam (the menu body renders through the same renderPicker). Set
   // once per render here — the same one-owner, per-render-mutation idiom as the
   // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
   compiled.menuRuntime.action.chromeCols = stripChromeCols(opts);

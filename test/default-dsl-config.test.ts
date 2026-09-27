@@ -1363,7 +1363,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
 
   // [LAW:verifiable-goals] candybar-settings-ui-aok.5's width gate: edit mode
   // restyles the whole bar (the staged globals.style), and the picker reserves
-  // its pagination seam from stripChromeCols(runtime.stripStyle). A staged
+  // its pagination seam from runtime.chromeCols. A staged
   // style that did not reach that reserve would give wrong page widths in
   // exactly the mode where menus are most used — so the sweep runs again with
   // edit mode open, at the same widths, over every preset.
