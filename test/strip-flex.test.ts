@@ -1,3 +1,4 @@
+import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
 import { buildLineStrip } from "../src/render/strip";
 
 const seg = (text: string) => ({ type: "x", text });
@@ -162,11 +163,11 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // Every row, continuations included, is led in by U+E0B2 and tailed out
-      // by U+E0B0 — a wrapped row has the same shape at both ends as the first.
+      // Every row, continuations included, is led in by the lead glyph and tailed
+      // out by the tail glyph — a wrapped row has the same shape at both ends as the first.
       for (const row of rows) {
-        expect(row.startsWith("\uE0B2")).toBe(true);
-        expect(row.endsWith("\uE0B0")).toBe(true);
+        expect(row.startsWith(POWERLINE_JOINER_GLYPHS.lead)).toBe(true);
+        expect(row.endsWith(POWERLINE_JOINER_GLYPHS.tail)).toBe(true);
       }
     });
   });

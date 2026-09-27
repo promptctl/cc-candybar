@@ -28,7 +28,7 @@ const THEMES = listResolvablePaletteNames();
 const cw = (s: string): number => new RichText(s).cellLength;
 // Powerline cap glyphs (private-use block) glue to the edge token with no space;
 // strip them ONLY for token membership, never for width (they count toward it).
-const stripCaps = (s: string): string => s.replace(/[\u{E0B0}-\u{E0D4}]/gu, "");
+const stripCaps = (s: string): string => s.replace(/[\u{E0B0}-\u{E0D7}]/gu, "");
 
 const STYLES: StripStyle[] = ["powerline", "capsule", "plain"];
 // brandon-display-dam.3: the ascii glyphs are chosen single-column so the
