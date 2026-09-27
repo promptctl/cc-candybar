@@ -22,7 +22,7 @@ import { NODE_FLAGS } from "./cli-flags";
 // reader matches text to affordance by shape rather than by reading order.
 export const EDIT_MODE_HELP = [
   "+ inserts here",
-  "- removes the one left of it",
+  "- removes the left one",
   "↺ undoes edits",
 ] as const;
 

@@ -42,6 +42,7 @@ import {
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -501,7 +502,13 @@ describe("edit mode's (?) survives any root shape", () => {
     enterEditMode(rt);
     const [host] = triggerLines(rt);
 
-    expect(host!.replaceAll(HELP_GLYPH_CLOSED, "").trim() !== "").toBe(rides);
+    // The `(?)` trails edit mode's view toggle; the plain joiner's `|` seam
+    // between the two is not content either.
+    const others = host!
+      .replaceAll(HELP_GLYPH_CLOSED, "")
+      .replaceAll(EDIT_LIVE_DISPLAY[0], "")
+      .replaceAll("|", "");
+    expect(others.trim() !== "").toBe(rides);
   });
 });
 

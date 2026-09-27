@@ -76,6 +76,7 @@ import {
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
 } from "../src/config/loader/edit-mode";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   addableSegmentDomains,
@@ -834,6 +835,8 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     const store = new VariableStore();
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    // Live output, not names: the subject is whether the CONTENT follows the gate.
+    sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     try {
       const compiled = registerDslConfig(config, registry);
