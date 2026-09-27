@@ -831,7 +831,7 @@ synthesizes:
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - While edit mode is open each segment reads as its **name**, whether or not
-  its own `when` would show it, so a segment hidden right now can still be
+  its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
   `(?)`) puts the live output back.
 
