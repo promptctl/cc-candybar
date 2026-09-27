@@ -27,7 +27,6 @@ import { RichText } from "@promptctl/rich-js";
 import type { Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
-import { stripChromeCols } from "./strip.js";
 import { TERM_COLS_VAR } from "../config/dsl-types.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -73,19 +72,19 @@ export function cellWidth(text: string): number {
 // [LAW:single-enforcer] The width one option row may fill: term.cols less what
 // the row's own segment spends around it. term.cols is the raw usable width the
 // strip wraps to; the row is itself a styled strip segment, so the joiner
-// brackets it with end-caps (powerline's trailing separator, capsule's two
-// caps) painted OUTSIDE that width, and the segment layout pads every line it
+// brackets it with caps (powerline's lead and tail, capsule's two caps) that
+// FlexStrip counts inside that width, and the segment layout pads every line it
 // emits by the render's intra-cell padding on both sides. A row packed to the
 // full term.cols is pushed past it by both — the maximally-packed middle pages
 // once overflowed and the terminal ate the trailing →. Reserved HERE, at the
 // row-fitting seam, rather than by shrinking the shared term.cols every
-// template reads; stripChromeCols owns the per-style geometry. The picker and
+// template reads; stripChromeCols measures the per-shape geometry. The picker and
 // the carousel both fit a row by this one budget.
 export function rowBudget(runtime: ActionRuntime): number {
   return Math.max(
     1,
     toNumber(runtime.store.read(TERM_COLS_VAR)) -
-      stripChromeCols(runtime.stripStyle) -
+      runtime.chromeCols -
       2 * runtime.padding,
   );
 }

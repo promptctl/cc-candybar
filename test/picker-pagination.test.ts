@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] brandon-menu-abg regression: a paged menu/picker must
 // fit EVERY page within term.cols, with the ←/→/✕ affordances each page should
 // show all present — at any terminal width and any strip style. The bug:
-// pagination packed option cells to the raw wrap width, but the strip paints the
-// joiner's end-caps OUTSIDE that budget (powerline 1 col, capsule 2), so the
-// maximally-packed middle pages overflowed by the cap width and the terminal ate
-// the trailing → affordance (page 0 fit while page ≥1 did not — the signature).
+// pagination packed option cells to the raw wrap width, forgetting the columns
+// the joiner's caps cost the row, so the maximally-packed middle pages overflowed
+// by the cap width and the terminal ate the trailing → affordance (page 0 fit
+// while page ≥1 did not — the signature).
 //
 // [LAW:behavior-not-structure] These assert the rendered geometry (width ≤ limit;
 // the nav glyphs visible), never the internal pagination shape — driven through
@@ -106,13 +106,11 @@ function buildRuntime(
 }
 
 describe("brandon-menu-abg — paged menu fits every page within term.cols", () => {
-  // The chrome declaration must match what the strip actually paints, else the
-  // picker's reserve drifts from reality. Measure a single styled full-width
-  // cell — under BOTH charsets, since stripChromeCols is deliberately total
-  // over StripStyle alone (the ascii glyphs are single-column by choice; this
-  // is the pin that fails loudly if a wider glyph ever lands).
+  // stripChromeCols measures a bare Strip; the rows the picker fits are
+  // serialized through FlexStrip. The reserve is only right if the two agree, so
+  // pin it over every style × charset on a real wrapped-path row.
   test.each(STYLE_CHARSET)(
-    "stripChromeCols(%s) matches measured strip chrome (charset %s)",
+    "stripChromeCols(%s) matches the chrome a FlexStrip row paints (charset %s)",
     (style, charset) => {
       const content = "ABCDEFGHIJ";
       const cell = new RichText(content, {
@@ -130,7 +128,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
           width: 60,
         }),
       );
-      expect(cw(out) - cw(content)).toBe(stripChromeCols(style));
+      expect(cw(out) - cw(content)).toBe(stripChromeCols({ style, charset }));
     },
   );
 

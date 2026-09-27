@@ -40,6 +40,7 @@ import {
   DEFAULT_CHARSET,
   DEFAULT_PADDING,
   renderStripCells,
+  stripChromeCols,
   stripSeamCols,
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
@@ -390,10 +391,13 @@ export function registerDslConfig(
     store: registry.variableStore,
     compiled: new Map(),
     // [LAW:types-are-the-program] Always present — renderDsl republishes the live
-    // style each render; "powerline" is the registration-time default so a
-    // compile-only path (no render) still has a valid value.
-    stripStyle: "powerline",
-    // Same contract as stripStyle: renderDsl republishes the live resolved
+    // chrome each render; the default shape's is the registration-time value so a
+    // compile-only path (no render) still has a valid one.
+    chromeCols: stripChromeCols({
+      style: "powerline",
+      charset: DEFAULT_CHARSET,
+    }),
+    // Same contract as chromeCols: renderDsl republishes the live resolved
     // base palette each render; `globals.palette` is the registration-time
     // value, so a compile-only path (no render) still has a real palette.
     // [LAW:one-source-of-truth] Resolved through the same resolution the render
@@ -404,7 +408,7 @@ export function registerDslConfig(
     basePalette: floorPalette,
     // The compile-only floor for the drawn palette: the base under no look.
     palette: floorPalette,
-    // Same contract as stripStyle: renderDsl republishes the live resolved
+    // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
     // Same contract again: the compile-only floor is the registration-time
@@ -906,12 +910,12 @@ export function renderDsl(
       provisionalName(selectedLook, LOOK_FLOOR),
     ),
   );
-  // [LAW:single-enforcer] Publish the render's strip style onto the shared action
-  // runtime so the picker can reserve the joiner's end-cap chrome at its
-  // pagination seam (the menu body renders through the same renderPicker). Set
+  // [LAW:single-enforcer] Publish the columns the render's strip spends on a
+  // row's caps onto the shared action runtime, so the picker can reserve them at
+  // its pagination seam (the menu body renders through the same renderPicker). Set
   // once per render here — the same one-owner, per-render-mutation idiom as the
   // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
-  compiled.menuRuntime.action.stripStyle = opts.style;
+  compiled.menuRuntime.action.chromeCols = stripChromeCols(opts);
   // [LAW:one-source-of-truth] Publish the render's intra-cell padding beside the
   // style: the picker reserves 2×padding at its pagination seam, the same seam
   // that reserves the joiner chrome — one resolved value, read where needed.

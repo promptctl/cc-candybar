@@ -5,8 +5,8 @@
 //
 // The first test is where the ticket's risk lives. The leftover depends on what the
 // joiner chrome costs, and that differs per style — measured through this very
-// serializer, powerline costs nothing inside the width budget, capsule costs per
-// seam, and plain's cost is the author's own separator text — so the resolution
+// serializer, powerline and capsule cost their caps and seams, and plain's cost
+// is the author's own separator text — so the resolution
 // MEASURES the row instead of modelling any of it, and this test pins the result
 // over the whole style × charset product, the same shape as the measured-chrome pin
 // in test/picker-pagination.test.ts.
