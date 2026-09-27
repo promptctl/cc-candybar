@@ -1,3 +1,10 @@
+# [1.80.0](https://github.com/promptctl/cc-candybar/compare/v1.79.1...v1.80.0) (2026-09-27)
+
+
+### Features
+
+* **edit:** edit mode shows each segment by name, with a live toggle ([#246](https://github.com/promptctl/cc-candybar/issues/246)) ([c3ceec7](https://github.com/promptctl/cc-candybar/commit/c3ceec70b7fec476d537eba74eca0e8226e08e82))
+
 ## [1.79.1](https://github.com/promptctl/cc-candybar/compare/v1.79.0...v1.79.1) (2026-09-27)
 
 
