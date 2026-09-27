@@ -54,7 +54,7 @@ import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
-import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
+import { EDIT_LIVE_KEY, arrangedSegment } from "../src/config/edit-chrome";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -341,11 +341,11 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       .map(([, a]) => (a as { removeSegment: string }).removeSegment)
       .sort();
     expect(removes).toEqual(["directory", "git", "trigger"]);
-    expect(names.filter((n) => n.startsWith("edit.label.")).sort()).toEqual([
-      "edit.label.directory",
-      "edit.label.git",
-      "edit.label.trigger",
-    ]);
+    const labelled = names
+      .filter((n) => n.startsWith("edit."))
+      .map(arrangedSegment)
+      .filter((n) => n !== undefined);
+    expect(labelled.sort()).toEqual(["directory", "git", "trigger"]);
     // N+1 `+` positions per row, each in its own cell (a segment's `-` shares
     // the cell of the `+` after it): 3 for the 2-segment row (before
     // directory, after directory, after git) + 2 for the single-segment
@@ -364,7 +364,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     // only, and `isChromeExempt` excludes every "edit." name outright.
     for (const n of names) {
       if (!n.startsWith("edit.")) continue;
-      expect(names).not.toContain(`edit.label.${n}`);
+      expect(names.map(arrangedSegment)).not.toContain(n);
     }
   });
 
@@ -415,10 +415,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
   // `idle` hides itself by its own `when`, in a row and as a row of its own.
   const HIDDEN = BASE.replace(
     "gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },",
-    "gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },\n    idle: { template: 'IDLE', when: '{{ false }}' },\n    alone: { template: 'ALONE', when: '{{ false }}' },",
+    "gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },\n    idle: { template: 'IDLE', when: '{{ false }}' },\n    alone: { template: 'ALONE', when: '{{ false }}' },\n    boxed: { template: 'BOXED' },",
   ).replace(
     "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
-    "root: { v: [ { h: ['directory', 'idle', 'git'] }, 'alone', 'trigger' ] },",
+    "root: { v: [ { h: ['directory', 'idle', 'git'] }, 'alone', { h: ['boxed'], when: '{{ false }}' }, 'trigger' ] },",
   );
   const removesOf = (rendered: string): string[] =>
     ownUrls(rendered).flatMap((u) =>
@@ -427,10 +427,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         .map((e) => String(e.args[2])),
     );
 
-  test("a segment its own `when` hides still shows its name and its `-`", () => {
+  test("a segment its own `when` or its container's hides still shows its name and its `-`", () => {
     const { render, click, dispose } = buildEditRuntime(HIDDEN);
     const closed = stripAnsi(render());
-    expect(closed).not.toMatch(/idle|alone|IDLE|ALONE/);
+    expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     // A hidden segment that is a whole row leaves no blank line behind.
     expect(closed.split("\n").some((line) => line.trim() === "")).toBe(false);
 
@@ -443,10 +443,11 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     const names = render();
     expect(stripAnsi(names)).toMatch(/directory.*idle.*git/);
     expect(stripAnsi(names)).toContain("alone");
-    expect(stripAnsi(names)).not.toMatch(/IDLE|ALONE|\bd\b|\bg\b/);
+    expect(stripAnsi(names)).toContain("boxed");
+    expect(stripAnsi(names)).not.toMatch(/IDLE|ALONE|BOXED|\bd\b|\bg\b/);
     expect(removesOf(names)).toEqual(
       expect.arrayContaining(
-        ["idle", "alone", "directory"].map((target) =>
+        ["idle", "alone", "boxed", "directory"].map((target) =>
           encodeLayoutOp({ op: "remove", target }),
         ),
       ),
@@ -461,12 +462,29 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     )!;
     click(live);
     const shown = render();
-    expect(stripAnsi(shown)).not.toMatch(/idle|alone|IDLE|ALONE/);
+    expect(stripAnsi(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     expect(stripAnsi(shown)).toMatch(/d.*g/);
     expect(removesOf(shown)).toContain(
       encodeLayoutOp({ op: "remove", target: "idle" }),
     );
     dispose();
+  });
+
+  test("only a name label stands for a segment in the arrangement, whatever the presets are called", () => {
+    // A preset named "label" puts its own chrome under `edit.label.`.
+    const config = parseAndValidate(
+      "<test>",
+      BASE.replace(
+        "presets: {},",
+        "presets: { label: { root: { v: [ { h: ['git', 'directory'] } ] } } },",
+      ),
+      ALLOWED,
+    );
+    const stands = Object.keys(config.segments)
+      .filter((n) => n.startsWith("edit."))
+      .map(arrangedSegment)
+      .filter((n) => n !== undefined);
+    expect(stands.sort()).toEqual(["directory", "git", "trigger"]);
   });
 });
 

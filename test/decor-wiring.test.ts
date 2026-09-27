@@ -211,11 +211,10 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     const sameStep = (x: Address[number], y: Address[number]): boolean =>
       x.index === y.index && x.count === y.count && x.axis === y.axis;
     for (const content of ["a", "solo"]) {
-      // The content sits inside the gate that yields its cell to its label.
-      const unit = addressOf(rt.root, content).slice(0, -2);
+      const unit = addressOf(rt.root, content).slice(0, -1);
       const members = segmentAddresses(rt.root).filter(
         ({ address }) =>
-          address.length > unit.length &&
+          address.length === unit.length + 1 &&
           unit.every((step, i) => sameStep(step, address[i]!)),
       );
       // The label, the content, and the `- +` cell (and the row's leading `+`).

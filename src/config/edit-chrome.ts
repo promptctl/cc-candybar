@@ -76,12 +76,20 @@ const EDIT_LIVE_REF: DisclosureRef = {
   key: EDIT_LIVE_KEY,
   member: "open",
 };
-// [LAW:dataflow-not-control-flow] A content cell holds its label AND its live
-// segment, always; these two complementary predicates decide which one draws.
-// Outside edit mode the content gate is true and the label's is false, so the
-// bar renders exactly what it renders without edit mode.
-const LABEL_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) }}`;
-const CONTENT_GATE = `{{ or (not ${disclosureTerm(EDIT_MODE_REF)}) ${disclosureTerm(EDIT_LIVE_REF)} }}`;
+const NAMES_VIEW = `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)})`;
+const LABEL_GATE = `{{ ${NAMES_VIEW} }}`;
+
+// [LAW:dataflow-not-control-flow] The names view decides a gate outright;
+// every other view hands it to the author's own `when`, evaluated exactly as
+// it was. A `when` is a whole template body, so it nests verbatim in the
+// `else` arm — no second node is needed to conjoin two predicates. A content
+// cell holds its label AND its live segment, always: in the names view the
+// segment is `false` and the label shows, and an authored container is `true`
+// so nothing placed hides behind a gate; outside it the label is false and
+// the bar renders exactly what it renders without edit mode.
+function inNamesView(verdict: "true" | "false", when: string): string {
+  return `{{ if ${NAMES_VIEW} }}${verdict}{{ else }}${when}{{ end }}`;
+}
 
 // [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate.
 // `.preset.customized` is a per-render payload fact (does the config FILE
@@ -197,7 +205,9 @@ function removeTerm(
   return `{{ action "${actionName}" "-" }}`;
 }
 
-const LABEL_NS = `${EDIT_NS}label.`;
+// `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
+// `:`, so no preset's chrome can land under this namespace.
+const LABEL_NS = `${EDIT_NS}label:`;
 
 // [LAW:one-source-of-truth] The segment a placed segment stands for in the
 // layout's ARRANGEMENT (what `{{ layoutPreview }}` draws): a name label stands
@@ -340,14 +350,7 @@ function spliceContainer(
     const cells: LayoutNode[] = [
       ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
       labelChrome(child.name, artifacts),
-      // The segment keeps its own `when`: this gate only yields the cell to
-      // the label while edit mode shows names.
-      {
-        kind: "container",
-        direction: "horizontal",
-        when: CONTENT_GATE,
-        children: [spliced],
-      },
+      { ...spliced, when: inNamesView("false", child.when ?? "true") },
       chromeCell(
         after.host,
         `${removeTerm(presetIdent, rootKey, child.name, artifacts)} ${after.template}`,
@@ -378,7 +381,11 @@ function spliceContainer(
         : unit,
     );
   }
-  return { ...node, children };
+  return {
+    ...node,
+    children,
+    ...(node.when !== undefined && { when: inNamesView("true", node.when) }),
+  };
 }
 
 // brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
@@ -413,7 +420,7 @@ function wrapWithPresetRows(
   // ALWAYS a registered key — config-validators.ts's presetRootContributions
   // registers it
   // for every declared preset UNCONDITIONALLY, specifically so a preset
-  // edited down to zero non-exempt segments (no removeChrome/insertChrome
+  // edited down to zero non-exempt segments (no removeTerm/insertTerm
   // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootKey };
   // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS

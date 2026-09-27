@@ -1520,7 +1520,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // context — candybar-settings-ui-aok.3 dropped its standalone preset
   // control, since the settings menu is spliced into every preset root and
   // carries one) — removing all 3 via the synthesized `-` chrome
-  // leaves spliceContainer with zero children, so removeChrome/insertChrome
+  // leaves spliceContainer with zero children, so removeTerm/insertTerm
   // contribute NOTHING for "compact" on the next reload. Proves the reset
   // banner's own click still works in exactly that state, through the REAL
   // RenderCache and the REAL daemon reset-config handler — not just that
