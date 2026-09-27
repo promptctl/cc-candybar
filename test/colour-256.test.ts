@@ -19,6 +19,7 @@ import {
   Oklch,
   ColorRgba,
   SEAM_MIN_DELTA_E,
+  POWERLINE_JOINER_GLYPHS,
 } from "@promptctl/rich-js";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
@@ -76,14 +77,15 @@ const deltaE = (a: Rgb, b: Rgb): number =>
 
 // The unicode charset's joiners — every render here uses it, so the ascii
 // glyphs (`>`, `(`, `)`) are text and are measured like any other. The thin
-// dividers (U+E0B1, U+E0B3) are not joiners here: rich-js draws a divider in
+// divider is not a joiner here: rich-js draws a divider in
 // the left cell's text colour on the left cell's own ground, so it IS that
 // cell's text and is measured as text. Whether a seam is an arrow or a
 // divider is decided on the drawn colours, so a seam is compared as one
 // position, whichever glyph each depth drew there.
-const ARROWS = new Set(["", ""]);
-const JOINERS = new Set([...ARROWS, "", ""]);
-const DIVIDERS: Readonly<Record<string, string>> = { "": "", "": "" };
+const { glyph, divider, lead, tail } = POWERLINE_JOINER_GLYPHS;
+const ARROWS = new Set([glyph, lead, tail]);
+const JOINERS = new Set([...ARROWS, "\uE0B4", "\uE0B6"]);
+const DIVIDERS: Readonly<Record<string, string>> = { [divider]: glyph };
 const seamAsOne = (ch: string): string => DIVIDERS[ch] ?? ch;
 
 /**

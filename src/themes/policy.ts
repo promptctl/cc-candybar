@@ -381,9 +381,9 @@ export function effectiveStripStyle(
 // enum hosted in this leaf policy module so the config loader (validation +
 // JSON-schema emit) and the render layer (glyph dispatch) both derive from one
 // literal without a config↔render cycle [LAW:one-way-deps]. "ascii" swaps the
-// powerline-private-use cap glyphs (U+E0Bx — tofu without a Nerd Font) for
-// plain-ASCII equivalents; it is orthogonal to StripStyle: style picks the
-// joiner SHAPE, charset picks the glyph VALUES fed to it.
+// powerline-private-use cap glyphs (U+E0Bx and the U+E0D7 lead — tofu without
+// a Nerd Font) for plain-ASCII equivalents; it is orthogonal to StripStyle:
+// style picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
 // It is STRIP_STYLES' twin in resolution too: a session pick over the config
 // default. Charset describes the TERMINAL (does its font carry the powerline
 // private-use glyphs), and a Claude Code session runs in ONE terminal — two
