@@ -80,7 +80,6 @@ function ownUrls(rendered: string): string[] {
   return withoutSettingsLinks(urls);
 }
 
-
 function segmentNamesOf(root: RootFragment): string[] {
   const out: string[] = [];
   for (const node of walkNodes(fragmentNode(root))) {
@@ -467,6 +466,32 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     expect(removesOf(shown)).toContain(
       encodeLayoutOp({ op: "remove", target: "idle" }),
     );
+    dispose();
+  });
+
+  // The settings menu's synthesis, not withTrailingCell, lifts a gated root
+  // under an ungated wrapper row (the door's), so the tail lands outside the
+  // gate; edit mode needs `session.id`, which always brings the menu.
+  test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", () => {
+    const { render, click, ctx, dispose } = buildEditRuntime(
+      BASE.replace(
+        "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
+        "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
+      ),
+    );
+    ctx.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    const liveToggle = (rendered: string, to: string): string | undefined =>
+      ownUrls(rendered).find((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === to,
+        ),
+      );
+    click(liveToggle(render(), "open")!);
+    const live = render();
+    expect(stripAnsi(live)).not.toMatch(/directory|\bd\b/);
+    // The way back survives the root hiding.
+    click(liveToggle(live, "closed")!);
+    expect(stripAnsi(render())).toMatch(/directory.*git/);
     dispose();
   });
 
