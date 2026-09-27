@@ -62,6 +62,7 @@ import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { effectivePresetName } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
@@ -581,10 +582,26 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     openCarousel(rt, "preset");
     const outside = previewLabels(rt.render());
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    rt.sessionState.set(SID, EDIT_LIVE_KEY, "open");
     const rendered = rt.render();
     // Edit mode is on: its chrome is on the bar the preview describes.
     expect([...rt.sink.keys()].some((name) => name.startsWith(EDIT_NS))).toBe(true);
     expect(previewLabels(rendered)).toEqual(outside);
+    rt.dispose();
+  });
+
+  test("in edit mode's names view the preview draws every placed segment, shown or not", () => {
+    const rt = rig(`{}`);
+    openCarousel(rt, "preset");
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    // Every segment the default preset places, in order: the labels stand in
+    // for them whether or not this payload renders them (it renders no host,
+    // context, cache timer, or activity).
+    const placed = [
+      ["menu", "host", "directory", "gitaculous"],
+      ["model", "context", "cacheTimer", "block", "weekly", "activity"],
+    ];
+    expect(previewLabels(rt.render())).toEqual(placed);
     rt.dispose();
   });
 

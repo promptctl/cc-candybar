@@ -47,7 +47,7 @@ function isReservedChromeKey(key: string): boolean {
     // The settings menu's own pickers, hosted on `settings.<setting>`.
     key.startsWith(`${MENU_NS}settings_`) ||
     // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
-    // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertChrome
+    // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertTerm
     // calls menuStateKey directly), and `ident()` collapses the dots — so a
     // bundled-default config really does derive 30+ keys under this prefix.
     key.startsWith(`${MENU_NS}edit_`) ||

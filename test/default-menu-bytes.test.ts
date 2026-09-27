@@ -183,7 +183,7 @@ function hostsMenu(template: string): boolean {
 }
 // [LAW:one-type-per-behavior] Edit chrome's `+` affordances are excluded from
 // the enumerated coverage because they are not N menus to cover — they are ONE
-// synthesis site (`insertChrome`) minting an instance per insertion point, so
+// synthesis site (`insertTerm`) minting an instance per insertion point, so
 // their count is a fact about the active preset's segment count rather than
 // about the menu surface. One rendered instance is the representative, and it
 // gets its own bytes below.

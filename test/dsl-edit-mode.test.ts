@@ -54,6 +54,7 @@ import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
+import { EDIT_LIVE_KEY, arrangedSegment } from "../src/config/edit-chrome";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -78,7 +79,6 @@ function ownUrls(rendered: string): string[] {
   // this file's assertions are about the fixture's OWN clickable regions.
   return withoutSettingsLinks(urls);
 }
-
 
 function segmentNamesOf(root: RootFragment): string[] {
   const out: string[] = [];
@@ -331,20 +331,24 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(names).toEqual(
       expect.arrayContaining(["directory", "git", "trigger"]),
     );
-    // One `-` per content segment — directory, git, AND trigger: nothing
-    // about hosting `{{ action "edit.toggle" }}` makes a segment special to
-    // the SPLICE (it only excludes names under a reserved namespace, and
-    // "trigger" is an ordinary user-chosen name).
-    expect(
-      names.filter((n) => n.startsWith("edit.default.removeSeg.")).sort(),
-    ).toEqual([
-      "edit.default.removeSeg.directory",
-      "edit.default.removeSeg.git",
-      "edit.default.removeSeg.trigger",
-    ]);
-    // N+1 `+` positions per row: 3 for the 2-segment row (before directory,
-    // between directory/git, after git) + 2 for the single-segment trigger
-    // row (before, after) = 5.
+    // One `-` and one name label per content segment — directory, git, AND
+    // trigger: nothing about hosting `{{ action "edit.toggle" }}` makes a
+    // segment special to the SPLICE (it only excludes names under a reserved
+    // namespace, and "trigger" is an ordinary user-chosen name).
+    const removes = Object.entries(config.actions)
+      .filter(([, a]) => "removeSegment" in a)
+      .map(([, a]) => (a as { removeSegment: string }).removeSegment)
+      .sort();
+    expect(removes).toEqual(["directory", "git", "trigger"]);
+    const labelled = names
+      .filter((n) => n.startsWith("edit."))
+      .map(arrangedSegment)
+      .filter((n) => n !== undefined);
+    expect(labelled.sort()).toEqual(["directory", "git", "trigger"]);
+    // N+1 `+` positions per row, each in its own cell (a segment's `-` shares
+    // the cell of the `+` after it): 3 for the 2-segment row (before
+    // directory, after directory, after git) + 2 for the single-segment
+    // trigger row (before, after) = 5.
     const inserts = names.filter((n) =>
       n.startsWith("edit.default.insertSeg."),
     );
@@ -359,7 +363,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     // only, and `isChromeExempt` excludes every "edit." name outright.
     for (const n of names) {
       if (!n.startsWith("edit.")) continue;
-      expect(names).not.toContain(`edit.default.removeSeg.${n}`);
+      expect(names.map(arrangedSegment)).not.toContain(n);
     }
   });
 
@@ -404,6 +408,111 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   });
 });
 
+// ─── names view: every placed segment is manageable, rendering or not ──────
+
+describe("edit mode shows the arrangement: each content cell reads as its name", () => {
+  // `idle` hides itself by its own `when`, in a row and as a row of its own.
+  const HIDDEN = BASE.replace(
+    "gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },",
+    "gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },\n    idle: { template: 'IDLE', when: '{{ false }}' },\n    alone: { template: 'ALONE', when: '{{ false }}' },\n    boxed: { template: 'BOXED' },",
+  ).replace(
+    "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
+    "root: { v: [ { h: ['directory', 'idle', 'git'] }, 'alone', { h: ['boxed'], when: '{{ false }}' }, 'trigger' ] },",
+  );
+  const removesOf = (rendered: string): string[] =>
+    ownUrls(rendered).flatMap((u) =>
+      effectsOf(u)
+        .filter((e) => e.verb === "apply-layout-op")
+        .map((e) => String(e.args[2])),
+    );
+
+  test("a segment its own `when` or its container's hides still shows its name and its `-`", () => {
+    const { render, click, dispose } = buildEditRuntime(HIDDEN);
+    const closed = stripAnsi(render());
+    expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
+    // A hidden segment that is a whole row leaves no blank line behind.
+    expect(closed.split("\n").some((line) => line.trim() === "")).toBe(false);
+
+    const toggle = ownUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+      ),
+    )!;
+    click(toggle);
+    const names = render();
+    expect(stripAnsi(names)).toMatch(/directory.*idle.*git/);
+    expect(stripAnsi(names)).toContain("alone");
+    expect(stripAnsi(names)).toContain("boxed");
+    expect(stripAnsi(names)).not.toMatch(/IDLE|ALONE|BOXED|\bd\b|\bg\b/);
+    expect(removesOf(names)).toEqual(
+      expect.arrayContaining(
+        ["idle", "alone", "boxed", "directory"].map((target) =>
+          encodeLayoutOp({ op: "remove", target }),
+        ),
+      ),
+    );
+
+    // Live: the real output returns, and the hidden segment stays hidden
+    // without losing its `-`.
+    const live = ownUrls(names).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
+      ),
+    )!;
+    click(live);
+    const shown = render();
+    expect(stripAnsi(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
+    expect(stripAnsi(shown)).toMatch(/d.*g/);
+    expect(removesOf(shown)).toContain(
+      encodeLayoutOp({ op: "remove", target: "idle" }),
+    );
+    dispose();
+  });
+
+  // The settings menu's synthesis, not withTrailingCell, lifts a gated root
+  // under an ungated wrapper row (the door's), so the tail lands outside the
+  // gate; edit mode needs `session.id`, which always brings the menu.
+  test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", () => {
+    const { render, click, ctx, dispose } = buildEditRuntime(
+      BASE.replace(
+        "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
+        "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
+      ),
+    );
+    ctx.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    const liveToggle = (rendered: string, to: string): string | undefined =>
+      ownUrls(rendered).find((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === to,
+        ),
+      );
+    click(liveToggle(render(), "open")!);
+    const live = render();
+    expect(stripAnsi(live)).not.toMatch(/directory|\bd\b/);
+    // The way back survives the root hiding.
+    click(liveToggle(live, "closed")!);
+    expect(stripAnsi(render())).toMatch(/directory.*git/);
+    dispose();
+  });
+
+  test("only a name label stands for a segment in the arrangement, whatever the presets are called", () => {
+    // A preset named "label" puts its own chrome under `edit.label.`.
+    const config = parseAndValidate(
+      "<test>",
+      BASE.replace(
+        "presets: {},",
+        "presets: { label: { root: { v: [ { h: ['git', 'directory'] } ] } } },",
+      ),
+      ALLOWED,
+    );
+    const stands = Object.keys(config.segments)
+      .filter((n) => n.startsWith("edit."))
+      .map(arrangedSegment)
+      .filter((n) => n !== undefined);
+    expect(stands.sort()).toEqual(["directory", "git", "trigger"]);
+  });
+});
+
 // ─── end-to-end: toggle, remove, insert-via-menu, undo twice ──────────────
 
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
@@ -422,6 +531,16 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 
     const opened = stripAnsi(render());
     expect(opened).toContain("-");
+    // Edit mode shows each content cell as its segment's name, so the
+    // trigger reads "trigger" until `☐ live` puts the live output back.
+    expect(opened).toContain("trigger");
+    expect(opened).not.toContain(" e ");
+    const liveUrl = ownUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
+      ),
+    )!;
+    click(liveUrl);
 
     const closeUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(

@@ -76,6 +76,7 @@ import {
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
 } from "../src/config/loader/edit-mode";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   addableSegmentDomains,
@@ -834,6 +835,8 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     const store = new VariableStore();
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    // Live output, not names: the subject is whether the CONTENT follows the gate.
+    sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     try {
       const compiled = registerDslConfig(config, registry);
@@ -1517,7 +1520,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // context — candybar-settings-ui-aok.3 dropped its standalone preset
   // control, since the settings menu is spliced into every preset root and
   // carries one) — removing all 3 via the synthesized `-` chrome
-  // leaves spliceContainer with zero children, so removeChrome/insertChrome
+  // leaves spliceContainer with zero children, so removeTerm/insertTerm
   // contribute NOTHING for "compact" on the next reload. Proves the reset
   // banner's own click still works in exactly that state, through the REAL
   // RenderCache and the REAL daemon reset-config handler — not just that

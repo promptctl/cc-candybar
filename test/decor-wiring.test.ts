@@ -27,6 +27,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { decorFor, DISTRIBUTIONS, type Address } from "../src/themes/decor";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -202,6 +203,10 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       root: { v: [ { h: ['a', 'b'] }, 'solo', { h: ['c'] } ] },
     }`);
     rt.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    rt.sessionState.set("s1", EDIT_LIVE_KEY, "open");
+    rt.render();
+    const live = new Map(["a", "solo"].map((c) => [c, rt.bgOf(c)]));
+    rt.sessionState.set("s1", EDIT_LIVE_KEY, "closed");
     rt.render();
     const sameStep = (x: Address[number], y: Address[number]): boolean =>
       x.index === y.index && x.count === y.count && x.axis === y.axis;
@@ -212,10 +217,12 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
           address.length === unit.length + 1 &&
           unit.every((step, i) => sameStep(step, address[i]!)),
       );
-      // `+`, the content, `-` (and the row's closing `+`).
+      // The label, the content, and the `- +` cell (and the row's leading `+`).
       expect(members.length).toBeGreaterThanOrEqual(3);
-      for (const { name } of members) {
-        expect([content, name, rt.bgOf(name)]).toEqual([content, name, rt.bgOf(content)]);
+      // Names view: every member but the content (which yields its cell to
+      // its label) renders, all in the colour the live content wears.
+      for (const { name } of members.filter(({ name }) => name !== content)) {
+        expect([content, name, rt.bgOf(name)]).toEqual([content, name, live.get(content)]);
       }
     }
     rt.dispose();

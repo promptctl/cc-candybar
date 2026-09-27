@@ -24,6 +24,7 @@ import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
 import {
   mapOpens,
   type ContainerNode,
+  type DisclosureRef,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -57,7 +58,38 @@ import {
   disclosureCycleAction,
   disclosureStateVar,
   disclosureTerm,
+  disclosureTrigger,
 } from "./disclosure.js";
+
+// [LAW:one-source-of-truth] Edit mode shows the ARRANGEMENT: every content
+// cell reads as its segment's name, so a segment whose own `when` hides it
+// (no ssh session, an idle cache timer) is still there to move or remove —
+// its `-` would otherwise sit beside nothing. `☐ live` swaps the names back
+// for the live output. It is a binary toggle over one SessionState key, which
+// is what a disclosure ref already names, so both gates below derive from the
+// one term spelling rather than a second `eq`.
+export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
+// The toggle's text per state, names view (closed) first.
+export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
+const EDIT_LIVE_REF: DisclosureRef = {
+  variable: EDIT_LIVE_KEY,
+  key: EDIT_LIVE_KEY,
+  member: "open",
+};
+const NAMES_VIEW = `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)})`;
+const LABEL_GATE = `{{ ${NAMES_VIEW} }}`;
+
+// [LAW:dataflow-not-control-flow] The names view decides a gate outright;
+// every other view hands it to the author's own `when`, evaluated exactly as
+// it was. A `when` is a whole template body, so it nests verbatim in the
+// `else` arm — no second node is needed to conjoin two predicates. A content
+// cell holds its label AND its live segment, always: in the names view the
+// segment is `false` and the label shows, and an authored container is `true`
+// so nothing placed hides behind a gate; outside it the label is false and
+// the bar renders exactly what it renders without edit mode.
+function inNamesView(verdict: "true" | "false", when: string): string {
+  return `{{ if ${NAMES_VIEW} }}${verdict}{{ else }}${when}{{ end }}`;
+}
 
 // [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate.
 // `.preset.customized` is a per-render payload fact (does the config FILE
@@ -147,36 +179,67 @@ export function addableSegmentDomains(
   return domains;
 }
 
-// Synthesize the `-` affordance for one segment instance: a literal
-// `removeSegment` action plus the segment that hosts its `{{ action }}`.
-function removeChrome(
+// One edit-mode chrome cell: a segment visible exactly while edit mode is on.
+function chromeCell(
+  name: string,
+  template: string,
+  artifacts: ChromeArtifacts,
+): SegmentNode {
+  artifacts.segments[name] = { template, when: EDIT_MODE_GATE };
+  return { kind: "segment", name };
+}
+
+// The `-` affordance for one segment instance: a literal `removeSegment`
+// action, and the `{{ action }}` that clicks it for the cell to host.
+function removeTerm(
   presetIdent: string,
   rootKey: string,
   segName: string,
   artifacts: ChromeArtifacts,
-): SegmentNode {
+): string {
   const actionName = `${EDIT_NS}${presetIdent}.remove.${ident(segName)}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.removeSeg.${ident(segName)}`;
   artifacts.actions[actionName] = {
     persist: rootKey,
     removeSegment: segName,
   };
-  artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "-" }}`,
-    when: EDIT_MODE_GATE,
-  };
-  return { kind: "segment", name: chromeSegName };
+  return `{{ action "${actionName}" "-" }}`;
 }
 
-// Synthesize the `+` affordance for one gap: an `insertSegmentFrom` action
-// over this preset's addable domain, plus a segment hosting `{{ menu }}` over
-// it. The menu's own disclosure (open state, page cursor, toggle action) is
+// `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
+// `:`, so no preset's chrome can land under this namespace.
+const LABEL_NS = `${EDIT_NS}label:`;
+
+// [LAW:one-source-of-truth] The segment a placed segment stands for in the
+// layout's ARRANGEMENT (what `{{ layoutPreview }}` draws): a name label stands
+// for the segment it names, since in edit mode it holds that segment's cell;
+// every other edit-mode cell is an affordance over the arrangement, not part
+// of it; anything else is itself.
+export function arrangedSegment(name: string): string | undefined {
+  if (name.startsWith(LABEL_NS)) return name.slice(LABEL_NS.length);
+  return name.startsWith(EDIT_NS) ? undefined : name;
+}
+
+// The name a content segment wears in edit mode. Keyed by segment name alone —
+// the label says the same thing in every preset — so N presets placing one
+// segment mint one declaration.
+function labelChrome(segName: string, artifacts: ChromeArtifacts): SegmentNode {
+  const name = `${LABEL_NS}${segName}`;
+  artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(segName)}" }}`,
+    when: LABEL_GATE,
+  };
+  return { kind: "segment", name };
+}
+
+// The `+` affordance for one gap: an `insertSegmentFrom` action over this
+// preset's addable domain, and the `{{ menu }}` over it for the cell `host` to
+// carry (the menu's state key derives from its host segment's name). The menu's own disclosure (open state, page cursor, toggle action) is
 // synthesized here by calling the SAME pure functions menu-synth.ts's
 // file-parse-time pass calls — this pass runs too late to piggyback on that
 // pass directly (it needs post-merge data menu-synth.ts's
 // per-file timing does not have), so parity is achieved by sharing the
 // functions, not by re-deriving the shape.
-function insertChrome(
+function insertTerm(
   presetIdent: string,
   rootKey: string,
   posIdent: string,
@@ -184,7 +247,7 @@ function insertChrome(
   anchor: string,
   relation: "before" | "after",
   artifacts: ChromeArtifacts,
-): SegmentNode {
+): { readonly host: string; readonly template: string } {
   const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
   artifacts.actions[applyName] = {
@@ -219,17 +282,17 @@ function insertChrome(
   // authored bg or not), but colour alone is a hint the glyph should not
   // depend on: with one static display, "which one did I open" would rest on
   // a tint the terminal's colour depth may flatten. The `✕` names it.
-  artifacts.segments[chromeSegName] = {
+  return {
+    host: chromeSegName,
     template: `{{ menu "${applyName}" "+" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
-    when: EDIT_MODE_GATE,
   };
-  return { kind: "segment", name: chromeSegName };
 }
 
-// [LAW:dataflow-not-control-flow] One recursive splice: a container's
-// non-exempt segment children get a `+` before and a `-` after (so N
-// consecutive segments read `+ [seg1 -] + [seg2 -] + [seg3 -] +` — N+1 insert
-// points, N remove points); a container child recurses; an exempt segment
+// [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
+// segment child is followed by one gap cell holding its `-` and the `+` that
+// inserts after it, and the first also leads with a `+` (so N consecutive
+// segments read `+ [seg1 -+] [seg2 -+] [seg3 -+]` — N+1 insert points, N
+// remove points, N+1 chrome cells); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
 // untouched — but the disclosure BODY a segment hangs (a group's children,
 // the settings rows) recurses like any container, so the cells inside an
@@ -245,18 +308,13 @@ function spliceContainer(
   posCounter: { n: number },
 ): ContainerNode {
   const children: LayoutNode[] = [];
-  // [LAW:one-source-of-truth] The trailing `+`'s position is "after the last
-  // CONTENT segment", not "after the last child". Those coincide only in a row
-  // of pure content: a row ending in exempt chrome — a group toggle, a menu
-  // host, an authored `settings.menu` — would read its last child as the anchor
-  // and silently drop the row's final insert point, N segments offering only N
-  // insert points instead of N+1. The leading `+` needs no such rule: every
-  // content segment carries its own `before` cell, so exempt chrome at the
-  // front (where the global settings menu defaults) costs no insert point.
-  const lastContent = node.children.reduce(
-    (idx, child, i) =>
-      child.kind === "segment" && !isChromeExempt(child.name) ? i : idx,
-    -1,
+  // [LAW:one-source-of-truth] The leading `+`'s position is "before the
+  // first CONTENT segment", not "before the first child": a row led by exempt
+  // chrome — the settings door, where it defaults — would otherwise anchor on
+  // a segment no layout op may move. The trailing insert point needs no such
+  // rule: every content segment's gap cell carries its own `after`.
+  const firstContent = node.children.findIndex(
+    (child) => child.kind === "segment" && !isChromeExempt(child.name),
   );
   const splice = (body: ContainerNode): ContainerNode =>
     spliceContainer(
@@ -277,31 +335,27 @@ function spliceContainer(
       children.push(spliced);
       continue;
     }
-    const cells: LayoutNode[] = [
-      insertChrome(
+    const insert = (relation: "before" | "after") =>
+      insertTerm(
         presetIdent,
         rootKey,
         String(posCounter.n++),
         domainName,
         child.name,
-        "before",
+        relation,
+        artifacts,
+      );
+    const leading = i === firstContent ? [insert("before")] : [];
+    const after = insert("after");
+    const cells: LayoutNode[] = [
+      ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
+      labelChrome(child.name, artifacts),
+      { ...spliced, when: inNamesView("false", child.when ?? "true") },
+      chromeCell(
+        after.host,
+        `${removeTerm(presetIdent, rootKey, child.name, artifacts)} ${after.template}`,
         artifacts,
       ),
-      spliced,
-      removeChrome(presetIdent, rootKey, child.name, artifacts),
-      ...(i === lastContent
-        ? [
-            insertChrome(
-              presetIdent,
-              rootKey,
-              String(posCounter.n++),
-              domainName,
-              child.name,
-              "after",
-              artifacts,
-            ),
-          ]
-        : []),
     ];
     // [LAW:one-type-per-behavior] A content segment and its affordances are
     // ONE unit of the row: a horizontal container holding them, so the row
@@ -313,8 +367,9 @@ function spliceContainer(
     // was a whole row (presetRoot stacks every root's rows vertically, so a
     // bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this
     // way): the unit becomes that row's one CELL, so the content keeps the
-    // tone a one-cell row wears outside edit mode, and the row carries the
-    // content's own gate so the chrome hides with it.
+    // tone a one-cell row wears outside edit mode. The row carries no gate of
+    // its own: the content's `when` stays on the content, so a hidden row still
+    // shows its label and chrome in edit mode.
     const unit: LayoutNode = {
       kind: "container",
       direction: "horizontal",
@@ -322,16 +377,15 @@ function spliceContainer(
     };
     children.push(
       node.direction === "vertical"
-        ? {
-            kind: "container",
-            direction: "horizontal",
-            children: [unit],
-            ...(child.when !== undefined && { when: child.when }),
-          }
+        ? { kind: "container", direction: "horizontal", children: [unit] }
         : unit,
     );
   }
-  return { ...node, children };
+  return {
+    ...node,
+    children,
+    ...(node.when !== undefined && { when: inNamesView("true", node.when) }),
+  };
 }
 
 // brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
@@ -354,7 +408,7 @@ function wrapWithPresetRows(
   presetIdent: string,
   rootKey: string,
   artifacts: ChromeArtifacts,
-  help: SegmentNode,
+  tail: LayoutNode,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
@@ -366,7 +420,7 @@ function wrapWithPresetRows(
   // ALWAYS a registered key — config-validators.ts's presetRootContributions
   // registers it
   // for every declared preset UNCONDITIONALLY, specifically so a preset
-  // edited down to zero non-exempt segments (no removeChrome/insertChrome
+  // edited down to zero non-exempt segments (no removeTerm/insertTerm
   // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootKey };
   // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS
@@ -395,7 +449,7 @@ function wrapWithPresetRows(
       { kind: "segment", name: chromeSegName },
       // The `(?)`'s body drops BELOW the row the trigger rides while the
       // disclosure is open, like every other disclosure body in this codebase.
-      withTrailingCell(splicedRoot, help),
+      withTrailingCell(splicedRoot, tail),
     ],
   };
 }
@@ -470,7 +524,7 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
-  help: SegmentNode,
+  tail: LayoutNode,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const rootKey = presetRootKey(presetName);
@@ -491,7 +545,7 @@ function spliceEditChromeForPreset(
     presetIdent,
     rootKey,
     artifacts,
-    help,
+    tail,
   );
 }
 
@@ -533,13 +587,32 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     [EDIT_MODE_REF],
     artifacts,
   );
+  // The view toggle rides the same trailing cell as the `(?)`, minted once for
+  // the same reason: one key, so switching presets keeps the view you chose.
+  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
+    EDIT_LIVE_KEY,
+    DISCLOSURE_CLOSED,
+  );
+  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
+    EDIT_LIVE_KEY,
+    EDIT_LIVE_REF.member,
+  );
+  artifacts.segments[EDIT_LIVE_KEY] = {
+    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
+    when: EDIT_MODE_GATE,
+  };
+  const tail: LayoutNode = {
+    kind: "container",
+    direction: "horizontal",
+    children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
+  };
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
     const splicedRoot = spliceEditChromeForPreset(
       config,
       name,
       artifacts,
-      help,
+      tail,
     );
     presets[name] = {
       ...presetByName(config.presets, name),

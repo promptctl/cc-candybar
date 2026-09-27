@@ -171,7 +171,7 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // contribution is keyed off intent to use structural editing for that
 // preset, not off "this config has any presets block") stays a
 // registered key EVEN when that preset's CURRENT tree has no
-// addable/removable segment for removeChrome/insertChrome to contribute
+// addable/removable segment for removeTerm/insertTerm to contribute
 // from. Without this, a preset edited down to zero non-exempt segments
 // (spliceContainer then contributes nothing for it at all) would orphan
 // its OWN reset action: the one affordance meant to undo a fully-emptied

@@ -24,8 +24,10 @@ import type {
 import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
-import { addableSegmentDomains } from "../config/edit-chrome.js";
-import { EDIT_NS } from "../config/loader/reserved-namespace.js";
+import {
+  addableSegmentDomains,
+  arrangedSegment,
+} from "../config/edit-chrome.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -498,6 +500,18 @@ export function registerDslConfig(
   // a helper could fail to be visible). The helpers are parsed ONCE here.
   const helpers = compileHelpers(engine, config.helpers);
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
+  // A `when` is a pure predicate, and one source recurs across many nodes —
+  // edit mode gates every chrome cell and every placed segment in every
+  // preset by a handful of predicates — so each distinct source is parsed
+  // once and its template shared.
+  const whens = new Map<string, Template<RichText>>();
+  const parseWhen = (src: string): Template<RichText> => {
+    const known = whens.get(src);
+    if (known !== undefined) return known;
+    const parsed = parse(src);
+    whens.set(src, parsed);
+    return parsed;
+  };
   // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
   // on it reads back, so an option picker marks its current selection by
   // reading the SAME value the templates read — independent of whether the
@@ -582,9 +596,9 @@ export function registerDslConfig(
     null,
   ) as Record<string, CompiledSegment>;
   for (const [segName, seg] of Object.entries(config.segments)) {
-    const parseField = (src: string, field: string) => {
+    const parseField = (src: string, field: string, read = parse) => {
       try {
-        return parse(src);
+        return read(src);
       } catch (e) {
         throw new Error(
           `Template parse error in segments.${segName}.${field}: ${(e as Error).message}`,
@@ -593,7 +607,10 @@ export function registerDslConfig(
       }
     };
     compiled[segName] = {
-      when: seg.when !== undefined ? parseField(seg.when, "when") : undefined,
+      when:
+        seg.when !== undefined
+          ? parseField(seg.when, "when", parseWhen)
+          : undefined,
       template: parseField(seg.template, "template"),
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
       fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
@@ -617,9 +634,14 @@ export function registerDslConfig(
   // capabilities; the kind-specific assembly lives in node-registry.
   // [LAW:single-enforcer] The compiled tree mirrors config.root 1:1, so a node's
   // predicate and its children travel together.
-  const parseNodeField = (src: string, path: string, field: string) => {
+  const parseNodeField = (
+    src: string,
+    path: string,
+    field: string,
+    read = parse,
+  ) => {
     try {
-      return parse(src);
+      return read(src);
     } catch (e) {
       throw new Error(
         `Template parse error in ${path}.${field}: ${(e as Error).message}`,
@@ -636,7 +658,7 @@ export function registerDslConfig(
       when:
         node.when === undefined
           ? undefined
-          : parseNodeField(node.when, path, "when"),
+          : parseNodeField(node.when, path, "when", parseWhen),
       parse: (src, field) => parseNodeField(src, path, field),
       compileChild: compileNode,
     };
@@ -1111,12 +1133,13 @@ export function renderDsl(
   // tree about to be walked and the walk's own visibility: a node's `when`,
   // then a segment's own — and a segment whose `when` throws is SHOWN, because
   // the walk draws an error cell exactly there. Edit mode's `+`/`-` and reset
-  // banner are affordances over the arrangement, not part of it. Each segment
+  // banner are affordances over the arrangement, not part of it, while a name
+  // label stands in for its segment (`arrangedSegment`). Each segment
   // keeps the palette the walk colours it in, pin included.
   const shown = (node: CompiledNode): boolean => {
     if (!evaluateWhen(node.when, scope)) return false;
     if (node.kind === "container") return true;
-    if (node.name.startsWith(EDIT_NS)) return false;
+    if (arrangedSegment(node.name) === undefined) return false;
     try {
       return evaluateWhen(compiled.segments[node.name]!.when, scope);
     } catch {
@@ -1125,10 +1148,18 @@ export function renderDsl(
   };
   compiled.menuRuntime.action.layout = () =>
     layoutRows(root, shown).map((row) =>
-      row.map((placed) => ({
-        ...placed,
-        palette: compiled.segments[placed.name]!.palette ?? palette,
-      })),
+      row.flatMap((placed) => {
+        const name = arrangedSegment(placed.name);
+        return name === undefined
+          ? []
+          : [
+              {
+                ...placed,
+                name,
+                palette: compiled.segments[name]!.palette ?? palette,
+              },
+            ];
+      }),
     );
   return (
     renderNode(root, true, BAR_ROOT)

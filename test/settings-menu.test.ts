@@ -472,7 +472,9 @@ describe("the default placement never inherits an author's gate", () => {
       };
       return walk(resolvedRoot(config), []) ?? [];
     };
-    expect(gatesOver("directory")).toContain(GATE);
+    // Edit mode's names view composes over it, and the author's gate decides
+    // every other view verbatim.
+    expect(gatesOver("directory").some((g) => g.includes(GATE))).toBe(true);
   });
 
   test.each([
