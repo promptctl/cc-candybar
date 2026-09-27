@@ -1,3 +1,10 @@
+## [1.79.1](https://github.com/promptctl/cc-candybar/compare/v1.79.0...v1.79.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **render:** colour depth none keeps every link, so the bar can undo it ([#245](https://github.com/promptctl/cc-candybar/issues/245)) ([6d34a14](https://github.com/promptctl/cc-candybar/commit/6d34a149b9c30dd3ec3f50074487a1e3be2f64c3))
+
 # [1.79.0](https://github.com/promptctl/cc-candybar/compare/v1.78.0...v1.79.0) (2026-09-27)
 
 
