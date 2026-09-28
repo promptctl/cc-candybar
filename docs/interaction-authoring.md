@@ -83,7 +83,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "styles" \| "looks" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
+| `{ set: key, from: "themes" \| "styles" \| "looks" \| "progressions" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -106,15 +106,16 @@ its state is synthesized, see below.) A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`look`,
-`style`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
+`style`, `progression`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
 action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
 
 No example below authors `bg:` or `fg:`. A segment with no `bg:` wears a tint
-the theme derives from its position: each row wears one of the theme's
-branding hues (`primary`, then `secondary`) and each cell of the row one of
-three tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
+the theme derives from its position: row n wears step n of the
+`globals.progression` — an ordered list of the theme's decorative roles,
+`secondary` then `accent` by default — and each cell of the row one of three
+tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
 to read on whatever its background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
 tint.
@@ -377,6 +378,47 @@ default is a deliberate act — and a checkbox armed in one session can never
 write a default from another. And never place it above a control it cannot
 affect: a checkbox that silently does nothing for half the rows beneath it is a
 lie the panel tells.
+
+### The bar's progression
+
+`globals.progression` names which theme role each ROW of the closed bar wears,
+in order, the way a chord progression names degrees: `"secondary-accent"` (the
+default), `"primary-secondary"`, or `"primary"` (every row in one hue). Cells
+inside a row still differ by tone. It resolves like `style` — the session's pick
+over the config value over the default — and the settings menu's `⚙ config`
+row carries a `🎼` carousel over it. `progressions` is a registered domain and
+`{{ .progression.effective }}` its projection, so a control of your own is the
+same two lines as any other picker:
+
+```json5 check:pass
+{
+  globals: { progression: "primary-secondary" },
+  actions: {
+    applyProgression: { persist: "progression", from: "progressions" },
+  },
+  segments: {
+    progressionControl: {
+      template: '{{ .progression.effective }} {{ menu "applyProgression" "▸" "▾" }}',
+    },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { h: ["progressionControl"] },
+  ] },
+}
+```
+
+A name outside the table is a load error that lists the ones there are:
+
+```json5 check:fail
+{
+  globals: { progression: "accent-primary" },
+}
+```
+
+```error
+globals.progression must be one of: secondary-accent, primary-secondary, primary; got "accent-primary"
+```
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
 
