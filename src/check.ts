@@ -401,6 +401,7 @@ export function renderEffective(
       theme: effective.theme,
       look: effective.look,
       preset: effective.preset,
+      progression: effective.progression,
     },
   );
   return { rendered, failures };

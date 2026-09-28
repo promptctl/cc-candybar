@@ -9,6 +9,7 @@ import {
   COLOR_COMPATIBILITIES,
   DEFAULT_PADDING,
   PADDING_RANGE,
+  PROGRESSION_NAMES,
   STRIP_STYLES,
   isExpression,
   type ColorCompatibility,
@@ -141,6 +142,9 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // shapes the joiner can render), unlike the open-ended palette NAME — so it
   // validates by membership and emits a JSON-Schema `enum`.
   style: optionalEnumSpec(STRIP_STYLES),
+  // [LAW:types-are-the-program] Closed enum like `style`: the named bar
+  // progressions — which theme role each row of the closed bar wears.
+  progression: optionalEnumSpec(PROGRESSION_NAMES),
   autoWrap: optionalBooleanSpec(),
   // Intra-cell spaces per side. Bounded above so a config value can never
   // drive an unbounded `" ".repeat` allocation in the daemon

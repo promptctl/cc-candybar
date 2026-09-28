@@ -331,6 +331,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "style.effective",
       default: "",
     },
+    "progression.effective": {
+      kind: "input",
+      path: "progression.effective",
+      default: "",
+    },
     "charset.effective": {
       kind: "input",
       path: "charset.effective",

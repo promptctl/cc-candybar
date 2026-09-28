@@ -136,6 +136,7 @@ try {
         theme: effective.theme,
         look: effective.look,
         preset: effective.preset,
+        progression: effective.progression,
       },
     );
     process.stdout.write(`  ${line}\n`);

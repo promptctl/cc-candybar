@@ -1060,6 +1060,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           theme: effective.theme,
           look: effective.look,
           preset: effective.preset,
+          progression: effective.progression,
         },
       );
       // [LAW:one-source-of-truth] Consume the transient click error written by

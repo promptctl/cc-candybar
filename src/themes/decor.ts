@@ -2,13 +2,14 @@
 // of the theme's own decorative vocabulary. Rationale, measurements and the
 // rejected alternatives: design-docs/COLOUR-FROM-THEME-VOCABULARY.md.
 //
-// The rule, in Textual's colour roles: a row of the bar wears the theme's
-// `primary` or `secondary`, and each cell of the row one TONE of that hue —
-// a depth between the theme's `surface` receded toward its `background` and
-// its `surface` pulled toward the hue — with the row and the tone chosen by
-// the node's position in the tree. `accent` is kept for what is open. Every coordinate is one the theme
-// already contains or lies between two it contains: it SELECTS from the theme;
-// it never synthesises saturation the theme lacks.
+// The rule, in Textual's colour roles: each row of the bar wears one step of
+// the PROGRESSION — an ordered list of the theme's decorative roles, chosen
+// like any other display setting — and each cell of the row one TONE of that
+// hue: a depth between the theme's `surface` receded toward its `background`
+// and its `surface` pulled toward the hue, with the row and the tone chosen by
+// the node's position in the tree. Every coordinate is one the theme already
+// contains or lies between two it contains: it SELECTS from the theme; it
+// never synthesises saturation the theme lacks.
 //
 // [LAW:effects-at-boundaries] Pure. No renderer wiring, no I/O, no traversal
 // state: any node's colour is computable from its address alone, without
@@ -44,41 +45,54 @@ export const DECOR_HUES = ["primary", "secondary", "accent"] as const;
 export type DecorHue = (typeof DECOR_HUES)[number];
 
 /**
- * The hues the closed bar wears, one per ROW, in the roles Textual gives them:
- * `primary` is the theme's branding colour and `secondary` its alternative,
- * "to differentiate from primary" — so a second row reads as a different part
- * of the bar, while the cells inside one row share a hue and differ by tone.
- * Hue changing at every cell reads as team colours, not as the theme
- * (brandon-theme-picker-bgw.8fp); a row is the coarsest level a bar has.
+ * The hues the closed bar wears, one per ROW, in order: row n wears step n
+ * (the selection reads the row's placement, so under van der Corput a
+ * two-step progression alternates and a one-step one is uniform). Each row
+ * reads as a different part of the bar while the cells inside one row share
+ * a hue and differ by tone — hue changing at every cell reads as team colours,
+ * not as the theme (brandon-theme-picker-bgw.8fp); a row is the coarsest level
+ * a bar has. A progression is a sequence of roles the way a chord progression
+ * is a sequence of degrees, and it is a VALUE the render carries, so every
+ * one ships through the same selection.
+ * [LAW:types-are-the-program] One or two steps, no more: the hue is read with
+ * `inBin` off the row's van der Corput placement (0, ½, ¼, ¾, …), which steps
+ * in order through one or two bins and not through three (rows 0–3 of a
+ * three-step progression would land on steps 0, 1, 0, 2). A longer one needs
+ * a different selection, so the type does not admit it.
  */
-export const BAR_HUES = [
-  "primary",
-  "secondary",
-] as const satisfies readonly DecorHue[];
-export type BarHue = (typeof BAR_HUES)[number];
+export type Progression = readonly [DecorHue] | readonly [DecorHue, DecorHue];
+
+/**
+ * [LAW:one-type-per-behavior] Every progression a user can choose, named by
+ * the roles it steps through. A new one is one row here: the option domain,
+ * the loader's enum, the settings carousel and every floor derive from this
+ * table.
+ */
+export const PROGRESSIONS = {
+  "secondary-accent": ["secondary", "accent"],
+  "primary-secondary": ["primary", "secondary"],
+  primary: ["primary"],
+} as const satisfies Record<string, Progression>;
+export type ProgressionName = keyof typeof PROGRESSIONS;
 
 /**
  * The hue an open disclosure wears: Textual's `accent`, "used sparingly to
- * draw attention". It appears exactly while something is open, which is when
- * there is something to attend to.
+ * draw attention". Every bar trigger opens a band in it. A progression may put
+ * it on a closed row too, which is why an open trigger is held apart from the
+ * closed bar by contrast (`stateFor`), never by hue alone.
  */
 export const OPEN_HUE = "accent" satisfies DecorHue;
 
 /** The roles whose meaning decoration must never borrow. */
 export type SemanticRole = "error" | "success" | "warning";
 
-// [LAW:types-are-the-program] Two exclusions, checked by the compiler rather
-// than a review: no semantic role is a decorative hue, and the closed bar never
-// wears the open hue — so an open trigger cannot be mistaken for a closed cell
-// by hue alone. (test/decor.test.ts asserts both at runtime too.)
+// [LAW:types-are-the-program] Checked by the compiler rather than a review: no
+// semantic role is a decorative hue. (test/decor.test.ts asserts it at runtime
+// too.)
 const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
   ? true
   : never = true;
-const _barNeverWearsTheOpenHue: Extract<BarHue, typeof OPEN_HUE> extends never
-  ? true
-  : never = true;
 void _decorHuesAreNonSemantic;
-void _barNeverWearsTheOpenHue;
 
 /**
  * Where a cell sits on its row's tone axis, from the theme's `surface` receded
@@ -133,13 +147,32 @@ export type ThemePole = "foreground" | "background";
 
 /** One closed bar cell's decoration: its row's hue, at its own tone. */
 export interface DecorEntry {
-  readonly hue: BarHue;
+  readonly hue: DecorHue;
   readonly tone: DecorTone;
 }
 
-/** Every decoration the closed bar can wear: 2 hues × 3 tones, all the theme's own. */
-export const DECOR_VOCABULARY: readonly DecorEntry[] = BAR_HUES.flatMap((hue) =>
-  DECOR_TONES.map((tone) => ({ hue, tone })),
+/** Every decoration a row can wear over `hues`: each hue at each tone. */
+export const vocabularyOf = (
+  hues: readonly DecorHue[],
+): readonly DecorEntry[] =>
+  hues.flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })));
+
+/**
+ * Every decoration the closed bar can wear under ANY progression: every hue
+ * some progression steps through × every tone, all the theme's own. The
+ * floors that hold an open trigger apart from the closed bar measure against
+ * this whole set, so they hold whichever progression is chosen — a choice is
+ * a render-time value, and a floor that read it would pass under the default
+ * and fail after one click.
+ * [LAW:one-source-of-truth] Derived from PROGRESSIONS, so a new progression
+ * that reaches a new hue is measured the moment it is added.
+ */
+export const DECOR_VOCABULARY: readonly DecorEntry[] = vocabularyOf(
+  DECOR_HUES.filter((hue) =>
+    Object.values(PROGRESSIONS).some((steps) =>
+      (steps as readonly DecorHue[]).includes(hue),
+    ),
+  ),
 );
 
 // --- Distributions ------------------------------------------------------------
@@ -327,7 +360,8 @@ export function vocabularySelect<T extends {}>(
 }
 
 /**
- * The decorative entry a bar node's address selects. An address reads as the
+ * The decorative entry a bar node's address selects under `progression`. An
+ * address reads as the
  * rows it stacks through, then the cell of the innermost of them, then
  * whatever is nested inside that cell: the last of those rows chooses the hue,
  * so a row stacked above the whole bar (edit mode's reset banner) recolours no
@@ -345,11 +379,14 @@ export function vocabularySelect<T extends {}>(
  * pre-order cursor's flaw, where hiding one segment recoloured others. The
  * bundled bar stacks no rows inside a row.
  */
-export function decorEntryFor(address: Address): DecorEntry {
+export function decorEntryFor(
+  progression: Progression,
+  address: Address,
+): DecorEntry {
   const cell = address.findIndex((step) => step.axis === "cell");
   const rows = cell === -1 ? address : address.slice(0, cell);
   return {
-    hue: vocabularySelect(BAR_HUES, rows.at(-1), inBin),
+    hue: vocabularySelect(progression, rows.at(-1), inBin),
     tone: vocabularySelect(DECOR_TONES, address[rows.length], nearestPoint),
   };
 }
@@ -420,13 +457,16 @@ export function decorEntryColour(
 // Every segment of every render asks for its tint, and the answer is a pure
 // function of (palette, entry) — OKLCH conversions, four mixes, and a possible
 // gamut bisection, ~5% of a render before this memo. Keyed by the entry's
-// VALUE, whose domain is BAR_HUES × DECOR_TONES, so each map holds at most six
-// colours whoever built the entry.
+// VALUE, whose domain is DECOR_HUES × DECOR_TONES, so each map holds at most
+// nine colours whoever built the entry.
 const DECOR_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 
 /** A node's decorative background: the colour of the entry its address selects. */
-export const decorFor = (palette: Palette, address: Address): ColorRgba =>
-  decorEntryColour(palette, decorEntryFor(address));
+export const decorFor = (
+  palette: Palette,
+  progression: Progression,
+  address: Address,
+): ColorRgba => decorEntryColour(palette, decorEntryFor(progression, address));
 
 // --- The state region ---------------------------------------------------------
 
@@ -451,8 +491,9 @@ const STATE_STEPS = 12;
  * The state colour of `hue`: an open disclosure's trigger is drawn here. The
  * pure form of the hue, pushed toward `foreground` in twelfths — and past it,
  * along its own lightness, when the pole itself falls short — until it clears
- * `STATE_FLOOR` against EVERY colour the closed bar can wear, since an open
- * trigger stands among closed cells of any row and tone. A hue that already
+ * `STATE_FLOOR` against EVERY colour the closed bar can wear under any
+ * progression, since an open trigger stands among closed cells of any row and
+ * tone — its own hue's included, when a progression puts that hue on a row. A hue that already
  * clears at step zero is its pure form as drawn (composited over black, which
  * leaves an opaque colour byte-unchanged) — the enforcement is a floor, not a
  * transform.
@@ -887,23 +928,33 @@ export function bandItemFor(
 
 /**
  * Where a node stands in the colour model (design doc, "The region model"):
- * on the BAR, where its address selects a vocabulary entry, or on a BAND — the
- * plane a disclosure hung under its trigger — where its address is the steps
- * since that band's root and places it along the band's axis. The band's
- * `Disclosure` is the hue and depth its TRIGGER computed; nothing about the
- * trigger's own position enters, which is what lets a body hang on its
- * trigger and still be coloured without walk order [LAW:types-are-the-program].
+ * on the BAR, where its address selects a vocabulary entry under the bar's
+ * progression, or on a BAND — the plane a disclosure hung under its trigger —
+ * where its address is the steps since that band's root and places it along
+ * the band's axis. The band's `Disclosure` is the hue and depth its TRIGGER
+ * computed; nothing about the trigger's own position enters, which is what
+ * lets a body hang on its trigger and still be coloured without walk order
+ * [LAW:types-are-the-program]. The progression rides the bar arm alone: a
+ * band's colours are its trigger's lineage, which no progression reaches.
  */
 export type Region =
-  | { readonly kind: "bar"; readonly address: Address }
+  | {
+      readonly kind: "bar";
+      readonly progression: Progression;
+      readonly address: Address;
+    }
   | {
       readonly kind: "band";
       readonly band: Disclosure;
       readonly address: Address;
     };
 
-/** The bar's root: the top of the layout tree, before any step. */
-export const BAR_ROOT: Region = { kind: "bar", address: [] };
+/** The bar's root under `progression`: the top of the layout tree, before any step. */
+export const barRoot = (progression: Progression): Region => ({
+  kind: "bar",
+  progression,
+  address: [],
+});
 
 /** One step down within the same region — a container placing a child. */
 export const descend = (region: Region, step: AddressStep): Region => ({
@@ -931,7 +982,8 @@ export interface Decoration {
 
 /**
  * [LAW:one-source-of-truth] ONE read per segment, projected two ways. On the
- * bar, the vocabulary entry its address selects is the closed cell's tint, and
+ * bar, the entry its address selects under the bar's progression is the
+ * closed cell's tint, and
  * what it opens is the depth-0 band in `OPEN_HUE` — every bar trigger opens
  * the same accent, because an open disclosure is what the accent is for. On a
  * band, the item is placed by its address and OPENS the next band of the same
@@ -946,7 +998,7 @@ export function decorationFor(
   switch (region.kind) {
     case "bar": {
       return {
-        tint: decorFor(palette, region.address),
+        tint: decorFor(palette, region.progression, region.address),
         disclosure: { hue: OPEN_HUE, depth: 0 },
       };
     }

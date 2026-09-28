@@ -1336,6 +1336,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         {
           look: effective.look,
           preset: effective.preset,
+          progression: effective.progression,
         },
       );
       return { rendered, segmentErrors };

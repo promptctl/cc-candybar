@@ -54,6 +54,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   preset: "default",
   presetCustomized: false,
   style: "powerline",
+  progression: "secondary-accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
@@ -340,6 +341,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       preset: "default",
       presetCustomized: true,
       style: "capsule",
+      progression: "primary",
       charset: "ascii",
       colorCompatibility: "256",
       autoWrap: false,
@@ -365,6 +367,7 @@ describe("buildRenderPayload — effective globals projection", () => {
     expect("look" in payload).toBe(false);
     expect(payload.preset).toEqual({ effective: "default", customized: true });
     expect(payload.style).toEqual({ effective: "capsule" });
+    expect(payload.progression).toEqual({ effective: "primary" });
     expect(payload.charset).toEqual({ effective: "ascii" });
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });

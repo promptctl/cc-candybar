@@ -21,6 +21,7 @@ import {
   type ThemeKey,
 } from "@promptctl/rich-js";
 import type { ColorSystemSpec } from "@promptctl/rich-js/widgets";
+import { PROGRESSIONS, type ProgressionName } from "./decor.js";
 
 // --- Theme name aliasing ---
 
@@ -477,6 +478,41 @@ export function effectiveColorCompatibility(
 // no floor is measurable and DEFAULT says so.
 export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
   return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
+}
+
+// --- Bar progression identifiers ---
+
+// [LAW:one-source-of-truth] The names a `globals.progression` may hold — the
+// keys of decor.ts's PROGRESSIONS table, so the loader's enum, the option
+// domain and the session parse cannot admit a name the render has no
+// progression for. Like `style`, it is a taste that may differ between two
+// sessions, so a session pick sits over the config default.
+export const PROGRESSION_NAMES = Object.keys(
+  PROGRESSIONS,
+) as readonly ProgressionName[];
+
+// [LAW:one-source-of-truth] The one statement of the globals.progression
+// default: rows in `secondary`, then `accent` (brandon-theme-picker-bgw.7g6).
+export const DEFAULT_PROGRESSION: ProgressionName = "secondary-accent";
+
+export function isProgressionName(value: string): value is ProgressionName {
+  return (PROGRESSION_NAMES as readonly string[]).includes(value);
+}
+
+// [LAW:one-type-per-behavior] effectiveStripStyle's twin: the narrowing guard
+// IS the parse, and a stale session entry falls through to the config default.
+export function effectiveProgression(
+  stagedProgression: ProgressionName | undefined,
+  sessionProgression: string | null,
+  globalsProgression: ProgressionName | undefined,
+): ProgressionName {
+  return effectiveGlobal(
+    stagedProgression,
+    sessionProgression,
+    globalsProgression,
+    DEFAULT_PROGRESSION,
+    (raw) => (isProgressionName(raw) ? raw : null),
+  );
 }
 
 // --- Layout globals (autoWrap, padding) ---

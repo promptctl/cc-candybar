@@ -18,6 +18,10 @@ export {
   effectivePadding,
   effectiveCharset,
   effectiveColorCompatibility,
+  effectiveProgression,
+  isProgressionName,
+  PROGRESSION_NAMES,
+  DEFAULT_PROGRESSION,
   isStripStyle,
   isCharset,
   isColorCompatibility,
@@ -51,7 +55,7 @@ export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";
 
 export {
   DECOR_HUES,
-  BAR_HUES,
+  PROGRESSIONS,
   OPEN_HUE,
   DECOR_TONES,
   TONE_TINT,
@@ -71,7 +75,8 @@ export {
 } from "./decor.js";
 export type {
   DecorHue,
-  BarHue,
+  Progression,
+  ProgressionName,
   DecorTone,
   DecorEntry,
   SemanticRole,

@@ -25,7 +25,11 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
-import type { Axis, DistributionName } from "../themes/decor.js";
+import type {
+  Axis,
+  DistributionName,
+  ProgressionName,
+} from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -456,6 +460,12 @@ export interface Globals {
   // The config default under a session pick — `effectiveCharset` resolves
   // both into renderOpts.charset.
   readonly charset?: Charset;
+
+  // Which theme role each ROW of the closed bar wears, in order — a named
+  // entry of PROGRESSIONS (src/themes/decor.ts). Default "secondary-accent".
+  // The config default under a session pick — `effectiveProgression` resolves
+  // both into the render's selection.
+  readonly progression?: ProgressionName;
 
   readonly menuGlyph?: string;
 

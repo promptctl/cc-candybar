@@ -22,7 +22,7 @@ import {
   BAND_FLOORS,
   BAND_RECESSION,
   BAND_WINDOW,
-  BAR_HUES,
+  PROGRESSIONS,
   DECOR_HUES,
   DECOR_TONES,
   DECOR_VOCABULARY,
@@ -55,6 +55,8 @@ import {
   type DecorHue,
   type Distribution,
   type DistributionName,
+  type Progression,
+  type ProgressionName,
 } from "../src/themes/decor";
 import {
   allNodes,
@@ -70,6 +72,11 @@ import {
 } from "./helpers/seeded-trees";
 
 const DRACULA = getThemePalette("dracula");
+// The progression the address properties are stated under: two steps, so a
+// row alternation is visible. Every property below is about placement, which
+// no progression changes; the per-progression facts have their own describe.
+const TWO_STEP: Progression = PROGRESSIONS["primary-secondary"];
+const PROGRESSION_NAMES = Object.keys(PROGRESSIONS) as ProgressionName[];
 const BOUNDS = { maxDepth: 4, maxWidth: 6 };
 const SHAPES = drawShapes(0xa17, 60, BOUNDS);
 const ALL_NAMES = Object.keys(DISTRIBUTIONS) as DistributionName[];
@@ -81,7 +88,7 @@ function colourMap(shape: Shape, distribution: Distribution): Map<string, string
   return new Map(
     allNodes(shape, distribution).map(({ path, address }) => [
       pathKey(path),
-      decorFor(DRACULA, address).hex,
+      decorFor(DRACULA, TWO_STEP, address).hex,
     ]),
   );
 }
@@ -97,8 +104,14 @@ const cell = (index: number, count: number): AddressStep => ({ index, count, dis
 const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0, 0, 0));
 
 describe("the vocabulary", () => {
-  test("is bar hues × tones, every entry the theme's own", () => {
-    expect(DECOR_VOCABULARY).toHaveLength(BAR_HUES.length * DECOR_TONES.length);
+  test("is every hue any progression steps through × tones, every entry the theme's own", () => {
+    const reached = new Set(Object.values(PROGRESSIONS).flat());
+    expect(DECOR_VOCABULARY).toHaveLength(reached.size * DECOR_TONES.length);
+    for (const steps of Object.values(PROGRESSIONS)) {
+      for (const hue of steps) {
+        for (const tone of DECOR_TONES) expect(DECOR_VOCABULARY).toContainEqual({ hue, tone });
+      }
+    }
     const seen = new Set(DECOR_VOCABULARY.map((e) => `${e.hue}|${e.tone}`));
     expect(seen.size).toBe(DECOR_VOCABULARY.length);
   });
@@ -111,10 +124,14 @@ describe("the vocabulary", () => {
     }
   });
 
-  test("the closed bar never wears the open hue", () => {
-    // Runtime half of the module's compile-time theorem.
-    expect(BAR_HUES).not.toContain(OPEN_HUE);
-    expect(DECOR_HUES).toContain(OPEN_HUE);
+  test("every progression steps only through decorative hues, and the default reaches the open hue", () => {
+    for (const steps of Object.values(PROGRESSIONS)) {
+      expect(steps.length).toBeGreaterThan(0);
+      for (const hue of steps) expect(DECOR_HUES).toContain(hue);
+    }
+    // The bundled default (brandon-theme-picker-bgw.7g6) wears the accent on
+    // its second row, so every floor against the closed bar must count it.
+    expect(PROGRESSIONS["secondary-accent"]).toContain(OPEN_HUE);
   });
 
   test("every shipped theme carries every role the vocabulary names", () => {
@@ -129,7 +146,7 @@ describe("the vocabulary", () => {
   test("a palette missing a role fails loudly, naming palette and role", () => {
     const bare = new Palette("bare", true, new Map<string, ColorRgba>());
     expect(() => paletteRole(bare, "accent")).toThrow(/"bare".*"accent"/);
-    expect(() => decorFor(bare, [])).toThrow(/"bare"/);
+    expect(() => decorFor(bare, TWO_STEP, [])).toThrow(/"bare"/);
   });
 });
 
@@ -160,62 +177,79 @@ describe("the colour is a tone of the row's hue", () => {
   test("the row chooses the hue and the place in the row chooses the tone", () => {
     // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75 × 3 =
     // 2.25 -> tone 1).
-    expect(decorEntryFor([row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", tone: 1 });
+    expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", tone: 1 });
     // Only the innermost row counts: a row stacked above the whole bar (edit
     // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
-    expect(decorEntryFor([row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", tone: 1 });
+    expect(decorEntryFor(TWO_STEP, [row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", tone: 1 });
     // Anything nested inside a cell wears the cell's hue and tone: edit mode's
     // `+`/`-` wrap each content cell as the middle of three, and a `{ v }`
     // inside a cell stacks rows that are not the bar's.
     for (const nested of [[cell(1, 3)], [row(0, 2)], [row(0, 2), cell(2, 3)]]) {
-      expect(decorEntryFor([row(1, 2), cell(3, 6), ...nested])).toEqual(
-        decorEntryFor([row(1, 2), cell(3, 6)]),
+      expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6), ...nested])).toEqual(
+        decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6)]),
       );
     }
     // A bar with no vertical container is one row, in the first bar hue.
-    expect(decorEntryFor([cell(1, 4)])).toEqual({ hue: BAR_HUES[0], tone: 1 });
+    expect(decorEntryFor(TWO_STEP, [cell(1, 4)])).toEqual({ hue: TWO_STEP[0], tone: 1 });
   });
 
   test("the tone step is placed by its OWN distribution", () => {
     // Cell 1 of 4: vdc 0.5 × 3 = 1.5 -> tone 1; monotonic 0.375 × 3 = 1.125 -> tone ½.
-    expect(decorEntryFor([cell(1, 4)]).tone).toBe(1);
+    expect(decorEntryFor(TWO_STEP, [cell(1, 4)]).tone).toBe(1);
     expect(
-      decorEntryFor([{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).tone,
+      decorEntryFor(TWO_STEP, [{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).tone,
     ).toBe(0.5);
   });
 
   test("no two of a row's first eight cells side by side share a tone", () => {
     // The reason there are three tones: van der Corput lands a row's first
     // eight cells on 0, 1, ½, 1, 0, 1, ½, 0 of them.
-    const tones = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor([row(0, 2), cell(i, 8)]).tone);
+    const tones = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(TWO_STEP, [row(0, 2), cell(i, 8)]).tone);
     expect(tones).toEqual([0, 1, 0.5, 1, 0, 1, 0.5, 0]);
   });
 
   test("no two rows side by side share a hue", () => {
     // Rows land at 0, ½, ¼, ¾, … and a row's hue is the half it falls in, so
     // the first bit alternates them however many rows the bar stacks.
-    const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor([row(i, 8)]).hue);
-    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => BAR_HUES[i % 2]));
+    const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(TWO_STEP, [row(i, 8)]).hue);
+    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => TWO_STEP[i % 2]));
+  });
+
+  test("row n wears step n of every progression, and a one-step progression is uniform", () => {
+    for (const name of PROGRESSION_NAMES) {
+      const steps = PROGRESSIONS[name];
+      const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(steps, [row(i, 8), cell(0, 3)]).hue);
+      expect([name, hues]).toEqual([name, Array.from({ length: 8 }, (_, i) => steps[i % steps.length])]);
+    }
+    // The tone is the progression's business nowhere: the cell alone picks it.
+    for (const name of PROGRESSION_NAMES) {
+      expect(decorEntryFor(PROGRESSIONS[name], [row(1, 2), cell(3, 6)]).tone).toBe(1);
+    }
   });
 
   test("a stack of rows inside a row restarts the alternation: siblings alternate, not lines", () => {
     // root { v: [ { v: [x, y] }, z ] }: y is the second of its stack, z the
     // second of the bar's, so the two lines touch in one hue. Stated, not
     // hidden — see decorEntryFor.
-    expect(decorEntryFor([row(0, 2), row(1, 2)]).hue).toBe(decorEntryFor([row(1, 2)]).hue);
+    expect(decorEntryFor(TWO_STEP, [row(0, 2), row(1, 2)]).hue).toBe(decorEntryFor(TWO_STEP, [row(1, 2)]).hue);
   });
 
-  test("the root selects entry 0", () => {
+  test("the root selects the progression's first step at the first tone", () => {
     // The empty address has no step to place, so no distribution can reach it.
-    expect(decorEntryFor([])).toEqual(DECOR_VOCABULARY[0]);
+    for (const name of PROGRESSION_NAMES) {
+      expect(decorEntryFor(PROGRESSIONS[name], [])).toEqual({ hue: PROGRESSIONS[name][0], tone: DECOR_TONES[0] });
+    }
   });
 
-  test("an open bar trigger opens the accent, whatever its row", () => {
-    for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
-      expect(decorationFor(DRACULA, { kind: "bar", address }, ColorDepth.TRUECOLOR).disclosure).toEqual({
-        hue: OPEN_HUE,
-        depth: 0,
-      });
+  test("an open bar trigger opens the accent, whatever its row and the progression", () => {
+    for (const name of PROGRESSION_NAMES) {
+      for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
+        const region = { kind: "bar", progression: PROGRESSIONS[name], address } as const;
+        expect([name, decorationFor(DRACULA, region, ColorDepth.TRUECOLOR).disclosure]).toEqual([
+          name,
+          { hue: OPEN_HUE, depth: 0 },
+        ]);
+      }
     }
   });
 });
@@ -262,14 +296,14 @@ describe("done-when: any node's colour is computable alone", () => {
         const inOrder = colourMap(shape, distribution);
         // A single node, evaluated with no other node ever visited.
         const lone = drawFrom(rng, nodes);
-        expect([name, seed, decorFor(DRACULA, lone.address).hex]).toEqual([
+        expect([name, seed, decorFor(DRACULA, TWO_STEP, lone.address).hex]).toEqual([
           name,
           seed,
           inOrder.get(pathKey(lone.path)),
         ]);
         // The whole tree, evaluated back to front — a walk cursor would diverge here.
         for (const { path, address } of [...nodes].reverse()) {
-          expect(decorFor(DRACULA, address).hex).toBe(inOrder.get(pathKey(path)));
+          expect(decorFor(DRACULA, TWO_STEP, address).hex).toBe(inOrder.get(pathKey(path)));
         }
       }
     }
@@ -362,7 +396,11 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 // theme-specific (textual-dark, textual-ansi, solarized-dark), so a sample
 // proves nothing.
 
-/** Every colour the closed bar can wear: what an open trigger must stand off. */
+/**
+ * Every colour the closed bar can wear under ANY progression: what an open
+ * trigger must stand off. Checked here against the progressions themselves, so
+ * a floor measured over this set covers every one the user can pick.
+ */
 function barTints(palette: Palette) {
   return DECOR_VOCABULARY.map((entry) => decorEntryColour(palette, entry));
 }
@@ -462,16 +500,16 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
   });
 
   test("a band whose nested hue has no state still opens; the nested band throws only when it is asked for", () => {
-    // Whether a hue finds a state depends on the hue: this accent clears on
-    // its pure mix, while the primary nested under it clears nowhere. The
+    // Whether a hue finds a state depends on the hue: this accent finds one,
+    // while the primary nested under it clears nowhere. The
     // depth-0 band every closed cell deals must not inherit that refusal.
     const roles = new Map<string, ColorRgba>([
-      ["background", new ColorRgba(110, 14, 61)],
-      ["surface", new ColorRgba(59, 105, 208)],
-      ["foreground", new ColorRgba(99, 36, 231)],
-      ["primary", new ColorRgba(244, 76, 127)],
-      ["secondary", new ColorRgba(37, 185, 27)],
-      ["accent", new ColorRgba(93, 254, 37)],
+      ["background", new ColorRgba(0xf4, 0xa8, 0xae)],
+      ["surface", new ColorRgba(0x0f, 0x99, 0x75)],
+      ["foreground", new ColorRgba(0x30, 0x21, 0xa3)],
+      ["primary", new ColorRgba(0x10, 0x9b, 0xdb)],
+      ["secondary", new ColorRgba(0xa8, 0x90, 0x21)],
+      ["accent", new ColorRgba(0x39, 0x1a, 0x1b)],
     ]);
     const lopsided = new Palette("lopsided", true, roles);
     const nested = hueAtDepth(OPEN_HUE, 1);
@@ -503,7 +541,8 @@ describe("done-when: the enforcement is a floor, not a transform", () => {
         ]);
       }
     }
-    // The measured registry: 41 of 69 pairs stay the pure mix. At least one
+    // The measured registry: 33 of 69 pairs stay the pure mix (41 before the
+    // accent joined the closed bar, 7g6). At least one
     // must, or the "floor not transform" clause is vacuous.
     expect(untouched).toBeGreaterThan(0);
   });
