@@ -54,8 +54,13 @@ export type DecorHue = (typeof DECOR_HUES)[number];
  * a bar has. A progression is a sequence of roles the way a chord progression
  * is a sequence of degrees, and it is a VALUE the render carries, so every
  * one ships through the same selection.
+ * [LAW:types-are-the-program] One or two steps, no more: the hue is read with
+ * `inBin` off the row's van der Corput placement (0, ½, ¼, ¾, …), which steps
+ * in order through one or two bins and not through three (rows 0–3 of a
+ * three-step progression would land on steps 0, 1, 0, 2). A longer one needs
+ * a different selection, so the type does not admit it.
  */
-export type Progression = readonly [DecorHue, ...DecorHue[]];
+export type Progression = readonly [DecorHue] | readonly [DecorHue, DecorHue];
 
 /**
  * [LAW:one-type-per-behavior] Every progression a user can choose, named by
@@ -146,6 +151,12 @@ export interface DecorEntry {
   readonly tone: DecorTone;
 }
 
+/** Every decoration a row can wear over `hues`: each hue at each tone. */
+export const vocabularyOf = (
+  hues: readonly DecorHue[],
+): readonly DecorEntry[] =>
+  hues.flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })));
+
 /**
  * Every decoration the closed bar can wear under ANY progression: every hue
  * some progression steps through × every tone, all the theme's own. The
@@ -156,12 +167,13 @@ export interface DecorEntry {
  * [LAW:one-source-of-truth] Derived from PROGRESSIONS, so a new progression
  * that reaches a new hue is measured the moment it is added.
  */
-export const DECOR_VOCABULARY: readonly DecorEntry[] = DECOR_HUES.filter(
-  (hue) =>
+export const DECOR_VOCABULARY: readonly DecorEntry[] = vocabularyOf(
+  DECOR_HUES.filter((hue) =>
     Object.values(PROGRESSIONS).some((steps) =>
       (steps as readonly DecorHue[]).includes(hue),
     ),
-).flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })));
+  ),
+);
 
 // --- Distributions ------------------------------------------------------------
 

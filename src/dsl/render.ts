@@ -374,6 +374,13 @@ function compileHelpers(
  * ref's meaning depend on which segment is rendering instead of on the ref
  * string alone.
  */
+// [LAW:one-source-of-truth] The progression the CONFIG declares — what a caller
+// that resolved no session renders: the same fold, minus the rungs only a
+// session could supply. Registration's floor and renderDsl's omitted selection
+// both read it here.
+const configProgression = (config: ValidatedConfig): ProgressionName =>
+  effectiveProgression(undefined, null, config.globals.progression);
+
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
@@ -414,10 +421,7 @@ export function registerDslConfig(
     // The compile-only floor for the drawn palette: the base under no look.
     palette: floorPalette,
     // Same contract: the compile-only floor is the config's own progression.
-    progression:
-      PROGRESSIONS[
-        effectiveProgression(undefined, null, config.globals.progression)
-      ],
+    progression: PROGRESSIONS[configProgression(config)],
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -897,10 +901,7 @@ export function renderDsl(
   // [LAW:one-source-of-truth] An omitting caller renders the progression the
   // CONFIG declares — the same true default the theme below honours.
   const progression =
-    PROGRESSIONS[
-      selection?.progression ??
-        effectiveProgression(undefined, null, config.globals.progression)
-    ];
+    PROGRESSIONS[selection?.progression ?? configProgression(config)];
   compiled.menuRuntime.action.progression = progression;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this

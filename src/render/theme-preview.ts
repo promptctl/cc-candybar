@@ -22,10 +22,10 @@ import type { ColorRgba, ColorDepth, Palette } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import {
   bandFor,
-  DECOR_TONES,
   decorEntryColour,
   OPEN_HUE,
   paletteRole,
+  vocabularyOf,
   type Progression,
 } from "../themes/decor.js";
 import type { ActionRuntime } from "./action.js";
@@ -54,12 +54,10 @@ export function previewSwatches(
 ): readonly Swatch[][] {
   const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 }, drawnAt);
   return [
-    progression
-      .flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })))
-      .map((entry, i) => ({
-        text: BAR_WORDS[i % BAR_WORDS.length]!,
-        colour: decorEntryColour(palette, entry),
-      })),
+    vocabularyOf(progression).map((entry, i) => ({
+      text: BAR_WORDS[i % BAR_WORDS.length]!,
+      colour: decorEntryColour(palette, entry),
+    })),
     [
       { text: "▾ open", colour: band.state },
       { text: "menu", colour: band.plane },
