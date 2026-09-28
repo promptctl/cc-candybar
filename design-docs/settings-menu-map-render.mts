@@ -80,17 +80,16 @@ const model = (cells: readonly string[]): number =>
 const PROPOSED: Record<string, readonly string[]> = {
   "today door row (validates model)": ["❌", "⎘ id ↗ proj ↗ log ↗ repo", "☐ persist?", "(?)", "▦ default ▸ ↺", "⚙ config ▸", "🧰 tools ▸", "✎ edit"],
   "today config row (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 secondary-accent ▸ ↺", "🔣 unicode ▸ ↺", "🌈 truecolor ▸ ↺", "wrap: on ↺", "◀ padding 1 ▶ ↺"],
-  "tabs": ["❌", "⚡ session", "🎨 appearance", "▦ layout", "🧩 compat"],
-  "tabs + save cell": ["❌", "⚡ session", "🎨 appearance •", "▦ layout •", "🧩 compat", "💾 save 3 ↶ ↷ ⟲"],
-  "tabs + reset confirm": ["❌", "⚡ session", "🎨 appearance •", "▦ layout •", "🧩 compat", "💾 save 3 ↶ ↷ ⟲ reset all?"],
+  "tabs": ["❌", "▦ default ▸", "⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
+  "tabs + save cell": ["❌", "▦ default ▸", "⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools", "💾 save 3 ↶ ↷ ⟲"],
+  "tabs + reset confirm": ["❌", "▦ default ▸", "⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools", "💾 save 3 ↶ ↷ ⟲ reset all?"],
   "session links": ["✕", "⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config"],
   "session commands": ["✕", "/compact", "/clear", "/model", "⏲ autocompact ▸"],
-  "session commands, /clear confirm": ["✕", "/compact", "/clear?", "/model", "⏲ autocompact ▸"],
-  "appearance": ["✕", "🎨 tokyo-night ▸", "◐ none ▸", "🎼 secondary-accent ▸", "✦ powerline ▸"],
-  "appearance drifted": ["✕", "🎨 catppuccin-frappe ▸ ↺", "◐ inverted ▸ ↺", "🎼 primary-secondary ▸ ↺", "✦ capsule ▸ ↺"],
-  "layout": ["✕", "▦ default ▸", "+ preset", "✎ arrange", "wrap: on", "◀ padding 1 ▶"],
-  "layout drifted": ["✕", "▦ verbose ▸ ↺", "+ preset", "✎ arrange", "wrap: off ↺", "◀ padding 0 ▶ ↺"],
-  "compat": ["✕", "🔣 unicode", "🌈 truecolor ▸", "🩺 doctor"],
+  "look": ["✕", "◀ tokyo-night ▶", "◀ none ▶", "◀ accent ▶", "◀ powerline ▶"],
+  "look, long names": ["✕", "◀ catppuccin-frappe ▶", "◀ inverted ▶", "◀ accent ▶", "◀ powerline ▶"],
+  "look, drifted": ["✕", "◀ catppuccin-frappe ▶ ↺", "◀ inverted ▶ ↺", "◀ mono ▶ ↺", "◀ capsule ▶ ↺"],
+  "layout": ["✕", "+ preset", "✎ arrange", "wrap: on", "◀ padding 1 ▶"],
+  "tools": ["✕", "🩺 doctor"],
 };
 console.log("\n# Part 2 — proposed, modelled at padding 1");
 for (const [name, cells] of Object.entries(PROPOSED)) {
