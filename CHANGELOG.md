@@ -1,3 +1,10 @@
+# [1.81.0](https://github.com/promptctl/cc-candybar/compare/v1.80.0...v1.81.0) (2026-09-28)
+
+
+### Features
+
+* **themes:** choose which theme role each bar row wears ([#247](https://github.com/promptctl/cc-candybar/issues/247)) ([99f3a3d](https://github.com/promptctl/cc-candybar/commit/99f3a3db82c316ff1d1f5d12cf29104734c5d575))
+
 # [1.80.0](https://github.com/promptctl/cc-candybar/compare/v1.79.1...v1.80.0) (2026-09-27)
 
 
