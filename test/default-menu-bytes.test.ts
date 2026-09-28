@@ -82,6 +82,7 @@ const PAYLOAD = {
   theme: { effective: "textual-dark" },
   look: { effective: "none" },
   style: { effective: "powerline" },
+  progression: { effective: "secondary-accent" },
   preset: { effective: "default" },
   charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },

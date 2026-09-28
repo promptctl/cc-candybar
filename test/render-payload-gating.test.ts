@@ -113,6 +113,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   preset: "default",
   presetCustomized: false,
   style: "powerline",
+  progression: "secondary-accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,

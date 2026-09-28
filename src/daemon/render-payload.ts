@@ -35,6 +35,7 @@ import {
   effectiveStripStyle,
   effectiveCharset,
   effectiveColorCompatibility,
+  effectiveProgression,
   DEFAULT_UPDATE_NOTICE,
 } from "../themes/policy.js";
 import {
@@ -65,6 +66,7 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
+import type { ProgressionName } from "../themes/decor.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
 
@@ -115,6 +117,9 @@ export interface EffectiveGlobals {
   // value either — see `preset`'s own comment.
   readonly presetCustomized: boolean;
   readonly style: StripStyle;
+  // Which theme role each row of the closed bar wears — the render's
+  // selection carries it into the walk (RenderSelection.progression).
+  readonly progression: ProgressionName;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
   // segments (globals.default_separator). `string | undefined`, not a resolved
   // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
@@ -187,6 +192,11 @@ export function resolveEffectiveGlobals(
       sessionPick("style"),
       globals.style,
     ),
+    progression: effectiveProgression(
+      staged.progression,
+      sessionPick("progression"),
+      globals.progression,
+    ),
     // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
     // `staged ?? config ?? floor` — the same chain minus the rung they do not
     // have, spelled with the same `??` rather than a second mechanism.
@@ -224,7 +234,13 @@ export function resolveEffectiveGlobals(
 // blank by forgetting a field the daemon's payload carries.
 export type EffectiveInputs = Pick<
   RenderPayload,
-  "preset" | "style" | "charset" | "colorCompatibility" | "autoWrap" | "padding"
+  | "preset"
+  | "style"
+  | "progression"
+  | "charset"
+  | "colorCompatibility"
+  | "autoWrap"
+  | "padding"
 >;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
@@ -234,6 +250,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
       customized: effective.presetCustomized,
     },
     style: { effective: effective.style },
+    progression: { effective: effective.progression },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
@@ -299,6 +316,7 @@ export interface RenderPayload extends ClaudeHookData {
   // rather than widened to `string`, so a downstream `switch` over these
   // fields gets real exhaustiveness checking.
   readonly style: { readonly effective: StripStyle };
+  readonly progression: { readonly effective: ProgressionName };
   readonly charset: { readonly effective: Charset };
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };

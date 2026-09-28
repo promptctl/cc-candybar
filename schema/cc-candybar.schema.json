@@ -39,6 +39,13 @@
             "plain"
           ]
         },
+        "progression": {
+          "enum": [
+            "secondary-accent",
+            "primary-secondary",
+            "primary"
+          ]
+        },
         "autoWrap": {
           "type": "boolean"
         },
@@ -1325,6 +1332,13 @@
                   "plain"
                 ]
               },
+              "progression": {
+                "enum": [
+                  "secondary-accent",
+                  "primary-secondary",
+                  "primary"
+                ]
+              },
               "autoWrap": {
                 "type": "boolean"
               },
@@ -1394,6 +1408,13 @@
             "powerline",
             "capsule",
             "plain"
+          ]
+        },
+        "progression": {
+          "enum": [
+            "secondary-accent",
+            "primary-secondary",
+            "primary"
           ]
         },
         "autoWrap": {

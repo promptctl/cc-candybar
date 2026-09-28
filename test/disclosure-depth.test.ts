@@ -29,14 +29,15 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
 import { SessionState } from "../src/daemon/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
+import { DEFAULT_PROGRESSION, listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
-  BAR_ROOT,
+  barRoot,
+  PROGRESSIONS,
   bandFor,
   bandItemFor,
   bandRoot,
@@ -47,6 +48,9 @@ import {
   type Disclosure,
   type Region,
 } from "../src/themes/decor";
+
+// The progression the bundled config renders under.
+const BAR = PROGRESSIONS[DEFAULT_PROGRESSION];
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -116,7 +120,7 @@ function regionOf(root: CompiledNode, palette: Palette, name: string): Region {
     }
     return undefined;
   };
-  const found = walk(root, BAR_ROOT);
+  const found = walk(root, barRoot(BAR));
   if (found === undefined) throw new Error(`no segment "${name}" in the tree`);
   return found;
 }
@@ -385,7 +389,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     const { palette } = rt;
     rt.render();
     const toggle = "groups.outer";
-    const tint = decorFor(palette, barAddress(rt, toggle)).hex;
+    const tint = decorFor(palette, BAR, barAddress(rt, toggle)).hex;
     expect(rt.bgOf(toggle)).toBe(tint);
     expect(() => rt.bgOf("b")).toThrow(/did not render/);
 

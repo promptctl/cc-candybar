@@ -42,6 +42,7 @@ import { pickCycleDisplay } from "../config/disclosure.js";
 import { SETTING_PROJECTIONS } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import { parseSessionBoolean } from "../themes/policy.js";
+import type { Progression } from "../themes/decor.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -293,6 +294,11 @@ export interface ActionRuntime {
   // segment colours from — published at the same site. `{{ themePreview }}`
   // samples it, so a preview cannot show a palette the bar is not wearing.
   palette: Palette;
+  // [LAW:one-source-of-truth] The progression the closed bar's rows wear THIS
+  // render, published at the same site: `{{ layoutPreview }}` colours its
+  // blocks and `{{ themePreview }}` its bar swatches under it, so neither can
+  // show a row in a role the bar is not wearing.
+  progression: Progression;
   // [LAW:one-source-of-truth] The rows the bar lays its closed segments out in
   // THIS render — `layoutRows` of the compiled tree the walk renders, under the
   // walk's own visibility — published by renderDsl at the same site, lazily,

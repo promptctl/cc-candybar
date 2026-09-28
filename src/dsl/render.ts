@@ -53,6 +53,7 @@ import {
   finishSelection,
   declaredBasePalette,
   drawnDepth,
+  effectiveProgression,
   isExpression,
   LOOK_FLOOR,
   paletteForThemeName,
@@ -92,12 +93,14 @@ import {
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { stateCell } from "../render/band-style.js";
 import {
-  BAR_ROOT,
+  barRoot,
   bandFor,
   bandRoot,
   decorationFor,
   descend,
+  PROGRESSIONS,
   type AddressStep,
+  type ProgressionName,
   type Region,
 } from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
@@ -410,6 +413,11 @@ export function registerDslConfig(
     basePalette: floorPalette,
     // The compile-only floor for the drawn palette: the base under no look.
     palette: floorPalette,
+    // Same contract: the compile-only floor is the config's own progression.
+    progression:
+      PROGRESSIONS[
+        effectiveProgression(undefined, null, config.globals.progression)
+      ],
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -863,6 +871,11 @@ export interface RenderSelection {
   // fragment's two halves land in two different places — the root here, the
   // globals in `opts`/the payload — and one name keeps them from disagreeing.
   readonly preset?: string;
+  // The resolved PROGRESSION name: effectiveProgression over staged/session/
+  // globals (brandon-theme-picker-bgw.7g6). Which theme role each row of the
+  // closed bar wears; the walk roots the bar region at it, so every closed
+  // cell's tint is read under this one value.
+  readonly progression?: ProgressionName;
 }
 
 export function renderDsl(
@@ -881,6 +894,14 @@ export function renderDsl(
   // below — and every variable template's `readableOn` — is floored on it.
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   const { preset = PRESET_FLOOR } = selection ?? {};
+  // [LAW:one-source-of-truth] An omitting caller renders the progression the
+  // CONFIG declares — the same true default the theme below honours.
+  const progression =
+    PROGRESSIONS[
+      selection?.progression ??
+        effectiveProgression(undefined, null, config.globals.progression)
+    ];
+  compiled.menuRuntime.action.progression = progression;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
@@ -1162,7 +1183,7 @@ export function renderDsl(
       }),
     );
   return (
-    renderNode(root, true, BAR_ROOT)
+    renderNode(root, true, barRoot(progression))
       // A row's fill demands resolve here and nowhere else: this is the one place a
       // composed row and the width it must fit are both in hand (brandon-layout-0c2).
       .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))

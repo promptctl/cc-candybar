@@ -31,6 +31,7 @@ import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
+  PROGRESSION_NAMES,
   STRIP_STYLES,
 } from "../themes/policy.js";
 import {
@@ -111,6 +112,9 @@ registerBuiltinDomain(
   (option) => paletteForThemeName(option),
 );
 registerBuiltinDomain("styles", () => STRIP_STYLES);
+// Not colour-valued in the `paletteOf` sense: a progression chooses which of
+// the palette's roles each row wears, and puts no other palette in force.
+registerBuiltinDomain("progressions", () => PROGRESSION_NAMES);
 // [LAW:one-source-of-truth] Same shape as themes/styles: the exact consts
 // the loader's own field validation and the render layer's glyph/color-depth
 // dispatch already derive from (themes/policy.ts CHARSETS/COLOR_COMPATIBILITIES)

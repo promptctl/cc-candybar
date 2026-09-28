@@ -23,6 +23,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
+  DEFAULT_PROGRESSION,
+  effectiveProgression,
   effectiveCharset,
   effectiveColorCompatibility,
   listResolvablePaletteNames,
@@ -52,6 +54,7 @@ import {
   neighbourLevels,
 } from "../src/render/carousel";
 import { previewSwatches } from "../src/render/theme-preview";
+import { PROGRESSIONS } from "../src/themes/decor";
 import { renderStripCells } from "../src/render/strip";
 import {
   blockLabel,
@@ -123,6 +126,11 @@ function rig(
       sessionState.get(SID, "colorCompatibility"),
       config.globals.colorCompatibility,
     );
+    const progression = effectiveProgression(
+      undefined,
+      sessionState.get(SID, "progression"),
+      config.globals.progression,
+    );
     last = renderDsl(
       config,
       compiled,
@@ -141,6 +149,7 @@ function rig(
         padding: { effective: padding },
         charset: { effective: charset },
         colorCompatibility: { effective: depth },
+        progression: { effective: progression },
       },
       opts(width, padding, style, charset, depth),
       { perSegmentSink: sink },
@@ -151,6 +160,7 @@ function rig(
           config.globals.palette,
         ),
         preset,
+        progression,
         ...(lookKey !== undefined && {
           look: { kind: "decided" as const, name: lookName!, value: lookKey },
         }),
@@ -427,6 +437,39 @@ describe("the settings menu's theme, look and style controls are carousels", () 
   });
 });
 
+// brandon-theme-picker-bgw.7g6: which role each row wears is a setting in the
+// ⚙ config row, chosen like every display setting beside it.
+describe("the progression control", () => {
+  test("▶ applies the next progression in this session and the bar's closed cells recolour; ☑ persist? writes globals.progression", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openCarousel(rt, "progression");
+    expect(stripAnsi(rt.render())).toMatch(
+      new RegExp(`${CAROUSEL_PREV} secondary-accent ${CAROUSEL_NEXT}`),
+    );
+    // Row 1 (directory) and row 2 (model) under the default.
+    const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    const trial = effectsOf(rt.linkOn("progression", CAROUSEL_NEXT).url);
+    expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
+      ["set-state", "progression", "primary-secondary"],
+    ]);
+    rt.click(rt.linkOn("progression", CAROUSEL_NEXT).url);
+    expect(rt.sessionState.get(SID, "progression")).toBe("primary-secondary");
+    expect(stripAnsi(rt.render())).toMatch(
+      new RegExp(`${CAROUSEL_PREV} primary-secondary ${CAROUSEL_NEXT}`),
+    );
+    const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    expect(after[0]).not.toEqual(before[0]);
+    expect(after[1]).not.toEqual(before[1]);
+    // Checked, the same ▶ writes the config file's default and releases the pick.
+    rt.clickWriting("settings.persist", "true");
+    const commit = effectsOf(rt.linkOn("progression", CAROUSEL_NEXT).url);
+    expect(commit.map((e) => [e.verb, e.args[1], e.args[2], e.args[3]])).toEqual([
+      ["set-config", "progression", "primary", "progression"],
+    ]);
+    rt.dispose();
+  });
+});
+
 describe("glyphs and colour depth sit in the settings menu, not on the bar", () => {
   test("the bar carries no terminal drawer; ⚙ config holds both controls", () => {
     const rt = rig(`{}`);
@@ -633,7 +676,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     expect(labelBudget([row], 29)).toBe(10);
     expect(labelBudget([row], 28)).toBe(9);
     expect(labelBudget([row], 3)).toBe(1);
-    const text = renderLayoutPreview([row], ColorDepth.TRUECOLOR, 20).plain;
+    const text = renderLayoutPreview([row], PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR, 20).plain;
     expect(text).toBe(" menu  dire…  gita… ");
   });
 });
@@ -666,7 +709,7 @@ describe("the preview is the bar's own colours", () => {
       openCarousel(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
       const swatches = new Set(
-        previewSwatches(palette, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
+        previewSwatches(palette, PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
       );
       // What the preview segment actually drew is the swatch set.
       const drawn = backgrounds(rt.sink.get("settings.carousel.theme.0")!);
@@ -695,7 +738,7 @@ describe("the preview is the bar's own colours", () => {
       rt.config.looks[look]!,
     );
     const swatches = new Set(
-      previewSwatches(palette, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
+      previewSwatches(palette, PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
     );
     const drawn = backgrounds(rt.sink.get("settings.carousel.look.0")!);
     expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);

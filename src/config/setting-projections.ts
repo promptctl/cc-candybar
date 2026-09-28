@@ -47,6 +47,11 @@ export const SETTINGS = {
     sessionKey: "style",
     effectiveVar: "style.effective",
   },
+  progression: {
+    configKey: "progression",
+    sessionKey: "progression",
+    effectiveVar: "progression.effective",
+  },
   charset: {
     configKey: "charset",
     sessionKey: "charset",

@@ -28,7 +28,15 @@ import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { decorFor, DISTRIBUTIONS, type Address } from "../src/themes/decor";
+import {
+  decorFor,
+  DISTRIBUTIONS,
+  PROGRESSIONS,
+  type Address,
+  type ProgressionName,
+} from "../src/themes/decor";
+import { DEFAULT_PROGRESSION } from "../src/themes/policy";
+
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -76,7 +84,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}): string =>
+  const render = (payload: object = {}, progression?: ProgressionName): string =>
     renderDsl(
       config,
       compiled,
@@ -85,9 +93,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       { session_id: "s1", ...payload },
       OPTS,
       { perSegmentSink: sink },
-      look === undefined
-        ? undefined
-        : { look: { kind: "decided" as const, name: "test", value: look } },
+      {
+        ...(look === undefined ? {} : { look: { kind: "decided" as const, name: "test", value: look } }),
+        ...(progression === undefined ? {} : { progression }),
+      },
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
@@ -97,9 +106,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   };
   const fgOf = (name: string): string =>
     definedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
-  const expectedTint = (name: string): string =>
+  const expectedTint = (name: string, progression: ProgressionName = DEFAULT_PROGRESSION): string =>
     decorFor(
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
+      PROGRESSIONS[progression],
       addressOf(root, name),
     ).hex;
   return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
@@ -189,6 +199,36 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       return bg;
     };
     expect(rowTwoFirst("'a'")).toBe(rowTwoFirst("'a', 'x', 'y'"));
+  });
+
+  // brandon-theme-picker-bgw.7g6: which role each row wears is the render's
+  // selection, not a constant of the colour model.
+  test("the progression reaches every closed cell: row n wears step n of the one selected", () => {
+    const rt = build(SRC);
+    const names = ["a", "b", "c", "echo"];
+    const seen = new Set<string>();
+    for (const progression of Object.keys(PROGRESSIONS) as ProgressionName[]) {
+      rt.render({}, progression);
+      for (const name of names) {
+        expect([progression, name, rt.bgOf(name)]).toEqual([progression, name, rt.expectedTint(name, progression)]);
+      }
+      seen.add(names.map((n) => rt.bgOf(n)).join());
+    }
+    // Every shipped progression paints this two-row bar differently.
+    expect(seen.size).toBe(Object.keys(PROGRESSIONS).length);
+    // An omitting caller renders the default: secondary on row 1, accent on row 2.
+    rt.render();
+    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "secondary-accent"));
+    rt.dispose();
+  });
+
+  test("globals.progression is the config's default under an omitting caller", () => {
+    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', progression: 'primary' }`));
+    rt.render();
+    for (const name of ["a", "b", "c", "echo"]) {
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, "primary")]);
+    }
+    rt.dispose();
   });
 
   test("edit chrome wears its content cell's colour, in a row of many or a row of one", () => {
@@ -368,7 +408,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       const rePlaced: Address = address.map((step, i) =>
         i === own ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, rePlaced).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, PROGRESSIONS[DEFAULT_PROGRESSION], rePlaced).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
@@ -405,7 +445,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
         name,
         [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row" }],
       ]);
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, authored).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, PROGRESSIONS[DEFAULT_PROGRESSION], authored).hex]);
     }
     expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
       CELLS.map((n) => plain.bgOf(n)),
@@ -460,19 +500,19 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
 });
 
 describe("a band whose nested hue has no state", () => {
-  // This accent clears the state floor on its pure mix; the primary nested
+  // This accent finds a state; the primary nested
   // under it clears nowhere. Every cell of an open depth-0 body deals that
   // nested band, but only a cell with something open under it may draw it.
   const lopsided = new Palette(
     "lopsided",
     true,
     new Map<string, ColorRgba>([
-      ["background", new ColorRgba(110, 14, 61)],
-      ["surface", new ColorRgba(59, 105, 208)],
-      ["foreground", new ColorRgba(99, 36, 231)],
-      ["primary", new ColorRgba(244, 76, 127)],
-      ["secondary", new ColorRgba(37, 185, 27)],
-      ["accent", new ColorRgba(93, 254, 37)],
+      ["background", new ColorRgba(0xf4, 0xa8, 0xae)],
+      ["surface", new ColorRgba(0x0f, 0x99, 0x75)],
+      ["foreground", new ColorRgba(0x30, 0x21, 0xa3)],
+      ["primary", new ColorRgba(0x10, 0x9b, 0xdb)],
+      ["secondary", new ColorRgba(0xa8, 0x90, 0x21)],
+      ["accent", new ColorRgba(0x39, 0x1a, 0x1b)],
     ]),
   );
 

@@ -79,6 +79,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   look: "string",
   preset: "string",
   style: "string",
+  progression: "string",
   autoWrap: "boolean",
   padding: "number",
   charset: "string",

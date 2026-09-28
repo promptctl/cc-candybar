@@ -120,7 +120,7 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 //
 // The selector sits in the menu's FIRST row, above and beside every control it
 // governs, so it never stands over a row it cannot affect: every setting under
-// it — preset here, theme/look/style/charset/colour depth/wrap/padding in the
+// it — preset here, theme/look/style/progression/charset/colour depth/wrap/padding in the
 // config row — is dual.
 const PERSIST_SEG = `${SETTINGS_NS}persist`;
 const CONFIG_SEG = `${SETTINGS_NS}config`;
@@ -253,6 +253,16 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
     glyph: "✦",
     domain: "styles",
     beneath: [],
+  },
+  {
+    name: "progression",
+    ...SETTINGS.progression,
+    glyph: "🎼",
+    domain: "progressions",
+    // A progression says which role each ROW wears, and the tray this menu
+    // opens takes over the door's row — `{{ layoutPreview }}` draws every row,
+    // each block in the tint the ring's current progression deals it.
+    beneath: ["{{ layoutPreview }}"],
   },
   {
     name: "charset",
