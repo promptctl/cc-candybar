@@ -32,7 +32,7 @@ import {
 } from "./config-validators";
 import {
   applyLayoutOp as applyLayoutOpToFile,
-  deleteValue,
+  deleteValues,
   readValue,
   writeValues,
   type EditStore,
@@ -44,7 +44,7 @@ import {
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import type { DslConfig } from "../../config/dsl-types";
-import { settingDrafts } from "../setting-drafts";
+import { resetLayers, settingDrafts } from "../setting-drafts";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
@@ -575,11 +575,14 @@ const save: VerbHandler = (value, ctx) => {
   );
 };
 
-// [LAW:one-source-of-truth] `reset`: delete the key's path from the session's
-// config file, so the next reload falls back to the bundled default (or,
-// for a preset root, the config's own root). Gated by key MEMBERSHIP
-// (listConfigKeys) rather than a value domain — there is no value to
-// validate, only a legitimate target to clear.
+// [LAW:one-source-of-truth] `reset`: return the key to its bundled default at
+// every layer that can hold it (resetLayers) — its paths in the session's
+// config file, as one write, and the session's own pick. Gated by key
+// MEMBERSHIP (listConfigKeys) rather than a value domain — there is no value
+// to validate, only a legitimate target to clear.
+// [LAW:no-ambient-temporal-coupling] Save's order, for the same reason: the
+// file is written and reloaded before the pick is released, so no render in
+// between draws the pick's absence over a file that still holds the value.
 const resetConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -588,9 +591,16 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${key}" (have: ${listConfigKeys().join(", ")})`,
     );
   }
-  const file = sessionConfigFile(ctx, sid);
-  deleteValue(editStore(ctx, sid), file, key);
-  ctx.dlog("info", `reset-config: ${key} ← ${file} (session=${sid})`);
+  const origin = sessionOrigin(ctx, sid);
+  const file = originConfigFile(origin);
+  const layers = resetLayers(key);
+  deleteValues(editStore(ctx, sid), file, layers.fileKeys);
+  ctx.reloadConfig(origin);
+  for (const k of layers.sessionKeys) ctx.sessionState.clear(sid, k);
+  ctx.dlog(
+    "info",
+    `reset-config: ${[...layers.fileKeys, ...layers.sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${file} (session=${sid})`,
+  );
 };
 
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:

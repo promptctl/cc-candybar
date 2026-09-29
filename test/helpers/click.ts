@@ -54,9 +54,11 @@ export function testVerbContext(
     configFor: () => {
       throw new Error("save: no config lookup in this test");
     },
-    reloadConfig: () => {
-      throw new Error("save: no config reload in this test");
-    },
+    // A reload rebuilds the render cache's entry from the file. This context
+    // holds no render cache, so there is nothing to rebuild: the file a click
+    // wrote is the whole outcome, and it is what these tests read. A test with
+    // a cache (or a rig that re-parses the file) hands in its own.
+    reloadConfig: () => {},
   };
 }
 

@@ -493,15 +493,23 @@ export function writeValues(
 }
 
 /**
- * `reset`'s write: delete the path the key names, so the next reload falls
- * back to the bundled default (or, for a preset root, the config's own root).
- * A path the file never authored changes nothing and records nothing.
+ * `reset`'s write: delete the path each key names, as ONE tracked write, so
+ * the next reload falls back to the bundled default (or, for a preset root,
+ * the config's own root). Paths the file never authored change nothing, and a
+ * reset that changes nothing records nothing.
  */
-export function deleteValue(store: EditStore, file: string, key: string): void {
-  const target = requireTarget(key);
+export function deleteValues(
+  store: EditStore,
+  file: string,
+  keys: readonly string[],
+): void {
+  const targets = keys.map(requireTarget);
   const before = readConfigText(file);
   if (before === null) return;
-  const after = deleteAtPath(before, resetPathOf(docOf(before), target));
+  const after = targets.reduce(
+    (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
+    before,
+  );
   if (after === before) return;
   commit(store, file, before, after);
 }

@@ -113,6 +113,22 @@ const CONFIG_SEG = `${SETTINGS_NS}config`;
 const SAVE_SEG = `${SETTINGS_NS}save`;
 const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
+// ─── Reset all (brandon-save-undo-bwi.wt5) ──────────────────────────────────
+//
+// [LAW:composability] `⟲ reset all` is every control's ↺ fired as one click —
+// a `do` over the resets the controls already declare, so it cannot reset a
+// setting differently from that setting's own ↺, and one click is one step in
+// the undo history. It takes two clicks: the first arms it (a session key), the
+// second fires. The door's own click disarms it, so the confirming click is
+// always made in the menu the arming click was made in — the only way back into
+// a closed menu is through the door.
+const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
+const RESET_ALL_ARM = `${RESET_ALL_SEG}.arm`;
+const RESET_ALL_DISARM = `${RESET_ALL_SEG}.disarm`;
+const RESET_ALL_ARMED = "armed";
+// The door's own open/close cycle, fired by the door beside the disarm.
+const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+
 // [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
 // than as gate strings: every gate below — and every `(?)` nested inside them —
 // derives from these, so the toggle that writes a key and the `when` that reads
@@ -208,8 +224,8 @@ interface SettingControl extends KeyedSetting {
 const PALETTE_PREVIEW = ["{{ themePreview }}"];
 
 // [LAW:one-type-per-behavior] Every picker setting, one control shape: a glyph,
-// the current value, a picker over a domain, and the ↺ that forgets the durable
-// default. They differ only in which keys they write and which domain they
+// the current value, a picker over a domain, and the ↺ that returns it to the
+// bundled default. They differ only in which keys they write and which domain they
 // range — configuration, so they are VALUES of one synthesis, not hand-written
 // segments. `theme`'s two keys differ (SessionState "theme" over
 // globals field "palette") for the historical reason recorded in
@@ -513,6 +529,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
                     ...CONFIG_CONTROLS.map(controlNode),
                     { kind: "segment", name: WRAP_SEG },
                     { kind: "segment", name: PADDING_SEG },
+                    { kind: "segment", name: RESET_ALL_SEG },
                   ],
                 },
                 "drop",
@@ -580,7 +597,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
     },
     actions: {
-      [SETTINGS_ANCHOR]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, RESET_ALL_DISARM] },
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
@@ -656,6 +674,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
       },
+      [RESET_ALL_SEG]: {
+        template:
+          `{{ if eq .${RESET_ALL_SEG} "${RESET_ALL_ARMED}" }}` +
+          `{{ action "${RESET_ALL_SEG}" "⟲ confirm reset all" }}` +
+          `{{ else }}{{ action "${RESET_ALL_ARM}" "⟲ reset all" }}{{ end }}`,
+      },
     },
   };
   // The count the daemon publishes every render (RenderPayload.unsaved).
@@ -671,6 +695,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   );
   artifacts.variables[TOOLS_SEG] = disclosureStateVar(
     TOOLS_SEG,
+    DISCLOSURE_CLOSED,
+  );
+  artifacts.variables[RESET_ALL_SEG] = disclosureStateVar(
+    RESET_ALL_SEG,
     DISCLOSURE_CLOSED,
   );
   declareSettingControls(artifacts);
@@ -724,8 +752,8 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
 // table that describes them. A picker control is a glyph, its live value, the
-// toggle that opens its carousel over its domain, and the ↺ that forgets its
-// durable default; wrap and padding are a cycle and a stepper instead. Every
+// toggle that opens its carousel over its domain, and the ↺ that returns it to
+// bundled default; wrap and padding are a cycle and a stepper instead. Every
 // apply action here is a session `set` — a draft the save cell commits.
 //
 // A pick leaves its carousel open, re-centred on what it applied
@@ -742,10 +770,11 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of PICKER_CONTROLS) {
     const apply = controlApply(c.name);
     artifacts.actions[apply] = { set: c.sessionKey, from: c.domain };
-    // [LAW:one-source-of-truth] ↺ clears the DURABLE default only — the one
-    // write the user cannot otherwise take back, since a session value dies
-    // with the session. Its target is the config key a save writes, read from
-    // the same record, so the two can never name different settings.
+    // [LAW:one-source-of-truth] ↺ returns the setting to its bundled default:
+    // the session's pick and every layer of the config file a save can write
+    // (resetLayers, src/daemon/setting-drafts.ts). Its key is the config key a
+    // save writes, read from the same record, so the two can never name
+    // different settings.
     artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
     declareControlRow(c, artifacts);
   }
@@ -768,6 +797,20 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
   }
   artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
+  artifacts.actions[RESET_ALL_ARM] = {
+    set: RESET_ALL_SEG,
+    to: RESET_ALL_ARMED,
+  };
+  artifacts.actions[RESET_ALL_DISARM] = {
+    set: RESET_ALL_SEG,
+    to: DISCLOSURE_CLOSED,
+  };
+  artifacts.actions[RESET_ALL_SEG] = {
+    do: [
+      RESET_ALL_DISARM,
+      ...[...PICKER_CONTROLS, WRAP, PADDING].map((c) => controlReset(c.name)),
+    ],
+  };
 }
 
 // [LAW:one-type-per-behavior] Every picker control mints the same row — the

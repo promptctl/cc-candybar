@@ -12,9 +12,11 @@
 // list it returns, computed at click time over the same session and config,
 // so the button's count and the click's write cannot describe different sets.
 
+import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import type { DslConfig } from "../config/dsl-types.js";
+import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
-import { presetByName } from "../config/presets.js";
+import { presetByName, presetNames } from "../config/presets.js";
 import {
   SETTINGS,
   SETTING_PROJECTIONS,
@@ -103,4 +105,35 @@ export function settingDrafts(
           },
         ];
   });
+}
+
+// [LAW:one-source-of-truth] What a `reset` of one config key clears — the
+// inverse of where a save lands. A setting lives in three places: the session's
+// pick, the file's top-level `globals.<field>`, and a preset's own fragment
+// (`presets.<p>.globals.<field>`, where a save lands when that preset names
+// the field). Reset clears all three, so the bar returns to the bundled
+// default under whichever preset is showing. A fragment is cleared only for a
+// preset the BUNDLED default declares: there the file's entry is a delta over
+// the bundled one, while a preset the user authored is the user's own content
+// — deleting its pin would rewrite (or, as the last field, prune away) the
+// preset itself. Any other key — a segment's palette pin, a preset root — is
+// one path in the file and no session key.
+export interface ResetLayers {
+  readonly sessionKeys: readonly string[];
+  readonly fileKeys: readonly string[];
+}
+
+const BUNDLED_PRESETS = presetNames(DEFAULT_DSL_CONFIG.presets);
+
+export function resetLayers(key: string): ResetLayers {
+  const settings = SETTING_PROJECTIONS.filter((p) => p.configKey === key);
+  return {
+    sessionKeys: settings.map((p) => p.sessionKey),
+    fileKeys: [
+      key,
+      ...(isPresetGlobalsField(key)
+        ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key))
+        : []),
+    ],
+  };
 }
