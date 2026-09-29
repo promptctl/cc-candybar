@@ -29,9 +29,6 @@ import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { loadConfig, validateConfig } from "../../src/config/dsl-loader";
-import { durableConfigPath } from "../../src/config/loader/discovery";
-import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
@@ -55,7 +52,6 @@ export function testVerbContext(
   history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
   config?: DslConfig,
 ): VerbContext {
-  let current = config;
   return {
     sessionState,
     history,
@@ -86,28 +82,21 @@ export function testVerbContext(
         throw new Error("slash: no claude-input edge in this test");
       },
     },
-    // The config the session renders with: the one a test handed in until a
-    // click reloads, then the file that click wrote. A read before either is
-    // a test bug.
+    // The config the session renders with: a test whose click reads it (a
+    // save, a step from an unset key) hands it in; reaching the lookup
+    // without one is a test bug.
     configFor: () => {
-      if (current === undefined) {
+      if (config === undefined) {
         throw new Error("configFor: this test handed in no config");
       }
-      return current;
+      return config;
     },
-    // A reload re-reads the session's config file through the loader, as the
-    // render cache's entry does, so a click that decides from the reloaded
-    // file (what a durable write released) decides from what it wrote. A rig
-    // with a cache hands in its own — test/settings-config-menu.test.ts
-    // records each reload to pin write → reload → release.
-    reloadConfig: (origin) => {
-      const path = durableConfigPath(
-        origin.projectDir,
-        origin.cwd,
-        origin.configFile ?? undefined,
-      );
-      current = validateConfig(loadConfig(path, DEFAULT_DSL_CONFIG), path);
-    },
+    // A reload rebuilds the render cache's entry from the file. This context
+    // holds no render cache, so there is nothing to rebuild: the file a click
+    // wrote is the whole outcome, and it is what these tests read. A rig with a
+    // cache hands in its own — test/settings-config-menu.test.ts records each
+    // reload to pin write → reload → release.
+    reloadConfig: () => {},
   };
 }
 

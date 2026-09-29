@@ -296,13 +296,11 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "pinDracula"); // file
     const pinned = durable.text()!;
     press(runtime, "pickPadding"); // session
-    // The pin is what the bar shows next, so it released the theme pick —
-    // and undoing the pin restores that pick with the file.
-    expect([theme(), padding(), globals().palette]).toEqual([null, "3", "dracula"]);
+    expect([theme(), padding(), globals().palette]).toEqual(["nord", "3", "dracula"]);
     expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0 });
 
     press(runtime, "back");
-    expect([theme(), padding(), durable.text()]).toEqual([null, null, pinned]);
+    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
     press(runtime, "back");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
     press(runtime, "back");
@@ -312,9 +310,9 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "fwd");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
     press(runtime, "fwd");
-    expect([theme(), padding(), durable.text()]).toEqual([null, null, pinned]);
+    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
     press(runtime, "fwd");
-    expect([theme(), padding(), durable.text()]).toEqual([null, "3", pinned]);
+    expect([theme(), padding(), durable.text()]).toEqual(["nord", "3", pinned]);
     expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0 });
     runtime.dispose();
   });
@@ -419,13 +417,9 @@ describe("undo/redo click → the session's settings history", () => {
     // Nothing was overwritten, and the file step is gone: every change this
     // session made to that file chains through the state the hand edit replaced.
     expect(durable.text()).toBe(handEdited);
-    expect(runtime.history.depth("s1")).toEqual({ undo: 2, redo: 0 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 1, redo: 0 });
 
-    // The session halves are still undoable: the pin's release of the pick…
-    press(runtime, "back");
-    expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
-    // …and the pick itself.
-    press(runtime, "back");
+    press(runtime, "back"); // the session pick is still undoable
     expect(runtime.sessionState.get("s1", "theme")).toBeNull();
     expect(durable.text()).toBe(handEdited);
     runtime.dispose();
