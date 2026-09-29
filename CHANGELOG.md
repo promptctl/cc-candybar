@@ -1,3 +1,10 @@
+# [1.92.0](https://github.com/promptctl/cc-candybar/compare/v1.91.0...v1.92.0) (2026-09-29)
+
+
+### Features
+
+* **segments:** theme is a setting every placement has ([#269](https://github.com/promptctl/cc-candybar/issues/269)) ([4f88738](https://github.com/promptctl/cc-candybar/commit/4f8873883ca548936ba5a88f713ca2cd6dd4fb63))
+
 # [1.91.0](https://github.com/promptctl/cc-candybar/compare/v1.90.0...v1.91.0) (2026-09-29)
 
 
