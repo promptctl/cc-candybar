@@ -16,6 +16,7 @@ import {
   parseSettingSpelling,
   placementId,
   settingSpelling,
+  settingsOf,
   walkNodes,
   type DslConfig,
   type Globals,
@@ -211,7 +212,7 @@ function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
       node.kind !== "segment" || node.drafts === undefined
         ? []
         : Object.entries(node.drafts).map(([setting, { key }]) => {
-            const decl = config.segments[node.name]!.settings![setting]!;
+            const decl = settingsOf(config.segments[node.name]!)[setting]!;
             return {
               id: placementId(node),
               setting,

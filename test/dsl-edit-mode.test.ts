@@ -58,6 +58,7 @@ import {
   ADDABLE_DOMAIN,
   EDIT_LIVE_KEY,
   REMOVE_GLYPH,
+  CONFIGURE_GLYPH,
   arrangedSegment,
 } from "../src/config/edit-chrome";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
@@ -425,7 +426,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     const row = stripAnsi(render(60))
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
-    expect(row).toMatch(new RegExp(`d {4,}${REMOVE_GLYPH}`));
+    expect(row).toMatch(new RegExp(`d {4,}${CONFIGURE_GLYPH}${REMOVE_GLYPH}`));
     dispose();
   });
 

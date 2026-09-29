@@ -26,6 +26,7 @@ import {
   mapOpens,
   placementId,
   settingSpelling,
+  settingsOf,
   walkNodes,
   type ContainerNode,
   type DisclosureRef,
@@ -39,7 +40,7 @@ import {
   type VariableDecl,
 } from "./dsl-types.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
-import type { ResolvedDomain } from "./option-domain.js";
+import { PLACEMENT_THEMES, type ResolvedDomain } from "./option-domain.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
@@ -253,10 +254,12 @@ export function placementDraftKey(
 }
 
 // The control for one setting, generated from its declaration: a toggle for a
-// flag, a cycle through a word list, a stepper over a range. Each writes the
+// flag, a cycle through a word list, a stepper over a range, a carousel over
+// the themes — each option painted in the palette picking it would put on the
+// placement (the `placementThemes` domain's `paletteOf`). Each writes the
 // setting's draft key through an action whose gate is the declared domain, so
 // a click cannot write a value the setting may not hold.
-// [LAW:types-are-the-program] Total over SettingDecl's three domain arms.
+// [LAW:types-are-the-program] Total over SettingDecl's four domain arms.
 function settingControl(
   decl: SettingDecl,
   key: string,
@@ -269,6 +272,10 @@ function settingControl(
   if (domain === "bool") {
     artifacts.actions[actionName] = { set: key, cycle: ["false", "true"] };
     return `{{ action "${actionName}" "☐ ${label}" "☑ ${label}" }}`;
+  }
+  if (domain === "theme") {
+    artifacts.actions[actionName] = { set: key, from: PLACEMENT_THEMES };
+    return `{{ "${label}" }} {{ carousel "${actionName}" }}`;
   }
   if ("min" in domain) {
     for (const by of [-1, 1]) {
@@ -292,7 +299,7 @@ function settingControl(
   return `{{ action "${actionName}" ${displays.join(" ")} }}`;
 }
 
-// What configure mode adds to one placement that has settings: the `⚙` that
+// What configure mode adds to one placement: the `⚙` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
 // through. The body is a disclosure over edit mode's one key at this
@@ -340,7 +347,9 @@ function configureParts(
   return {
     term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
     ref: { variable: EDIT_MODE_KEY, key: EDIT_MODE_KEY, member },
-    body: { kind: "container", direction: "horizontal", children: controls },
+    // One control per row: the theme carousel fills its row with the
+    // neighbours that fit, as the settings menu's own carousels do.
+    body: { kind: "container", direction: "vertical", children: controls },
     drafts,
   };
 }
@@ -371,16 +380,14 @@ function labelChrome(
   id: string,
   segName: string,
   artifacts: ChromeArtifacts,
-  configure: ConfigureParts | null,
+  configure: ConfigureParts,
 ): SegmentNode {
   const name = `${LABEL_NS}${id}:${segName}`;
   artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    when: shownWhile(configure === null ? [] : [configure.ref], LABEL_GATE),
+    when: shownWhile([configure.ref], LABEL_GATE),
   };
-  return configure === null
-    ? { kind: "segment", name }
-    : disclosureNode(name, configure.ref, configure.body, "drop");
+  return disclosureNode(name, configure.ref, configure.body, "drop");
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -502,16 +509,18 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     // Every content segment has exactly one `after` insertion, so its
     // position names its removal and its configuration too.
     const remove = removeTerm(ctx, afterPos, id);
-    // [LAW:dataflow-not-control-flow] A placement with no settings has an
-    // empty declaration, and configures to nothing: no `⚙`, no body.
-    const decls = ctx.segments[child.name]?.settings ?? {};
-    const configure =
-      Object.keys(decls).length === 0
-        ? null
-        : configureParts(ctx, afterPos, child, decls);
+    // Every placement has settings — `theme` at least (settingsOf) — so
+    // every placement configures. [LAW:no-defensive-null-guards] cross-ref
+    // proved every placed segment is declared.
+    const configure = configureParts(
+      ctx,
+      afterPos,
+      child,
+      settingsOf(ctx.segments[child.name]!),
+    );
     // The buttons are drawn inside the cell of the placement they act on, in
     // whichever of the two views shows it, so nothing sits between them.
-    const trail = trailOf([...(configure ? [configure.term] : []), remove]);
+    const trail = trailOf([configure.term, remove]);
     const cells: LayoutNode[] = [
       ...leading.map((lead) =>
         chromeCell(lead.host, lead.template, ctx.artifacts),
@@ -523,7 +532,7 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
         trail,
-        ...(configure && { drafts: configure.drafts }),
+        drafts: configure.drafts,
       },
       chromeCell(after.host, after.template, ctx.artifacts),
     ];

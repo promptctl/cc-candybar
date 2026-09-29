@@ -31,6 +31,7 @@ import type {
   ProgressionName,
 } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
+import { FOLLOW_BAR, placementThemeNames } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -484,8 +485,8 @@ export interface Globals {
   // is the JSON-shape mirror, so the name is the authoritative datum and the
   // renderer owns name→Palette resolution. The config default for the base
   // theme; the daemon resolves the live base per render as
-  // `sessionState.theme ?? globals.palette ?? default`, and a per-segment
-  // `palette` is an explicit override that ignores the session theme.
+  // `sessionState.theme ?? globals.palette ?? default`, and a placement's
+  // `theme` setting other than `bar` ignores it.
   readonly palette?: string;
 
   // [LAW:one-type-per-behavior] The config default for the LOOK (a named
@@ -824,8 +825,9 @@ export interface SegmentDecl {
   readonly bg?: string;
   readonly fg?: string;
   readonly when?: string;
-  // [LAW:one-source-of-truth] Per-segment palette override (a NAME). Overrides
-  // globals.palette for this segment only; undefined = inherit the cascade base.
+  // The theme every placement of this segment wears unless the placement sets
+  // its own (a NAME): the default of the `theme` setting `settingsOf` implies.
+  // Absent, placements follow the bar's theme.
   readonly palette?: string;
   // Per-segment vars sub-block — lives in the same global MobX store at
   // runtime under the namespaced key `<segment>.<var>`. Templates reference a
@@ -838,6 +840,30 @@ export interface SegmentDecl {
   // is when a placement says nothing. The segment's templates read the
   // placement's resolved values as `.settings.<name>`.
   readonly settings?: Readonly<Record<string, SettingDecl>>;
+}
+
+// The setting every placement has without its segment declaring it.
+export const THEME_SETTING = "theme";
+
+// [LAW:single-enforcer] THE settings a segment's placements have: what its
+// definition declares, plus `theme`, which every placement has
+// (brandon-settings-menu-6c5) — so the loader's placement check, configure
+// mode's controls, the render's resolution, and save all read one set. The
+// definition's `palette:` is that setting's default for every copy; a
+// placement's own `settings.theme` overrides it for that copy alone. A
+// segment cannot declare `theme` itself (loader/settings.ts), so nothing here
+// shadows another.
+export function settingsOf(
+  seg: SegmentDecl,
+): Readonly<Record<string, SettingDecl>> {
+  return {
+    ...seg.settings,
+    [THEME_SETTING]: {
+      label: THEME_SETTING,
+      domain: "theme",
+      default: seg.palette ?? FOLLOW_BAR,
+    },
+  };
 }
 
 // [LAW:types-are-the-program] What a setting may hold. A template reads it,
@@ -864,6 +890,14 @@ export type SettingDecl =
       readonly label: string;
       readonly domain: SettingRange;
       readonly default: number;
+    }
+  | {
+      // The placement's theme (brandon-settings-menu-6c5): `bar` or an
+      // installed theme name (`placementThemeNames`). Implied on every
+      // segment by `settingsOf`, never authored.
+      readonly label: string;
+      readonly domain: "theme";
+      readonly default: string;
     };
 
 export interface SettingRange {
@@ -880,6 +914,9 @@ export function inSettingDomain(
 ): boolean {
   const { domain } = decl;
   if (domain === "bool") return typeof value === "boolean";
+  if (domain === "theme") {
+    return typeof value === "string" && placementThemeNames().includes(value);
+  }
   if ("min" in domain) {
     return (
       typeof value === "number" &&
@@ -912,7 +949,7 @@ export function parseSettingSpelling(
         : raw === "false"
           ? false
           : raw
-      : "min" in domain && /^-?\d+$/.test(raw)
+      : typeof domain === "object" && "min" in domain && /^-?\d+$/.test(raw)
         ? Number(raw)
         : raw;
   return inSettingDomain(decl, value) ? value : undefined;
@@ -923,6 +960,9 @@ export function parseSettingSpelling(
 export function describeSettingDomain(decl: SettingDecl): string {
   const { domain } = decl;
   if (domain === "bool") return "true or false";
+  if (domain === "theme") {
+    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
+  }
   if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
   return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
 }

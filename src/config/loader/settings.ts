@@ -8,6 +8,7 @@
 
 import {
   inSettingDomain,
+  THEME_SETTING,
   describeSettingDomain,
   type SettingDecl,
   type SettingValue,
@@ -193,7 +194,10 @@ export function settingsDeclSpec(): FieldSpec<
     required: false,
     json: {
       type: "object",
-      propertyNames: SETTING_NAME_JSON,
+      propertyNames: {
+        ...SETTING_NAME_JSON,
+        not: { const: THEME_SETTING },
+      },
       additionalProperties: SETTING_DECL_JSON,
     },
     parse: (ctx, path, field, raw) => {
@@ -214,6 +218,16 @@ export function settingsDeclSpec(): FieldSpec<
             ctx,
             `${at}.${name}`,
             `setting name "${name}" is read as .settings.${name} in a template, so it must be an identifier (letters, digits, _; not starting with a digit)`,
+          );
+          continue;
+        }
+        // [LAW:one-source-of-truth] Every placement already has `theme`
+        // (settingsOf); a declaration of its own would be a second one.
+        if (name === THEME_SETTING) {
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting "${THEME_SETTING}" is one every placement already has — its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
           );
           continue;
         }

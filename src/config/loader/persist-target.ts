@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] THE parser for what a `persist`/`reset` action's
 // key STRING may legally name — the single place a key is classified as a
-// Globals field, a per-segment palette pin, or a preset's layout root, so
-// cross-ref validation (load time), the config-file store (write/delete),
+// Globals field, a segment's palette (its placements' theme default), or a
+// preset's layout root, so cross-ref validation (load time), the config-file store (write/delete),
 // and the daemon's write-gate all classify a key through ONE authority
 // instead of three independently-drifting checks.
 //

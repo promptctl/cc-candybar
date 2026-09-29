@@ -31,11 +31,13 @@ import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
+  placementThemeNames,
   PROGRESSION_NAMES,
   STRIP_STYLES,
 } from "../themes/policy.js";
 import {
   paletteForThemeName,
+  placementPalette,
   transposedPalette,
 } from "../themes/palette-resolvers.js";
 import { presetNames } from "./presets.js";
@@ -111,6 +113,13 @@ registerBuiltinDomain(
   () => listResolvablePaletteNames(),
   (option) => paletteForThemeName(option),
 );
+// [LAW:one-source-of-truth] What a placement's `theme` setting may hold —
+// the bar's theme or any installed one — named so configure mode's picker
+// and the click gate derive from the same members. An option paints in what
+// the placement would render in: `bar` in the render's base palette, a theme
+// in its own, through the one `placementPalette` the walk uses.
+export const PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, placementPalette);
 registerBuiltinDomain("styles", () => STRIP_STYLES);
 // Not colour-valued in the `paletteOf` sense: a progression chooses which of
 // the palette's roles each row wears, and puts no other palette in force.

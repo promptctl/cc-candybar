@@ -600,12 +600,30 @@ The segment's `when`, `bg:` and `fg:` read the same `.settings` as its
 template. No variable may be named `settings` or `settings.<x>` — inside a
 segment that name is the placement's.
 
-A declared setting is also changeable from the bar. In edit mode each
-placement whose segment declares settings carries a `⚙` beside its `🚫`;
-clicking it configures that one placement: the `+`/`-` chrome goes away and
-one control per setting hangs below the cell (a toggle for `"bool"`, a cycle
-for a word list, a `◀ ▶` stepper for `{ min, max }`), bounded by the
-declaration. A change shows at once and is unsaved until `💾 save`, which
+Every placement also has one setting its segment never declares: `theme`,
+the palette that placement renders in. It is `"bar"` (the bar's own theme,
+look included) or an installed theme name, which pins that placement to that
+theme whatever the bar's theme and look are. A segment's `palette:` is the
+default for every placement of it; a placement's own `theme` overrides it for
+that placement alone, `"bar"` included. A template reads it as
+`.settings.theme` like any other setting.
+
+```json5 check:pass
+{
+  segments: {
+    modelTag: { template: "{{ .model.display_name }}", palette: "nord" },
+  },
+  root: { h: ["modelTag", { seg: "modelTag", id: "barTag", settings: { theme: "bar" } }] },
+}
+```
+
+A setting is also changeable from the bar. In edit mode every placement
+carries a `⚙` beside its `🚫` (every placement has `theme`); clicking it
+configures that one placement: the `+`/`-` chrome goes away and one control
+per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
+list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel
+whose every option is drawn in the palette it would put on the placement),
+bounded by the declaration. A change shows at once and is unsaved until `💾 save`, which
 writes it into that placement in the config file — a bare `"modelTag"`
 becomes `{ seg: "modelTag", settings: { … } }`. One placement is configured at
 a time.
@@ -1100,7 +1118,25 @@ placement "modelTag" of segment "modelTag" sets "length" to "tiny", but it must 
 ```
 
 ```error
-Template reads ".settings.icon", but segment "modelTag" declares no setting "icon" (it declares no settings)
+Template reads ".settings.icon", but segment "modelTag" has no setting "icon" (it has: theme)
+```
+
+### A segment declaring `theme`
+
+```json5 check:fail
+{
+  segments: {
+    modelTag: {
+      template: "{{ .model.display_name }}",
+      settings: { theme: { label: "Theme", domain: ["nord", "dracula"], default: "nord" } },
+    },
+  },
+  root: { h: ["modelTag"] },
+}
+```
+
+```error
+setting "theme" is one every placement already has
 ```
 
 ## Before you report done
