@@ -23,13 +23,16 @@ import type { SessionStateRW } from "../session-state";
 import {
   listStateKeys,
   rangeParamsFor,
+  stateKeySeed,
   validateStateWrite,
 } from "./state-validators";
 import {
+  configKeySeed,
   listConfigKeys,
   rangeParamsForConfig,
   validateConfigWrite,
 } from "./config-validators";
+import type { RangeParams } from "./validator-registry";
 import {
   applyLayoutOp as applyLayoutOpToFile,
   deletePreset as deletePresetFromFile,
@@ -323,8 +326,8 @@ const setState: VerbHandler = (rawValue, ctx) => {
 // [LAW:single-enforcer] One integer-shape boundary, mirroring the range
 // validator's canonical `^-?\d+$`: the `by` delta and a stored current value are
 // integers or they are not values. Only an integer-shaped stored value is a
-// current value; absence (or a non-integer) is the genuine "unset" state, seeded
-// from the registry's configured default.
+// current value; absence (or a non-integer) is the genuine "unset" state, which
+// steps from what the session's config shows (stepFrom).
 const STEP_INT_RE = /^-?\d+$/;
 
 // [LAW:no-ambient-temporal-coupling] Stepping past a bound WRAPS to the other end
@@ -339,9 +342,9 @@ function wrapStep(n: number, min: number, max: number): number {
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
 // snapshot), so the SAME link string fires every render and N rapid clicks each
 // re-read live state and accumulate — the idempotent absolute-write bug is gone.
-// The absolute target is computed HERE: read the live value (seed an unset key
-// from the registry's configured default, NOT silently from min), wrap by the
-// signed delta against the registry's bounds, then route the result through
+// The absolute target is computed HERE: read the live value (an unset key
+// steps from what the session's config shows, NOT silently from min), wrap by
+// the signed delta against the registry's bounds, then route the result through
 // validateStateWrite so the one range gate owns the [min,max] clamp and the
 // canonical decimal form that persists.
 const stepState: VerbHandler = (rawValue, ctx) => {
@@ -369,22 +372,54 @@ const stepState: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${listStateKeys().join(", ")})`,
     );
   }
-  // [LAW:no-defensive-null-guards] "unset" is a real state — seed from the
-  // configured default; only an integer-shaped stored value is a current value.
   const stored = ctx.sessionState.get(sid, key);
-  const current =
+  const clamped =
     stored && STEP_INT_RE.test(stored)
-      ? Math.max(params.min, Math.min(params.max, parseInt(stored, 10)))
-      : params.seed;
-  const next = wrapStep(current + by, params.min, params.max);
+      ? clampTo(params, parseInt(stored, 10))
+      : stepFrom(
+          "step-state",
+          key,
+          params,
+          stateKeySeed(
+            ctx.configFor(sessionOrigin(ctx, sid)),
+            (k) => ctx.sessionState.get(sid, k),
+            key,
+          ),
+        );
+  const next = wrapStep(clamped + by, params.min, params.max);
   const result = validateStateWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   ctx.sessionState.set(sid, key, result.value);
   ctx.dlog(
     "info",
-    `step-state: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
+    `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
   );
 };
+
+function clampTo(params: RangeParams, n: number): number {
+  return Math.max(params.min, Math.min(params.max, n));
+}
+
+// [LAW:no-defensive-null-guards] "unset" is a real state: an unset key steps
+// from the value its session's config shows before any click (`declared`,
+// resolved per session — the registry merges every config, so it cannot hold
+// it). A key whose config shows nothing steps from `min`; one that shows a
+// non-integer is a stepper over a value that is no number, refused loudly
+// rather than stepped from a guess.
+function stepFrom(
+  verb: string,
+  key: string,
+  params: RangeParams,
+  declared: string | null,
+): number {
+  if (declared === null) return params.min;
+  if (!STEP_INT_RE.test(declared)) {
+    throw new BadVerbArgs(
+      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`,
+    );
+  }
+  return clampTo(params, parseInt(declared, 10));
+}
 
 // ─── The durable store: which file, and the history over it ─────────────────
 
@@ -445,7 +480,7 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   if (raw === null) {
     throw new BadVerbArgs(
-      `session ${sid} has not rendered yet — no config file to write`,
+      `session ${sid} has not rendered yet — no config to act on`,
     );
   }
   return parseRenderOrigin(raw);
@@ -499,8 +534,8 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
-// against the value the file declares (or the merged config's own value when
-// it declares none — rangeParamsForConfig's seed), wrapped and re-validated
+// against the value the file declares (or, when it declares none, the session
+// config's own top-level field — configKeySeed), wrapped and re-validated
 // through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
@@ -525,12 +560,18 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${listConfigKeys().join(", ")})`,
     );
   }
-  const file = sessionConfigFile(ctx, sid);
+  const origin = sessionOrigin(ctx, sid);
+  const file = originConfigFile(origin);
   const stored = readValue(file, key);
   const current =
     typeof stored === "number"
-      ? Math.max(params.min, Math.min(params.max, stored))
-      : params.seed;
+      ? clampTo(params, stored)
+      : stepFrom(
+          "step-config",
+          key,
+          params,
+          configKeySeed(ctx.configFor(origin), key),
+        );
   const next = wrapStep(current + by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);

@@ -198,7 +198,6 @@ describe("config-validators registry", () => {
       kind: "range",
       min: 0,
       max: 16,
-      seed: 1,
     });
     try {
       const bad = validateConfigWrite("padding", "999");
@@ -389,7 +388,11 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+  const ctx: VerbContext = testVerbContext(
+    sessionState,
+    durable.historyFor(sessionState),
+    config,
+  );
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -638,12 +641,11 @@ describe("persist action click → the config file", () => {
     const urls = ownUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
-    // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar
+    // [LAW:one-source-of-truth] An unset stepper steps from the value the bar
     // RENDERS with no write at all — this config declares no `globals.padding`,
     // so that is the field's floor (DEFAULT_PADDING = 1), not `min`.
-    // candybar-settings-ui-aok.3: seeding from `min` is what made the first ◀
-    // on a bar reading `padding 1` wrap to 16, and both write gates now read
-    // the same seed source (numericGlobalsSeeds).
+    // candybar-settings-ui-aok.3: stepping from `min` is what made the first ◀
+    // on a bar reading `padding 1` wrap to 16.
     click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
     click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
     expect(globalsInFile()).toEqual({ padding: 3 });

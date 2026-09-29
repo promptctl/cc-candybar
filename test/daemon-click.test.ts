@@ -10,7 +10,9 @@ import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
-import { testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext } from "./helpers/click";
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import type { DslConfig } from "../src/config/dsl-types";
 
 // --- SessionState unit tests ---
 
@@ -216,13 +218,18 @@ describe("step-state handler", () => {
   const KEY = "step-test-hue";
   function setup() {
     const sessionState = new SessionState();
-    const ctx: VerbContext = testVerbContext(sessionState);
-    // The range registry is the single source of bounds + the unset seed.
+    // The range registry holds the bounds; the session's config holds what an
+    // unset key steps from — its `state` variable's default.
+    const config: DslConfig = {
+      ...EMPTY_DEFAULT,
+      variables: { hue: { kind: "state", key: KEY, default: "14" } },
+    };
+    recordRender(sessionState, "s1");
+    const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
     const dispose = registerStateValidator(KEY, {
       kind: "range",
       min: 0,
       max: 60,
-      seed: 14,
     });
     const step = VERBS.get(VERB_STEP_STATE)!;
     const click = (by: number): void =>
@@ -230,7 +237,7 @@ describe("step-state handler", () => {
     return { sessionState, click, dispose };
   }
 
-  test("an unset key seeds from the registry default, not min", () => {
+  test("an unset key steps from its config's default, not min", () => {
     const { sessionState, click, dispose } = setup();
     expect(sessionState.get("s1", KEY)).toBeNull();
     click(2);
@@ -270,6 +277,49 @@ describe("step-state handler", () => {
     expect(() =>
       step(encodeSegments(["s1", KEY, "x"]), ctx),
     ).toThrow(BadVerbArgs);
+    dispose();
+  });
+
+  // The registry merges every loaded config's specs into one gate per key, so
+  // what an unset key steps from cannot live there: two configs declaring the
+  // same stepper with different defaults would share whichever registered
+  // first. Each session steps from its own config's default.
+  test("an unset key steps from the default of the config ITS session renders with", () => {
+    const stateVar = (dflt: string): DslConfig => ({
+      ...EMPTY_DEFAULT,
+      variables: { hue: { kind: "state", key: KEY, default: dflt } },
+    });
+    const range = { kind: "range", min: 0, max: 60 } as const;
+    const disposeA = registerStateValidator(KEY, range);
+    const disposeB = registerStateValidator(KEY, range);
+    const step = VERBS.get(VERB_STEP_STATE)!;
+    const stepIn = (dflt: string): string | null => {
+      const sessionState = new SessionState();
+      recordRender(sessionState, "s1");
+      const ctx = testVerbContext(sessionState, undefined, stateVar(dflt));
+      step(encodeSegments(["s1", KEY, "2"]), ctx);
+      return sessionState.get("s1", KEY);
+    };
+    expect(stepIn("14")).toBe("16");
+    expect(stepIn("30")).toBe("32");
+    disposeA();
+    disposeB();
+  });
+
+  test("an unset key whose config shows a non-integer is refused, not stepped from min", () => {
+    const sessionState = new SessionState();
+    recordRender(sessionState, "s1");
+    const config: DslConfig = {
+      ...EMPTY_DEFAULT,
+      variables: { hue: { kind: "state", key: KEY, default: "wide" } },
+    };
+    const ctx = testVerbContext(sessionState, undefined, config);
+    const dispose = registerStateValidator(KEY, { kind: "range", min: 0, max: 60 });
+    const step = VERBS.get(VERB_STEP_STATE)!;
+    expect(() => step(encodeSegments(["s1", KEY, "2"]), ctx)).toThrow(
+      /"step-test-hue" shows "wide" before any click/,
+    );
+    expect(sessionState.get("s1", KEY)).toBeNull();
     dispose();
   });
 

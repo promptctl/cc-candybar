@@ -20,6 +20,7 @@ import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
   SETTING_PROJECTIONS,
+  type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
@@ -67,8 +68,6 @@ const SETTING_KEYS: ReadonlySet<string> = new Set(
 
 const NOT_CUSTOMIZED = (): boolean => false;
 
-type SettingName = keyof typeof SETTINGS;
-
 // The bar the session renders: its own picks over the config, and nothing
 // else it holds — edit mode's staged globals are chrome.
 function sessionGlobals(
@@ -98,6 +97,20 @@ function differing(
       ? []
       : [{ ...row, value, target: targetOf(row) }];
   });
+}
+
+// [LAW:one-source-of-truth] The value the session's own layer resolves a
+// setting to, in its SessionState spelling — the layer a step click writes, so
+// the value it steps from while the session holds no pick. It is the same
+// resolution a draft is measured against: under a preset that pins the field
+// it is the preset's value, never top-level globals the preset shadows. Edit
+// mode's staged fragment is chrome over that layer, not part of it.
+export function sessionSettingValue(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  name: SettingName,
+): string | null {
+  return SPELLING[name](sessionGlobals(config, sessionPick));
 }
 
 // Every setting the session renders differently from the config file. The

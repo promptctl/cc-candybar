@@ -23,9 +23,9 @@ import {
   type ResolvedDomain,
 } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
-import { numericGlobalsSeeds } from "../../config/loader/globals";
+import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
+import { sessionSettingValue } from "../setting-drafts";
 import {
-  clampSeed,
   createValidatorRegistry,
   mergeContributions,
   type DerivedValidatorSpec,
@@ -136,7 +136,6 @@ export function rangeParamsFor(key: string): RangeParams | null {
 // twin — same shape, different action key and target keyspace.
 function actionKeySpecs(
   a: ActionDecl,
-  seeds: ReadonlyMap<string, number>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): KeySpecContribution[] {
   if (!("set" in a)) return [];
@@ -163,12 +162,7 @@ function actionKeySpecs(
   return [
     {
       key: a.set,
-      spec: {
-        kind: "range",
-        min: a.min,
-        max: a.max,
-        seed: clampSeed(seeds.get(a.set), a.min, a.max),
-      },
+      spec: { kind: "range", min: a.min, max: a.max },
     },
   ];
 }
@@ -193,43 +187,34 @@ function dropBaselineAllowLists(
   );
 }
 
-// [LAW:one-source-of-truth] The value a bounded key renders with before any
-// click, from the two places that can define it: a `state` variable's integer
-// `default` (the only source for a key of the config's own invention), and —
-// winning for the fields it covers — what the config
-// resolves for a GLOBALS field, since a session stepper over `padding` starts
-// from the padding the bar is showing, not from a state var nobody declared.
-//
-// The globals half is the SAME function the config-file gate seeds from
-// (numericGlobalsSeeds), so a session stepper and its durable twin cannot
-// start from different numbers. Before it existed, the settings menu's session
-// padding stepper seeded from `min`: a bar reading `padding 1` answered its
-// first ◀ by wrapping to 16.
-function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
-  const seeds = new Map<string, number>();
-  const INT_RE = /^-?\d+$/;
-  for (const decl of Object.values(config.variables)) {
-    if (decl.kind !== "state") continue;
-    const raw = decl.default;
-    if (raw !== undefined && INT_RE.test(raw)) {
-      seeds.set(decl.key, parseInt(raw, 10));
-    }
+// [LAW:one-source-of-truth] What a stepped SessionState key shows before any
+// click, in the session whose config and picks these are: a setting's is the
+// value the session's preset resolves it to (sessionSettingValue — the bar and
+// its control show the same); any other key's is its `state` variable's
+// `default`. null when the config declares neither.
+export function stateKeySeed(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  key: string,
+): string | null {
+  const setting = SESSION_KEY_TO_SETTING.get(key);
+  if (setting !== undefined) {
+    return sessionSettingValue(config, sessionPick, setting);
   }
-  for (const [key, seed] of numericGlobalsSeeds(config.globals)) {
-    seeds.set(key, seed);
-  }
-  return seeds;
+  const decl = Object.values(config.variables).find(
+    (d) => d.kind === "state" && d.key === key,
+  );
+  return decl?.kind === "state" ? (decl.default ?? null) : null;
 }
 
 // [LAW:one-source-of-truth] The writable-key surface a config's `set` actions
 // need, DERIVED from the action table — the same declarations the
 // `{{ action }}` fn realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
-  const seeds = stateKeySeeds(config);
   const perConfigDomains = perConfigDomainsFor(config);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, seeds, perConfigDomains),
+      actionKeySpecs(a, perConfigDomains),
     ),
   );
 }

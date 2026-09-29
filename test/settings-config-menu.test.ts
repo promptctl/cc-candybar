@@ -344,6 +344,19 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(durable.text()).toBe(before);
   });
 
+  // brandon-save-undo-bwi.bcn: the bundled compact preset pins padding 0, so
+  // the stepper starts from the 0 the bar shows, never top-level globals' 1.
+  test("an unpicked padding steps from the value the session's preset shows", () => {
+    r.sessionState.set(SID, "preset", "compact");
+    expect(plain(r.render())).toContain("padding 0");
+    r.click(paddingUp());
+    expect(r.sessionState.get(SID, "padding")).toBe("1");
+    expect(plain(r.render())).toContain("padding 1");
+    expect(r.logs).toContainEqual(
+      `step-state: padding 0→1 (by 1, session=${SID})`,
+    );
+  });
+
   test("a pick back to the saved value is no draft", () => {
     r.click(wrapUrl());
     expect(plain(r.render())).toContain("💾 save 1");
