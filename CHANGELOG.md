@@ -1,3 +1,10 @@
+# [1.82.0](https://github.com/promptctl/cc-candybar/compare/v1.81.1...v1.82.0) (2026-09-29)
+
+
+### Features
+
+* **edit:** a visible way out of edit mode, and add/remove buttons that read as what they do ([#251](https://github.com/promptctl/cc-candybar/issues/251)) ([29fbfd4](https://github.com/promptctl/cc-candybar/commit/29fbfd4bbcccb7abf9a103edc26b0d37331c4794))
+
 ## [1.81.1](https://github.com/promptctl/cc-candybar/compare/v1.81.0...v1.81.1) (2026-09-29)
 
 
