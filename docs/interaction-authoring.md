@@ -2017,8 +2017,10 @@ Give the second its own id and each copy's menu opens on its own:
 
 ### A typo'd action or variable name
 
-Every `{{ action }}`/`{{ menu }}`/`{{ picker }}` reference and every dotted
-variable read is resolved at load against the merged config:
+Every `{{ action }}`/`{{ menu }}`/`{{ picker }}`/`{{ carousel }}` reference and
+every dotted variable read is resolved at load against the merged config —
+through every helper the template calls, so a typo inside a helper is reported
+at `helpers.<name>`:
 
 ```json5 check:fail
 {
