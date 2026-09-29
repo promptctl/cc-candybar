@@ -556,6 +556,21 @@ describe("reset returns settings to the bundled default", () => {
     expect(durable.text()).toBe(before);
   });
 
+  test("closing ⚙ config any way and reopening it disarms reset all", () => {
+    r.click(labelled("⟲ reset all")!);
+    // Close the panel through the ✕ that leads its row — not the door.
+    const close = links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "✕" &&
+        effectsOf(l.url).some((e) => e.args.includes("settings.config")),
+    )!.url;
+    r.click(close);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    r.click(writesTo(r.render(), "settings.config")[0]!);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    expect(labelled("⟲ reset all")).toBeDefined();
+  });
+
   test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", () => {
     const before = durable.text();
     r.sessionState.set(SID, "padding", "5");

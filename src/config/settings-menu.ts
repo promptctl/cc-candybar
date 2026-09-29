@@ -119,16 +119,19 @@ const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 // a `do` over the resets the controls already declare, so it cannot reset a
 // setting differently from that setting's own ↺, and one click is one step in
 // the undo history. It takes two clicks: the first arms it (a session key), the
-// second fires. The door's own click disarms it, so the confirming click is
-// always made in the menu the arming click was made in — the only way back into
-// a closed menu is through the door.
+// second fires. Every click that can bring its row into view — the door and the
+// `⚙ config` toggle, the only two ways in — disarms it, so the confirming click
+// is always made in the view the arming click was made in, however that view
+// was later closed.
 const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 const RESET_ALL_ARM = `${RESET_ALL_SEG}.arm`;
 const RESET_ALL_DISARM = `${RESET_ALL_SEG}.disarm`;
 const RESET_ALL_ARMED = "armed";
 const RESET_ALL_DISARMED = "disarmed";
-// The door's own open/close cycle, fired by the door beside the disarm.
+// The door's and the config panel's own open/close cycles, each fired beside
+// the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+const CONFIG_TOGGLE = `${CONFIG_SEG}.toggle`;
 
 // [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
 // than as gate strings: every gate below — and every `(?)` nested inside them —
@@ -605,7 +608,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, RESET_ALL_DISARM] },
-      [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
+      [CONFIG_TOGGLE]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
+      [CONFIG_SEG]: { do: [CONFIG_TOGGLE, RESET_ALL_DISARM] },
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
