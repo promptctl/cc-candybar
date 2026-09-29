@@ -11,7 +11,11 @@
 import type { RichText } from "@promptctl/rich-js";
 import { cellLen } from "@promptctl/rich-js";
 
-import { sizeCell, type LaidCell } from "../template-engine/layout.js";
+import {
+  sizeCell,
+  type CellSizing,
+  type LaidCell,
+} from "../template-engine/layout.js";
 import { renderStripCells, type BuildLineOptions } from "./strip.js";
 import { INVISIBLE } from "./ansi.js";
 
@@ -43,10 +47,12 @@ export function resolveFill(
   row: readonly LaidCell[],
   options: BuildLineOptions,
 ): readonly RichText[] {
-  const cells = row.map((c) => c.text);
-  const demands = row.flatMap(({ text, fill }) =>
-    fill === undefined ? [] : [{ cell: text, how: fill }],
-  );
+  const cells: RichText[] = [];
+  const demands: Array<{ cell: RichText; how: CellSizing }> = [];
+  for (const { text, fill } of row) {
+    cells.push(text);
+    if (fill !== undefined) demands.push({ cell: text, how: fill });
+  }
   if (demands.length === 0) return cells;
   if (!Number.isFinite(options.width)) return cells;
 
