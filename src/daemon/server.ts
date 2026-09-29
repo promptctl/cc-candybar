@@ -105,6 +105,7 @@ import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
 import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
+import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
   composeWithDiagnostics,
@@ -1263,6 +1264,7 @@ const verbCtx = {
   applyUpdate: () => updateWatch.act(),
   doctor: productionEdge(),
   memento: mementoProvider,
+  claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
   // The config a session's last render resolved from — the same entry the
   // render drew the bar with, so a save compares against the bar the user saw.

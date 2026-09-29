@@ -56,6 +56,12 @@ export const LAUNCH_CATEGORIES = [
   // from a click, and neither is rate-limited — clicks on `+` must accumulate.
   "memento.read",
   "memento.move",
+  // Typing a slash command into a session's Claude Code pane
+  // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
+  // is safe, `type` sends the keys. One click runs both in turn, so neither is
+  // rate-limited — the second would be refused by the first's timestamp.
+  "claude-input.read",
+  "claude-input.type",
   "install.plutil",
   "install.osacompile",
   "install.lsregister",

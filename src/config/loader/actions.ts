@@ -27,6 +27,10 @@ import {
 import { findKeyLine } from "./diagnostics.js";
 import { CHECKS, checkByName } from "../../doctor/checks.js";
 import {
+  parseSlashLine,
+  SLASH_LINE_PATTERN,
+} from "../../claude-input/slash-line.js";
+import {
   describeType,
   describeValue,
   fields,
@@ -147,6 +151,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   preset: presetArm,
   doctor: doctorArm,
   ceiling: ceilingArm,
+  slash: slashArm,
   do: doArm,
 };
 
@@ -179,6 +184,7 @@ function actionDeclJson(): JsonNode {
       ...presetArmJson(),
       ...doctorArmJson(),
       ...CEILING_ARM_JSON,
+      SLASH_ARM_JSON,
       DO_ARM_JSON,
     ],
   };
@@ -435,6 +441,37 @@ const CEILING_ARM_JSON: readonly JsonNode[] = [
     additionalProperties: false,
   },
 ];
+
+// [LAW:parse-dont-validate] `slash` is the one place a line to type becomes a
+// SlashLine (src/claude-input/slash-line.ts); the verb and the edge take
+// nothing else. `function`, not a const arrow, so ACTION_ARMS can reference it.
+function slashArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (k !== "slash")
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a slash action. Expected only: slash`,
+      );
+  }
+  const parsed = parseSlashLine(raw.slash);
+  if (parsed.kind === "refused") {
+    issue(ctx, `${path}.slash`, parsed.reason);
+    return null;
+  }
+  return { slash: parsed.line };
+}
+
+const SLASH_ARM_JSON: JsonNode = {
+  type: "object",
+  properties: { slash: { type: "string", pattern: SLASH_LINE_PATTERN } },
+  required: ["slash"],
+  additionalProperties: false,
+};
 
 // [LAW:one-source-of-truth] Two schema members for the two arms `doctorArm`
 // parses, the check enum drawn from the same CHECKS list.

@@ -18,6 +18,7 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_FIX,
   VERB_CEILING,
+  VERB_SLASH,
 } from "../../src/click/wire";
 import {
   VERBS,
@@ -72,6 +73,16 @@ export function testVerbContext(
         throw new Error("ceiling: no memento provider in this test");
       },
     },
+    // And for the Claude Code pane: a test that drives a slash click hands in
+    // its own edge.
+    claudeInput: {
+      read: () => {
+        throw new Error("slash: no claude-input edge in this test");
+      },
+      type: () => {
+        throw new Error("slash: no claude-input edge in this test");
+      },
+    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key) hands it in; reaching the lookup
     // without one is a test bug.
@@ -112,6 +123,7 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_APPLY_LAYOUT_OP,
   VERB_DOCTOR_FIX,
   VERB_CEILING,
+  VERB_SLASH,
 ]);
 function decodeArgs(verb: string, value: string): string[] {
   return MULTI_ARG_VERBS.has(verb)
