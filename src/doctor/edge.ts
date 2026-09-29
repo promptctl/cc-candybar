@@ -34,7 +34,7 @@ function probeTmux(hint: TmuxHint): TermFeatures {
     hint.pane,
     "#{client_termfeatures}",
   ]);
-  if (run.kind === "failed") return run;
+  if (run.kind !== "ok") return { kind: "failed", reason: run.reason };
   return {
     kind: "ok",
     value: run.stdout

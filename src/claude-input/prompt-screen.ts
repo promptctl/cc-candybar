@@ -14,7 +14,10 @@
 // So the edge types only into the bare input box, with no stash held, in a
 // pane tmux is not holding in a mode. Everything else is a refusal, and a
 // screen this module does not recognise is one too: an unrecognised
-// Claude Code is never typed into blind.
+// Claude Code is never typed into blind. What no read can see is a dialog
+// that opens AFTER it — in the milliseconds before the typing, or inside
+// Claude Code between the paste and its Enter; mid-turn streaming draws no
+// marker to refuse on, so the edge narrows that window and cannot close it.
 
 export interface PaneSnapshot {
   // tmux's `#{pane_in_mode}`: copy mode, view mode, or any other mode.

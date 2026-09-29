@@ -7,8 +7,11 @@
 import { launchSync, type LaunchCategory } from "./launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
+// `rate-limited`: launch.ts refused to spawn, so tmux never ran — a fact about
+// the caller's cadence, not about tmux.
 export type TmuxRun =
   | { readonly kind: "ok"; readonly stdout: string }
+  | { readonly kind: "rate-limited"; readonly reason: string }
   | { readonly kind: "failed"; readonly reason: string };
 
 export function runTmux(
@@ -25,6 +28,9 @@ export function runTmux(
     stdinInput,
   });
   if (result.ok) return { kind: "ok", stdout: result.stdout };
+  if (result.reason === "rate-limited") {
+    return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
+  }
   // `error` is a whole sentence when present (rate-limited, timeout, spawn);
   // a non-zero exit has only its stderr to say.
   const detail =

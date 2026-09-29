@@ -11,16 +11,21 @@
 
 import type { ClientHints } from "../daemon/protocol.js";
 import type { LaunchCategory } from "../proc/launch.js";
-import { runTmux } from "../proc/tmux.js";
+import { runTmux, type TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
 import type { SlashLine } from "./slash-line.js";
 
 export interface ClaudeInputEdge {
-  // Throws naming tmux's own failure.
+  // Both throw naming tmux's own failure. `type` answers with the refusal
+  // when a line was typed into the session too recently to type another.
   readonly read: (hint: TmuxHint) => PaneSnapshot;
-  readonly type: (hint: TmuxHint, line: SlashLine) => void;
+  readonly type: (hint: TmuxHint, line: SlashLine) => Typed;
 }
+
+export type Typed =
+  | { readonly kind: "typed" }
+  | { readonly kind: "refused"; readonly reason: string };
 
 export type TypeResult =
   | { readonly kind: "typed"; readonly pane: string }
@@ -49,8 +54,8 @@ export function typeSlash(
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
   }
-  edge.type(tmux, line);
-  return { kind: "typed", pane: tmux.pane };
+  const typed = edge.type(tmux, line);
+  return typed.kind === "typed" ? { kind: "typed", pane: tmux.pane } : typed;
 }
 
 // A command separator inside one tmux invocation: the commands run in order
@@ -63,14 +68,14 @@ function tmux(
   category: LaunchCategory,
   args: string[],
   stdinInput?: string,
-): string {
+): Exclude<TmuxRun, { kind: "failed" }> {
   const run = runTmux(hint, category, args, stdinInput);
   if (run.kind === "failed") throw new Error(run.reason);
-  return run.stdout;
+  return run;
 }
 
 function read(hint: TmuxHint): PaneSnapshot {
-  const [mode = "", ...screen] = tmux(hint, "claude-input.read", [
+  const run = tmux(hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -81,7 +86,9 @@ function read(hint: TmuxHint): PaneSnapshot {
     "-p",
     "-t",
     hint.pane,
-  ]).split("\n");
+  ]);
+  if (run.kind === "rate-limited") throw new Error(run.reason);
+  const [mode = "", ...screen] = run.stdout.split("\n");
   return { inMode: mode !== "0", screen };
 }
 
@@ -92,8 +99,8 @@ function read(hint: TmuxHint): PaneSnapshot {
 // The line reaches the buffer over stdin, never as an argument: tmux reads an
 // argument ending in `;` as a command separator and drops it, so
 // `/compact keep the api;` would be typed without its last character.
-function type(hint: TmuxHint, line: SlashLine): void {
-  tmux(
+function type(hint: TmuxHint, line: SlashLine): Typed {
+  const run = tmux(
     hint,
     "claude-input.type",
     [
@@ -122,6 +129,12 @@ function type(hint: TmuxHint, line: SlashLine): void {
     ],
     line,
   );
+  return run.kind === "ok"
+    ? { kind: "typed" }
+    : {
+        kind: "refused",
+        reason: `a command was typed into this pane moments ago (${run.reason})`,
+      };
 }
 
 export function productionClaudeInputEdge(): ClaudeInputEdge {

@@ -272,12 +272,22 @@ describe("a slash click", () => {
     expect(invocations()[1]).not.toContain("/compact keep the api;");
   });
 
-  test("a double-click types once: the second is refused before tmux is asked", () => {
+  test("a double-click types once: the second is refused in the bar, typing nothing", () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     clickUrl(rt.urls[0]!, rt.ctx);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/rate-limited/);
-    expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
+    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/typed into this pane moments ago/);
+    expect(rt.sessionState.get("s1", "click.error")).toMatch(/\/compact was not typed/);
+    expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
+  });
+
+  test("a click the pane refused types nothing, so clicking again at once goes through", () => {
+    serve(SCREENS.permission);
+    const rt = runtime(HINT);
+    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/not at its prompt/);
+    serve(SCREENS.idle);
+    clickUrl(rt.urls[0]!, rt.ctx);
+    expect(invocations().map((argv) => argv[2])).toEqual(["display", "display", "load-buffer"]);
   });
 
   test("outside tmux: refused in the bar, and tmux is never run", () => {
