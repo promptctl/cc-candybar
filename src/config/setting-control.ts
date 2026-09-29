@@ -36,28 +36,31 @@ export interface ControlDecl {
 // how much room the control needs: an `inline` control is one cell of its
 // row; a `ring` is a carousel, which fills the row it is given with the
 // neighbours that fit — so a caller gives it a row of its own, and puts the
-// setting's label wherever that caller labels things.
-export type Affordance =
-  | { readonly kind: "inline"; readonly template: string }
-  | { readonly kind: "ring"; readonly template: string };
+// setting's label wherever that caller labels things. Either way it carries
+// the actions its template names, so the two cannot be separated.
+export interface Affordance {
+  readonly kind: "inline" | "ring";
+  readonly template: string;
+  readonly actions: Readonly<Record<string, ActionDecl>>;
+}
 
 // A placement setting's declaration as a control: a word list is an inline
 // option domain, and the placement's theme ranges the placement themes.
 export function controlDeclOf(decl: SettingDecl): ControlDecl {
-  const { domain } = decl;
-  return {
-    label: decl.label,
-    domain:
-      domain === "theme"
-        ? { from: PLACEMENT_THEMES }
-        : Array.isArray(domain)
-          ? { from: domain }
-          : (domain as "bool" | SettingRange),
-  };
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
 }
 
-// The control, and the actions it writes `key` through — minted into
-// `actions` under `name` (and `name.down`/`name.up` for a stepper). `readVar`
+// [LAW:types-are-the-program] Total over SettingDecl's domain arms by
+// narrowing alone, so a new arm is a compile error here, not a stepper minted
+// over an undefined range.
+function controlDomainOf(domain: SettingDecl["domain"]): ControlDomain {
+  if (domain === "theme") return { from: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+
+// The control, and the actions it writes `key` through — named `name` (and
+// `name.down`/`name.up` for a stepper). `readVar`
 // is the variable holding the value the bar renders with, which a stepper
 // shows between its arrows.
 //
@@ -70,35 +73,39 @@ export function settingControl(
   key: string,
   readVar: string,
   name: string,
-  actions: Record<string, ActionDecl>,
 ): Affordance {
   const label = escapeTemplateLiteral(decl.label);
   const { domain } = decl;
   if (domain === "bool") {
     // The displays match BOOLEAN_MEMBERS position by position: ☑ is true.
-    actions[name] = { set: key, cycle: [...BOOLEAN_MEMBERS] };
     return {
       kind: "inline",
       template: `{{ action "${name}" "☑ ${label}" "☐ ${label}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
     };
   }
   if ("from" in domain) {
-    actions[name] = { set: key, from: domain.from };
-    return { kind: "ring", template: `{{ carousel "${name}" }}` };
-  }
-  for (const by of [-domain.step, domain.step]) {
-    actions[`${name}.${by < 0 ? "down" : "up"}`] = {
-      set: key,
-      min: domain.min,
-      max: domain.max,
-      by,
+    return {
+      kind: "ring",
+      template: `{{ carousel "${name}" }}`,
+      actions: { [name]: { set: key, from: domain.from } },
     };
   }
+  const step = (by: number): ActionDecl => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by,
+  });
   return {
     kind: "inline",
     template:
       `{{ action "${name}.down" "◀" }} ` +
       `{{ "${label}" }} {{ .${readVar} }} ` +
       `{{ action "${name}.up" "▶" }}`,
+    actions: {
+      [`${name}.down`]: step(-domain.step),
+      [`${name}.up`]: step(domain.step),
+    },
   };
 }

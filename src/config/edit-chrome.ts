@@ -297,13 +297,8 @@ function configureParts(
     const segName = `${prefix}.setting.${posIdent}.${name}`;
     // [LAW:one-type-per-behavior] The settings menu's generator: a ring gets
     // the setting's label beside it, on the row it fills.
-    const control = settingControl(
-      controlDeclOf(decl),
-      key,
-      variable,
-      segName,
-      ctx.artifacts.actions,
-    );
+    const control = settingControl(controlDeclOf(decl), key, variable, segName);
+    Object.assign(ctx.artifacts.actions, control.actions);
     ctx.artifacts.segments[segName] = {
       template:
         control.kind === "ring"

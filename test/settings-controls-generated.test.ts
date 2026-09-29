@@ -171,14 +171,13 @@ describe("each controlled field's control is generated from its declared domain"
 describe("a global the menu has never seen gets its control from the generator", () => {
   // A throwaway enum global: its declaration, fed through the SAME generator
   // the settings menu builds every control with, into a real config.
-  const actions: Record<string, ActionDecl> = {};
   const control = settingControl(
     { label: "🧪", domain: { from: ["low", "mid", "high"] } },
     "zoom",
     "zoom",
     "apply.zoom",
-    actions,
   );
+  const { actions } = control;
 
   test("an enum becomes a carousel over exactly its members", () => {
     expect(control.kind).toBe("ring");

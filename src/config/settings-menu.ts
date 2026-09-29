@@ -247,12 +247,11 @@ const controlCarousel = (name: string): string =>
 const controlBeneath = (name: string, row: number): string =>
   `${controlCarousel(name)}.${row}`;
 
-// One control of the menu: its setting's row of SETTINGS, what the generator
-// made of that setting's declared domain, and the actions it minted.
+// One control of the menu: its setting's row of SETTINGS and what the
+// generator made of that setting's declared domain.
 interface MenuControl extends SettingProjection {
   readonly name: SettingName;
   readonly control: Affordance;
-  readonly actions: Readonly<Record<string, ActionDecl>>;
   readonly beneath: readonly string[];
 }
 
@@ -275,15 +274,13 @@ const CONTROLS: readonly MenuControl[] = (
       `settings menu: globals.${row.configKey} is free text, which no control can change — list it in UNCONTROLLED_GLOBALS instead of SETTINGS`,
     );
   }
-  const actions: Record<string, ActionDecl> = {};
   const control = settingControl(
     { label: row.label, domain },
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
-    actions,
   );
-  return { ...row, name, control, actions, beneath: BENEATH[name] ?? [] };
+  return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
 // [LAW:dataflow-not-control-flow] Where a control renders is a fact about its
@@ -714,7 +711,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // keys, not tree positions.
 function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of CONTROLS) {
-    Object.assign(artifacts.actions, c.actions);
+    Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
     artifacts.actions[reset] = { reset: c.configKey };
     const resetCell = `{{ action "${reset}" "↺" }}`;

@@ -320,10 +320,17 @@ export interface ResetLayers {
   readonly fileKeys: readonly string[];
 }
 
+// The session keys whose pick outranks config key `key` — none for a key no
+// setting projects (a segment's palette pin, a preset root).
+export function settingSessionKeys(key: string): readonly string[] {
+  return SETTING_PROJECTIONS.filter((p) => p.configKey === key).map(
+    (p) => p.sessionKey,
+  );
+}
+
 export function resetLayers(key: string): ResetLayers {
-  const settings = SETTING_PROJECTIONS.filter((p) => p.configKey === key);
   return {
-    sessionKeys: settings.map((p) => p.sessionKey),
+    sessionKeys: settingSessionKeys(key),
     fileKeys: [
       key,
       ...(isPresetGlobalsField(key)
