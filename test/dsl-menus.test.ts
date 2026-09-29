@@ -834,6 +834,64 @@ describe("toggle round trip + drop stacking", () => {
   });
 });
 
+// [LAW:types-are-the-program] brandon-render-channels-b1x.651: a rich-js style
+// function returns a NEW RichText around its child, so a body that rode the
+// glyph as an undeclared property was lost under any wrapper and the menu
+// opened to nothing. The body rides the segment's record; every wrapper keeps it.
+describe("a {{ menu }} under a style wrapper still drops its body", () => {
+  const wrapped = (template: string): string => `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+    },
+    actions: { applyTheme: { set: 'theme', from: 'themes' } },
+    segments: {
+      label: { template: 'PICK' },
+      themepicker: { template: ${JSON.stringify(template)} },
+    },
+    root: { h: ['label', 'themepicker'] },
+  }`;
+  const MENU = 'menu "applyTheme" "▸" "▾"';
+  test.each([
+    ["fg", `{{ fg (color "success") (${MENU}) }}`],
+    ["bg", `{{ bg (color "success") (${MENU}) }}`],
+    ["bold", `{{ bold (${MENU}) }}`],
+    ["link", `{{ link "https://example.com" (${MENU}) }}`],
+    ["style", `{{ style "bold red" (${MENU}) }}`],
+  ])("%s", (_wrapper, template) => {
+    const { render, sessionState, dispose } = buildRuntime(wrapped(template));
+    expect(stripAnsi(render()).split("\n")).toHaveLength(1);
+    // `link` replaces the trigger's own URL, so open it the way a click would.
+    sessionState.set("s1", TKEY, "applyTheme");
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("PICK");
+    expect(lines[0]).toContain("▾");
+    expect(lines[1]).toContain("✕");
+    dispose();
+  });
+});
+
+// A segment that throws after its menu evaluated renders ⚠ and drops
+// nothing, and leaves no record published for whatever evaluates next.
+describe("a segment that throws after its {{ menu }} evaluated", () => {
+  test("renders its error cell, drops no body, and leaves no segment active", () => {
+    const src = MENU_SRC.replace(
+      `'🎨 {{ menu "applyTheme" "▸" "▾" }}'`,
+      `'🎨 {{ menu "applyTheme" "▸" "▾" }}{{ fail "boom" }}'`,
+    );
+    expect(src).not.toBe(MENU_SRC);
+    const { render, sessionState, compiled, dispose } = buildRuntime(src);
+    sessionState.set("s1", TKEY, "applyTheme");
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("⚠ themepicker");
+    expect(compiled.activeSegment.current).toBeNull();
+    dispose();
+  });
+});
+
 // Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
 const INDEPENDENT_SRC = `{
   globals: {},

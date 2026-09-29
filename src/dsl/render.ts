@@ -81,13 +81,10 @@ import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
 import { layoutPreviewFuncs } from "../render/layout-preview.js";
-import {
-  menuFuncs,
-  collectMenuDrops,
-  type MenuRuntime,
-} from "../render/menu.js";
+import { menuFuncs, type MenuRuntime } from "../render/menu.js";
 import {
   createActiveSegmentRef,
+  openSegment,
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
@@ -118,6 +115,7 @@ import {
   type NodeCompileCtx,
   type NodeRenderCtx,
   type SegmentStyles,
+  type EvaluatedSegment,
 } from "./node-registry.js";
 
 // ─── Compiled config ───────────────────────────────────────────────────────────
@@ -1025,72 +1023,82 @@ export function renderDsl(
       : undefined;
   };
 
-  // [LAW:single-enforcer] The segment seam, owned here as a symmetric pair.
-  // `enterSegment` establishes everything a segment's templates may ask about
-  // themselves — the name `{{ menu }}` derives its identity from, the palette
-  // `{{ color }}` resolves against, the background `{{ bgOf }}` returns, the
-  // band a `{{ menu }}` body colours its items by — and returns every Style
-  // the segment can wear: its authored `closed` Style, and the `trigger` /
-  // `band` pair of the band it opens (the state colour and its plane), both
-  // from the one `bandFor` read so the trigger and its dropped band cannot
-  // disagree about their hue. `exitSegment` collects the menu bodies the
-  // fragments carried as metadata and tears the record back down.
+  // [LAW:single-enforcer] The segment seam, owned here. It first establishes
+  // everything a segment's templates may ask about themselves — the name
+  // `{{ menu }}` derives its identity from, the palette `{{ color }}` resolves
+  // against, the background `{{ bgOf }}` returns, the band a `{{ menu }}` body
+  // colours its items by — and every Style the segment can wear: its authored
+  // `closed` Style, and the `trigger` / `band` pair of the band it opens (the
+  // state colour and its plane), both from the one `bandFor` read so the
+  // trigger and its dropped band cannot disagree about their hue. Then the
+  // body evaluates, and the menu bodies it appended to the record come back
+  // beside its fragments.
   //
   // [LAW:no-ambient-temporal-coupling] The record is set and cleared around each
   // segment's evaluation by the walk ONLY, so "which segment am I in" is owned
   // state with one writer, never ambient context a reader has to hope is
-  // current. Enter/exit are a pair by construction: every path that publishes
-  // goes through the first, every path that finishes goes through the second.
+  // current. Publishing and clearing are one call with the clear in `finally`,
+  // so a `bg:`, `fg:` or body that throws leaves no record behind for a
+  // container `when` or the next segment to read.
   //
   // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
   // read of its region (src/themes/decor.ts): the tint its closed cell wears
   // and the disclosure it opens —
   // so the cell, the band it drops, and the body hung under it cannot disagree
   // about their hue.
-  const enterSegment = (
+  const evaluateSegment = (
     segName: string,
     palette: Palette,
     region: Region,
-    bgTemplate: Template<RichText> | undefined,
-    fgTemplate: Template<RichText> | undefined,
-  ): SegmentStyles => {
-    const drawnAt = registry.drawnAt();
-    const { tint, disclosure } = decorationFor(palette, region, drawnAt);
-    const closed = resolveSegmentColors(
-      compiled.activeSegment,
-      segName,
-      palette,
-      disclosure,
-      tint,
-      bgTemplate,
-      fgTemplate,
-      scope,
-    );
-    // Read only where something hangs open under the segment: a band that can
-    // never be drawn (a hue with no state) throws when it is opened, never
-    // from a closed cell or a body cell that merely deals it.
-    return {
-      closed,
-      get trigger() {
-        return stateCell(
-          palette,
-          bandFor(palette, disclosure, drawnAt).state,
-          drawnAt,
-        );
-      },
-      get band() {
-        return stateCell(
-          palette,
-          bandFor(palette, disclosure, drawnAt).plane,
-          drawnAt,
-        );
-      },
-      disclosure,
-    };
-  };
-  const exitSegment = (fragments: readonly RichText[]): readonly RichText[] => {
-    compiled.activeSegment.current = null;
-    return collectMenuDrops(fragments);
+    templates: {
+      readonly bg: Template<RichText> | undefined;
+      readonly fg: Template<RichText> | undefined;
+      readonly body: Template<RichText>;
+    },
+  ): EvaluatedSegment => {
+    try {
+      const drawnAt = registry.drawnAt();
+      const { tint, disclosure } = decorationFor(palette, region, drawnAt);
+      const active = openSegment(
+        compiled.activeSegment,
+        segName,
+        palette,
+        disclosure,
+        tint,
+      );
+      const closed = resolveSegmentColors(
+        active,
+        drawnAt,
+        templates.bg,
+        templates.fg,
+        scope,
+      );
+      const fragments = templates.body.evaluate(scope);
+      // Read only where something hangs open under the segment: a band that
+      // can never be drawn (a hue with no state) throws when it is opened,
+      // never from a closed cell or a body cell that merely deals it.
+      const styles: SegmentStyles = {
+        closed,
+        get trigger() {
+          return stateCell(
+            palette,
+            bandFor(palette, disclosure, drawnAt).state,
+            drawnAt,
+          );
+        },
+        get band() {
+          return stateCell(
+            palette,
+            bandFor(palette, disclosure, drawnAt).plane,
+            drawnAt,
+          );
+        },
+        disclosure,
+      };
+      return { styles, fragments, drops: active.drops };
+    } finally {
+      compiled.activeSegment.current = null;
+    }
   };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
@@ -1113,8 +1121,7 @@ export function renderDsl(
       region,
       perSegmentSink,
       onSegmentError,
-      enterSegment,
-      exitSegment,
+      evaluateSegment,
       lookupSegment,
       renderChild: (child, childVisible, step: AddressStep) =>
         renderNode(child, childVisible, descend(region, step)),

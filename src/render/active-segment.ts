@@ -16,7 +16,12 @@
 // the background is the thing being computed. Readers get a message naming the
 // phase instead of a plausible-looking wrong color.
 
-import type { ColorDepth, ColorRgba, Palette } from "@promptctl/rich-js";
+import type {
+  ColorDepth,
+  ColorRgba,
+  Palette,
+  RichText,
+} from "@promptctl/rich-js";
 import type { Disclosure } from "../themes/decor.js";
 
 export interface ActiveSegment {
@@ -57,6 +62,19 @@ export interface ActiveSegment {
    * computing itself.
    */
   bg: ColorRgba | undefined;
+  /**
+   * The bodies this segment's open `{{ menu }}`s drop below its row, in the
+   * order the template evaluated them. A menu appends here and the walk reads
+   * the list when the segment exits. Evaluating a `{{ menu }}` IS placing it —
+   * whatever the template then does with the glyph — so a menu that should
+   * not show is gated by not calling it (`{{ if … }}{{ menu … }}{{ end }}`).
+   *
+   * [LAW:types-are-the-program] The body travels on this declared record, not
+   * on the glyph the menu returns: a template function's result is handed to
+   * whatever wraps it (`fg`, `bg`, `bold`, `link`, `style`), which returns a
+   * new RichText, so anything riding the glyph outside its type is lost there.
+   */
+  readonly drops: RichText[];
 }
 
 /** The published pointer. Null between segments. */
@@ -75,6 +93,30 @@ export function createActiveSegmentRef(
   drawnAt: () => ColorDepth,
 ): ActiveSegmentRef {
   return { current: null, drawnAt };
+}
+
+/**
+ * Publish a fresh record for the segment about to evaluate and return it. Its
+ * background is unknown and its drop list empty: both fill in as the
+ * segment's templates run.
+ */
+export function openSegment(
+  ref: ActiveSegmentRef,
+  segName: string,
+  palette: Palette,
+  disclosure: Disclosure,
+  tint: ColorRgba,
+): ActiveSegment {
+  const active: ActiveSegment = {
+    segName,
+    palette,
+    disclosure,
+    tint,
+    bg: undefined,
+    drops: [],
+  };
+  ref.current = active;
+  return active;
 }
 
 /**

@@ -125,10 +125,7 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 }
 
 // [LAW:dataflow-not-control-flow] A fill demand is a VALUE riding the cell, not a
-// shape in the walk's return type: `{{ menu }}` already carries its dropped body
-// this way (MENU_DROP, src/render/menu.ts:91), which is this codebase's settled
-// channel for render data one boundary produces and another consumes. The payoff
-// is that composition needs no change at all — `composeBlocks` concatenates the
+// shape in the walk's return type, so composition needs no change at all — `composeBlocks` concatenates the
 // same cell objects, so the demand survives every container level for free, and
 // only the row about to be serialized resolves anything.
 const FILL_DEMAND = Symbol("cc-candybar.fillDemand");

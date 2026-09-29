@@ -23,11 +23,11 @@ import {
   resolveColorRef,
   ColorRefError,
 } from "@promptctl/rich-js";
-import type { ColorRgba, Palette } from "@promptctl/rich-js";
+import type { ColorDepth, ColorRgba, Palette } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
-import type { ActiveSegmentRef } from "../render/active-segment.js";
-import { textOn, type Disclosure } from "../themes/decor.js";
+import type { ActiveSegment } from "../render/active-segment.js";
+import { textOn } from "../themes/decor.js";
 
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg", detail: string) {
@@ -38,7 +38,8 @@ export class ColorSpecError extends Error {
 
 /**
  * Resolve a segment's `bg:` and `fg:` templates into the Style that becomes
- * its baseStyle, publishing each phase's result into `ref` as it goes.
+ * its baseStyle, publishing each phase's result into `active` — the segment's
+ * published record — as it goes.
  *
  * A `bg:`/`fg:` field is a template evaluated to a **color reference** — a
  * palette variable name (`"surface-active"`) or a `#RRGGBB` literal. Since
@@ -72,27 +73,16 @@ export class ColorSpecError extends Error {
  * theme-designed relationships are preserved.
  */
 export function resolveSegmentColors(
-  ref: ActiveSegmentRef,
-  segName: string,
-  palette: Palette,
-  disclosure: Disclosure,
-  tint: ColorRgba,
+  active: ActiveSegment,
+  drawnAt: ColorDepth,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
 ): Style {
-  // Phase 0 — the palette (and the disclosure a `{{ menu }}` body colours its
-  // items by) are live from here until the walk clears them, so
+  // Phase 0 — the record is already published (`openSegment`), so
   // `{{ color … }}` in the bg template, the fg template, and the body all read
-  // this one palette. `bg` starts undefined: it is what phase 1 computes.
-  const active = {
-    segName,
-    palette,
-    disclosure,
-    tint,
-    bg: undefined as ColorRgba | undefined,
-  };
-  ref.current = active;
+  // its one palette. `bg` is still undefined: it is what phase 1 computes.
+  const { palette, tint } = active;
 
   // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
@@ -105,7 +95,7 @@ export function resolveSegmentColors(
   const fgColor =
     fgSpec !== undefined
       ? resolveRef(palette, fgSpec, "fg")
-      : textOn(palette, bgColor, ref.drawnAt());
+      : textOn(palette, bgColor, drawnAt);
 
   return new Style({
     bgcolor: ColorSpec.fromRgba(bgColor),
