@@ -17,6 +17,7 @@ import {
   type DslConfig,
   type PresetDecl,
   type RawDslConfig,
+  type SegmentDecl,
 } from "../dsl-types.js";
 import { EMPTY_ROWS, mergeRoot } from "../root.js";
 
@@ -26,7 +27,8 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
  *   globals    : shallow merge per field (user wins per-field)
  *   variables  : merge by name (user wins per-name)
  *   segments   : merge by name, then by FIELD within a name (a user's
- *                declaration under a bundled name is a delta over it)
+ *                declaration under a bundled name is a delta over it), and
+ *                `settings` by setting name within that
  *   presets    : merge by name, then by field, the same overlay
  *   root       : merge by row name (user wins per-name) when the user wrote a
  *                `{ rows }` map; a whole tree replaces the default's rows
@@ -43,7 +45,10 @@ export function mergeWithDefault(
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
-    segments: overlayByName(dflt.segments, raw.segments ?? {}),
+    segments: overlayByName(
+      dflt.segments,
+      segmentDeltas(dflt.segments, raw.segments ?? {}),
+    ),
     root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
@@ -73,6 +78,28 @@ export function mergeWithDefault(
     // from the bundled default.
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
+}
+
+// A segment's `settings` is a by-name block like `variables`: a file adding
+// one setting to a bundled segment says nothing about the settings it
+// inherits, which the bundled templates go on reading. Laid over the base's
+// before the overlay replaces the member's `settings` field whole — the
+// preset `globals` fold below, over a different field.
+function segmentDeltas(
+  base: Readonly<Record<string, SegmentDecl>>,
+  over: Readonly<Record<string, Partial<SegmentDecl>>>,
+): Readonly<Record<string, Partial<SegmentDecl>>> {
+  return Object.fromEntries(
+    Object.entries(over).map(([name, delta]) => [
+      name,
+      delta.settings === undefined
+        ? delta
+        : {
+            ...delta,
+            settings: { ...base[name]?.settings, ...delta.settings },
+          },
+    ]),
+  );
 }
 
 // A preset's own `globals` is a globals fragment, so it merges FIELD by field

@@ -540,6 +540,25 @@ the fact leaves both forms:
  🍫  ⎇ main +2/-1 ▸ 
 ```
 
+Hide a fact from one copy only — each optional piece also reads a setting of
+the placement it renders in (`aheadBehind`, `flags`, `operation`, `repo`,
+`sha`, `stash`, `upstream`, `age`; every one defaults to `true`; `upstream`
+off takes its bracket and the ahead/behind inside it), so two copies of the
+segment can show different facts in either form, and configure mode changes
+them from the bar. A segment of your own that calls one of these pieces
+declares the same setting (the loader names your segment and the setting when
+it does not):
+
+```json5 check:pass
+{
+  root: { h: ["gitaculous", { seg: "gitaculous", id: "gitLean", settings: { flags: false, aheadBehind: false } }] },
+}
+```
+
+```render
+ 🍫  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+```
+
 Recolour one fact — override its colour variable (any palette name or hex),
 or re-spell it by overriding its piece:
 

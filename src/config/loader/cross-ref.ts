@@ -807,17 +807,28 @@ function checkTemplateRefs(
 ): void {
   for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
-    if (via !== null) {
-      checkHelperRef(ctx, via, ref);
-      continue;
-    }
-    if (opts?.segCtx !== undefined && ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
-      const declared = Object.keys(opts.settings ?? {});
+    // [LAW:single-enforcer] A setting is the CALLER's declaration, never the
+    // helper's: `.settings` binds to whichever placement renders, so a helper
+    // reading one is correct and the fix is on the template that called it.
+    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
+      const through = via === null ? "" : ` through helper "${via}"`;
+      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
+      // `settings` is passed exactly for a segment's own templates — the ones
+      // a placement renders; a variable (a segment-local one included) has no
+      // placement, so no declaration could make its read valid.
+      const message =
+        opts?.segCtx === undefined || opts.settings === undefined
+          ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings — call it from a segment that declares "${setting}"`
+          : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) — declare it under segments.${opts.segCtx}.settings`;
       ctx.issues.push({
         path: declPath,
-        message: `Template reads ".${ref}", but segment "${opts.segCtx}" has no setting "${ref.slice(SETTINGS_SCOPE_PREFIX.length)}" (it has: ${declared.join(", ")}) — declare it under segments.${opts.segCtx}.settings`,
-        line: opts.line ?? findKeyLine(ctx.source, declPath.split(".")),
+        message,
+        line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
       });
+      continue;
+    }
+    if (via !== null) {
+      checkHelperRef(ctx, via, ref);
       continue;
     }
     const namespaced =
