@@ -461,6 +461,27 @@ describe("persist action click → the config file", () => {
     dispose();
   });
 
+  // …but only where the written layer wins: a preset whose own globals name
+  // the field shadows the top-level value, so releasing the pick would drop
+  // the bar to the preset's value and discard the one the user was looking at.
+  test("a durable write the session's preset shadows keeps the pick", () => {
+    const { sessionState, dispose } = buildPersistRuntime(`{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { pad: { persist: 'padding', min: 0, max: 16, by: 1 } },
+      segments: { bar: { template: 'x', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+      presets: { tight: { globals: { padding: 0 } } },
+    }`);
+    const ctx = testVerbContext(sessionState, durable.historyFor(sessionState));
+    sessionState.set("s1", "preset", "tight");
+    sessionState.set("s1", "padding", "3");
+    VERBS.get("set-config")!(encodeSegments(["s1", "padding", "4"]), ctx);
+    expect(globalsInFile()).toEqual({ padding: 4 });
+    expect(sessionState.get("s1", "padding")).toBe("3");
+    dispose();
+  });
+
   test("clicking reset deletes the persisted key from the file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC);
     const urls = ownUrls(render());

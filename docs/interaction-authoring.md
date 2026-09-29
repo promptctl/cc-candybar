@@ -195,7 +195,11 @@ other byte of the file (comments, blank lines, key order, quote style, trailing
 commas) is preserved. There is no second durable store: the precedence chain is
 bundled default < config file < active preset < session pick < edit mode, so a
 session's own `set` pick still wins over the file's default for that one
-session. A `persist` click is a hand edit as far as the file can tell:
+session — except that the `persist` click itself releases the clicking
+session's pick of that setting whenever the value it wrote is what that
+session renders without the pick, so the bar moves. When the session's preset
+names the field in its own `globals`, the preset shadows the written value,
+and the pick stays. A `persist` click is a hand edit as far as the file can tell:
 `git diff` on your config shows it, `cc-candybar check` validates it, and
 nothing in the file records which of the two made it. No config file for any
 software on the planet shows whether the application's settings menu updated

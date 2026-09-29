@@ -320,17 +320,32 @@ export interface ResetLayers {
   readonly fileKeys: readonly string[];
 }
 
-// The session keys whose pick outranks config key `key` — none for a key no
-// setting projects (a segment's palette pin, a preset root).
-export function settingSessionKeys(key: string): readonly string[] {
-  return SETTING_PROJECTIONS.filter((p) => p.configKey === key).map(
-    (p) => p.sessionKey,
-  );
+// [LAW:one-source-of-truth] The session picks a durable write of `value` to
+// config key `key` has made redundant: each setting over that key the session
+// would render as `value` with its pick gone — so the written layer is the one
+// that wins under the preset the session renders. A write the preset's own
+// fragment shadows releases nothing, and the pick the bar shows survives.
+// `config` is the file as reloaded after the write.
+export function releasedByWrite(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  key: string,
+  value: string,
+): readonly string[] {
+  return SETTING_ROWS.flatMap(([name, row]) => {
+    if (row.configKey !== key) return [];
+    const without = (k: string) =>
+      k === row.sessionKey ? null : sessionPick(k);
+    return sessionSettingValue(config, without, name) === value
+      ? [row.sessionKey]
+      : [];
+  });
 }
 
 export function resetLayers(key: string): ResetLayers {
+  const settings = SETTING_PROJECTIONS.filter((p) => p.configKey === key);
   return {
-    sessionKeys: settingSessionKeys(key),
+    sessionKeys: settings.map((p) => p.sessionKey),
     fileKeys: [
       key,
       ...(isPresetGlobalsField(key)
