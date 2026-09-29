@@ -35,13 +35,13 @@ const SETTING_DECL_JSON = {
   additionalProperties: false,
   required: ["label", "domain", "default"],
   properties: {
-    label: { type: "string", minLength: 1 },
+    label: { type: "string", pattern: "^[^\\n\\r]+$" },
     domain: {
       anyOf: [
         { const: "bool" },
         {
           type: "array",
-          items: { type: "string" },
+          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
           minItems: 1,
           uniqueItems: true,
         },
@@ -92,6 +92,21 @@ function parseDomain(
         `a list domain names each word once, got ${JSON.stringify(raw)}`,
       );
     }
+    // [LAW:no-silent-failure] A word is a deliverable set-state value —
+    // configure mode's control writes it on the wire, which rejects empty
+    // values and splits on "/" — and display text spliced into a template
+    // string, which a newline would leave unterminated. The rule preset names
+    // keep (presets.ts), for the same two reasons.
+    const unwritable = words.filter(
+      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w),
+    );
+    if (unwritable.length > 0) {
+      return issue(
+        ctx,
+        path,
+        `a list domain's words must be non-empty, slash-free, and newline-free — configure mode writes each on the set-state wire — got ${JSON.stringify(unwritable)}`,
+      );
+    }
     return words;
   }
   if (isPlainObject(raw)) {
@@ -140,17 +155,17 @@ function parseSettingDecl(
     }
   }
   const { label } = raw;
-  if (typeof label !== "string" || label.length === 0) {
+  const labelOk =
+    typeof label === "string" && label.length > 0 && !/[\n\r]/.test(label);
+  if (!labelOk) {
     issue(
       ctx,
       `${path}.label`,
-      `a setting needs a non-empty "label" — the name its control shows — got ${describeValue(label)}`,
+      `a setting needs a one-line, non-empty "label" — the name its control shows, spliced into a synthesized template string — got ${describeValue(label)}`,
     );
   }
   const domain = parseDomain(ctx, `${path}.domain`, raw.domain);
-  if (typeof label !== "string" || label.length === 0 || domain === undefined) {
-    return undefined;
-  }
+  if (!labelOk || domain === undefined) return undefined;
   // The arm is chosen by the parsed domain; the default is admitted only when
   // it is a member, which is what makes the arm's default type true.
   const decl = { label, domain, default: raw.default } as SettingDecl;

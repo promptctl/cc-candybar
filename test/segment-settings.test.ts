@@ -330,7 +330,10 @@ describe("load errors", () => {
     [`on: { label: 'On', domain: 'bool', default: 'no' }`, `default must be true or false, got "no"`],
     [`on: { label: 'On', domain: [], default: 'a' }`, `a list domain must be a non-empty list of words`],
     [`on: { label: 'On', domain: { min: 3, max: 1 }, default: 2 }`, `a range domain is { min, max } with integers min ≤ max`],
-    [`on: { domain: 'bool', default: true }`, `a setting needs a non-empty "label"`],
+    [`on: { domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
+    [`on: { label: 'a\\nb', domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
+    [`on: { label: 'On', domain: ['', 'a'], default: 'a' }`, `a list domain's words must be non-empty, slash-free, and newline-free`],
+    [`on: { label: 'On', domain: ['a/b', 'a'], default: 'a' }`, `a list domain's words must be non-empty, slash-free, and newline-free`],
     [`'show-hash': { label: 'Hash', domain: 'bool', default: true }`, `setting name "show-hash" is read as .settings.show-hash`],
   ])("a malformed declaration: %s", (decl, message) => {
     expect(refusal(withSegment(decl, `{ h: ['s'] }`))).toContain(message);

@@ -529,14 +529,7 @@ export interface PlacementValue {
   readonly value: SettingValue;
 }
 
-/**
- * `save`'s write: every value key and every placement setting, as ONE tracked
- * write. A placement's value lands inside the placement, in the row of the
- * preset's layout that holds it — the row materialized first when the file
- * inherits it, as a structural edit's is.
- * [LAW:no-silent-failure] A placement no row holds is the stale click's loud
- * error, never a value written somewhere plausible.
- */
+/** `save`'s write: every value key and every placement setting, as ONE tracked write. */
 export function writeDrafts(
   store: EditStore,
   file: string,
@@ -554,10 +547,23 @@ export function writeDrafts(
       ),
     before ?? "",
   );
-  const after = placements.reduce((text, { preset, id, setting, value }) => {
-    const placement = layoutPlacementOf(docOf(text), preset, id);
+  commit(store, file, before, withPlacements(valued, file, placements));
+}
+
+// Every placement value laid into `text`, each inside its placement in the row
+// of its preset's layout that holds it — the row materialized first when the
+// file inherits it, as a structural edit's is.
+// [LAW:no-silent-failure] A placement no row holds is the stale click's loud
+// error, never a value written somewhere plausible.
+function withPlacements(
+  text: string,
+  file: string,
+  placements: readonly PlacementValue[],
+): string {
+  return placements.reduce((acc, { preset, id, setting, value }) => {
+    const placement = layoutPlacementOf(docOf(acc), preset, id);
     const set = setPlacementSetting(
-      ensureAuthored(text, placement),
+      ensureAuthored(acc, placement),
       placement.path,
       id,
       setting,
@@ -569,8 +575,7 @@ export function writeDrafts(
       );
     }
     return set;
-  }, valued);
-  commit(store, file, before, after);
+  }, text);
 }
 
 // [LAW:one-source-of-truth] A preset the user authored is declared by its
@@ -642,6 +647,7 @@ export function writePreset(
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
+  placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
   const before = readConfigText(file);
   const doc = docOf(before ?? "");
@@ -674,7 +680,14 @@ export function writePreset(
     (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
     setValue(before ?? "", own, "{}", JSON5_DIALECT),
   );
-  commit(store, file, before, after);
+  // The placements the session configured, in the copy of their layout the
+  // new preset now holds.
+  const placed = withPlacements(
+    after,
+    file,
+    placements.map((p) => ({ ...p, preset: name })),
+  );
+  commit(store, file, before, placed);
   return name;
 }
 

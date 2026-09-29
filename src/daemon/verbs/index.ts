@@ -57,6 +57,7 @@ import {
 import {
   placementDrafts,
   presetSnapshot,
+  type PlacementDraft,
   resetLayers,
   settingDrafts,
 } from "../setting-drafts";
@@ -632,10 +633,7 @@ const save: VerbHandler = (value, ctx) => {
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
     return [d.target, result.value];
   });
-  for (const p of placements) {
-    const result = validateStateWrite(p.key, settingSpelling(p.value));
-    if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
-  }
+  gatePlacements("save", placements);
   const file = originConfigFile(origin);
   writeDrafts(editStore(ctx, sid), file, pairs, placements);
   ctx.reloadConfig(origin);
@@ -649,13 +647,25 @@ const save: VerbHandler = (value, ctx) => {
     "info",
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
-      ...placements.map(
-        (p) =>
-          `${p.preset}/${p.id}.settings.${p.setting}=${settingSpelling(p.value)}`,
-      ),
+      ...placements.map(placementLog),
     ].join(" ")} → ${file} (session=${sid})`,
   );
 };
+
+// [LAW:single-enforcer] A placement's value re-crosses the gate its control's
+// click passed, as a display setting's does.
+const placementLog = (p: PlacementDraft): string =>
+  `${p.preset}/${p.id}.settings.${p.setting}=${settingSpelling(p.value)}`;
+
+function gatePlacements(
+  verb: string,
+  placements: readonly PlacementDraft[],
+): void {
+  for (const p of placements) {
+    const result = validateStateWrite(p.key, settingSpelling(p.value));
+    if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
+  }
+}
 
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders
 // becomes `presets.<name>` in its config file (presetSnapshot), and the
@@ -678,6 +688,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
     return [d.configKey, result.value];
   });
+  gatePlacements("save-preset", snapshot.placements);
   const file = originConfigFile(origin);
   const name = writePreset(
     editStore(ctx, sid),
@@ -685,14 +696,19 @@ const savePreset: VerbHandler = (value, ctx) => {
     snapshot.from,
     snapshot.globals,
     picks,
+    snapshot.placements,
   );
   ctx.reloadConfig(origin);
-  for (const p of SETTING_PROJECTIONS)
-    ctx.sessionState.clear(sid, p.sessionKey);
+  for (const key of [
+    ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
+    ...snapshot.placements.map((p) => p.key),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.dlog(
     "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`)].join(" ")} → ${file} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${file} (session=${sid})`,
   );
 };
 

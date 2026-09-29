@@ -683,7 +683,10 @@ export function registerDslConfig(
           draft === undefined
             ? () => saved
             : () =>
-                parseSettingSpelling(decl, String(store.read(draft))) ?? saved,
+                parseSettingSpelling(
+                  decl,
+                  String(store.read(draft.variable)),
+                ) ?? saved,
       });
     }
     return Object.freeze(out);

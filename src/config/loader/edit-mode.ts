@@ -52,6 +52,12 @@ export const EDIT_MODE_KEY = "edit.mode";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 export const EDIT_MODE_ARRANGE = "arrange";
 
+// The namespace every placement's unsaved setting value lives under, as a
+// session key and as a variable. No scalar is declared at `edit.draft`, so
+// nothing under it can be shadowed by one — as a preset named `mode` would
+// shadow `edit.mode.…` beside edit mode's own state.
+export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+
 // The member that configures the placement `id`. An id holds no `:` (the
 // loader refuses one), so the member names exactly one placement.
 export function configureMember(id: string): string {

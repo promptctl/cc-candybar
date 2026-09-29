@@ -20,7 +20,13 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH, VERB_SAVE } from "../src/click/wire";
+import {
+  parseEffects,
+  VERB_DISPATCH,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_UNDO,
+} from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import {
   deriveActionValidators,
@@ -96,7 +102,12 @@ afterEach(() => {
   durable.dispose();
 });
 
-function buildRuntime(src: string, sessionState = new SessionState()) {
+// `preset` is the layout the render walks — the floor unless a test names one.
+function buildRuntime(
+  src: string,
+  sessionState = new SessionState(),
+  preset?: string,
+) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
@@ -117,6 +128,8 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
         charset: "unicode" as const,
         width: 200,
       },
+      undefined,
+      { preset },
     );
   const disposers = [
     ...deriveActionValidators(config).map(({ key, spec }) =>
@@ -361,6 +374,107 @@ describe("configure mode's drafts are saved into the placement", () => {
     expect(text).toContain("d-short-3");
     expect(text).toContain("D-long-2");
     after.dispose();
+    rt.dispose();
+  });
+});
+
+describe("configure mode survives what a placement's settings do to it", () => {
+  // A setting that hides its own placement: the gate reads the very value the
+  // toggle writes.
+  const HIDING = `{
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+    },
+    segments: {
+      tag: {
+        template: 'TAG',
+        when: '{{ .settings.show }}',
+        settings: { show: { label: 'show', domain: 'bool', default: true } },
+      },
+    },
+    root: { v: [{ h: ['tag'] }] },
+  }`;
+
+  test("the placement being configured shows its controls whatever its own when says", () => {
+    durable.write(HIDING);
+    const rt = buildRuntime(HIDING);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("tag"));
+    rt.click(rt.urlWriting(rt.render(), draftKey("tag", "show"), "false"));
+    // The control that turned it off is still there to turn it back on.
+    expect(stripAnsi(rt.render())).toContain("☐ show");
+    rt.click(rt.urlWriting(rt.render(), draftKey("tag", "show"), "true"));
+    expect(stripAnsi(rt.render())).toContain("☑ show");
+    // Out of configure mode, the placement's own gate decides again.
+    rt.sessionState.set(SID, draftKey("tag", "show"), "false");
+    rt.sessionState.set(SID, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    expect(stripAnsi(rt.render())).not.toContain("TAG");
+    rt.dispose();
+  });
+
+  test("a label is display text, however it is spelled", () => {
+    const src = SRC.replace(`label: 'depth'`, `label: 'max "items" {{ x }}'`);
+    durable.write(src);
+    const rt = buildRuntime(src);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs2"));
+    expect(stripAnsi(rt.render())).toContain(`◀ max "items" {{ x }} 2 ▶`);
+    rt.dispose();
+  });
+
+  test("a preset named like edit mode's own state still renders its controls", () => {
+    const src = SRC.replace(
+      "globals: {},",
+      "globals: { preset: 'mode' }, presets: { mode: { root: { v: [{ h: [{ seg: 'vcs', id: 'vcs2' }] }] } } },",
+    );
+    durable.write(src);
+    const rt = buildRuntime(src, new SessionState(), "mode");
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs2"));
+    const text = stripAnsi(rt.render());
+    expect(text).toMatch(/◀ depth 2 ▶/);
+    expect(text).not.toContain("⚠");
+    rt.dispose();
+  });
+});
+
+describe("placement drafts are settings, to undo and to save as a preset", () => {
+  test("a configure pick is one undo step, and an undone save brings the draft back", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs2"));
+    rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
+
+    rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    VERBS.get(VERB_SAVE)!(SID, rt.ctx);
+    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
+    VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    expect(durable.text()).toBe(SRC);
+    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBe("true");
+    rt.dispose();
+  });
+
+  test("save as preset writes the placement's draft into the new preset and releases it", () => {
+    // A preset that stages its own layout, so the new preset's copy of it is
+    // its own and the preset it was copied from keeps the file's value.
+    const src = SRC.replace(
+      "globals: {},",
+      "globals: { preset: 'p' }, presets: { p: { root: { v: [{ h: [{ seg: 'vcs', id: 'vcs2', settings: { form: 'long' } }] }] } } },",
+    );
+    durable.write(src);
+    const rt = buildRuntime(src, new SessionState(), "p");
+    const key = placementDraftKey("p", "vcs2", "detail");
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs2"));
+    rt.click(rt.urlWriting(rt.render(), key, "true"));
+    VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+    expect(rt.sessionState.get(SID, key)).toBeNull();
+    const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
+    const settingsIn = (preset: string) =>
+      [...walkNodes(presetRoot(saved, preset).node)].find(
+        (n): n is SegmentNode =>
+          n.kind === "segment" && placementId(n) === "vcs2",
+      )?.settings;
+    expect(settingsIn("custom-1")).toEqual({ form: "long", detail: true });
+    expect(settingsIn("p")).toEqual({ form: "long" });
     rt.dispose();
   });
 });

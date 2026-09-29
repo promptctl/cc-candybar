@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
+import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
 import type { DaemonLogger } from "./log";
 import type { SessionStateRW } from "./session-state";
@@ -73,12 +74,16 @@ export interface HistoryStorage {
 
 const EPHEMERAL_STORAGE: HistoryStorage = { load: () => ({}), save: () => {} };
 
-// [LAW:one-source-of-truth] The session keys a settings control writes. Every
-// other session key — an open menu, a page cursor, the edit-mode toggle — is
-// the menu's own state, and undoing it would be undoing navigation.
+// [LAW:one-source-of-truth] The session keys a settings control writes: a
+// display setting's, and every placement setting's unsaved value, which
+// configure mode mints under one namespace. Every other session key — an open
+// menu, a page cursor, the edit-mode toggle — is the menu's own state, and
+// undoing it would be undoing navigation.
 const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey),
 );
+const isSettingKey = (key: string): boolean =>
+  SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
 
 // [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
 // history costs is its bytes, held in memory and rewritten on every step. It
@@ -160,7 +165,7 @@ export class SettingsHistory {
       write: () => void,
     ): void => {
       const before = keys
-        .filter((key) => SETTING_SESSION_KEYS.has(key))
+        .filter(isSettingKey)
         .map((key) => ({ key, before: inner.get(sessionId, key) }));
       write();
       for (const { key, before: b } of before) {

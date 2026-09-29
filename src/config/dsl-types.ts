@@ -131,12 +131,20 @@ export interface SegmentNode {
   // like `opens`.
   readonly trail?: string;
   // Where this placement's unsaved setting values live (brandon-segment-
-  // settings-i4n.g64): setting name → the `state` variable configure mode's
-  // controls write, whose default is the value `settings` resolves to. The
-  // placement's templates read `.settings` through these, so a pick shows the
-  // moment it is made and `💾 save` writes it into the placement.
+  // settings-i4n.g64): setting name → the session key configure mode's
+  // controls write and the `state` variable that reads it. The placement's
+  // templates read `.settings` through these, so a pick shows the moment it
+  // is made and `💾 save` writes it into the placement.
   // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
-  readonly drafts?: Readonly<Record<string, string>>;
+  readonly drafts?: Readonly<Record<string, DraftSlot>>;
+}
+
+// One setting's unsaved value: the session key it is held at, and the `state`
+// variable a template reads it through — minted together, so a reader of the
+// key never looks the variable up to find it.
+export interface DraftSlot {
+  readonly key: string;
+  readonly variable: string;
 }
 
 // [LAW:one-source-of-truth] THE identity of a placement: its authored `id`,

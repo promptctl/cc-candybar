@@ -40,6 +40,7 @@ import {
   ADD_GLYPH,
   EDIT_LIVE_DISPLAY,
   REMOVE_GLYPH,
+  CONFIGURE_GLYPH,
 } from "../src/config/edit-chrome";
 
 const SID = "s-help";
@@ -245,10 +246,10 @@ describe("edit mode's (?)", () => {
     for (const line of EDIT_MODE_HELP) expect(reclosed).not.toContain(line);
   });
 
-  test("covers add, remove and the ↺ customized banner", () => {
+  test("covers add, remove, configure and the ↺ customized banner", () => {
     // Coverage is the checkable criterion the ticket names: each affordance
     // edit mode shows gets a line naming what clicking it does.
-    const glyphs = [ADD_GLYPH, REMOVE_GLYPH, "↺"];
+    const glyphs = [ADD_GLYPH, REMOVE_GLYPH, CONFIGURE_GLYPH, "↺"];
     for (const g of glyphs) {
       expect(EDIT_MODE_HELP.some((l) => l.startsWith(g))).toBe(true);
     }

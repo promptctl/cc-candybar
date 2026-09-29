@@ -177,30 +177,16 @@ export function placementDrafts(
   return [...walkNodes(presetRoot(config, preset).node)].flatMap((node) =>
     node.kind !== "segment" || node.drafts === undefined
       ? []
-      : Object.entries(node.drafts).flatMap(([setting, variable]) => {
+      : Object.entries(node.drafts).flatMap(([setting, { key }]) => {
           const decl = config.segments[node.name]!.settings![setting]!;
-          const held = config.variables[variable];
-          // [LAW:no-silent-failure] Edit chrome mints the variable beside the
-          // field that names it; a name that reads nothing is drift there.
-          if (held?.kind !== "state") {
-            throw new Error(
-              `placement "${placementId(node)}": draft variable "${variable}" is not a declared state variable`,
-            );
-          }
-          const pick = sessionPick(held.key);
+          const saved = node.settings?.[setting] ?? decl.default;
+          const pick = sessionPick(key);
           const value =
             pick === null ? undefined : parseSettingSpelling(decl, pick);
-          return value === undefined || settingSpelling(value) === held.default
+          return value === undefined ||
+            settingSpelling(value) === settingSpelling(saved)
             ? []
-            : [
-                {
-                  preset,
-                  id: placementId(node),
-                  setting,
-                  key: held.key,
-                  value,
-                },
-              ];
+            : [{ preset, id: placementId(node), setting, key, value }];
         }),
   );
 }
@@ -215,6 +201,7 @@ export interface PresetSnapshot {
   readonly from: string;
   readonly globals: Globals;
   readonly picks: readonly SettingDraft[];
+  readonly placements: readonly PlacementDraft[];
 }
 
 export function presetSnapshot(
@@ -238,6 +225,7 @@ export function presetSnapshot(
       () => from,
       (row) => row.configKey,
     ),
+    placements: placementDrafts(config, sessionPick),
   };
 }
 

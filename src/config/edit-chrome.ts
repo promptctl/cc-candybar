@@ -33,6 +33,7 @@ import {
   type PresetDecl,
   type SegmentDecl,
   type SegmentNode,
+  type DraftSlot,
   type SettingDecl,
   type VariableDecl,
 } from "./dsl-types.js";
@@ -46,6 +47,7 @@ import {
   EDIT_MODE_KEY,
   EDIT_MODE_REF,
   EDIT_TOGGLE_ACTION,
+  PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
 import { declareHelp } from "./help.js";
@@ -208,6 +210,17 @@ function trailOf(terms: readonly string[]): string {
 
 // ─── Configure mode (brandon-segment-settings-i4n.g64) ──────────────────────
 
+// The label of the placement being configured shows, as every label does in
+// the names view, and its controls hang on the LABEL: a placement's own
+// `when` is the author's, so a placement hidden right now — by the data, or
+// by the very setting just toggled — would take the controls that could
+// change that with it. The label also names which placement they configure.
+function shownWhile(configure: ConfigureParts | null, when: string): string {
+  return configure === null
+    ? when
+    : `{{ if ${disclosureTerm(configure.opens.ref)} }}true{{ else }}${when}{{ end }}`;
+}
+
 // [LAW:one-source-of-truth] THE session key an unsaved value of one
 // placement's setting lives at: the preset (a placement's id is unique only in
 // the tree one preset renders), the id, and the setting. A setting name is an
@@ -218,7 +231,7 @@ export function placementDraftKey(
   id: string,
   setting: string,
 ): string {
-  return `${EDIT_NS}draft.${presetIdent}.${id}.${setting}`;
+  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
 // The control for one setting, generated from its declaration: a toggle for a
@@ -250,7 +263,7 @@ function settingControl(
     }
     return (
       `{{ action "${actionName}.down" "◀" }} ` +
-      `${label} {{ .${variable} }} ` +
+      `{{ "${label}" }} {{ .${variable} }} ` +
       `{{ action "${actionName}.up" "▶" }}`
     );
   }
@@ -268,33 +281,35 @@ function settingControl(
 // placement's `configure:<id>` member, so its `✕` writes that key closed and
 // entering any other mode — arranging, or configuring another placement —
 // closes it by overwriting the value it is open on.
+interface ConfigureParts {
+  readonly term: string;
+  readonly opens: NonNullable<SegmentNode["opens"]>;
+  readonly drafts: Readonly<Record<string, DraftSlot>>;
+}
+
 function configureParts(
   ctx: SpliceCtx,
   posIdent: string,
   node: SegmentNode,
   decls: Readonly<Record<string, SettingDecl>>,
-): {
-  readonly term: string;
-  readonly opens: SegmentNode["opens"];
-  readonly drafts: Readonly<Record<string, string>>;
-} {
+): ConfigureParts {
   const id = placementId(node);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(id);
   const enter = `${prefix}.configure.${posIdent}`;
   ctx.artifacts.actions[enter] = { set: EDIT_MODE_KEY, to: member };
-  const drafts: Record<string, string> = {};
+  const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
-    // Named by position so it is a template field path (`.edit.p.draft.d3.x`);
+    // Named by position so it is a template field path (`.edit.draft.p.d3.x`);
     // the key, not the name, is what a session holds across reloads.
-    const variable = `${prefix}.draft.d${posIdent}.${name}`;
+    const variable = `${PLACEMENT_DRAFT_NS}${ctx.presetIdent}.d${posIdent}.${name}`;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
       default: settingSpelling(node.settings?.[name] ?? decl.default),
     };
-    drafts[name] = variable;
+    drafts[name] = { key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
     ctx.artifacts.segments[segName] = {
       template: settingControl(decl, key, variable, segName, ctx.artifacts),
@@ -338,13 +353,18 @@ function labelChrome(
   id: string,
   segName: string,
   artifacts: ChromeArtifacts,
+  configure: ConfigureParts | null,
 ): SegmentNode {
   const name = `${LABEL_NS}${id}:${segName}`;
   artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    when: LABEL_GATE,
+    when: shownWhile(configure, LABEL_GATE),
   };
-  return { kind: "segment", name };
+  return {
+    kind: "segment",
+    name,
+    ...(configure !== null && { opens: configure.opens }),
+  };
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -482,12 +502,12 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       ),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(id, child.name, ctx.artifacts), trail },
+      { ...labelChrome(id, child.name, ctx.artifacts, configure), trail },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
         trail,
-        ...(configure && { opens: configure.opens, drafts: configure.drafts }),
+        ...(configure && { drafts: configure.drafts }),
       },
       chromeCell(after.host, after.template, ctx.artifacts),
     ];
