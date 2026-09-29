@@ -63,6 +63,7 @@ import {
   templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
+import { retiredThemeNote } from "./retired-themes.js";
 
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
 // in loader/presets.ts's per-file structural pass (where a round-1 version
@@ -820,7 +821,7 @@ function checkPlacementSettings(
         ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})`
         : inSettingDomain(decl, value)
           ? undefined
-          : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
+          : `sets "${setting}" to ${JSON.stringify(value)}${decl.domain === "theme" ? retiredThemeNote(value) : ""}, but it must be ${describeSettingDomain(decl)}`;
     if (problem !== undefined) {
       ctx.issues.push({
         path: layoutKey,

@@ -1503,7 +1503,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
     // it sits on: a theme's `success`/`warning`/`accent` is designed against
     // its own background, not the tint a bar cell wears (the raw role measured
-    // 1.01:1 on `light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
+    // 1.01:1 on `textual-light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
     // OKLCH lightness, so the hue — the part that says "staged" — survives.
     // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
     gitPaint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,

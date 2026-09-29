@@ -375,6 +375,17 @@ describe("globals.palette as an expression — loader", () => {
     expect(() => load(src("no-such-theme"))).toThrow(/Unknown palette/);
   });
 
+  test("a retired theme name is refused with the theme that replaced it", () => {
+    const retired = /"dark" was retired; write "textual-dark"/;
+    expect(() => load(src("dark"))).toThrow(retired);
+    const placed = src(THEME_FLOOR).replace(
+      "root: { v: ['plain', 'label'] }",
+      "root: { v: [{ seg: 'plain', settings: { theme: 'dark' } }, 'label'] }",
+    );
+    expect(() => load(placed)).toThrow(retired);
+    expect(() => load(src("no-such-theme"))).not.toThrow(/was retired/);
+  });
+
   test("a per-segment palette: pin still refuses a rule — it is frozen at registration", () => {
     // [LAW:one-type-per-behavior] The two slots differ in BEHAVIOUR now, so they
     // differ in spec: a pin can never be settled per render, so a rule there must
@@ -419,8 +430,6 @@ describe("resolveThemeSelection", () => {
   });
 
   test("a session pick naming no installed theme falls through to the config rung", () => {
-    // `dark` was an alias of textual-dark until brandon-theme-picker-bgw.exj.dw1;
-    // a session that picked it before then holds a name nothing installs.
     expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
       kind: "decided",
       name: "nord",

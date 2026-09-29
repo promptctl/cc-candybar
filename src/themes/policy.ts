@@ -79,9 +79,8 @@ export function effectiveGlobal<T>(
 }
 
 // [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
-// is exactly the registry's names: one name per palette, so a picker or a
-// carousel stepping this list never lands on a palette it already showed, and
-// a label always names the palette the bar wears. "custom" and "random" are
+// is exactly the registry's names — no alias, so every name is its palette's
+// own and a label always names the palette the bar wears. "custom" and "random" are
 // deliberately absent: neither names a concrete palette (custom needs inline
 // colors; random is a per-session sentinel). Config validators that gate a
 // palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
