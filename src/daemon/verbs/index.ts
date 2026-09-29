@@ -612,7 +612,7 @@ const savePreset: VerbHandler = (value, ctx) => {
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, snapshot.name);
   ctx.dlog(
     "info",
-    `save-preset: ${snapshot.name} from=${snapshot.from} ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,
+    `save-preset: ${[`${snapshot.name} from=${snapshot.from}`, ...pairs.map(([k, v]) => `${k}=${v}`)].join(" ")} → ${file} (session=${sid})`,
   );
 };
 

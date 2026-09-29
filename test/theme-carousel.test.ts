@@ -531,7 +531,9 @@ function previewLabels(rendered: string): string[][] {
   const ring = lines.findIndex((l) => RING.test(l));
   const rows: string[][] = [];
   for (const line of lines.slice(ring + 1)) {
-    if (!/^\W*✕/u.test(line)) break;
+    // The preview's rows end where the ring's body goes on to the preset
+    // actions (brandon-save-undo-bwi.o6u), or where the body ends.
+    if (!/^\W*✕/u.test(line) || line.includes("⊕ save as preset")) break;
     rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
   }
   return rows;
