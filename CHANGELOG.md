@@ -1,3 +1,10 @@
+# [1.97.0](https://github.com/promptctl/cc-candybar/compare/v1.96.1...v1.97.0) (2026-09-29)
+
+
+### Features
+
+* **settings:** menu controls are generated from the globals declarations ([#276](https://github.com/promptctl/cc-candybar/issues/276)) ([2cfebe6](https://github.com/promptctl/cc-candybar/commit/2cfebe6279fc668e1775bd8ce83c3f96bfcdc297))
+
 ## [1.96.1](https://github.com/promptctl/cc-candybar/compare/v1.96.0...v1.96.1) (2026-09-29)
 
 
