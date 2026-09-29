@@ -10,8 +10,11 @@ import {
   describeSettingDomain,
   hasCacheField,
   inSettingDomain,
+  rangeOf,
   settingOrderProblems,
   settingsOf,
+  type SettingOrderProblem,
+  type SettingValue,
   type SettingDecl,
   freePlacementId,
   placementId,
@@ -46,7 +49,10 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
-import { retiredVariableMessage } from "./retired-variables.js";
+import {
+  retiredReadHint,
+  retiredVariableMessage,
+} from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
@@ -682,7 +688,9 @@ function withSettingsScope(
 // [LAW:no-silent-failure] A declaration's `atLeast` relations, over the MERGED
 // settings (a file may redeclare one setting of a bundled segment, and the
 // setting it names may be the bundled one): each names another range setting
-// of the segment, and the defaults stand together under every relation.
+// of the segment, no chain of them closes a cycle (every setting on one could
+// only ever equal the rest, so no stepper click could move any of them), and
+// the defaults stand together under every relation.
 function checkSettingOrder(
   ctx: ValidateCtx,
   segName: string,
@@ -696,40 +704,85 @@ function checkSettingOrder(
       line: findKeyLine(ctx.source, ["segments", segName, "settings", name]),
     });
   };
-  const unresolved = unresolvedFloors(settings);
-  for (const [name, floor] of unresolved) {
-    push(
-      name,
-      `atLeast "${floor}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`,
-    );
-  }
-  if (unresolved.length > 0) return;
-  const defaults = Object.fromEntries(
-    Object.entries(settings).map(([n, d]) => [n, d.default]),
-  );
-  for (const { setting, message } of settingOrderProblems(settings, defaults)) {
+  const broken = floorProblems(settings);
+  for (const { setting, message } of broken) push(setting, message);
+  if (broken.length > 0) return;
+  for (const { setting, message } of settingOrderProblems(
+    settings,
+    defaultsOf(settings),
+  )) {
     push(setting, `the defaults do not stand together: ${message}`);
   }
 }
 
-const isRange = (decl: SettingDecl | undefined): boolean =>
-  typeof decl?.domain === "object" && "min" in decl.domain;
-
-// Each `atLeast` that names no OTHER range setting of the segment, as
-// [setting, the name it gives]. The relations are asked of values only when
-// this is empty — the declaration reports it once, never each placement.
-function unresolvedFloors(
+// Whether the declaration's relations were already reported by
+// checkSettingOrder — then no placement repeats them.
+function relationsReported(
   settings: Readonly<Record<string, SettingDecl>>,
-): ReadonlyArray<readonly [string, string]> {
-  return Object.entries(settings).flatMap(([name, { domain }]) => {
-    if (typeof domain !== "object" || !("min" in domain)) return [];
-    const floor = domain.atLeast;
+): boolean {
+  return (
+    floorProblems(settings).length > 0 ||
+    settingOrderProblems(settings, defaultsOf(settings)).length > 0
+  );
+}
+
+function defaultsOf(
+  settings: Readonly<Record<string, SettingDecl>>,
+): Record<string, SettingValue> {
+  return Object.fromEntries(
+    Object.entries(settings).map(([n, d]) => [n, d.default]),
+  );
+}
+
+// Each `atLeast` that names no OTHER range setting of the segment, and each
+// cycle of them (reported once, at its first member by name). The relations
+// are asked of values only when this is empty.
+function floorProblems(
+  settings: Readonly<Record<string, SettingDecl>>,
+): readonly SettingOrderProblem[] {
+  const floorOf = (name: string): string | undefined =>
+    rangeOf(own(settings, name))?.atLeast;
+  return Object.keys(settings).flatMap((name): SettingOrderProblem[] => {
+    const floor = floorOf(name);
     if (floor === undefined) return [];
-    const target = Object.prototype.hasOwnProperty.call(settings, floor)
-      ? settings[floor]
-      : undefined;
-    return floor !== name && isRange(target) ? [] : [[name, floor] as const];
+    if (floor === name || rangeOf(own(settings, floor)) === undefined) {
+      return [
+        {
+          setting: name,
+          message: `atLeast "${floor}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`,
+        },
+      ];
+    }
+    const chain = [name];
+    for (
+      let next: string | undefined = floor;
+      next !== undefined;
+      next = floorOf(next)
+    ) {
+      if (next === name) {
+        return chain.every((member) => name <= member)
+          ? [
+              {
+                setting: name,
+                message: `atLeast closes a cycle (${[...chain, name].join(" ≥ ")}) — every setting on it could only ever equal the rest`,
+              },
+            ]
+          : [];
+      }
+      if (chain.includes(next)) return [];
+      chain.push(next);
+    }
+    return [];
   });
+}
+
+function own(
+  settings: Readonly<Record<string, SettingDecl>>,
+  name: string,
+): SettingDecl | undefined {
+  return Object.prototype.hasOwnProperty.call(settings, name)
+    ? settings[name]
+    : undefined;
 }
 
 function rangeSettingNames(
@@ -737,7 +790,7 @@ function rangeSettingNames(
   except: string,
 ): string[] {
   return Object.entries(settings)
-    .filter(([n, decl]) => n !== except && isRange(decl))
+    .filter(([n, decl]) => n !== except && rangeOf(decl) !== undefined)
     .map(([n]) => n);
 }
 
@@ -787,7 +840,7 @@ function checkPlacementSettings(
   const members = Object.entries(resolved).every(([n, v]) =>
     inSettingDomain(declared[n]!, v),
   );
-  if (!members || unresolvedFloors(declared).length > 0) return;
+  if (!members || relationsReported(declared)) return;
   for (const { message } of settingOrderProblems(declared, resolved)) {
     ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
   }
@@ -924,7 +977,7 @@ function checkTemplateRefs(
     const hint =
       namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
-        : "";
+        : retiredReadHint(ref);
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"${hint}`,
@@ -938,7 +991,7 @@ function checkTemplateRefs(
 // helper — and ONCE, however many templates reach it at that path.
 function checkHelperRef(ctx: ValidateCtx, helper: string, ref: string): void {
   const path = `helpers.${helper}`;
-  const message = `Template references unknown variable ".${ref}"`;
+  const message = `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`;
   if (ctx.issues.some((i) => i.path === path && i.message === message)) return;
   ctx.issues.push({
     path,

@@ -2110,6 +2110,7 @@
                         "minimum": 1
                       },
                       "atLeast": {
+                        "type": "string",
                         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       }
                     }
@@ -2828,6 +2829,7 @@
                         "minimum": 1
                       },
                       "atLeast": {
+                        "type": "string",
                         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       }
                     }

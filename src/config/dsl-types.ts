@@ -928,14 +928,24 @@ export interface SettingOrderProblem {
   readonly message: string;
 }
 
+// A setting's range domain, or undefined for every other arm — the one
+// spelling of "is this setting a number between bounds".
+export function rangeOf(
+  decl: SettingDecl | undefined,
+): SettingRange | undefined {
+  const domain = decl?.domain;
+  return typeof domain === "object" && "min" in domain ? domain : undefined;
+}
+
+// `decls` is a LOADED declaration: every `atLeast` names another range
+// setting of it and none closes a cycle (the loader refuses both), so each
+// floor's value is a number in `values`.
 export function settingOrderProblems(
   decls: Readonly<Record<string, SettingDecl>>,
   values: Readonly<Record<string, SettingValue>>,
 ): readonly SettingOrderProblem[] {
   return Object.entries(decls).flatMap(([name, decl]) => {
-    const { domain } = decl;
-    if (typeof domain !== "object" || !("min" in domain)) return [];
-    const floor = domain.atLeast;
+    const floor = rangeOf(decl)?.atLeast;
     if (floor === undefined) return [];
     const value = values[name] as number;
     const least = values[floor] as number;

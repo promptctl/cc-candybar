@@ -172,7 +172,81 @@ describe("block's thresholds are settings configure mode steps", () => {
   });
 });
 
+describe("a stride wider than 1 reaches both ends", () => {
+  test("a step past a bound stops on it; only a step from the bound wraps", () => {
+    const rt = buildRuntime(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "session"));
+    const budget = placementDraftKey("default", "session", "budget");
+    rt.sessionState.set(SID, budget, "9998");
+    rt.click(rt.stepper("session", "budget", 5));
+    expect(rt.pick("session", "budget")).toBe("10000");
+    rt.click(rt.stepper("session", "budget", 5));
+    expect(rt.pick("session", "budget")).toBe("0");
+    rt.sessionState.set(SID, budget, "3");
+    rt.click(rt.stepper("session", "budget", -5));
+    expect(rt.pick("session", "budget")).toBe("0");
+    rt.click(rt.stepper("session", "budget", -5));
+    expect(rt.pick("session", "budget")).toBe("10000");
+    rt.dispose();
+  });
+});
+
 describe("the loader holds the file to the same order", () => {
+  test("an atLeast cycle fails to load, once", () => {
+    const src = `{
+      segments: {
+        gauge: {
+          template: '{{ .settings.low }}{{ .settings.high }}',
+          settings: {
+            low: { label: 'low', domain: { min: 0, max: 9, atLeast: 'high' }, default: 5 },
+            high: { label: 'high', domain: { min: 0, max: 9, atLeast: 'low' }, default: 5 },
+          },
+        },
+      },
+      root: { v: [ { h: ['gauge'] } ] },
+    }`;
+    let message = "";
+    try {
+      load(src);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(
+      /segments\.gauge\.settings\.high: atLeast closes a cycle \(high ≥ low ≥ high\)/,
+    );
+    expect(message.match(/closes a cycle/g)).toHaveLength(1);
+  });
+
+  test("defaults out of order are reported at the declaration only, not per placement", () => {
+    const src = `{
+      segments: {
+        gauge: {
+          template: '{{ .settings.low }}{{ .settings.high }}',
+          settings: {
+            low: { label: 'low', domain: { min: 0, max: 9 }, default: 5 },
+            high: { label: 'high', domain: { min: 0, max: 9, atLeast: 'low' }, default: 2 },
+          },
+        },
+      },
+      root: { v: [ { h: ['gauge'] } ] },
+    }`;
+    let message = "";
+    try {
+      load(src);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message.match(/is below "low"/g)).toHaveLength(1);
+  });
+
+  test("a template still reading a retired threshold names the setting that replaced it", () => {
+    const src = `{ segments: { mine: { template: '{{ .burn.eta.warnMinutes }}' } } }`;
+    expect(() => load(src)).toThrow(
+      /unknown variable "\.burn\.eta\.warnMinutes" — "\.burn\.eta\.warnMinutes" is no longer a variable: it became the "warnWithin" setting of each "burnrate" placement .*; a "burnrate" template reads it as "\.settings\.warnWithin"/,
+    );
+  });
+
+
   test("a placement whose thresholds descend fails to load", () => {
     expect(() =>
       load(

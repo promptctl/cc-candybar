@@ -364,12 +364,23 @@ const setState: VerbHandler = (rawValue, ctx) => {
 // steps from what the session's config shows (stepFrom).
 const STEP_INT_RE = /^-?\d+$/;
 
-// [LAW:no-ambient-temporal-coupling] Stepping past a bound WRAPS to the other end
-// — the navigation owner is THIS handler (moved off the render side, which is no
-// longer the timing authority for the value). The range gate still owns the
-// [min,max] CLAMP; wrap is navigation, clamp is enforcement.
-function wrapStep(n: number, min: number, max: number): number {
-  return n > max ? min : n < min ? max : n;
+// [LAW:no-ambient-temporal-coupling] A step that would pass a bound STOPS on it,
+// and only a step taken FROM the bound wraps to the other end — so a stride
+// wider than 1 (a setting's `step`) still reaches both ends, and one click past
+// a bound never lands a value no click was aimed at. The navigation owner is
+// THIS handler (moved off the render side, which is no longer the timing
+// authority for the value). The range gate still owns the [min,max] CLAMP;
+// wrap is navigation, clamp is enforcement.
+function stepWithin(
+  current: number,
+  by: number,
+  min: number,
+  max: number,
+): number {
+  const n = current + by;
+  if (n > max) return current === max ? min : max;
+  if (n < min) return current === min ? max : min;
+  return n;
 }
 
 // [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
@@ -420,7 +431,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
             key,
           ),
         );
-  const next = wrapStep(clamped + by, params.min, params.max);
+  const next = stepWithin(clamped, by, params.min, params.max);
   const result = validateStateWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
@@ -630,7 +641,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
           params,
           configKeySeed(ctx.configFor(origin), key),
         );
-  const next = wrapStep(current + by, params.min, params.max);
+  const next = stepWithin(current, by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), file, [[key, result.value]]);

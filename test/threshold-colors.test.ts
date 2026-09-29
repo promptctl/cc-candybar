@@ -273,7 +273,8 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
 // [LAW:no-silent-failure] An error threshold set below the warning threshold
 // is a descending pair. The loader refuses such a placement and configure mode
 // refuses such a pick (test/threshold-settings.test.ts), so this is the
-// render's own last line — a pick left standing by a hand edit of the file.
+// render's own last line — a pick left standing when the file under it
+// changes: a hand edit, or another session's (or another preset's) save.
 // The old `if ge …` cascade rendered it by silently dropping the warning
 // band; the ramp refuses to sort and names both positions.
 describe("a threshold below its neighbour is a loud render error", () => {

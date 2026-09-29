@@ -54,7 +54,7 @@ const SETTING_DECL_JSON = {
             min: { type: "integer" },
             max: { type: "integer" },
             step: { type: "integer", minimum: 1 },
-            atLeast: SETTING_NAME_JSON,
+            atLeast: { type: "string", ...SETTING_NAME_JSON },
           },
         },
       ],
