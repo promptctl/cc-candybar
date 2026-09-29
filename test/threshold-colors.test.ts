@@ -1,6 +1,6 @@
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
-// names — not opaque bytes. block/weekly heat as utilization passes 50 and
-// the (user-overridable) warning threshold; burnrate heats as the projected
+// names — not opaque bytes. block/weekly heat as utilization passes the
+// placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
 // minutes-to-cap fall under the warn/error minutes, with the -1 "cannot
 // project" sentinel calm; context heats as the integer percentage left drops
 // through 40 and 20. Each row says which palette NAME the cell's background
@@ -46,7 +46,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// One row: the payload a segment reads, the literal vars it thresholds
+// One row: the payload a segment reads, the placement settings it thresholds
 // against, and the palette name its cell's background must wear.
 interface Row {
   readonly value: number;
@@ -55,7 +55,7 @@ interface Row {
 interface Case {
   readonly segment: string;
   readonly glyph: string;
-  readonly vars: Readonly<Record<string, number>>;
+  readonly settings: Readonly<Record<string, number>>;
   readonly payload: (value: number) => Record<string, unknown>;
   readonly rows: readonly Row[];
 }
@@ -118,7 +118,7 @@ const CASES: readonly Case[] = [
   ...(["block", "weekly"] as const).map((segment) => ({
     segment,
     glyph: segment === "block" ? "◱" : "◑",
-    vars: { [`${segment}.budget.heatThreshold`]: 20 },
+    settings: { warnAt: 20 },
     payload: (v: number) =>
       segment === "block"
         ? { block: { nativeUtilization: v, resetsAt: RESETS_AT } }
@@ -128,7 +128,7 @@ const CASES: readonly Case[] = [
   ...([80, 50] as const).map((threshold) => ({
     segment: "block",
     glyph: "◱",
-    vars: { "block.budget.warningThreshold": threshold },
+    settings: { errorAt: threshold },
     payload: (v: number) => ({
       block: { nativeUtilization: v, resetsAt: RESETS_AT },
     }),
@@ -137,7 +137,7 @@ const CASES: readonly Case[] = [
   ...([80, 50] as const).map((threshold) => ({
     segment: "weekly",
     glyph: "◑",
-    vars: { "weekly.budget.warningThreshold": threshold },
+    settings: { errorAt: threshold },
     payload: (v: number) => ({
       weekly: { percentage: v, resetsAt: RESETS_AT },
     }),
@@ -146,7 +146,7 @@ const CASES: readonly Case[] = [
   {
     segment: "burnrate",
     glyph: "⚡",
-    vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 30 },
+    settings: { warnWithin: 60, errorWithin: 30 },
     payload: (v: number) => ({
       burn: { costPerHour: 1 },
       block: { etaMinutes: v, resetsAt: RESETS_AT },
@@ -156,7 +156,7 @@ const CASES: readonly Case[] = [
   {
     segment: "context",
     glyph: "◔",
-    vars: {},
+    settings: {},
     payload: (v: number) => ({
       context: { totalTokens: 1000, contextLeft: v },
     }),
@@ -185,6 +185,7 @@ function renderOne(
   const narrowed = narrowToSegment(
     parseAndValidate("<default>", SERIALIZED),
     c.segment,
+    c.settings,
   );
   // `undecorated` renders the same cell with its `bg:` removed — the colour an
   // absent `bg:` resolves to at this address, which a calm arm names as `(tint)`.
@@ -194,19 +195,7 @@ function renderOne(
         [c.segment]: { ...narrowed.segments[c.segment]!, bg: undefined },
       }
     : narrowed.segments;
-  const one = {
-    ...narrowed,
-    segments,
-    variables: {
-      ...narrowed.variables,
-      ...Object.fromEntries(
-        Object.entries(c.vars).map(([name, v]) => [
-          name,
-          { kind: "literal" as const, value: v },
-        ]),
-      ),
-    },
-  };
+  const one = { ...narrowed, segments };
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
@@ -265,7 +254,7 @@ function expectedBg(palette: Palette, row: Row, c: Case, paletteName: string): s
 describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
   const palette = getThemePalette(paletteName)!;
   for (const c of CASES) {
-    const varLabel = Object.entries(c.vars)
+    const varLabel = Object.entries(c.settings)
       .map(([k, v]) => `${k}=${v}`)
       .join(" ");
     test.each(c.rows)(
@@ -281,42 +270,45 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
   }
 });
 
-// [LAW:no-silent-failure] A warning threshold set below the heat threshold is
-// a descending pair. The old `if ge …` cascade rendered it by silently
-// dropping the warning band; the ramp refuses to sort and names both
-// positions, so the user can see which two knobs to move together.
+// [LAW:no-silent-failure] An error threshold set below the warning threshold
+// is a descending pair. The loader refuses such a placement and configure mode
+// refuses such a pick (test/threshold-settings.test.ts), so this is the
+// render's own last line — a pick left standing when the file under it
+// changes: a hand edit, or another session's (or another preset's) save.
+// The old `if ge …` cascade rendered it by silently dropping the warning
+// band; the ramp refuses to sort and names both positions.
 describe("a threshold below its neighbour is a loud render error", () => {
   const palette = getThemePalette("textual-dark")!;
   const INVERTED: readonly {
     segment: string;
-    vars: Readonly<Record<string, number>>;
+    settings: Readonly<Record<string, number>>;
     pair: string;
   }[] = [
     {
       segment: "block",
-      vars: { "block.budget.warningThreshold": 30 },
+      settings: { errorAt: 30 },
       pair: "stop 2 at 30 follows stop 1 at 50",
     },
     {
       segment: "weekly",
-      vars: { "weekly.budget.warningThreshold": 30 },
+      settings: { errorAt: 30 },
       pair: "stop 2 at 30 follows stop 1 at 50",
     },
     {
       segment: "burnrate",
-      vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 90 },
+      settings: { warnWithin: 60, errorWithin: 90 },
       pair: "stop 3 at 60 follows stop 2 at 90",
     },
   ];
   test.each(INVERTED)(
-    "$segment $vars names both positions",
-    ({ segment, vars, pair }) => {
-      // The found case lends its payload and glyph; `vars` are this row's own,
-      // over the bundled defaults, so the pair inverts exactly as stated.
+    "$segment $settings names both positions",
+    ({ segment, settings, pair }) => {
+      // The found case lends its payload and glyph; `settings` are this row's
+      // own, over the bundled defaults, so the pair inverts exactly as stated.
       const c = CASES.find((x) => x.segment === segment)!;
       const errors: string[] = [];
       const rendered = renderOne(
-        { ...c, vars },
+        { ...c, settings },
         60,
         "textual-dark",
         (name, message) => errors.push(`${name}: ${message}`),

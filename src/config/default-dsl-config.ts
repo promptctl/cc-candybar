@@ -28,7 +28,7 @@
 // loader's own synthesis pass (see the bottom of this file) — a `DslConfig`,
 // the same effective shape every user config resolves to.
 
-import type { DslConfig, SegmentDecl } from "./dsl-types.js";
+import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
@@ -132,12 +132,37 @@ const GIT_QUIET_FG =
 // A fixed role here (`panel`) painted the calm block and weekly as one slab
 // (brandon-theme-picker-bgw.8fp).
 //
-// block/weekly heat as the displayed (rounded) percentage rises: calm to
-// `heatThreshold`, warning to `warningThreshold`, error beyond. No `fg:` rides
-// beside the ramp: the text is chosen on whichever stop the cell resolves to
-// (`textOn`), so it cannot disagree with the background about where the cell
-// warms. Both thresholds are variables, so the ascending constraint is between
-// two knobs the user can see.
+// block/weekly heat as the displayed (rounded) percentage rises: calm below
+// `warnAt`, warning from it, error from `errorAt`. No `fg:` rides beside the
+// ramp: the text is chosen on whichever stop the cell resolves to (`textOn`),
+// so it cannot disagree with the background about where the cell warms.
+//
+// [LAW:types-are-the-program] Every threshold and budget is a SETTING of the
+// placement (brandon-settings-coverage-g4p.lx2), so each copy tunes its own
+// from configure mode, and a ramp's ascending stops are declared as an
+// `atLeast` relation between them: a pick that would put them out of order is
+// refused where it is written, and a file that does fails to load.
+const PERCENT = { min: 0, max: 100, step: 5 } as const;
+
+const QUOTA_SETTINGS: Readonly<Record<string, SettingDecl>> = {
+  warnAt: { label: "warning at %", domain: PERCENT, default: 50 },
+  errorAt: {
+    label: "error at %",
+    domain: { ...PERCENT, atLeast: "warnAt" },
+    default: 80,
+  },
+};
+
+function budgetSettings(budget: number): Readonly<Record<string, SettingDecl>> {
+  return {
+    budget: {
+      label: "budget $",
+      domain: { min: 0, max: 10000, step: 5 },
+      default: budget,
+    },
+    warnAt: { label: "warning at %", domain: PERCENT, default: 80 },
+  };
+}
 
 // ─── The default config ──────────────────────────────────────────────────────
 
@@ -349,15 +374,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
-    // Budget knobs — pure config constants, user overrides in their file.
-    // [LAW:dataflow-not-control-flow] amount defaults 0, the budgetStatus
-    // helper's non-displayable value, so with no user override the session
-    // segment renders byte-identically to its pre-budget form through the
-    // same unconditional template — opt-in is a value, not a config mode.
-    // Matches the legacy shipped default (budget.session had a threshold but
-    // no amount ⇒ suffix off until the user sets an amount).
-    "session.budget.amount": { kind: "literal", value: 0 },
-    "session.budget.warningThreshold": { kind: "literal", value: 80 },
 
     // Today — daemon folds today's cross-session total from the SessionUsageStore.
     "today.cost": {
@@ -372,9 +388,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
-    // Budget knobs — pure config constants, user overrides in their file.
-    "today.budget.amount": { kind: "literal", value: 50 },
-    "today.budget.warningThreshold": { kind: "literal", value: 80 },
 
     // Block — daemon projects directly from hookData.rate_limits.five_hour;
     // resetsAt is raw epoch seconds
@@ -392,11 +405,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
-    // Budget knob — overridable per-config through the variables-merge-by-
-    // name cascade. Matches the legacy DEFAULT_CONFIG.budget.block.warning
-    // Threshold.
-    "block.budget.warningThreshold": { kind: "literal", value: 80 },
-    "block.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Weekly — direct projection of hookData.rate_limits.seven_day.
     "weekly.percentage": {
@@ -411,8 +419,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
-    "weekly.budget.warningThreshold": { kind: "literal", value: 80 },
-    "weekly.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Burn rate + cap projection — daemon-derived (see render-payload.ts).
     // Each projection is ABSENT when not projectable; the var-system fills the
@@ -437,10 +443,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: -1,
     },
-    // ETA-heat thresholds (minutes-to-cap) — overridable per-config through the
-    // variables-merge-by-name cascade, like the *.budget.warningThreshold knobs.
-    "burn.eta.warnMinutes": { kind: "literal", value: 60 },
-    "burn.eta.errorMinutes": { kind: "literal", value: 30 },
 
     // Token throughput for the active turn — daemon-derived tok/s on three lanes
     // (render-payload.ts: successive-render delta over the SessionUsageStore).
@@ -801,14 +803,19 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "This session's cost and token total, with a budget warning once a budget is configured.",
       template:
         '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})' +
-        '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .session.budget.amount "warn" .session.budget.warningThreshold) }}',
+        '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
+      // [LAW:dataflow-not-control-flow] A budget of 0 is budgetStatus's
+      // non-displayable value, so a placement with no budget renders no
+      // suffix through the same unconditional template — opt-in is a value.
+      settings: budgetSettings(0),
     },
     today: {
       description:
         "Today's cost and tokens across every session, with a budget warning once a budget is configured.",
       template:
         '☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
-        '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }}',
+        '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
+      settings: budgetSettings(50),
     },
     block: {
       description:
@@ -816,7 +823,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
-      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
+      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
+      settings: QUOTA_SETTINGS,
       // No `fg:`: an unauthored foreground is the theme pole that reads on the
       // background this ramp resolves to, at every stop. The hand-paired
       // `button-color-foreground` it replaces measured 1.55:1 on rose-pine's
@@ -830,7 +838,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
-      bg: '{{ ramp (round .weekly.percentage) "step" 0 (tint) .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
+      bg: '{{ ramp (round .weekly.percentage) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
+      settings: QUOTA_SETTINGS,
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
@@ -847,7 +856,21 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
         '{{ template "formatEta" .weekly.etaMinutes }} to wk',
-      bg: '{{ ramp .block.etaMinutes "step" -1 (tint) 0 "error" .burn.eta.errorMinutes "warning" .burn.eta.warnMinutes (tint) }}',
+      bg: '{{ ramp .block.etaMinutes "step" -1 (tint) 0 "error" .settings.errorWithin "warning" .settings.warnWithin (tint) }}',
+      // Minutes to the 5h cap, so the nearer threshold is the hotter one:
+      // error inside `errorWithin`, warning inside `warnWithin`.
+      settings: {
+        errorWithin: {
+          label: "error within (min)",
+          domain: { min: 0, max: 300, step: 5 },
+          default: 30,
+        },
+        warnWithin: {
+          label: "warning within (min)",
+          domain: { min: 0, max: 300, step: 5, atLeast: "errorWithin" },
+          default: 60,
+        },
+      },
       when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
     },
     // Token throughput for the active turn — output / input / total tok/s, each a

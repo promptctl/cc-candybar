@@ -2,7 +2,10 @@
 // narrow an already-validated config to that segment's leaf. Shared by every
 // test that pins a single segment's bytes or colours.
 
-import type { ValidatedConfig } from "../../src/config/dsl-types";
+import type {
+  SettingValue,
+  ValidatedConfig,
+} from "../../src/config/dsl-types";
 import { rootOf } from "../../src/config/root";
 import {
   EDIT_MODE_KEY,
@@ -12,14 +15,23 @@ import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
 
 // A canonical one-leaf vertical root — narrows a spread config to a single
 // segment so the rendered line is exactly that segment's text.
-export const oneSegmentRoot = (segment: string) => ({
+export const oneSegmentRoot = (
+  segment: string,
+  settings?: Readonly<Record<string, SettingValue>>,
+) => ({
   kind: "container" as const,
   direction: "vertical" as const,
   children: [
     {
       kind: "container" as const,
       direction: "horizontal" as const,
-      children: [{ kind: "segment" as const, name: segment }],
+      children: [
+        {
+          kind: "segment" as const,
+          name: segment,
+          ...(settings !== undefined && { settings }),
+        },
+      ],
     },
   ],
 });
@@ -55,6 +67,9 @@ const EDIT_CHROME_NAME = (name: string) =>
 export const narrowToSegment = (
   parsed: ValidatedConfig,
   segment: string,
+  // The placement's own settings — set past the loader, so a test can hand
+  // the render a pair the loader would refuse.
+  settings?: Readonly<Record<string, SettingValue>>,
 ): ValidatedConfig => {
   const dropEditChrome = <V>(rec: Readonly<Record<string, V>>) =>
     Object.fromEntries(
@@ -62,7 +77,7 @@ export const narrowToSegment = (
     );
   return {
     ...parsed,
-    root: rootOf(oneSegmentRoot(segment)),
+    root: rootOf(oneSegmentRoot(segment, settings)),
     presets: {},
     variables: dropEditChrome(parsed.variables),
     actions: dropEditChrome(parsed.actions),

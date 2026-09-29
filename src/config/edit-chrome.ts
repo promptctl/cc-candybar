@@ -279,7 +279,7 @@ function settingControl(
     return `{{ "${label}" }} {{ carousel "${actionName}" }}`;
   }
   if ("min" in domain) {
-    for (const by of [-1, 1]) {
+    for (const by of [-domain.step, domain.step]) {
       artifacts.actions[`${actionName}.${by < 0 ? "down" : "up"}`] = {
         set: key,
         min: domain.min,

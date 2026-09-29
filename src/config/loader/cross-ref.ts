@@ -10,7 +10,11 @@ import {
   describeSettingDomain,
   hasCacheField,
   inSettingDomain,
+  rangeOf,
+  settingOrderProblems,
   settingsOf,
+  type SettingOrderProblem,
+  type SettingValue,
   type SettingDecl,
   freePlacementId,
   placementId,
@@ -45,6 +49,10 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
+import {
+  retiredReadHint,
+  retiredVariableMessage,
+} from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
@@ -468,6 +476,14 @@ export function validateCrossReferences(
   // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of Object.entries(cfg.variables)) {
     checkVarRefs(ctx, `variables.${name}`, v, templateScope);
+    const retired = retiredVariableMessage(name);
+    if (retired !== undefined) {
+      ctx.issues.push({
+        path: `variables.${name}`,
+        message: retired,
+        line: findKeyLine(ctx.source, ["variables", name]),
+      });
+    }
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
@@ -497,6 +513,7 @@ export function validateCrossReferences(
     // `.settings.<name>` — the placement's value for each setting the
     // segment declares, and nothing else under that name.
     const settings = settingsOf(seg);
+    checkSettingOrder(ctx, segName, settings);
     const segScope = withSettingsScope(templateScope, settings);
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
@@ -668,6 +685,115 @@ function withSettingsScope(
   };
 }
 
+// [LAW:no-silent-failure] A declaration's `atLeast` relations, over the MERGED
+// settings (a file may redeclare one setting of a bundled segment, and the
+// setting it names may be the bundled one): each names another range setting
+// of the segment, no chain of them closes a cycle (every setting on one could
+// only ever equal the rest, so no stepper click could move any of them), and
+// the defaults stand together under every relation.
+function checkSettingOrder(
+  ctx: ValidateCtx,
+  segName: string,
+  settings: Readonly<Record<string, SettingDecl>>,
+): void {
+  const at = (name: string): string => `segments.${segName}.settings.${name}`;
+  const push = (name: string, message: string): void => {
+    ctx.issues.push({
+      path: at(name),
+      message: `${at(name)}: ${message}`,
+      line: findKeyLine(ctx.source, ["segments", segName, "settings", name]),
+    });
+  };
+  const broken = floorProblems(settings);
+  for (const { setting, message } of broken) push(setting, message);
+  if (broken.length > 0) return;
+  for (const { setting, message } of settingOrderProblems(
+    settings,
+    defaultsOf(settings),
+  )) {
+    push(setting, `the defaults do not stand together: ${message}`);
+  }
+}
+
+// Whether the declaration's relations were already reported by
+// checkSettingOrder — then no placement repeats them.
+function relationsReported(
+  settings: Readonly<Record<string, SettingDecl>>,
+): boolean {
+  return (
+    floorProblems(settings).length > 0 ||
+    settingOrderProblems(settings, defaultsOf(settings)).length > 0
+  );
+}
+
+function defaultsOf(
+  settings: Readonly<Record<string, SettingDecl>>,
+): Record<string, SettingValue> {
+  return Object.fromEntries(
+    Object.entries(settings).map(([n, d]) => [n, d.default]),
+  );
+}
+
+// Each `atLeast` that names no OTHER range setting of the segment, and each
+// cycle of them (reported once, at its first member by name). The relations
+// are asked of values only when this is empty.
+function floorProblems(
+  settings: Readonly<Record<string, SettingDecl>>,
+): readonly SettingOrderProblem[] {
+  const floorOf = (name: string): string | undefined =>
+    rangeOf(own(settings, name))?.atLeast;
+  return Object.keys(settings).flatMap((name): SettingOrderProblem[] => {
+    const floor = floorOf(name);
+    if (floor === undefined) return [];
+    if (floor === name || rangeOf(own(settings, floor)) === undefined) {
+      return [
+        {
+          setting: name,
+          message: `atLeast "${floor}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`,
+        },
+      ];
+    }
+    const chain = [name];
+    for (
+      let next: string | undefined = floor;
+      next !== undefined;
+      next = floorOf(next)
+    ) {
+      if (next === name) {
+        return chain.every((member) => name <= member)
+          ? [
+              {
+                setting: name,
+                message: `atLeast closes a cycle (${[...chain, name].join(" ≥ ")}) — every setting on it could only ever equal the rest`,
+              },
+            ]
+          : [];
+      }
+      if (chain.includes(next)) return [];
+      chain.push(next);
+    }
+    return [];
+  });
+}
+
+function own(
+  settings: Readonly<Record<string, SettingDecl>>,
+  name: string,
+): SettingDecl | undefined {
+  return Object.prototype.hasOwnProperty.call(settings, name)
+    ? settings[name]
+    : undefined;
+}
+
+function rangeSettingNames(
+  settings: Readonly<Record<string, SettingDecl>>,
+  except: string,
+): string[] {
+  return Object.entries(settings)
+    .filter(([n, decl]) => n !== except && rangeOf(decl) !== undefined)
+    .map(([n]) => n);
+}
+
 // [LAW:no-silent-failure] A placement's setting values, against the merged
 // declaration of its segment: every name must be one it declares, every value
 // inside that setting's domain. A placement of an undeclared segment is
@@ -702,6 +828,21 @@ function checkPlacementSettings(
         line,
       });
     }
+  }
+  // Values out of their domains were reported above; the relations are asked
+  // of the placement's resolved values only once every one is a member.
+  const resolved = Object.fromEntries(
+    Object.entries(declared).map(([n, d]) => [
+      n,
+      node.settings?.[n] ?? d.default,
+    ]),
+  );
+  const members = Object.entries(resolved).every(([n, v]) =>
+    inSettingDomain(declared[n]!, v),
+  );
+  if (!members || relationsReported(declared)) return;
+  for (const { message } of settingOrderProblems(declared, resolved)) {
+    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
   }
 }
 
@@ -836,7 +977,7 @@ function checkTemplateRefs(
     const hint =
       namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
-        : "";
+        : retiredReadHint(ref);
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"${hint}`,
@@ -850,7 +991,7 @@ function checkTemplateRefs(
 // helper — and ONCE, however many templates reach it at that path.
 function checkHelperRef(ctx: ValidateCtx, helper: string, ref: string): void {
   const path = `helpers.${helper}`;
-  const message = `Template references unknown variable ".${ref}"`;
+  const message = `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`;
   if (ctx.issues.some((i) => i.path === path && i.message === message)) return;
   ctx.issues.push({
     path,

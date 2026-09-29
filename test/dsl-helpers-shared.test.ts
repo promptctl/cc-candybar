@@ -10,11 +10,13 @@ import { SessionState } from "../src/daemon/session-state";
 // [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
 // re-parsed into every template cost ~30 MB per registered config; the daemon
 // holds one per (projectDir, cwd) and sat at 600+ MB with twenty. Helpers are
-// now one shared Defines (src/dsl/render.ts compileHelpers), which brings a
-// stdlib config to ~1.2 MB. This pins the order of magnitude, not the exact
-// figure: a regression back to per-template copies overshoots the bound by
-// ten times; ordinary growth of the stdlib does not.
-const PER_CONFIG_BOUND_BYTES = 4 * 1024 * 1024;
+// now one shared Defines (src/dsl/render.ts compileHelpers), which brought a
+// stdlib config to ~1.2 MB; the stdlib has grown since (~4.2 MB at
+// brandon-settings-coverage-g4p.lx2, whose per-placement threshold controls
+// added ~0.2 MB). This pins the order of magnitude, not the exact figure: a
+// regression back to per-template copies overshoots the bound several times;
+// ordinary growth of the stdlib does not.
+const PER_CONFIG_BOUND_BYTES = 8 * 1024 * 1024;
 
 v8.setFlagsFromString("--expose_gc");
 const gc = vm.runInNewContext("gc") as () => void;

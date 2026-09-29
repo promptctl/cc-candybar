@@ -14,6 +14,7 @@
 
 import {
   parseSettingSpelling,
+  settingOrderProblems,
   settingSpelling,
   settingsOf,
   walkNodes,
@@ -24,7 +25,7 @@ import {
 } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
-import { presetByName, presetRoot } from "../config/presets.js";
+import { presetByName, presetNames, presetRoot } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -186,6 +187,40 @@ export function placementDrafts(
         : [{ preset, id, setting, key, value }];
     },
   );
+}
+
+// [LAW:single-enforcer] What unsaved picks about to land would break between
+// a placement's settings (`settingOrderProblems`, the relation the loader
+// holds the file to): each placement a write touches, in whichever preset's
+// layout holds it, resolved as the written value over the session's pick over
+// the file's value. A write to a key no slot holds touches no placement.
+export function placementPickProblems(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
+): readonly string[] {
+  const written = new Map(writes.map((w) => [w.key, w.value]));
+  return presetNames(config.presets).flatMap((preset) => {
+    const slots = slotsOf(config, preset);
+    const touched = new Set(
+      slots.filter((s) => written.has(s.key)).map((s) => s.id),
+    );
+    return [...touched].flatMap((id) => {
+      const own = slots.filter((s) => s.id === id);
+      const decls = Object.fromEntries(own.map((s) => [s.setting, s.decl]));
+      const values = Object.fromEntries(
+        own.map((s) => {
+          const pick = written.get(s.key) ?? sessionPick(s.key);
+          const value =
+            pick === null ? undefined : parseSettingSpelling(s.decl, pick);
+          return [s.setting, value ?? s.saved];
+        }),
+      );
+      return settingOrderProblems(decls, values).map(
+        ({ message }) => `placement "${id}": ${message}`,
+      );
+    });
+  });
 }
 
 // Every draft slot in one preset's layout, with what the file gives it. A

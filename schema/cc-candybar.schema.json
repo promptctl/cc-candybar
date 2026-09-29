@@ -2114,6 +2114,14 @@
                       },
                       "max": {
                         "type": "integer"
+                      },
+                      "step": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "atLeast": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       }
                     }
                   }
@@ -2830,6 +2838,14 @@
                       },
                       "max": {
                         "type": "integer"
+                      },
+                      "step": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "atLeast": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       }
                     }
                   }

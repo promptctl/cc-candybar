@@ -587,7 +587,8 @@ as `.settings.<name>`:
 
 - `settings` on the segment maps a name (an identifier) to
   `{ label, domain, default }`. A domain is `"bool"`, a list of words, or
-  `{ min, max }` (whole numbers); the default must be in it.
+  `{ min, max, step?, atLeast? }` (whole numbers; `step`, 1 when absent, is
+  how far one click of its stepper moves it); the default must be in it.
 - A placement is `{ seg: "<segment>", id: "<id>", settings: { … } }`. It sets
   only what differs; every other setting reads its default. A bare
   `"modelTag"` is the placement `{ seg: "modelTag", id: "modelTag" }` with every
@@ -649,6 +650,31 @@ bounded by the declaration. A change shows at once and is unsaved until `💾 sa
 writes it into that placement in the config file — a bare `"modelTag"`
 becomes `{ seg: "modelTag", settings: { … } }`. One placement is configured at
 a time.
+
+Thresholds a `ramp` reads are settings too, and a ramp's stops must ascend.
+Say so in the declaration: `atLeast` names another range setting this one may
+never fall below. A placement whose values break it fails to load, and a
+stepper click that would break it is refused in the bar with both names, so
+the ramp never sees a descending pair. The bundled `block`, `weekly`,
+`burnrate`, `session` and `today` segments declare their thresholds and
+budgets this way — `{ seg: "block", settings: { warnAt: 60, errorAt: 90 } }`
+retunes one copy.
+
+```json5 check:pass
+{
+  segments: {
+    spend: {
+      template: "{{ .session.cost }}",
+      bg: '{{ ramp .session.cost "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
+      settings: {
+        warnAt: { label: "warning at $", domain: { min: 0, max: 100, step: 5 }, default: 10 },
+        errorAt: { label: "error at $", domain: { min: 0, max: 100, step: 5, atLeast: "warnAt" }, default: 20 },
+      },
+    },
+  },
+  root: { h: ["spend", { seg: "spend", id: "tightSpend", settings: { warnAt: 5, errorAt: 5 } }] },
+}
+```
 
 ## Mistakes and the errors they produce
 
