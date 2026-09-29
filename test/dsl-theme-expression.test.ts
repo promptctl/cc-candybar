@@ -95,7 +95,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const warnings: string[] = [];
   const sink = new Map<string, readonly RichText[]>();
   const render = (pct: number, staged?: string): Painted => {
@@ -316,7 +316,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(config, registry);
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const sink = new Map<string, readonly RichText[]>();
       const out = renderDsl(
         config,
@@ -345,7 +345,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(config, registry);
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const sink = new Map<string, readonly RichText[]>();
       const out = renderDsl(
         config,
@@ -400,7 +400,7 @@ describe("globals.palette as an expression — loader", () => {
       new SessionState(),
     );
     try {
-      expect(() => registerDslConfig(config, registry)).toThrow(
+      expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
         /globals\.palette is not a valid template/,
       );
     } finally {

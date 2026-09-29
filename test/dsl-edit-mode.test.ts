@@ -142,7 +142,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (width?: number): string =>
     renderDsl(
@@ -734,7 +734,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const renderWith = (padding: number): string =>

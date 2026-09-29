@@ -36,6 +36,7 @@ import {
   optionalStringSpec,
   optionalTypedDefault,
   reject,
+  requireAbsolutePathSpec,
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
@@ -340,7 +341,7 @@ const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
   default: optionalStringSpec(),
 };
 const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
-  path: requireStringSpec(),
+  path: requireAbsolutePathSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"] as const),
   parse: parseSpec(),
   cache: requireCacheSpec("file"),

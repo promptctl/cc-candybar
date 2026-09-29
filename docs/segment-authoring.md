@@ -83,9 +83,11 @@ shape, invoked by the same name:
 printf '%s\n' '{"period": "September", "spent": 42.5, "limit": 120, "spentPct": 35, "timePct": 20}'
 ```
 
-The command runs under `/bin/sh -c` with the daemon's environment, so the
-script is either on the daemon's `PATH` or spelled as an absolute path. A
-command the shell cannot find fails its run with `exited with code 127`, and
+The command runs under `/bin/sh -c` in the directory Claude Code started the
+statusline in — the same directory `git` variables read — so a command that
+asks about "this repo" answers for the session's repo. It runs with the daemon's environment, so the script
+is either on the daemon's `PATH` or spelled as an absolute path. A command the
+shell cannot find fails its run with `exited with code 127`, and
 what that failure renders as depends on the `default` you declare (Step 2).
 
 ## Step 2 — the source: one `shell` variable, one document
@@ -135,8 +137,9 @@ The complete shape of a `shell` variable:
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes), `{ depends_on: ["otherVar"] }` (re-run when a declared variable changes), `{ key: "{{ .otherVar }}" }` (re-run when the key template's value changes), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values |
 
-A `file` variable is the same declaration with `path` (absolute — `~` is not
-expanded; write the full path) in place of `command`, plus an
+A `file` variable is the same declaration with `path` (absolute — `~` and
+relative paths are refused at load, like a relative `watch_file`; write the
+full path) in place of `command`, plus an
 optional `readMode: "whole" | "first-line"` selecting how much of the file
 the parser sees. A file that does not exist yet reads as its `default`:
 
@@ -819,9 +822,9 @@ Template references unknown variable ".budget.spentPct"
 
 ### A `~` in a file path
 
-Paths are absolute and `~` is not expanded, so the file is unreadable. This
-one is a render error, and only because the source declares no `default` —
-with one, the default would read forever and nothing would say why:
+Paths are absolute and `~` is not expanded. The loader refuses the path
+rather than read a file nobody meant — a relative path would name one
+directory for the daemon and another for the session's shell commands:
 
 ```json5 check:fail
 {
@@ -839,7 +842,7 @@ with one, the default would read forever and nothing would say why:
 ```
 
 ```error
-segment "budget": variable "budget": file unreadable: ~/.cache/budget/status.json
+variables.budget.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
 ```
 
 ### A `json` source whose script prints something that is not JSON, with no `default`
@@ -853,10 +856,11 @@ echo 'budget: unavailable'
 
 Every segment reading the document renders `⚠` naming the variable, then the
 reason: `JSON parse failed: Unexpected token 'b', "budget: unavailable` for
-this script, `shell "budget-broken" exited with code 127` for one the shell
-cannot find, `file unreadable: <path>` for a `file` source. A `default` would
-render instead, quietly — which is what you want in the bar, and why the
-mistake to avoid is the missing `default`, not the broken script:
+this script (each followed by ` in output of "<command>" in <cwd>`),
+`shell "budget-broken" exited with code 127 in <cwd>` for one the shell
+cannot find, `file unreadable: <path>` for a `file` source. A
+`default` would render instead, quietly — which is what you want in the bar,
+and why the mistake to avoid is the missing `default`, not the broken script:
 
 ```json5 check:fail
 {

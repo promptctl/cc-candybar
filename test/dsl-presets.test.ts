@@ -204,7 +204,7 @@ describe("preset compile diagnostics name the authored path", () => {
         undefined,
         new SessionState(),
       );
-      registerDslConfig(config, registry);
+      registerDslConfig(config, registry, { cwd: process.cwd() });
     } catch (e) {
       return (e as Error).message;
     }
@@ -303,7 +303,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     // The daemon's cache installs the derived gate at config load; mirror it so
     // the click below passes through the real validator.
     const disposers = deriveActionValidators(config).map(({ key, spec }) =>

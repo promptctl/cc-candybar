@@ -30,9 +30,26 @@
 // by its timeout, its caller's `signal`, or its own exit.
 
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 
 import type { LaunchStatsHandle } from "./stats-handle";
+
+// [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
+// errno as a missing binary — Node words it `spawn /bin/sh ENOENT`, blaming
+// the shell. The one place a spawn failure becomes text names the directory
+// instead when that is what is missing (a removed worktree the session is
+// still rendering from). Measured only on the failure path.
+function spawnErrorText(err: unknown, cwd: string | undefined): string {
+  // isNativeError, not instanceof: the realm-proof test (Node's own errors
+  // fail `instanceof Error` under a vm context such as Jest's).
+  if (!types.isNativeError(err)) return String(err);
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" && cwd !== undefined && !existsSync(cwd)
+    ? `working directory does not exist: ${cwd}`
+    : err.message;
+}
 
 // Closed list of subprocess categories. Adding a new spawn site requires
 // adding its category here, which forces a code review of the new launch
@@ -284,7 +301,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
         stderr: "",
         exitCode: null,
         signal: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: spawnErrorText(err, opts.cwd),
       });
       return;
     }
@@ -374,7 +391,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
         stderr,
         exitCode: null,
         signal: null,
-        error: err.message,
+        error: spawnErrorText(err, opts.cwd),
       });
     });
 
@@ -466,7 +483,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
         stderr,
         exitCode: null,
         signal: result.signal ?? null,
-        error: result.error.message,
+        error: spawnErrorText(result.error, opts.cwd),
       };
     }
 
@@ -503,7 +520,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       stderr: "",
       exitCode: null,
       signal: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: spawnErrorText(err, opts.cwd),
     };
   }
 }
@@ -550,7 +567,7 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
       stderr: "",
       exitCode: null,
       signal: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: spawnErrorText(err, opts.cwd),
     };
   }
   // [LAW:no-silent-fallbacks] spawn() with ENOENT (e.g. missing binary) does

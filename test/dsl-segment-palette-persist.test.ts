@@ -272,7 +272,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
       config,

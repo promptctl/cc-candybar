@@ -373,6 +373,14 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.path",
       message: "variables.x.path must be a string",
     });
+    expectIssue(
+      `{ variables: { x: { kind: "file", path: "status.json", cache: { never: true } } } }`,
+      {
+        path: "variables.x.path",
+        message:
+          'variables.x.path must be an absolute path (`~` and relative paths are not expanded), got "status.json"',
+      },
+    );
     const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "file", path: "/etc/hostname", readMode: "first-line", cache: { watch_file: "/etc/hostname" } } } }`,
@@ -422,7 +430,7 @@ describe("loadDslConfig — variable source kinds", () => {
   // naming ttl as the only supported form (brandon-config-validation-cje).
   test("time: cache is ttl-only — non-ttl forms are load-time diagnostics", () => {
     for (const cache of [
-      `{ watch_file: ".git/HEAD" }`,
+      `{ watch_file: "/repo/.git/HEAD" }`,
       `{ depends_on: ["x"] }`,
       `{ key: "{{ .x }}" }`,
       `{ never: true }`,
@@ -473,12 +481,12 @@ describe("loadDslConfig — variable source kinds", () => {
     });
     const ok = parseAndValidate(
       FILE,
-      `{ variables: { b: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" }, default: "(detached)" } } }`,
+      `{ variables: { b: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" }, default: "(detached)" } } }`,
     );
     expect(ok.variables.b).toEqual({
       kind: "git",
       field: "branch",
-      cache: { watch_file: ".git/HEAD" },
+      cache: { watch_file: "/repo/.git/HEAD" },
       default: "(detached)",
     });
   });
@@ -841,11 +849,19 @@ describe("loadDslConfig — cache policies", () => {
     });
   });
 
-  test("watch_file: non-empty string", () => {
-    expectIssue(base(`{ watch_file: "" }`), {
+  test("watch_file: an absolute path", () => {
+    expectIssue(base(`{ watch_file: 7 }`), {
       path: "variables.x.cache.watch_file",
-      message: "cache.watch_file must be a non-empty path string",
+      message: "cache.watch_file must be a path string",
     });
+    // A relative path would name the daemon's cwd for the watcher and the
+    // session's for a shell command — refused, as `~` (not expanded) is.
+    for (const rel of ["", ".budget.json", "~/.cache/b.json"]) {
+      expectIssue(base(`{ watch_file: ${JSON.stringify(rel)} }`), {
+        path: "variables.x.cache.watch_file",
+        message: `cache.watch_file must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(rel)}`,
+      });
+    }
   });
 
   test("depends_on: array of strings", () => {
@@ -1600,7 +1616,7 @@ describe("loadDslConfig — cross-references", () => {
     const cfg = parseAndValidate(
       FILE,
       `{ variables: {
-        branch: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" } },
+        branch: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" } },
         recent: { kind: "shell", command: "echo", cache: { depends_on: ["branch"] } }
       }}`,
     );
@@ -1617,7 +1633,7 @@ describe("loadDslConfig — cross-references", () => {
         s: {
           template: "{{ .s.recent }}",
           vars: {
-            branch: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" } },
+            branch: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" } },
             recent: { kind: "shell", command: "echo", cache: { depends_on: ["branch"] } }
           }
         }
@@ -1973,7 +1989,7 @@ describe("loadDslConfig — valid corpus", () => {
         now: { kind: "time", layout: "15:04", cache: { ttl: "1s" } },
         branch: {
           kind: "git", field: "branch",
-          cache: { watch_file: ".git/HEAD" },
+          cache: { watch_file: "/repo/.git/HEAD" },
           default: "(detached)",
         },
         constant: { kind: "literal", value: "hello" },

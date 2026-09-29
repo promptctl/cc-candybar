@@ -5,6 +5,8 @@
 // …) is a DECLARATION built from these; changing a primitive changes every
 // validator uniformly. This file changes when the combinator vocabulary changes.
 
+import { isAbsolute } from "node:path";
+
 import {
   SOURCE_KINDS,
   type GroupSugarDecl,
@@ -715,6 +717,36 @@ export function requireStringSpec(): FieldSpec<string> {
     json: { type: "string" },
     parse: (ctx, path, field, raw) =>
       requireString(ctx, path, raw, field) ?? undefined,
+  };
+}
+
+// [LAW:one-source-of-truth] The one rule for a path a source reads or watches
+// (a `file` source's `path`, any `cache.watch_file`): absolute. A shell source
+// runs in the session's working directory while the daemon's own cwd is
+// whichever shell spawned it, so a relative path has no single directory to
+// mean — refused here rather than resolved against either one. `~` is a
+// relative path to the OS, so it is refused by the same test.
+export function absolutePathProblem(
+  where: string,
+  value: string,
+): string | null {
+  return isAbsolute(value)
+    ? null
+    : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(value)}`;
+}
+
+export function requireAbsolutePathSpec(): FieldSpec<string> {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^/" },
+    parse: (ctx, at, field, raw) => {
+      const v = requireString(ctx, at, raw, field);
+      if (v === null) return undefined;
+      const problem = absolutePathProblem(`${at}.${field}`, v);
+      return problem === null
+        ? v
+        : (reject<string>(ctx, `${at}.${field}`, problem) ?? undefined);
+    },
   };
 }
 

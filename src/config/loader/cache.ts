@@ -13,6 +13,7 @@ import {
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
+  absolutePathProblem,
   describeValue,
   oneOfPresent,
   oneOfPresentJson,
@@ -102,15 +103,19 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     watch_file: {
-      json: { type: "string" },
-      parse: (ctx, path, value) =>
-        typeof value === "string" && value !== ""
+      json: { type: "string", pattern: "^/" },
+      parse: (ctx, path, value) => {
+        if (typeof value !== "string")
+          return reject(
+            ctx,
+            path,
+            `cache.watch_file must be a path string, got ${describeValue(value)}`,
+          );
+        const problem = absolutePathProblem("cache.watch_file", value);
+        return problem === null
           ? { watch_file: value }
-          : reject(
-              ctx,
-              path,
-              `cache.watch_file must be a non-empty path string, got ${describeValue(value)}`,
-            ),
+          : reject(ctx, path, problem);
+      },
     },
     depends_on: {
       json: { type: "array", items: { type: "string" } },

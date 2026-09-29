@@ -77,7 +77,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // The click below goes through the real dispatch, which consults the
   // daemon-global validator registry — so the config's derived gate has to be
   // registered, exactly as the daemon registers it on load.

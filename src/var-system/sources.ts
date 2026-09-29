@@ -102,6 +102,10 @@ export function parseDuration(s: string): number {
 // combination means what it says. The fallback lives in the parser arm, in
 // that arm's output domain.
 export interface ShellOptions {
+  // [LAW:types-are-the-program] Where the command runs: the render entry's
+  // cwd, like GitOptions.cwd. Required, because the daemon is detached — its
+  // own cwd is whichever shell spawned it, never the session's.
+  readonly cwd: string;
   readonly cache: CachePolicy;
   readonly parse: SourceParse;
 }
@@ -176,13 +180,21 @@ interface SourceReader {
   read(): Promise<Outcome<string>>;
 }
 
-function shellReader(command: string, signal: AbortSignal): SourceReader {
+function shellReader(
+  command: string,
+  cwd: string,
+  signal: AbortSignal,
+): SourceReader {
   return {
-    where: `output of "${command}"`,
+    // The directory is part of the origin: a command that asks about "this
+    // repo" answers differently per session, so every failure — exit, regex
+    // no-match, JSON parse — names where it ran.
+    where: `output of "${command}" in ${cwd}`,
     read: async () => {
       const r = await launch({
         bin: "/bin/sh",
         args: ["-c", command],
+        cwd,
         category: "user-shell",
         signal,
       });
@@ -192,7 +204,7 @@ function shellReader(command: string, signal: AbortSignal): SourceReader {
         r.exitCode === null
           ? [r.reason, r.error].filter((s) => s !== undefined).join(": ")
           : `exited with code ${r.exitCode}`;
-      return failed(`shell "${command}" ${why}`);
+      return failed(`shell "${command}" ${why} in ${cwd}`);
     },
   };
 }
@@ -706,7 +718,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      shellReader(command, this.abort.signal),
+      shellReader(command, opts.cwd, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse,
     );

@@ -522,7 +522,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (): string =>
     renderDsl(
@@ -846,7 +846,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
-      compiled = registerDslConfig(config, registry);
+      compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     }).not.toThrow();
     const basePalette = getThemePalette("textual-dark"!);
     const rendered = renderDsl(
@@ -899,7 +899,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     try {
-      const compiled = registerDslConfig(config, registry);
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const basePalette = getThemePalette("textual-dark"!);
       return renderDsl(
         config,

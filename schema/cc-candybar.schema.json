@@ -164,7 +164,8 @@
                 "const": "file"
               },
               "path": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^/"
               },
               "readMode": {
                 "enum": [
@@ -230,7 +231,8 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^/"
                       }
                     },
                     "required": [
@@ -364,7 +366,8 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^/"
                       }
                     },
                     "required": [
@@ -458,7 +461,8 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^/"
                       }
                     },
                     "required": [
@@ -586,7 +590,8 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^/"
                       }
                     },
                     "required": [
@@ -1552,7 +1557,8 @@
                     "const": "file"
                   },
                   "path": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^/"
                   },
                   "readMode": {
                     "enum": [
@@ -1618,7 +1624,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -1752,7 +1759,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -1846,7 +1854,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -1974,7 +1983,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -2263,7 +2273,8 @@
                     "const": "file"
                   },
                   "path": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^/"
                   },
                   "readMode": {
                     "enum": [
@@ -2329,7 +2340,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -2463,7 +2475,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -2557,7 +2570,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
@@ -2685,7 +2699,8 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^/"
                           }
                         },
                         "required": [
