@@ -4,8 +4,8 @@
 // segment-local vars, custom helpers, dynamic bg expressions,
 // per-segment palette override, and width/justify/truncate controls.
 //
-// Point CC_CANDYBAR_CONFIG at this file to try it:
-//   CC_CANDYBAR_CONFIG=examples/demo-variables.json5 pnpm demo
+// Render it with the demo, which takes the config path as its argument:
+//   pnpm demo examples/demo-variables.json5
 //
 // NOTE: kind:"file" and watch_file paths must be ABSOLUTE — ~ is not
 // expanded at runtime. Adjust paths to match your system before use.

@@ -1,7 +1,7 @@
 // Minimal end-to-end demo of the segment DSL render spine.
 //
-//   pnpm demo:dsl                       # renders src/demo/statusline.json5
-//   pnpm demo:dsl path/to/other.json5   # renders any DSL config
+//   pnpm demo                       # renders src/demo/statusline.json5
+//   pnpm demo path/to/other.json5   # renders any DSL config
 //
 // [LAW:single-enforcer] This renders through registerDslConfig + renderDsl
 // — the exact spine the daemon calls. There is no demo-only render path; what
