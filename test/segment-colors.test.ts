@@ -398,6 +398,7 @@ describe("segment color functions in the engine", () => {
       disclosure: DISCLOSURE,
       tint: TINT,
       bg: undefined,
+      drops: [],
     };
     const fragments = tpl.evaluate({});
     expect(definedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");

@@ -188,9 +188,9 @@ export interface NodeRenderCtx {
   // resolution HAS to happen here rather than after the body: a body asking for
   // its own background can only be answered once the background exists.
   //
-  // `exitSegment` runs AFTER eval: it reads the open menu bodies the menus
-  // carried as metadata on the evaluated fragments (template order) for the
-  // boundary to stack below the row, and tears the published record down.
+  // `exitSegment` runs AFTER eval: it returns the open menu bodies the
+  // segment's `{{ menu }}`s appended to the published record (template order)
+  // for the boundary to stack below the row, and tears the record down.
   enterSegment(
     segName: string,
     palette: Palette,
@@ -198,7 +198,7 @@ export interface NodeRenderCtx {
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles;
-  exitSegment(fragments: readonly RichText[]): readonly RichText[];
+  exitSegment(): readonly RichText[];
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
   lookupSegment(
@@ -465,11 +465,12 @@ const segmentType: NodeType<"segment"> = {
         segCompiled.fg,
       );
       const fragments = segCompiled.template.evaluate(ctx.scope);
-      // [LAW:decomposition] The open menu bodies, carried as out-of-band metadata
-      // on the evaluated fragments — invisible to the inline render, so a menu can
-      // sit anywhere in the template and content after it stays inline. Each
-      // becomes one full-width line stacked below the segment's row.
-      const drops = ctx.exitSegment(fragments);
+      // [LAW:decomposition] The open menu bodies, collected on the segment's
+      // record rather than in its fragments — invisible to the inline render,
+      // so a menu can sit anywhere in the template, under any wrapper, and
+      // content after it stays inline. Each becomes one full-width line
+      // stacked below the segment's row.
+      const drops = ctx.exitSegment();
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
       // each entering the seam in turn — on the band this trigger computed.

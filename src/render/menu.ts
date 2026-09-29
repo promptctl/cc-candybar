@@ -17,20 +17,14 @@
 // `{{ action }}` does, through the same `pickCycleDisplay` (candybar-settings-
 // ui-aok.4).
 //
-// [LAW:effects-at-boundaries] The helper is a PURE function of its inputs (the
-// walk-published placement + the live store): it computes the inline glyph and,
-// when open, the body, and RETURNS them together — the glyph as the fragment, the
-// body carried as out-of-band metadata on that returned RichText (a symbol the
-// segment boundary reads). It mutates no shared sink; the EFFECT of placing the
-// body below the row is performed at the boundary (collectMenuDrops + the segment
-// walk). Pure core returns a description; the edge performs it.
-//
 // [LAW:decomposition] The glyph and the body travel on SEPARATE channels: the
-// glyph is the visible fragment, the body rides as metadata invisible to the
-// inline render. This is the fix for the old `\n`-in-the-stream representation —
-// the body never enters the visible inline text, so a menu may sit ANYWHERE in a
-// template (content after it stays inline on row 0), and a segment may contain
-// ANY NUMBER of menus (each returned glyph carries its own body).
+// glyph is the fragment the helper returns, and the body is appended to the
+// active-segment record the walk published for this segment, which the walk
+// reads when the segment exits and stacks below the row. The body never enters
+// the visible inline text, so a menu may sit ANYWHERE in a template (content
+// after it stays inline on row 0), under any wrapper (`fg`, `bold`, `link` …
+// return a new RichText, and the record is not on it), and a segment may
+// contain ANY NUMBER of menus (each appends its own body, in template order).
 //
 // [LAW:one-source-of-truth] A menu is CONTEXT-FREE about its NAME in the template
 // (it cannot see the segment it sits in), so the host segment name is published
@@ -42,7 +36,7 @@
 //
 // [LAW:dataflow-not-control-flow] Openness is the value of the menu's state key,
 // not a when-gated reveal: open ⇔ the state key holds THIS menu's member name.
-// The body metadata is a list whose length carries open/closed (1 open, 0 closed).
+// A menu appends a list whose length carries open/closed (1 open, 0 closed).
 
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
@@ -58,7 +52,10 @@ import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker, requireOptionKind } from "./picker.js";
 import { optionItemStyle } from "./band-style.js";
-import type { ActiveSegmentRef } from "./active-segment.js";
+import {
+  requireActiveSegment,
+  type ActiveSegmentRef,
+} from "./active-segment.js";
 
 // [LAW:one-type-per-behavior] A `{{ menu }}` needs one structural fact it cannot
 // see about itself — the name of the segment it renders inside. That used to be
@@ -84,41 +81,15 @@ export interface MenuRuntime {
   readonly activeSegment: ActiveSegmentRef;
 }
 
-// [LAW:effects-at-boundaries] The body a `{{ menu }}` drops below its row rides as
-// out-of-band metadata on the returned glyph (a symbol the boundary reads), so the
-// helper returns a description rather than mutating a shared sink. A list whose
-// length carries open/closed — `[body]` open, `[]` closed.
-const MENU_DROP = Symbol("cc-candybar.menuDrop");
-type GlyphWithDrop = RichText & { [MENU_DROP]?: readonly RichText[] };
-
-// [LAW:single-enforcer] THE reader of the drop metadata, used by the segment
-// boundary (injected by the driver — node-registry never imports this module).
-// Scans a segment's evaluated fragments in template order and returns every menu
-// body carried on them; a fragment with no metadata contributes nothing.
-export function collectMenuDrops(
-  fragments: readonly RichText[],
-): readonly RichText[] {
-  return fragments.flatMap((f) => (f as GlyphWithDrop)[MENU_DROP] ?? []);
-}
-
 // Realize a `{{ menu }}` against the live placement + state: return its inline
-// trigger, carrying the (open) body as out-of-band metadata for the boundary.
+// trigger, and append its (open) body to the segment it renders in.
 function renderMenu(
   applyName: string,
   displays: readonly string[],
   options: MenuOptions,
   runtime: MenuRuntime,
 ): RichText {
-  const placement = runtime.activeSegment.current;
-  // [LAW:no-defensive-null-guards] The walk publishes a placement before every
-  // segment template evaluates; a `{{ menu }}` only renders inside a segment. A
-  // null here is a wiring bug (the func fired with no current segment), surfaced
-  // loudly rather than rendering a placeless menu.
-  if (placement === null) {
-    throw new Error(
-      "{{ menu }} rendered with no active segment placement — the render walk must publish one before evaluating a segment template",
-    );
-  }
+  const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
   const action = runtime.action;
   // [LAW:one-source-of-truth] Identity — and the page-cursor key derived from it
   // — comes from the SAME menu-keys derivation the loader synthesis used, so the
@@ -163,46 +134,48 @@ function renderMenu(
       },
     ]),
     false,
-  ) as GlyphWithDrop;
+  );
 
-  // [LAW:effects-at-boundaries] The body is a VALUE whose length carries open/
-  // closed — `[body]` open, `[]` closed — attached to the glyph the helper returns.
-  // No shared mutation: the boundary reads this metadata to place the body.
-  // (renderPicker is pure, so it is only built when open — skipping wasted
-  // computation, gating no effect.)
+  // [LAW:dataflow-not-control-flow] The body is a VALUE whose length carries
+  // open/closed — `[body]` open, `[]` closed — appended to the record of the
+  // segment this menu renders in, the one record the walk owns and reads at
+  // the segment's exit. (renderPicker is pure, so it is only built when open —
+  // skipping wasted computation, gating no effect.)
   // [LAW:one-source-of-truth] The body's page cursor is the identity-derived
   // key (its synthesized state var is named by it, the disclosure-var
   // convention), and CLOSING — the ✕ affordance or a closeOnPick pick — writes
   // the disclosure back to the closed sentinel and resets the page, the same
   // coupled pair the toggle glyph above writes. What the ▾ promised, ✕ delivers.
-  glyph[MENU_DROP] = open
-    ? [
-        renderPicker(
-          applyName,
-          { key: pageKey, stateVar: pageKey },
-          [
-            [stateKey, DISCLOSURE_CLOSED],
-            [pageKey, "0"],
-          ],
-          options.closeOnPick,
-          options.paged,
-          action,
-          // [LAW:one-source-of-truth] The body's items are the band THIS
-          // segment opens — the same record the walk draws the trigger from —
-          // placed by THIS menu's distribution: the picker knows positions,
-          // the instance knows how it places them. Unless the menu's domain is
-          // colour-valued, in which case the OPTION colours its own cell; one
-          // call decides, the same one the standalone `{{ picker }}` makes.
-          optionItemStyle(
-            placement,
-            options.distribution,
-            action.basePalette,
-            requireOptionKind(action, applyName, "menu").paletteOf,
-            runtime.activeSegment.drawnAt(),
+  placement.drops.push(
+    ...(open
+      ? [
+          renderPicker(
+            applyName,
+            { key: pageKey, stateVar: pageKey },
+            [
+              [stateKey, DISCLOSURE_CLOSED],
+              [pageKey, "0"],
+            ],
+            options.closeOnPick,
+            options.paged,
+            action,
+            // [LAW:one-source-of-truth] The body's items are the band THIS
+            // segment opens — the same record the walk draws the trigger from —
+            // placed by THIS menu's distribution: the picker knows positions,
+            // the instance knows how it places them. Unless the menu's domain is
+            // colour-valued, in which case the OPTION colours its own cell; one
+            // call decides, the same one the standalone `{{ picker }}` makes.
+            optionItemStyle(
+              placement,
+              options.distribution,
+              action.basePalette,
+              requireOptionKind(action, applyName, "menu").paletteOf,
+              runtime.activeSegment.drawnAt(),
+            ),
           ),
-        ),
-      ]
-    : [];
+        ]
+      : []),
+  );
   return glyph;
 }
 

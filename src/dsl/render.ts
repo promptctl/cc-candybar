@@ -81,11 +81,7 @@ import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
 import { layoutPreviewFuncs } from "../render/layout-preview.js";
-import {
-  menuFuncs,
-  collectMenuDrops,
-  type MenuRuntime,
-} from "../render/menu.js";
+import { menuFuncs, type MenuRuntime } from "../render/menu.js";
 import {
   createActiveSegmentRef,
   type ActiveSegmentRef,
@@ -1033,8 +1029,8 @@ export function renderDsl(
   // the segment can wear: its authored `closed` Style, and the `trigger` /
   // `band` pair of the band it opens (the state colour and its plane), both
   // from the one `bandFor` read so the trigger and its dropped band cannot
-  // disagree about their hue. `exitSegment` collects the menu bodies the
-  // fragments carried as metadata and tears the record back down.
+  // disagree about their hue. `exitSegment` hands back the menu bodies the
+  // segment's templates appended to the record and tears the record down.
   //
   // [LAW:no-ambient-temporal-coupling] The record is set and cleared around each
   // segment's evaluation by the walk ONLY, so "which segment am I in" is owned
@@ -1088,9 +1084,15 @@ export function renderDsl(
       disclosure,
     };
   };
-  const exitSegment = (fragments: readonly RichText[]): readonly RichText[] => {
+  const exitSegment = (): readonly RichText[] => {
+    const active = compiled.activeSegment.current;
+    // [LAW:no-silent-failure] Exit only ever follows an enter; a null here is
+    // the walk out of step with itself, never an empty drop list.
+    if (active === null) {
+      throw new Error("exitSegment called with no segment entered");
+    }
     compiled.activeSegment.current = null;
-    return collectMenuDrops(fragments);
+    return active.drops;
   };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS

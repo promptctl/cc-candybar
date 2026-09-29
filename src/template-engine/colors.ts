@@ -91,6 +91,7 @@ export function resolveSegmentColors(
     disclosure,
     tint,
     bg: undefined as ColorRgba | undefined,
+    drops: [],
   };
   ref.current = active;
 
