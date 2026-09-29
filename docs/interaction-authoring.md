@@ -91,6 +91,8 @@ declares exactly one value source:
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
+| `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
+| `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -322,6 +324,36 @@ the undo history: undoing it restores the file and the picks together.
 ```error
 save must be the literal true
 ```
+
+### Save as preset
+
+`{ preset: "save" }` keeps the bar your session renders as a new preset. It
+takes the first free name `custom-1`, `custom-2`, … (rename it in the file),
+copies the arrangement of the preset you are in — comments included — and
+pins in the new preset's `globals` only the settings whose value differs from
+your config file's own `globals`, drafts included. The session switches to the
+new preset and drops the picks it now holds, so the only draft left is the
+switch itself. `{ preset: "delete", name }` removes a preset your file
+declares — and `globals.preset` too when it selects that preset — but never a
+bundled one. Each click is one undo step. The settings menu puts both under
+the preset carousel; this is the same pair on a bar of your own:
+
+```json5 check:pass
+{
+  actions: {
+    keepBar: { preset: "save" },
+    dropPreset: { preset: "delete", name: "{{ .preset.effective }}" },
+  },
+  segments: {
+    presets: {
+      template: '▦ {{ .preset.effective }} {{ action "keepBar" "⊕" }}{{ if not .preset.bundled }} {{ action "dropPreset" "🗑" }}{{ end }}',
+    },
+  },
+  root: { v: ["presets"] },
+}
+```
+
+`.preset.bundled` is `false` exactly for a preset you authored.
 
 ### The bar's progression
 
@@ -1080,6 +1112,9 @@ close.
   the cell disappears (see "Drafts and `save`" above). `↶ undo` and `↷ redo`
   step every one of those changes, saves included, each shown only while it
   has a step to take.
+- **Under the preset carousel**, `⊕ save as preset` keeps the bar as a new
+  preset and switches to it, and `🗑 delete <name>` removes the preset you are
+  in when you made it (see "Save as preset" above).
 - **The preset switcher** and **`✎ edit`** are one click from the toggle,
   because switching arrangement and entering edit mode are what you most often
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the

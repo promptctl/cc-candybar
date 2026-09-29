@@ -744,3 +744,207 @@ describe("a pick leaves the picker open", () => {
 function isReset(url: string): boolean {
   return effectsOf(url).some((e) => e.verb === "reset-config");
 }
+
+// [LAW:verifiable-goals] brandon-save-undo-bwi.o6u: save as preset. Every
+// click is found in the rendered bar and dispatched through the real verb
+// table, and every assertion on the file is on its exact bytes.
+const USER_PRESETS = `{
+  globals: { palette: 'nord', padding: 2 },
+  segments: { mine: { template: 'mine' } },
+  presets: {
+    narrow: {
+      root: { h: [
+        'mine', // mine leads
+        'directory',
+      ] },
+    },
+  },
+  root: { h: ['directory', 'mine'] },
+}`;
+
+// USER_PRESETS once the session in `narrow`, wearing dracula and dim, saved
+// its bar: narrow's root copied with its comment, and only the two settings
+// that differ from the file's own globals.
+const SAVED_CUSTOM_1 = `{
+  globals: { palette: 'nord', padding: 2 },
+  segments: { mine: { template: 'mine' } },
+  presets: {
+    narrow: {
+      root: { h: [
+        'mine', // mine leads
+        'directory',
+      ] },
+    },
+    "custom-1": {
+      root: { h: [
+        'mine', // mine leads
+        'directory',
+      ] },
+      globals: {
+        palette: "dracula",
+        look: "dim",
+      },
+    },
+  },
+  root: { h: ['directory', 'mine'] },
+}`;
+
+describe("save as preset", () => {
+  let r: ReturnType<typeof rig>;
+  let durable: DurableConfig;
+
+  const link = (text: string): string | undefined =>
+    links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
+  const effective = () =>
+    resolveEffectiveGlobals(
+      r.config,
+      (key) => r.sessionState.get(SID, key),
+      () => false,
+    );
+  // The door, then the preset control's ▸: the ring and the rows beneath it.
+  const openPresets = () => {
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(
+      links(r.render()).find((l) =>
+        effectsOf(l.url).some((e) => e.args[2] === "settings.apply.preset"),
+      )!.url,
+    );
+  };
+
+  function start(source: string, picks: Record<string, string> = {}): void {
+    durable = durableConfig("cc-candybar-save-preset-");
+    r = rig(source, durable);
+    for (const [k, v] of Object.entries(picks)) r.sessionState.set(SID, k, v);
+    openPresets();
+  }
+  afterEach(() => {
+    r.dispose();
+    durable.dispose();
+  });
+
+  test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", () => {
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim", padding: "2" });
+    r.click(link("⊕ save as preset")!);
+
+    expect(durable.text()).toBe(SAVED_CUSTOM_1);
+    // Reloaded once, while the session still held its picks.
+    expect(r.reloads).toEqual([
+      { text: SAVED_CUSTOM_1, picks: { theme: "dracula", look: "dim", padding: "2" } },
+    ]);
+    // The preset renders what the picks did, so they are released.
+    for (const key of ["theme", "look", "padding"]) {
+      expect(r.sessionState.get(SID, key)).toBeNull();
+    }
+    expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
+    const e = effective();
+    expect([e.preset, e.theme.kind === "decided" && e.theme.name, e.padding]).toEqual([
+      "custom-1",
+      "dracula",
+      2,
+    ]);
+    // The ring is on the new preset, and the one draft left is the switch.
+    const out = plain(r.render());
+    expect(out).toContain("◀ custom-1 ▶");
+    expect(out).toContain("💾 save 1");
+    expect(r.logs).toContainEqual(
+      `save-preset: custom-1 from=narrow presets.custom-1.globals.palette=dracula presets.custom-1.globals.look=dim → ${durable.configPath} (session=${SID})`,
+    );
+  });
+
+  test("switching away and back changes no byte, and the preset still renders what was saved", () => {
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    r.click(link("⊕ save as preset")!);
+    r.click(link("default")!);
+    expect(effective().preset).toBe("default");
+    expect(effective().theme).toMatchObject({ name: "nord" });
+    r.click(link("custom-1")!);
+    expect(durable.text()).toBe(SAVED_CUSTOM_1);
+    expect(effective().theme).toMatchObject({ name: "dracula" });
+    expect(effective().look).toMatchObject({ name: "dim" });
+  });
+
+  test("a second save takes the next free name", () => {
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    r.click(link("⊕ save as preset")!);
+    r.click(link("⊕ save as preset")!);
+    const presets = durable.parsed().presets as Record<string, unknown>;
+    expect(Object.keys(presets)).toEqual(["narrow", "custom-1", "custom-2"]);
+    // Saved from custom-1 with nothing picked: its arrangement and its pins.
+    expect(presets["custom-2"]).toEqual(presets["custom-1"]);
+    expect(effective().preset).toBe("custom-2");
+  });
+
+  test("🗑 deletes the preset it names, returning the file byte for byte, and only a user preset offers it", () => {
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    expect(plain(r.render())).toContain("🗑 delete narrow");
+    r.click(link("⊕ save as preset")!);
+    r.click(link("🗑 delete custom-1")!);
+
+    expect(durable.text()).toBe(USER_PRESETS);
+    expect(r.sessionState.get(SID, "preset")).toBeNull();
+    expect(effective().preset).toBe("default");
+    // `default` is bundled: nothing to delete.
+    expect(plain(r.render())).not.toContain("🗑");
+    expect(r.logs).toContainEqual(
+      `delete-preset: custom-1 ← ${durable.configPath} (session=${SID})`,
+    );
+  });
+
+  test("save and delete are one undo step each, restoring the exact bytes and picks", () => {
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    r.click(link("⊕ save as preset")!);
+    r.click(link("🗑 delete custom-1")!);
+
+    r.click(link("↶ undo")!);
+    expect(durable.text()).toBe(SAVED_CUSTOM_1);
+    expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
+
+    r.click(link("↶ undo")!);
+    expect(durable.text()).toBe(USER_PRESETS);
+    expect(
+      ["preset", "theme", "look"].map((k) => r.sessionState.get(SID, k)),
+    ).toEqual(["narrow", "dracula", "dim"]);
+  });
+
+  test("a bundled preset is never deleted, even one the file pins a setting on", () => {
+    const source = `{
+  presets: { compact: { globals: { padding: 3 } } },
+}`;
+    start(source, { preset: "compact" });
+    expect(plain(r.render())).not.toContain("🗑");
+    // The click a stale or hand-built URL could still carry.
+    expect(() =>
+      r.click(`cc-candybar://delete-preset/${SID}/compact`),
+    ).toThrow('cannot delete preset "compact": it is bundled');
+    expect(durable.text()).toBe(source);
+  });
+
+  test("deleting the preset the file selects removes the selection too, so the file still loads", () => {
+    const source = `{
+  globals: { preset: 'mine' },
+  presets: { mine: { globals: { padding: 4 } } },
+}`;
+    start(source);
+    expect(effective().preset).toBe("mine");
+    r.click(link("🗑 delete mine")!);
+    expect(durable.parsed()).toEqual({});
+    expect(effective().preset).toBe("default");
+  });
+});
+
+describe("the preset action", () => {
+  test.each([
+    [{ preset: "rename" }, 'preset must be "save" or "delete", got "rename"'],
+    [{ preset: "delete" }, "actions.a.name must be a string"],
+    [{ preset: "save", name: "x" }, 'Unknown key "name" on a preset action. Expected only: preset'],
+  ])("%j is refused at load", (action, message) => {
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        JSON.stringify({ actions: { a: action } }),
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      ),
+    ).toThrow(message);
+  });
+});

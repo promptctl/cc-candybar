@@ -144,6 +144,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   undo: markerArm("undo"),
   redo: markerArm("redo"),
   save: markerArm("save"),
+  preset: presetArm,
   doctor: doctorArm,
   do: doArm,
 };
@@ -174,6 +175,7 @@ function actionDeclJson(): JsonNode {
       markerArmJson("undo"),
       markerArmJson("redo"),
       markerArmJson("save"),
+      ...presetArmJson(),
       ...doctorArmJson(),
       DO_ARM_JSON,
     ],
@@ -279,6 +281,55 @@ function markerArmJson(key: MarkerKey): JsonNode {
     required: [key],
     additionalProperties: false,
   };
+}
+
+// [LAW:types-are-the-program] `preset` (brandon-save-undo-bwi.o6u) is the
+// doctor's shape: `"save"` alone, or `"delete"` with the `name` it removes — a
+// template, so its preset can be the one the bar is in. `function`, not a
+// const arrow, so ACTION_ARMS above can reference it directly via hoisting.
+function presetArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  const verb = raw.preset;
+  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`,
+      );
+  }
+  if (verb !== "save" && verb !== "delete") {
+    issue(
+      ctx,
+      `${path}.preset`,
+      `preset must be "save" or "delete", got ${describeValue(verb)}`,
+    );
+    return null;
+  }
+  if (verb === "save") return { preset: "save" };
+  const name = requireString(ctx, path, raw, "name");
+  return name === null ? null : { preset: "delete", name };
+}
+
+function presetArmJson(): readonly JsonNode[] {
+  return [
+    {
+      type: "object",
+      properties: { preset: { const: "save" } },
+      required: ["preset"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: { preset: { const: "delete" }, name: { type: "string" } },
+      required: ["preset", "name"],
+      additionalProperties: false,
+    },
+  ];
 }
 
 // [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a two-member

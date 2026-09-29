@@ -12,11 +12,11 @@
 // list it returns, computed at click time over the same session and config,
 // so the button's count and the click's write cannot describe different sets.
 
-import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import type { DslConfig } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
 import { presetByName, presetNames } from "../config/presets.js";
+import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
   SETTING_PROJECTIONS,
@@ -67,6 +67,39 @@ const SETTING_KEYS: ReadonlySet<string> = new Set(
 
 const NOT_CUSTOMIZED = (): boolean => false;
 
+type SettingName = keyof typeof SETTINGS;
+
+// The bar the session renders: its own picks over the config, and nothing
+// else it holds — edit mode's staged globals are chrome.
+function sessionGlobals(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): EffectiveGlobals {
+  return resolveEffectiveGlobals(
+    config,
+    (key) => (SETTING_KEYS.has(key) ? sessionPick(key) : null),
+    NOT_CUSTOMIZED,
+  );
+}
+
+// [LAW:one-source-of-truth] THE comparison a draft and a saved preset are both
+// made of: each of `rows` whose value the session renders differs from the
+// value `baseOf` it resolves to, and names a value at all (a theme or look
+// chosen by rule has none to write). `targetOf` says where each would land.
+function differing(
+  rows: ReadonlyArray<[SettingName, SettingProjection]>,
+  session: EffectiveGlobals,
+  baseOf: (name: SettingName) => EffectiveGlobals,
+  targetOf: (row: SettingProjection) => string,
+): readonly SettingDraft[] {
+  return rows.flatMap(([name, row]) => {
+    const value = SPELLING[name](session);
+    return value === null || value === SPELLING[name](baseOf(name))
+      ? []
+      : [{ ...row, value, target: targetOf(row) }];
+  });
+}
+
 // Every setting the session renders differently from the config file. The
 // preset is the layer every other field resolves through, so the preset
 // compares against the file alone and every other field against the file
@@ -77,11 +110,7 @@ export function settingDrafts(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): readonly SettingDraft[] {
-  const session = resolveEffectiveGlobals(
-    config,
-    (key) => (SETTING_KEYS.has(key) ? sessionPick(key) : null),
-    NOT_CUSTOMIZED,
-  );
+  const session = sessionGlobals(config, sessionPick);
   const file = resolveEffectiveGlobals(config, () => null, NOT_CUSTOMIZED);
   const landed = resolveEffectiveGlobals(
     config,
@@ -89,22 +118,60 @@ export function settingDrafts(
     NOT_CUSTOMIZED,
   );
   const fragment = presetByName(config.presets, session.preset).globals ?? {};
-  return SETTING_ROWS.flatMap(([name, row]) => {
-    const value = SPELLING[name](session);
-    const saved = SPELLING[name](name === "preset" ? file : landed);
-    return value === null || value === saved
-      ? []
-      : [
-          {
-            ...row,
-            value,
-            target:
-              row.configKey in fragment
-                ? presetGlobalsKey(session.preset, row.configKey)
-                : row.configKey,
-          },
-        ];
-  });
+  return differing(
+    SETTING_ROWS,
+    session,
+    (name) => (name === "preset" ? file : landed),
+    (row) =>
+      row.configKey in fragment
+        ? presetGlobalsKey(session.preset, row.configKey)
+        : row.configKey,
+  );
+}
+
+// Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders, as
+// a new preset. It takes the first free `custom-N` — the bar has no text
+// input, and a name is renamed in the file — stages the arrangement of the
+// preset the session is in (`from`), and pins every display setting whose
+// value differs from what a preset naming none would render with: a preset's
+// globals are a delta over the config's, exactly as the bundled presets'
+// are. Drafts are included — the session's picks are what it renders.
+export interface PresetSnapshot {
+  readonly name: string;
+  readonly from: string;
+  readonly globals: readonly SettingDraft[];
+}
+
+export const SAVED_PRESET_PREFIX = "custom-";
+
+export function presetSnapshot(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): PresetSnapshot {
+  const taken = new Set(presetNames(config.presets));
+  // One more candidate than there are names, so one is always free.
+  const name = Array.from(
+    { length: taken.size + 1 },
+    (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`,
+  ).find((candidate) => !taken.has(candidate))!;
+  const session = sessionGlobals(config, sessionPick);
+  const bare = resolveEffectiveGlobals(
+    { ...config, presets: { ...config.presets, [name]: {} } },
+    (key) => (key === SETTINGS.preset.sessionKey ? name : null),
+    NOT_CUSTOMIZED,
+  );
+  return {
+    name,
+    from: session.preset,
+    // [LAW:types-are-the-program] A preset cannot select a preset: its
+    // globals schema refuses `preset`, so the row is not offered.
+    globals: differing(
+      SETTING_ROWS.filter(([n]) => n !== "preset"),
+      session,
+      () => bare,
+      (row) => presetGlobalsKey(name, row.configKey),
+    ),
+  };
 }
 
 // [LAW:one-source-of-truth] What a `reset` of one config key clears: every
@@ -124,8 +191,6 @@ export interface ResetLayers {
   readonly sessionKeys: readonly string[];
   readonly fileKeys: readonly string[];
 }
-
-const BUNDLED_PRESETS = presetNames(DEFAULT_DSL_CONFIG.presets);
 
 export function resetLayers(key: string): ResetLayers {
   const settings = SETTING_PROJECTIONS.filter((p) => p.configKey === key);

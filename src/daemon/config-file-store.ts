@@ -43,6 +43,7 @@ import {
   insertSegmentRef,
   json5Text,
   JSON5_DIALECT,
+  movableTextOf,
   nodeAt,
   parseDocument,
   removeSegmentRef,
@@ -59,6 +60,7 @@ import {
   type PersistTarget,
 } from "../config/loader/persist-target.js";
 import type { DaemonLogger } from "./log.js";
+import { isBundledPreset } from "./bundled-presets.js";
 
 // [LAW:types-are-the-program] Every Globals field's primitive type, keyed by
 // `keyof Globals` — TypeScript forces this map to stay total over Globals, so
@@ -512,6 +514,94 @@ export function deleteValues(
   );
   if (after === before) return;
   commit(store, file, before, after);
+}
+
+/**
+ * Save as preset: declare `presets.<name>` as ONE tracked write — the root
+ * `from` stages, copied as the file spells it (comments included) or as the
+ * bundled preset's authored text, and each `presets.<name>.globals.<field>`
+ * the snapshot pins. A preset that stages the config's own root carries no
+ * root, and a preset pinning nothing is `{}`: the name alone is the
+ * declaration. [LAW:no-silent-failure] A name the file already declares is
+ * the stale click — the name was chosen from a config this file no longer
+ * is — refused rather than overwritten.
+ */
+export function writePreset(
+  store: EditStore,
+  file: string,
+  name: string,
+  from: string,
+  pairs: ReadonlyArray<readonly [key: string, raw: string]>,
+): void {
+  const before = readConfigText(file);
+  const doc = docOf(before ?? "");
+  const own: ConfigPath = ["presets", name];
+  if (has(doc, own) || isBundledPreset(name)) {
+    throw new BadVerbArgs(
+      `cannot save preset "${name}": ${own.join(".")} is already declared — the bar you clicked is stale; it reloads on the next render`,
+    );
+  }
+  const staged = presetLayer(doc, from);
+  const root: ReadonlyArray<readonly [ConfigPath, string]> =
+    staged === null
+      ? []
+      : [
+          [
+            [...own, "root"],
+            staged.unit === null
+              ? movableTextOf(before ?? "", staged.fragment)
+              : json5Text(staged.unit.value),
+          ],
+        ];
+  const values = pairs.map(
+    ([key, raw]) =>
+      [
+        valuePathOf(doc, requireValueTarget(key)),
+        persistValueText(key, raw),
+      ] as const,
+  );
+  const after = [...root, ...values].reduce(
+    (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
+    setValue(before ?? "", own, "{}", JSON5_DIALECT),
+  );
+  commit(store, file, before, after);
+}
+
+/**
+ * Delete a preset the file authors, as ONE tracked write — and the file's
+ * `globals.preset` with it when that names it, since a default naming no
+ * declared preset fails the load. [LAW:single-enforcer] The one gate on what a
+ * delete may remove: never a bundled preset (the file's entry there is a
+ * delta the bundled preset survives, which `reset` owns), never a name the
+ * file does not declare (the stale click).
+ */
+export function deletePreset(
+  store: EditStore,
+  file: string,
+  name: string,
+): void {
+  if (isBundledPreset(name)) {
+    throw new BadVerbArgs(
+      `cannot delete preset "${name}": it is bundled — reset its settings instead`,
+    );
+  }
+  const before = readConfigText(file);
+  const doc = docOf(before ?? "");
+  const own: ConfigPath = ["presets", name];
+  if (before === null || !has(doc, own)) {
+    throw new BadVerbArgs(
+      `cannot delete preset "${name}": ${file} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
+    );
+  }
+  const selected =
+    doc === null ? undefined : nodeAt(doc, ["globals", "preset"]);
+  const paths: readonly ConfigPath[] = [
+    own,
+    ...(selected?.kind === "string" && selected.value === name
+      ? [["globals", "preset"]]
+      : []),
+  ];
+  commit(store, file, before, paths.reduce(deleteAtPath, before));
 }
 
 /**

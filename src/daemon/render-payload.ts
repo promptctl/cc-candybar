@@ -51,6 +51,7 @@ import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
 import type { DaemonLogger } from "./log.js";
+import { isBundledPreset } from "./bundled-presets.js";
 import type {
   SessionUsageStore,
   SpeedObservation,
@@ -283,6 +284,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     preset: {
       effective: effective.preset,
       customized: effective.presetCustomized,
+      bundled: isBundledPreset(effective.preset),
     },
     style: { effective: effective.style },
     progression: { effective: effective.progression },
@@ -337,7 +339,14 @@ export interface RenderPayload extends ClaudeHookData {
   // beside the trigger's own `.preset.effective` label. Required for the
   // same reason as `effective`: resolved unconditionally per render from
   // the render cache's authoredRoots, never absent.
-  readonly preset: { readonly effective: string; readonly customized: boolean };
+  // `bundled` says whether the bundled default declares that preset — false
+  // exactly for a preset the user authored, the only kind the settings menu's
+  // `🗑` deletes (brandon-save-undo-bwi.o6u).
+  readonly preset: {
+    readonly effective: string;
+    readonly customized: boolean;
+    readonly bundled: boolean;
+  };
   // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally

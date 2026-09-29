@@ -32,8 +32,10 @@ import {
 } from "./config-validators";
 import {
   applyLayoutOp as applyLayoutOpToFile,
+  deletePreset as deletePresetFromFile,
   deleteValues,
   readValue,
+  writePreset,
   writeValues,
   type EditStore,
 } from "../config-file-store";
@@ -44,7 +46,11 @@ import {
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import type { DslConfig } from "../../config/dsl-types";
-import { resetLayers, settingDrafts } from "../setting-drafts";
+import { presetSnapshot, resetLayers, settingDrafts } from "../setting-drafts";
+import {
+  SETTING_PROJECTIONS,
+  SETTINGS,
+} from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
@@ -59,6 +65,8 @@ import {
   VERB_REDO,
   VERB_RESET_CONFIG,
   VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
@@ -575,6 +583,59 @@ const save: VerbHandler = (value, ctx) => {
   );
 };
 
+// Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders
+// becomes `presets.<name>` in its config file (presetSnapshot), and the
+// session switches to it. Once the file holds every setting the session had
+// picked, those picks are released — the preset now renders them — so the
+// session is left with one pick: the preset itself.
+// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, then the
+// session — the preset the pick names exists before the pick does.
+// [LAW:single-enforcer] Each pinned value re-crosses the session gate that
+// admitted it, as a save's do.
+const savePreset: VerbHandler = (value, ctx) => {
+  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const snapshot = presetSnapshot(ctx.configFor(origin), (key) =>
+    ctx.sessionState.get(sid, key),
+  );
+  const pairs = snapshot.globals.map((d): readonly [string, string] => {
+    const result = validateStateWrite(d.sessionKey, d.value);
+    if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
+    return [d.target, result.value];
+  });
+  const file = originConfigFile(origin);
+  writePreset(editStore(ctx, sid), file, snapshot.name, snapshot.from, pairs);
+  ctx.reloadConfig(origin);
+  for (const p of SETTING_PROJECTIONS)
+    ctx.sessionState.clear(sid, p.sessionKey);
+  ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, snapshot.name);
+  ctx.dlog(
+    "info",
+    `save-preset: ${snapshot.name} from=${snapshot.from} ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,
+  );
+};
+
+// Delete a preset the session's config file authors. A session that was in
+// it returns to the file's default arrangement; any other session in it
+// falls to the floor, as it would for a name deleted by hand.
+const deletePreset: VerbHandler = (value, ctx) => {
+  const [sessionId = "", name = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  if (!name) {
+    throw new BadVerbArgs(
+      "delete-preset: <name> is required (shape: <sessionId>/<name>)",
+    );
+  }
+  const origin = sessionOrigin(ctx, sid);
+  const file = originConfigFile(origin);
+  deletePresetFromFile(editStore(ctx, sid), file, name);
+  ctx.reloadConfig(origin);
+  const key = SETTINGS.preset.sessionKey;
+  if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
+  ctx.dlog("info", `delete-preset: ${name} ← ${file} (session=${sid})`);
+};
+
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
 // at every layer that can hold it (resetLayers) — their paths in the session's
 // config file, as ONE write, and the session's own picks. A `do` over several
@@ -821,6 +882,8 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
   [VERB_SAVE, save],
+  [VERB_SAVE_PRESET, savePreset],
+  [VERB_DELETE_PRESET, deletePreset],
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
   [VERB_UNDO, undo],
   [VERB_REDO, redo],
@@ -843,6 +906,8 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_STEP_CONFIG,
   VERB_RESET_CONFIG,
   VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_DELETE_PRESET,
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,

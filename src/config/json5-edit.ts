@@ -270,6 +270,23 @@ export function textOf(text: string, node: Node): string {
   return text.slice(node.span.start, node.span.end);
 }
 
+/**
+ * A node's text as a value to splice elsewhere: its continuation lines carry
+ * the indentation of the line it sat on, which `setValue` would otherwise add
+ * to a second time, so that indentation comes off and the text is on LF —
+ * the shape `json5Text` mints, nested by `reindent` wherever it lands.
+ * Comments inside the node travel with it.
+ */
+export function movableTextOf(text: string, node: Node): string {
+  const indent = indentOfLine(text, node.span.start);
+  return textOf(text, node)
+    .split(/\r?\n/)
+    .map((line, i) =>
+      i > 0 && line.startsWith(indent) ? line.slice(indent.length) : line,
+    )
+    .join("\n");
+}
+
 // ─── Text generation ─────────────────────────────────────────────────────────
 
 const IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;

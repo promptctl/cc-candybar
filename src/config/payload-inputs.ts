@@ -76,6 +76,15 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: false,
   },
+  // Does the bundled default declare the active preset (RenderPayload
+  // .preset.bundled) — false for a preset the user authored, which the
+  // settings menu offers to delete.
+  "preset.bundled": {
+    kind: "input",
+    path: "preset.bundled",
+    type: "boolean",
+    default: true,
+  },
   // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
