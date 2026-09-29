@@ -698,6 +698,9 @@
         "toolbar": {
           "$ref": "#/definitions/SegmentDelta"
         },
+        "commands": {
+          "$ref": "#/definitions/SegmentDelta"
+        },
         "themeSwitcher": {
           "$ref": "#/definitions/SegmentDelta"
         },

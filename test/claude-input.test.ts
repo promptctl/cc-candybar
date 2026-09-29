@@ -16,7 +16,11 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
-import { VERB_SLASH, effectsUrl } from "../src/click/wire";
+import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
+import {
+  deriveActionValidators,
+  registerStateValidator,
+} from "../src/daemon/verbs/state-validators";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -314,19 +318,135 @@ describe("a slash click", () => {
 
   test("a line no action declares is refused before tmux is asked", () => {
     const rt = runtime(HINT);
-    const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/clear"] }]);
-    // The declared lines in full: the bundled autocompact controls (merged
-    // under the config), then this config's own.
+    const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/exit"] }]);
+    // The declared lines in full, each once: the bundled command tray and
+    // autocompact controls (merged under the config), then this config's own
+    // (the settings menu's tray instance declares the tray's lines again).
     const declared = [
+      "/compact",
+      "/model",
+      "/clear",
       "/autocompact auto",
       ...AUTOCOMPACT_WINDOWS.map((w) => `/autocompact ${w}`),
-      "/compact",
       "/model opus",
       "/compact keep the api;",
     ];
     expect(() => clickUrl(forged, rt.ctx)).toThrow(
-      `"/clear" is not a command this config declares (it declares: ${declared.join(", ")})`,
+      `"/exit" is not a command this config declares (it declares: ${declared.join(", ")})`,
     );
     expect(invocations()).toEqual([]);
+  });
+});
+
+// ─── The command tray (brandon-context-ceiling-xta.qhj) ───────────────────────
+
+// The bundled `commands` segment, placed as the bar's one segment: the same
+// tray the settings menu's `candybar.commands` instances under its prefix.
+function tray(tmux: TmuxHint | null) {
+  const config = parseAndValidate(
+    "<user>",
+    "{ root: { h: ['commands'] } }",
+    ALLOWED,
+    DEFAULT_DSL_CONFIG,
+  );
+  const sessionState = new SessionState();
+  sessionState.set(
+    "s1",
+    SESSION_RENDER_ORIGIN_KEY,
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+  );
+  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
+    registerStateValidator(key, spec),
+  );
+  const ctx = {
+    ...testVerbContext(sessionState, undefined, config),
+    claudeInput: productionClaudeInputEdge(),
+  };
+  // The tray's links by what they do, in render order.
+  const links = () =>
+    linkUrls(renderDsl(config, compiled, store, registry, { session_id: "s1" }, OPTS)).map(
+      (u) => ({ url: u, effects: effectsOf(u) }),
+    );
+  return { config, links, ctx, sessionState, dispose: () => disposers.forEach((d) => d()) };
+}
+
+const typedLines = (effects: { verb: string; args: string[] }[]) =>
+  effects.filter((e) => e.verb === VERB_SLASH).map((e) => e.args[1]);
+
+describe("the command tray: /compact, /model, /clear from the bar", () => {
+  test.each(["/compact", "/model"])("%s is one click: typed into the session's pane", (line) => {
+    serve(SCREENS.idle);
+    const rt = tray(HINT);
+    const button = rt.links().find((l) => typedLines(l.effects).includes(line))!;
+    expect(button.effects).toEqual([{ verb: VERB_SLASH, args: ["s1", line] }]);
+    clickUrl(button.url, rt.ctx);
+    expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
+    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(line);
+    rt.dispose();
+  });
+
+  test("/clear takes a second click: the first arms it and types nothing", () => {
+    serve(SCREENS.idle);
+    const rt = tray(HINT);
+    // The bar tray's own /clear links: its arm key, or the line itself.
+    const clearLinks = () =>
+      rt.links().filter((l) =>
+        l.effects.some((e) => e.args[1] === "commands.clearArmed" || e.args[1] === "/clear"),
+      );
+    // Disarmed, no link in the tray can type /clear.
+    const [arm] = clearLinks();
+    expect(clearLinks()).toHaveLength(1);
+    expect(arm!.effects).toEqual([
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "armed"] },
+    ]);
+    clickUrl(arm!.url, rt.ctx);
+    expect(invocations()).toEqual([]);
+
+    // Armed: a confirm that types /clear and disarms, and a ✕ that only disarms.
+    const [confirm, cancel] = clearLinks();
+    expect(confirm!.effects).toEqual([
+      { verb: VERB_SLASH, args: ["s1", "/clear"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "disarmed"] },
+    ]);
+    expect(cancel!.effects).toEqual([
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "disarmed"] },
+    ]);
+    clickUrl(confirm!.url, rt.ctx);
+    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
+    expect(rt.sessionState.get("s1", "commands.clearArmed")).toBe("disarmed");
+    expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
+    rt.dispose();
+  });
+
+  test("outside tmux the confirm says so in the bar and disarms, typing nothing", () => {
+    const rt = tray(null);
+    const armed = () => rt.links().find((l) => typedLines(l.effects).includes("/clear"));
+    clickUrl(
+      rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clearArmed"))!.url,
+      rt.ctx,
+    );
+    expect(() => clickUrl(armed()!.url, rt.ctx)).toThrow(/not running inside tmux/);
+    expect(rt.sessionState.get("s1", "click.error")).toMatch(
+      /\/clear was not typed: this Claude Code is not running inside tmux/,
+    );
+    expect(rt.sessionState.get("s1", "commands.clearArmed")).toBe("disarmed");
+    expect(invocations()).toEqual([]);
+    rt.dispose();
+  });
+
+  test("the settings door disarms the menu's /clear, so a confirm is never clicked in a view it was not armed in", () => {
+    const rt = tray(HINT);
+    expect(rt.config.actions["candybar.menu"]).toEqual({
+      do: ["candybar.menu.toggle", "candybar.resetAll.disarm", "candybar.commands.clear.disarm"],
+    });
+    expect(rt.config.actions["candybar.commands.clear.disarm"]).toEqual({
+      set: "candybar.commands.clearArmed",
+      to: "disarmed",
+    });
+    rt.dispose();
   });
 });

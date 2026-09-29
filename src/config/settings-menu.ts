@@ -70,6 +70,7 @@ import {
 import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
+import { commandTray } from "./command-tray.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import { SETTINGS, type SettingProjection } from "./setting-projections.js";
@@ -99,6 +100,8 @@ const EDIT_SEG = `${SETTINGS_NS}edit`;
 const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
+const COMMANDS_SEG = `${SETTINGS_NS}commands`;
+const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
@@ -537,6 +540,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
             direction: "horizontal",
             children: [
               { kind: "segment", name: TOOLBAR_SEG },
+              { kind: "segment", name: COMMANDS_SEG },
               ...PRIMARY_CONTROLS.map(controlNode),
               { kind: "segment", name: SAVE_SEG },
               // The display settings, behind their own disclosure so the
@@ -620,7 +624,9 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, RESET_ALL_DISARM] },
+      [SETTINGS_ANCHOR]: {
+        do: [DOOR_TOGGLE, RESET_ALL_DISARM, COMMANDS.disarm],
+      },
       [CONFIG_TOGGLE]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [CONFIG_SEG]: { do: [CONFIG_TOGGLE, RESET_ALL_DISARM] },
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
@@ -634,6 +640,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
       [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
+      ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
       [PRESET_SAVE]: { preset: "save" },
       [PRESET_DELETE]: {
@@ -658,6 +665,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         ),
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS.template },
       // [LAW:dataflow-not-control-flow] The cell exists exactly while there is
       // something to save — `gt` renders the literal "false" at zero, the only
       // text a `when` hides on — and it says how much, so a click never
@@ -725,6 +733,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     TOOLS_SEG,
     DISCLOSURE_CLOSED,
   );
+  Object.assign(artifacts.variables, COMMANDS.variables);
   artifacts.variables[RESET_ALL_SEG] = {
     kind: "state",
     key: RESET_ALL_SEG,

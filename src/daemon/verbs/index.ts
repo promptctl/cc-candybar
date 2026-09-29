@@ -1020,7 +1020,7 @@ const slash: VerbHandler = (value, ctx) => {
   const action = declared.find((a) => a.slash === line);
   if (action === undefined) {
     throw new BadVerbArgs(
-      `${JSON.stringify(line)} is not a command this config declares (it declares: ${declared.map((a) => a.slash).join(", ") || "none"})`,
+      `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`,
     );
   }
   const result = typeSlash(

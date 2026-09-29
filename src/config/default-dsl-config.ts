@@ -33,11 +33,16 @@ import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
+import { commandTray } from "./command-tray.js";
 import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
 // same one the renderer holds chosen text to (textOn).
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
+
+// The bundled `commands` segment's instance, under names no user config
+// spells by accident.
+const COMMAND_TRAY = commandTray("commands.");
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -167,6 +172,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   //   • shell — subprocess; cached
   //   • state — per-session daemon state
   variables: {
+    ...COMMAND_TRAY.variables,
     // [LAW:one-source-of-truth] The payload inputs the synthesized settings
     // menu and edit chrome read, spelled once in payload-inputs.ts.
     ...PAYLOAD_INPUTS,
@@ -766,6 +772,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "Quick actions: copy the session id, and open the project, transcript or repo.",
       template: quickActions("").template,
     },
+    // OPT-IN, like `toolbar`: the settings menu carries its own instance.
+    commands: {
+      description:
+        "Type /compact, /model or /clear into this session; /clear asks for a second click.",
+      template: COMMAND_TRAY.template,
+    },
     // Declared-but-opt-in: a theme stepper that lives ON the bar, so the whole
     // bar stays visible in each theme while stepping through them — the
     // settings menu's theme control opens inline over the door's row, hiding
@@ -1096,6 +1108,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // as a literal filename, not a deep link).
   actions: {
     ...quickActions("").actions,
+    ...COMMAND_TRAY.actions,
     copyDir: { copy: "{{ .current_dir }}" },
     // The `themeSwitcher` segment's click: each arrow writes the theme it
     // points at into this session. Gated by the themes domain it names, the

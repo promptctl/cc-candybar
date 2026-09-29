@@ -836,6 +836,42 @@ derives, so nothing a `do` fires could not be clicked alone.
 - A `do` lists at least two members, none of them twice, and none of them may
   itself be a `do` — list its members directly instead.
 
+### A command button: `slash`
+
+The settings menu already carries `/compact`, `/model` and `/clear` (the
+last one asks for a second click), and the bundled `commands` segment places
+the same buttons on the bar. A button for any other command —
+your own project slash command included — is one `slash` action and one
+`{{ action }}`:
+
+```json5 check:pass
+{
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+  },
+  actions: {
+    review: { slash: '/review' },
+    compactKeepApi: { slash: '/compact keep the API design' },
+  },
+  segments: {
+    commands: {
+      template: '{{ action "review" "⌕ review" }} {{ action "compactKeepApi" "⊘ compact" }}',
+    },
+  },
+  root: "commands",
+}
+```
+
+- **The line is the whole command, arguments included.** A click types exactly
+  the declared line and presses Enter; the URL only picks which declared line,
+  so no click can type text the config does not hold.
+- **A command that destroys work wants a confirm step.** Spell it as a
+  `state` key the first click arms, and a `do` over the `slash` and a disarm
+  that the armed view shows (the bundled `/clear` is built this way,
+  `src/config/command-tray.ts`).
+- **Outside tmux the click types nothing** and says why in the bar, like
+  every refusal in the table above.
+
 ## Edit mode: `+`/`-` chrome for free
 
 Composing the layout by hand-writing `removeSegment`/`insertSegmentFrom`
