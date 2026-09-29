@@ -65,7 +65,6 @@ export function testVerbContext(
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },
-      claudeSettingsPath: "/nonexistent/settings.json",
     },
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {

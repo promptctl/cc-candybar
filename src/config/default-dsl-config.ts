@@ -33,6 +33,8 @@ import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
+import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
+import type { SlashLine } from "../claude-input/slash-line.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
 // same one the renderer holds chosen text to (textOn).
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
@@ -507,6 +509,36 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     "memento.session": { kind: "input", path: "memento.session", default: "" },
     "memento.error": { kind: "input", path: "memento.error", default: "" },
 
+    // Claude Code's auto-compact window as its `/autocompact` last wrote it
+    // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+    // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+    // to the model's context window; `lower`/`higher` are the windows − and +
+    // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+    // settings file the daemon could not read, and the only field set when it
+    // is.
+    "autocompact.window": {
+      kind: "input",
+      path: "autocompact.window",
+      type: "number",
+      default: -1,
+    },
+    ...Object.fromEntries(
+      ["applied", "lower", "higher"].map((field) => [
+        `autocompact.${field}`,
+        {
+          kind: "input",
+          path: `autocompact.${field}`,
+          type: "number",
+          default: 0,
+        },
+      ]),
+    ),
+    "autocompact.error": {
+      kind: "input",
+      path: "autocompact.error",
+      default: "",
+    },
+
     // Metrics — daemon fetches via MetricsProvider; numeric.
     "metrics.lastResponseTime": {
       kind: "input",
@@ -880,6 +912,23 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: '{{ if ne .memento.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
       when: '{{ or (ge .memento.ceiling 0) (ne .memento.error "") }}',
     },
+    // Beside the ceiling: where Claude Code itself will summarize the context.
+    // Claude Code's `/autocompact` is its only writer, so each control types
+    // that command into the session (a `slash` action per window below); the
+    // daemon names the window − and + land on (autoCompactControls), and ↺
+    // hands the window back to `auto`.
+    autocompact: {
+      description:
+        "Claude Code's auto-compact window: − and + move it by 100K, ↺ returns it to auto. Clicks type /autocompact into this session.",
+      template:
+        '{{ if ne .autocompact.error "" }}⇲ ⚠ {{ .autocompact.error }}{{ else }}' +
+        '⇲ {{ if eq .autocompact.window 0 }}auto{{ else }}{{ template "formatTokenCount" .autocompact.applied }}{{ end }}' +
+        '{{ if gt .autocompact.lower 0 }} {{ action (printf "autocompact.%d" .autocompact.lower) "−" }}{{ end }}' +
+        '{{ if gt .autocompact.higher 0 }} {{ action (printf "autocompact.%d" .autocompact.higher) "+" }}{{ end }}' +
+        '{{ if gt .autocompact.window 0 }} {{ action "autocompact.auto" "↺" }}{{ end }}{{ end }}',
+      bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+      when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+    },
     metrics: {
       description:
         "Response times, session duration, message count, and lines added/removed.",
@@ -1002,6 +1051,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             children: [
               { kind: "segment", name: "context" },
               { kind: "segment", name: "ceiling" },
+              { kind: "segment", name: "autocompact" },
             ],
           },
           { kind: "segment", name: "cacheTimer" },
@@ -1046,6 +1096,19 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     "ceiling.lower": { ceiling: "set", to: "-100_000" },
     "ceiling.off": { ceiling: "set", to: "off" },
     "ceiling.clear": { ceiling: "clear" },
+    // The `autocompact` segment's controls. [LAW:one-source-of-truth] One
+    // action per window Claude Code accepts, so the lines a click can type are
+    // exactly AUTOCOMPACT_WINDOWS; the segment picks one by name.
+    // [LAW:parse-dont-validate] The casts claim nothing unchecked: this whole
+    // literal is parsed through the loader below (DEFAULT_DSL_CONFIG), which
+    // is where every line becomes a SlashLine or fails the module load.
+    "autocompact.auto": { slash: "/autocompact auto" as SlashLine },
+    ...Object.fromEntries(
+      AUTOCOMPACT_WINDOWS.map((w) => [
+        `autocompact.${w}`,
+        { slash: `/autocompact ${w}` as SlashLine },
+      ]),
+    ),
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────
@@ -1203,6 +1266,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
                 children: [
                   { kind: "segment", name: "context" },
                   { kind: "segment", name: "ceiling" },
+                  { kind: "segment", name: "autocompact" },
                 ],
               },
               { kind: "segment", name: "cacheTimer" },
@@ -1295,6 +1359,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
                 children: [
                   { kind: "segment", name: "context" },
                   { kind: "segment", name: "ceiling" },
+                  { kind: "segment", name: "autocompact" },
                 ],
               },
               { kind: "segment", name: "cacheTimer" },
@@ -1344,6 +1409,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             children: [
               { kind: "segment", name: "context" },
               { kind: "segment", name: "ceiling" },
+              { kind: "segment", name: "autocompact" },
             ],
           },
           { kind: "segment", name: "cacheTimer" },

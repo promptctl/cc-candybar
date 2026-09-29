@@ -42,10 +42,14 @@ export type TmuxFacts =
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
-  // The `env` block of ~/.claude/settings.json as read — a second, daemon-
-  // observable fact beside the client-observed env, so a verdict can say the
-  // truthful thing after a fix has landed but Claude Code has not restarted.
-  readonly claudeSettingsEnv: Readonly<Record<string, unknown>>;
+  // The session's Claude Code settings file and the `env` block read from it
+  // — a second, daemon-observable fact beside the client-observed env, so a
+  // verdict can say the truthful thing after a fix has landed but Claude Code
+  // has not restarted, naming the file it landed in.
+  readonly claudeSettings: {
+    readonly path: string;
+    readonly env: Readonly<Record<string, unknown>>;
+  };
 }
 
 // [LAW:types-are-the-program] A fix is a DESCRIPTION of an edit the edge
@@ -90,7 +94,7 @@ export const TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
 const tmuxTruecolor: Check = {
   name: "tmuxTruecolor",
   label: "tmux truecolor",
-  probe: ({ tmux, claudeSettingsEnv }) => {
+  probe: ({ tmux, claudeSettings }) => {
     switch (tmux.kind) {
       case "unreported":
         return {
@@ -114,11 +118,11 @@ const tmuxTruecolor: Check = {
         // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
         // its env: a non-empty string. Anything else in settings.json — absent,
         // empty, a non-string — is "not told", and the fix overwrites it.
-        const staged = claudeSettingsEnv[TMUX_TRUECOLOR_VAR];
+        const staged = claudeSettings.env[TMUX_TRUECOLOR_VAR];
         if (typeof staged === "string" && staged !== "") {
           return {
             ok: false,
-            reason: `${TMUX_TRUECOLOR_VAR} is set in ~/.claude/settings.json — restart Claude Code to apply`,
+            reason: `${TMUX_TRUECOLOR_VAR} is set in ${claudeSettings.path} — restart Claude Code to apply`,
           };
         }
         return {

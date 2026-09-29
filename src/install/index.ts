@@ -10,7 +10,11 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
-import { claudeSettingsPath } from "../claude-settings";
+import {
+  claudeConfigDir,
+  claudeSettingsPath,
+  detectClaudeConfigDir,
+} from "../claude-settings";
 import {
   assessCurrency,
   currencyReport,
@@ -499,7 +503,13 @@ function updateClaudeSettings(
   force: boolean,
   overridePath?: string,
 ): void {
-  const target = overridePath ?? claudeSettingsPath();
+  // The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
+  // the Claude Code they launch from it reads.
+  const target =
+    overridePath ??
+    claudeSettingsPath(
+      claudeConfigDir(detectClaudeConfigDir(process.env, process.cwd())),
+    );
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

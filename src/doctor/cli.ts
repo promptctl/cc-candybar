@@ -5,7 +5,7 @@
 // switch are what Claude Code sees), projected onto text + an exit code:
 //   0 — every check ok
 //   1 — at least one check failed (its reason on the line)
-//   2 — usage error, or ~/.claude/settings.json unreadable
+//   2 — usage error, or Claude Code's settings.json unreadable
 //
 // [LAW:single-enforcer] No parallel check logic: the CLI differs from the click
 // only in WHERE its tmux facts come from — its own env here, the session's
@@ -17,6 +17,7 @@ import { DISCLOSURE_GLYPH_CLOSED, DOOR_GLYPH } from "../config/disclosure.js";
 import { detectTmuxHint } from "../tmux-hint.js";
 import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
 import { gatherFacts, productionEdge, type DoctorEdge } from "./edge.js";
+import { detectClaudeConfigDir } from "../claude-settings.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -35,10 +36,14 @@ function reportLine({ check, verdict }: CheckReport): string {
 export function doctorPlan(
   edge: DoctorEdge,
   env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
 ): CliPlan {
   let facts: DoctorFacts;
   try {
-    facts = gatherFacts(edge, detectTmuxHint(env));
+    facts = gatherFacts(edge, {
+      tmux: detectTmuxHint(env),
+      claudeConfigDir: detectClaudeConfigDir(env, cwd),
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
@@ -58,7 +63,7 @@ export function runDoctorCli(args: readonly string[]): never {
     );
     process.exit(EXIT_USAGE);
   }
-  const plan = doctorPlan(productionEdge(), process.env);
+  const plan = doctorPlan(productionEdge(), process.env, process.cwd());
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);

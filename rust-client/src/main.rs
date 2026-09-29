@@ -242,6 +242,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let ssh = detect_ssh();
     let tmux = detect_tmux();
     let config_env = detect_config_env();
+    let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -272,6 +273,11 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // the affirmative "no override", spelled as an absent field.
     if let Some(path) = config_env {
         request["configEnv"] = serde_json::Value::from(path);
+    }
+    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
+    // Claude Code directory, spelled as an absent field.
+    if let Some(dir) = claude_config_dir {
+        request["claudeConfigDir"] = serde_json::Value::from(dir);
     }
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
@@ -490,6 +496,30 @@ const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
 // unset-or-empty is the affirmative "no override" (`None`), never a failure.
 fn detect_config_env() -> Option<String> {
     env::var(CONFIG_ENV).ok().filter(|v| !v.is_empty())
+}
+
+// The variable that moves Claude Code's configuration directory — mirrors
+// CLAUDE_CONFIG_DIR_ENV in src/claude-settings.ts, diffed by
+// scripts/check-protocol.mjs. The daemon reads the session's settings.json
+// from it, and its own env and cwd answer for whichever session spawned it, so
+// only the client can resolve it: the first entry of the comma list, made
+// absolute against this client's cwd — detectClaudeConfigDir's rule.
+const CLAUDE_CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
+
+fn detect_claude_config_dir(cwd: &std::path::Path) -> Option<String> {
+    claude_config_dir_hint(env::var(CLAUDE_CONFIG_DIR_ENV).ok(), cwd)
+}
+
+// [LAW:dataflow-not-control-flow] Total by construction, like
+// detect_config_env: unset, empty, or a blank first entry is the default
+// directory (`None`). `join` keeps an absolute entry as it is.
+fn claude_config_dir_hint(raw: Option<String>, cwd: &std::path::Path) -> Option<String> {
+    let raw = raw?;
+    let first = raw.split(',').next().unwrap_or("").trim();
+    if first.is_empty() {
+        return None;
+    }
+    Some(cwd.join(first).to_string_lossy().into_owned())
 }
 
 fn detect_tmux() -> serde_json::Value {
@@ -1029,6 +1059,18 @@ mod tests {
 
     // The same table as test/term-extent.test.ts: both runtimes must read
     // the same COLUMNS/LINES value from the same shell, or neither.
+    #[test]
+    fn claude_config_dir_hint_resolves_the_first_entry_against_cwd() {
+        let cwd = std::path::Path::new("/work/proj");
+        let hint = |raw: Option<&str>| claude_config_dir_hint(raw.map(String::from), cwd);
+        assert_eq!(hint(None), None);
+        assert_eq!(hint(Some("")), None);
+        assert_eq!(hint(Some(" ,/b")), None);
+        assert_eq!(hint(Some("/home/u/.claude-work")), Some("/home/u/.claude-work".into()));
+        assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
+        assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
+    }
+
     #[test]
     fn detect_term_extent_parses_exactly_what_the_ts_client_parses() {
         let env = |s: &str| detect_term_extent(Some(s.to_string()), 0);

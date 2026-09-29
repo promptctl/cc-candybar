@@ -19,6 +19,7 @@ import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls } from "./ansi";
+import { detectClaudeConfigDir } from "../../src/claude-settings";
 export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
@@ -70,6 +71,10 @@ export async function render(
         hookData: hookData(sessionId, cwd),
         args,
         cwd,
+        // What the real client always reports from its env: test/setup.ts
+        // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
+        // host's Claude Code settings. A case's own hints win.
+        claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
         ...hints,
       },
       REPLY_BUDGET_MS,

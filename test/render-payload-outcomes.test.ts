@@ -501,3 +501,93 @@ describe("buildRenderPayload — git PR projection", () => {
     expect(logs).toEqual([]);
   });
 });
+
+// brandon-context-ceiling-xta.e3p: the autocompact lane reads the settings file
+// of the Claude Code directory THIS render's client reported — never the
+// daemon's own env — and its refusal is logged once by the one log site and
+// carried into the payload as text the segment shows.
+describe("buildRenderPayload — autocompact lane", () => {
+  const AUTOCOMPACT_PATHS = new Set(["autocompact.window"]);
+  const run = async (
+    read: Outcome<number | "auto">,
+    hints: ClientHints,
+    logs: LogEntry[],
+  ) => {
+    const asked: string[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      autoCompact: (settingsPath: string) => {
+        asked.push(settingsPath);
+        return read;
+      },
+    });
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      AUTOCOMPACT_PATHS,
+      EFFECTIVE_GLOBALS,
+      hints,
+      0,
+    );
+    return { payload, asked };
+  };
+
+  test("the settings file is the one in the client's claudeConfigDir", async () => {
+    const logs: LogEntry[] = [];
+    const { payload, asked } = await run(
+      ok(400_000),
+      { claudeConfigDir: "/home/u/.claude-work" },
+      logs,
+    );
+    expect(asked).toEqual(["/home/u/.claude-work/settings.json"]);
+    // No context payload: the cap is the range's own top.
+    expect(payload.autocompact).toEqual({
+      window: 400_000,
+      applied: 400_000,
+      lower: 300_000,
+      higher: 500_000,
+    });
+    expect(logs).toEqual([]);
+  });
+
+  // Asked for autocompact alone, the context lane still runs: the controls
+  // are capped to the model's window, which only it knows.
+  test("the cap comes from the context lane even when no template reads context", async () => {
+    const deps = depsWith(ABSENT, [], {
+      autoCompact: () => ok(800_000),
+      contextProvider: {
+        getContextInfo: async () =>
+          ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
+      },
+    });
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      AUTOCOMPACT_PATHS,
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      0,
+    );
+    expect(payload.autocompact).toEqual({
+      window: 800_000,
+      applied: 200_000,
+      lower: 100_000,
+      higher: 0,
+    });
+  });
+
+  test("a refused read: one warn log naming the lane, the reason in the payload", async () => {
+    const logs: LogEntry[] = [];
+    const { payload } = await run(failed("cannot read /c/settings.json: nope"), {}, logs);
+    expect(payload.autocompact).toEqual({
+      error: "cannot read /c/settings.json: nope",
+    });
+    expect(logs).toEqual([
+      {
+        level: "warn",
+        msg: "provider fetch failed: autocompact: cannot read /c/settings.json: nope",
+      },
+    ]);
+  });
+});

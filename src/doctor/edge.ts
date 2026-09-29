@@ -1,14 +1,20 @@
 // The doctor's edge: where the facts are GATHERED and a fix is PERFORMED.
 //
 // [LAW:effects-at-boundaries] Every effect the doctor has — the tmux query,
-// the settings.json read, the settings.json write — lives in this module,
-// behind one `DoctorEdge` record the daemon and the CLI both construct with
-// `productionEdge()` and a test constructs with fakes. checks.ts never sees an
-// effect; this file never decides a verdict.
+// the settings.json read, the settings.json write — lives in this module. The
+// tmux query sits behind the `DoctorEdge` record the daemon and the CLI both
+// construct with `productionEdge()` and a test fakes; the settings file is the
+// one the session's client hints name, so a test points it with a hint.
+// checks.ts never sees an effect; this file never decides a verdict.
 
 import fs from "node:fs";
 import path from "node:path";
-import { claudeSettingsPath } from "../claude-settings.js";
+import {
+  claudeConfigDir,
+  claudeSettingsPath,
+  readClaudeSettings,
+  readClaudeSettingsText,
+} from "../claude-settings.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
@@ -20,7 +26,6 @@ export interface DoctorEdge {
   // tmux's own verdict on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
   readonly probeTmux: (hint: TmuxHint) => TermFeatures;
-  readonly claudeSettingsPath: string;
 }
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
@@ -45,31 +50,22 @@ function probeTmux(hint: TmuxHint): TermFeatures {
 }
 
 export function productionEdge(): DoctorEdge {
-  return { probeTmux, claudeSettingsPath: claudeSettingsPath() };
+  return { probeTmux };
 }
 
-// [LAW:no-silent-failure] A missing settings file is the one absence with a
-// meaning ("Claude Code has written nothing yet" — an empty env); an
-// unparseable one is thrown, never read as empty, because the fix would then
-// splice into a file it cannot parse either.
-function readSettingsText(edge: DoctorEdge): string {
-  return fs.existsSync(edge.claudeSettingsPath)
-    ? fs.readFileSync(edge.claudeSettingsPath, "utf8")
-    : "";
-}
-
-function settingsEnv(text: string): Readonly<Record<string, unknown>> {
-  if (/^\s*$/.test(text)) return {};
-  const parsed: unknown = JSON_DIALECT.parse(text);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("not a JSON object");
-  }
-  const env = (parsed as Record<string, unknown>).env;
-  if (env === undefined) return {};
+// [LAW:no-silent-failure] The one reading of the settings document
+// (readClaudeSettings: missing or blank is empty, anything unparseable throws
+// naming the file — never read as empty, because the fix would then splice
+// into a file it cannot parse either), and its `env` held to the same rule.
+function readClaudeSettingsEnv(
+  settingsPath: string,
+): DoctorFacts["claudeSettings"] {
+  const env = readClaudeSettings(settingsPath).env;
+  if (env === undefined) return { path: settingsPath, env: {} };
   if (typeof env !== "object" || env === null || Array.isArray(env)) {
-    throw new Error("`env` is not an object");
+    throw new Error(`cannot read ${settingsPath}: \`env\` is not an object`);
   }
-  return env as Record<string, unknown>;
+  return { path: settingsPath, env: env as Record<string, unknown> };
 }
 
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
@@ -81,30 +77,18 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
-// The one place that names the file: every failure — a JSON parse error,
-// a non-object document, a non-object `env` — surfaces as "cannot read <the
-// path this edge was built with>", so a test's temp path and the real
-// ~/.claude/settings.json are reported the same way.
-function readClaudeSettingsEnv(
-  edge: DoctorEdge,
-): DoctorFacts["claudeSettingsEnv"] {
-  try {
-    return settingsEnv(readSettingsText(edge));
-  } catch (e) {
-    throw new Error(
-      `cannot read ${edge.claudeSettingsPath}: ${e instanceof Error ? e.message : String(e)}`,
-      { cause: e },
-    );
-  }
-}
-
+// [LAW:single-enforcer] Both halves come from the facts the CLIENT saw: its
+// tmux, and the Claude Code directory its session runs with — never the
+// daemon's own env, which answers for whichever session spawned it.
 export function gatherFacts(
   edge: DoctorEdge,
-  tmuxHint: ClientHints["tmux"],
+  hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
 ): DoctorFacts {
   return {
-    tmux: tmuxFacts(edge, tmuxHint),
-    claudeSettingsEnv: readClaudeSettingsEnv(edge),
+    tmux: tmuxFacts(edge, hints.tmux),
+    claudeSettings: readClaudeSettingsEnv(
+      claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
+    ),
   };
 }
 
@@ -118,23 +102,20 @@ export function gatherFacts(
 // Returns the facts with the one this fix changed re-read — the performer of
 // an effect is the one place that knows what it touched, so a post-fix report
 // cannot reuse a stale fact or re-probe an unchanged one.
-export function applyFix(
-  edge: DoctorEdge,
-  fix: Fix,
-  facts: DoctorFacts,
-): DoctorFacts {
+export function applyFix(fix: Fix, facts: DoctorFacts): DoctorFacts {
+  const settingsPath = facts.claudeSettings.path;
   switch (fix.kind) {
     case "claude-settings-env": {
-      const text = readSettingsText(edge);
+      const text = readClaudeSettingsText(settingsPath);
       const next = setValue(
         text,
         ["env", fix.name],
         JSON.stringify(fix.value),
         JSON_DIALECT,
       );
-      fs.mkdirSync(path.dirname(edge.claudeSettingsPath), { recursive: true });
-      writeAtomic(edge.claudeSettingsPath, next);
-      return { ...facts, claudeSettingsEnv: readClaudeSettingsEnv(edge) };
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      writeAtomic(settingsPath, next);
+      return { ...facts, claudeSettings: readClaudeSettingsEnv(settingsPath) };
     }
     default: {
       const _exhaustive: never = fix.kind;

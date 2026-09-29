@@ -38,6 +38,19 @@ export function links(rendered: string): Link[] {
   return out;
 }
 
+/** The bytes with every OSC 8 open and close removed, SGR kept: what a
+ *  rendered line looks like, apart from where its clicks go (a link names the
+ *  session it was rendered for). */
+export function withoutLinks(rendered: string): string {
+  let out = "";
+  let from = 0;
+  for (const seq of osc8Sequences(rendered)) {
+    out += rendered.slice(from, seq.index);
+    from = seq.index + seq.length;
+  }
+  return out + rendered.slice(from);
+}
+
 /** The URI of every link open, in order — closed or not. */
 export function linkUrls(rendered: string): string[] {
   return osc8Sequences(rendered)

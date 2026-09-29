@@ -731,6 +731,9 @@
         "ceiling": {
           "$ref": "#/definitions/SegmentDelta"
         },
+        "autocompact": {
+          "$ref": "#/definitions/SegmentDelta"
+        },
         "metrics": {
           "$ref": "#/definitions/SegmentDelta"
         },

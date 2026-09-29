@@ -28,6 +28,7 @@ import { parseSlashLine } from "../src/claude-input/slash-line";
 import { linkUrls } from "./helpers/ansi";
 import { __resetRateLimitsForTest } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
+import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -314,8 +315,17 @@ describe("a slash click", () => {
   test("a line no action declares is refused before tmux is asked", () => {
     const rt = runtime(HINT);
     const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/clear"] }]);
+    // The declared lines in full: the bundled autocompact controls (merged
+    // under the config), then this config's own.
+    const declared = [
+      "/autocompact auto",
+      ...AUTOCOMPACT_WINDOWS.map((w) => `/autocompact ${w}`),
+      "/compact",
+      "/model opus",
+      "/compact keep the api;",
+    ];
     expect(() => clickUrl(forged, rt.ctx)).toThrow(
-      /"\/clear" is not a command this config declares \(it declares: \/compact, \/model opus, \/compact keep the api;\)/,
+      `"/clear" is not a command this config declares (it declares: ${declared.join(", ")})`,
     );
     expect(invocations()).toEqual([]);
   });
