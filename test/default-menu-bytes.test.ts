@@ -92,13 +92,11 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
+
 // The OSC-8 spans of a render, paired with the text each one wraps — enough to
 // click an affordance by the label a user would click.
 function links(rendered: string): Link[] {
-  return rawLinks(rendered).map((l) => ({
-    url: l.url,
-    text: stripAnsi(l.text),
-  }));
+  return rawLinks(rendered).map((l) => ({ url: l.url, text: stripAnsi(l.text) }));
 }
 
 // [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own

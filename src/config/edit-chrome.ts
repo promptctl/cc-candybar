@@ -193,8 +193,9 @@ function chromeCell(
   return { kind: "segment", name };
 }
 
-// The `-` affordance for one segment instance: a literal `removeSegment`
-// action, and the `{{ action }}` that clicks it for the cell to host.
+// The `-` affordance (drawn `🚫`) for one segment instance: a literal
+// `removeSegment` action, and the `{{ action }}` that clicks it, carried as the
+// segment node's own `trail` so it is drawn inside that segment's cell.
 function removeTerm(
   presetIdent: string,
   rootKey: string,
@@ -306,10 +307,10 @@ function insertTerm(
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child is followed by one gap cell holding its `-` and the `+` that
-// inserts after it, and the first also leads with a `+` (so N consecutive
-// segments read `+ [seg1 -+] [seg2 -+] [seg3 -+]` — N+1 insert points, N
-// remove points, N+1 chrome cells); a container child recurses; an exempt segment
+// segment child carries its `-` as its own trail and is followed by one gap
+// cell holding the `+` that inserts after it, and the first also leads with a
+// `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
+// insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
 // untouched — but the disclosure BODY a segment hangs (a group's children,
 // the settings rows) recurses like any container, so the cells inside an

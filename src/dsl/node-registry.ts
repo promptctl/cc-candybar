@@ -47,7 +47,7 @@ import {
   evaluateWhen,
   applySegmentLayout,
 } from "../template-engine/index.js";
-import { stripItem, type LaidCell } from "../template-engine/layout.js";
+import type { LaidCell } from "../template-engine/layout.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -128,6 +128,11 @@ export interface Line<C> {
   readonly span: "shared" | "row";
 }
 export type RenderedLine = Line<LaidCell>;
+
+// A laid cell's parts, as the objects the row's fill sizing will still grow in
+// place: a copy joined now would record a fill cell at its natural width.
+const cellParts = ({ text, trail }: LaidCell): readonly RichText[] =>
+  trail === undefined ? [text] : [text, trail];
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -595,7 +600,7 @@ const segmentType: NodeType<"segment"> = {
           [
             ...laidLines.flatMap((line) => line.cells),
             ...bodyTail.flatMap(leadOf),
-          ].map(stripItem),
+          ].flatMap(cellParts),
         );
       }
       // Below row 0 every line is a drop: menu bands first (template order),

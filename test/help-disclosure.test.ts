@@ -34,7 +34,11 @@ import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
-import { EDIT_MODE_HELP, HELP_TEXT, PERSIST_HELP } from "../src/help-text";
+import {
+  EDIT_MODE_HELP,
+  HELP_TEXT,
+  PERSIST_HELP,
+} from "../src/help-text";
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -55,6 +59,7 @@ const openRuntimes: Array<{ dispose: () => void }> = [];
 afterEach(() => {
   while (openRuntimes.length > 0) openRuntimes.pop()!.dispose();
 });
+
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
 // `src/render/picker.ts` reserves its pagination seam with. Counting code
@@ -359,30 +364,34 @@ describe.each([
   test.each([
     ["edit mode", enterEditMode, EDIT_MODE_HELP],
     ["the config menu", openSettingsMenu, PERSIST_HELP],
-  ])(
-    "open help in %s overflows no line and costs at most one row",
-    (_name, open, corpus) => {
-      const rt = buildRuntime(twoSegmentRoot(padding));
-      open(rt);
-      const before = rt.lines(width);
-      rt.toggleHelp(rt.render(width));
-      const after = rt.lines(width);
+  ])("open help in %s overflows no line and costs at most one row", (
+    _name,
+    open,
+    corpus,
+  ) => {
+    const rt = buildRuntime(twoSegmentRoot(padding));
+    open(rt);
+    const before = rt.lines(width);
+    rt.toggleHelp(rt.render(width));
+    const after = rt.lines(width);
 
-      // The body is REALLY there: without this the row-count bound below is
-      // satisfied by a help toggle that renders nothing at all.
-      for (const line of corpus)
-        expect([width, padding, line, after.join("\n").includes(line)]).toEqual(
-          [width, padding, line, true],
-        );
-      for (const line of after) expect(cols(line)).toBeLessThanOrEqual(width);
-      // AT MOST one row, not exactly one: the trigger shrinks when it opens
-      // (`(?)` → `✕`), so on a bar sitting at the wrap seam the freed columns can
-      // pull a wrapped cell back up and the body lands in the row it vacated.
-      // Costing NO extra row is the better outcome; the promise is the ceiling.
-      expect(after.length - before.length).toBeLessThanOrEqual(1);
-      expect(after.length).toBeGreaterThanOrEqual(before.length);
-    },
-  );
+    // The body is REALLY there: without this the row-count bound below is
+    // satisfied by a help toggle that renders nothing at all.
+    for (const line of corpus)
+      expect([width, padding, line, after.join("\n").includes(line)]).toEqual([
+        width,
+        padding,
+        line,
+        true,
+      ]);
+    for (const line of after) expect(cols(line)).toBeLessThanOrEqual(width);
+    // AT MOST one row, not exactly one: the trigger shrinks when it opens
+    // (`(?)` → `✕`), so on a bar sitting at the wrap seam the freed columns can
+    // pull a wrapped cell back up and the body lands in the row it vacated.
+    // Costing NO extra row is the better outcome; the promise is the ceiling.
+    expect(after.length - before.length).toBeLessThanOrEqual(1);
+    expect(after.length).toBeGreaterThanOrEqual(before.length);
+  });
 
   // "Help must not widen the bar while closed." The earlier version of this
   // test opened neither surface, so no `(?)` was on the bar at all and it

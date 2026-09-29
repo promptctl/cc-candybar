@@ -875,8 +875,9 @@ synthesizes:
 - While edit mode is open each segment reads as its **name**, whether or not
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
-  `(?)`) puts the live output back; a segment hidden right now then has no
-  cell, so its `🚫` goes with it.
+  `(?)`) puts the live output back; a segment with no cell right now —
+  hidden, rendering nothing, or failing — then has no `🚫` either, so find
+  it in the names view.
 - A row above the bar, led by `✎ done`, which fires `edit.toggle` — the way
   out, without reopening the menu edit mode was entered from.
 

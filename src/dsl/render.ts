@@ -510,16 +510,17 @@ export function registerDslConfig(
   // a helper could fail to be visible). The helpers are parsed ONCE here.
   const helpers = compileHelpers(engine, config.helpers);
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
-  // A `when` is a pure predicate, and one source recurs across many nodes —
-  // edit mode gates every chrome cell and every placed segment in every
-  // preset by a handful of predicates — so each distinct source is parsed
-  // once and its template shared.
-  const whens = new Map<string, Template<RichText>>();
-  const parseWhen = (src: string): Template<RichText> => {
-    const known = whens.get(src);
+  // A node's templates recur across many nodes — edit mode gates every chrome
+  // cell and every placed segment in every preset by a handful of predicates,
+  // and draws one segment's remove trail on both its label and its content —
+  // so each distinct source is parsed once and its template shared. A parsed
+  // template holds no evaluation state, so sharing one is sharing its AST.
+  const nodeTemplates = new Map<string, Template<RichText>>();
+  const parseShared = (src: string): Template<RichText> => {
+    const known = nodeTemplates.get(src);
     if (known !== undefined) return known;
     const parsed = parse(src);
-    whens.set(src, parsed);
+    nodeTemplates.set(src, parsed);
     return parsed;
   };
   // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
@@ -619,7 +620,7 @@ export function registerDslConfig(
     compiled[segName] = {
       when:
         seg.when !== undefined
-          ? parseField(seg.when, "when", parseWhen)
+          ? parseField(seg.when, "when", parseShared)
           : undefined,
       template: parseField(seg.template, "template"),
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
@@ -644,14 +645,9 @@ export function registerDslConfig(
   // capabilities; the kind-specific assembly lives in node-registry.
   // [LAW:single-enforcer] The compiled tree mirrors config.root 1:1, so a node's
   // predicate and its children travel together.
-  const parseNodeField = (
-    src: string,
-    path: string,
-    field: string,
-    read = parse,
-  ) => {
+  const parseNodeField = (src: string, path: string, field: string) => {
     try {
-      return read(src);
+      return parseShared(src);
     } catch (e) {
       throw new Error(
         `Template parse error in ${path}.${field}: ${(e as Error).message}`,
@@ -668,7 +664,7 @@ export function registerDslConfig(
       when:
         node.when === undefined
           ? undefined
-          : parseNodeField(node.when, path, "when", parseWhen),
+          : parseNodeField(node.when, path, "when"),
       parse: (src, field) => parseNodeField(src, path, field),
       compileChild: compileNode,
     };
