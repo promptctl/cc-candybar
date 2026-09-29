@@ -726,6 +726,18 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         ' {{ action "gitDetail" "▸" "◂" }}',
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
+      // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
+      // (brandon-segment-settings-i4n.u36): each is read by its own piece
+      // below, so a fact leaves both forms at once, the same as overriding
+      // the piece with an empty body does, but per placement and from the bar.
+      settings: {
+        aheadBehind: { label: "ahead/behind", domain: "bool", default: true },
+        flags: { label: "dirty flags", domain: "bool", default: true },
+        operation: { label: "operation", domain: "bool", default: true },
+        sha: { label: "commit hash", domain: "bool", default: true },
+        stash: { label: "stash", domain: "bool", default: true },
+        age: { label: "time since commit", domain: "bool", default: true },
+      },
     },
     // Git PR/MR — the branch's open pull/merge request as a clickable link.
     // OPT-IN: declared but NOT in the default root (it adds a network gh/glab
@@ -1481,22 +1493,26 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // renders ` <fact>` with its OWN leading space, or nothing — only the piece
     // knows whether it exists — so pieces reorder and drop without leaving a
     // doubled or dangling space. `gitBranch` is the exception: the segment is
-    // gated on a branch, so it is always present and carries no space.
+    // gated on a branch, so it is always present and carries no space. A piece
+    // whose fact is optional reads that fact's `.settings.<name>` too, so a
+    // segment of your own that calls it declares the same setting (the loader
+    // names the helper and the read when it does not).
     gitBranch:
       '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
     gitRepo: '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}',
     gitOperation:
-      '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}',
-    gitSha: '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}',
+      '{{ if and .settings.operation (ne .git.operation "") }} [{{ .git.operation }}]{{ end }}',
+    gitSha:
+      '{{ if and .settings.sha (ne .git.sha "") }} {{ .git.sha }}{{ end }}',
     gitFlags:
-      "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
+      "{{ if and .settings.flags (or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0)) }} " +
       '{{ if gt .git.staged 0 }}{{ template "gitPaint" (dict "color" .git.color.staged "text" "S") }}{{ end }}' +
       '{{ if gt .git.unstaged 0 }}{{ template "gitPaint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}' +
       '{{ if gt .git.untracked 0 }}{{ template "gitPaint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}' +
       '{{ if gt .git.conflicts 0 }}{{ template "gitPaint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}' +
       "{{ end }}",
     gitAheadBehind:
-      "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
+      "{{ if and .settings.aheadBehind (or (gt .git.ahead 0) (gt .git.behind 0)) }} " +
       '{{ if gt .git.ahead 0 }}{{ template "gitPaint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}' +
       "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
       '{{ if gt .git.behind 0 }}{{ template "gitPaint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}' +
@@ -1504,9 +1520,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     gitUpstream:
       '{{ if ne .git.upstream "" }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
     gitStash:
-      '{{ if gt .git.stash 0 }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
+      '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
     gitAge:
-      '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+      '{{ if and .settings.age (gt .git.timeSinceCommit 0) }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
 
     // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
     // unrepresentable through the var-system — type:number with a numeric default
