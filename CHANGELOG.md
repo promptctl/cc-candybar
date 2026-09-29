@@ -1,3 +1,11 @@
+# [1.86.0](https://github.com/promptctl/cc-candybar/compare/v1.85.0...v1.86.0) (2026-09-29)
+
+
+### Features
+
+* **git-segment:** gitaculous collapses to a summary, and an arrow at its right edge expands it ([#259](https://github.com/promptctl/cc-candybar/issues/259)) ([10434ea](https://github.com/promptctl/cc-candybar/commit/10434ead7943ca425a645a05d5b67aa2a2828ac4)), closes [#258](https://github.com/promptctl/cc-candybar/issues/258)
+* **settings:** reset per setting and reset all return to the bundled default, each one undo step ([#258](https://github.com/promptctl/cc-candybar/issues/258)) ([1e9404e](https://github.com/promptctl/cc-candybar/commit/1e9404edaacf98b9e43994dad4dcd838be0ad904))
+
 # [1.85.0](https://github.com/promptctl/cc-candybar/compare/v1.84.0...v1.85.0) (2026-09-29)
 
 
