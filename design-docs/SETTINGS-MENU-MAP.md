@@ -1,6 +1,6 @@
 # Settings menu map
 
-The settings menu's structure, for brandon-menu-ia-q30.1ws. Implementation tickets are filed from this map once Brandon confirms it. Quotes are Brandon's words from the review on 2026-09-28.
+The settings menu's structure, for brandon-menu-ia-q30.1ws. Quotes are Brandon's words from his review on 2026-09-28. The implementation tickets are listed under Tickets at the end.
 
 ## Structure
 
@@ -33,33 +33,32 @@ Every body placement today drops below its trigger or takes over its row (`place
 
 ## Edit mode
 
-Today, clicking `✎ edit` closes the menu and leaves the bar in edit mode with no way out in sight. The only exit is to reopen the menu and click `✎ done`.
-
-In edit mode, a row above the bar holds the way out, top left: "move the 'done' button to the upper left … ideally as a 'Save' and 'Cancel' type situation that lets users either persist or discard changes they made here."
+brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, drew each remove button inside its segment's cell, and gave each add button a cell of its own. What is left is save and cancel, and the glyphs and colours below. Brandon: "move the 'done' button to the upper left … ideally as a 'Save' and 'Cancel' type situation that lets users either persist or discard changes they made here."
 
 ```
-✓ save 2  ↩ cancel  ↺ reset layout
+✓ save 2  ↩ cancel  ↺ reset layout  ☐ live
 🍫 | ⊕ | host ⊖ | ⊕ | directory ⊖ | ⊕ | gitaculous ⊖ | ⊕
 ```
 
 - **Save** writes the layout changes to the config file and leaves edit mode. With no changes it reads `✓ done`, and cancel is hidden.
 - **Cancel** discards the changes and leaves edit mode.
 - **Layout changes become drafts.** Today each `+`/`-` click writes the config file at once. For cancel to discard anything, layout changes have to be session drafts, the same model brandon-save-undo-bwi.hpi gives settings.
+- **`☐ live`** moves onto this row from the end of the bar's last row, where it sits today. It is an edit-mode control like the other three.
 - **`↺ reset layout`** is today's `↺ default customized`, renamed. It shows only when the config file has its own layout for the active preset, and clicking it restores the bundled layout. The old label didn't say that.
 
 ### Add and remove
 
-Today each segment's `-` shares a cell with the next `+`, one joiner away from the segment it removes:
+Today, after #251:
 
 ```
-🍫  |  +  |  host  |  - +  |  directory  |  - +  |  gitaculous  |  - +
+🍫  |  ✚  |  host ⚙🚫  |  ✚  |  directory ⚙🚫  |  ✚  |  gitaculous ⚙🚫  |  ✚
 ```
 
-The remove button goes inside its segment's cell. Each add button is a cell of its own between segments. Brandon: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
+The positions are what Brandon asked for. The glyphs and colours are not: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
 
 - Remove is `⊖` in red. Add is `⊕` in green.
 - The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. Today every cell gets a background (`resolveSegmentColors`), so a cell with no fill is new.
-- The row has as many cells and as much text as today's, so it measures the same: 72 cells at 80 columns.
+- The row keeps today's cells. Each `⊖` is one column narrower than the `🚫` it replaces.
 
 ## The look tab
 
@@ -101,7 +100,7 @@ The variants page (`.git/8fp-decoration-variants.html`) describes C as "base cha
 
 ## Removed from the menu
 
-Charset and colour depth go: "you can just remove 'charset' and 'colordepth' completely. make users set them in the config file." Both stay as `globals` fields and lose their session halves and menu controls. `☐ persist?` and its `(?)` go too, replaced by Save.
+Charset and colour depth go: "you can just remove 'charset' and 'colordepth' completely. make users set them in the config file." Both stay as `globals` fields and lose their session halves and menu controls. `☐ persist?` is already gone: Save replaced it in #256.
 
 ## Doctor checks
 
@@ -124,7 +123,7 @@ Added by me, at Brandon's request to fill out the list:
 
 ## Widths at 80 columns
 
-`pnpm exec tsx design-docs/settings-menu-map-render.mts` prints every number here. It renders today's menu through `renderDsl` and measures the proposed rows with a model that reproduces today's two widest rows exactly (103 and 150 cells). Widths are at padding 1, and each padding step adds two cells per cell.
+`pnpm exec tsx design-docs/settings-menu-map-render.mts` prints every number here. It renders today's menu through `renderDsl` and measures the proposed rows with a model that reproduces today's two widest rows exactly (139 and 182 cells, at 200 columns). Widths are at padding 1, and each padding step adds two cells per cell.
 
 | Row | Cells |
 |---|---|
@@ -134,7 +133,7 @@ Added by me, at Brandon's request to fill out the list:
 | `🎨 look` / long names / all four drifted | 63 / 73 / 77 |
 | `📐 layout` | 55 |
 | `🧰 tools` | 17 |
-| Edit mode's save row | 40 |
+| Edit mode's save row | 49 |
 
 ## Also recorded
 
@@ -142,3 +141,22 @@ Added by me, at Brandon's request to fill out the list:
 - `default_truncate_marker` is read by nothing, like `default_bg` and `default_fg` (brandon-config-349): `applySegmentLayout` defaults the marker to `…` (`src/template-engine/layout.ts:156`) and nothing passes the global to it.
 - The bundled `copyDir` action is declared and clicked by nothing. Proposal: clicking `directory` copies the full path, which the fish-abbreviated text hides.
 - Placed outside the menu: the context ceiling widget (xta.asv) and the lit widget (3xo.btb) are segments added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `⚙` beside each cell while arranging.
+
+## Tickets
+
+Filed from this map under epic brandon-menu-ia-q30 unless noted, in this order:
+
+1. **The menu opens above the bar.** A third disclosure placement beside `drop` and `inline`, and the door's two lines (preset and save cell, then tabs).
+2. **Five tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, and each body holds what the Structure table lists.
+3. **Renames:** look → style, progression → variation, style → endcaps, and the variation values accent / duo / mono. Label, config key, session key and `.effective` variable. A config that uses an old key fails with an error naming the new one.
+4. **The look tab:** four `◀ name ▶` selectors. The name opens a plain menu whose choices show their effect in text colour on one shared background.
+5. **Charset and colour depth leave the menu** and lose their session halves.
+6. **Session tab additions:** `⎘ resume` and `↗ config`.
+7. **Edit mode save and cancel:** layout changes become session drafts, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
+8. **Edit mode glyphs:** `⊖` in red and `⊕` in green, text colour only, with `⊕` drawn on no fill.
+9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
+10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.
+11. **`globals.default_truncate_marker` is refused** with a migration pointer, as brandon-config-349 did for `default_bg`/`default_fg`.
+12. **Clicking `directory` copies the full path.** This replaces the unused `copyDir` action.
+
+brandon-menu-ia-q30.nk8 narrows to the reset-only marker described under Also recorded. brandon-menu-ia-q30.kpl is unchanged.

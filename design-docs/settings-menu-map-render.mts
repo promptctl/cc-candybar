@@ -12,27 +12,34 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { checkPayload } from "../src/check";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import {
+  renderOptionsOf,
+  renderSelectionOf,
+  resolveEffectiveGlobals,
+} from "../src/daemon/render-payload";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 
 const SID = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
-const PICKERS = sharedMenuStateKey("settings.pickers");
+const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 const plain = (s: string): string =>
   s
     .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
     .replace(/\x1b\[[0-9;]*m/g, "");
 
-const door = { "settings.menu": "open" };
-const config = { ...door, "settings.config": "open" };
+const door = { [SETTINGS_ANCHOR]: SETTINGS_OPEN };
+const config = { ...door, [`${SETTINGS_NS}config`]: SETTINGS_OPEN };
 const ring = (name: string, base: Record<string, string>) => ({
   ...base,
-  [PICKERS]: `settings.apply.${name}`,
+  [PICKERS]: `${SETTINGS_NS}apply.${name}`,
 });
 const STATES: Record<string, Record<string, string>> = {
   closed: {},
   door,
   config,
-  tools: { ...door, "settings.tools": "open" },
+  tools: { ...door, [`${SETTINGS_NS}tools`]: SETTINGS_OPEN },
   presetRing: ring("preset", door),
   themeRing: ring("theme", config),
   lookRing: ring("look", config),
@@ -40,12 +47,11 @@ const STATES: Record<string, Record<string, string>> = {
   progressionRing: ring("progression", config),
   charsetRing: ring("charset", config),
   depthRing: ring("colorCompatibility", config),
-  edit: { "edit.mode": "open" },
+  edit: { [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE },
 };
 
 function renderToday(preset: string, width: number, state: Record<string, string>): string {
-  const { config: merged, source } = loadConfig(null, DEFAULT_DSL_CONFIG);
-  const cfg = validateConfig(merged, "<default>", source);
+  const cfg = validateConfig(loadConfig(null, DEFAULT_DSL_CONFIG), "<default>");
   const session = new SessionState();
   session.set(SID, "preset", preset);
   for (const [k, v] of Object.entries(state)) session.set(SID, k, v);
@@ -53,13 +59,11 @@ function renderToday(preset: string, width: number, state: Record<string, string
   const registry = new SourceRegistry(store, "", undefined, session);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/home/tester/code/cc-candybar/src" });
   const eff = resolveEffectiveGlobals(cfg, (k) => session.get(SID, k) ?? null, () => false);
-  const payload = { ...checkPayload(eff), term: { cols: width } };
+  const payload = { ...checkPayload(eff), session_id: SID, term: { cols: width } };
   return renderDsl(
-    cfg, compiled, store, registry, payload,
-    { style: eff.style, separator: eff.separator, width, colorCompatibility: eff.colorCompatibility,
-      wrap: eff.autoWrap, padding: eff.padding, charset: eff.charset },
+    cfg, compiled, store, registry, payload, renderOptionsOf(eff, width),
     { onSegmentError: (s, m) => console.log(`ERROR ${s}: ${m}`) },
-    { theme: eff.theme, look: eff.look, preset: eff.preset, progression: eff.progression },
+    renderSelectionOf(eff),
   );
 }
 
@@ -78,8 +82,8 @@ for (const preset of ["default", "compact"]) {
 const model = (cells: readonly string[]): number =>
   cells.reduce((w, c) => w + cellLen(c) + 3, 1);
 const PROPOSED: Record<string, readonly string[]> = {
-  "today door row (validates model)": ["❌", "⎘ id ↗ proj ↗ log ↗ repo", "☐ persist?", "(?)", "▦ default ▸ ↺", "⚙ config ▸", "🧰 tools ▸", "✎ edit"],
-  "today config row (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 secondary-accent ▸ ↺", "🔣 unicode ▸ ↺", "🌈 truecolor ▸ ↺", "wrap: on ↺", "◀ padding 1 ▶ ↺"],
+  "today door row (validates model)": ["❌", "⎘ id ↗ proj ↗ log ↗ repo", "/compact /model /clear", "▦ default ▸ ↺", "💾 save 1", "⚙ config ▸", "🧰 tools ▸", "✎ edit", "↶ undo", "↷ redo"],
+  "today config row (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 secondary-accent ▸ ↺", "🔣 unicode ▸ ↺", "🌈 truecolor ▸ ↺", "☑ wrap ↺", "◀ padding 1 ▶ ↺", "☑ update notice ↺", "⟲ reset all"],
   "door line 1": ["❌", "▦ default ▸"],
   "door line 1 + save cell": ["❌", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲"],
   "door line 1 + reset confirm": ["❌", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
@@ -92,7 +96,7 @@ const PROPOSED: Record<string, readonly string[]> = {
   "look, drifted": ["✕", "◀ catppuccin-frappe ▶ ↺", "◀ inverted ▶ ↺", "◀ mono ▶ ↺", "◀ capsule ▶ ↺"],
   "layout": ["✕", "+ preset", "✎ arrange", "wrap: on", "◀ padding 1 ▶"],
   "tools": ["✕", "🩺 doctor"],
-  "edit row": ["✓ save 2", "↩ cancel", "↺ reset layout"],
+  "edit row": ["✓ save 2", "↩ cancel", "↺ reset layout", "☐ live"],
 };
 console.log("\n# Part 2 — proposed, modelled at padding 1");
 for (const [name, cells] of Object.entries(PROPOSED)) {
