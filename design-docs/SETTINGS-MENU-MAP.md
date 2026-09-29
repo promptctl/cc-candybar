@@ -4,12 +4,18 @@ The settings menu's structure, for brandon-menu-ia-q30.1ws. Implementation ticke
 
 ## Structure
 
-The door opens onto two lines. The first holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time, and its body drops below the tabs.
+The menu opens above the bar and leaves the bar as it was: "Opening the candy menu (the top level menu) should show the menus ABOVE the existing bar rather than replacing it." Today the menu takes over the door's row.
+
+The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-❌  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
+✕  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
 ✕  ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+✕  …the open tab's body…
+❌  host  directory  gitaculous          ← the bar, unchanged
 ```
+
+Every body placement today drops below its trigger or takes over its row (`placement: "drop" | "inline"`, `src/config/disclosure.ts`). Opening above is a third placement.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
@@ -19,11 +25,41 @@ The door opens onto two lines. The first holds the preset control and, when ther
 |---|---|
 | `⚡ session` | `⎘ id`, `⎘ resume` (new), `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (new, shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
 | `🎨 look` | Four selectors: theme, style, variation, endcaps (below) |
-| `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
+| `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
 | `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.
+
+## Edit mode
+
+Today, clicking `✎ edit` closes the menu and leaves the bar in edit mode with no way out in sight. The only exit is to reopen the menu and click `✎ done`.
+
+In edit mode, a row above the bar holds the way out, top left: "move the 'done' button to the upper left … ideally as a 'Save' and 'Cancel' type situation that lets users either persist or discard changes they made here."
+
+```
+✓ save 2  ↩ cancel  ↺ reset layout
+🍫 | ⊕ | host ⊖ | ⊕ | directory ⊖ | ⊕ | gitaculous ⊖ | ⊕
+```
+
+- **Save** writes the layout changes to the config file and leaves edit mode. With no changes it reads `✓ done`, and cancel is hidden.
+- **Cancel** discards the changes and leaves edit mode.
+- **Layout changes become drafts.** Today each `+`/`-` click writes the config file at once. For cancel to discard anything, layout changes have to be session drafts, the same model brandon-save-undo-bwi.hpi gives settings.
+- **`↺ reset layout`** is today's `↺ default customized`, renamed. It shows only when the config file has its own layout for the active preset, and clicking it restores the bundled layout. The old label didn't say that.
+
+### Add and remove
+
+Today each segment's `-` shares a cell with the next `+`, one joiner away from the segment it removes:
+
+```
+🍫  |  +  |  host  |  - +  |  directory  |  - +  |  gitaculous  |  - +
+```
+
+The remove button goes inside its segment's cell. Each add button is a cell of its own between segments. Brandon: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
+
+- Remove is `⊖` in red. Add is `⊕` in green.
+- The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. Today every cell gets a background (`resolveSegmentColors`), so a cell with no fill is new.
+- The row has as many cells and as much text as today's, so it measures the same: 72 cells at 80 columns.
 
 ## The look tab
 
@@ -98,6 +134,7 @@ Added by me, at Brandon's request to fill out the list:
 | `🎨 look` / long names / all four drifted | 63 / 73 / 77 |
 | `📐 layout` | 55 |
 | `🧰 tools` | 17 |
+| Edit mode's save row | 40 |
 
 ## Also recorded
 

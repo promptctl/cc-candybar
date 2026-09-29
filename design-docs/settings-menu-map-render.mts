@@ -92,6 +92,7 @@ const PROPOSED: Record<string, readonly string[]> = {
   "look, drifted": ["✕", "◀ catppuccin-frappe ▶ ↺", "◀ inverted ▶ ↺", "◀ mono ▶ ↺", "◀ capsule ▶ ↺"],
   "layout": ["✕", "+ preset", "✎ arrange", "wrap: on", "◀ padding 1 ▶"],
   "tools": ["✕", "🩺 doctor"],
+  "edit row": ["✓ save 2", "↩ cancel", "↺ reset layout"],
 };
 console.log("\n# Part 2 — proposed, modelled at padding 1");
 for (const [name, cells] of Object.entries(PROPOSED)) {
