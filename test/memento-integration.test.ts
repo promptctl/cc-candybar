@@ -108,6 +108,14 @@ suite(`memento at ${root ?? "(not installed — skipped)"}`, () => {
     expect((await reading()).ceiling).toBe(400_000);
   });
 
+  test("a working directory removed since (a deleted worktree) reads and moves as before", async () => {
+    const gone = path.join(project, "worktree");
+    const moved = { ...scope, cwd: gone };
+    edge.move(root!, moved, { kind: "set", to: "400000" });
+    const out = await edge.read(root!, moved);
+    expect(out).toEqual({ kind: "ok", value: { ceiling: 400_000, session: "400000" } });
+  });
+
   test("a layer memento cannot read is a failed reading naming the file", async () => {
     fs.mkdirSync(path.dirname(sessionFile()), { recursive: true });
     fs.writeFileSync(sessionFile(), "ceilng = 5\n");

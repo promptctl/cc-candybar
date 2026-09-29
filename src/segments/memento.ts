@@ -47,7 +47,8 @@ export class MementoProvider {
   // failed — memento refused (an unreadable layer: the very state that
   // switches its gate off). An expired reading is still drawn while its
   // replacement is fetched: a python spawn does not fit in a render's budget,
-  // so only a session with no reading at all waits on one.
+  // so only a scope with no reading at all waits on one — a new session, or a
+  // new directory, since the project layer memento reads is anchored there.
   getCeiling(scope: CeilingScope): Promise<Outcome<CeilingReading>> {
     const key = keyOf(scope);
     const cached = this.readings.get(key);

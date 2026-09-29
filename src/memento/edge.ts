@@ -159,7 +159,11 @@ export function locateIn(file: string, projectDir: string): Outcome<string> {
 
 // [LAW:no-ambient-temporal-coupling] The daemon is detached, so its own env
 // may carry whichever session's CLAUDE_* vars spawned it; both are replaced
-// by the clicked or rendered session's, never inherited.
+// by the clicked or rendered session's, never inherited. The anchor is spelled
+// here, whole — the project, else the working directory, memento's own
+// `anchored` rule — so no spawn has to stand in the session's directory: a
+// worktree removed since would fail the spawn itself (`spawn python3 ENOENT`)
+// and blame a python that is fine.
 function mementoEnv(scope: CeilingScope): NodeJS.ProcessEnv {
   const {
     CLAUDE_PROJECT_DIR: _project,
@@ -169,7 +173,7 @@ function mementoEnv(scope: CeilingScope): NodeJS.ProcessEnv {
   return {
     ...inherited,
     CLAUDE_CODE_SESSION_ID: scope.sessionId,
-    CLAUDE_PROJECT_DIR: scope.projectDir,
+    CLAUDE_PROJECT_DIR: scope.projectDir || scope.cwd,
   };
 }
 
@@ -227,7 +231,6 @@ async function read(
       scope.sessionId,
       scope.cwd,
     ],
-    cwd: scope.cwd,
     env: mementoEnv(scope),
     timeoutMs: 3000,
     category: "memento.read",
@@ -239,7 +242,6 @@ function move(root: string, scope: CeilingScope, m: CeilingMove): void {
   const result = launchSync({
     bin: path.join(root, CEILING_COMMAND),
     args: m.kind === "set" ? ["set", "session", m.to] : ["clear", "session"],
-    cwd: scope.cwd,
     env: mementoEnv(scope),
     timeoutMs: 5000,
     category: "memento.move",
