@@ -18,7 +18,7 @@ const EDGE_OPTS = { maxWidth: 80 };
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function cell(text: string, style?: Style | string): RichText {
-  return new RichText(text, { style, end: "", noWrap: true });
+  return new RichText(text, { style, end: "", overflow: "ignore" });
 }
 
 // The strip items a layout lays out, for the tests that read only its text.
@@ -341,7 +341,7 @@ describe("truncation preserves per-character styling through the cut", () => {
     const r = new RichText("hello world", {
       style: new Style({ bgcolor: "blue", color: "white" }),
       end: "",
-      noWrap: true,
+      overflow: "ignore",
     });
     r.stylize("red", 6, 11); // "world" is red
     return r;

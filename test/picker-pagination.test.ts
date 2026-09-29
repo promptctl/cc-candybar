@@ -115,7 +115,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
       const content = "ABCDEFGHIJ";
       const cell = new RichText(content, {
         end: "",
-        noWrap: true,
+        overflow: "ignore",
         style: new Style({ bgcolor: "#445566", color: "#ffffff" }),
       });
       const out = stripAnsi(

@@ -172,4 +172,20 @@ describe("{{ gauge }} in a real config", () => {
       ),
     ).rejects.toThrow(/must be "<position>:<colour>"/);
   });
+
+  // An easing names a ramp; a ramp with no stop has no colour to give, and an
+  // uncoloured gauge would read as if the easing had been obeyed.
+  test("an easing with no stop fails the render loudly", async () => {
+    await expect(
+      checkText(
+        "gauge-no-stop",
+        `{
+          segments: {
+            g: { template: '{{ gauge 1 2 4 "#" "-" "step" }}' },
+          },
+          root: { h: ["g"] },
+        }`,
+      ),
+    ).rejects.toThrow(/easing "step" needs at least one/);
+  });
 });

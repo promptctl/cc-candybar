@@ -4,7 +4,7 @@
 // this reads them through rich-js's `osc8Sequences`, over the OSC 8 grammar — the same one the bytes are
 // written with — so a change to how a link is written is a change in one place,
 // not in a regex copied into every file that clicks something.
-import { osc8Sequences, type Osc8Sequence } from "@promptctl/rich-js";
+import { decodeAnsi, osc8Sequences, type Osc8Sequence } from "@promptctl/rich-js";
 import { INVISIBLE } from "../../src/render/ansi.js";
 
 /** SGR + OSC 8: every escape that occupies no columns. */
@@ -64,11 +64,27 @@ export function linkCloseCount(rendered: string): number {
 }
 
 /**
- * The URIs whose open immediately follows a bold SGR (`;1m`) — the renderer's
- * "current selection" marking.
+ * The URI of every link drawn bold — the renderer's "current selection"
+ * marking — once per link, in order.
+ *
+ * Read through rich-js's `decodeAnsi`, the inverse of the writer, so where
+ * bold sits among an SGR's parameters is the writer's business (0.18 moved it
+ * from last to first and a byte match went blind).
  */
 export function boldUrls(rendered: string): string[] {
-  return osc8Sequences(rendered)
-    .filter((seq) => seq.uri !== "" && rendered.slice(seq.index - 3, seq.index) === ";1m")
-    .map((seq) => seq.uri);
+  const out: string[] = [];
+  let run: { link: string; end: number } | undefined;
+  for (const { start, end, style } of decodeAnsi(rendered).spans) {
+    const link = typeof style === "string" ? undefined : style.link;
+    if (link === undefined) {
+      run = undefined;
+      continue;
+    }
+    // A link whose cells change style decodes as adjacent spans; the first
+    // decides, as the open's own SGR did.
+    const continues = run?.link === link && run.end === start;
+    if (!continues && typeof style !== "string" && style.bold === true) out.push(link);
+    run = { link, end };
+  }
+  return out;
 }

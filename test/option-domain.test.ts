@@ -7,6 +7,8 @@
 // incidentally through the config pipeline (test/dsl-actions.test.ts covers
 // that end-to-end acceptance).
 
+import { resolveColorSystem } from "@promptctl/rich-js";
+
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
@@ -42,6 +44,14 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("colorCompatibilities", new Map()).members).toEqual(
       COLOR_COMPATIBILITIES,
     );
+  });
+
+  // rich-js's `resolveColorSystem` takes a bare string, so no type holds the
+  // two vocabularies together; a member it does not know throws here instead.
+  test("every colorCompatibility is a depth rich-js can draw at", () => {
+    for (const depth of COLOR_COMPATIBILITIES) {
+      expect(() => resolveColorSystem(depth)).not.toThrow();
+    }
   });
 
   test("an inline array IS its own domain — no registry lookup", () => {

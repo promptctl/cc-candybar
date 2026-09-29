@@ -17,7 +17,7 @@
 // `paged` flag selects the available width passed to `paginate` (term.cols vs
 // Infinity). Infinite width ⇒ one page ⇒ the long line wraps via FlexStrip; finite
 // ⇒ a sliced page with ←/→. The same fold, same emit pipeline; the width value
-// (and the matching noWrap) select the shape.
+// (and the matching overflow) select the shape.
 //
 // [LAW:one-way-deps] Lives in render/ (depends on template-engine/ + ./action.js),
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
@@ -136,9 +136,10 @@ export function paginate(
 
 // [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
 // separators into ONE RichText (a picker is one `{{ picker }}` expression, so it
-// must emit one value; the option/affordance cells ride as spans on it). `noWrap`
-// is the `paged` value: a paged page is one line that must not wrap; a wrap-mode
-// run is the long line FlexStrip is ALLOWED to break across lines.
+// must emit one value; the option/affordance cells ride as spans on it). Its
+// overflow is the `paged` value: a paged page is one unbounded line (`"ignore"`:
+// no break, no cut — the page already fits); a wrap-mode run is the long line
+// FlexStrip is ALLOWED to break across lines.
 export function assemble(frags: readonly RichText[], paged: boolean): RichText {
   const spaced: RichText[] = [];
   for (const frag of frags) {
@@ -146,7 +147,7 @@ export function assemble(frags: readonly RichText[], paged: boolean): RichText {
     spaced.push(frag);
   }
   const assembled = RichText.fromFragments(spaced);
-  assembled.noWrap = paged;
+  assembled.overflow = paged ? "ignore" : undefined;
   assembled.end = "";
   return assembled;
 }

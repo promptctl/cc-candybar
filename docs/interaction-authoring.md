@@ -2107,7 +2107,7 @@ error cell you cannot see; `check` fails it for you:
 ```
 
 ```error
-segment "chip": action "cycleMode" cycles 3 members; bind one display per member (3) or one static display, got 2
+segment "chip": error calling action: action "cycleMode" cycles 3 members; bind one display per member (3) or one static display, got 2
 ```
 
 ### An unclosed template action

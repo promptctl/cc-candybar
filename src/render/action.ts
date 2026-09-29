@@ -561,7 +561,7 @@ export function linkFragment(
   const rt = new RichText(text, {
     style: Style.combine([base, new Style({ link: url, bold: active })]),
   });
-  rt.noWrap = true;
+  rt.overflow = "ignore";
   rt.end = "";
   return rt;
 }

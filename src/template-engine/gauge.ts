@@ -53,7 +53,7 @@ export function renderGauge(spec: GaugeSpec): RichText {
   }
   const gauge = RichText.fromFragments(cells);
   gauge.end = "";
-  gauge.noWrap = true;
+  gauge.overflow = "ignore";
   return gauge;
 }
 

@@ -12,11 +12,11 @@ importers:
         specifier: ^9.33.0
         version: 9.39.4
       '@promptctl/go-template-js':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.10.0
+        version: 0.10.0
       '@promptctl/rich-js':
-        specifier: ^0.17.0
-        version: 0.17.0(@promptctl/go-template-js@0.9.0)(mobx@6.15.1)
+        specifier: ^0.18.1
+        version: 0.18.1(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -732,15 +732,15 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@promptctl/go-template-js@0.9.0':
-    resolution: {integrity: sha512-ri/iP9GjWa7uX2o65Ss8Gb8+aWFJ9CGS8gvVIGQxibwDz+UYciRlMcX2YKi65lXzu6Jf3L+f3QfZDoXYUiNVdw==}
+  '@promptctl/go-template-js@0.10.0':
+    resolution: {integrity: sha512-yi4RcDJ8cTsSpL1qSIUJDjfXYpqVfZFO6BeWwiJ1R/wuoWVn7uI3MnHA6kpmeT4apYStlU6sDl7nSexnQiDvjA==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@0.17.0':
-    resolution: {integrity: sha512-08ZYDklK4Zs61gowu/5da7tR/z6XEEOwLhhHUIzRsFcEjUP8glngyHkANTwJmlCWh0OFnhPb+GkvZzr8AyH9JQ==}
+  '@promptctl/rich-js@0.18.1':
+    resolution: {integrity: sha512-CqDQIY0LTlM4fMtMTqM1F6uxBvVCgj8eplwhGT3mNrwqqWltuDnqtxUcQSS4AV4QCFzd/Ihja1RC3n2UIHZFUw==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@promptctl/go-template-js': ^0.9.0
+      '@promptctl/go-template-js': ^0.10.0
       mobx: ^7.0.3
     peerDependenciesMeta:
       '@promptctl/go-template-js':
@@ -3940,15 +3940,15 @@ snapshots:
   '@promptctl/cc-candybar-linux-x64@1.97.0':
     optional: true
 
-  '@promptctl/go-template-js@0.9.0':
+  '@promptctl/go-template-js@0.10.0':
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.17.0(@promptctl/go-template-js@0.9.0)(mobx@6.15.1)':
+  '@promptctl/rich-js@0.18.1(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)':
     dependencies:
       string-width: 8.3.0
     optionalDependencies:
-      '@promptctl/go-template-js': 0.9.0
+      '@promptctl/go-template-js': 0.10.0
       mobx: 6.15.1
 
   '@quansync/fs@1.0.0':

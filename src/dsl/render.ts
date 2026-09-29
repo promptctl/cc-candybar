@@ -510,7 +510,11 @@ export function registerDslConfig(
       // reason, same shape. A hand-authored `range presets` and a
       // `{{ menu "applyPreset" }}` therefore enumerate the same names the
       // derived click gate admits.
-      presets: { fn: () => presetOptions, argTypes: [], arity: { kind: "exact" } },
+      presets: {
+        fn: () => presetOptions,
+        argTypes: [],
+        arity: { kind: "exact" },
+      },
     },
     opts.clock,
     // [LAW:one-source-of-truth] The registry's drawn-depth clock: this
