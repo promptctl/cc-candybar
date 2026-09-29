@@ -1012,7 +1012,7 @@ bounded stepper (`min`/`max`/`by`), because a palette is a NAME, not a
 number.
 
 "A segment your config declares" includes the bundled ones — `directory`,
-`git`, `model`, and the rest merge into every config by name — so
+`gitaculous`, `model`, and the rest merge into every config by name — so
 `segments.model.palette` is a legal target in a file that never mentions
 `model`. The first write adds exactly one field: `segments` merge by name
 and then by field, so a declaration under a bundled name is a delta over it,

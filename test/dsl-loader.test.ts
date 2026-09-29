@@ -1140,6 +1140,37 @@ describe("loadDslConfig — renamed built-in segment", () => {
       validateAgainstDefault(`{ root: { seg: "gitaculous" } }`),
     ).not.toThrow();
   });
+
+  // [LAW:single-enforcer] The pointer rides every path an old name can be
+  // written on, not only `root` (brandon-git-segment-ixf.tl0 retired `git`).
+  test.each([
+    ["a segments delta", `{ segments: { git: { palette: "nord" } } }`],
+    [
+      "a palette persist target",
+      `{ actions: { p: { persist: "segments.git.palette", to: "nord" } } }`,
+    ],
+    [
+      "a tree-op anchor",
+      `{ actions: { p: { persist: "presets.compact.root", insertSegment: "model", anchor: "git", relation: "after" } } }`,
+    ],
+    [
+      "a removeSegment",
+      `{ actions: { p: { persist: "presets.compact.root", removeSegment: "git" } } }`,
+    ],
+  ])("%s naming a retired segment points at its successor", (_, src) => {
+    const err = (() => {
+      try {
+        validateAgainstDefault(src);
+      } catch (e) {
+        if (e instanceof ConfigError) return e;
+        throw e;
+      }
+      throw new Error("expected ConfigError, got success");
+    })();
+    expect(err.issues.map((i) => i.message).join("\n")).toMatch(
+      /the built-in segment "git" was renamed to "gitaculous"/,
+    );
+  });
 });
 
 // ─── Option A shape grammar (2de.15) ─────────────────────────────────────────

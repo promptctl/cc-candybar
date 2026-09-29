@@ -546,13 +546,13 @@ or re-spell it by overriding its piece:
 ```json5 check:pass
 {
   variables: { "git.color.behind": { kind: "literal", value: "error" } },
-  helpers: { gitBranch: '{{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}' },
+  helpers: { gitBranch: 'on {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}' },
   root: { h: ["gitaculous"] },
 }
 ```
 
 ```render
- 🍫  main +2/-1 SU? ▸ 
+ 🍫  on main +2/-1 SU? ▸ 
 ```
 
 ## Mistakes and the errors they produce

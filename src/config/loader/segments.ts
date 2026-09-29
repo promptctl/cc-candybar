@@ -22,6 +22,7 @@ import {
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isReservedName } from "./reserved-namespace.js";
+import { renamedHint } from "./renamed-segments.js";
 import {
   describeType,
   describeValue,
@@ -101,7 +102,7 @@ function ownTemplateSpec(): FieldSpec<string> {
         ? (reject<string>(
             ctx,
             `${path}.${field}`,
-            `${path} declares no template — only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own`,
+            `${path} declares no template — only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path.slice("segments.".length))}`,
           ) ?? undefined)
         : (requireString(ctx, path, raw, field) ?? undefined),
   };
