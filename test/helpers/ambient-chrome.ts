@@ -26,7 +26,10 @@ import {
 } from "../../src/config/loader/reserved-namespace";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
-import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
+import {
+  menuInputs,
+  SETTINGS_WRITTEN_KEYS,
+} from "../../src/config/settings-menu";
 import {
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
@@ -186,17 +189,18 @@ export function withoutSettingsLinks(urls: readonly string[]): string[] {
 }
 
 // Declaration NAMES the synthesis passes add to a validated config — the
-// reserved namespaces plus the one ordinary variable edit chrome ensures for
-// its own banner. A test asserting "what did the AUTHOR declare" filters these.
+// reserved namespaces plus the ordinary input variables the settings menu and
+// edit chrome ensure for what their artifacts read (brandon-settings-menu-d6f).
+// A test asserting "what did the AUTHOR declare" filters these.
 //
-// `PRESET_CUSTOMIZED_VAR` gets no authorship check, unlike `ownValidators`'
-// bare `preset`, because there is no discriminator to read: a WRITE carries its
+// The ensured inputs get no authorship check, unlike `ownValidators`' bare
+// `preset`, because there is no discriminator to read: a WRITE carries its
 // author in the action's name, but a DECLARATION name carries nothing, and by
 // the time these names are collected the merged config holds one entry whether
-// edit chrome ensured it or an author declared it. Closing that collision would
-// mean reserving or namespacing the name upstream, not filtering harder here.
+// the synthesis ensured it or an author declared it. Closing that collision
+// would mean reserving or namespacing the names upstream, not filtering harder
+// here.
+const ENSURED = new Set([...menuInputs(), PRESET_CUSTOMIZED_VAR]);
 export function ownDeclNames(names: readonly string[]): string[] {
-  return names.filter(
-    (n) => n !== PRESET_CUSTOMIZED_VAR && !isReservedName(n),
-  );
+  return names.filter((n) => !ENSURED.has(n) && !isReservedName(n));
 }

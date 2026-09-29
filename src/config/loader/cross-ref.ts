@@ -1,13 +1,16 @@
 // [LAW:single-enforcer] All cross-reference resolution on the MERGED config:
 // layout nodes name declared segments, every template-bearing field references
-// only existing variables/actions, depends_on points at declared variables, and
-// state/set-action configs declare the session.id anchor. Runs after merge so a
+// only existing variables/actions, and depends_on points at declared variables.
+// (session.id needs no check: the settings menu, synthesized into every
+// config, ensures it.) Runs after merge so a
 // user surface can reference default-provided segments/actions. This file changes
 // when the visibility/scoping rules between config parts change.
 
 import JSON5 from "json5";
+import { createEngine } from "@promptctl/go-template-js";
 import {
   hasCacheField,
+  walkNodePaths,
   walkNodes,
   AXIS_OF,
   type DslConfig,
@@ -17,15 +20,9 @@ import {
   parseArm,
 } from "../dsl-types.js";
 import {
-  actionBindsPersist,
-  actionBindsRedo,
-  actionBindsReset,
-  actionBindsDoctor,
-  actionBindsSet,
   actionBindsTemplateValue,
   actionIsDual,
   PERSIST_WHEN,
-  actionBindsUndo,
   type ActionDecl,
 } from "../action.js";
 import {
@@ -40,10 +37,8 @@ import { fragmentNode, rootNode } from "../root.js";
 import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   anchorUnderGate,
-  canHostSessionState,
   countAnchors,
   isSettingsAnchor,
-  SESSION_ID_VAR,
   SETTINGS_ANCHOR,
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
@@ -342,14 +337,11 @@ export function validateCrossReferences(
   // never a second traversal that could learn a different idea of what a valid
   // layout is. This is what makes `cc-candybar check` catch a preset staging a
   // segment nobody declared.
-  //
-  // [LAW:single-enforcer] The menu precondition is asked once, of the same
-  // predicate synthesizeSettingsMenu gates on, and read by every tree walked.
-  const menuWillSynthesize = canHostSessionState(cfg);
+
   // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
   // an author may place and the walk below must therefore accept, even though
   // no config declares a segment by that name — synthesizeSettingsMenu provides
-  // it unconditionally, immediately after these checks pass. Two placements is
+  // it in every config, immediately after these checks pass. Two placements is
   // the real error: one state key holds one open state, so a second anchor
   // would be a second toggle writing one disclosure, with two bodies claiming
   // to be it. Counted over the SAME census the synthesis reads, so "placed"
@@ -433,7 +425,7 @@ export function validateCrossReferences(
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
-    for (const node of walkNodes(root)) {
+    for (const [node, path] of walkNodePaths(root, layoutKey)) {
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
       // segment template, surfaced at load time.
@@ -441,26 +433,13 @@ export function validateCrossReferences(
         checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
           line: layoutLine,
         });
+        checkWhenParses(ctx, `${path}.when`, node.when, layoutLine);
       }
       if (node.kind !== "segment") continue;
-      if (isSettingsAnchor(node.name)) {
-        // [LAW:one-source-of-truth] Accepting the anchor asserts that
-        // synthesizeSettingsMenu WILL declare a segment by this name, so the
-        // acceptance reads the very predicate that pass decides by rather than
-        // assuming its answer. When it is false the reference is genuinely
-        // dangling, and the error names the unmet precondition: the author
-        // placed a documented anchor, they did not typo a segment name, and the
-        // generic "does not match any declared segment" would teach the wrong
-        // lesson [LAW:no-silent-failure].
-        if (!menuWillSynthesize) {
-          ctx.issues.push({
-            path: layoutKey,
-            message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}", but this config declares no "${SESSION_ID_VAR}" variable — the menu is a click surface and every click composes a URL from "${SESSION_ID_VAR}", so it is not synthesized for a config without it. Declare a "${SESSION_ID_VAR}" variable (any config merged onto the bundled default inherits one) or remove the anchor placement.`,
-            line: layoutLine,
-          });
-        }
-        continue;
-      }
+      // [LAW:one-source-of-truth] The anchor is a position, not a declared
+      // segment: synthesizeSettingsMenu lowers it in every config, right after
+      // these checks pass.
+      if (isSettingsAnchor(node.name)) continue;
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         const renamed = RENAMED_SEGMENTS[node.name];
         const hint =
@@ -589,39 +568,6 @@ export function validateCrossReferences(
       );
     }
   }
-
-  // [LAW:verifiable-goals] state-kind variables have an implicit dependency
-  // on the canonical session-id input variable. Same shape as the
-  // depends_on / template-ref existence checks above — surface a missing
-  // anchor at load time so the user fixes the config from a config-file
-  // error message, not from a render-time ReferenceError.
-  //
-  // [LAW:types-are-the-program] Check against `cfg.variables` directly: the
-  // accept/reject table for this predicate is "GLOBAL session.id declared".
-  // A segment-local declaration named "session.id" registers at runtime as
-  // `<seg>.session.id` and does NOT satisfy declareState's read of the
-  // global `session.id` box.
-  // [LAW:verifiable-goals] A widget `set` action composes a set-state click URL
-  // whose first segment is `session.id` (read from the store at render). Without
-  // a global session.id the URL is malformed and the daemon rejects the click
-  // (requireSessionId is the single enforcer — it rejects empty/slash session
-  // ids loudly, so there is no silent corruption; this surfaces the SAME
-  // requirement at load instead of at first click). Same anchor + same shape as
-  // the state-kind requirement above; OR them so either trigger fires it once.
-  // [LAW:dataflow-not-control-flow] A `set` action composes a set-state click URL
-  // whose first segment is session.id. OR it into the same requirement so an
-  // actions-only config (no state vars) still demands the anchor it needs. A
-  // picker's ✕/←/→/apply-close all go through `set` actions, so this covers them.
-  if (
-    (hasStateKind(cfg) || hasActionSetAction(cfg)) &&
-    !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
-  ) {
-    ctx.issues.push({
-      path: "variables.session.id",
-      message: `state reads and action set-writes require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
-      line: findKeyLine(ctx.source, ["variables"]),
-    });
-  }
 }
 
 // [LAW:no-silent-failure] brandon-layout-edit-2gc.1's structural-edit target
@@ -726,32 +672,10 @@ function stateVars(cfg: DslConfig): VariableDecl[] {
   ].filter((v) => v.kind === "state");
 }
 
-function hasStateKind(cfg: DslConfig): boolean {
-  return stateVars(cfg).length > 0;
-}
-
 // Does any declared `state` variable hold this key? The question a dual's
 // `persistWhen` selector has to answer, asked over the same two scopes.
 function declaresStateKey(cfg: DslConfig, key: string): boolean {
   return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
-}
-
-// [LAW:dataflow-not-control-flow] A config needs session.id when any declared
-// action carries it on the wire — `set` (literal/option/bounded/cycle),
-// `persist`, `reset`, `undo`/`redo`, and both `doctor` verbs — so a click
-// error (an empty history stack, nothing left to fix) surfaces on the session
-// that clicked, never as a silent no-op. copy/open write nothing and embed
-// no session.id.
-function hasActionSetAction(cfg: DslConfig): boolean {
-  return Object.values(cfg.actions).some(
-    (a) =>
-      actionBindsSet(a) ||
-      actionBindsPersist(a) ||
-      actionBindsReset(a) ||
-      actionBindsUndo(a) ||
-      actionBindsRedo(a) ||
-      actionBindsDoctor(a),
-  );
 }
 
 // [LAW:one-source-of-truth] The one scope every reference surface resolves
@@ -832,6 +756,30 @@ function checkDependsOn(
         "cache",
         "depends_on",
       ]),
+    });
+  }
+}
+
+// [LAW:no-silent-failure] A malformed `when` in an authored tree is a load
+// error at the path the author wrote. The compile would catch it too, but it
+// compiles the SYNTHESIZED trees — the settings menu and edit chrome rewrite
+// every preset root — so its path would name a position the author never
+// wrote (`presets.default.root.children[1]…`). Parse-only: a bare engine,
+// since no function is looked up before evaluation.
+const SYNTAX_ENGINE = createEngine<string>({ fromString: (s) => s });
+function checkWhenParses(
+  ctx: ValidateCtx,
+  path: string,
+  when: string,
+  line: number | undefined,
+): void {
+  try {
+    SYNTAX_ENGINE.parse(when);
+  } catch (e) {
+    ctx.issues.push({
+      path,
+      message: `Template parse error in ${path}: ${(e as Error).message}`,
+      line,
     });
   }
 }

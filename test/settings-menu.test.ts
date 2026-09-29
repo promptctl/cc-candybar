@@ -33,13 +33,21 @@ import {
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
-import { addableSegmentDomains } from "../src/config/edit-chrome";
+import {
+  addableSegmentDomains,
+  PRESET_CUSTOMIZED_VAR,
+} from "../src/config/edit-chrome";
 import {
   anchorUnderGate,
   countAnchors,
+  menuInputs,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import {
+  isReservedName,
+  SETTINGS_NS,
+} from "../src/config/loader/reserved-namespace";
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
@@ -82,8 +90,8 @@ function userConfig(root: string): string {
 
 const TWO_SEGMENT_ROW = `{ h: ['directory', 'model'] }`;
 
-function buildRuntime(src: string) {
-  const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
+  const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
@@ -560,55 +568,106 @@ describe("the default placement never inherits an author's gate", () => {
   });
 });
 
-// ─── 4. The anchor's precondition is loud ────────────────────────────────────
+// ─── 4. The menu needs nothing from the config ──────────────────────────────
 
-// [LAW:one-source-of-truth] cross-ref accepts an authored `settings.menu` on the
-// promise that synthesizeSettingsMenu will declare it. When the two read
-// different facts, that promise breaks silently: the config loads clean, the
-// anchor is never lowered, and the dangling reference reaches the render walk to
-// throw at `lookupSegment` — a load-time mistake surfacing three layers away.
-// These tests pin the two halves of the one predicate.
-//
-// The default here is the EMPTY one (parseAndValidate's default argument), which
-// is the only way to reach a config with no `session.id`: production's cascade
-// merges the bundled default, which declares it.
-describe("placing the anchor where the menu cannot be synthesized", () => {
-  const placing = (variables: string): string => `{
+// [LAW:verifiable-goals] brandon-settings-menu-d6f: "The settings menu should
+// always be visible no matter what." The synthesis supplies every input its
+// artifacts read, so a config that declares no variables at all — reachable
+// only over the EMPTY default, since production merges the bundled one — still
+// carries a door, and every disclosure behind it renders without a ⚠.
+describe("the menu in a config that declares no variables", () => {
+  const BARE = `{
     globals: {},
-    variables: { ${variables} },
     segments: { hello: { template: 'hi' } },
-    root: { h: ['hello', '${SETTINGS_ANCHOR}'] },
+    root: { h: ['hello'] },
   }`;
 
-  test("without session.id, the load error names the unmet precondition", () => {
-    try {
-      parseAndValidate("<user>", placing(""), ALLOWED);
-      throw new Error("expected a ConfigError");
-    } catch (err) {
-      expect(err).toBeInstanceOf(ConfigError);
-      const message = (err as ConfigError).message;
-      expect(message).toContain(SETTINGS_ANCHOR);
-      expect(message).toContain("session.id");
-      // Not the generic dangling-reference error: true, but it teaches the
-      // author to hunt for a typo in a name they copied from the docs.
-      expect(message).not.toContain("does not match any declared segment");
+  // Every key the config holds in a disclosure state: a `state` var whose
+  // default is the closed sentinel.
+  const disclosureKeys = (config: DslConfig): Set<string> =>
+    new Set(
+      Object.values(config.variables).flatMap((v) =>
+        v.kind === "state" && v.default === DISCLOSURE_CLOSED ? [v.key] : [],
+      ),
+    );
+
+  test("loads, renders the door, and opens every disclosure without a ⚠", () => {
+    const { config, render, click, dispose } = buildRuntime(BARE, EMPTY_DEFAULT);
+    const keys = disclosureKeys(config);
+    const first = stripAnsi(render());
+    expect(first).toContain(DOOR_GLYPH);
+    expect(first).not.toContain("⚠");
+    // Click every affordance that opens a disclosure, until a render offers no
+    // opening not already taken; every render on the way is checked.
+    const opened = new Set<string>();
+    for (let frontier = true; frontier; ) {
+      frontier = false;
+      for (const url of linkUrls(render())) {
+        const opens = effectsOf(url).filter(
+          (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
+        );
+        const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");
+        if (opens.length === 0 || opened.has(id)) continue;
+        opened.add(id);
+        click(url);
+        const out = stripAnsi(render());
+        expect(out).not.toContain("⚠");
+        frontier = true;
+        break;
+      }
     }
+    // The walk reached the menu's own disclosures, not just the door.
+    expect([...opened].some((id) => id.startsWith(SETTINGS_ANCHOR))).toBe(true);
+    expect(opened.size).toBeGreaterThan(3);
+    dispose();
   });
 
-  test("with session.id, the anchor loads and lowers to a declared segment", () => {
+  test("an authored placement of the anchor loads", () => {
     const config = parseAndValidate(
       "<user>",
-      placing(
-        `'session.id': { kind: 'input', path: 'session_id', default: '' }`,
-      ),
+      `{
+        globals: {},
+        segments: { hello: { template: 'hi' } },
+        root: { h: ['hello', '${SETTINGS_ANCHOR}'] },
+      }`,
       ALLOWED,
     );
-    // The invariant whose violation used to throw at render: every segment the
-    // resolved root names is a segment the config declares.
-    for (const name of segmentNames(resolvedRoot(config))) {
+    const placed = segmentNames(resolvedRoot(config));
+    for (const name of placed) {
       expect(Object.keys(config.segments)).toContain(name);
     }
-    expect(segmentNames(resolvedRoot(config))).toContain(SETTINGS_ANCHOR);
+    // The author's position holds: the door follows `hello`.
+    expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(placed.indexOf("hello"));
+  });
+
+  test("the ensured inputs are exactly the refs the synthesis reads", () => {
+    const bare = parseAndValidate("<user>", BARE, ALLOWED);
+    const ensured = Object.keys(bare.variables).filter(
+      (name) => !isReservedName(name),
+    );
+    // Edit chrome's banner ensures its own one input the same way.
+    expect(new Set(ensured)).toEqual(
+      new Set([...menuInputs(), PRESET_CUSTOMIZED_VAR]),
+    );
+  });
+
+  test("a user's own declaration of an ensured name is kept", () => {
+    const own = {
+      kind: "input",
+      path: "workspace.somewhere_else",
+      default: "mine",
+    } as const;
+    const config = parseAndValidate(
+      "<user>",
+      `{
+        globals: {},
+        variables: { project_dir: ${JSON.stringify(own)} },
+        segments: { hello: { template: 'hi' } },
+        root: { h: ['hello'] },
+      }`,
+      ALLOWED,
+    );
+    expect(config.variables.project_dir).toEqual(own);
   });
 });
 

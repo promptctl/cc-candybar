@@ -34,8 +34,10 @@
 //     precisely what edit chrome's own demand gate reads — so the ordering is
 //     load-bearing in that direction too, not merely tidy.
 
-import type { ActionDecl } from "./action.js";
+import { actionCarriesSession, type ActionDecl } from "./action.js";
 import {
+  ROW_BUDGET_FUNCS,
+  TERM_COLS_VAR,
   walkNodes,
   type DisclosureRef,
   type DslConfig,
@@ -74,7 +76,14 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
-import { SETTINGS, type SettingProjection } from "./setting-projections.js";
+import {
+  CONFIG_KEY_TO_EFFECTIVE_VAR,
+  SESSION_KEY_TO_EFFECTIVE_VAR,
+  SETTINGS,
+  type SettingProjection,
+} from "./setting-projections.js";
+import { PAYLOAD_INPUTS } from "./payload-inputs.js";
+import { callsAnyOf, extractTemplateRefs, refResolves } from "./loader/refs.js";
 import {
   BOOLEAN_FALSE,
   BOOLEAN_MEMBERS,
@@ -877,30 +886,92 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
   );
 }
 
-// [LAW:one-source-of-truth] The variable whose presence IS the precondition,
-// named once so the predicate below and the load error cross-ref.ts raises when
-// it fails cannot describe different variables.
-export const SESSION_ID_VAR = "session.id";
+// [LAW:one-source-of-truth] Every variable the menu READS, derived from the
+// artifacts it mints and the subtree it splices — never a hand-kept list, so a
+// ref a later control adds is ensured without a second place to update. Three
+// kinds of read: the dotted refs of every template (segment fields, node
+// `when`s, template variables, copy/open actions), and term.cols wherever a
+// template calls a row-fitting function; session.id, the first
+// segment of every click that carries it on the wire; and the `.effective`
+// projection a `set` or `persist` on a setting reads its current value back
+// through (registerDslConfig's stateKeyToVar, CONFIG_KEY_TO_EFFECTIVE_VAR).
+function menuReads(artifacts: MenuArtifacts, menu: LayoutNode): Set<string> {
+  const reads = new Set<string>();
+  const add = (template: string | undefined): void => {
+    if (template === undefined) return;
+    for (const ref of extractTemplateRefs(template)) reads.add(ref);
+    if (callsAnyOf(template, ROW_BUDGET_FUNCS)) reads.add(TERM_COLS_VAR);
+  };
+  for (const seg of Object.values(artifacts.segments)) {
+    add(seg.template);
+    add(seg.bg);
+    add(seg.fg);
+    add(seg.when);
+  }
+  for (const node of walkNodes(menu)) add(node.when);
+  for (const v of Object.values(artifacts.variables)) {
+    if (v.kind === "template") add(v.template);
+  }
+  for (const a of Object.values(artifacts.actions)) {
+    if ("copy" in a) add(a.copy);
+    if ("open" in a) add(a.open);
+    if (actionCarriesSession(a)) reads.add(SESSION_ID_VAR);
+    const setBack =
+      "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : undefined;
+    const persistBack =
+      "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : undefined;
+    if (setBack !== undefined) reads.add(setBack);
+    if (persistBack !== undefined) reads.add(persistBack);
+  }
+  return reads;
+}
 
-// [LAW:types-are-the-program] The menu's one structural prerequisite, read as a
-// value: a global `session.id`. It is not a demand gate and not a preference —
-// the menu is a CLICK surface, every click composes a URL whose first segment is
-// `session.id` read from the store, and cross-ref.ts already rejects an AUTHORED
-// state read or `set` write in a config that declares no such variable. A config
-// without it describes a static, non-interactive bar, and there is no menu to
-// place on one. Every config the daemon renders merges the bundled default,
-// which declares `session.id`, so in production this is universally true; what
-// it excludes is the hand-built static config, not a user.
-//
-// [LAW:one-source-of-truth] Exported because this is THE fact "will the anchor
-// resolve to a segment?" — asked here to decide whether to mint the menu, and
-// asked by cross-ref.ts to decide whether an authored placement of the anchor is
-// a reference this pass is about to satisfy or a dangling one. Two readers, one
-// predicate: when they were two predicates, cross-ref accepted an anchor this
-// pass then declined to provide, and the un-lowered reference reached the render
-// walk to throw at `lookupSegment`.
-export function canHostSessionState(config: DslConfig): boolean {
-  return Object.prototype.hasOwnProperty.call(config.variables, SESSION_ID_VAR);
+// The name every click's first wire segment is read from.
+const SESSION_ID_VAR = "session.id";
+
+// [LAW:no-silent-failure] The declarations the menu depends on rather than
+// owns: every read its own artifacts do not declare, supplied from the one
+// PAYLOAD_INPUTS table. A read the table cannot supply is a defect in this
+// file — the menu would render a ⚠ in every config that lacks it — so it throws
+// at load, naming the ref, rather than minting a guess.
+function ensuredInputs(
+  artifacts: MenuArtifacts,
+  menu: LayoutNode,
+): Record<string, VariableDecl> {
+  const own = {
+    names: new Set(Object.keys(artifacts.variables)),
+    documents: new Set<string>(),
+  };
+  const ensured: Record<string, VariableDecl> = {};
+  for (const ref of menuReads(artifacts, menu)) {
+    if (refResolves(ref, own)) continue;
+    const decl = PAYLOAD_INPUTS[ref];
+    if (decl === undefined) {
+      throw new Error(
+        `the settings menu reads ".${ref}", which it does not declare and PAYLOAD_INPUTS does not supply`,
+      );
+    }
+    ensured[ref] = decl;
+  }
+  return ensured;
+}
+
+// The menu's artifacts and the subtree the anchor lowers to, for a door glyph.
+function menuSynthesis(doorGlyph: string): {
+  artifacts: MenuArtifacts;
+  help: SegmentNode;
+  ensured: Record<string, VariableDecl>;
+} {
+  const { artifacts, help } = settingsArtifacts(doorGlyph);
+  ensureEditToggle(artifacts);
+  const menu = expandAnchor({ kind: "segment", name: SETTINGS_ANCHOR }, help);
+  return { artifacts, help, ensured: ensuredInputs(artifacts, menu) };
+}
+
+// [LAW:verifiable-goals] The names the menu ensures, for the test that holds
+// them equal to what a config declaring nothing ends up with.
+export function menuInputs(): ReadonlySet<string> {
+  return new Set(Object.keys(menuSynthesis(DOOR_GLYPH).ensured));
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
@@ -910,12 +981,16 @@ export function canHostSessionState(config: DslConfig): boolean {
 // itself is left untouched, exactly as synthesizeEditChrome leaves it, because
 // presetRoot falls back to it only for a preset declaring no root of its own
 // and every name now declares one.
+//
+// There is no precondition (brandon-settings-menu-d6f: "The settings menu
+// should always be visible no matter what"): whatever the menu reads that the
+// config does not declare, it ensures — merged UNDER the config, so a user's
+// own declaration of the same name wins, exactly as edit chrome's ensured
+// inputs do.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
-  if (!canHostSessionState(config)) return config;
-  const { artifacts, help } = settingsArtifacts(
+  const { artifacts, help, ensured } = menuSynthesis(
     config.globals.menuGlyph ?? DOOR_GLYPH,
   );
-  ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
@@ -926,7 +1001,7 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   }
   return {
     ...config,
-    variables: { ...config.variables, ...artifacts.variables },
+    variables: { ...ensured, ...config.variables, ...artifacts.variables },
     actions: { ...config.actions, ...artifacts.actions },
     segments: { ...config.segments, ...artifacts.segments },
     presets,

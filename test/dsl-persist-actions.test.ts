@@ -334,22 +334,6 @@ describe("persist/reset action loader shape", () => {
     ).toThrow(ConfigError);
   });
 
-  test("a config with only `persist` actions still requires session.id", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{
-          globals: {},
-          variables: {},
-          actions: { applyTheme: { persist: 'palette', from: 'themes' } },
-          segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
-          root: 's',
-        }`,
-        ALLOWED,
-      ),
-    ).toThrow(/session\.id/);
-  });
-
   // [LAW:no-silent-failure] A typo'd persist/reset target must be a LOAD-time
   // error naming the real field set, not a confusing click-time
   // "registration invariant broken" message the operator can't act on.

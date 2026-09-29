@@ -18,6 +18,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
 import { stripAnsi } from "./helpers/ansi";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -100,7 +101,7 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[1]!.indexOf("C")).toBeLessThan(lines[1]!.indexOf("D"));
   });
 
-  test("empty root container produces empty string (no newlines, no segments)", () => {
+  test("an empty root container renders the settings door alone", () => {
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {},
@@ -109,7 +110,9 @@ describe("renderDsl — multi-line layout", () => {
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, OPTS);
-    expect(out).toBe("");
+    // No row of the author's: one line, the door every bar carries.
+    expect(out.split("\n")).toHaveLength(1);
+    expect(stripAnsi(out)).toContain(DOOR_GLYPH);
   });
 
   test("layout: key is rejected with migration error (removed in 2de.19)", () => {
@@ -325,7 +328,11 @@ describe("renderDsl — multi-line layout", () => {
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    // The settings door takes its own ungated row above a gated first node.
+    const lines = out
+      .split("\n")
+      .map(stripAnsi)
+      .filter((line) => !line.includes(DOOR_GLYPH));
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("B");
     expect(lines[0]!).not.toContain("A");

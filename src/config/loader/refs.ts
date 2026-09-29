@@ -28,6 +28,25 @@ export function extractTemplateRefs(template: string): Set<string> {
   return refs;
 }
 
+// Does the template call any of these functions? The same code-span walk:
+// string literals stripped, so a display that merely spells a name is not a
+// call.
+export function callsAnyOf(
+  template: string,
+  funcs: readonly string[],
+): boolean {
+  const call = new RegExp(`(?<![\\w.$])(?:${funcs.join("|")})\\b`);
+  TEMPLATE_BLOCK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
+    if (call.test(m[1]!.replace(STRING_LITERAL_RE, ""))) {
+      TEMPLATE_BLOCK_RE.lastIndex = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
 // [LAW:dataflow-not-control-flow] Extract every `action "name"` call from a
 // template, for the load-time existence check. Same best-effort code-span /
 // string-literal walk as extractTemplateRefs: the `action` keyword lives in a

@@ -20,6 +20,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -52,8 +53,10 @@ function render(src: string, hookData: Record<string, unknown>): string {
 describe("segment is the rendering unit (2de.10)", () => {
   test("a unit with internal clickable regions renders as ONE strip item — no internal chevron", () => {
     // A segment whose template emits three OSC-8 links. The segment collapses to
-    // one strip item, so the only chevron in the whole line is the single end-cap
-    // — never one between X/Y/Z — while all three link spans survive inside it.
+    // one strip item, so the only chevron in its line is the single end-cap —
+    // never one between X/Y/Z — while all three link spans survive inside it.
+    // The settings door, present in every bar, is placed on its own row so the
+    // unit's row holds the unit alone.
     const src = `{
       globals: { palette: 'textual-dark' },
       segments: {
@@ -63,31 +66,37 @@ describe("segment is the rendering unit (2de.10)", () => {
           fg: 'foreground',
         },
       },
-      root: 'actions',
+      root: { v: ['${SETTINGS_ANCHOR}', 'actions'] },
     }`;
-    const out = render(src, {});
+    const line = render(src, {}).split("\n")[1]!;
 
     // One unit ⇒ one item ⇒ only the end-cap chevron, none between the regions.
-    expect(chevronCount(out)).toBe(1);
+    expect(chevronCount(line)).toBe(1);
     // All three clickable regions survive as their own OSC-8 spans inside the
     // single item.
-    expect(linkUrls(out)).toHaveLength(3);
+    expect(linkUrls(line)).toHaveLength(3);
   });
 
   test("a segment that renders nothing contributes no strip item — no spurious cap", () => {
     // A visible segment whose template evaluates to empty: fragmentsToCells drops
     // the empty content, so the segment collapses to zero cells (not one empty
     // cell). An empty strip item would draw powerline caps around nothing; the
-    // unit must instead contribute no item at all — zero glyphs in the output.
-    const src = `{
-      globals: { palette: 'textual-dark' },
-      segments: { empty: { template: '', bg: 'surface', fg: 'foreground' } },
-      root: 'empty',
-    }`;
-    const out = render(src, {});
+    // unit must instead contribute no item at all — the bar renders exactly as
+    // it does without the segment (the settings door, present in every bar, is
+    // all either renders).
+    const bar = (root: string): string =>
+      render(
+        `{
+          globals: { palette: 'textual-dark' },
+          segments: { empty: { template: '', bg: 'surface', fg: 'foreground' } },
+          root: ${root},
+        }`,
+        {},
+      );
 
-    expect(chevronCount(out)).toBe(0);
-    expect(out).toBe("");
+    expect(bar(`{ h: ['${SETTINGS_ANCHOR}', 'empty'] }`)).toBe(
+      bar(`{ h: ['${SETTINGS_ANCHOR}'] }`),
+    );
   });
 
   test("two adjacent same-bg segments read as TWO units — the structural chevron survives equal bg", () => {

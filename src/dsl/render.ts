@@ -73,9 +73,9 @@ import {
 import {
   compileActions,
   actionFuncs,
-  SESSION_KEY_TO_EFFECTIVE_VAR,
   type ActionRuntime,
 } from "../render/action.js";
+import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";

@@ -19,6 +19,7 @@ import { VERBS } from "../src/daemon/verbs";
 import { resolveThemeSelection } from "../src/themes";
 import { testVerbContext } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
+import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -525,58 +526,38 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     ).toThrow(/empty key at pair 2/);
   });
 
-  test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {
-    // [LAW:verifiable-goals] A config that uses state-kind vars without
-    // declaring session.id has to fail at LOAD time. The runtime would
-    // otherwise throw "Unknown variable session.id" on the next render —
-    // which is observable only when a render lands, not when the file is
-    // loaded — and that violates "machine-verifiable at the earliest point."
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{
-          globals: {},
-          variables: {
-            theme: { kind: 'state', key: 'theme' },
-          },
-          segments: {
-            s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
-          },
-          root: 's',
-        }`,
-        ALLOWED_PALETTES,
-      ),
-    ).toThrow(/global "session\.id" variable/);
-  });
-
-  test("parseDslConfig requires session.id GLOBALLY (segment-local doesn't satisfy)", () => {
-    // [LAW:types-are-the-program] declareState reads the global session.id
-    // box at runtime. A segment-local declaration named "session.id"
-    // registers as "<seg>.session.id" — same string, different box. The
-    // load-time check must reject this case, not silently accept it.
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{
-          globals: {},
-          variables: {
-            theme: { kind: 'state', key: 'theme' },
-          },
-          segments: {
-            s: {
-              template: '{{ .theme }}',
-              bg: 'surface',
-              fg: 'foreground',
-              vars: {
-                'session.id': { kind: 'input', path: 'session_id', default: '' },
-              },
-            },
-          },
-          root: 's',
-        }`,
-        ALLOWED_PALETTES,
-      ),
-    ).toThrow(/global "session\.id" variable/);
+  test("a state-kind var needs no session.id of the author's — the menu ensures it", () => {
+    // [LAW:verifiable-goals] declareState reads the global session.id box. The
+    // settings menu, synthesized into every config, ensures that input from
+    // PAYLOAD_INPUTS (brandon-settings-menu-d6f), so a config that reads state
+    // without declaring it loads AND renders the state it reads.
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          theme: { kind: 'state', key: 'theme', default: 'calm' },
+        },
+        segments: {
+          s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: 's',
+      }`,
+      ALLOWED_PALETTES,
+    );
+    expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const compiled = registerDslConfig(config, registry);
+    const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, {
+      style: "powerline",
+      colorCompatibility: "truecolor",
+      wrap: true,
+      padding: 0,
+      charset: "unicode",
+      width: Number.POSITIVE_INFINITY,
+    });
+    expect(stripAnsi(out)).toContain("calm");
   });
 
   test("toolbar-toggle click verb cascades through state binding", () => {

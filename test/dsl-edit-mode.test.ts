@@ -6,11 +6,10 @@
 //      a from-shaped domain (name or inline array) + literal anchor/relation,
 //      and it is a legal arm over a "presets.<name>.root" target alongside
 //      removeSegment/insertSegment.
-//   2. Edit mode is DEMAND-DRIVEN, not unconditional: a config that never
-//      references `{{ action "edit.toggle" … }}` gets neither the toggle nor
-//      any chrome — and critically, no new `session.id` requirement — so a
-//      fully static, non-interactive bar is untouched by this feature's mere
-//      existence.
+//   2. Every config carries edit mode: the settings menu, synthesized into
+//      every config, ensures the toggle and fires it from `✎ edit`, so even a
+//      config that never references `{{ action "edit.toggle" … }}` gets the
+//      toggle and its chrome (brandon-settings-menu-d6f).
 //   3. A config that DOES reference the toggle gets `edit.mode`/`edit.toggle`
 //      synthesized, PLUS per-segment `-`/`+` chrome spliced into every
 //      preset's resolved root, gated behind the SAME session var — a splice,
@@ -276,8 +275,8 @@ describe("insertSegmentFrom loader shape", () => {
 
 // ─── demand-driven synthesis ────────────────────────────────────────────────
 
-describe("edit mode is demand-driven, not unconditional", () => {
-  test("a config never referencing edit.toggle gets no toggle, no chrome, and needs no session.id", () => {
+describe("edit mode is in every config", () => {
+  test("a config never referencing edit.toggle still gets the toggle and its chrome", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -288,12 +287,16 @@ describe("edit mode is demand-driven, not unconditional", () => {
       }`,
       ALLOWED,
     );
-    expect(config.actions[EDIT_TOGGLE_ACTION]).toBeUndefined();
-    expect(config.variables[EDIT_MODE_KEY]).toBeUndefined();
-    // No preset declares its own root and edit chrome never ran (it's a
-    // no-op when `edit.toggle` never merged in), so `config.root` — the
+    expect(config.actions[EDIT_TOGGLE_ACTION]).toBeDefined();
+    expect(config.variables[EDIT_MODE_KEY]).toBeDefined();
+    // The chrome is spliced into the floor preset's root; `config.root` — the
     // config's own declared tree — is untouched, byte-for-byte.
     expect(segmentNamesOf(config.root)).toEqual(["directory"]);
+    expect(
+      segmentNamesOf(config.presets.default!.root!).some((n) =>
+        n.startsWith("edit."),
+      ),
+    ).toBe(true);
   });
 
   test("a config referencing edit.toggle gets the toggle var + action synthesized", () => {

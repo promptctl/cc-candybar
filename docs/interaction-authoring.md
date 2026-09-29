@@ -250,11 +250,10 @@ always undoable from the bar itself:
 }
 ```
 
-`applyThemeForever` needs no matching `state` variable and no `session.id`
-plumbing of its own — the loader still requires the global `session.id`
-anchor the moment any `set`/`persist`/`reset` action exists (it rides the
-click for error-surfacing, same as `set`), but reading `.session.id` back is
-never required for `persist` the way `{ kind: "state" }` is for `set`.
+`applyThemeForever` needs no matching `state` variable: reading a value back
+is required for `set` (through `{ kind: "state" }`), never for `persist`. The
+click still carries the session id, for error-surfacing — every config has
+`session.id`, since the settings menu ensures the inputs it reads.
 
 ### One control, two destinations: `persistWhen`
 
@@ -886,18 +885,11 @@ synthesizes:
 - A row above the bar, led by `✎ done`, which fires `edit.toggle` — the way
   out, without reopening the menu edit mode was entered from.
 
-**This is demand-driven, not automatic — but the demand is usually already
-there.** A config that never references `edit.toggle` gets none of this — no
-toggle, no chrome, and critically no new `session.id` requirement, so a fully
-static bar is untouched by the feature's mere existence. Reference it once,
-anywhere, and the whole mechanism switches on for every row in every preset.
-
-In practice you almost never make that reference yourself: the global settings
-menu (below) puts an `✎ edit` entry in every bar it can, and that entry
-fires `edit.toggle` (through a `do` that also closes the menu). So expect edit mode to be live in any config you
-write. The gate still does its job at the one edge that matters — the menu is
-not synthesized for a config declaring no `session.id`, which is exactly the
-static, non-interactive bar the gate exists to leave alone.
+**Every bar has it.** The global settings menu (below) is in every config, and
+its `✎ edit` entry fires `edit.toggle` (through a `do` that also closes the
+menu), so edit mode is live in any config you write, for every row in every
+preset. You never declare the toggle yourself; reference it from your own
+template if you want a second way in.
 
 **It's a splice, not a render branch.** Edit mode is not a special render
 mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
@@ -1225,14 +1217,10 @@ anchor may not sit under a `when` or inside a group's body:
 the menu is visible under every condition, so its placement may not be gated
 ```
 
-**The one config that gets no menu** is one that declares no `session.id`
-variable. Every click composes a URL whose first segment is the session id read
-from the store, so a config without it describes a static, non-interactive bar
-and there is no menu to put on one. Any config merged over the bundled default
-— which is every config the daemon loads — inherits `session.id`, so this
-excludes hand-built static configs and nothing else. Placing the `settings.menu`
-anchor in such a config is a load error naming the missing variable, not a
-silently absent menu.
+**Every config gets the menu.** It needs nothing from yours: whatever it reads
+that your config does not declare — `session.id`, the `.effective` settings,
+`project_dir`, `term.cols` — it declares itself, and your own declaration of
+any of those names wins.
 
 Everything the menu synthesizes lives under the reserved `settings.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,

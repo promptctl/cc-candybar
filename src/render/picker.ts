@@ -79,7 +79,8 @@ export function cellWidth(text: string): number {
 // once overflowed and the terminal ate the trailing →. Reserved HERE, at the
 // row-fitting seam, rather than by shrinking the shared term.cols every
 // template reads; stripChromeCols measures the per-shape geometry. The picker and
-// the carousel both fit a row by this one budget.
+// the carousel both fit a row by this one budget, and every template function
+// that reaches it is listed in ROW_BUDGET_FUNCS (config/dsl-types.ts).
 export function rowBudget(runtime: ActionRuntime): number {
   return Math.max(
     1,

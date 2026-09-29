@@ -20,6 +20,7 @@
 // (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
 // are indistinguishable at render. Nothing here is a new render concept.
 
+import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
 import {
   mapOpens,
@@ -453,12 +454,8 @@ function wrapWithPresetRows(
   // the bar. Ensured, never overridden: a user declaration of the same name
   // wins (see the merge in synthesizeEditChrome), so this only supplies the
   // floor the synthesis itself depends on.
-  artifacts.ensured[PRESET_CUSTOMIZED_VAR] = {
-    kind: "input",
-    path: PRESET_CUSTOMIZED_VAR,
-    type: "boolean",
-    default: false,
-  };
+  artifacts.ensured[PRESET_CUSTOMIZED_VAR] =
+    PAYLOAD_INPUTS[PRESET_CUSTOMIZED_VAR]!;
   const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
@@ -589,15 +586,11 @@ function spliceEditChromeForPreset(
 // nothing here can collide with user data, since every name it mints lives
 // under the `edit.`/`menus.` namespaces `synthesizeEditModeToggle` and
 // `synthesizeMenuDecls` already reserve unconditionally at parse time.
+//
+// Unconditional: the settings menu, synthesized into every config just before
+// this pass, ensures `edit.toggle` and puts `✎ edit` in its body, so every bar
+// can reach edit mode (brandon-settings-menu-d6f).
 export function synthesizeEditChrome(config: DslConfig): DslConfig {
-  // [LAW:carrying-cost] Demand-driven, mirroring synthesizeEditModeToggle's
-  // own gate: `edit.toggle` exists in the merged config iff SOME file's
-  // Phase A synthesis fired (iff some segment referenced it), which iff some
-  // author actually placed an edit-mode trigger. A config that never opted
-  // in gets back the identical config, untouched — no extra segments,
-  // actions, or variables, and critically no NEW `set`/`state` surface that
-  // would force session.id onto an otherwise fully static bar.
-  if (!(EDIT_TOGGLE_ACTION in config.actions)) return config;
   const artifacts: ChromeArtifacts = {
     variables: {},
     ensured: {},

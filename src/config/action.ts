@@ -325,42 +325,20 @@ export function actionBindsTemplateValue(a: ActionDecl): boolean {
   return "from" in a || "int" in a || "insertSegmentFrom" in a;
 }
 
-// [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A
-// `set` action composes a set-state click URL whose first segment is session.id;
-// copy/open/persist/reset embed none. One predicate the loader's session.id
-// requirement folds over — no per-arm branching at the callsite.
-export function actionBindsSet(a: ActionDecl): boolean {
-  return "set" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action write the config file?
-// Mirrors actionBindsSet for the `persist` arm.
-export function actionBindsPersist(a: ActionDecl): boolean {
-  return "persist" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action delete a config-file
-// key? `reset` carries session.id on the wire too (for click-error surfacing,
-// same as set/persist), so it joins the same requirement.
-export function actionBindsReset(a: ActionDecl): boolean {
-  return "reset" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action step the settings
-// history? `undo`/`redo` carry session.id on the wire too — same reason as
-// `reset`: an empty stack is a loud, session-scoped click.error, not a
-// silent no-op (the ticket's own done-gate).
-export function actionBindsUndo(a: ActionDecl): boolean {
-  return "undo" in a;
-}
-export function actionBindsRedo(a: ActionDecl): boolean {
-  return "redo" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action run or fix the doctor? Both
-// doctor verbs carry session.id first on the wire (the report is written into
-// that session's state, and a failure surfaces there), so it joins the same
-// session.id requirement the others do.
-export function actionBindsDoctor(a: ActionDecl): boolean {
-  return "doctor" in a;
+// [LAW:single-enforcer] Does this action's click carry session.id on the wire?
+// `set` composes a set-state URL whose first segment is it; `persist`, `reset`,
+// `undo`/`redo` and both `doctor` verbs carry it too, so a click error (a
+// refused write, an empty history stack, nothing left to fix) surfaces on the
+// session that clicked rather than as a silent no-op. copy/open write nothing
+// and embed none; a `do` carries whatever its members carry, each of which is
+// a declared action asked this on its own.
+export function actionCarriesSession(a: ActionDecl): boolean {
+  return (
+    "set" in a ||
+    "persist" in a ||
+    "reset" in a ||
+    "undo" in a ||
+    "redo" in a ||
+    "doctor" in a
+  );
 }
