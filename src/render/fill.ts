@@ -13,6 +13,7 @@ import { cellLen } from "@promptctl/rich-js";
 
 import {
   sizeCell,
+  stripItem,
   type CellSizing,
   type LaidCell,
 } from "../template-engine/layout.js";
@@ -47,12 +48,11 @@ export function resolveFill(
   row: readonly LaidCell[],
   options: BuildLineOptions,
 ): readonly RichText[] {
-  const cells: RichText[] = [];
-  const demands: Array<{ cell: RichText; how: CellSizing }> = [];
-  for (const { text, fill } of row) {
-    cells.push(text);
-    if (fill !== undefined) demands.push({ cell: text, how: fill });
-  }
+  const cells = row.map(stripItem);
+  const demands: Array<{ at: number; how: CellSizing }> = [];
+  row.forEach(({ fill }, at) => {
+    if (fill !== undefined) demands.push({ at, how: fill });
+  });
   if (demands.length === 0) return cells;
   if (!Number.isFinite(options.width)) return cells;
 
@@ -76,9 +76,13 @@ export function resolveFill(
   // its natural width, because that width is already inside the measurement above.
   const share = Math.floor(deficit / demands.length);
   const remainder = deficit - share * demands.length;
-  demands.forEach(({ cell, how }, i) => {
+  // The content grows, then its trail rejoins: a left-justified fill pads
+  // BEFORE the trail, never after it.
+  demands.forEach(({ at, how }, i) => {
     const grow = share + (i === demands.length - 1 ? remainder : 0);
-    sizeCell(cell, cell.cellLength + grow, how);
+    const { text } = row[at]!;
+    sizeCell(text, text.cellLength + grow, how);
+    cells[at] = stripItem(row[at]!);
   });
   return cells;
 }

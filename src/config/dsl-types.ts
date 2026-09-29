@@ -112,6 +112,11 @@ export interface SegmentNode {
   // producer and the loader's segment schema does not list the field, so no
   // config can author it.
   readonly opens?: Opens;
+  // A template drawn inside this segment's own cell, after its content and
+  // after any sizing, so it reads as part of the segment: edit mode's remove
+  // button, which has to sit against the segment it removes. Synthesis-only,
+  // like `opens`.
+  readonly trail?: string;
 }
 
 export type Placement = "drop" | "inline";

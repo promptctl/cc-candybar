@@ -53,6 +53,8 @@ export interface SegmentLayoutOptions {
    * assignment here.
    */
   baseStyle?: Style;
+  /** Cells drawn inside the cell after the sized content (SegmentNode.trail). */
+  trail?: readonly RichText[];
 }
 
 /**
@@ -127,6 +129,18 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 export interface LaidCell {
   readonly text: RichText;
   readonly fill?: CellSizing;
+  // Drawn inside the cell after `text`, never resized with it
+  // (SegmentNode.trail). Joined by `stripItem` once sizing is final.
+  readonly trail?: RichText;
+}
+
+// The ONE strip item a laid cell serializes to: its sized text, then its trail,
+// on the cell's own ground.
+export function stripItem({ text, trail }: LaidCell): RichText {
+  if (trail === undefined) return text;
+  const joined = collapseToCell([text, trail]);
+  joined.style = text.style;
+  return joined;
 }
 
 /**
@@ -152,6 +166,7 @@ export function applySegmentLayout(
     truncateMarker = "…",
     baseStyle,
     padding,
+    trail = [],
   } = options;
 
   if (cells.length === 0) return [];
@@ -162,11 +177,24 @@ export function applySegmentLayout(
   // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
   // the cell's wrapping style, so the segment bg is continuous.
   const cell = collapseToCell(cells, baseStyle).pad(padding);
-  if (width === "auto") return [{ text: cell }];
+  // The trail is carried beside the content rather than joined here, so the
+  // content alone is what any sizing — this call's or the row's fill — resizes:
+  // a fixed width never truncates the trail away, and a fill's pad lands before
+  // it. It takes only a right pad: the content's own right pad separates them.
+  const tail =
+    trail.length === 0
+      ? {}
+      : {
+          trail: collapseToCell(
+            [...trail, new RichText(" ".repeat(padding))],
+            baseStyle,
+          ),
+        };
+  if (width === "auto") return [{ text: cell, ...tail }];
   const how: CellSizing = { justify, truncate, truncateMarker };
   // "fill" leaves the cell content-sized and states its demand; the row resolves
   // it, since the leftover depends on siblings this call cannot see.
-  if (width === "fill") return [{ text: cell, fill: how }];
+  if (width === "fill") return [{ text: cell, fill: how, ...tail }];
   sizeCell(cell, width, how);
-  return [{ text: cell }];
+  return [{ text: cell, ...tail }];
 }

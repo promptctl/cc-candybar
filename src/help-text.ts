@@ -21,8 +21,8 @@ import { NODE_FLAGS } from "./cli-flags";
 // it explains is worth. Every line leads with the glyph it explains, so the
 // reader matches text to affordance by shape rather than by reading order.
 export const EDIT_MODE_HELP = [
-  "+ inserts here",
-  "- removes the left one",
+  "✚ inserts here",
+  "🚫 removes its segment",
   "↺ undoes edits",
 ] as const;
 

@@ -38,6 +38,8 @@ import {
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { DOOR_GLYPH } from "../src/config/disclosure";
+import { ADD_GLYPH } from "../src/config/edit-chrome";
 import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
@@ -236,6 +238,12 @@ describe("every {{ menu }} the bundled default renders", () => {
       return rig;
     };
 
+    // The bar's first row: the one the door leads, below edit mode's own.
+    const barRow = (out: string): string =>
+      stripAnsi(out)
+        .split("\n")
+        .find((line) => line.includes(DOOR_GLYPH))!;
+
     test("closed: exact bytes of the whole edit-mode bar", () => {
       const rig = editRig();
       const out = rig.render();
@@ -244,10 +252,10 @@ describe("every {{ menu }} the bundled default renders", () => {
       // have the arrow" — so no disclosure glyph rides beside a `+`, in either
       // state, while the settings menu's own `{{ action }}` disclosure keeps
       // the ▸ it has always authored.
-      const row0 = stripAnsi(out).split("\n")[0]!;
-      expect(row0).toContain("+");
-      expect(row0).not.toContain(`+${DISCLOSURE_GLYPH_CLOSED}`);
-      expect(row0).not.toContain(`+${DISCLOSURE_GLYPH_OPEN}`);
+      const row = barRow(out);
+      expect(row).toContain(ADD_GLYPH);
+      expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_CLOSED}`);
+      expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("closed");
       rig.dispose();
     });
@@ -260,9 +268,7 @@ describe("every {{ menu }} the bundled default renders", () => {
       if (!opener) throw new Error("edit mode rendered no + opener");
       rig.click(opener.url);
       const out = rig.render();
-      expect(stripAnsi(out).split("\n")[0]!).not.toContain(
-        `+${DISCLOSURE_GLYPH_OPEN}`,
-      );
+      expect(barRow(out)).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("open");
       rig.dispose();
     });
@@ -281,9 +287,9 @@ describe("every {{ menu }} the bundled default renders", () => {
       );
       expect(openers.length).toBeGreaterThan(1);
 
-      const closedRow = stripAnsi(rig.render()).split("\n")[0]!;
+      const closedRow = barRow(rig.render());
       rig.click(openers[0]!.url);
-      const openRow = stripAnsi(rig.render()).split("\n")[0]!;
+      const openRow = barRow(rig.render());
       expect(openRow).not.toBe(closedRow);
       rig.dispose();
     });

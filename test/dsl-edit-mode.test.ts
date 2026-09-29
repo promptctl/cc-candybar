@@ -54,7 +54,11 @@ import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
-import { EDIT_LIVE_KEY, arrangedSegment } from "../src/config/edit-chrome";
+import {
+  EDIT_LIVE_KEY,
+  REMOVE_GLYPH,
+  arrangedSegment,
+} from "../src/config/edit-chrome";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -138,14 +142,14 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const basePalette = getThemePalette("textual-dark"!);
-  const render = (): string =>
+  const render = (width?: number): string =>
     renderDsl(
       config,
       compiled,
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      opts(),
+      opts(width),
     );
   const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
@@ -345,8 +349,8 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       .map(arrangedSegment)
       .filter((n) => n !== undefined);
     expect(labelled.sort()).toEqual(["directory", "git", "trigger"]);
-    // N+1 `+` positions per row, each in its own cell (a segment's `-` shares
-    // the cell of the `+` after it): 3 for the 2-segment row (before
+    // N+1 `+` positions per row, each in its own cell (a segment's `-` is
+    // drawn inside the segment's own cell): 3 for the 2-segment row (before
     // directory, after directory, after git) + 2 for the single-segment
     // trigger row (before, after) = 5.
     const inserts = names.filter((n) =>
@@ -386,10 +390,86 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     }
   });
 
+  test("a segment's `-` is drawn inside its own cell, in both views", () => {
+    // Inside the cell means on the segment's own node, as its trail — not a
+    // sibling cell a joiner separates from it. Both the live content node and
+    // the name label that stands in for it carry it.
+    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const trails = new Map<string, string>();
+    for (const node of walkNodes(fragmentNode(config.presets.default!.root!))) {
+      if (node.kind === "segment" && node.trail !== undefined) {
+        trails.set(node.name, node.trail);
+      }
+    }
+    for (const seg of ["directory", "git", "trigger"]) {
+      const remove = `"edit.default.remove.${seg}"`;
+      expect(trails.get(seg)).toContain(remove);
+      expect(trails.get(`edit.label:${seg}`)).toContain(remove);
+    }
+  });
+
+  // A fill cell's pad is part of its content, so the `-` rides AFTER the pad,
+  // against the cell's far edge — never stranded mid-cell with the pad beyond it.
+  test("a fill segment's `-` sits after the leftover width it absorbed", () => {
+    const src = BASE.replace(
+      "directory: { template: 'd',",
+      "directory: { width: 'fill', template: 'd',",
+    );
+    const { render, click, dispose } = buildEditRuntime(src);
+    const open = (key: string) =>
+      ownUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+      )!;
+    click(open(EDIT_MODE_KEY));
+    click(open(EDIT_LIVE_KEY));
+    const row = stripAnsi(render(60))
+      .split("\n")
+      .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
+    expect(row).toMatch(new RegExp(`d {4,}${REMOVE_GLYPH}`));
+    dispose();
+  });
+
+  test("a segment that fails to render keeps its `-` beside its ⚠", () => {
+    const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
+    const { render, click, dispose } = buildEditRuntime(src);
+    const open = (key: string) =>
+      ownUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+      )!;
+    click(open(EDIT_MODE_KEY));
+    click(open(EDIT_LIVE_KEY));
+    const out = render();
+    expect(stripAnsi(out)).toMatch(new RegExp(`⚠ git: [^\n]*${REMOVE_GLYPH}`));
+    expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
+    dispose();
+  });
+
+  test("edit mode leads with ✎ done, top left, and it leaves edit mode", () => {
+    const { render, click, dispose } = buildEditRuntime(BASE);
+    const toggle = ownUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+      ),
+    )!;
+    click(toggle);
+    const [first] = stripAnsi(render()).split("\n");
+    expect(first).toContain("✎ done");
+    expect(first).not.toMatch(/directory|git|trigger/);
+    const done = ownUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
+      ),
+    );
+    expect(done).toBeDefined();
+    click(done!);
+    expect(stripAnsi(render())).not.toContain("✎ done");
+    dispose();
+  });
+
   test("chrome segments are gated behind edit.mode — absent from render when closed", () => {
     const { render, dispose } = buildEditRuntime(BASE);
     const out = stripAnsi(render());
-    expect(out).not.toContain("-"); // no `-` glyph rendered while closed
+    expect(out).not.toContain(REMOVE_GLYPH); // no `-` rendered while closed
     dispose();
   });
 
@@ -452,8 +532,9 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
       ),
     );
 
-    // Live: the real output returns, and the hidden segment stays hidden
-    // without losing its `-`.
+    // Live: the real output returns and the hidden segment stays hidden. Its
+    // `-` goes with it, since the `-` is drawn inside the segment's own cell;
+    // the names view above is where a hidden segment is removed.
     const live = ownUrls(names).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
@@ -463,7 +544,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     const shown = render();
     expect(stripAnsi(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     expect(stripAnsi(shown)).toMatch(/d.*g/);
-    expect(removesOf(shown)).toContain(
+    expect(removesOf(shown)).not.toContain(
       encodeLayoutOp({ op: "remove", target: "idle" }),
     );
     dispose();
@@ -519,7 +600,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
   test("toggling edit mode on makes the `-` chrome render; off hides it again", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const before = stripAnsi(render());
-    expect(before).not.toContain("-");
+    expect(before).not.toContain(REMOVE_GLYPH);
 
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
@@ -530,7 +611,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     click(toggleUrl);
 
     const opened = stripAnsi(render());
-    expect(opened).toContain("-");
+    expect(opened).toContain(REMOVE_GLYPH);
     // Edit mode shows each content cell as its segment's name, so the
     // trigger reads "trigger" until `☐ live` puts the live output back.
     expect(opened).toContain("trigger");
@@ -638,8 +719,10 @@ describe("a segment row's chrome rides its row", () => {
     )!;
     click(toggleUrl);
     const opened = stripAnsi(render()).split("\n");
-    expect(opened.some((line) => line.includes("-"))).toBe(true);
-    expect(opened.length).toBe(closed.length);
+    expect(opened.some((line) => line.includes(REMOVE_GLYPH))).toBe(true);
+    // One more line than the closed bar: edit mode's own top row, with
+    // `✎ done`. The chrome itself adds none.
+    expect(opened.length).toBe(closed.length + 1);
     dispose();
   });
 });

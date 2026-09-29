@@ -42,7 +42,11 @@ import {
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
+import {
+  ADD_GLYPH,
+  EDIT_LIVE_DISPLAY,
+  REMOVE_GLYPH,
+} from "../src/config/edit-chrome";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -247,10 +251,10 @@ describe("edit mode's (?)", () => {
     for (const line of EDIT_MODE_HELP) expect(reclosed).not.toContain(line);
   });
 
-  test("covers +, - and the ↺ customized banner", () => {
+  test("covers add, remove and the ↺ customized banner", () => {
     // Coverage is the checkable criterion the ticket names: each affordance
     // edit mode shows gets a line naming what clicking it does.
-    const glyphs = ["+", "-", "↺"];
+    const glyphs = [ADD_GLYPH, REMOVE_GLYPH, "↺"];
     for (const g of glyphs) {
       expect(EDIT_MODE_HELP.some((l) => l.startsWith(g))).toBe(true);
     }

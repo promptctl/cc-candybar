@@ -187,18 +187,19 @@ function childrenSpec(
 }
 
 // [LAW:types-are-the-program] The AUTHORABLE segment node: `opens` — the
-// disclosure body a trigger hangs (candybar-render-ai7.9) — is deliberately
-// not a field here. Records reject unknown keys, so a config spelling it is a
+// disclosure body a trigger hangs (candybar-render-ai7.9) — and `trail` —
+// edit mode's remove button — are deliberately not fields here. Records reject unknown keys, so a config spelling it is a
 // load error, and `disclosureNode` (src/config/disclosure.ts) stays the only
 // producer of a body. The Omit is the statement, checked by the field map.
-const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens">> = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("segment"),
-    name: segmentNameSpec(),
-    when: optionalStringSpec(),
-  },
-};
+const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens" | "trail">> =
+  {
+    noun: "layout-node key",
+    fields: {
+      kind: literalSpec("segment"),
+      name: segmentNameSpec(),
+      when: optionalStringSpec(),
+    },
+  };
 
 // [LAW:one-source-of-truth] The one spec for a placer's `distribution` field —
 // the container arms and the group body all validate through it, against the

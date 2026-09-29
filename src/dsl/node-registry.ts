@@ -63,6 +63,7 @@ export interface CompiledSegmentNode {
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
   readonly opens?: CompiledOpens;
+  readonly trail?: Template<RichText>;
 }
 export interface CompiledOpens {
   readonly open: Template<RichText>;
@@ -127,6 +128,11 @@ export interface Line<C> {
   readonly span: "shared" | "row";
 }
 export type RenderedLine = Line<LaidCell>;
+
+// A laid cell's parts, as the objects the row's fill sizing will still grow in
+// place: a copy joined now would record a fill cell at its natural width.
+const cellParts = ({ text, trail }: LaidCell): readonly RichText[] =>
+  trail === undefined ? [text] : [text, trail];
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -201,6 +207,7 @@ export interface NodeRenderCtx {
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly trail: Template<RichText> | undefined;
     },
   ): EvaluatedSegment;
   // Resolve a segment name to its decl + compiled form (the driver closes over
@@ -252,6 +259,7 @@ export interface SegmentStyles {
 export interface EvaluatedSegment {
   readonly styles: SegmentStyles;
   readonly fragments: readonly RichText[];
+  readonly trail: readonly RichText[];
   readonly drops: readonly RichText[];
 }
 
@@ -432,6 +440,9 @@ const segmentType: NodeType<"segment"> = {
           placement: node.opens.placement,
         },
       }),
+      ...(node.trail !== undefined && {
+        trail: cctx.parse(node.trail, "trail"),
+      }),
     };
   },
   render(node, ctx) {
@@ -474,11 +485,16 @@ const segmentType: NodeType<"segment"> = {
       // a menu can sit anywhere in the template, under any wrapper, and
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
-      const { styles, fragments, drops } = ctx.evaluateSegment(
+      const { styles, fragments, trail, drops } = ctx.evaluateSegment(
         node.name,
         palette,
         ctx.region,
-        { bg: segCompiled.bg, fg: segCompiled.fg, body: segCompiled.template },
+        {
+          bg: segCompiled.bg,
+          fg: segCompiled.fg,
+          body: segCompiled.template,
+          trail: node.trail,
+        },
       );
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
@@ -551,8 +567,11 @@ const segmentType: NodeType<"segment"> = {
       // Each inline line is a ROW of the band this segment sits on.
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
-      ).map((line) => ({
-        cells: applySegmentLayout(line, layout),
+      ).map((line, i) => ({
+        cells: applySegmentLayout(line, {
+          ...layout,
+          trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
+        }),
         band: "own",
         span: "shared",
       }));
@@ -581,7 +600,7 @@ const segmentType: NodeType<"segment"> = {
           [
             ...laidLines.flatMap((line) => line.cells),
             ...bodyTail.flatMap(leadOf),
-          ].map((c) => c.text),
+          ].flatMap(cellParts),
         );
       }
       // Below row 0 every line is a drop: menu bands first (template order),
@@ -608,14 +627,16 @@ const segmentType: NodeType<"segment"> = {
       const oneLine = message.replace(/\s*\n\s*/g, " ");
       return [
         {
-          cells: [
+          cells: applySegmentLayout(
+            [new RichText(`⚠ ${node.name}: ${oneLine}`, { end: "" })],
             {
-              text: new RichText(`⚠ ${node.name}: ${oneLine}`, {
-                end: "",
-                noWrap: true,
-              }),
+              width: "auto",
+              justify: "left",
+              truncate: "right",
+              padding: 0,
+              trail: errorTrail(node, ctx),
             },
-          ],
+          ),
           band: "own",
           span: "shared",
         },
@@ -623,6 +644,27 @@ const segmentType: NodeType<"segment"> = {
     }
   },
 };
+
+// A broken segment stays removable: edit mode's `-` rides its ⚠ cell as it
+// rides any cell. The trail is entered as a body of its own, so a trail that
+// fails too is one more reported error beside the first, never a bar-wide throw.
+function errorTrail(
+  node: CompiledSegmentNode,
+  ctx: NodeRenderCtx,
+): readonly RichText[] {
+  if (node.trail === undefined) return [];
+  try {
+    return ctx.evaluateSegment(node.name, ctx.palette, ctx.region, {
+      bg: undefined,
+      fg: undefined,
+      body: node.trail,
+      trail: undefined,
+    }).fragments;
+  } catch (err) {
+    ctx.onSegmentError?.(node.name, (err as Error).message ?? String(err));
+    return [];
+  }
+}
 
 // [LAW:single-enforcer] THE registry. `satisfies` forces an entry for every
 // LayoutNode kind — adding a kind to the union breaks compilation here until its
