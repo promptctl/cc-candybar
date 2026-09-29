@@ -3,6 +3,9 @@
 //   pnpm demo                       # renders src/demo/statusline.json5
 //   pnpm demo path/to/other.json5   # renders any DSL config
 //
+// pnpm runs scripts from the repo root, so a relative path resolves there,
+// not in the directory you typed the command in.
+//
 // [LAW:single-enforcer] This renders through registerDslConfig + renderDsl
 // — the exact spine the daemon calls. There is no demo-only render path; what
 // prints here is what production produces.
