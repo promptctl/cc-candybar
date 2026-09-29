@@ -1171,6 +1171,19 @@ describe("loadDslConfig — renamed built-in segment", () => {
       /the built-in segment "git" was renamed to "gitaculous"/,
     );
   });
+
+  test("a prototype key is not a rename", () => {
+    const err = (() => {
+      try {
+        validateAgainstDefault(`{ root: { seg: "constructor" } }`);
+      } catch (e) {
+        if (e instanceof ConfigError) return e;
+        throw e;
+      }
+      throw new Error("expected ConfigError, got success");
+    })();
+    expect(err.issues.map((i) => i.message).join("\n")).not.toMatch(/renamed/);
+  });
 });
 
 // ─── Option A shape grammar (2de.15) ─────────────────────────────────────────
