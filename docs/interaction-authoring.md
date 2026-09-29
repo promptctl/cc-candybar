@@ -864,8 +864,8 @@ synthesizes:
   trigger to it, or copy `editControl` above verbatim.
 - For **every** preset (the `"default"` floor included) and every ordinary
   segment in its resolved root: a `🚫` (a synthesized `removeSegment` action
-  behind `{{ action }}`) drawn inside the segment's own cell, then a `✚` in
-  a cell of its own (a synthesized `insertSegmentFrom` action behind
+  behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
+  in a cell of its own (a synthesized `insertSegmentFrom` action behind
   `{{ menu }}`, ranging every declared segment not already in that preset's
   tree) that inserts after it, plus one `✚` leading each run — so N segments
   in a row read `✚ [seg1 🚫] ✚ [seg2 🚫] ✚ … [segN 🚫] ✚`. Every affordance is gated on edit

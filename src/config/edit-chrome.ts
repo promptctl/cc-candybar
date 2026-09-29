@@ -44,6 +44,7 @@ import {
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
 import { declareHelp } from "./help.js";
+import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import {
   menuActionName,
@@ -287,9 +288,20 @@ function insertTerm(
   // authored bg or not), but colour alone is a hint the glyph should not
   // depend on: with one static display, "which one did I open" would rest on
   // a tint the terminal's colour depth may flatten. The `✕` names it.
+  //
+  // Closed, the `✚` is green TEXT on the chrome cell's own ground — no
+  // background of its own — so "add" reads by colour beside the red 🚫,
+  // floored to stay legible on the tint that ground is. Open, the `✕` keeps
+  // the trigger's own chosen text: the trigger's ground is decided after the
+  // body evaluates (by the drop this very menu makes), so `bgOf` cannot see
+  // it and a floor measured against it would measure the wrong colour.
+  const open = disclosureTerm({ variable: stateKey, key: stateKey, member });
+  const add = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
   return {
     host: chromeSegName,
-    template: `{{ menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
+    template:
+      `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}` +
+      `{{ if ${open} }}{{ $m }}{{ else }}{{ fg (${add}) $m }}{{ end }}`,
   };
 }
 

@@ -142,14 +142,14 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const basePalette = getThemePalette("textual-dark"!);
-  const render = (): string =>
+  const render = (width?: number): string =>
     renderDsl(
       config,
       compiled,
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
-      opts(),
+      opts(width),
     );
   const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
@@ -406,6 +406,27 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       expect(trails.get(seg)).toContain(remove);
       expect(trails.get(`edit.label:${seg}`)).toContain(remove);
     }
+  });
+
+  // A fill cell's pad is part of its content, so the `-` rides AFTER the pad,
+  // against the cell's far edge — never stranded mid-cell with the pad beyond it.
+  test("a fill segment's `-` sits after the leftover width it absorbed", () => {
+    const src = BASE.replace(
+      "directory: { template: 'd',",
+      "directory: { width: 'fill', template: 'd',",
+    );
+    const { render, click, dispose } = buildEditRuntime(src);
+    const open = (key: string) =>
+      ownUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+      )!;
+    click(open(EDIT_MODE_KEY));
+    click(open(EDIT_LIVE_KEY));
+    const row = stripAnsi(render(60))
+      .split("\n")
+      .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
+    expect(row).toMatch(new RegExp(`d {4,}${REMOVE_GLYPH}`));
+    dispose();
   });
 
   test("edit mode leads with ✎ done, top left, and it leaves edit mode", () => {
