@@ -37,6 +37,7 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
+import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -382,11 +383,7 @@ export function pickerFuncs(
         paged?: boolean,
         ...extra: boolean[]
       ) => {
-        if (extra.length > 0) {
-          throw new Error(
-            `picker "${applyName}": takes at most two bools (closeOnPick, paged) after the action names, got ${2 + extra.length}`,
-          );
-        }
+        refuseSurplus(`picker "${applyName}"`, ["closeOnPick", "paged"], extra);
         // [LAW:one-source-of-truth] The standalone picker's page cursor comes
         // from its NAMED set-int action (the documented desugaring surface);
         // closing means paging to -1, the when-gate idiom its host row reads

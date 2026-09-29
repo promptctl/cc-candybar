@@ -52,7 +52,7 @@ export {
 
 export interface BuildLineOptions {
   style: StripStyle;
-  // [LAW:types-are-the-program] Narrower than rich-js ColorSystemSpec on
+  // [LAW:types-are-the-program] Narrower than rich-js's colour-system names on
   // purpose: the four explicit depths only. "auto"/null never reach a render —
   // the daemon is detached, so env detection would read the wrong terminal;
   // the loader rejects "auto" at the trust boundary (see COLOR_COMPATIBILITIES

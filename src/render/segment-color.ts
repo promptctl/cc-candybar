@@ -111,7 +111,10 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       easing?: string,
       ...stops: string[]
     ) => {
-      const ramped = easing === undefined ? undefined : rampTail(easing, stops);
+      // [LAW:single-enforcer] `ramp` owns the tail's shape: an easing with no
+      // stop reaches its ColorRamp, which refuses it at the first cell.
+      const ramped =
+        easing === undefined ? undefined : [easing, ...flattenStops(stops)];
       return renderGauge({
         value,
         max,
@@ -134,31 +137,14 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     // "float" for the two measurements (a percentage need not be whole), "int"
     // for the cell count, the glyph pair, then a repeating string slot for the
     // optional easing and its stops — Go's spelling of an optional tail is a
-    // variadic one, so the gate requires the five and `rampTail` refuses an
-    // easing with no stop.
+    // variadic one, so the gate requires the five and `ramp` refuses an easing
+    // with no stop.
     argTypes: ["float", "float", "int", "string", "string", "string"],
     arity: { kind: "variadic" },
     returnType: "T",
   };
 
   return { ...palette, bgOf, tint, gauge };
-}
-
-// [LAW:single-enforcer] The gauge calls `ramp`'s body directly, past the
-// engine's arity gate, so the tail's shape is refused here, once per call and
-// before any cell is drawn: an easing names a ramp, and a ramp with no stop
-// has no colour to give.
-function rampTail(
-  easing: string,
-  stops: readonly string[],
-): Array<number | string> {
-  if (stops.length === 0) {
-    throw new Error(
-      `{{ gauge }} easing "${easing}" needs at least one "<position>:<colour>" ` +
-        `stop, e.g. "80:error"`,
-    );
-  }
-  return [easing, ...flattenStops(stops)];
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

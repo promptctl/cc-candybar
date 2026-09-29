@@ -20,6 +20,7 @@ import {
 import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
 import { cascadeAt, parseCascadeStops } from "./cascade.js";
 import { renderSparkline, parseSeries } from "./sparkline.js";
+import { refuseSurplus } from "./optional-tail.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
 // project the SAME canonical sources the set-state validator consults
@@ -81,8 +82,10 @@ export function ccCandybarFuncs(): FuncMap {
     // "value" argType: these funcs enforce their own constraints and emit
     // a useful TypeError on ambiguous input — no need for the engine gate
     // to pre-filter (it can't describe the partial-cast semantics anyway).
+    // `int` truncates toward zero, as sprig's does: an `int` parameter refuses
+    // a fractional at the gate, so this cast is how an author says "drop it".
     int: {
-      fn: (v: VarValue) => toNumber(v),
+      fn: (v: VarValue) => Math.trunc(toNumber(v)),
       argTypes: ["value"],
       arity: { kind: "exact" },
     },
@@ -145,11 +148,7 @@ export function ccCandybarFuncs(): FuncMap {
     // whole graph — no per-glyph color math here.
     sparkline: {
       fn: (series: string, width?: number, ...extra: number[]) => {
-        if (extra.length > 0) {
-          throw new Error(
-            `sparkline takes at most one width after the series, got ${1 + extra.length}`,
-          );
-        }
+        refuseSurplus("sparkline", ["width"], extra);
         return renderSparkline(parseSeries(series), width);
       },
       argTypes: ["string", "int"],

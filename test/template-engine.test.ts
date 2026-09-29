@@ -222,6 +222,12 @@ describe("cast functions", () => {
     expect(() => tpl.evaluate({})).toThrow(/Cannot cast "abc" to number/);
   });
 
+  // An explicit cast is how an author drops a fraction the int gate refuses.
+  test("int truncates toward zero, as sprig's does", () => {
+    const engine = createCcCandybarEngine();
+    expect(engine.parse("{{ formatInteger (int 2.7) }} {{ int -2.7 }}").evaluate({}).map((r) => r.plain).join("")).toBe("2 -2");
+  });
+
   test("bool throws on ambiguous string", () => {
     const engine = createCcCandybarEngine();
     const tpl = engine.parse('{{ bool "yes" }}');
@@ -387,7 +393,10 @@ describe("documents in scope", () => {
 
   test("a template cannot edit a document in place: sprig set throws and the store is unchanged", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
-    expect(() => evalStore('{{ set .budget "spent" 0 }}', store)).toThrow(/read only property .spent./);
+    // The engine wraps a func's throw; the cause is the freeze's own TypeError.
+    expect(() => evalStore('{{ set .budget "spent" 0 }}', store)).toThrow(
+      expect.objectContaining({ cause: expect.any(TypeError) }),
+    );
     expect(store.readDocument("budget")).toEqual({ kind: "ok", value: { spent: 1 } });
   });
 

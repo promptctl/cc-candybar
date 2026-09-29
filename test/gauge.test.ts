@@ -186,6 +186,6 @@ describe("{{ gauge }} in a real config", () => {
           root: { h: ["g"] },
         }`,
       ),
-    ).rejects.toThrow(/easing "step" needs at least one/);
+    ).rejects.toThrow(/needs at least one stop/);
   });
 });
