@@ -1,3 +1,16 @@
+# [1.96.0](https://github.com/promptctl/cc-candybar/compare/v1.95.0...v1.96.0) (2026-09-29)
+
+
+### Bug Fixes
+
+* **sources:** shell sources run in the session's working directory ([#273](https://github.com/promptctl/cc-candybar/issues/273)) ([7d28211](https://github.com/promptctl/cc-candybar/commit/7d28211f4f6b35c5d164a9fb30524dc5d751e7a4))
+* **test:** threshold-settings registers its config with a cwd ([#275](https://github.com/promptctl/cc-candybar/issues/275)) ([de314b1](https://github.com/promptctl/cc-candybar/commit/de314b15c08a554a715a2fc06b949bb934c688f8)), closes [#273](https://github.com/promptctl/cc-candybar/issues/273) [#272](https://github.com/promptctl/cc-candybar/issues/272)
+
+
+### Features
+
+* **segments:** bundled thresholds and budgets are per-placement settings ([#272](https://github.com/promptctl/cc-candybar/issues/272)) ([2564232](https://github.com/promptctl/cc-candybar/commit/2564232300deab99b2553416bf38b2a24ccc81e6))
+
 # [1.95.0](https://github.com/promptctl/cc-candybar/compare/v1.94.0...v1.95.0) (2026-09-29)
 
 
