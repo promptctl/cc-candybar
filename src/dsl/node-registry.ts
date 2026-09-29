@@ -627,14 +627,16 @@ const segmentType: NodeType<"segment"> = {
       const oneLine = message.replace(/\s*\n\s*/g, " ");
       return [
         {
-          cells: [
+          cells: applySegmentLayout(
+            [new RichText(`⚠ ${node.name}: ${oneLine}`, { end: "" })],
             {
-              text: new RichText(`⚠ ${node.name}: ${oneLine}`, {
-                end: "",
-                noWrap: true,
-              }),
+              width: "auto",
+              justify: "left",
+              truncate: "right",
+              padding: 0,
+              trail: errorTrail(node, ctx),
             },
-          ],
+          ),
           band: "own",
           span: "shared",
         },
@@ -642,6 +644,27 @@ const segmentType: NodeType<"segment"> = {
     }
   },
 };
+
+// A broken segment stays removable: edit mode's `-` rides its ⚠ cell as it
+// rides any cell. The trail is entered as a body of its own, so a trail that
+// fails too is one more reported error beside the first, never a bar-wide throw.
+function errorTrail(
+  node: CompiledSegmentNode,
+  ctx: NodeRenderCtx,
+): readonly RichText[] {
+  if (node.trail === undefined) return [];
+  try {
+    return ctx.evaluateSegment(node.name, ctx.palette, ctx.region, {
+      bg: undefined,
+      fg: undefined,
+      body: node.trail,
+      trail: undefined,
+    }).fragments;
+  } catch (err) {
+    ctx.onSegmentError?.(node.name, (err as Error).message ?? String(err));
+    return [];
+  }
+}
 
 // [LAW:single-enforcer] THE registry. `satisfies` forces an entry for every
 // LayoutNode kind — adding a kind to the union breaks compilation here until its

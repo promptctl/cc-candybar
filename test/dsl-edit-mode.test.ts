@@ -429,6 +429,21 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     dispose();
   });
 
+  test("a segment that fails to render keeps its `-` beside its ⚠", () => {
+    const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
+    const { render, click, dispose } = buildEditRuntime(src);
+    const open = (key: string) =>
+      ownUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+      )!;
+    click(open(EDIT_MODE_KEY));
+    click(open(EDIT_LIVE_KEY));
+    const out = render();
+    expect(stripAnsi(out)).toMatch(new RegExp(`⚠ git: [^\n]*${REMOVE_GLYPH}`));
+    expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
+    dispose();
+  });
+
   test("edit mode leads with ✎ done, top left, and it leaves edit mode", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
