@@ -1,3 +1,10 @@
+## [1.83.2](https://github.com/promptctl/cc-candybar/compare/v1.83.1...v1.83.2) (2026-09-29)
+
+
+### Bug Fixes
+
+* **settings-menu:** when errors name the authored row; synthesis reads derive from the trees each pass returns ([#255](https://github.com/promptctl/cc-candybar/issues/255)) ([559c128](https://github.com/promptctl/cc-candybar/commit/559c12889002d72ee0c494af1605e5059a8d578e))
+
 ## [1.83.1](https://github.com/promptctl/cc-candybar/compare/v1.83.0...v1.83.1) (2026-09-29)
 
 
