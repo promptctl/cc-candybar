@@ -1,3 +1,10 @@
+# [1.83.0](https://github.com/promptctl/cc-candybar/compare/v1.82.0...v1.83.0) (2026-09-29)
+
+
+### Features
+
+* **settings:** one undo history for every settings change, with undo/redo in the menu ([#252](https://github.com/promptctl/cc-candybar/issues/252)) ([4b5fb16](https://github.com/promptctl/cc-candybar/commit/4b5fb16548f0c821cb25c3e915d3c16f3c78e6ca))
+
 # [1.82.0](https://github.com/promptctl/cc-candybar/compare/v1.81.1...v1.82.0) (2026-09-29)
 
 
