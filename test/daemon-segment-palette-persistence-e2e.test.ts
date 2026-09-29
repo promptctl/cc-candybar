@@ -26,7 +26,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
-import { linkUrls } from "./helpers/ansi";
+import { linkUrls, withoutLinks } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
@@ -157,9 +157,13 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // unaffected" assertion below compares against. The rows stack
       // identity, status, then the control's own row, whose open menu drops a
       // line beneath it; the status row is the one line no click here moves,
-      // so it is found by content rather than by index.
-      const statusRow = (out: string): string | undefined =>
-        out.split("\n").find((line) => line.includes("Opus 4.7"));
+      // so it is found by content rather than by index. Its links are dropped:
+      // a control's link names the session it was rendered for, and the fresh
+      // session below is a different one — the colours are what must match.
+      const statusRow = (out: string): string | undefined => {
+        const row = out.split("\n").find((line) => line.includes("Opus 4.7"));
+        return row === undefined ? undefined : withoutLinks(row);
+      };
       const statusRowBefore = statusRow(before);
       expect(statusRowBefore).toBeDefined();
 

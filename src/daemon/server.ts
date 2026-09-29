@@ -106,7 +106,6 @@ import { TmuxService } from "../segments/tmux.js";
 import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
 import { readAutoCompactWindow } from "../segments/autocompact.js";
-import { claudeSettingsPath } from "../claude-settings.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
@@ -1342,7 +1341,7 @@ const payloadDeps = {
   activityProvider,
   tmuxService,
   mementoProvider,
-  autoCompact: () => readAutoCompactWindow(claudeSettingsPath()),
+  autoCompact: readAutoCompactWindow,
   // [LAW:single-enforcer] buildRenderPayload is the one log site for the
   // outcome-carrying provider lanes (git, cache).
   log: dlog,

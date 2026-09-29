@@ -242,6 +242,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let ssh = detect_ssh();
     let tmux = detect_tmux();
     let config_env = detect_config_env();
+    let claude_config_dir = detect_claude_config_dir();
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -272,6 +273,11 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // the affirmative "no override", spelled as an absent field.
     if let Some(path) = config_env {
         request["configEnv"] = serde_json::Value::from(path);
+    }
+    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
+    // Claude Code directory, spelled as an absent field.
+    if let Some(dir) = claude_config_dir {
+        request["claudeConfigDir"] = serde_json::Value::from(dir);
     }
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
@@ -490,6 +496,19 @@ const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
 // unset-or-empty is the affirmative "no override" (`None`), never a failure.
 fn detect_config_env() -> Option<String> {
     env::var(CONFIG_ENV).ok().filter(|v| !v.is_empty())
+}
+
+// The variable that moves Claude Code's configuration directory — mirrors
+// CLAUDE_CONFIG_DIR_ENV in src/claude-settings.ts, diffed by
+// scripts/check-protocol.mjs. The daemon reads the session's settings.json
+// from it, and its own env answers for whichever session spawned it, so only
+// the client can report it. Raw here; the daemon resolves the comma list.
+const CLAUDE_CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
+
+// [LAW:dataflow-not-control-flow] Total by construction, like
+// detect_config_env: unset-or-empty is the default directory (`None`).
+fn detect_claude_config_dir() -> Option<String> {
+    env::var(CLAUDE_CONFIG_DIR_ENV).ok().filter(|v| !v.is_empty())
 }
 
 fn detect_tmux() -> serde_json::Value {

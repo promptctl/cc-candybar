@@ -49,6 +49,7 @@ export interface RenderRequest {
   ssh?: boolean;
   tmux?: TmuxHint | null;
   configEnv?: string;
+  claudeConfigDir?: string;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -93,12 +94,19 @@ export interface RenderRequest {
 //     the `~`-expanded path the client named; server.ts composes it beneath
 //     a load-config pick and `--config`, never with the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
+//   • `claudeConfigDir` absent — the client's Claude Code runs with no
+//     CLAUDE_CONFIG_DIR (or the client is too old to say; both mean the
+//     default directory, what every reader assumed before the hint existed).
+//     Present, it is the variable's raw value, resolved by `claudeConfigDir`
+//     (src/claude-settings.ts) into the directory whose settings.json that
+//     session's Claude Code reads.
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
   readonly ssh?: boolean;
   readonly tmux?: TmuxHint | null;
   readonly configEnv?: string;
+  readonly claudeConfigDir?: string;
 }
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
@@ -116,13 +124,23 @@ export function parseClientHints(
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
   const configEnv = sanitizeConfigPath(req.configEnv);
+  const claudeConfigDir = sanitizeNonEmpty(req.claudeConfigDir);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
     ...(tmux !== undefined && { tmux }),
     ...(configEnv !== undefined && { configEnv }),
+    ...(claudeConfigDir !== undefined && { claudeConfigDir }),
   };
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary. A non-string or
+// empty value is "not reported" (`undefined`); the raw text passes unchanged,
+// because the value's own grammar (a comma list, first entry wins) belongs to
+// its one resolver, `claudeConfigDir`.
+function sanitizeNonEmpty(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" ? v : undefined;
 }
 
 // [LAW:single-enforcer] The one rule for a client-supplied explicit config

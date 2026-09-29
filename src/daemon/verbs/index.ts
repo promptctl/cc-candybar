@@ -937,7 +937,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 
 const doctorRun: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  writeReport(ctx, sid, gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux));
+  writeReport(ctx, sid, gatherFacts(ctx.doctor, sessionHints(ctx, sid)));
 };
 
 // Re-probe THIS check at click time and perform the fix its fresh verdict
@@ -953,14 +953,14 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux);
+  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid));
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(
       `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
     );
   }
-  const after = applyFix(ctx.doctor, verdict.fix, facts);
+  const after = applyFix(verdict.fix, facts);
   ctx.dlog(
     "info",
     `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.name}=${verdict.fix.value} (session=${sid})`,

@@ -17,7 +17,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { claudeInstalledPluginsPath } from "../claude-settings.js";
+import {
+  claudeConfigDir,
+  claudeInstalledPluginsPath,
+} from "../claude-settings.js";
 import { launch, launchSync, type LaunchResult } from "../proc/launch.js";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
 
@@ -250,7 +253,12 @@ function move(root: string, scope: CeilingScope, m: CeilingMove): void {
 }
 
 export function productionMementoEdge(): MementoEdge {
-  const registry = claudeInstalledPluginsPath();
+  // [LAW:single-enforcer] exception: the daemon's own CLAUDE_CONFIG_DIR, which
+  // answers for whichever session spawned it rather than the session asking;
+  // the per-session `claudeConfigDir` hint is the cure (brandon-claude-config-dir-89x).
+  const registry = claudeInstalledPluginsPath(
+    claudeConfigDir(process.env.CLAUDE_CONFIG_DIR),
+  );
   return {
     locate: (projectDir) => locateIn(registry, projectDir),
     read,

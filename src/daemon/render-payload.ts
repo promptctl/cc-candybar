@@ -69,7 +69,12 @@ import type {
 import type { TmuxService } from "../segments/tmux.js";
 import type { MementoProvider } from "../segments/memento.js";
 import type { CeilingReading } from "../memento/edge.js";
-import type { AutoCompactWindow } from "../segments/autocompact.js";
+import {
+  autoCompactControls,
+  type AutoCompactControls,
+  type AutoCompactWindow,
+} from "../segments/autocompact.js";
+import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type {
   Charset,
@@ -410,11 +415,11 @@ export interface RenderPayload extends ClaudeHookData {
   readonly autocompact?: AutoCompactPayload;
 }
 
-// Tokens, or 0 under `auto` (Claude Code's own per-model choice) — or the
-// refusal that the settings file could not be read, carried as text like
-// memento's, so the control says why it cannot show the window.
+// The control's facts (src/segments/autocompact.ts) — or the refusal that the
+// settings file could not be read, carried as text like memento's, so the
+// control says why it cannot show the window.
 export type AutoCompactPayload =
-  | { readonly window: number }
+  | AutoCompactControls
   | { readonly error: string };
 
 // [LAW:no-silent-failure] Two shapes, never mixed: memento's reading, or its
@@ -572,9 +577,6 @@ export interface CachePayload {
 export interface ContextPayload {
   readonly totalTokens: number;
   readonly contextLeft: number;
-  // The model's context window in tokens — the most any auto-compact window
-  // can be, since Claude Code caps a larger one to it.
-  readonly windowSize: number;
 }
 
 // [LAW:types-are-the-program] Each metrics field can independently be absent
@@ -637,8 +639,9 @@ export interface RenderPayloadDeps {
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
   readonly mementoProvider: MementoProvider;
-  // Claude Code's auto-compact window, read from its user settings file.
-  readonly autoCompact: () => Promise<Outcome<AutoCompactWindow>>;
+  // Claude Code's auto-compact window, read from the user settings file at
+  // this path.
+  readonly autoCompact: (settingsPath: string) => Outcome<AutoCompactWindow>;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
@@ -1157,7 +1160,9 @@ export async function buildRenderPayload(
       () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
     ),
     lane("today", wants("today"), () => deps.usageStore.getTodayInfo(hookData)),
-    lane("context", wants("context"), () =>
+    // autocompact's controls are capped to the model's context window, so
+    // the lane runs for either family, as metrics runs for burn.
+    lane("context", wants("context") || wants("autocompact"), () =>
       deps.contextProvider.getContextInfo(hookData),
     ),
     lane("metrics", wants("metrics") || wants("burn"), () =>
@@ -1192,7 +1197,16 @@ export async function buildRenderPayload(
         cwd: cwd ?? hookData.workspace?.current_dir ?? "",
       }),
     ),
-    lane("autocompact", wants("autocompact"), () => deps.autoCompact()),
+    // [LAW:single-enforcer] The settings file of THIS session's Claude Code,
+    // from the client's `claudeConfigDir` hint — never the daemon's own env,
+    // which answers for whichever session spawned it.
+    lane("autocompact", wants("autocompact"), () =>
+      Promise.resolve(
+        deps.autoCompact(
+          claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
+        ),
+      ),
+    ),
   ]);
   // [LAW:effects-at-boundaries] The projections are pure folds returning data
   // (payload fragment + failure descriptions); the log effect happens once,
@@ -1222,7 +1236,10 @@ export async function buildRenderPayload(
   const cacheValue = take(cacheExpiry);
   const mementoValue = projectMemento(memento);
   if (memento.kind === "failed") failures.push(`memento: ${memento.reason}`);
-  const autoCompactValue = projectAutoCompact(autoCompact);
+  const autoCompactValue = projectAutoCompact(
+    autoCompact,
+    contextValue?.maxTokens,
+  );
   if (autoCompact.kind === "failed") {
     failures.push(`autocompact: ${autoCompact.reason}`);
   }
@@ -1372,7 +1389,6 @@ export async function buildRenderPayload(
       context: {
         totalTokens: contextValue.totalTokens,
         contextLeft: contextValue.contextLeftPercentage,
-        windowSize: contextValue.maxTokens,
       },
     }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
@@ -1382,11 +1398,12 @@ export async function buildRenderPayload(
   };
 }
 
-// [LAW:effects-at-boundaries] Pure: the settings read in, the payload shape
-// out. The read never answers `absent` (a missing file is `auto`), so the
-// family is dropped only when no segment asked for it.
+// [LAW:effects-at-boundaries] Pure: the settings read and the model's context
+// window in, the payload shape out. The read never answers `absent` (a missing
+// file is `auto`), so the family is dropped only when no segment asked for it.
 export function projectAutoCompact(
   outcome: Outcome<AutoCompactWindow>,
+  contextWindow: number | undefined,
 ): AutoCompactPayload | undefined {
   switch (outcome.kind) {
     case "absent":
@@ -1394,7 +1411,7 @@ export function projectAutoCompact(
     case "failed":
       return { error: outcome.reason };
     case "ok":
-      return { window: outcome.value === "auto" ? 0 : outcome.value };
+      return autoCompactControls(outcome.value, contextWindow);
   }
 }
 

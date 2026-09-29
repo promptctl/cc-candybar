@@ -101,6 +101,7 @@ const TS_INDEX = "src/index.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
+const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -225,6 +226,23 @@ const CHECKS = [
     rust: memberSet(
       RS_MAIN,
       /const CONFIG_ENV: &str = "[A-Z_]+";/,
+      /"([A-Z_]+)"/g,
+    ),
+  },
+  // Which env var names Claude Code's configuration directory. Same drift
+  // hazard: a renamed variable would not fail — the native client would
+  // silently stop reporting the directory the node fallback still reports, and
+  // the daemon would read the default directory's settings.json for it.
+  {
+    label: "Claude config dir env var",
+    ts: memberSet(
+      TS_CLAUDE_SETTINGS,
+      /export const CLAUDE_CONFIG_DIR_ENV = "[A-Z_]+";/,
+      /"([A-Z_]+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const CLAUDE_CONFIG_DIR_ENV: &str = "[A-Z_]+";/,
       /"([A-Z_]+)"/g,
     ),
   },

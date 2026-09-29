@@ -284,7 +284,12 @@ describe("no two neighbouring cells blur", () => {
   // alert cell's `warning`/`error` beside it (atom-one-light under `inverted`
   // pulls its warning and its accent's middle tone onto one near-black).
   // Neighbours share a background because the THEME says so, and the divider
-  // keeps that seam.
+  // keeps that seam. The one other shared background is not a seam between
+  // cells at all: segments nested in one bar cell (context beside autocompact,
+  // and ceiling) wear that cell's tint byte for byte (decorEntryFor), and the
+  // divider is how the joiner separates them on it.
+  const oneCell = (s: { left: ColorRgba; right: ColorRgba }): boolean =>
+    s.left.hex === s.right.hex;
   const ownColoursMeet = (name: string, look: string): boolean => {
     const palette = transposePalette(getThemePalette(name)!, CONFIG.looks[look]!);
     const alerts = (["warning", "error"] as const).map((role) => paletteRole(palette, role));
@@ -304,6 +309,7 @@ describe("no two neighbouring cells blur", () => {
     // loop below has seams to judge.
     expect(dividers.length).toBeGreaterThan(0);
     const wrong = dividers
+      .filter((s) => !oneCell(s))
       .filter((s) => !(dE(s.left, s.right) < SEAM_MIN_DELTA_E && ownColoursMeet(s.palette, s.look)))
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(wrong)]).toEqual([]);

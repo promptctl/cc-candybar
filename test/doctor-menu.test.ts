@@ -1,8 +1,8 @@
 // [LAW:verifiable-goals] brandon-doctor-b6a: the `🍫 ▸ 🧰 tools ▸ 🩺 doctor`
 // route, driven through the real loader, the real spine (registerDslConfig +
 // renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
-// probe answers `RGB` and whose settings.json is a temp file. The recorded
-// client hints are seeded the way server.ts records them, so the click reads
+// probe answers `RGB`, and a settings.json in a temp Claude Code directory the
+// recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
 import fs from "node:fs";
@@ -81,7 +81,11 @@ function buildRuntime(tmux: TmuxHint | null) {
   );
   const sessionState = new SessionState();
   // What server.ts records on a render: the stamped hints, as JSON.
-  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
+  sessionState.set(
+    "s1",
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ tmux, claudeConfigDir: dir }),
+  );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -101,7 +105,6 @@ function buildRuntime(tmux: TmuxHint | null) {
       probes += 1;
       return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
     },
-    claudeSettingsPath: settingsPath,
   };
   const ctx: VerbContext = { ...testVerbContext(sessionState), doctor };
   const click = (url: string): void => {
@@ -204,7 +207,7 @@ describe("🍫 ▸ 🧰 tools ▸ 🩺 doctor", () => {
     });
     const fixed = rt.render();
     expect(fixed).toContain(
-      `✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ~/.claude/settings.json — restart Claude Code to apply`,
+      `✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${rt.settingsPath} — restart Claude Code to apply`,
     );
     expect(fixed).not.toContain("[fix]");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();

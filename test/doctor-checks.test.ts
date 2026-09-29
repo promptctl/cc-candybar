@@ -25,8 +25,11 @@ const inside = (
 
 const facts = (
   tmux: TmuxFacts,
-  claudeSettingsEnv: Record<string, unknown> = {},
-): DoctorFacts => ({ tmux, claudeSettingsEnv });
+  env: Record<string, unknown> = {},
+): DoctorFacts => ({
+  tmux,
+  claudeSettings: { path: "/home/u/.claude/settings.json", env },
+});
 
 const probe = checkByName("tmuxTruecolor")!.probe;
 

@@ -1699,7 +1699,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
       200,
       withCustomized,
     ).rendered.replace(INVISIBLE, "");
-    expect(viewing).not.toContain("↺");
+    // The banner's own text, not its glyph: the bar's autocompact control
+    // carries a ↺ of its own.
+    expect(viewing).not.toContain("↺ default customized");
 
     const clean = renderPreset(
       "default",
@@ -1707,6 +1709,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
       undefined,
       editingSession,
     ).rendered.replace(INVISIBLE, "");
-    expect(clean).not.toContain("↺");
+    expect(clean).not.toContain("↺ default customized");
   });
 });

@@ -35,6 +35,7 @@ import {
   expandHome,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
+import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
@@ -143,6 +144,9 @@ export function checkPayload(
     // RENDERS and its template gets checked. A local-looking fixture would
     // gate the host segment off and let a typo inside it ship.
     host: { name: "tester-box", user: "tester", ssh: true },
+    // A set window with a step each way, through the daemon's own projection,
+    // so the when-gated `autocompact` control renders all of its cells.
+    autocompact: autoCompactControls(400_000, 1_000_000),
     // [LAW:one-source-of-truth] The daemon's own projection of the resolved
     // globals, so a `.preset.effective`/`.style.effective` label is checked
     // against the value it will actually show, never its declared default.

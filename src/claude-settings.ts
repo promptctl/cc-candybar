@@ -1,27 +1,90 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { JSON_DIALECT } from "./config/json5-edit.js";
 
-// Claude Code's configuration directory: `CLAUDE_CONFIG_DIR` when Claude Code
-// runs with one (its first entry — the transcript search in src/utils/claude.ts
-// reads the same variable), else ~/.claude.
-function claudeConfigDir(): string {
-  const configured = process.env.CLAUDE_CONFIG_DIR?.split(",")[0]?.trim();
+// [LAW:one-source-of-truth] The variable that moves Claude Code's
+// configuration directory. Mirrored by the Rust client
+// (rust-client/src/main.rs, CLAUDE_CONFIG_DIR_ENV) and diffed by
+// scripts/check-protocol.mjs, which anchors on the declaration below — keep it
+// a named const holding a string literal, or repoint the CHECKS row in the
+// same commit.
+export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+
+// [LAW:single-enforcer] Only the statusline CLIENT can observe this: Claude
+// Code spawns it with Claude Code's exact environment, while the daemon is
+// detached and one-per-user, its env answering for whichever session spawned
+// it. So the client reports the raw value as the `claudeConfigDir` hint and
+// the daemon resolves the directory per session with `claudeConfigDir` —
+// exactly the move `configEnv` made (brandon-config-5g8). Total over the
+// environment: unset or empty is `undefined`, the default directory.
+export function detectClaudeConfigDir(
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const value = env[CLAUDE_CONFIG_DIR_ENV] ?? "";
+  return value === "" ? undefined : value;
+}
+
+// Claude Code's configuration directory for a session whose environment
+// carried `raw` as CLAUDE_CONFIG_DIR: its first entry (the transcript search
+// in src/utils/claude.ts reads the same variable), else ~/.claude.
+export function claudeConfigDir(raw: string | undefined): string {
+  const configured = raw?.split(",")[0]?.trim();
   return configured || path.join(os.homedir(), ".claude");
 }
 
-// [LAW:one-source-of-truth] THE location of Claude Code's user settings file.
-// Two writers touch it — `cc-candybar install` (the statusLine command) and the
-// doctor's claude-settings-env fix (src/doctor/edge.ts) — and one reader, the
-// auto-compact window the bar shows (src/segments/autocompact.ts), which
-// Claude Code's own `/autocompact` writes here. They must all mean the file
-// Claude Code reads, so the path is spelled once and imported by each.
-export function claudeSettingsPath(): string {
-  return path.join(claudeConfigDir(), "settings.json");
+// [LAW:one-source-of-truth] THE location of Claude Code's user settings file
+// in a configuration directory. Two writers touch it — `cc-candybar install`
+// (the statusLine command) and the doctor's claude-settings-env fix
+// (src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
+// shows (src/segments/autocompact.ts), which Claude Code's own `/autocompact`
+// writes here. They must all mean the file Claude Code reads, so the path is
+// spelled once and imported by each.
+export function claudeSettingsPath(configDir: string): string {
+  return path.join(configDir, "settings.json");
 }
 
 // Claude Code's record of the plugins installed for this user — where each
 // one's files live, at which scope. Read to find the memento plugin
 // (src/memento/edge.ts), whose context ceiling the bar shows and moves.
-export function claudeInstalledPluginsPath(): string {
-  return path.join(claudeConfigDir(), "plugins", "installed_plugins.json");
+export function claudeInstalledPluginsPath(configDir: string): string {
+  return path.join(configDir, "plugins", "installed_plugins.json");
 }
+
+// The settings file's bytes, for an editor that splices it. A missing file is
+// the one absence with a meaning — Claude Code has written nothing yet — so it
+// reads as the empty document.
+export function readClaudeSettingsText(settingsPath: string): string {
+  return fs.existsSync(settingsPath)
+    ? fs.readFileSync(settingsPath, "utf8")
+    : "";
+}
+
+// [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
+// document, shared by every reader of its fields (the doctor's `env`, the
+// auto-compact window), so no two of them disagree about what a file means.
+// Empty text — a missing file or a blank one — is the empty document; text
+// that does not parse, or parses to anything but an object, throws naming the
+// file ([LAW:no-silent-failure]: Claude Code is not running with whatever a
+// guess would say).
+export function readClaudeSettings(
+  settingsPath: string,
+): Readonly<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    const text = readClaudeSettingsText(settingsPath);
+    if (/^\s*$/.test(text)) return {};
+    parsed = JSON_DIALECT.parse(text);
+  } catch (e) {
+    throw new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, {
+      cause: e,
+    });
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+const messageOf = (e: unknown): string =>
+  e instanceof Error ? e.message : String(e);

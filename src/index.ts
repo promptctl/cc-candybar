@@ -21,6 +21,7 @@ import { PACKAGE_VERSION } from "./version";
 import { detectTermExtent } from "./term-extent";
 import { detectTmuxHint } from "./tmux-hint";
 import { detectConfigEnv } from "./config-hint";
+import { detectClaudeConfigDir } from "./claude-settings";
 import { runDoctorCli } from "./doctor/cli";
 
 function detectTermCols(): number | undefined {
@@ -194,6 +195,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         // Conditional like termCols: absent IS "no override", so the daemon
         // resolves the precedence chain. The daemon reads no env of its own.
         configEnv: detectConfigEnv(process.env),
+        // Conditional too: absent is the default directory. The daemon reads
+        // settings.json from THIS session's Claude Code directory.
+        claudeConfigDir: detectClaudeConfigDir(process.env),
       },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
