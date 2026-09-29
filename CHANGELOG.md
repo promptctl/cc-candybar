@@ -1,3 +1,10 @@
+## [1.87.1](https://github.com/promptctl/cc-candybar/compare/v1.87.0...v1.87.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **settings:** an unpicked padding steps from the value the session's preset shows ([#262](https://github.com/promptctl/cc-candybar/issues/262)) ([1209e13](https://github.com/promptctl/cc-candybar/commit/1209e137625cb7815b432c1302dee148775be58f))
+
 # [1.87.0](https://github.com/promptctl/cc-candybar/compare/v1.86.0...v1.87.0) (2026-09-29)
 
 
