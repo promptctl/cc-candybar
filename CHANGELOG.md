@@ -1,3 +1,10 @@
+# [1.84.0](https://github.com/promptctl/cc-candybar/compare/v1.83.2...v1.84.0) (2026-09-29)
+
+
+### Features
+
+* **settings:** a Save button replaces the persist? checkbox ([#256](https://github.com/promptctl/cc-candybar/issues/256)) ([efc3667](https://github.com/promptctl/cc-candybar/commit/efc3667077fc8b3fba724b79281779fc0a0b7181))
+
 ## [1.83.2](https://github.com/promptctl/cc-candybar/compare/v1.83.1...v1.83.2) (2026-09-29)
 
 
