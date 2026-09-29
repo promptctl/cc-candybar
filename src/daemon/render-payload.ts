@@ -69,6 +69,7 @@ import type {
 import type { TmuxService } from "../segments/tmux.js";
 import type { MementoProvider } from "../segments/memento.js";
 import type { CeilingReading } from "../memento/edge.js";
+import type { AutoCompactWindow } from "../segments/autocompact.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type {
   Charset,
@@ -405,7 +406,16 @@ export interface RenderPayload extends ClaudeHookData {
   // The memento plugin's context ceiling for this session; missing when
   // memento is not installed for the project.
   readonly memento?: MementoPayload;
+  // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
+  readonly autocompact?: AutoCompactPayload;
 }
+
+// Tokens, or 0 under `auto` (Claude Code's own per-model choice) — or the
+// refusal that the settings file could not be read, carried as text like
+// memento's, so the control says why it cannot show the window.
+export type AutoCompactPayload =
+  | { readonly window: number }
+  | { readonly error: string };
 
 // [LAW:no-silent-failure] Two shapes, never mixed: memento's reading, or its
 // refusal. A refusal is the state in which memento's Stop hook is failing too
@@ -562,6 +572,9 @@ export interface CachePayload {
 export interface ContextPayload {
   readonly totalTokens: number;
   readonly contextLeft: number;
+  // The model's context window in tokens — the most any auto-compact window
+  // can be, since Claude Code caps a larger one to it.
+  readonly windowSize: number;
 }
 
 // [LAW:types-are-the-program] Each metrics field can independently be absent
@@ -624,6 +637,8 @@ export interface RenderPayloadDeps {
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
   readonly mementoProvider: MementoProvider;
+  // Claude Code's auto-compact window, read from its user settings file.
+  readonly autoCompact: () => Promise<Outcome<AutoCompactWindow>>;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
@@ -1124,6 +1139,7 @@ export async function buildRenderPayload(
     cacheExpiry,
     speed,
     memento,
+    autoCompact,
   ] = await Promise.all([
     lane("git", wants("git"), () =>
       deps.gitProvider.getGitInfo(
@@ -1176,6 +1192,7 @@ export async function buildRenderPayload(
         cwd: cwd ?? hookData.workspace?.current_dir ?? "",
       }),
     ),
+    lane("autocompact", wants("autocompact"), () => deps.autoCompact()),
   ]);
   // [LAW:effects-at-boundaries] The projections are pure folds returning data
   // (payload fragment + failure descriptions); the log effect happens once,
@@ -1205,6 +1222,10 @@ export async function buildRenderPayload(
   const cacheValue = take(cacheExpiry);
   const mementoValue = projectMemento(memento);
   if (memento.kind === "failed") failures.push(`memento: ${memento.reason}`);
+  const autoCompactValue = projectAutoCompact(autoCompact);
+  if (autoCompact.kind === "failed") {
+    failures.push(`autocompact: ${autoCompact.reason}`);
+  }
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
@@ -1351,12 +1372,30 @@ export async function buildRenderPayload(
       context: {
         totalTokens: contextValue.totalTokens,
         contextLeft: contextValue.contextLeftPercentage,
+        windowSize: contextValue.maxTokens,
       },
     }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
     ...(activityPayload !== undefined && { activity: activityPayload }),
     ...(mementoValue !== undefined && { memento: mementoValue }),
+    ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
   };
+}
+
+// [LAW:effects-at-boundaries] Pure: the settings read in, the payload shape
+// out. The read never answers `absent` (a missing file is `auto`), so the
+// family is dropped only when no segment asked for it.
+export function projectAutoCompact(
+  outcome: Outcome<AutoCompactWindow>,
+): AutoCompactPayload | undefined {
+  switch (outcome.kind) {
+    case "absent":
+      return undefined;
+    case "failed":
+      return { error: outcome.reason };
+    case "ok":
+      return { window: outcome.value === "auto" ? 0 : outcome.value };
+  }
 }
 
 // [LAW:effects-at-boundaries] Pure: memento's outcome in, the payload shape

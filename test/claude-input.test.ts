@@ -315,7 +315,7 @@ describe("a slash click", () => {
     const rt = runtime(HINT);
     const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/clear"] }]);
     expect(() => clickUrl(forged, rt.ctx)).toThrow(
-      /"\/clear" is not a command this config declares \(it declares: \/compact, \/model opus, \/compact keep the api;\)/,
+      /"\/clear" is not a command this config declares \(it declares: .*\/compact, \/model opus, \/compact keep the api;\)/,
     );
     expect(invocations()).toEqual([]);
   });

@@ -141,6 +141,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
         // Nested with `context` as one cell unit, when-gated on memento being
         // installed (brandon-context-ceiling-xta.asv).
         "ceiling",
+        // Beside the ceiling, when-gated on the auto-compact window having been
+        // read (brandon-context-ceiling-xta.e3p).
+        "autocompact",
         "cacheTimer",
         "block",
         "weekly",
