@@ -73,14 +73,15 @@ import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
-import type { OptionDomain } from "./option-domain.js";
-import { SETTINGS, type SettingProjection } from "./setting-projections.js";
-import { synthesisInputs } from "./synthesis-inputs.js";
 import {
-  BOOLEAN_MEMBERS,
-  BOOLEAN_TRUE,
-  PADDING_RANGE,
-} from "../themes/policy.js";
+  SETTINGS,
+  type SettingName,
+  type SettingProjection,
+} from "./setting-projections.js";
+import { synthesisInputs } from "./synthesis-inputs.js";
+import { BOOLEAN_TRUE } from "../themes/policy.js";
+import { globalsControlDomain } from "./loader/globals.js";
+import { settingControl, type Affordance } from "./setting-control.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
 // segment name an author places in `root` to choose the menu's position, the
@@ -205,224 +206,151 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // selected by a value, not a mode.
 const PICKER_KEY = `${SETTINGS_NS}pickers`;
 
-// [LAW:types-are-the-program] One row of the config menu, as data: everything
-// that differs between "theme" and "padding" is a field here, so the six
-// controls below are six VALUES and the synthesis that mints them is written
-// once. A control names the two keys a setting has — the session key its pick
-// writes and the config field its save and ↺ write (they differ where history
-// made them differ — SessionState "theme" over globals field "palette") — the
-// variable whose value it displays, and its value source.
-//
-// A control labels itself with its `effectiveVar` — the value the bar is
-// ACTUALLY rendering with, whatever produced it — rather than with its own
-// session key, so the label can never name a value the bar is not in.
-interface SettingControl extends KeyedSetting {
-  readonly glyph: string;
-  readonly domain: OptionDomain;
-  // [LAW:one-type-per-behavior] Every control offers its domain as a carousel
-  // — a ring centred on the current value where every click applies
-  // (brandon-theme-picker-bgw.ef6) — and `beneath` are the rows under the
-  // ring, each a template: what sits under a ring is data a control carries,
-  // not a kind of control.
-  readonly beneath: readonly string[];
-}
-
 // The theme and look carousels share one preview: both choose the palette the
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
 const PALETTE_PREVIEW = ["{{ themePreview }}"];
 
-// [LAW:one-type-per-behavior] Every picker setting, one control shape: a glyph,
-// the current value, a picker over a domain, and the ↺ that returns it to the
-// bundled default. They differ only in which keys they write and which domain they
-// range — configuration, so they are VALUES of one synthesis, not hand-written
-// segments. `theme`'s two keys differ (SessionState "theme" over
-// globals field "palette") for the historical reason recorded in
-// state-validators.ts's baseline table; carrying BOTH keys as data is what
-// makes that difference expressible without a special case.
-//
-// They are split into two lists by WHERE they render, because that is a fact
-// about each control, not something the layout should recover by comparing
-// names [LAW:dataflow-not-control-flow]. Switching arrangement is what people
-// open this menu for, so the preset carousel sits one click from the toggle;
-// the display settings sit one disclosure deeper, which is what keeps the
-// menu narrow when opened.
-const PRIMARY_CONTROLS: readonly SettingControl[] = [
-  {
-    name: "preset",
-    ...SETTINGS.preset,
-    glyph: "▦",
-    domain: "presets",
-    // A preset changes the arrangement, and the tray this menu opens takes
-    // over the door's row — so the bar cannot show its own first row while the
-    // ring is open. `{{ layoutPreview }}` draws every row of it. Under it, the
-    // presets the user makes (brandon-save-undo-bwi.o6u): keep the bar as a
-    // new one, which the ring then shows current, and delete the one the ring
-    // is on when the user made it.
-    beneath: [
-      "{{ layoutPreview }}",
-      `{{ action "${PRESET_SAVE}" "⊕ save as preset" }}` +
-        `{{ if not .preset.bundled }} ` +
-        `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}` +
-        `{{ end }}`,
-    ],
-  },
-];
+// [LAW:types-are-the-program] What hangs under a control's carousel, beyond
+// the ring itself — each a template row. A ring shows neighbours of the
+// current value; these show what picking one does to the bar.
+const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
+  // A preset changes the arrangement, and the tray this menu opens takes over
+  // the door's row — so the bar cannot show its own first row while the ring
+  // is open. `{{ layoutPreview }}` draws every row of it. Under it, the
+  // presets the user makes (brandon-save-undo-bwi.o6u): keep the bar as a new
+  // one, which the ring then shows current, and delete the one the ring is on
+  // when the user made it.
+  preset: [
+    "{{ layoutPreview }}",
+    `{{ action "${PRESET_SAVE}" "⊕ save as preset" }}` +
+      `{{ if not .preset.bundled }} ` +
+      `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}` +
+      `{{ end }}`,
+  ],
+  theme: PALETTE_PREVIEW,
+  look: PALETTE_PREVIEW,
+  // A progression says which role each ROW wears, and the tray this menu
+  // opens takes over the door's row — `{{ layoutPreview }}` draws every row,
+  // each block in the tint the ring's current progression deals it.
+  progression: ["{{ layoutPreview }}"],
+};
 
-const CONFIG_CONTROLS: readonly SettingControl[] = [
-  {
-    name: "theme",
-    ...SETTINGS.theme,
-    glyph: "🎨",
-    domain: "themes",
-    beneath: PALETTE_PREVIEW,
-  },
-  {
-    name: "look",
-    ...SETTINGS.look,
-    glyph: "◐",
-    domain: "looks",
-    beneath: PALETTE_PREVIEW,
-  },
-  {
-    name: "style",
-    ...SETTINGS.style,
-    glyph: "✦",
-    domain: "styles",
-    beneath: [],
-  },
-  {
-    name: "progression",
-    ...SETTINGS.progression,
-    glyph: "🎼",
-    domain: "progressions",
-    // A progression says which role each ROW wears, and the tray this menu
-    // opens takes over the door's row — `{{ layoutPreview }}` draws every row,
-    // each block in the tint the ring's current progression deals it.
-    beneath: ["{{ layoutPreview }}"],
-  },
-  {
-    name: "charset",
-    ...SETTINGS.charset,
-    glyph: "🔣",
-    domain: "charsets",
-    beneath: [],
-  },
-  {
-    name: "colorCompatibility",
-    ...SETTINGS.colorCompatibility,
-    glyph: "🌈",
-    domain: "colorCompatibilities",
-    beneath: [],
-  },
-];
-
-// The two settings whose affordance is not a picker: wrapping is a toggle (two
-// members, so a menu would be a drop-down over a binary) and padding is a
-// stepper over a range (16 picker cells for a value you nudge). Both are
-// session writes exactly like the pickers — only the affordance differs, so
-// they carry the same key record and only their `domain` is absent.
-//
-// [LAW:one-source-of-truth] Declared as records rather than typed inline at
-// each use, so every key in SETTINGS_WRITTEN_KEYS below traces to one
-// declaration. When these two were string literals repeated across the set,
-// the segment and the action, a rename in one place would have silently
-// misclassified the key rather than failing.
-//
-// Every control's keys are a row of SETTINGS (src/config/setting-projections.ts)
-// spread in, never spelled here: the render derives its read-back from the same
-// row, so a control cannot write a key whose current value nothing reads back.
-interface KeyedSetting extends SettingProjection {
-  readonly name: string;
-}
-
-const WRAP: KeyedSetting = { name: "wrap", ...SETTINGS.autoWrap };
-const PADDING: KeyedSetting = { name: "padding", ...SETTINGS.padding };
-
-const WRAP_SEG = `${SETTINGS_NS}${WRAP.name}`;
-const PADDING_SEG = `${SETTINGS_NS}${PADDING.name}`;
-
-// Every picker control, wherever it renders — minting one is the same job in
-// both rows, so the synthesis folds over this and the placement lists above
-// decide only where each lands.
-const PICKER_CONTROLS: readonly SettingControl[] = [
-  ...PRIMARY_CONTROLS,
-  ...CONFIG_CONTROLS,
-];
-
-// [LAW:one-source-of-truth] Every control the menu mints, of every shape — the
-// keys it writes and the resets `⟲ reset all` fires both read this one list.
-const ALL_CONTROLS: readonly KeyedSetting[] = [
-  ...PICKER_CONTROLS,
-  WRAP,
-  PADDING,
-];
-
-// [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
-// session key every control picks and the config field its save and ↺ write. Unlike the `candybar.` names, these
-// are ordinary words a config can own (`theme`, `padding`, …), so a reader
-// cannot tell from the key alone whether the menu or the author wrote it. This
-// set is the menu's own answer to "which keys do I write", derived from the
-// same records the controls are minted from, so a consumer pairing it with an
-// authorship check (test/helpers/ambient-chrome.ts) can never drift from what
-// the synthesis actually declares.
-export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
-  ALL_CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
-);
-
-// [LAW:one-source-of-truth] A control's three names, derived from its one
-// name — the segment that shows it, the action its picker applies, and the
-// action its ↺ resets. Derived rather than declared so a control record can
-// never name a segment whose picker writes a different setting.
+// [LAW:one-source-of-truth] A control's names, derived from its setting's
+// name — the segment that shows it, the action it writes through, and the
+// action its ↺ resets — so a control can never name a segment whose action
+// writes a different setting.
 const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
-const RESET_ALL = confirmStep(
-  RESET_ALL_SEG,
-  { arm: "⟲ reset all", confirm: "⟲ confirm reset all" },
-  ALL_CONTROLS.map((c) => controlReset(c.name)),
-);
-// [LAW:one-source-of-truth] Every two-click step the door can bring into view,
-// so the door disarms each of them without anyone remembering to list one.
-const CONFIRMS = [RESET_ALL, COMMANDS] as const;
 const controlCarousel = (name: string): string =>
   `${SETTINGS_NS}carousel.${name}`;
 const controlBeneath = (name: string, row: number): string =>
   `${controlCarousel(name)}.${row}`;
 
-// [LAW:one-source-of-truth] The one accordion every control's drop-down joins,
-// as a disclosure ref per member, so two carousels are mutually exclusive
-// through one key — and a `{{ menu }}` given the same shared key (menuStateKey)
-// would join the same accordion rather than start a second convention.
-const PICKERS_STATE_KEY = sharedMenuStateKey(PICKER_KEY);
-const controlRef = (c: SettingControl): DisclosureRef => ({
-  variable: PICKERS_STATE_KEY,
-  key: PICKERS_STATE_KEY,
-  member: menuMember(controlApply(c.name)),
+// One control of the menu: its setting's row of SETTINGS and what the
+// generator made of that setting's declared domain.
+interface MenuControl extends SettingProjection {
+  readonly name: SettingName;
+  readonly control: Affordance;
+  readonly beneath: readonly string[];
+}
+
+// [LAW:one-source-of-truth] Every setting the menu offers, generated
+// (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
+// shape — a toggle, a stepper, a carousel — decided by the domain the loader
+// declares for the field beside its spec (`globalsControlDomain`), through the
+// same generator configure mode uses for a placement's settings. Every apply
+// action is a session `set`: a draft until the save cell commits it.
+//
+// [LAW:no-silent-failure] A row naming a field no control shape fits is a
+// programming error, refused the moment this module loads.
+const CONTROLS: readonly MenuControl[] = (
+  Object.keys(SETTINGS) as SettingName[]
+).map((name) => {
+  const row: SettingProjection = SETTINGS[name];
+  const domain = globalsControlDomain(row.configKey);
+  if (domain === "text") {
+    throw new Error(
+      `settings menu: globals.${row.configKey} is free text, which no control can change — list it in UNCONTROLLED_GLOBALS instead of SETTINGS`,
+    );
+  }
+  const control = settingControl(
+    { label: row.label, domain },
+    row.sessionKey,
+    row.effectiveVar,
+    controlApply(name),
+  );
+  return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
-// [LAW:dataflow-not-control-flow] Every control takes one place in the tree:
-// its segment, with the carousel and the rows beneath it hung on it through
-// the one disclosure lowering, dropped below the row the control sits in —
-// what differs between controls is the record, never the shape.
-function controlNode(c: SettingControl): LayoutNode {
-  return disclosureNode(
-    controlSeg(c.name),
-    controlRef(c),
-    {
-      kind: "container",
-      direction: "vertical",
-      children: [
-        { kind: "segment", name: controlCarousel(c.name) },
-        ...c.beneath.map(
-          (_, row): LayoutNode => ({
-            kind: "segment",
-            name: controlBeneath(c.name, row),
-          }),
-        ),
-      ],
-    },
-    "drop",
-  );
+// [LAW:dataflow-not-control-flow] Where a control renders is a fact about its
+// setting, not something the layout recovers by comparing names at the splice.
+// Switching arrangement is what people open this menu for, so the preset
+// control sits one click from the door; the display settings sit one
+// disclosure deeper, which is what keeps the menu narrow when opened.
+const PRIMARY_SETTINGS: ReadonlySet<SettingName> = new Set(["preset"]);
+const PRIMARY_CONTROLS = CONTROLS.filter((c) => PRIMARY_SETTINGS.has(c.name));
+const CONFIG_CONTROLS = CONTROLS.filter((c) => !PRIMARY_SETTINGS.has(c.name));
+
+// [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
+// session key every control picks and the config field its save and ↺ write.
+// Unlike the `candybar.` names, these are ordinary words a config can own
+// (`theme`, `padding`, …), so a reader cannot tell from the key alone whether
+// the menu or the author wrote it. This set is the menu's own answer to "which
+// keys do I write", derived from the same rows the controls are minted from,
+// so a consumer pairing it with an authorship check
+// (test/helpers/ambient-chrome.ts) can never drift from what the synthesis
+// actually declares.
+export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
+  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
+);
+
+const RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "⟲ reset all", confirm: "⟲ confirm reset all" },
+  CONTROLS.map((c) => controlReset(c.name)),
+);
+// [LAW:one-source-of-truth] Every two-click step the door can bring into view,
+// so the door disarms each of them without anyone remembering to list one.
+const CONFIRMS = [RESET_ALL, COMMANDS] as const;
+
+// [LAW:one-source-of-truth] The one accordion every control's carousel joins,
+// as a disclosure ref per member, so two carousels are mutually exclusive
+// through one key, and a `{{ menu }}` given the same shared key (menuStateKey)
+// would join the same accordion rather than start a second convention.
+const PICKERS_STATE_KEY = sharedMenuStateKey(PICKER_KEY);
+const controlRef = (name: string): DisclosureRef => ({
+  variable: PICKERS_STATE_KEY,
+  key: PICKERS_STATE_KEY,
+  member: menuMember(controlApply(name)),
+});
+
+// [LAW:dataflow-not-control-flow] Every control takes one place in the tree,
+// decided by what the generator made of it: an inline control is its own
+// cell; a ring hangs its carousel and the rows beneath it on the control
+// through the one disclosure lowering, dropped below the row it sits in.
+function controlNode(c: MenuControl): LayoutNode {
+  const self = controlSeg(c.name);
+  return c.control.kind === "inline"
+    ? { kind: "segment", name: self }
+    : disclosureNode(
+        self,
+        controlRef(c.name),
+        {
+          kind: "container",
+          direction: "vertical",
+          children: [
+            { kind: "segment", name: controlCarousel(c.name) },
+            ...c.beneath.map(
+              (_, row): LayoutNode => ({
+                kind: "segment",
+                name: controlBeneath(c.name, row),
+              }),
+            ),
+          ],
+        },
+        "drop",
+      );
 }
 
 // [LAW:single-enforcer] The one answer to "is this segment reference the global
@@ -558,8 +486,6 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
                   direction: "horizontal",
                   children: [
                     ...CONFIG_CONTROLS.map(controlNode),
-                    { kind: "segment", name: WRAP_SEG },
-                    { kind: "segment", name: PADDING_SEG },
                     { kind: "segment", name: RESET_ALL_SEG },
                   ],
                 },
@@ -696,22 +622,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [DOCTOR_SEG]: {
         template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
-      // [LAW:one-type-per-behavior] Both non-picker controls read the same
-      // `.effective` projection their picker siblings read, and write the
-      // session exactly as they do — a toggle and a stepper are affordances
-      // over one behavior, not two kinds of setting.
-      [WRAP_SEG]: {
-        template:
-          `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
-          `{{ action "${controlReset("wrap")}" "↺" }}`,
-      },
-      [PADDING_SEG]: {
-        template:
-          `{{ action "${controlApply("padding")}.down" "◀" }} ` +
-          `padding {{ .${PADDING.effectiveVar} }} ` +
-          `{{ action "${controlApply("padding")}.up" "▶" }} ` +
-          `{{ action "${controlReset("padding")}" "↺" }}`,
-      },
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
       },
@@ -783,11 +693,15 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
   }
 }
 
-// [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
-// table that describes them. A picker control is a glyph, its live value, the
-// toggle that opens its carousel over its domain, and the ↺ that returns it to
-// bundled default; wrap and padding are a cycle and a stepper instead. Every
-// apply action here is a session `set` — a draft the save cell commits.
+// Every control's artifacts: the actions the generator minted for it, the ↺
+// that returns it to the bundled default — the session's pick and every layer
+// of the config file a save can write (resetLayers,
+// src/daemon/setting-drafts.ts), keyed by the config field a save writes so
+// the two can never name different settings — and its segments. An inline
+// control is one cell, the ↺ beside it; a ring is a trigger naming the value
+// the bar renders with (the control's `effectiveVar`, whatever rung produced
+// it), the toggle that opens its carousel on the shared accordion key, the ↺,
+// and the carousel's own rows as segments of their own.
 //
 // A pick leaves its carousel open, re-centred on what it applied
 // (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
@@ -795,66 +709,39 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // whose click swaps the whole root — the menu survives it because every
 // preset root references this one anchor and both open states are session
 // keys, not tree positions.
-//
-// [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
-// derives each session key's gate from these `set`s, and a save re-validates
-// every draft through that same gate before it touches the file.
 function declareSettingControls(artifacts: MenuArtifacts): void {
-  for (const c of PICKER_CONTROLS) {
-    const apply = controlApply(c.name);
-    artifacts.actions[apply] = { set: c.sessionKey, from: c.domain };
-    // [LAW:one-source-of-truth] ↺ returns the setting to its bundled default:
-    // the session's pick and every layer of the config file a save can write
-    // (resetLayers, src/daemon/setting-drafts.ts). Its key is the config key a
-    // save writes, read from the same record, so the two can never name
-    // different settings.
-    artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
-    declareControlRow(c, artifacts);
-  }
-  artifacts.actions[controlApply(WRAP.name)] = {
-    set: WRAP.sessionKey,
-    cycle: [...BOOLEAN_MEMBERS],
-  };
-  artifacts.actions[controlReset(WRAP.name)] = { reset: WRAP.configKey };
-  // [LAW:one-source-of-truth] The stepper's bounds are PADDING_RANGE, the same
-  // range the loader validates a config-file `padding` against and the same one
-  // both write gates enforce — a click can never reach a value the file could
-  // not have held.
-  for (const by of [-1, 1]) {
-    artifacts.actions[
-      `${controlApply(PADDING.name)}.${by < 0 ? "down" : "up"}`
-    ] = {
-      set: PADDING.sessionKey,
-      ...PADDING_RANGE,
-      by,
+  for (const c of CONTROLS) {
+    Object.assign(artifacts.actions, c.control.actions);
+    const reset = controlReset(c.name);
+    artifacts.actions[reset] = { reset: c.configKey };
+    const resetCell = `{{ action "${reset}" "↺" }}`;
+    if (c.control.kind === "inline") {
+      artifacts.segments[controlSeg(c.name)] = {
+        template: `${c.control.template} ${resetCell}`,
+      };
+      continue;
+    }
+    const ref = controlRef(c.name);
+    const toggle = menuActionName(ref.key, ref.member);
+    artifacts.variables[ref.key] = disclosureStateVar(
+      ref.key,
+      DISCLOSURE_CLOSED,
+    );
+    artifacts.actions[toggle] = disclosureCycleAction(ref.key, ref.member);
+    artifacts.segments[controlSeg(c.name)] = {
+      template:
+        `${c.label} {{ .${c.effectiveVar} }} ` +
+        `${disclosureTrigger(toggle, DISCLOSURE_GLYPH_CLOSED, DISCLOSURE_GLYPH_OPEN)} ` +
+        resetCell,
     };
+    artifacts.segments[controlCarousel(c.name)] = {
+      template: c.control.template,
+    };
+    c.beneath.forEach((template, i) => {
+      artifacts.segments[controlBeneath(c.name, i)] = { template };
+    });
   }
-  artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
   Object.assign(artifacts.actions, RESET_ALL.actions);
-}
-
-// [LAW:one-type-per-behavior] Every picker control mints the same row — the
-// glyph, the value the bar is rendering with, the toggle that opens its
-// carousel on the shared accordion key, the ↺ — and the carousel's own rows as
-// segments of their own.
-function declareControlRow(c: SettingControl, artifacts: MenuArtifacts): void {
-  const apply = controlApply(c.name);
-  const ref = controlRef(c);
-  const toggle = menuActionName(ref.key, ref.member);
-  artifacts.variables[ref.key] = disclosureStateVar(ref.key, DISCLOSURE_CLOSED);
-  artifacts.actions[toggle] = disclosureCycleAction(ref.key, ref.member);
-  artifacts.segments[controlSeg(c.name)] = {
-    template:
-      `${c.glyph} {{ .${c.effectiveVar} }} ` +
-      `${disclosureTrigger(toggle, DISCLOSURE_GLYPH_CLOSED, DISCLOSURE_GLYPH_OPEN)} ` +
-      `{{ action "${controlReset(c.name)}" "↺" }}`,
-  };
-  artifacts.segments[controlCarousel(c.name)] = {
-    template: `{{ carousel "${apply}" }}`,
-  };
-  c.beneath.forEach((template, i) => {
-    artifacts.segments[controlBeneath(c.name, i)] = { template };
-  });
 }
 
 // [LAW:one-source-of-truth] Edit mode's toggle, ensured rather than duplicated:

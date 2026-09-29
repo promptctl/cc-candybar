@@ -404,20 +404,22 @@ globals.progression must be one of: secondary-accent, primary-secondary, primary
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
 
-`updateNotice` has no SessionState half. It is
+`updateNotice` is
 the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
 [dismiss] [disable]` row the daemon shows above the bar when the bundle
 rendering it was built from source other than the `src/` beside it — an
 identity check, so a checkout to an older commit trips it too — or, for a
 published install, when the registry's latest release is newer than the
 installed one. Its `[disable]` affordance IS
-`{ persist: "updateNotice", to: "false" }` — the config file, durably. The
-per-session spelling is not a `set:` on this key but the row's own
-`[dismiss]`, which writes the session key `update.dismissed` with the
+`{ persist: "updateNotice", to: "false" }` — the config file, durably — and
+sets this session's pick to `false` in the same click, since a session pick
+outranks the file. Like the other display globals it has a session half, the
+settings menu's `☑ update notice` toggle, read back as
+`.updateNotice.effective`, so it is how a disabled notice is turned back on
+from the bar. The row's own `[dismiss]` is
+a different thing: it writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
-something newer appears. There is no `updateNotices` domain and no
-`.effective` projection to label a control with: the row itself is the
-only display the field has.
+something newer appears.
 
 `charset`, `colorCompatibility`, `autoWrap` and `padding` each have a session
 half, because each describes the terminal a session runs in — whether its font
@@ -1163,7 +1165,7 @@ opens in turn drops below:
 
 ```
 ❌ ⎘ id ↗ proj ↗ log ↗ repo   ▦ default ▸ ↺   💾 save 2   ⚙ config ▾   🧰 tools ▸   ✎ edit   ↶ undo
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 secondary-accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺   ⟲ reset all
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1195,10 +1197,15 @@ close.
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
   menu in the same click, so you land on the bar you are about to edit — the
   open menu covers the door's own row, edit chrome included.
-- **`⚙ config`** opens the display settings: theme, look, style, charset (the
-  joiner glyphs: `unicode` or `ascii`), colour depth (`truecolor`, `256`,
-  `ansi`, `none`), wrap and padding, each ONE control, each with a `↺` that
-  forgets its durable default.
+- **`⚙ config`** opens the display settings: theme, look, style, progression,
+  charset (the joiner glyphs: `unicode` or `ascii`), colour depth
+  (`truecolor`, `256`, `ansi`, `none`), wrap, padding and the update notice,
+  each ONE control, each with a `↺` that forgets its durable default. The
+  controls are generated from the `globals` declarations: a field with a list
+  of values gets a carousel, a boolean a `☑`/`☐` toggle, a bounded number a
+  `◀ ▶` stepper — the same controls configure mode generates for a
+  placement's `settings`. `default_empty_value`, `default_separator` and
+  `menuGlyph` are free text and are set in the config file only.
 - **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look

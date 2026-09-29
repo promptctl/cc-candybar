@@ -42,7 +42,7 @@ import {
   effectiveCharset,
   effectiveColorCompatibility,
   effectiveProgression,
-  DEFAULT_UPDATE_NOTICE,
+  effectiveUpdateNotice,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -147,9 +147,10 @@ export interface EffectiveGlobals {
   readonly colorCompatibility: ColorCompatibility;
   readonly autoWrap: boolean;
   readonly padding: number;
-  // Whether the update notice may render for this session's config
-  // (Globals.updateNotice). No SessionState half: the per-session dismissal
-  // is keyed on the update's identity, not on this switch.
+  // Whether the update notice may render for this session
+  // (Globals.updateNotice) — a session pick over the config default, like
+  // every other setting the menu controls. The per-version dismissal is a
+  // separate thing, keyed on the update's identity.
   readonly updateNotice: boolean;
 }
 
@@ -231,8 +232,11 @@ export function resolveEffectiveGlobals(
       sessionPick("charset"),
       globals.charset,
     ),
-    updateNotice:
-      staged.updateNotice ?? globals.updateNotice ?? DEFAULT_UPDATE_NOTICE,
+    updateNotice: effectiveUpdateNotice(
+      staged.updateNotice,
+      sessionPick("updateNotice"),
+      globals.updateNotice,
+    ),
     colorCompatibility: effectiveColorCompatibility(
       staged.colorCompatibility,
       sessionPick("colorCompatibility"),
@@ -288,6 +292,7 @@ export type EffectiveInputs = Pick<
   | "colorCompatibility"
   | "autoWrap"
   | "padding"
+  | "updateNotice"
 >;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
@@ -303,6 +308,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
     padding: { effective: effective.padding },
+    updateNotice: { effective: effective.updateNotice },
   };
 }
 
@@ -376,6 +382,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };
   readonly padding: { readonly effective: number };
+  readonly updateNotice: { readonly effective: boolean };
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is

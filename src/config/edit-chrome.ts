@@ -41,7 +41,8 @@ import {
   type VariableDecl,
 } from "./dsl-types.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
-import { PLACEMENT_THEMES, type ResolvedDomain } from "./option-domain.js";
+import { type ResolvedDomain } from "./option-domain.js";
+import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
@@ -254,52 +255,6 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
-// The control for one setting, generated from its declaration: a toggle for a
-// flag, a cycle through a word list, a stepper over a range, a carousel over
-// the themes — each option painted in the palette picking it would put on the
-// placement (the `placementThemes` domain's `paletteOf`). Each writes the
-// setting's draft key through an action whose gate is the declared domain, so
-// a click cannot write a value the setting may not hold.
-// [LAW:types-are-the-program] Total over SettingDecl's four domain arms.
-function settingControl(
-  decl: SettingDecl,
-  key: string,
-  variable: string,
-  actionName: string,
-  artifacts: ChromeArtifacts,
-): string {
-  const label = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    artifacts.actions[actionName] = { set: key, cycle: ["false", "true"] };
-    return `{{ action "${actionName}" "☐ ${label}" "☑ ${label}" }}`;
-  }
-  if (domain === "theme") {
-    artifacts.actions[actionName] = { set: key, from: PLACEMENT_THEMES };
-    return `{{ "${label}" }} {{ carousel "${actionName}" }}`;
-  }
-  if ("min" in domain) {
-    for (const by of [-domain.step, domain.step]) {
-      artifacts.actions[`${actionName}.${by < 0 ? "down" : "up"}`] = {
-        set: key,
-        min: domain.min,
-        max: domain.max,
-        by,
-      };
-    }
-    return (
-      `{{ action "${actionName}.down" "◀" }} ` +
-      `{{ "${label}" }} {{ .${variable} }} ` +
-      `{{ action "${actionName}.up" "▶" }}`
-    );
-  }
-  artifacts.actions[actionName] = { set: key, cycle: [...domain] };
-  const displays = domain.map(
-    (word) => `"${label}: ${escapeTemplateLiteral(word)}"`,
-  );
-  return `{{ action "${actionName}" ${displays.join(" ")} }}`;
-}
-
 // What configure mode adds to one placement: the `⚙` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
@@ -340,8 +295,15 @@ function configureParts(
     };
     drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
+    // [LAW:one-type-per-behavior] The settings menu's generator: a ring gets
+    // the setting's label beside it, on the row it fills.
+    const control = settingControl(controlDeclOf(decl), key, variable, segName);
+    Object.assign(ctx.artifacts.actions, control.actions);
     ctx.artifacts.segments[segName] = {
-      template: settingControl(decl, key, variable, segName, ctx.artifacts),
+      template:
+        control.kind === "ring"
+          ? `{{ "${escapeTemplateLiteral(decl.label)}" }} ${control.template}`
+          : control.template,
     };
     return { kind: "segment", name: segName };
   });

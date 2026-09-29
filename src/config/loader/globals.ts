@@ -32,6 +32,7 @@ import {
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
 import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "../disclosure.js";
+import type { ControlDomain } from "../setting-control.js";
 
 // [LAW:types-are-the-program] Closed enum like `charset`, plus one
 // migration-pointing rejection: "auto" was the LEGACY default, so migrating
@@ -113,14 +114,39 @@ const menuGlyphSpec: FieldSpec<string> = {
   },
 };
 
+// [LAW:types-are-the-program] One globals field, declared once: how the loader
+// reads it, and the domain a control changing it from the bar ranges
+// (brandon-settings-coverage-g4p.zoj) — or `text`, a field no control shape
+// fits. The helpers below build both halves from ONE literal, so the members a
+// control offers are the members the loader accepts [LAW:one-source-of-truth].
+interface GlobalDecl<T> {
+  readonly spec: FieldSpec<T>;
+  readonly domain: ControlDomain | "text";
+}
+
+function enumGlobal<T extends string>(allowed: readonly T[]): GlobalDecl<T> {
+  return { spec: optionalEnumSpec(allowed), domain: { from: allowed } };
+}
+
+function boolGlobal(): GlobalDecl<boolean> {
+  return { spec: optionalBooleanSpec(), domain: "bool" };
+}
+
+function textGlobal(spec: FieldSpec<string>): GlobalDecl<string> {
+  return { spec, domain: "text" };
+}
+
 // [LAW:one-source-of-truth] THE globals field table, declared once. Both the
 // top-level `globals:` schema and the preset-scoped one below are built from
 // this map, so a field added here is automatically settable from a preset —
-// there is no second list to remember to grow.
-const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
-  default_empty_value: optionalStringSpec(),
-  default_separator: optionalStringSpec(),
-  palette: paletteOrRuleSpec,
+// there is no second list to remember to grow — and the settings menu's
+// control for it ranges the domain declared beside it.
+const GLOBALS: {
+  readonly [K in keyof Globals]-?: GlobalDecl<NonNullable<Globals[K]>>;
+} = {
+  default_empty_value: textGlobal(optionalStringSpec()),
+  default_separator: textGlobal(optionalStringSpec()),
+  palette: { spec: paletteOrRuleSpec, domain: { from: "themes" } },
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
   // `looks` block), so membership is a cross-ref check on the MERGED config —
@@ -130,37 +156,54 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // the right one: `string` already admits both, so neither the spec nor the
   // emitted schema needed a new arm. Shape-only here,
   // exactly the shape/meaning split paletteSpec's schema facet keeps.
-  look: optionalStringSpec(),
+  look: { spec: optionalStringSpec(), domain: { from: "looks" } },
   // [LAW:types-are-the-program] The config-default PRESET name — same
   // per-config-domain shape as `look` (membership is a post-merge cross-ref
   // check, since a user's globals.preset may name a default-provided preset).
-  preset: optionalStringSpec(),
+  preset: { spec: optionalStringSpec(), domain: { from: "presets" } },
   // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
   // shapes the joiner can render), unlike the open-ended palette NAME — so it
   // validates by membership and emits a JSON-Schema `enum`.
-  style: optionalEnumSpec(STRIP_STYLES),
+  style: enumGlobal(STRIP_STYLES),
   // [LAW:types-are-the-program] Closed enum like `style`: the named bar
   // progressions — which theme role each row of the closed bar wears.
-  progression: optionalEnumSpec(PROGRESSION_NAMES),
-  autoWrap: optionalBooleanSpec(),
+  progression: enumGlobal(PROGRESSION_NAMES),
+  autoWrap: boolGlobal(),
   // Intra-cell spaces per side. Bounded above so a config value can never
   // drive an unbounded `" ".repeat` allocation in the daemon
   // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
   // silently-huge render.
   // [LAW:one-source-of-truth] The bound comes from PADDING_RANGE, the same
-  // literal the bundled default's stepper actions bound clicks by and the
-  // session-half parse admits values from — so the file, the click, and the
-  // session pick cannot end up honouring three different ranges.
-  padding: optionalIntSpec(PADDING_RANGE),
+  // literal the session-half parse admits values from — so the file, the
+  // click, and the session pick cannot end up honouring three different ranges.
+  padding: {
+    spec: optionalIntSpec(PADDING_RANGE),
+    domain: { ...PADDING_RANGE, step: 1 },
+  },
   // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
   // vocabularies pickJoiner can render — validates by membership, emits a
   // JSON-Schema `enum` from the same CHARSETS literal.
-  charset: optionalEnumSpec(CHARSETS),
-  updateNotice: optionalBooleanSpec(),
+  charset: enumGlobal(CHARSETS),
+  updateNotice: boolGlobal(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
-  colorCompatibility: colorCompatibilitySpec,
-  menuGlyph: menuGlyphSpec,
+  colorCompatibility: {
+    spec: colorCompatibilitySpec,
+    domain: { from: COLOR_COMPATIBILITIES },
+  },
+  menuGlyph: textGlobal(menuGlyphSpec),
 };
+
+const GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBALS).map(([field, decl]) => [field, decl.spec]),
+) as FieldSpecMap<Globals>;
+
+// The domain a control changing `field` from the bar ranges, as declared
+// beside the field's spec — `text` for a field no control shape fits.
+export function globalsControlDomain(
+  field: keyof Globals,
+): ControlDomain | "text" {
+  return GLOBALS[field].domain;
+}
 
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
 // config's own globals at render time — may not carry `preset`: which preset is

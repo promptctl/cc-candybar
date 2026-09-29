@@ -64,6 +64,7 @@ const SPELLING: {
   colorCompatibility: (e) => e.colorCompatibility,
   autoWrap: (e) => (e.autoWrap ? BOOLEAN_TRUE : BOOLEAN_FALSE),
   padding: (e) => String(e.padding),
+  updateNotice: (e) => (e.updateNotice ? BOOLEAN_TRUE : BOOLEAN_FALSE),
 };
 
 const SETTING_ROWS = Object.entries(SETTINGS) as ReadonlyArray<

@@ -13,6 +13,7 @@ import {
   updateOf,
   UPDATE_DISMISSED_KEY,
   UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
   type ActState,
   type Update,
 } from "../src/daemon/update-notice";
@@ -110,6 +111,7 @@ describe("updateNotice", () => {
     ]);
     expect(effectsOf(disable!.link)).toEqual([
       { verb: "set-config", args: [SID, UPDATE_NOTICE_FIELD, "false"] },
+      { verb: "set-state", args: [SID, UPDATE_NOTICE_SESSION_KEY, "false"] },
     ]);
   });
 

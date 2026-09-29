@@ -123,6 +123,12 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "number",
     default: 1,
   },
+  "updateNotice.effective": {
+    kind: "input",
+    path: "updateNotice.effective",
+    type: "boolean",
+    default: true,
+  },
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects

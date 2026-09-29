@@ -143,6 +143,7 @@ const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   colorCompatibility: { pin: "'256'", pick: "ansi" },
   autoWrap: { pin: "false", pick: "true" },
   padding: { pin: "3", pick: "2" },
+  updateNotice: { pin: "false", pick: "true" },
 };
 
 describe("a save under a preset that pins the field lands where it renders", () => {
