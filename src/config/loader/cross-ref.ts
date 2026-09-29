@@ -317,20 +317,12 @@ export function validateCrossReferences(
   // name string, never of which segment declares or renders it.
   const templateScope = templateScopeOf(cfg);
 
-  // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
-  // every layout cross-ref: each cells node's segment names must resolve to a
-  // declared segment, and any node's `when` predicate (a template like any
-  // other) must reference only existing variables. Cross-ref runs on the MERGED
-  // config so a node can name default-provided segments without re-declaring
-  // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
-  // form is already collapsed and unrecoverable post-merge — so the path
-  // describes the tree and `line` points at whichever layout key the user wrote.
-  // [LAW:one-source-of-truth] Which top-level layout surface the user authored
-  // is read from the PARSED structure, not a text probe: a nested key named
-  // `root` (a variable, a segment) — or `layout` (a `time` var's `layout`
-  // field) — would fool a raw `findKeyLine` search and misclassify the config.
-  // Validation is cold-path, so reading the source's top-level keys is exact.
-  // The reported path/message then point at the surface the user wrote.
+  // [LAW:single-enforcer] ONE pre-order walk owns every layout cross-ref:
+  // each segment a layout names must resolve to a declared segment — in the
+  // MERGED config, so a file can place a bundled segment without re-declaring
+  // it — and any node's `when` predicate (a template like any other) must
+  // reference only existing variables. The walk covers the fragments the FILE
+  // wrote (checkLayoutTree), so its paths and lines are the author's own.
   //
   // [LAW:one-type-per-behavior] A PRESET's `root` is a root: it gets this exact
   // walk, not a reduced copy. The only thing that varies between the config's
