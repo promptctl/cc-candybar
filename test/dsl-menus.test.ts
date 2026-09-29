@@ -834,7 +834,6 @@ describe("toggle round trip + drop stacking", () => {
   });
 });
 
-// Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
 // [LAW:types-are-the-program] brandon-render-channels-b1x.651: a rich-js style
 // function returns a NEW RichText around its child, so a body that rode the
 // glyph as an undeclared property was lost under any wrapper and the menu
@@ -874,6 +873,26 @@ describe("a {{ menu }} under a style wrapper still drops its body", () => {
   });
 });
 
+// A segment that throws after its menu evaluated renders ⚠ and drops
+// nothing, and leaves no record published for whatever evaluates next.
+describe("a segment that throws after its {{ menu }} evaluated", () => {
+  test("renders its error cell, drops no body, and leaves no segment active", () => {
+    const src = MENU_SRC.replace(
+      `'🎨 {{ menu "applyTheme" "▸" "▾" }}'`,
+      `'🎨 {{ menu "applyTheme" "▸" "▾" }}{{ fail "boom" }}'`,
+    );
+    expect(src).not.toBe(MENU_SRC);
+    const { render, sessionState, compiled, dispose } = buildRuntime(src);
+    sessionState.set("s1", TKEY, "applyTheme");
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("⚠ themepicker");
+    expect(compiled.activeSegment.current).toBeNull();
+    dispose();
+  });
+});
+
+// Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
 const INDEPENDENT_SRC = `{
   globals: {},
   variables: {

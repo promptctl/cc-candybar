@@ -28,7 +28,7 @@ import { RichText, Style } from "@promptctl/rich-js";
  * cells. Callers do not assemble cells by hand.
  */
 export function fragmentsToCells(
-  fragments: RichText[],
+  fragments: readonly RichText[],
   baseStyle?: Style,
 ): RichText[] {
   const cells: RichText[] = [];

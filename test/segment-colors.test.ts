@@ -23,7 +23,10 @@ import {
   resolveSegmentColors,
   ColorSpecError,
 } from "../src/template-engine/colors";
-import { createActiveSegmentRef } from "../src/render/active-segment";
+import {
+  createActiveSegmentRef,
+  openSegment,
+} from "../src/render/active-segment";
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
 import type { Disclosure } from "../src/themes/decor";
@@ -82,11 +85,8 @@ function resolve(
   scope: object = {},
 ): Style {
   return resolveSegmentColors(
-    h.ref,
-    SEG,
-    palette,
-    DISCLOSURE,
-    TINT,
+    openSegment(h.ref, SEG, palette, DISCLOSURE, TINT),
+    ColorDepth.TRUECOLOR,
     bg,
     fg,
     scope,
@@ -392,14 +392,7 @@ describe("segment color functions in the engine", () => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
     const engine = createCcCandybarEngine(segmentColorFuncs(ref));
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    ref.current = {
-      segName: SEG,
-      palette: makeTestPalette(),
-      disclosure: DISCLOSURE,
-      tint: TINT,
-      bg: undefined,
-      drops: [],
-    };
+    openSegment(ref, SEG, makeTestPalette(), DISCLOSURE, TINT);
     const fragments = tpl.evaluate({});
     expect(definedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
     expect(fragments[0]?.plain).toBe("hello");

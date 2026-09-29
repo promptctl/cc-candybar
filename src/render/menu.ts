@@ -141,6 +141,12 @@ function renderMenu(
   // segment this menu renders in, the one record the walk owns and reads at
   // the segment's exit. (renderPicker is pure, so it is only built when open —
   // skipping wasted computation, gating no effect.)
+  // [LAW:effects-at-boundaries] exception: the body cannot ride the returned
+  // glyph as a description, because whatever wraps the call (`fg`, `bold`,
+  // `link` …) rebuilds that glyph and keeps only its declared fields. So the
+  // menu appends to the one record the walk publishes for this segment and
+  // tears down after it — a mutation scoped to one segment's evaluation, never
+  // a shared sink.
   // [LAW:one-source-of-truth] The body's page cursor is the identity-derived
   // key (its synthesized state var is named by it, the disclosure-var
   // convention), and CLOSING — the ✕ affordance or a closeOnPick pick — writes

@@ -165,7 +165,7 @@ export interface NodeRenderCtx {
   // on with the steps since that body — extended by one step per container
   // level by the driver, re-rooted onto a band by `renderBody`. A pure fact
   // about position — unchanged by any node being hidden — that the segment
-  // hands to `enterSegment` so its colours derive from where it sits, with no
+  // hands to `evaluateSegment` so its colours derive from where it sits, with no
   // walk state read.
   readonly region: Region;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
@@ -176,29 +176,32 @@ export interface NodeRenderCtx {
   // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
   // (the registry-dispose contract) — see RenderObservers.onSegmentError.
   readonly onSegmentError?: (segName: string, message: string) => void;
-  // [LAW:locality-or-seam] The segment seam, injected as a capability pair so
-  // this module never imports the menu or color features — it only says when a
-  // segment starts and stops.
+  // [LAW:locality-or-seam] The segment seam, injected as a capability so this
+  // module never imports the menu or color features — it only hands over a
+  // segment's templates and gets back what evaluating them produced.
   //
-  // `enterSegment` runs BEFORE any of the segment's templates evaluate. It
-  // publishes what the segment's own templates may ask about themselves — the
-  // name a `{{ menu }}` derives its identity from, the palette `{{ color }}`
-  // resolves against, the background `{{ bgOf }}` returns — and resolves the
-  // segment's `bg:`/`fg:` into its base Style along the way. The bg/fg
-  // resolution HAS to happen here rather than after the body: a body asking for
-  // its own background can only be answered once the background exists.
+  // Before any of the segment's templates evaluate, the seam publishes what
+  // they may ask about themselves — the name a `{{ menu }}` derives its
+  // identity from, the palette `{{ color }}` resolves against, the background
+  // `{{ bgOf }}` returns — and resolves the segment's `bg:`/`fg:` into its
+  // base Style along the way; a body asking for its own background can only be
+  // answered once the background exists. Then the body evaluates, and the seam
+  // returns its fragments beside the bodies its open `{{ menu }}`s dropped
+  // (template order), for the boundary to stack below the row.
   //
-  // `exitSegment` runs AFTER eval: it returns the open menu bodies the
-  // segment's `{{ menu }}`s appended to the published record (template order)
-  // for the boundary to stack below the row, and tears the record down.
-  enterSegment(
+  // [LAW:no-ambient-temporal-coupling] Publishing and tearing down are ONE
+  // call, so a template that throws cannot leave the record published for
+  // whatever evaluates next outside any segment.
+  evaluateSegment(
     segName: string,
     palette: Palette,
     region: Region,
-    bgTemplate: Template<RichText> | undefined,
-    fgTemplate: Template<RichText> | undefined,
-  ): SegmentStyles;
-  exitSegment(): readonly RichText[];
+    templates: {
+      readonly bg: Template<RichText> | undefined;
+      readonly fg: Template<RichText> | undefined;
+      readonly body: Template<RichText>;
+    },
+  ): EvaluatedSegment;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
   lookupSegment(
@@ -241,6 +244,14 @@ export interface SegmentStyles {
   readonly trigger: Style;
   readonly band: Style;
   readonly disclosure: Disclosure;
+}
+
+// What evaluating one segment's templates produced: the Styles it can wear,
+// its inline fragments, and the bodies its open `{{ menu }}`s dropped.
+export interface EvaluatedSegment {
+  readonly styles: SegmentStyles;
+  readonly fragments: readonly RichText[];
+  readonly drops: readonly RichText[];
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -457,20 +468,17 @@ const segmentType: NodeType<"segment"> = {
       // evaluates rather than after — a body coloured from a palette resolved
       // independently of the cell it sits in is two palettes in one segment,
       // and they diverge the moment a theme or look moves.
-      const styles = ctx.enterSegment(
+      // [LAW:decomposition] The open menu bodies (`drops`) come back beside
+      // the fragments, never inside them — invisible to the inline render, so
+      // a menu can sit anywhere in the template, under any wrapper, and
+      // content after it stays inline. Each becomes one full-width line
+      // stacked below the segment's row.
+      const { styles, fragments, drops } = ctx.evaluateSegment(
         node.name,
         palette,
         ctx.region,
-        segCompiled.bg,
-        segCompiled.fg,
+        { bg: segCompiled.bg, fg: segCompiled.fg, body: segCompiled.template },
       );
-      const fragments = segCompiled.template.evaluate(ctx.scope);
-      // [LAW:decomposition] The open menu bodies, collected on the segment's
-      // record rather than in its fragments — invisible to the inline render,
-      // so a menu can sit anywhere in the template, under any wrapper, and
-      // content after it stays inline. Each becomes one full-width line
-      // stacked below the segment's row.
-      const drops = ctx.exitSegment();
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
       // each entering the seam in turn — on the band this trigger computed.
