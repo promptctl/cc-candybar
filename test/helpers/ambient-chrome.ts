@@ -140,7 +140,7 @@ function keysWrittenBy(url: string): string[] {
 
 // The settings menu's OWN surfaces: its `🍫` toggle and — the part a substring
 // match on the anchor missed — its hosted pickers, whose shared disclosure key
-// is `menus.settings_pickers.…` and shares none of the anchor's spelling. A
+// is `menus.candybar_pickers.…` and shares none of the anchor's spelling. A
 // test that opens the menu before collecting links would otherwise have counted
 // a picker's toggle as one of its fixture's own regions.
 function isSettingsMenuKey(key: string): boolean {

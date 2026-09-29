@@ -65,7 +65,7 @@ export type Verdict =
 
 export interface Check {
   // camelCase: the name splices into state-variable and action names
-  // (`settings.doctor.<name>.verdict`), where a hyphen is not an identifier.
+  // (`candybar.doctor.<name>.verdict`), where a hyphen is not an identifier.
   readonly name: string;
   readonly label: string;
   readonly probe: (facts: DoctorFacts) => Verdict;

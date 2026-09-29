@@ -1083,14 +1083,14 @@ A segment's `palette:` has no SessionState half — `persist` is its only seam,
 so there is no session `set` twin to pair it with. (The display globals
 `charset`, `colorCompatibility`, `autoWrap` and `padding` do have one.)
 
-### The global settings menu: `settings.menu`
+### The global settings menu: `candybar.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
 global settings menu, rendered as `🍫`. It is one symbol per state rather than a
 label plus an arrow: `🍫` closed, `❌` open. By default it is the leading cell of
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
-is shared by every preset). Place the reserved `settings.menu` segment name
+is shared by every preset). Place the reserved `candybar.menu` segment name
 yourself to move it anywhere else.
 
 ```json5 check:pass
@@ -1165,7 +1165,7 @@ drop-down open, so you can try several in a row; the `✕` leading each of its
 rows closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
-where it goes, by placing the reserved segment name `settings.menu` in your
+where it goes, by placing the reserved segment name `candybar.menu` in your
 layout — the anchor. Place it and the menu renders there; leave it out and the
 menu leads the bar's first row. Nothing else differs between the two:
 the same toggle, the same body, the same clicks.
@@ -1174,7 +1174,7 @@ the same toggle, the same body, the same clicks.
 {
   root: { v: [
     { h: ["directory", "gitaculous"] },
-    { h: ["settings.menu", "model", "context"] },
+    { h: ["candybar.menu", "model", "context"] },
   ] },
 }
 ```
@@ -1186,8 +1186,8 @@ placement would be two toggles fighting over it:
 ```json5 check:fail
 {
   root: { v: [
-    { h: ["directory", "settings.menu"] },
-    { h: ["model", "settings.menu"] },
+    { h: ["directory", "candybar.menu"] },
+    { h: ["model", "candybar.menu"] },
   ] },
 }
 ```
@@ -1205,7 +1205,7 @@ anchor may not sit under a `when` or inside a group's body:
 ```json5 check:fail
 {
   root: { v: [
-    { h: ["directory", "settings.menu"], when: "{{ ne .git.branch \"\" }}" },
+    { h: ["directory", "candybar.menu"], when: "{{ ne .git.branch \"\" }}" },
   ] },
 }
 ```
@@ -1219,7 +1219,7 @@ that your config does not declare — `session.id`, the `.effective` settings,
 `project_dir` — it declares itself, and your own declaration of any of those
 names wins.
 
-Everything the menu synthesizes lives under the reserved `settings.` namespace
+Everything the menu synthesizes lives under the reserved `candybar.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
 the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
 reserved namespace" below). Edit mode also treats those names as structural: no
@@ -1290,7 +1290,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 |---|---|---|---|
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
-| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `settings.`) is a load error |
+| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`) is a load error |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the style pick closing its
@@ -1827,7 +1827,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A `{{ menu }}` accordion key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `settings.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `settings.pickers`, `settings-pickers`, and `settings_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `settings.`), not only this one:
+The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`), not only this one:
 
 ```json5 check:fail
 {
@@ -1836,7 +1836,7 @@ The bundled settings menu's four config pickers share the accordion key `setting
   },
   segments: {
     themePicker: {
-      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "settings-pickers") }}',
+      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar-pickers") }}',
     },
   },
   root: { rows: { identity: { h: ["directory", "themePicker"] } } },
@@ -1844,7 +1844,7 @@ The bundled settings menu's four config pickers share the accordion key `setting
 ```
 
 ```error
-segment "themePicker" has a {{ menu }} whose accordion key "settings-pickers" lands in the reserved "settings." namespace — a key is collapsed to an identifier ("settings-pickers" becomes "menus.settings_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
+segment "themePicker" has a {{ menu }} whose accordion key "candybar-pickers" lands in the reserved "candybar." namespace — a key is collapsed to an identifier ("candybar-pickers" becomes "menus.candybar_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit

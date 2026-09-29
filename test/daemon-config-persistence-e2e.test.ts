@@ -93,8 +93,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(
         sockPath,
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [SID, "settings.config", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.config", "open"] },
         ]),
       );
 
@@ -108,7 +108,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
-        effects[0]!.args[2] === "settings.apply.theme",
+        effects[0]!.args[2] === "candybar.apply.theme",
       );
       expect(themeMenuToggleUrl).toBeDefined();
       await click(sockPath, themeMenuToggleUrl!);
@@ -161,8 +161,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(
         sockPath,
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.config", "open"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.config", "open"] },
         ]),
       );
       const otherBar = await render(sockPath, OTHER_SID, projectDir);
@@ -262,8 +262,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(
         sockPath,
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [FRESH_SID, "settings.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [FRESH_SID, "settings.config", "open"] },
+          { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.config", "open"] },
         ]),
       );
       const freshOut = await renderUntil(

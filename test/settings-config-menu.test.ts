@@ -278,10 +278,10 @@ describe("the config menu, reached from a user config whose root is one row", ()
     // Open the menu and its config row — the two clicks a "🍫 ▸" then
     // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
     // bytes, never constructed, so this also proves they are REACHABLE.
-    const menuToggle = writesTo(r.render(), "settings.menu")[0];
+    const menuToggle = writesTo(r.render(), "candybar.menu")[0];
     expect(menuToggle).toBeDefined();
     r.click(menuToggle!);
-    const configToggle = writesTo(r.render(), "settings.config")[0];
+    const configToggle = writesTo(r.render(), "candybar.config")[0];
     expect(configToggle).toBeDefined();
     r.click(configToggle!);
   });
@@ -319,8 +319,8 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
   test("every control writes the session key; the only durable links are the ↺ resets", () => {
     // Open the theme ring so its option cells render too.
-    const themeMenu = writesTo(r.render(), "menus.settings_pickers").find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
+    const themeMenu = writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+      effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
     );
     r.click(themeMenu!);
     const open = r.render();
@@ -467,10 +467,10 @@ describe("save under a preset that pins the setting", () => {
   // Pick `plain` from the style carousel, save, and return the bar after the
   // save released the pick — what the file alone renders.
   const pickPlainAndSave = (r: ReturnType<typeof rig>): string => {
-    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(writesTo(r.render(), "candybar.config")[0]!);
     r.click(
-      writesTo(r.render(), "menus.settings_pickers").find((u) =>
-        effectsOf(u).some((e) => e.args[2] === "settings.apply.style"),
+      writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+        effectsOf(u).some((e) => e.args[2] === "candybar.apply.style"),
       )!,
     );
     const capsule = plain(r.render());
@@ -491,7 +491,7 @@ describe("save under a preset that pins the setting", () => {
   test("the file names the preset: the save lands in its globals and the bar draws it", () => {
     const r = rig(PINNING_PRESET_NAMED, durable);
     try {
-      r.click(writesTo(r.render(), "settings.menu")[0]!);
+      r.click(writesTo(r.render(), "candybar.menu")[0]!);
       const after = pickPlainAndSave(r);
 
       const parsed = durable.parsed() as {
@@ -514,10 +514,10 @@ describe("save under a preset that pins the setting", () => {
   test("the session picks the preset: the save writes both, the style into the preset", () => {
     const r = rig(PINNING_PRESET, durable);
     try {
-      r.click(writesTo(r.render(), "settings.menu")[0]!);
+      r.click(writesTo(r.render(), "candybar.menu")[0]!);
       r.click(
-        writesTo(r.render(), "menus.settings_pickers").find((u) =>
-          effectsOf(u).some((e) => e.args[2] === "settings.apply.preset"),
+        writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+          effectsOf(u).some((e) => e.args[2] === "candybar.apply.preset"),
         )!,
       );
       r.click(
@@ -569,8 +569,8 @@ describe("reset returns settings to the bundled default", () => {
   beforeEach(() => {
     durable = durableConfig("cc-candybar-settings-reset-");
     r = rig(CUSTOMIZED, durable);
-    r.click(writesTo(r.render(), "settings.menu")[0]!);
-    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    r.click(writesTo(r.render(), "candybar.config")[0]!);
   });
   afterEach(() => {
     r.dispose();
@@ -646,8 +646,8 @@ describe("reset returns settings to the bundled default", () => {
     expect(labelled("⟲ reset all")).toBeUndefined();
     expect(labelled("⟲ confirm reset all")).toBeDefined();
     // Close and reopen the menu: the arm does not survive it.
-    r.click(writesTo(r.render(), "settings.menu")[0]!);
-    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
     expect(labelled("⟲ confirm reset all")).toBeUndefined();
     expect(labelled("⟲ reset all")).toBeDefined();
     expect(durable.text()).toBe(before);
@@ -659,11 +659,11 @@ describe("reset returns settings to the bundled default", () => {
     const close = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("settings.config")),
+        effectsOf(l.url).some((e) => e.args.includes("candybar.config")),
     )!.url;
     r.click(close);
     expect(labelled("⟲ confirm reset all")).toBeUndefined();
-    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(writesTo(r.render(), "candybar.config")[0]!);
     expect(labelled("⟲ confirm reset all")).toBeUndefined();
     expect(labelled("⟲ reset all")).toBeDefined();
   });
@@ -716,11 +716,11 @@ describe("a pick leaves the picker open", () => {
   let r: ReturnType<typeof rig>;
   beforeEach(() => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
-    r.click(writesTo(r.render(), "settings.menu")[0]!);
-    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    r.click(writesTo(r.render(), "candybar.config")[0]!);
     r.click(
-      writesTo(r.render(), "menus.settings_pickers").find((u) =>
-        effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
+      writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+        effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
       )!,
     );
   });
@@ -818,10 +818,10 @@ describe("save as preset", () => {
     );
   // The door, then the preset control's ▸: the ring and the rows beneath it.
   const openPresets = () => {
-    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
     r.click(
       links(r.render()).find((l) =>
-        effectsOf(l.url).some((e) => e.args[2] === "settings.apply.preset"),
+        effectsOf(l.url).some((e) => e.args[2] === "candybar.apply.preset"),
       )!.url,
     );
   };

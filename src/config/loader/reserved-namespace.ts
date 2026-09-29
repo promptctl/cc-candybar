@@ -24,7 +24,10 @@ import { findKeyLine } from "./diagnostics.js";
 export const GROUP_NS = "groups.";
 export const MENU_NS = "menus.";
 export const EDIT_NS = "edit.";
-export const SETTINGS_NS = "settings.";
+// `candybar.`, not `settings.`: `.settings` in a segment's templates is its
+// placement's own settings (brandon-segment-settings-i4n), so no variable may
+// live under that name.
+export const SETTINGS_NS = "candybar.";
 
 const RESERVED_NAMESPACES = [GROUP_NS, MENU_NS, EDIT_NS, SETTINGS_NS] as const;
 
@@ -42,8 +45,8 @@ export function isReservedName(name: string): boolean {
 // `{{ menu }}` accordion key is such a name: it is a template argument, so
 // `reservedNamespaceCollisions` below (which walks declaration sections) cannot
 // see it, and `menuStateKey` collapses it through `ident()` before it becomes the
-// state key. That collapse is where the reservation leaked: `settings.pickers`,
-// `settings-pickers` and `settings_pickers` all collapse to `settings_pickers`,
+// state key. That collapse is where the reservation leaked: `candybar.pickers`,
+// `candybar-pickers` and `candybar_pickers` all collapse to `candybar_pickers`,
 // so all three derived the state key the settings menu's own picker accordion
 // mints and JOINED it — opening a user menu closed the settings picker, with no
 // error naming the cause (brandon-menus-du8).
@@ -52,7 +55,7 @@ export function isReservedName(name: string): boolean {
 // [LAW:behavior-not-structure]: `ident()`'s codomain is `[A-Za-z0-9_]*`, so an
 // authored name can only collide with a synthesized `ns + x` when its own
 // collapse starts with `ident(ns)`. Testing the authored spelling for a leading
-// `"settings."` — the check the reviewer proposed — misses two of those three.
+// `"candybar."` — the check the reviewer proposed — misses two of those three.
 // Returns the namespace, so the caller's message can name what owns it.
 export function reservedNamespaceOf(name: string): string | undefined {
   const collapsed = ident(name);

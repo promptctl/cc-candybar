@@ -25,7 +25,7 @@
 //     rows merge by name over the bundled default's, and it is the MERGED root
 //     the menu has to be present in.
 //   • It runs BEFORE edit chrome so edit chrome walks the final content tree.
-//     Every name minted here lives under the reserved `settings.` namespace,
+//     Every name minted here lives under the reserved `candybar.` namespace,
 //     which `isChromeExempt` excludes, so the menu never acquires a `+`/`-`
 //     affordance and can never be edited out of the bar it is the entry point
 //     to. Running after would splice the menu into an already-chromed tree,
@@ -358,7 +358,7 @@ const ALL_CONTROLS: readonly KeyedSetting[] = [
 ];
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
-// session key every control picks and the config field its save and ↺ write. Unlike the `settings.` names, these
+// session key every control picks and the config field its save and ↺ write. Unlike the `candybar.` names, these
 // are ordinary words a config can own (`theme`, `padding`, …), so a reader
 // cannot tell from the key alone whether the menu or the author wrote it. This
 // set is the menu's own answer to "which keys do I write", derived from the

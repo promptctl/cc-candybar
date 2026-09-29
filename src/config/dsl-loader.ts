@@ -237,7 +237,7 @@ export function validateConfig(
   // cycle checking, exactly as group/menu synthesis's output doesn't either.
   // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.1's global settings
   // menu, spliced BEFORE edit chrome so edit chrome walks the final content tree
-  // and treats the menu's reserved `settings.` names as chrome-exempt — the
+  // and treats the menu's reserved `candybar.` names as chrome-exempt — the
   // full ordering argument lives in settings-menu.ts's header, beside the pass
   // it governs.
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(config));
@@ -429,7 +429,7 @@ function validateTopLevel(
   // here and synthesizes NOTHING here: the tree it must be present in only
   // exists after merge (a user `root` replaces the default's), so the artifacts
   // are minted in validateConfig. The reservation is unconditional all the same,
-  // mirroring every other namespace above — "you never author settings.*" is a
+  // mirroring every other namespace above — "you never author candybar.*" is a
   // stable contract, not a rule that switches on when the pass happens to fire.
   reservedNamespaceCollisions(
     ctx,

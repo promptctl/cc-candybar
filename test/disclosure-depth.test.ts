@@ -309,12 +309,12 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the carousel it
     // opens (brandon-theme-picker-bgw.ef6) is a depth-2 item of that band.
     const control = row2[0]!;
-    const pickers = sharedMenuStateKey("settings.pickers");
-    rt.clickWriting(control, pickers, "settings.apply.theme");
+    const pickers = sharedMenuStateKey("candybar.pickers");
+    rt.clickWriting(control, pickers, "candybar.apply.theme");
     rt.render();
     const band2: Disclosure = { hue, depth: 2 };
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
-    const ring = "settings.carousel.theme";
+    const ring = "candybar.carousel.theme";
     expect(rt.bgOf(ring)).toBe(
       bandItemFor(palette, band2, regionAddress(rt, ring), ColorDepth.TRUECOLOR).hex,
     );

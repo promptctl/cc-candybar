@@ -69,7 +69,7 @@ function pickerConfig(): string {
     // placed EXPLICITLY on its own row here so the picker keeps its row to
     // itself — a sibling cell would eat into the width this suite measures
     // pagination against, which is not what these tests are about.
-    root: { v: ['menu', 'settings.menu'] },
+    root: { v: ['menu', 'candybar.menu'] },
   }`;
 }
 
@@ -268,7 +268,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       // (as pickerConfig does) so row 0 stays exactly the inline trigger row
       // these tests measure — an unaccounted ambient cell in the measured row
       // would make the width budget below lie.
-      root: { v: [{ h: ['label', 'themeMenu', 'styleMenu'] }, 'settings.menu'] },
+      root: { v: [{ h: ['label', 'themeMenu', 'styleMenu'] }, 'candybar.menu'] },
     }`;
   }
 
