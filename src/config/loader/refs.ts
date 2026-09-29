@@ -5,20 +5,54 @@
 // when the surface grammar of those refs changes; the cross-ref/cycle passes
 // consume the sets it returns without re-deriving them.
 
-const TEMPLATE_BLOCK_RE = /{{([\s\S]*?)}}/g;
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 const DOTTED_REF_RE =
   /(?<![A-Za-z0-9_)])\.([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)/g;
+
+// [LAW:single-enforcer] The inside of every `{{ … }}` action in a template,
+// string literals intact. A block closes at the first `}}` OUTSIDE a string
+// literal, as the engine's own lexer closes it: a literal carrying `}}` (a
+// display, an escaped glyph) is text, and a regex ending at the first `}}`
+// would read the rest of that literal as code. A `/* … */` comment is skipped
+// the same way, and left out of the block: it is neither code nor a literal,
+// and an apostrophe in it opens nothing. An unclosed action yields nothing:
+// it is the engine's parse error to report. Every extractor below reads its
+// blocks from here.
+function* templateBlocks(template: string): IterableIterator<string> {
+  let open = template.indexOf("{{");
+  while (open !== -1) {
+    let block = "";
+    let i = open + 2;
+    while (i < template.length && !template.startsWith("}}", i)) {
+      if (template.startsWith("/*", i)) {
+        const close = template.indexOf("*/", i + 2);
+        i = close === -1 ? template.length : close + 2;
+        continue;
+      }
+      const start = i;
+      const quote = template[i]!;
+      i += 1;
+      if (quote === '"' || quote === "'" || quote === "`") {
+        while (i < template.length && template[i] !== quote) {
+          i += template[i] === "\\" && quote !== "`" ? 2 : 1;
+        }
+        i += 1;
+      }
+      block += template.slice(start, i);
+    }
+    if (i >= template.length) return;
+    yield block;
+    open = template.indexOf("{{", i + 2);
+  }
+}
 
 // [LAW:dataflow-not-control-flow] Extract every `.<id>(.<id>)*` token inside
 // `{{ ... }}` blocks after stripping string literals. The result is a set of
 // dotted reference candidates; the caller decides which are valid.
 export function extractTemplateRefs(template: string): Set<string> {
   const refs = new Set<string>();
-  let m: RegExpExecArray | null;
-  TEMPLATE_BLOCK_RE.lastIndex = 0;
-  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
-    const block = m[1]!.replace(STRING_LITERAL_RE, "");
+  for (const raw of templateBlocks(template)) {
+    const block = raw.replace(STRING_LITERAL_RE, "");
     let r: RegExpExecArray | null;
     DOTTED_REF_RE.lastIndex = 0;
     while ((r = DOTTED_REF_RE.exec(block)) !== null) {
@@ -37,10 +71,7 @@ export function extractTemplateRefs(template: string): Set<string> {
 const ACTION_ARG_RE = /\baction\s+$/;
 export function extractActionRefs(template: string): Set<string> {
   const refs = new Set<string>();
-  TEMPLATE_BLOCK_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
-    const block = m[1]!;
+  for (const block of templateBlocks(template)) {
     let cursor = 0;
     let s: RegExpExecArray | null;
     STRING_LITERAL_RE.lastIndex = 0;
@@ -67,10 +98,7 @@ export function extractActionRefs(template: string): Set<string> {
 const PICKER_OR_MENU_ARG_RE = /\b(picker|menu|carousel)\s+$/;
 export function extractPickerMenuRefs(template: string): Set<string> {
   const refs = new Set<string>();
-  TEMPLATE_BLOCK_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
-    const block = m[1]!;
+  for (const block of templateBlocks(template)) {
     let cursor = 0;
     let pending = 0; // remaining name args to capture for the current call
     let s: RegExpExecArray | null;

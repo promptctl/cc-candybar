@@ -123,37 +123,6 @@ describe("undo/redo loader shape", () => {
   });
 });
 
-describe("cross-ref: undo/redo require a global session.id", () => {
-  test("a config declaring only 'undo' still needs session.id", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{
-          segments: { bar: { template: 'b', bg: 'surface', fg: 'foreground' } },
-          actions: { back: { undo: true } },
-          root: 'bar',
-        }`,
-        ALLOWED,
-      ),
-    ).toThrow(/require a global "session.id" variable/);
-  });
-
-  test("declaring session.id satisfies it", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{
-          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-          segments: { bar: { template: 'b', bg: 'surface', fg: 'foreground' } },
-          actions: { back: { undo: true }, fwd: { redo: true } },
-          root: 'bar',
-        }`,
-        ALLOWED,
-      ),
-    ).not.toThrow();
-  });
-});
-
 // ─── config-validators: undo/redo derive NO gate ──────────────────────────
 
 describe("deriveConfigActionValidators over undo/redo actions", () => {

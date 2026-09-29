@@ -31,7 +31,7 @@ import type {
   Placement,
   SegmentDecl,
 } from "../config/dsl-types.js";
-import { AXIS_OF } from "../config/dsl-types.js";
+import { AXIS_OF, bodyPath, childPath } from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -406,7 +406,7 @@ const containerType: NodeType<"container"> = {
       when: cctx.when,
       distribution: placedBy(node.distribution),
       children: node.children.map((child, i) =>
-        cctx.compileChild(child, `${cctx.path}.children[${i}]`),
+        cctx.compileChild(child, childPath(cctx.path, i)),
       ),
     };
   },
@@ -435,7 +435,7 @@ const segmentType: NodeType<"segment"> = {
       ...(node.opens !== undefined && {
         opens: {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          body: cctx.compileChild(node.opens.body, `${cctx.path}.opens.body`),
+          body: cctx.compileChild(node.opens.body, bodyPath(cctx.path)),
           key: node.opens.ref.key,
           placement: node.opens.placement,
         },

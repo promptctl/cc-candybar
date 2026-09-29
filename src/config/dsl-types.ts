@@ -245,6 +245,28 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   for (const child of childrenOf(node)) yield* walkNodes(child);
 }
 
+// [LAW:one-source-of-truth] The diagnostic path of a node's subtrees, spelled
+// once for the compile (node-registry.ts) and the load-time checks
+// (cross-ref.ts), so an error names the same place from either.
+export const childPath = (path: string, i: number): string =>
+  `${path}.children[${i}]`;
+export const bodyPath = (path: string): string => `${path}.opens.body`;
+
+// walkNodes, with each node's diagnostic path beside it.
+export function* walkNodePaths(
+  node: LayoutNode,
+  path: string,
+): IterableIterator<readonly [LayoutNode, string]> {
+  yield [node, path];
+  if (node.kind === "container") {
+    for (const [i, child] of node.children.entries()) {
+      yield* walkNodePaths(child, childPath(path, i));
+    }
+  } else if (node.opens !== undefined) {
+    yield* walkNodePaths(node.opens.body, bodyPath(path));
+  }
+}
+
 // [LAW:one-source-of-truth] THE subtrees a node owns: a container's children,
 // a segment's disclosure body. The walk and every count over it read this, so
 // "what is under this node" has one answer for both kinds.
@@ -782,14 +804,3 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
   "left",
   "middle",
 ];
-
-// ─── Conventional render-time variable names ─────────────────────────────────
-//
-// [LAW:one-source-of-truth] These are not widget types (those live in
-// `./action.ts`); they are the conventional variable NAMES the renderer and the
-// picker agree on. Kept here, with the other render/config conventions.
-
-// [LAW:one-source-of-truth] The conventional variable a picker paginates against
-// — the usable terminal width renderDsl injects each render. One name shared by
-// the declaration (default config) and the picker's read, so they cannot drift.
-export const TERM_COLS_VAR = "term.cols";

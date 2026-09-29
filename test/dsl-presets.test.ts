@@ -193,15 +193,17 @@ describe("presets block — loader validation", () => {
 // The floor makes this reachable for configs that never opted into presets at
 // all [FRAMING:representation].
 describe("preset compile diagnostics name the authored path", () => {
+  // Load or compile: a malformed `when` in an authored tree is refused at load
+  // (cross-ref), the compile being where anything synthesized is parsed.
   const compileError = (src: string): string => {
-    const config = parseAndValidate("<presets>", src, ALLOWED);
-    const registry = new SourceRegistry(
-      new VariableStore(),
-      "",
-      undefined,
-      new SessionState(),
-    );
     try {
+      const config = parseAndValidate("<presets>", src, ALLOWED);
+      const registry = new SourceRegistry(
+        new VariableStore(),
+        "",
+        undefined,
+        new SessionState(),
+      );
       registerDslConfig(config, registry);
     } catch (e) {
       return (e as Error).message;

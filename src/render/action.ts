@@ -39,7 +39,7 @@ import {
   type ResolvedDomain,
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
-import { SETTING_PROJECTIONS } from "../config/setting-projections.js";
+import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import { parseSessionBoolean } from "../themes/policy.js";
 import type { Progression } from "../themes/decor.js";
@@ -228,25 +228,6 @@ export type CompiledActionDecl =
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
-// [LAW:one-source-of-truth] The current value of a setting is the one the bar
-// is rendering with — whichever rung (staged, session, config, floor) produced
-// it — so a `persist` and a `set` on a key in SETTING_PROJECTIONS both read
-// back through its `.effective` projection. The table is the settings menu's
-// too (src/config/setting-projections.ts), so every dual control it mints has
-// a row here. A `persist` on a field with no row reads back through a var
-// named after the field, which none is, so its current-selection mark is
-// inert (readVar yields ""); a `set` on a key with no row reads back through
-// the `state` variable over that key.
-const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
-  SETTING_PROJECTIONS.map((p) => [p.configKey, p.effectiveVar]),
-);
-
-// registerDslConfig seeds its key → read-back map from this, ahead of any
-// `state` variable over the same key: an unpicked session has no pick, yet the
-// bar still wears a theme (brandon-theme-picker-bgw.exj).
-export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
-  new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));
-
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
 // engine, the compiled actions reference the engine — the holder breaks the
@@ -267,6 +248,12 @@ export interface ActionRuntime {
   // renders are sequential and synchronous, so the per-render write never leaks
   // across renders. [LAW:no-ambient-temporal-coupling]
   chromeCols: number;
+  // [LAW:locality-or-seam] The width the current render's strip wraps to
+  // (`opts.width`, the value renderDsl also injects as `term.cols`), published
+  // beside chromeCols. The row-fitting functions read it here rather than from
+  // the store, so fitting a row to the width reads no variable a config must
+  // declare.
+  width: number;
   // [LAW:locality-or-seam] The current render's intra-cell padding (resolved
   // globals.padding), published per render by renderDsl exactly like
   // chromeCols. The picker reserves 2×padding at its pagination seam — the

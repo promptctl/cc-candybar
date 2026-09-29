@@ -30,9 +30,10 @@
 //     affordance and can never be edited out of the bar it is the entry point
 //     to. Running after would splice the menu into an already-chromed tree,
 //     landing it between a segment and the `-` that removes it.
-//   • It also GUARANTEES `edit.toggle` (see ensureEditToggle below), which is
-//     precisely what edit chrome's own demand gate reads — so the ordering is
-//     load-bearing in that direction too, not merely tidy.
+//   • It also GUARANTEES `edit.toggle` and the `edit.mode` state it cycles
+//     (see ensureEditToggle below), which edit chrome's gates read and its
+//     `✎ done` fires — so the ordering is load-bearing in that direction too,
+//     not merely tidy.
 
 import type { ActionDecl } from "./action.js";
 import {
@@ -75,6 +76,7 @@ import { quickActions } from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import { SETTINGS, type SettingProjection } from "./setting-projections.js";
+import { synthesisInputs } from "./synthesis-inputs.js";
 import {
   BOOLEAN_FALSE,
   BOOLEAN_MEMBERS,
@@ -877,32 +879,6 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
   );
 }
 
-// [LAW:one-source-of-truth] The variable whose presence IS the precondition,
-// named once so the predicate below and the load error cross-ref.ts raises when
-// it fails cannot describe different variables.
-export const SESSION_ID_VAR = "session.id";
-
-// [LAW:types-are-the-program] The menu's one structural prerequisite, read as a
-// value: a global `session.id`. It is not a demand gate and not a preference —
-// the menu is a CLICK surface, every click composes a URL whose first segment is
-// `session.id` read from the store, and cross-ref.ts already rejects an AUTHORED
-// state read or `set` write in a config that declares no such variable. A config
-// without it describes a static, non-interactive bar, and there is no menu to
-// place on one. Every config the daemon renders merges the bundled default,
-// which declares `session.id`, so in production this is universally true; what
-// it excludes is the hand-built static config, not a user.
-//
-// [LAW:one-source-of-truth] Exported because this is THE fact "will the anchor
-// resolve to a segment?" — asked here to decide whether to mint the menu, and
-// asked by cross-ref.ts to decide whether an authored placement of the anchor is
-// a reference this pass is about to satisfy or a dangling one. Two readers, one
-// predicate: when they were two predicates, cross-ref accepted an anchor this
-// pass then declined to provide, and the un-lowered reference reached the render
-// walk to throw at `lookupSegment`.
-export function canHostSessionState(config: DslConfig): boolean {
-  return Object.prototype.hasOwnProperty.call(config.variables, SESSION_ID_VAR);
-}
-
 // [LAW:single-enforcer] THE synthesis entry point, called once from
 // validateConfig after cross-ref/cycle checks pass and before edit chrome.
 // Every declared preset — the floor `default` included — gets an explicit
@@ -910,8 +886,13 @@ export function canHostSessionState(config: DslConfig): boolean {
 // itself is left untouched, exactly as synthesizeEditChrome leaves it, because
 // presetRoot falls back to it only for a preset declaring no root of its own
 // and every name now declares one.
+//
+// There is no precondition (brandon-settings-menu-d6f: "The settings menu
+// should always be visible no matter what"): whatever the menu reads that the
+// config does not declare, it ensures — merged UNDER the config, so a user's
+// own declaration of the same name wins, exactly as edit chrome's ensured
+// inputs do.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
-  if (!canHostSessionState(config)) return config;
   const { artifacts, help } = settingsArtifacts(
     config.globals.menuGlyph ?? DOOR_GLYPH,
   );
@@ -924,9 +905,14 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
       root: expandAnchor(withAnchor(node), help),
     };
   }
+  const ensured = synthesisInputs(
+    artifacts,
+    [expandAnchor({ kind: "segment", name: SETTINGS_ANCHOR }, help)],
+    Object.keys(config.variables),
+  );
   return {
     ...config,
-    variables: { ...config.variables, ...artifacts.variables },
+    variables: { ...ensured, ...config.variables, ...artifacts.variables },
     actions: { ...config.actions, ...artifacts.actions },
     segments: { ...config.segments, ...artifacts.segments },
     presets,

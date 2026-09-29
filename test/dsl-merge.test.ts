@@ -229,11 +229,16 @@ describe("mergeWithDefault", () => {
 
 describe("validateConfig", () => {
   test("returns ValidatedConfig for a clean merged config", () => {
-    // ValidatedConfig is structurally DslConfig + a phantom brand; runtime
-    // identity is preserved.
+    // ValidatedConfig is structurally DslConfig + a phantom brand. The
+    // synthesis passes add the chrome every bar carries; what was merged
+    // passes through untouched.
     const merged = mergeWithDefault({}, DFLT);
     const validated = validateConfig(merged, "<test>");
-    expect(validated).toBe(merged);
+    expect(validated.root).toBe(merged.root);
+    expect(validated.globals).toBe(merged.globals);
+    for (const [name, seg] of Object.entries(merged.segments)) {
+      expect(validated.segments[name]).toBe(seg);
+    }
   });
 
   test("throws ConfigError when a merged layout references an unknown segment", () => {

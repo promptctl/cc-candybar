@@ -168,7 +168,9 @@ describe("introspectVars with populated state", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const names = ownDeclNames(vars.map((v) => v.name));
-    expect(names).toEqual(["derived", "greeting", "session.id", "user_path"]);
+    // session.id is declared here but is also a name the settings menu ensures,
+    // so the ambient filter drops it (ownDeclNames records why).
+    expect(names).toEqual(["derived", "greeting", "user_path"]);
   });
 
   test("source kind matches the DSL declaration", () => {
@@ -418,7 +420,6 @@ describe("introspectConfig with populated state", () => {
     expect(ownDeclNames(Object.keys(config?.variables ?? {})).sort()).toEqual([
       "derived",
       "greeting",
-      "session.id",
       "user_path",
     ]);
     expect(ownDeclNames(Object.keys(config?.segments ?? {})).sort()).toEqual([

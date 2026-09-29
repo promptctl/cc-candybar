@@ -18,7 +18,7 @@ import type {
   ValidatedConfig,
 } from "../../src/config/dsl-types";
 
-const EMPTY_DEFAULT: DslConfig = {
+export const EMPTY_DEFAULT: DslConfig = {
   globals: {},
   variables: {},
   segments: {},

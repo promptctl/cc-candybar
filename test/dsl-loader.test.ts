@@ -28,7 +28,8 @@ import {
 import type { ConfigIssue } from "../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import type { LayoutNode } from "../src/config/dsl-types";
+import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
+import { ownDeclNames } from "./helpers/ambient-chrome";
 import { rootNode, rootOf } from "../src/config/root";
 
 const FILE = "/tmp/test.json5";
@@ -119,22 +120,27 @@ describe("loadDslConfig — JSON5 syntax", () => {
   });
 });
 
+// The canonical shape of a config that declares nothing: every authored field
+// empty, and nothing but the chrome every bar carries — the settings menu, edit
+// mode, and the inputs they ensure — beside it. The synthesis gives the floor
+// preset its spliced root; `root` itself stays as authored.
+function expectCanonicalEmpty(cfg: DslConfig): void {
+  expect(cfg.globals).toEqual({});
+  expect(cfg.editGlobals).toEqual({});
+  expect(cfg.root).toEqual({ rows: {} });
+  expect(cfg.looks).toEqual({});
+  expect(cfg.helpers).toEqual({});
+  expect(Object.keys(cfg.presets)).toEqual(["default"]);
+  for (const field of ["variables", "segments", "actions"] as const) {
+    expect(ownDeclNames(Object.keys(cfg[field]))).toEqual([]);
+  }
+}
+
 // ─── Top-level shape ─────────────────────────────────────────────────────────
 
 describe("loadDslConfig — top-level shape", () => {
   test("empty config is valid", () => {
-    const cfg = parseAndValidate(FILE, "{}");
-    expect(cfg).toEqual({
-      globals: {},
-      editGlobals: {},
-      variables: {},
-      segments: {},
-      root: { rows: {} },
-      actions: {},
-      looks: {},
-      presets: {},
-      helpers: {},
-    });
+    expectCanonicalEmpty(parseAndValidate(FILE, "{}"));
   });
 
   test("unknown top-level keys are reported", () => {
@@ -1756,7 +1762,7 @@ describe("loadDslConfig — cycle detection", () => {
         c: { kind: "literal", value: "leaf" }
       }}`,
     );
-    expect(Object.keys(cfg.variables)).toEqual(["a", "b", "c"]);
+    expect(ownDeclNames(Object.keys(cfg.variables))).toEqual(["a", "b", "c"]);
   });
 
   // depends_on cycle tests
@@ -1791,7 +1797,7 @@ describe("loadDslConfig — cycle detection", () => {
         b: { kind: "shell", command: "echo b", cache: { ttl: "30s" } }
       }}`,
     );
-    expect(Object.keys(cfg.variables)).toEqual(["a", "b"]);
+    expect(ownDeclNames(Object.keys(cfg.variables))).toEqual(["a", "b"]);
   });
 
   // cache.key cycle tests
@@ -1920,7 +1926,7 @@ describe("loadDslConfig — valid corpus", () => {
       root: { h: ["cwd", "branch", "load"] },
     }`;
     const cfg = parseAndValidate(FILE, source);
-    expect(Object.keys(cfg.variables).sort()).toEqual([
+    expect(ownDeclNames(Object.keys(cfg.variables)).sort()).toEqual([
       "branch",
       "constant",
       "cwd",
@@ -1944,17 +1950,7 @@ describe("loadDslConfig — valid corpus", () => {
   });
 
   test("minimal valid config loads to canonical empty shape", () => {
-    expect(parseAndValidate(FILE, "{}")).toEqual({
-      globals: {},
-      editGlobals: {},
-      variables: {},
-      segments: {},
-      root: { rows: {} },
-      actions: {},
-      looks: {},
-      presets: {},
-      helpers: {},
-    });
+    expectCanonicalEmpty(parseAndValidate(FILE, "{}"));
   });
 });
 
@@ -1969,6 +1965,18 @@ describe("extractTemplateRefs", () => {
     expect([...extractTemplateRefs("{{ .session.id }}")]).toEqual([
       "session.id",
     ]);
+  });
+
+  test("a `}}` inside a string literal does not close the block", () => {
+    expect([
+      ...extractTemplateRefs('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}'),
+    ]).toEqual(["y", "w"]);
+  });
+
+  test("a comment is neither code nor the start of a literal", () => {
+    expect([
+      ...extractTemplateRefs("{{/* don't .x */}}{{ .a }} it's {{- /* .z */ .b }}"),
+    ]).toEqual(["a", "b"]);
   });
 
   test("multiple refs across blocks", () => {

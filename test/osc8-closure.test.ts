@@ -25,6 +25,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -122,13 +123,14 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       segments: {
         bar: { template: '{{ link "a" "AA" }}{{ link "b" "BB" }} after', bg: 'surface', fg: 'foreground' },
       },
-      root: 'bar',
+      root: { v: ['${SETTINGS_ANCHOR}', 'bar'] },
     }`;
+    // The bar's own row; the settings door (a link of its own) sits above it.
     const out = render(src, {
       style: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
-    });
+    }).split("\n")[1]!;
     const { opens, closes, endsLinked } = osc8Walk(out);
     expect(opens).toBe(2);
     expect(closes).toBe(2);

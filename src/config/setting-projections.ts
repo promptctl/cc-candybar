@@ -76,3 +76,21 @@ export const SETTINGS = {
 
 export const SETTING_PROJECTIONS: readonly SettingProjection[] =
   Object.values(SETTINGS);
+
+// [LAW:one-source-of-truth] The current value of a setting is the one the bar
+// is rendering with — whichever rung (staged, session, config, floor) produced
+// it — so a `persist` and a `set` on a key in SETTING_PROJECTIONS both read
+// back through its `.effective` projection. The settings menu mints its dual
+// controls from the same table, so every one of them has a row here. A `persist` on a field with no row reads back through a var
+// named after the field, which none is, so its current-selection mark is
+// inert (readVar yields ""); a `set` on a key with no row reads back through
+// the `state` variable over that key.
+export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
+  SETTING_PROJECTIONS.map((p) => [p.configKey, p.effectiveVar]),
+);
+
+// registerDslConfig seeds its key → read-back map from this, ahead of any
+// `state` variable over the same key: an unpicked session has no pick, yet the
+// bar still wears a theme (brandon-theme-picker-bgw.exj).
+export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
+  new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));

@@ -774,28 +774,6 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       /references unknown action "ghost"/,
     );
   });
-
-  test("a set action requires a global session.id", () => {
-    const src = `{
-      globals: {},
-      variables: { k: { kind: 'state', key: 'k', default: '' } },
-      actions: { a: { set: 'k', to: 'v' } },
-      segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
-      root: 'bar',
-    }`;
-    expectIssue(src, /require a global "session\.id"/);
-  });
-
-  test("a copy-only config does NOT require session.id", () => {
-    const src = `{
-      globals: {},
-      variables: {},
-      actions: { a: { copy: 'literal' } },
-      segments: { bar: { template: '{{ action "a" "⎘" }}', bg: 'surface', fg: 'foreground' } },
-      root: 'bar',
-    }`;
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
-  });
 });
 
 // ─── Cycle set action (2de.4 — enumerated-domain stepper) ───────────────────────

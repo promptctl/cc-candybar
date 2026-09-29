@@ -15,31 +15,12 @@
 // derived data (like a group's lowered body), and each belongs at the stage
 // that has what it needs.
 //
-// [LAW:carrying-cost] DEMAND-DRIVEN, not unconditional — this is the one place
-// this pass diverges from group/menu synthesis's OWN precedent of "reserve
-// unconditionally, synthesize on demand" and leans fully into the "on demand"
-// half: a config that references `{{ action "edit.toggle" … }}` nowhere gets
-// NEITHER the toggle var/action NOR (edit-chrome.ts checks for the SAME
-// action's presence) any per-segment chrome. This matters concretely, not just
-// as a purity concern — `edit.mode` is a `state` variable and `edit.toggle` is
-// a `set` action, and cross-ref.ts requires a global `session.id` variable the
-// instant ANY state var or set action exists anywhere in a config. Synthesizing
-// either unconditionally would force session.id onto every purely-static,
-// non-interactive bar in the corpus — exactly the regression an early version
-// of this pass caused. The reserved namespace stays reserved unconditionally
-// (mirroring reservedNamespaceCollisions' own contract); only the SYNTHESIS is
-// conditional.
-//
-// WHAT candybar-settings-ui-aok.1 CHANGED, and what it did not: the gate above
-// is intact and still the only way edit mode is reached — but it now has a
-// PERMANENT DEMANDER. synthesizeSettingsMenu mints a `settings.edit` segment
-// referencing `edit.toggle` into every config it can host, so in practice the
-// demand is satisfied for essentially every config a user writes, and reading
-// this section as "most bars carry no edit mode" is no longer true. The
-// separation the gate protects still holds exactly where it always mattered:
-// the menu declines to synthesize for a config with no `session.id`
-// (canHostSessionState in settings-menu.ts), which is precisely the static,
-// non-interactive bar this comment was written to keep clean.
+// [LAW:carrying-cost] Per FILE, the toggle is minted only where that file
+// references it, so an authored `{{ action "edit.toggle" … }}` (or a `do`
+// firing it) cross-ref-checks before the merged config exists. It is not what
+// makes edit mode reachable: the settings menu is synthesized into every
+// config (settings-menu.ts), ensures this same toggle, and puts `✎ edit` in its
+// body, so every bar carries edit mode and edit chrome runs unconditionally.
 
 import { createEngine } from "@promptctl/go-template-js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";

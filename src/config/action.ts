@@ -271,7 +271,7 @@ export type DualActionDecl =
 // reason every `"set" in a` consumer stays correct: a dual decl carries both
 // `set` and `persist`, so a consumer that must treat the two destinations
 // separately asks THIS first (or folds through actionDestinations below), and
-// a consumer that only asks "does this bind a session write" (actionBindsSet)
+// a consumer that only asks "does this write the session" (`"set" in a`)
 // keeps its existing answer with no change at all.
 export function actionIsDual(a: ActionDecl): a is DualActionDecl {
   return PERSIST_WHEN in a;
@@ -323,44 +323,4 @@ export function actionDestinations(a: ActionDecl): readonly ActionDecl[] {
 // than a wrong write.
 export function actionBindsTemplateValue(a: ActionDecl): boolean {
   return "from" in a || "int" in a || "insertSegmentFrom" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A
-// `set` action composes a set-state click URL whose first segment is session.id;
-// copy/open/persist/reset embed none. One predicate the loader's session.id
-// requirement folds over — no per-arm branching at the callsite.
-export function actionBindsSet(a: ActionDecl): boolean {
-  return "set" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action write the config file?
-// Mirrors actionBindsSet for the `persist` arm.
-export function actionBindsPersist(a: ActionDecl): boolean {
-  return "persist" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action delete a config-file
-// key? `reset` carries session.id on the wire too (for click-error surfacing,
-// same as set/persist), so it joins the same requirement.
-export function actionBindsReset(a: ActionDecl): boolean {
-  return "reset" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action step the settings
-// history? `undo`/`redo` carry session.id on the wire too — same reason as
-// `reset`: an empty stack is a loud, session-scoped click.error, not a
-// silent no-op (the ticket's own done-gate).
-export function actionBindsUndo(a: ActionDecl): boolean {
-  return "undo" in a;
-}
-export function actionBindsRedo(a: ActionDecl): boolean {
-  return "redo" in a;
-}
-
-// [LAW:dataflow-not-control-flow] Does this action run or fix the doctor? Both
-// doctor verbs carry session.id first on the wire (the report is written into
-// that session's state, and a failure surfaces there), so it joins the same
-// session.id requirement the others do.
-export function actionBindsDoctor(a: ActionDecl): boolean {
-  return "doctor" in a;
 }
