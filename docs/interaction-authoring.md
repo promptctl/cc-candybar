@@ -863,7 +863,7 @@ detection `{{ menu }}` uses to find its own placements) and, only then,
 synthesizes:
 
 - `edit.mode` — a `state` variable holding `closed` (the default),
-  `arrange` (the `✚`/`🚫` chrome below), or `configure:<id>` (one
+  `arrange` (the `✚`/`🚫` chrome below), or `configure:<preset>:<id>` (one
   placement's settings) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
   above verbatim.
@@ -879,8 +879,10 @@ synthesizes:
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - A placement whose segment declares `settings` also carries a `⚙` before
-  its `🚫`. Clicking it writes `configure:<id>` to `edit.mode`, which hides
-  every `✚`/`🚫` and hangs one control per setting below that placement; the
+  its `🚫`. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
+  hides every `✚`/`🚫` and hangs one control per setting below that
+  placement's name — shown, with every row holding it, whatever their `when`
+  says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
   (see "One segment, many placements" in `docs/segment-authoring.md`). One
   key holds the mode, so configuring another placement closes this one.

@@ -26,6 +26,7 @@ import {
   mapOpens,
   placementId,
   settingSpelling,
+  walkNodes,
   type ContainerNode,
   type DisclosureRef,
   type DslConfig,
@@ -64,6 +65,7 @@ import {
   DISCLOSURE_GLYPH_CLOSE,
   escapeTemplateLiteral,
   disclosureCycleAction,
+  disclosureNode,
   disclosureStateVar,
   disclosureTerm,
   disclosureTrigger,
@@ -210,15 +212,31 @@ function trailOf(terms: readonly string[]): string {
 
 // ─── Configure mode (brandon-segment-settings-i4n.g64) ──────────────────────
 
-// The label of the placement being configured shows, as every label does in
-// the names view, and its controls hang on the LABEL: a placement's own
-// `when` is the author's, so a placement hidden right now — by the data, or
-// by the very setting just toggled — would take the controls that could
-// change that with it. The label also names which placement they configure.
-function shownWhile(configure: ConfigureParts | null, when: string): string {
-  return configure === null
-    ? when
-    : `{{ if ${disclosureTerm(configure.opens.ref)} }}true{{ else }}${when}{{ end }}`;
+// What configure mode shows whatever the author's `when` says: the label of
+// the placement being configured, which its controls hang on, and every
+// container holding it. A placement hidden right now — by the data, by an
+// enclosing row's gate, or by the very setting just toggled — would otherwise
+// take the controls that could change that with it. The label also names
+// which placement they configure. A fold over the configure refs a node
+// holds: none leaves `when` exactly as it was.
+function shownWhile(refs: readonly DisclosureRef[], when: string): string {
+  return refs.reduce(
+    (inner, ref) =>
+      `{{ if ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+    when,
+  );
+}
+
+// The configure refs a spliced subtree holds: every label's disclosure over
+// edit mode's key.
+function configureRefsIn(nodes: readonly LayoutNode[]): DisclosureRef[] {
+  return nodes.flatMap((node) =>
+    [...walkNodes(node)].flatMap((n) =>
+      n.kind === "segment" && n.opens?.ref.key === EDIT_MODE_KEY
+        ? [n.opens.ref]
+        : [],
+    ),
+  );
 }
 
 // [LAW:one-source-of-truth] THE session key an unsaved value of one
@@ -283,7 +301,8 @@ function settingControl(
 // closes it by overwriting the value it is open on.
 interface ConfigureParts {
   readonly term: string;
-  readonly opens: NonNullable<SegmentNode["opens"]>;
+  readonly ref: DisclosureRef;
+  readonly body: ContainerNode;
   readonly drafts: Readonly<Record<string, DraftSlot>>;
 }
 
@@ -295,15 +314,17 @@ function configureParts(
 ): ConfigureParts {
   const id = placementId(node);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(id);
+  const member = configureMember(ctx.presetIdent, id);
   const enter = `${prefix}.configure.${posIdent}`;
   ctx.artifacts.actions[enter] = { set: EDIT_MODE_KEY, to: member };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
-    // Named by position so it is a template field path (`.edit.draft.p.d3.x`);
-    // the key, not the name, is what a session holds across reloads.
-    const variable = `${PLACEMENT_DRAFT_NS}${ctx.presetIdent}.d${posIdent}.${name}`;
+    // Named by position so it is a template field path (`.edit.draft.pp.d3.x`):
+    // an id is free text, and a preset's ident may lead with a digit, which a
+    // field name may not — hence its `p`. The key, not the name, is what a
+    // session holds across reloads.
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
@@ -318,11 +339,8 @@ function configureParts(
   });
   return {
     term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    opens: {
-      ref: { variable: EDIT_MODE_KEY, key: EDIT_MODE_KEY, member },
-      body: { kind: "container", direction: "horizontal", children: controls },
-      placement: "drop",
-    },
+    ref: { variable: EDIT_MODE_KEY, key: EDIT_MODE_KEY, member },
+    body: { kind: "container", direction: "horizontal", children: controls },
     drafts,
   };
 }
@@ -358,13 +376,11 @@ function labelChrome(
   const name = `${LABEL_NS}${id}:${segName}`;
   artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    when: shownWhile(configure, LABEL_GATE),
+    when: shownWhile(configure === null ? [] : [configure.ref], LABEL_GATE),
   };
-  return {
-    kind: "segment",
-    name,
-    ...(configure !== null && { opens: configure.opens }),
-  };
+  return configure === null
+    ? { kind: "segment", name }
+    : disclosureNode(name, configure.ref, configure.body, "drop");
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -538,7 +554,12 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
   return {
     ...node,
     children,
-    ...(node.when !== undefined && { when: inNamesView("true", node.when) }),
+    ...(node.when !== undefined && {
+      when: shownWhile(
+        configureRefsIn(children),
+        inNamesView("true", node.when),
+      ),
+    }),
   };
 }
 

@@ -58,10 +58,14 @@ export const EDIT_MODE_ARRANGE = "arrange";
 // shadow `edit.mode.…` beside edit mode's own state.
 export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 
-// The member that configures the placement `id`. An id holds no `:` (the
-// loader refuses one), so the member names exactly one placement.
-export function configureMember(id: string): string {
-  return `configure:${id}`;
+// The member that configures the placement `id` in the layout of the preset
+// whose ident is `presetIdent` — an id is unique only within one preset's
+// tree, so switching presets never carries configure mode onto a different
+// placement that shares the id. Neither part holds a `:` (an ident is
+// `[A-Za-z0-9_]`, and the loader refuses one in an id), so the member names
+// exactly one placement.
+export function configureMember(presetIdent: string, id: string): string {
+  return `configure:${presetIdent}:${id}`;
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
