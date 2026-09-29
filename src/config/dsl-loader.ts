@@ -91,7 +91,7 @@ export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";
 export {
-  extractTemplateRefs,
+  templateReads,
   extractActionRefs,
   extractPickerMenuRefs,
 } from "./loader/refs.js";

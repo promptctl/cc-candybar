@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert on the observable contract:
 // either a returned DslConfig with the expected shape, or a ConfigError
 // whose issues describe the problem. Tests never reach into private
-// helpers — extractTemplateRefs and findKeyLine are exported for direct
+// helpers — templateReads and findKeyLine are exported for direct
 // unit-test coverage of their tricky bits, but everything else goes
 // through parseDslConfig.
 
@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   ConfigError,
-  extractTemplateRefs,
+  templateReads,
   findKeyLine,
   loadConfig,
   parseDslConfig,
@@ -1446,6 +1446,18 @@ describe("loadDslConfig — cross-references", () => {
     });
   });
 
+  test("an unknown variable a root-dot helper reads is reported, naming the helper", () => {
+    expectIssue(
+      `{ helpers: { stash: "{{ .stsh }}" },
+         segments: { cwd: { template: '{{ template "stash" . }}' } } }`,
+      {
+        path: "segments.cwd.template",
+        message:
+          'Template references unknown variable ".stsh" (read in helpers.stash)',
+      },
+    );
+  });
+
   test("template referencing declared variable passes", () => {
     const cfg = parseAndValidate(
       FILE,
@@ -1956,54 +1968,101 @@ describe("loadDslConfig — valid corpus", () => {
 
 // ─── Helper unit tests ───────────────────────────────────────────────────────
 
-describe("extractTemplateRefs", () => {
+describe("templateReads", () => {
+  const refsOf = (t: string) => templateReads(t, {}).keys();
+
   test("simple ref", () => {
-    expect([...extractTemplateRefs("{{ .foo }}")]).toEqual(["foo"]);
+    expect([...refsOf("{{ .foo }}")]).toEqual(["foo"]);
   });
 
   test("dotted ref", () => {
-    expect([...extractTemplateRefs("{{ .session.id }}")]).toEqual([
+    expect([...refsOf("{{ .session.id }}")]).toEqual([
       "session.id",
     ]);
   });
 
   test("a `}}` inside a string literal does not close the block", () => {
     expect([
-      ...extractTemplateRefs('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}'),
+      ...refsOf('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}'),
     ]).toEqual(["y", "w"]);
   });
 
   test("a comment is neither code nor the start of a literal", () => {
     expect([
-      ...extractTemplateRefs("{{/* don't .x */}}{{ .a }} it's {{- /* .z */ .b }}"),
+      ...refsOf("{{/* don't .x */}}{{ .a }} it's {{- /* .z */ .b }}"),
     ]).toEqual(["a", "b"]);
   });
 
   test("multiple refs across blocks", () => {
-    const refs = extractTemplateRefs(
+    const refs = refsOf(
       "{{ .a }} static {{ .b | upper }} {{ if .c }}{{ .d }}{{ end }}",
     );
     expect([...refs].sort()).toEqual(["a", "b", "c", "d"]);
   });
 
   test("strips string literals", () => {
-    expect([...extractTemplateRefs(`{{ printf ".not.a.ref" .real }}`)]).toEqual(
+    expect([...refsOf(`{{ printf ".not.a.ref" .real }}`)]).toEqual(
       ["real"],
     );
   });
 
   test("ignores text outside {{ }}", () => {
-    expect([...extractTemplateRefs("plain text .not.a.ref here")]).toEqual([]);
+    expect([...refsOf("plain text .not.a.ref here")]).toEqual([]);
   });
 
   test("numeric literals don't match", () => {
     expect([
-      ...extractTemplateRefs("{{ if gt .x 1.5 }}{{ .y }}{{ end }}"),
+      ...refsOf("{{ if gt .x 1.5 }}{{ .y }}{{ end }}"),
     ]).toEqual(["x", "y"]);
   });
 
   test("function calls aren't refs (no leading dot)", () => {
-    expect([...extractTemplateRefs("{{ bold .x }}")]).toEqual(["x"]);
+    expect([...refsOf("{{ bold .x }}")]).toEqual(["x"]);
+  });
+  describe("follows helpers by the dot each call hands them", () => {
+    const readsOf = (t: string, helpers: Record<string, string>) =>
+      Object.fromEntries(templateReads(t, helpers));
+
+    test("a root dot makes the helper's refs the caller's, naming the helper", () => {
+      expect(
+        readsOf('{{ template "h" . }}', { h: "{{ .git.branch }}" }),
+      ).toEqual({ "git.branch": "h" });
+    });
+
+    test("a path argument puts the helper's refs under that path", () => {
+      expect(readsOf('{{ template "h" .git }}', { h: "{{ .branch }}" })).toEqual(
+        { git: null, "git.branch": "h" },
+      );
+    });
+
+    test("a dict argument reads the dict, not the root", () => {
+      expect(
+        readsOf('{{ template "p" (dict "text" .git.sha) }}', {
+          p: "{{ .text }}",
+        }),
+      ).toEqual({ "git.sha": null });
+    });
+
+    test("nested calls follow through and name the outermost helper", () => {
+      expect(
+        readsOf('{{ template "outer" . }}', {
+          outer: '{{ template "inner" . }}',
+          inner: "{{ .git.stash }}",
+        }),
+      ).toEqual({ "git.stash": "outer" });
+    });
+
+    test("a self-calling helper terminates", () => {
+      expect(
+        readsOf('{{ template "h" . }}', { h: '{{ .a }}{{ template "h" . }}' }),
+      ).toEqual({ a: "h" });
+    });
+
+    test("a `template` inside a string literal is text, not a call", () => {
+      expect(
+        readsOf('{{ print "template \\"h\\" ." }}', { h: "{{ .a }}" }),
+      ).toEqual({});
+    });
   });
 });
 

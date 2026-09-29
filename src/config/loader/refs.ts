@@ -48,10 +48,10 @@ function* templateBlocks(template: string): IterableIterator<string> {
   }
 }
 
-// [LAW:dataflow-not-control-flow] Extract every `.<id>(.<id>)*` token inside
-// `{{ ... }}` blocks after stripping string literals. The result is a set of
-// dotted reference candidates; the caller decides which are valid.
-export function extractTemplateRefs(template: string): Set<string> {
+// Every `.<id>(.<id>)*` token inside `{{ ... }}` blocks after stripping string
+// literals — the refs this template text spells itself, blind to the helpers it
+// calls. Local on purpose: every reader asks `templateReads`.
+function dottedRefs(template: string): Set<string> {
   const refs = new Set<string>();
   for (const raw of templateBlocks(template)) {
     const block = raw.replace(STRING_LITERAL_RE, "");
@@ -64,9 +64,70 @@ export function extractTemplateRefs(template: string): Set<string> {
   return refs;
 }
 
+// A `{{ template "name" <arg> }}` call, with where its argument puts the
+// helper's dot: `.` hands it the root (prefix ""), `.a.b` hands it the field
+// `a.b` (prefix "a.b."), anything else — a `dict`, a pipeline, `$x`, no arg —
+// hands it a value whose reads the CALLER already spelled building it.
+const TEMPLATE_KEYWORD_RE = /\btemplate\s+$/;
+const DOT_ARG_RE = /^\s+\.((?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?)(?=\s|\)|$)/;
+function* helperCalls(
+  template: string,
+): IterableIterator<{ name: string; prefix: string }> {
+  for (const block of templateBlocks(template)) {
+    let cursor = 0;
+    let s: RegExpExecArray | null;
+    STRING_LITERAL_RE.lastIndex = 0;
+    while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
+      const end = s.index + s[0].length;
+      if (TEMPLATE_KEYWORD_RE.test(block.slice(cursor, s.index))) {
+        const arg = DOT_ARG_RE.exec(block.slice(end));
+        if (arg !== null) {
+          yield {
+            name: s[0].slice(1, -1),
+            prefix: arg[1] === "" ? "" : `${arg[1]}.`,
+          };
+        }
+      }
+      cursor = end;
+    }
+  }
+}
+
+// [LAW:single-enforcer] What a template READS: its own dotted refs, plus the
+// refs of every helper it hands a root-relative dot to, followed through
+// helpers those call. A helper's `.x` is relative to the argument it was
+// given, so it is a root read only when that argument is `.` or a `.a.b` path
+// — a helper fed a `dict` reads the dict. Each ref maps to the helper it was
+// reached through (`null` = the template itself), so a load error can name
+// the body that spells it. Every reader — reachability, cross-ref, cycles,
+// introspection — asks this, so none is blind to a helper's reads.
+export function templateReads(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): ReadonlyMap<string, string | null> {
+  const reads = new Map<string, string | null>();
+  const seen = new Set<string>();
+  const walk = (src: string, prefix: string, via: string | null): void => {
+    for (const ref of dottedRefs(src)) {
+      if (!reads.has(prefix + ref)) reads.set(prefix + ref, via);
+    }
+    // Collected before recursing: the scan's regexes are shared globals.
+    for (const call of [...helperCalls(src)]) {
+      const body = helpers[call.name];
+      const at = prefix + call.prefix;
+      const key = `${call.name}\0${at}`;
+      if (body === undefined || seen.has(key)) continue;
+      seen.add(key);
+      walk(body, at, via ?? call.name);
+    }
+  };
+  walk(template, "", null);
+  return reads;
+}
+
 // [LAW:dataflow-not-control-flow] Extract every `action "name"` call from a
 // template, for the load-time existence check. Same best-effort code-span /
-// string-literal walk as extractTemplateRefs: the `action` keyword lives in a
+// string-literal walk as dottedRefs: the `action` keyword lives in a
 // CODE span and its NAME is the very next string literal (the display/boundValue
 // literals that follow are preceded by a non-`action` span, so they are never
 // misread as the name).
@@ -126,10 +187,12 @@ export function extractPickerMenuRefs(template: string): Set<string> {
 // the runtime's MissingFieldError, as for a payload field). One value, so
 // every reference surface — template refs, `when`, cache.key — resolves the
 // same way; `depends_on` reads `names` alone (the reaction calls the store by
-// exact key).
+// exact key). And the HELPERS, because a ref a helper spells on the root dot is
+// a read of the template that calls it (`templateReads`).
 export interface TemplateScope {
   readonly names: ReadonlySet<string>;
   readonly documents: ReadonlySet<string>;
+  readonly helpers: Readonly<Record<string, string>>;
 }
 
 // A ref resolves if (a) the full dotted name is a declared variable, (b) it
@@ -165,7 +228,7 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
       declare(`${segName}.${name}`, v);
     }
   }
-  return { names, documents };
+  return { names, documents, helpers: cfg.helpers };
 }
 
 function isDocumentDecl(v: VariableDecl): boolean {

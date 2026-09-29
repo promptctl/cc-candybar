@@ -314,6 +314,58 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     );
   });
 
+  // The bundled git segments are pure helper calls (`{{ template "gitSha" . }}`),
+  // so every git fact they show is read only inside a helper body. A walk blind
+  // to helpers left `git.branch` (the `when`) as the one needed path, and the
+  // daemon turned off every other git option.
+  test("a fact read only inside a root-dot helper keeps its provider online", () => {
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    const needed = buildNeededPrefixes(config, PRESET_FLOOR);
+    for (const path of [
+      "git.sha",
+      "git.repoName",
+      "git.operation",
+      "git.staged",
+      "git.unstaged",
+      "git.untracked",
+      "git.conflicts",
+      "git.ahead",
+      "git.behind",
+      "git.upstream",
+      "git.stash",
+      "git.timeSinceCommit",
+    ]) {
+      expect([path, needed.has(path)]).toEqual([path, true]);
+    }
+  });
+
+  test("a helper handed a dict reads the dict, bringing no root path online", () => {
+    const config: DslConfig = {
+      globals: {},
+      variables: SHARED_VARIABLES,
+      segments: {
+        ...SHARED_SEGMENTS,
+        painted: {
+          template: '{{ template "echo" (dict "git" .current_dir) }}',
+        },
+      },
+      root: rootOf("painted"),
+      actions: {},
+      looks: {},
+      presets: {},
+      helpers: { echo: "{{ .git.branch }}" },
+      editGlobals: {},
+    };
+    const needed = buildNeededPrefixes(config, PRESET_FLOOR);
+    expect(needed.has("workspace.current_dir")).toBe(true);
+    expect(needed.has("git.branch")).toBe(false);
+  });
+
   test("a segment only an inactive preset places brings no inputs online", () => {
     const config = parseAndValidate(
       "<user>",

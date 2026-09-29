@@ -484,7 +484,7 @@ Every piece except `gitBranch` renders with its own leading space, or renders
 nothing when its fact is absent, so pieces drop and reorder without leaving a
 doubled space. Each fact's colour is a variable holding a palette name —
 `git.color.branch`, `.staged`, `.unstaged`, `.untracked`, `.conflicts`,
-`.ahead`, `.behind`, `.stash` — painted through the `paint` helper, which
+`.ahead`, `.behind`, `.stash` — painted through the `gitPaint` helper, which
 keeps it readable on the cell's background. Everything unpainted wears the
 segment's quiet `fg:`.
 

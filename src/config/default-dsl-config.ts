@@ -1198,7 +1198,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // 1.01:1 on `light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
     // OKLCH lightness, so the hue — the part that says "staged" — survives.
     // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
-    paint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
+    gitPaint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
 
     // ─── Git pieces ────────────────────────────────────────────────────────
     // The named parts the `git` and `gitaculous` segments compose, each called
@@ -1208,28 +1208,28 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // doubled or dangling space. `gitBranch` is the exception: the segments are
     // gated on a branch, so it is always present and carries no space.
     gitBranch:
-      '⎇ {{ template "paint" (dict "color" .git.color.branch "text" .git.branch) }}',
+      '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
     gitRepo: '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}',
     gitOperation:
       '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}',
     gitSha: '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}',
     gitFlags:
       "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
-      '{{ if gt .git.staged 0 }}{{ template "paint" (dict "color" .git.color.staged "text" "S") }}{{ end }}' +
-      '{{ if gt .git.unstaged 0 }}{{ template "paint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}' +
-      '{{ if gt .git.untracked 0 }}{{ template "paint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}' +
-      '{{ if gt .git.conflicts 0 }}{{ template "paint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}' +
+      '{{ if gt .git.staged 0 }}{{ template "gitPaint" (dict "color" .git.color.staged "text" "S") }}{{ end }}' +
+      '{{ if gt .git.unstaged 0 }}{{ template "gitPaint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}' +
+      '{{ if gt .git.untracked 0 }}{{ template "gitPaint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}' +
+      '{{ if gt .git.conflicts 0 }}{{ template "gitPaint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}' +
       "{{ end }}",
     gitAheadBehind:
       "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
-      '{{ if gt .git.ahead 0 }}{{ template "paint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}' +
+      '{{ if gt .git.ahead 0 }}{{ template "gitPaint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}' +
       "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
-      '{{ if gt .git.behind 0 }}{{ template "paint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}' +
+      '{{ if gt .git.behind 0 }}{{ template "gitPaint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}' +
       "{{ end }}",
     gitUpstream:
       '{{ if ne .git.upstream "" }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
     gitStash:
-      '{{ if gt .git.stash 0 }} {{ template "paint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
+      '{{ if gt .git.stash 0 }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
     gitAge:
       '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
 

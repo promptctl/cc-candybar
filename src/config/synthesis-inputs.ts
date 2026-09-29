@@ -17,11 +17,7 @@ import {
   type SegmentDecl,
   type VariableDecl,
 } from "./dsl-types.js";
-import {
-  extractTemplateRefs,
-  refResolves,
-  templateScopeOf,
-} from "./loader/refs.js";
+import { templateReads, refResolves, templateScopeOf } from "./loader/refs.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
@@ -45,10 +41,12 @@ export interface SynthesisArtifacts {
 function synthesisReads(
   artifacts: SynthesisArtifacts,
   trees: readonly LayoutNode[],
+  helpers: Readonly<Record<string, string>>,
 ): Set<string> {
   const reads = new Set<string>();
   const add = (template: string | undefined): void => {
-    for (const ref of extractTemplateRefs(template ?? "")) reads.add(ref);
+    for (const ref of templateReads(template ?? "", helpers).keys())
+      reads.add(ref);
   };
   for (const seg of Object.values(artifacts.segments)) {
     add(seg.template);
@@ -94,7 +92,7 @@ export function synthesisInputs(
     segments: { ...config.segments, ...artifacts.segments },
   });
   const ensured: Record<string, VariableDecl> = {};
-  for (const ref of synthesisReads(artifacts, trees)) {
+  for (const ref of synthesisReads(artifacts, trees, config.helpers)) {
     if (refResolves(ref, own)) continue;
     const decl = PAYLOAD_INPUTS[ref];
     if (decl === undefined) {

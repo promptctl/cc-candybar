@@ -41,7 +41,7 @@ import { type ValidateCtx } from "./validate-core.js";
 import {
   extractActionRefs,
   extractPickerMenuRefs,
-  extractTemplateRefs,
+  templateReads,
   refResolves,
   templateScopeOf,
   type TemplateScope,
@@ -723,7 +723,7 @@ function checkTemplateRefs(
     segCtx?: string;
   },
 ): void {
-  for (const ref of extractTemplateRefs(template)) {
+  for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
     const namespaced =
       opts?.segCtx !== undefined ? `${opts.segCtx}.${ref}` : undefined;
@@ -731,9 +731,10 @@ function checkTemplateRefs(
       namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
         : "";
+    const through = via === null ? "" : ` (read in helpers.${via})`;
     ctx.issues.push({
       path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
+      message: `Template references unknown variable ".${ref}"${through}${hint}`,
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
