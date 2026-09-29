@@ -213,6 +213,7 @@ export function carouselFuncs(
         );
       },
       argTypes: ["string", "float"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

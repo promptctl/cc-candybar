@@ -112,6 +112,7 @@ export function layoutPreviewFuncs(
           ledRowBudget(runtime),
         ),
       argTypes: [],
+      arity: { kind: "exact" },
       returnType: "T",
     },
   };

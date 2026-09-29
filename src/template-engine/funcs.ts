@@ -39,8 +39,8 @@ const STYLES_LIST: readonly string[] = [...STRIP_STYLES];
 // [LAW:single-enforcer] Numeric validation lives at ONE boundary — the engine's
 // `int`/`float` argType gate (@promptctl/go-template-js), which proves membership
 // and normalizes the carrier to a JS `number` before the func body runs. `int`
-// admits only finite integer-valued numbers + safe-integer bigints (rejecting
-// fractionals and precision-losing/overflowing bigints loudly at the gate);
+// admits only safe integers, as a number or a bigint (rejecting fractionals and
+// integers past 2^53 loudly at the gate);
 // `float` admits any finite number. So a formatter wrapper receives a clean
 // `number` and needs no bigint guard of its own — the prior `num()` helper was a
 // second enforcer of what the gate now owns, removed when the formatters adopted
@@ -59,10 +59,12 @@ export function ccCandybarFuncs(): FuncMap {
     basename: {
       fn: (s: string) => pathBasename(s),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
     dirname: {
       fn: (s: string) => pathDirname(s),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
 
     // [LAW:decomposition] Fish-style path abbreviation — one thing: shorten
@@ -72,6 +74,7 @@ export function ccCandybarFuncs(): FuncMap {
     abbreviatePath: {
       fn: (s: string) => abbreviatePath(s),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
 
     // [LAW:single-enforcer] Type casts delegate to var-system/types.ts.
@@ -81,14 +84,17 @@ export function ccCandybarFuncs(): FuncMap {
     int: {
       fn: (v: VarValue) => toNumber(v),
       argTypes: ["value"],
+      arity: { kind: "exact" },
     },
     string: {
       fn: (v: VarValue) => toString(v),
       argTypes: ["value"],
+      arity: { kind: "exact" },
     },
     bool: {
       fn: (v: VarValue) => toBool(v),
       argTypes: ["value"],
+      arity: { kind: "exact" },
     },
 
     // [LAW:single-enforcer] One URL-encoding function for click-verb URL
@@ -101,6 +107,7 @@ export function ccCandybarFuncs(): FuncMap {
     urlEncode: {
       fn: (s: string) => encodeURIComponent(s),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
 
     // [LAW:one-source-of-truth] themes() and styles() are zero-arg
@@ -118,10 +125,12 @@ export function ccCandybarFuncs(): FuncMap {
     themes: {
       fn: () => THEMES_LIST,
       argTypes: [],
+      arity: { kind: "exact" },
     },
     styles: {
       fn: () => STYLES_LIST,
       argTypes: [],
+      arity: { kind: "exact" },
     },
 
     // [LAW:effects-at-boundaries] Pure trend renderer: a numeric series (the
@@ -129,15 +138,22 @@ export function ccCandybarFuncs(): FuncMap {
     // becomes a unicode mini-graph. The series crosses the scalar var-system
     // seam as a string, so the FuncMap slot is "string"; `parseSeries` decodes
     // it and `renderSparkline` draws it — neither accumulates state. The
-    // optional trailing "int" slot caps the glyph count to fit a cell (the
-    // evaluator validates only supplied args, so `{{ sparkline .series }}` and
-    // `{{ sparkline .series 24 }}` are both well-typed). Returns a bare string;
+    // optional trailing "int" slot caps the glyph count to fit a cell: Go spells
+    // an optional parameter as a variadic one, so the gate owns the minimum and
+    // the body refuses a second cap. Returns a bare string;
     // the engine lifts it to RichText so the segment's fg/bg palette colors the
     // whole graph — no per-glyph color math here.
     sparkline: {
-      fn: (series: string, width?: number) =>
-        renderSparkline(parseSeries(series), width),
+      fn: (series: string, width?: number, ...extra: number[]) => {
+        if (extra.length > 0) {
+          throw new Error(
+            `sparkline takes at most one width after the series, got ${1 + extra.length}`,
+          );
+        }
+        return renderSparkline(parseSeries(series), width);
+      },
       argTypes: ["string", "int"],
+      arity: { kind: "variadic" },
     },
     // A threshold cascade whose result is TEXT (brandon-template-funcs-jku): the
     // same `<value> <stops…>` shape `{{ ramp }}` takes, minus the easing, because
@@ -152,6 +168,7 @@ export function ccCandybarFuncs(): FuncMap {
       fn: (value: number, ...stops: string[]) =>
         cascadeAt(value, parseCascadeStops(stops)),
       argTypes: ["float", "string"],
+      arity: { kind: "variadic" },
     },
   };
 }
@@ -201,6 +218,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
       // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
       // fractional or precision-losing carrier at the gate.
       argTypes: ["int"],
+      arity: { kind: "exact" },
     },
 
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
@@ -215,6 +233,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
       // [LAW:types-are-the-program] Integer grouping is meaningful only for an
       // integer; `int` rejects a fractional/precision-losing carrier at the gate.
       argTypes: ["int"],
+      arity: { kind: "exact" },
     },
 
     // ─── Numeric helper (block/weekly's Math.round of pct) ────────────
@@ -227,6 +246,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
       // [LAW:types-are-the-program] round takes a fractional value (e.g. a
       // percentage) → `float` admits any finite number.
       argTypes: ["float"],
+      arity: { kind: "exact" },
     },
 
     // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
@@ -239,10 +259,12 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     formatModelName: {
       fn: (raw: string) => formatModelName(raw),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
     shortenModelName: {
       fn: (formatted: string) => shortenModelName(formatted),
       argTypes: ["string"],
+      arity: { kind: "exact" },
     },
   };
 }

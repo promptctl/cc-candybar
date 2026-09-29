@@ -66,6 +66,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       return active.bg.hex;
     }) as TemplateFunc["fn"],
     argTypes: [],
+    arity: { kind: "exact" },
     returnType: "string",
   };
 
@@ -78,6 +79,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     fn: (() =>
       requireActiveSegment(ref, "{{ tint }}").tint.hex) as TemplateFunc["fn"],
     argTypes: [],
+    arity: { kind: "exact" },
     returnType: "string",
   };
 
@@ -116,7 +118,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
         filled,
         empty,
         colourAt:
-          easing === undefined || stops.length === 0
+          easing === undefined
             ? undefined
             : (position) =>
                 String(
@@ -128,9 +130,12 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
                 ),
       })) as TemplateFunc["fn"],
     // "float" for the two measurements (a percentage need not be whole), "int"
-    // for the cell count, then the glyph pair, the easing, and a repeating
-    // trailing slot for the stops.
-    argTypes: ["float", "float", "int", "string", "string", "string", "string"],
+    // for the cell count, the glyph pair, then a repeating string slot for the
+    // optional easing and its stops — Go's spelling of an optional tail is a
+    // variadic one, so the gate requires the five and `ramp` refuses an easing
+    // with no stop.
+    argTypes: ["float", "float", "int", "string", "string", "string"],
+    arity: { kind: "variadic" },
     returnType: "T",
   };
 

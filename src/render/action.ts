@@ -942,6 +942,7 @@ export function actionFuncs(runtime: ActionRuntime): FuncMap {
       fn: (name: string, ...displays: string[]) =>
         renderAction(name, displays, runtime),
       argTypes: ["string", "string"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

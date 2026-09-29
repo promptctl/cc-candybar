@@ -360,11 +360,11 @@ export function renderPicker(
 // recolors live and LEAVES THE MENU OPEN so themes can be tried in a row — the
 // baseline UX; the ✕ affordance closes), `closeOnPick=true` is the opt-in where a
 // pick ALSO writes the page key closed; `paged=false` is one wrapping page,
-// `paged=true` slices into ←/→ pages at the live width. `enforceArgTypes`
-// validates only the values actually passed (it loops over arity), so an omitted
-// trailing bool arrives `undefined` and resolves to the default here — no arity
-// error, and order is preserved so existing callers (which pass both) are
-// untouched. Authoring stay-open + paged is `{{ picker "a" "p" false true }}`.
+// `paged=true` slices into ←/→ pages at the live width. Go spells an optional
+// tail as a variadic parameter, so the gate requires the two action names and
+// types every bool after them, an omitted bool arrives `undefined` and resolves
+// to the default here, and the body refuses a third. Authoring stay-open +
+// paged is `{{ picker "a" "p" false true }}`.
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the picker.
@@ -379,7 +379,13 @@ export function pickerFuncs(
         pageName: string,
         closeOnPick?: boolean,
         paged?: boolean,
+        ...extra: boolean[]
       ) => {
+        if (extra.length > 0) {
+          throw new Error(
+            `picker "${applyName}": takes at most two bools (closeOnPick, paged) after the action names, got ${2 + extra.length}`,
+          );
+        }
         // [LAW:one-source-of-truth] The standalone picker's page cursor comes
         // from its NAMED set-int action (the documented desugaring surface);
         // closing means paging to -1, the when-gate idiom its host row reads
@@ -409,7 +415,8 @@ export function pickerFuncs(
           ),
         );
       },
-      argTypes: ["string", "string", "bool", "bool"],
+      argTypes: ["string", "string", "bool"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

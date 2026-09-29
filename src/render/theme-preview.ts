@@ -118,6 +118,7 @@ export function themePreviewFuncs(
           ledRowBudget(runtime),
         ),
       argTypes: [],
+      arity: { kind: "exact" },
       returnType: "T",
     },
   };
