@@ -940,9 +940,19 @@ function fireVerb(verb: string, ctx: VerbContext, ...args: string[]): void {
 // A session that has rendered from the fixture's file — the origin a durable
 // verb resolves the file from. The cache's own SessionState, so the click
 // reads the same store the render published into.
-function originCtx(sessionState: SessionState, sessionId = "s1"): VerbContext {
+function originCtx(
+  cache: RenderCache,
+  sessionState: SessionState,
+  sessionId = "s1",
+): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
-  return testVerbContext(sessionState, durable.historyFor(sessionState));
+  return {
+    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    // The daemon's own wiring (server.ts): a click that must not act on the
+    // old config reloads this cache's entry from the file it just wrote.
+    reloadConfig: (origin) =>
+      cache.reload(origin.projectDir, origin.cwd, origin.configFile ?? undefined),
+  };
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {
@@ -1071,7 +1081,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       // banner's fact is "the file authors this tree", by whichever hand.
       expect(entry.state.authoredRoots.has("default")).toBe(true);
 
-      const ctx = originCtx(sessionState);
+      const ctx = originCtx(cache, sessionState);
       let clicked = false;
       await reloads.after(entry, () => {
         if (clicked) {
@@ -1126,7 +1136,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual(["sidebar"]);
-      const ctx = originCtx(sessionState);
+      const ctx = originCtx(cache, sessionState);
       const fire = (op: LayoutOp): void =>
         fireVerb(
           "apply-layout-op",
@@ -1165,7 +1175,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache();
     try {
       cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
-      const ctx = originCtx(sessionState);
+      const ctx = originCtx(cache, sessionState);
       fireVerb(
         "apply-layout-op",
         ctx,
@@ -1209,7 +1219,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
       fireVerb(
         "apply-layout-op",
-        originCtx(sessionState),
+        originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
         REMOVE_DIRECTORY,
@@ -1251,7 +1261,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(entry.lastError).toBeNull();
       fireVerb(
         "apply-layout-op",
-        originCtx(sessionState),
+        originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "directory" }),
@@ -1286,7 +1296,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       const removeDirectory = (): void =>
         fireVerb(
           "apply-layout-op",
-          originCtx(sessionState),
+          originCtx(cache, sessionState),
           "s1",
           "presets.default.root",
           encodeLayoutOp({ op: "remove", target: "directory" }),
@@ -1328,7 +1338,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       // declares, through the gate this cache entry registered for it.
       fireVerb(
         "apply-layout-op",
-        originCtx(sessionState),
+        originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "gitaculous" }),
@@ -1391,7 +1401,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         // reload derived from that domain.
         fireVerb(
           "apply-layout-op",
-          originCtx(sessionState2),
+          originCtx(cache2, sessionState2),
           "s1",
           "presets.default.root",
           encodeLayoutOp({
@@ -1451,7 +1461,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
       fireVerb(
         "apply-layout-op",
-        originCtx(sessionState),
+        originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
         REMOVE_DIRECTORY,
@@ -1487,7 +1497,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         // the target key, exactly like a hand click would send.
         fireVerb(
           "reset-config",
-          originCtx(sessionState2),
+          originCtx(cache2, sessionState2),
           "s1",
           "presets.default.root",
         );
@@ -1551,7 +1561,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       ]);
       expect(entry.state.authoredRoots.has("compact")).toBe(false);
 
-      const ctx = originCtx(sessionState);
+      const ctx = originCtx(cache, sessionState);
       const compactRemove = (target: string): void =>
         fireVerb(
           "apply-layout-op",
@@ -1593,7 +1603,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(() =>
         fireVerb(
           "reset-config",
-          originCtx(sessionState2),
+          originCtx(cache2, sessionState2),
           "s1",
           "presets.compact.root",
         ),

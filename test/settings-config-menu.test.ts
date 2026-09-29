@@ -38,7 +38,6 @@ import {
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import { settingDrafts } from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
@@ -85,6 +84,10 @@ function rig(
   readonly config: ValidatedConfig;
   sessionState: SessionState;
   logs: string[];
+  // One entry per reload, holding the file text and the session's picks at the
+  // moment it ran — so a test can pin how many reloads a click cost and that
+  // the picks were still held while the file reloaded.
+  reloads: { text: string; picks: Record<string, string | null> }[];
   render: () => string;
   click: (url: string) => void;
   dispose: () => void;
@@ -118,11 +121,18 @@ function rig(
   };
   let entry = load(source);
   const logs: string[] = [];
+  const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
+      reloads.push({
+        text: durable!.text()!,
+        picks: Object.fromEntries(
+          ["theme", "look", "padding"].map((k) => [k, sessionState.get(SID, k)]),
+        ),
+      });
       const next = load(durable!.text()!);
       entry.disposers.forEach((d) => d());
       entry = next;
@@ -134,6 +144,7 @@ function rig(
     },
     sessionState,
     logs,
+    reloads,
     render: () => {
       const { config, compiled, store, registry } = entry;
       return renderDsl(
@@ -179,6 +190,11 @@ function rig(
           // function the save verb writes from.
           unsaved: settingDrafts(config, (key) => sessionState.get(SID, key))
             .length,
+          // What the daemon publishes from the session's settings history.
+          history: {
+            undo: durable?.history(SID).past.length ?? 0,
+            redo: durable?.history(SID).future.length ?? 0,
+          },
         },
         opts(width),
         undefined,
@@ -191,15 +207,13 @@ function rig(
         },
       );
     },
+    // The daemon's own path: the URL's verb — `dispatch` for a compound
+    // click — looked up in the one table, so a click is one history step.
     click: (url: string) => {
       const { verb, value } = parseHandlerUrl(url);
-      const effects =
-        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) {
-        const handler = VERBS.get(e.verb);
-        if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-        handler(e.value, ctx);
-      }
+      const handler = VERBS.get(verb);
+      if (!handler) throw new Error(`no handler for verb "${verb}"`);
+      handler(value, ctx);
     },
     dispose: () => entry.disposers.forEach((d) => d()),
   };
@@ -436,6 +450,165 @@ describe("the config menu, reached from a user config whose root is one row", ()
   });
 });
 
+// ─── 6. Reset (brandon-save-undo-bwi.wt5) ────────────────────────────────────
+//
+// A user file carrying settings at BOTH layers a save writes — top-level
+// globals and a bundled preset's own fragment — beside content the user
+// authored that no reset may touch: a segment, the root, and a preset of their
+// own whose pin is part of what they wrote.
+const CUSTOMIZED = `{
+  // the user's own words
+  globals: { palette: 'nord', padding: 2, style: 'capsule' },
+  segments: { mine: { template: 'mine' } },
+  presets: {
+    compact: { globals: { padding: 3 } },
+    narrow: { globals: { style: 'plain' } },
+  },
+  root: { h: ['directory', 'mine'] },
+}`;
+
+describe("reset returns settings to the bundled default", () => {
+  let r: ReturnType<typeof rig>;
+  let durable: DurableConfig;
+
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-settings-reset-");
+    r = rig(CUSTOMIZED, durable);
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "settings.config")[0]!);
+  });
+  afterEach(() => {
+    r.dispose();
+    durable.dispose();
+  });
+
+  // The ↺ beside one setting: the link whose only reset names `configKey`.
+  const resetOf = (configKey: string): string =>
+    links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "↺" &&
+        effectsOf(l.url).some(
+          (e) => e.verb === "reset-config" && e.args[1] === configKey,
+        ),
+    )!.url;
+  const labelled = (text: string): string | undefined =>
+    links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
+  const userContent = () => {
+    const { segments, root, presets } = durable.parsed() as {
+      segments: unknown;
+      root: unknown;
+      presets: Record<string, unknown>;
+    };
+    return { segments, root, narrow: presets.narrow };
+  };
+  const USER_CONTENT = {
+    segments: { mine: { template: "mine" } },
+    root: { h: ["directory", "mine"] },
+    narrow: { globals: { style: "plain" } },
+  };
+
+  test("↺ clears the session's pick and the saved value, and the bar shows the default", () => {
+    r.sessionState.set(SID, "theme", "dracula");
+    expect(plain(r.render())).toContain("🎨 dracula");
+    r.click(resetOf("palette"));
+    expect(r.reloads).toEqual([
+      { text: durable.text(), picks: { theme: "dracula", look: null, padding: null } },
+    ]);
+    expect(r.sessionState.get(SID, "theme")).toBeNull();
+    expect(durable.parsed().globals).not.toHaveProperty("palette");
+    const theme = DEFAULT_DSL_CONFIG.globals.palette as string;
+    expect(plain(r.render())).toContain(`🎨 ${theme}`);
+    expect(plain(r.render())).not.toContain("💾");
+    expect(userContent()).toEqual(USER_CONTENT);
+  });
+
+  test("↺ clears a value saved into a bundled preset's fragment, never a user preset's pin", () => {
+    r.click(resetOf("padding"));
+    const parsed = durable.parsed() as {
+      globals: Record<string, unknown>;
+      presets: Record<string, unknown>;
+    };
+    expect(parsed.globals).not.toHaveProperty("padding");
+    // compact's fragment held nothing else, so the file stops naming it and
+    // the bundled compact (padding 0) shows through again.
+    expect(parsed.presets).not.toHaveProperty("compact");
+    expect(userContent()).toEqual(USER_CONTENT);
+
+    r.click(resetOf("style"));
+    expect(durable.parsed().globals).not.toHaveProperty("style");
+    expect(userContent()).toEqual(USER_CONTENT);
+    expect(r.logs).toContainEqual(
+      `reset-config: style presets.default.globals.style presets.compact.globals.style presets.verbose.globals.style session:style ← ${durable.configPath} (session=${SID})`,
+    );
+  });
+
+  test("reset all takes two clicks in one open menu, and the door disarms it", () => {
+    const before = durable.text();
+    r.click(labelled("⟲ reset all")!);
+    expect(durable.text()).toBe(before);
+    expect(labelled("⟲ reset all")).toBeUndefined();
+    expect(labelled("⟲ confirm reset all")).toBeDefined();
+    // Close and reopen the menu: the arm does not survive it.
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    expect(labelled("⟲ reset all")).toBeDefined();
+    expect(durable.text()).toBe(before);
+  });
+
+  test("closing ⚙ config any way and reopening it disarms reset all", () => {
+    r.click(labelled("⟲ reset all")!);
+    // Close the panel through the ✕ that leads its row — not the door.
+    const close = links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "✕" &&
+        effectsOf(l.url).some((e) => e.args.includes("settings.config")),
+    )!.url;
+    r.click(close);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    r.click(writesTo(r.render(), "settings.config")[0]!);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    expect(labelled("⟲ reset all")).toBeDefined();
+  });
+
+  test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", () => {
+    const before = durable.text();
+    r.sessionState.set(SID, "padding", "5");
+    r.sessionState.set(SID, "look", "dim");
+    const depth = durable.history(SID).past.length;
+    r.click(labelled("⟲ reset all")!);
+    r.click(labelled("⟲ confirm reset all")!);
+
+    // Every setting's reset in one click is ONE write and ONE reload, made
+    // while the session still held its picks — released only after.
+    expect(r.reloads).toEqual([
+      { text: durable.text(), picks: { theme: null, look: "dim", padding: "5" } },
+    ]);
+
+    const parsed = durable.parsed() as {
+      globals?: Record<string, unknown>;
+      presets: Record<string, unknown>;
+    };
+    expect(parsed.globals ?? {}).toEqual({});
+    expect(parsed.presets).not.toHaveProperty("compact");
+    expect(userContent()).toEqual(USER_CONTENT);
+    expect(r.sessionState.get(SID, "padding")).toBeNull();
+    expect(r.sessionState.get(SID, "look")).toBeNull();
+    expect(labelled("⟲ reset all")).toBeDefined();
+    const out = plain(r.render());
+    expect(out).toContain("padding 1");
+    expect(out).toContain("◐ none");
+    expect(out).not.toContain("💾");
+
+    // One click, one step — undone by the ↶ on the bar.
+    expect(durable.history(SID).past).toHaveLength(depth + 1);
+    r.click(labelled("↶ undo")!);
+    expect(durable.text()).toBe(before);
+    expect(r.sessionState.get(SID, "padding")).toBe("5");
+    expect(r.sessionState.get(SID, "look")).toBe("dim");
+  });
+});
+
 // [LAW:verifiable-goals] brandon-theme-picker-bgw.etd: choosing a theme is
 // trying several, so a pick must leave the picker open with the new pick
 // current. Driven the way a user drives it: two clicks found in the rendered
@@ -487,5 +660,5 @@ describe("a pick leaves the picker open", () => {
 // it forgets a durable default rather than setting one, so it is not the
 // control's own apply.
 function isReset(url: string): boolean {
-  return effectsOf(url).every((e) => e.verb === "reset-config");
+  return effectsOf(url).some((e) => e.verb === "reset-config");
 }

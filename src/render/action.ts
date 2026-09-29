@@ -154,8 +154,8 @@ export type CompiledActionDecl =
       readonly stateVar: string;
       readonly members: readonly string[];
     }
-  // [LAW:one-source-of-truth] The gated undo for a persistent write: clears
-  // one key from the config file. Carries only the key — there is no value to
+  // [LAW:one-source-of-truth] The gated way back to the bundled default: clears
+  // one key from the config file and the session (resetLayers). Carries only the key — there is no value to
   // realize, so it shares copy/open's "no gate" shape at compile time (the
   // GATE is the key-membership check the reset-config verb handler applies).
   | { readonly kind: "reset"; readonly key: string }

@@ -14,9 +14,10 @@ import {
   VERB_DISPATCH,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_RUN,
+  VERB_RESET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_STATE,
-  batchSessionWrites,
+  batchAdjacentWrites,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
@@ -173,17 +174,25 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const copy = { verb: VERB_COPY, value: "x" };
     // Order is the click's: the copy between two writes keeps its place.
     expect(
-      batchSessionWrites([set("a", "k1", "v1"), set("a", "k2", "v2"), copy, set("a", "k3", "v3")]),
+      batchAdjacentWrites([set("a", "k1", "v1"), set("a", "k2", "v2"), copy, set("a", "k3", "v3")]),
     ).toEqual([
       { verb: VERB_SET_STATE, value: "a/k1/v1/k2/v2" },
       copy,
       set("a", "k3", "v3"),
     ]);
     // A different session id starts a new batch rather than joining one.
-    expect(batchSessionWrites([set("a", "k", "v"), set("b", "k", "v")])).toEqual([
+    expect(batchAdjacentWrites([set("a", "k", "v"), set("b", "k", "v")])).toEqual([
       set("a", "k", "v"),
       set("b", "k", "v"),
     ]);
+  });
+
+  test("adjacent resets for one session join into one reset of every key, never with a set-state", () => {
+    const reset = (sid: string, k: string) => ({ verb: VERB_RESET_CONFIG, value: `${sid}/${k}` });
+    const set = { verb: VERB_SET_STATE, value: "a/k/v" };
+    expect(
+      batchAdjacentWrites([set, reset("a", "palette"), reset("a", "look"), reset("b", "style")]),
+    ).toEqual([set, { verb: VERB_RESET_CONFIG, value: "a/palette/look" }, reset("b", "style")]);
   });
 
   test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {
