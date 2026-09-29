@@ -347,10 +347,10 @@ const NUMERIC_GLOBALS_FLOORS: Readonly<Record<NumericGlobalsField, number>> = {
 
 // [LAW:single-enforcer] THE seed for a bounded stepper over a globals field:
 // what the bar renders with no write of any kind — the config's own value, or
-// the field's floor when it declares none. Both write gates read it (the
-// SessionState one through stateKeySeeds, the config-file one through
-// configKeySeeds), so a session stepper and its durable twin can never start
-// from different numbers, and neither can silently start from `min`.
+// the field's floor when it declares none. The config-file gate reads it
+// (configKeySeeds), so a durable stepper never silently starts from `min`. A
+// session stepper does not: its bar resolves through the session's preset, so
+// step-state seeds it from that resolution instead.
 export function numericGlobalsSeeds(
   globals: Globals,
 ): ReadonlyMap<string, number> {

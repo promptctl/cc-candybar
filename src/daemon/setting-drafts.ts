@@ -67,7 +67,7 @@ const SETTING_KEYS: ReadonlySet<string> = new Set(
 
 const NOT_CUSTOMIZED = (): boolean => false;
 
-type SettingName = keyof typeof SETTINGS;
+export type SettingName = keyof typeof SETTINGS;
 
 // The bar the session renders: its own picks over the config, and nothing
 // else it holds — edit mode's staged globals are chrome.
@@ -98,6 +98,25 @@ function differing(
       ? []
       : [{ ...row, value, target: targetOf(row) }];
   });
+}
+
+// [LAW:one-source-of-truth] The value the session renders a setting as, in its
+// SessionState spelling: the value a click that steps the setting starts from
+// while the session holds no pick for it. It is the same resolution a draft is
+// measured against, so under a preset that pins the field the stepper starts
+// from the preset's value — the one the bar and its control are showing — and
+// never from top-level globals the preset shadows.
+export function sessionSettingValue(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  name: SettingName,
+): string | null {
+  return SPELLING[name](sessionGlobals(config, sessionPick));
+}
+
+// The setting whose SessionState key is `key`, if `key` belongs to one.
+export function settingOfSessionKey(key: string): SettingName | undefined {
+  return SETTING_ROWS.find(([, row]) => row.sessionKey === key)?.[0];
 }
 
 // Every setting the session renders differently from the config file. The

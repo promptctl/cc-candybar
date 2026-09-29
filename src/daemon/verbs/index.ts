@@ -46,7 +46,14 @@ import {
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import type { DslConfig, Globals } from "../../config/dsl-types";
-import { presetSnapshot, resetLayers, settingDrafts } from "../setting-drafts";
+import {
+  presetSnapshot,
+  resetLayers,
+  sessionSettingValue,
+  settingDrafts,
+  settingOfSessionKey,
+  type SettingName,
+} from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
   SETTINGS,
@@ -370,21 +377,49 @@ const stepState: VerbHandler = (rawValue, ctx) => {
     );
   }
   // [LAW:no-defensive-null-guards] "unset" is a real state — seed from the
-  // configured default; only an integer-shaped stored value is a current value.
+  // value the bar shows before any click; only an integer-shaped stored value
+  // is a current value. A setting's is per SESSION (its preset decides it), so
+  // it is resolved here; any other key's is the registry's configured seed.
   const stored = ctx.sessionState.get(sid, key);
+  const setting = settingOfSessionKey(key);
   const current =
     stored && STEP_INT_RE.test(stored)
-      ? Math.max(params.min, Math.min(params.max, parseInt(stored, 10)))
-      : params.seed;
-  const next = wrapStep(current + by, params.min, params.max);
+      ? parseInt(stored, 10)
+      : setting === undefined
+        ? params.seed
+        : settingSeed(ctx, sid, setting);
+  const clamped = Math.max(params.min, Math.min(params.max, current));
+  const next = wrapStep(clamped + by, params.min, params.max);
   const result = validateStateWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   ctx.sessionState.set(sid, key, result.value);
   ctx.dlog(
     "info",
-    `step-state: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
+    `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
   );
 };
+
+// The value an unset setting renders with in this session: resolved over the
+// config the session renders with and its picks, exactly as the bar resolved
+// it. A range-gated setting that resolves to no integer is a gate that does not
+// describe the setting, refused loudly rather than stepped from a guess.
+function settingSeed(
+  ctx: VerbContext,
+  sid: string,
+  setting: SettingName,
+): number {
+  const value = sessionSettingValue(
+    ctx.configFor(sessionOrigin(ctx, sid)),
+    (k) => ctx.sessionState.get(sid, k),
+    setting,
+  );
+  if (value === null || !STEP_INT_RE.test(value)) {
+    throw new BadVerbArgs(
+      `step-state: setting "${setting}" resolves to ${JSON.stringify(value)}, not an integer to step`,
+    );
+  }
+  return parseInt(value, 10);
+}
 
 // ─── The durable store: which file, and the history over it ─────────────────
 

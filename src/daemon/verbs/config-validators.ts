@@ -160,8 +160,7 @@ function actionKeySpecs(
 
 // [LAW:one-source-of-truth] The seed for a bounded `persist` key (e.g. a
 // padding stepper) is the merged config's OWN globals field — the value the
-// bar renders with today. Mirrors stateKeySeeds' "the bar's current display,
-// not silently min" rule for SessionState steppers.
+// bar renders with today, not silently `min`.
 function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   return numericGlobalsSeeds(config.globals);
 }
