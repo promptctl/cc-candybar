@@ -1,3 +1,10 @@
+## [1.97.1](https://github.com/promptctl/cc-candybar/compare/v1.97.0...v1.97.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **deps:** go-template-js 0.10.0 + rich-js 0.18.1 — int gates refuse fractionals ([#277](https://github.com/promptctl/cc-candybar/issues/277)) ([aba746d](https://github.com/promptctl/cc-candybar/commit/aba746d07a90e16c9e8c81228f305f7fc6b07269))
+
 # [1.97.0](https://github.com/promptctl/cc-candybar/compare/v1.96.1...v1.97.0) (2026-09-29)
 
 
