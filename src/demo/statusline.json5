@@ -1,6 +1,6 @@
 // Demo DSL statusline — a runnable example of the segment DSL.
 //
-//   Run it:   pnpm demo:dsl
+//   Run it:   pnpm demo
 //   Hack it:  edit a template / palette / layout entry below and re-run.
 //             No rebuild — the config IS the program.
 //
