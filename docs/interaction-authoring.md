@@ -519,14 +519,28 @@ means "this config's own `root` and `globals`, unchanged". `"default"` is
 always selectable, whether or not you declare it, so a menu can always get back
 to where it started.
 
-The bundled default ships two ready-made presets on top of its own two-row
-`"default"` arrangement, merged by name under anything you declare: `"compact"`
-— one row (directory, git, context) at `padding: 0`, for narrow terminals and
-split panes — and `"verbose"` — the default's own rows plus a third,
-surfacing every segment the default declares but leaves opt-in (`gitPr`,
-`burnrate`, `speed`, `tokenSparkline`). Every preset carries the settings-menu
-door, so switching to either never strands a session without a way back. Try
-them without writing a config at all — open the door and click `▦` — or pin
+The bundled default ships six ready-made presets on top of its own two-row
+`"default"` arrangement, merged by name under anything you declare, each for a
+different way of working:
+
+- `"compact"` — one row (directory, git, context) at `padding: 0`, for narrow
+  terminals and split panes.
+- `"verbose"` — the default's own rows plus a third, surfacing four segments
+  the default declares but leaves out (`gitPr`, `burnrate`, `speed`,
+  `tokenSparkline`).
+- `"zen"` — one quiet row (directory, context) in `plain` style under the `dim`
+  look, for heads-down work.
+- `"git"` — the open PR beside the git state, and a status row cut to model,
+  context and activity, for branch-and-review work.
+- `"usage"` — every cost and limit segment, one concern per row, including
+  today's spend across every session (`today`), which no other preset stages.
+- `"dense"` — the default's segments plus session spend on one row at
+  `padding: 0`, which auto-wrap folds only where the terminal runs out.
+
+A preset's `globals` (style, look, padding) are part of the arrangement: picking
+`"zen"` changes the style and look too. Every preset carries the settings-menu
+door, so switching to any of them never strands a session without a way back.
+Try them without writing a config at all — open the door and click `▦` — or pin
 one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass

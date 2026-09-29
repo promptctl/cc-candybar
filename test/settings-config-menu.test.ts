@@ -633,7 +633,9 @@ describe("reset returns settings to the bundled default", () => {
     expect(durable.parsed().globals).not.toHaveProperty("style");
     expect(userContent()).toEqual(USER_CONTENT);
     expect(r.logs).toContainEqual(
-      `reset-config: style presets.default.globals.style presets.compact.globals.style presets.verbose.globals.style session:style ← ${durable.configPath} (session=${SID})`,
+      `reset-config: style ${Object.keys(DEFAULT_DSL_CONFIG.presets)
+        .map((name) => `presets.${name}.globals.style`)
+        .join(" ")} session:style ← ${durable.configPath} (session=${SID})`,
     );
   });
 
