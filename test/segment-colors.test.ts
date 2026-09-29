@@ -35,6 +35,7 @@ import {
   paletteForThemeName,
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { definedStyle } from "../src/template-engine/cells.js";
 
@@ -578,12 +579,12 @@ describe("paletteForThemeName", () => {
     expect(paletteForThemeName("nord")).toBe(paletteForThemeName("nord"));
   });
 
-  test("resolves aliases to the same palette as the canonical name", () => {
-    // 'dark' is an alias of 'textual-dark' (resolvePaletteName), so both must
-    // collapse to one cached palette.
-    expect(paletteForThemeName("dark")).toBe(
-      paletteForThemeName("textual-dark"),
-    );
+  test("every resolvable theme name is its own palette, named after it", () => {
+    // [LAW:one-source-of-truth] one name per palette: a second name for one
+    // palette would put a step in every theme carousel that recolours nothing
+    // (brandon-theme-picker-bgw.exj.dw1).
+    const names = listResolvablePaletteNames();
+    expect(names.map((n) => paletteForThemeName(n).name)).toEqual(names);
   });
 
   test("distinct themes resolve 'primary' to distinct colors", () => {

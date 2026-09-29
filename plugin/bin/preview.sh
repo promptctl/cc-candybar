@@ -16,7 +16,7 @@ readonly TEMPLATE="${PLUGIN_ROOT}/templates/config.json"
 
 # The options the wizard offers, one list per template placeholder. Each name
 # must be one the daemon accepts; the test pins that against the real domains.
-readonly THEMES=(dark light nord tokyo-night rose-pine gruvbox catppuccin-mocha dracula solarized-dark monokai)
+readonly THEMES=(textual-dark textual-light nord tokyo-night rose-pine gruvbox catppuccin-mocha dracula solarized-dark monokai)
 readonly STYLES=(powerline capsule plain)
 readonly CHARSETS=(unicode ascii)
 readonly PRESETS=(default compact verbose zen git usage dense)

@@ -175,7 +175,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
       if (p > 0 && line === prev) break;
       prev = line;
       // Whole-cell membership: theme names are space-delimited tokens, so a name
-      // that is a substring of another ("dark" in "textual-dark") isn't a false
+      // that is a substring of another ("rose-pine" in "rose-pine-dawn") isn't a false
       // hit. The strip glues its cap glyph to the edge token with no space, so
       // strip caps before tokenizing.
       for (const tok of stripCaps(line).split(" ")) shown.add(tok);

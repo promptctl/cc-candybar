@@ -13,6 +13,7 @@ import {
   type SourceKind,
 } from "../dsl-types.js";
 import { findKeyLine, type ConfigIssue } from "./diagnostics.js";
+import { retiredThemeNote } from "../../themes/policy.js";
 
 export interface ValidateCtx {
   readonly source: string;
@@ -115,7 +116,7 @@ export function validatePaletteName(
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
       path: `${path}.palette`,
-      message: `Unknown palette "${v}". Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
       line: findKeyLine(ctx.source, [...path.split("."), "palette"]),
     });
     return undefined;

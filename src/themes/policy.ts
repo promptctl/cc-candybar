@@ -22,15 +22,27 @@ import {
 } from "@promptctl/rich-js";
 import { PROGRESSIONS, type ProgressionName } from "./decor.js";
 
-// --- Theme name aliasing ---
+// [LAW:one-source-of-truth] Theme names the registry no longer installs: old
+// name → the theme that replaced it. `dark`/`light` were second names for the
+// textual palettes, and a second name put a step in every theme carousel that
+// recoloured nothing (brandon-theme-picker-bgw.exj.dw1) — but the settings
+// menu's own save could write them, so a file may still hold one. The loader
+// refuses it [LAW:no-silent-failure], as does a `globals.palette` rule that
+// renders one, and each refusal names the theme to write instead. A
+// future retirement is one row here.
+// A Map, not an object literal: an authored name is user data.
+const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
+  ["dark", "textual-dark"],
+  ["light", "textual-light"],
+]);
 
-const THEME_ALIASES: Record<string, string> = {
-  dark: "textual-dark",
-  light: "textual-light",
-};
-
-export function resolvePaletteName(name: string): string {
-  return THEME_ALIASES[name] ?? name;
+// The sentence appended to an unknown-theme refusal — empty for a name that
+// was never installed, so every refusal site spells it the same way.
+export function retiredThemeNote(name: unknown): string {
+  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : undefined;
+  return to === undefined
+    ? ""
+    : ` — "${name as string}" was retired; write "${to}", the same palette`;
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
@@ -89,18 +101,14 @@ export function effectiveGlobal<T>(
   return staged ?? picked ?? configDefault ?? floor;
 }
 
-function listThemeAliases(): readonly string[] {
-  return Object.keys(THEME_ALIASES);
-}
-
 // [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
-// is exactly registry names ∪ aliases — the same inputs resolvePaletteName +
-// getThemePalette accept. "custom" and "random" are deliberately absent: neither
-// names a concrete palette (custom needs inline colors; random is a per-session
-// sentinel). Config validators that gate a palette PULL (DSL `palette:` field)
-// must reuse this, not re-derive it.
+// is exactly the registry's names — no alias, so every name is its palette's
+// own and a label always names the palette the bar wears. "custom" and "random" are
+// deliberately absent: neither names a concrete palette (custom needs inline
+// colors; random is a per-session sentinel). Config validators that gate a
+// palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
 export function listResolvablePaletteNames(): readonly string[] {
-  return [...listThemePalettes(), ...listThemeAliases()];
+  return listThemePalettes();
 }
 
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold

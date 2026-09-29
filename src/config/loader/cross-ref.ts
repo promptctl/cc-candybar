@@ -36,7 +36,7 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
-import { isExpression } from "../../themes/policy.js";
+import { isExpression, retiredThemeNote } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
@@ -820,7 +820,7 @@ function checkPlacementSettings(
         ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})`
         : inSettingDomain(decl, value)
           ? undefined
-          : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
+          : `sets "${setting}" to ${JSON.stringify(value)}${decl.domain === "theme" ? retiredThemeNote(value) : ""}, but it must be ${describeSettingDomain(decl)}`;
     if (problem !== undefined) {
       ctx.issues.push({
         path: layoutKey,

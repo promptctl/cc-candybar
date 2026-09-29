@@ -19,8 +19,8 @@ import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import {
   finishSelection,
   FOLLOW_BAR,
-  resolvePaletteName,
   resolveSelection,
+  retiredThemeNote,
   THEME_FLOOR,
   type Decided,
   type Selection,
@@ -30,7 +30,7 @@ const baseCache = new Map<string, Palette>();
 const transposeCache = new Map<string, Palette>();
 
 /**
- * The Palette for a theme name (aliases resolved). Memoized.
+ * The Palette for a theme name. Memoized.
  *
  * [LAW:single-enforcer] The one place a theme name becomes a Palette —
  * the per-render base palette and every placement's pinned `theme` both flow
@@ -44,9 +44,8 @@ export function paletteForThemeName(name: string): Palette {
   const palette = basePaletteFor(name);
   if (palette === null) {
     throw new Error(
-      `Palette "${name}" (resolved "${resolvePaletteName(name)}") did not ` +
-        `resolve in the theme registry — allowed names and the registry are ` +
-        `inconsistent`,
+      `Palette "${name}" did not resolve in the theme registry — allowed ` +
+        `names and the registry are inconsistent`,
     );
   }
   return palette;
@@ -71,13 +70,12 @@ export function placementPalette(theme: string, bar: Palette): Palette {
 // reports. Two absence policies, one construction — a second `getThemePalette`
 // call beside this one would be a second place a theme name becomes a palette.
 function basePaletteFor(name: string): Palette | null {
-  const resolved = resolvePaletteName(name);
-  const hit = baseCache.get(resolved);
+  const hit = baseCache.get(name);
   if (hit !== undefined) return hit;
 
-  const palette = getThemePalette(resolved);
+  const palette = getThemePalette(name);
   if (palette === null) return null;
-  baseCache.set(resolved, palette);
+  baseCache.set(name, palette);
   return palette;
 }
 
@@ -133,9 +131,6 @@ export type DecidedTheme = Decided<Palette>;
 // elsewhere. `basePaletteFor` answering null is the one membership fact, so
 // asking `listResolvablePaletteNames().includes(...)` first would be the same
 // question twice — and the second answer could only ever restate the first.
-//
-// The NAME kept is the author's own, never the resolved one: `resolvePaletteName`
-// folds aliases, so a user who picked `dark` must still read `dark` on the label.
 function namedTheme(name: string): DecidedTheme | null {
   const value = basePaletteFor(name);
   return value === null ? null : { kind: "decided", name, value };
@@ -165,7 +160,7 @@ export function decideThemeName(
   const named = namedTheme(name);
   if (named !== null) return named;
   onUnresolvable(
-    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme`,
+    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme${retiredThemeNote(name)}`,
   );
   return themeFloor();
 }

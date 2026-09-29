@@ -375,6 +375,17 @@ describe("globals.palette as an expression — loader", () => {
     expect(() => load(src("no-such-theme"))).toThrow(/Unknown palette/);
   });
 
+  test("a retired theme name is refused with the theme that replaced it", () => {
+    const retired = /"dark" was retired; write "textual-dark"/;
+    expect(() => load(src("dark"))).toThrow(retired);
+    const placed = src(THEME_FLOOR).replace(
+      "root: { v: ['plain', 'label'] }",
+      "root: { v: [{ seg: 'plain', settings: { theme: 'dark' } }, 'label'] }",
+    );
+    expect(() => load(placed)).toThrow(retired);
+    expect(() => load(src("no-such-theme"))).not.toThrow(/was retired/);
+  });
+
   test("a per-segment palette: pin still refuses a rule — it is frozen at registration", () => {
     // [LAW:one-type-per-behavior] The two slots differ in BEHAVIOUR now, so they
     // differ in spec: a pin can never be settled per render, so a rule there must
@@ -418,14 +429,12 @@ describe("resolveThemeSelection", () => {
     });
   });
 
-  test("an alias decides under the name the AUTHOR wrote, not the resolved one", () => {
-    // `Palette.name` cannot stand in for the label: resolvePaletteName folds
-    // aliases, so a user who picked `dark` must still read `dark`.
-    const decided = resolveThemeSelection(undefined, "dark", undefined);
-    expect(decided).toMatchObject({ kind: "decided", name: "dark" });
-    expect(decided.kind === "decided" && decided.value.name).toBe(
-      getThemePalette("textual-dark")!.name,
-    );
+  test("a session pick naming no installed theme falls through to the config rung", () => {
+    expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
+      kind: "decided",
+      name: "nord",
+      value: getThemePalette("nord"),
+    });
   });
 
   test("an expression is undecided only when no higher rung decided", () => {
@@ -480,5 +489,11 @@ describe("decideThemeName", () => {
     expect(said[0]).toContain("globals.palette");
     expect(said[0]).toContain("nope");
     expect(said[0]).toContain(THEME_FLOOR);
+  });
+
+  test("a rule rendering a retired name is told the theme that replaced it", () => {
+    const said: string[] = [];
+    decideThemeName("light", (m) => said.push(m));
+    expect(said[0]).toMatch(/"light" was retired; write "textual-light"/);
   });
 });
