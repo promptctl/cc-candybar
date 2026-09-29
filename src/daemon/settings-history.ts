@@ -190,7 +190,11 @@ export class SettingsHistory {
       file: (sessionId, file, before, after) =>
         note(sessionId, { kind: "file", file, before, after }),
       commit: () => {
-        for (const [sessionId, changes] of pending) {
+        // Handed off before it is saved, so a save that fails is reported by
+        // this commit alone and never recorded again by a later one.
+        const committing = [...pending];
+        pending.clear();
+        for (const [sessionId, changes] of committing) {
           // A click that wrote a value already there changed nothing, and a
           // step that changes nothing would be an undo that visibly does
           // nothing.
@@ -204,7 +208,6 @@ export class SettingsHistory {
             future: [],
           });
         }
-        pending.clear();
       },
     };
   }
@@ -216,8 +219,7 @@ export class SettingsHistory {
     if (step === undefined) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
-    this.apply(sessionId, step, "before", "undo");
-    this.put(sessionId, {
+    this.apply(sessionId, step, "before", "undo", {
       past: past.slice(0, -1),
       future: capped([...future, step]),
     });
@@ -230,23 +232,25 @@ export class SettingsHistory {
     if (step === undefined) {
       throw new BadVerbArgs("redo: nothing to redo");
     }
-    this.apply(sessionId, step, "after", "redo");
-    this.put(sessionId, {
+    this.apply(sessionId, step, "after", "redo", {
       past: capped([...past, step]),
       future: future.slice(0, -1),
     });
     return step;
   }
 
-  // [LAW:no-silent-failure] A step lands whole or not at all: every change is
-  // checked before any is written, and a write that fails puts back the ones
-  // already written before the error goes on. A stale target is refused by
-  // name, and its now-unreachable changes leave both stacks (see the header).
+  // [LAW:no-silent-failure] A step lands whole, together with the history
+  // that records it, or not at all: every change is checked before any is
+  // written, and a failure while writing it or saving `then` puts back what
+  // was already written before the error goes on. A stale target is refused
+  // by name, and its now-unreachable changes leave both stacks (see the
+  // header).
   private apply(
     sessionId: string,
     step: Step,
     to: "before" | "after",
     verb: "undo" | "redo",
+    then: SessionHistory,
   ): void {
     const from = to === "before" ? "after" : "before";
     const stale = step.filter((c) => this.read(sessionId, c) !== c[from]);
@@ -266,9 +270,16 @@ export class SettingsHistory {
         this.write(sessionId, change, change[to]);
         written.push(change);
       }
+      this.put(sessionId, then);
     } catch (e) {
-      for (const change of written.reverse()) {
-        this.write(sessionId, change, change[from]);
+      try {
+        for (const change of written.reverse()) {
+          this.write(sessionId, change, change[from]);
+        }
+      } catch (restoring) {
+        throw new Error(
+          `${(e as Error).message}; and putting the step back failed, so it is half-applied: ${(restoring as Error).message}`,
+        );
       }
       throw e;
     }

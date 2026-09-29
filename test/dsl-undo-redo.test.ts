@@ -607,3 +607,45 @@ describe("settings history: a step lands whole, and records only what landed", (
     expect(history.depth("new")).toEqual({ undo: 2, redo: 0 });
   });
 });
+
+describe("settings history: the step and its record land together", () => {
+  // A store whose save refuses while `refusing` is set.
+  function refusingHistory() {
+    const sessionState = new SessionState();
+    const gate = { refusing: false };
+    const history = new SettingsHistory(sessionState, () => {}, {
+      load: () => ({}),
+      save: () => {
+        if (gate.refusing) throw new Error("history save refused");
+      },
+    });
+    return { sessionState, gate, history };
+  }
+
+  test("an undo whose history save fails puts its writes back", () => {
+    const { sessionState, gate, history } = refusingHistory();
+    const journal = history.begin();
+    journal.sessionState.set("s1", "theme", "nord");
+    journal.commit();
+
+    gate.refusing = true;
+    expect(() => history.undo("s1")).toThrow(/history save refused/);
+    expect(sessionState.get("s1", "theme")).toBe("nord");
+    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0 });
+
+    gate.refusing = false;
+    history.undo("s1");
+    expect(sessionState.get("s1", "theme")).toBeNull();
+  });
+
+  test("a commit whose save fails reports it once and never records the step later", () => {
+    const { gate, history } = refusingHistory();
+    const journal = history.begin();
+    journal.sessionState.set("s1", "theme", "nord");
+    gate.refusing = true;
+    expect(() => journal.commit()).toThrow(/history save refused/);
+    gate.refusing = false;
+    journal.commit();
+    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0 });
+  });
+});
