@@ -1,3 +1,10 @@
+## [1.96.1](https://github.com/promptctl/cc-candybar/compare/v1.96.0...v1.96.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **config:** refuse globals.default_bg/default_fg with a migration pointer ([#274](https://github.com/promptctl/cc-candybar/issues/274)) ([d065c08](https://github.com/promptctl/cc-candybar/commit/d065c088848558ec61a32274af69ece2ec3d1f7e))
+
 # [1.96.0](https://github.com/promptctl/cc-candybar/compare/v1.95.0...v1.96.0) (2026-09-29)
 
 
