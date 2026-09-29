@@ -1,3 +1,10 @@
+# [1.88.0](https://github.com/promptctl/cc-candybar/compare/v1.87.1...v1.88.0) (2026-09-29)
+
+
+### Features
+
+* **presets:** zen, git, usage and dense — a bundled preset for each way of working ([#264](https://github.com/promptctl/cc-candybar/issues/264)) ([fcca300](https://github.com/promptctl/cc-candybar/commit/fcca300368c6f251f127b43649afc9145935b786))
+
 ## [1.87.1](https://github.com/promptctl/cc-candybar/compare/v1.87.0...v1.87.1) (2026-09-29)
 
 
