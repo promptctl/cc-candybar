@@ -44,7 +44,7 @@ import {
   type ThemeSelection,
 } from "../themes/palette-resolvers.js";
 import { walkNodes } from "../config/dsl-types.js";
-import { extractTemplateRefs } from "../config/dsl-loader.js";
+import { templateReads } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
@@ -837,17 +837,18 @@ export function buildNeededPrefixes(
   //    followed.
   const frontier: string[] = [];
   const visited = new Set<string>();
+  const reads = (src: string): Iterable<string> =>
+    templateReads(src, config.helpers).keys();
 
   for (const node of walkNodes(presetRoot(config, preset).node)) {
     // A node's `when` references variables too — seed them so a provider feeding
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
-    if (node.when)
-      for (const ref of extractTemplateRefs(node.when)) frontier.push(ref);
+    if (node.when) for (const ref of reads(node.when)) frontier.push(ref);
     if (node.kind !== "segment") continue;
     const seg = config.segments[node.name];
     if (!seg) continue;
     for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
-      if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
+      if (src) for (const ref of reads(src)) frontier.push(ref);
     }
   }
 
@@ -874,7 +875,7 @@ export function buildNeededPrefixes(
       if (decl.kind === "input") {
         inputPaths.add(decl.path);
       } else if (decl.kind === "template") {
-        for (const r of extractTemplateRefs(decl.template)) {
+        for (const r of reads(decl.template)) {
           frontier.push(r);
         }
       }
@@ -1002,7 +1003,7 @@ export async function buildRenderPayload(
   cwd: string | undefined,
   // [LAW:single-enforcer] The cache pre-computes the closure once at
   // registration; passing it in (rather than recomputing per render) keeps
-  // the hot path free of the BFS + extractTemplateRefs cost.
+  // the hot path free of the BFS + templateReads cost.
   neededInputPaths: ReadonlySet<string>,
   // [LAW:one-source-of-truth] Every globals field a menu/stepper can persist,
   // resolved ONCE by the daemon (server.ts, before both this call and the

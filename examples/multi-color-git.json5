@@ -4,12 +4,12 @@
 // each fact in the git segment — branch, staged/unstaged/untracked counts,
 // conflicts — gets its OWN semantic palette color instead of one uniform
 // segment `fg`, so a dirty tree reads at a glance without parsing the text
-// (the p10k / gitaculous-style terminal-prompt convention). This is what the
-// bundled default's `git`/`gitaculous` segment templates
-// (src/config/default-dsl-config.ts) already do; this file lifts that same
-// template body out into a standalone, heavily-annotated example so a
-// template author can copy the pattern without reading the DEFAULT_DSL_CONFIG
-// source.
+// (the p10k / gitaculous-style terminal-prompt convention). The bundled
+// `git`/`gitaculous` segments follow the same convention, composed from named
+// `helpers` and `git.color.*` variables — to hide, recolour, or reorder one of
+// THEIR facts, override that one helper or variable (docs/segment-authoring.md,
+// "Reshaping a bundled segment: git"). This file is the other case: a git cell
+// written from scratch, as one annotated template.
 //
 // ── The two ideas worth taking from this file ──────────────────────────────
 //
@@ -68,10 +68,6 @@
       //   error    — merge conflicts (the one state that blocks a commit)
       // Everything NOT wrapped in an `fg` — the ⎇ glyph, the parentheses, the
       // separating spaces — inherits the quiet `fg:` below.
-      // Compare this to the bundled default's GIT_TEMPLATE/GIT_WORKTREE in
-      // src/config/default-dsl-config.ts — same coloring convention, just
-      // inlined here instead of factored through shared TS template-string
-      // constants (this file has no TS module to factor into).
       template: '⎇ {{ fg (color "primary") .git.branch }}{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} {{ if gt .git.ahead 0 }}{{ fg (color "success") (printf "↑%v" .git.ahead) }}{{ end }}{{ if gt .git.behind 0 }}{{ fg (color "warning") (printf "↓%v" .git.behind) }}{{ end }}{{ end }}{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} ({{ $first := true }}{{ if gt .git.staged 0 }}{{ fg (color "success") (printf "+%v" .git.staged) }}{{ $first = false }}{{ end }}{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}{{ fg (color "warning") (printf "~%v" .git.unstaged) }}{{ $first = false }}{{ end }}{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}{{ fg (color "accent") (printf "?%v" .git.untracked) }}{{ $first = false }}{{ end }}{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}{{ fg (color "error") (printf "!%v" .git.conflicts) }}{{ $first = false }}{{ end }}){{ end }}',
       bg: "surface-active",
       // A computed `fg:`. The field is a template that evaluates to a colour,

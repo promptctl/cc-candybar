@@ -8,8 +8,6 @@
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
-const DOTTED_REF_RE =
-  /(?<![A-Za-z0-9_)])\.([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)/g;
 
 // [LAW:single-enforcer] The inside of every `{{ … }}` action in a template,
 // string literals intact. A block closes at the first `}}` OUTSIDE a string
@@ -48,25 +46,137 @@ function* templateBlocks(template: string): IterableIterator<string> {
   }
 }
 
-// [LAW:dataflow-not-control-flow] Extract every `.<id>(.<id>)*` token inside
-// `{{ ... }}` blocks after stripping string literals. The result is a set of
-// dotted reference candidates; the caller decides which are valid.
-export function extractTemplateRefs(template: string): Set<string> {
-  const refs = new Set<string>();
+// Where the dot stands, as a prefix relative to the walk's `$` (the template's
+// root, or the argument a helper was called with): "" is `$` itself, "a.b." is
+// its field `a.b`, and null is a value no path names — a `range` element, a
+// computed `with`. A ref on a null dot reads that value, never the root.
+type Dot = string | null;
+
+// A `.`, `.a.b`, `$` or `$.a.b` operand at the start of `text`, as the Dot it
+// names; anything else — a `dict`, a pipeline, `$x`, nothing — is null.
+const PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+const OPERAND_RE = new RegExp(
+  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`,
+);
+function operandAt(text: string, dot: Dot): Dot {
+  const m = OPERAND_RE.exec(text.trimStart());
+  if (m === null) return null;
+  if (m[1] !== undefined) return m[2] === undefined ? "" : `${m[2]}.`;
+  if (dot === null) return null;
+  return m[3] === undefined ? dot : `${dot}${m[3]}.`;
+}
+
+// [LAW:types-are-the-program] Every `{{ … }}` action with the Dot its text is
+// evaluated at, tracking the rebinding Go templates do: `with X` binds the dot
+// to X for its body, `range` binds it to each element, `else` returns to the
+// enclosing dot (an `else with X` binds X there), `end` closes. A header
+// (`range .items`) is evaluated at the dot OUTSIDE the body it opens.
+const KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
+function* scopedBlocks(
+  template: string,
+): IterableIterator<{ code: string; dot: Dot }> {
+  const stack: Dot[] = [""];
   for (const raw of templateBlocks(template)) {
-    const block = raw.replace(STRING_LITERAL_RE, "");
-    let r: RegExpExecArray | null;
-    DOTTED_REF_RE.lastIndex = 0;
-    while ((r = DOTTED_REF_RE.exec(block)) !== null) {
-      refs.add(r[1]!);
+    const code = raw.replace(/^-(?=\s)/, "").trim();
+    const [, keyword = "", rest = ""] = KEYWORD_RE.exec(code) ?? [];
+    const top = stack[stack.length - 1]!;
+    const outer = stack.length > 1 ? stack[stack.length - 2]! : top;
+    if (keyword === "end") {
+      if (stack.length > 1) stack.pop();
+      continue;
     }
+    if (keyword === "else") {
+      yield { code, dot: outer };
+      const chained = /^with\b([\s\S]*)$/.exec(rest);
+      stack[stack.length - 1] =
+        chained === null ? outer : operandAt(chained[1]!, outer);
+      continue;
+    }
+    yield { code, dot: top };
+    if (keyword === "if") stack.push(top);
+    if (keyword === "with") stack.push(operandAt(rest, top));
+    if (keyword === "range" || keyword === "define" || keyword === "block")
+      stack.push(null);
   }
-  return refs;
+}
+
+// The refs an action's text spells, relative to the walk's `$`. A `$.a` ref
+// is `a` whatever the dot; a `.a` ref is under the dot, and reads nothing
+// nameable when the dot is null.
+const REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
+function* dotRefs(code: string, dot: Dot): IterableIterator<string> {
+  const text = code.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text.matchAll(REF_RE)]) {
+    if (r[1] === "$") yield r[2]!;
+    else if (dot !== null) yield `${dot}${r[2]!}`;
+  }
+}
+
+// The `{{ template "name" <arg> }}` calls in an action, each with the Dot its
+// argument hands the helper; a call whose argument names no path hands it a
+// value whose reads the caller already spelled building it, and is left out.
+const TEMPLATE_KEYWORD_RE = /\btemplate\s+$/;
+function* helperCalls(
+  code: string,
+  dot: Dot,
+): IterableIterator<{ name: string; at: string }> {
+  let cursor = 0;
+  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
+    const end = s.index + s[0].length;
+    if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
+      const at = operandAt(code.slice(end), dot);
+      if (at !== null) yield { name: s[0].slice(1, -1), at };
+    }
+    cursor = end;
+  }
+}
+
+// [LAW:single-enforcer] What a template READS, as paths from its root: its own
+// refs, plus the refs of every helper it hands a path, followed through the
+// helpers those call. A helper's refs are relative to the argument it was
+// given — a helper fed a `dict` reads the dict, one called with `.` inside a
+// `range` reads the element. A helper already on the call chain is not
+// followed again (a recursive walker, `{{ template "walk" .child }}`, hands
+// itself a longer path each time, so the path cannot be what stops it), and a
+// helper already walked at a path is not walked there twice. Each ref maps to
+// the helper whose body spells it (`null` = the template itself), so a load
+// error names the body to fix. Every variable-read question — reachability,
+// cross-ref, cycles, synthesis, introspection — asks this, so none is blind to
+// a helper's reads.
+export function templateReads(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): ReadonlyMap<string, string | null> {
+  const reads = new Map<string, string | null>();
+  const walked = new Set<string>();
+  const walk = (
+    src: string,
+    base: string,
+    via: string | null,
+    chain: ReadonlySet<string>,
+  ): void => {
+    for (const { code, dot } of [...scopedBlocks(src)]) {
+      for (const ref of dotRefs(code, dot)) {
+        if (!reads.has(base + ref)) reads.set(base + ref, via);
+      }
+      for (const call of [...helperCalls(code, dot)]) {
+        const body = helpers[call.name];
+        const at = base + call.at;
+        const key = `${call.name}\0${at}`;
+        if (body === undefined || chain.has(call.name) || walked.has(key))
+          continue;
+        walked.add(key);
+        walk(body, at, call.name, new Set([...chain, call.name]));
+      }
+    }
+  };
+  walk(template, "", null, new Set());
+  return reads;
 }
 
 // [LAW:dataflow-not-control-flow] Extract every `action "name"` call from a
 // template, for the load-time existence check. Same best-effort code-span /
-// string-literal walk as extractTemplateRefs: the `action` keyword lives in a
+// string-literal walk as helperCalls: the `action` keyword lives in a
 // CODE span and its NAME is the very next string literal (the display/boundValue
 // literals that follow are preceded by a non-`action` span, so they are never
 // misread as the name).
@@ -126,10 +236,12 @@ export function extractPickerMenuRefs(template: string): Set<string> {
 // the runtime's MissingFieldError, as for a payload field). One value, so
 // every reference surface — template refs, `when`, cache.key — resolves the
 // same way; `depends_on` reads `names` alone (the reaction calls the store by
-// exact key).
+// exact key). And the HELPERS, because a ref a helper spells on the root dot is
+// a read of the template that calls it (`templateReads`).
 export interface TemplateScope {
   readonly names: ReadonlySet<string>;
   readonly documents: ReadonlySet<string>;
+  readonly helpers: Readonly<Record<string, string>>;
 }
 
 // A ref resolves if (a) the full dotted name is a declared variable, (b) it
@@ -165,7 +277,7 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
       declare(`${segName}.${name}`, v);
     }
   }
-  return { names, documents };
+  return { names, documents, helpers: cfg.helpers };
 }
 
 function isDocumentDecl(v: VariableDecl): boolean {

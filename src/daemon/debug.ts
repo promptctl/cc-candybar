@@ -28,7 +28,7 @@ import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
 import { walkNodes } from "../config/dsl-types";
 import { rootNode } from "../config/root";
-import { extractTemplateRefs } from "../config/dsl-loader";
+import { templateReads } from "../config/dsl-loader";
 import type { CompiledConfig } from "../dsl/render";
 import type {
   DebugSnapshot,
@@ -205,7 +205,11 @@ export function introspectSegments(
       name,
       description: seg.description ?? null,
       template: seg.template,
-      referencedVars: extractReferencedVars(seg.template, declaredNames),
+      referencedVars: extractReferencedVars(
+        seg.template,
+        config.helpers,
+        declaredNames,
+      ),
       lastRender: lastRenderBySegment.get(name) ?? null,
     });
   }
@@ -239,7 +243,7 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
 // template references. Raw candidate extraction (find dotted paths inside
 // `{{ ... }}` actions, strip string literals so `{{ printf ".foo" }}`
 // does not falsely match a declared `foo`) is delegated to
-// extractTemplateRefs in src/config/dsl-loader.ts — that helper already
+// templateReads in src/config/loader/refs.ts — that helper already
 // owns the template-ref parsing rules and is exercised by the loader's
 // cycle detector. Reusing it means a future improvement to the parser
 // (e.g. supporting `$x.field` variable references) lands here for free.
@@ -258,10 +262,11 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
 //   3. Sort the result for deterministic snapshots.
 export function extractReferencedVars(
   template: string,
+  helpers: Readonly<Record<string, string>>,
   declared: ReadonlySet<string>,
 ): readonly string[] {
   const found = new Set<string>();
-  for (const candidate of extractTemplateRefs(template)) {
+  for (const candidate of templateReads(template, helpers).keys()) {
     if (declared.has(candidate)) {
       found.add(candidate);
       continue;

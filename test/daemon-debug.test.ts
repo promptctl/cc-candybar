@@ -324,26 +324,26 @@ describe("extractReferencedVars", () => {
   ]);
 
   test("finds simple dotted refs inside actions", () => {
-    expect(extractReferencedVars("{{ .greeting }}", declared)).toEqual([
+    expect(extractReferencedVars("{{ .greeting }}", {}, declared)).toEqual([
       "greeting",
     ]);
   });
 
   test("finds multi-segment refs", () => {
-    expect(extractReferencedVars("{{ .git.branch }}", declared)).toEqual([
+    expect(extractReferencedVars("{{ .git.branch }}", {}, declared)).toEqual([
       "git.branch",
     ]);
-    expect(extractReferencedVars("{{ .session.id }}", declared)).toEqual([
+    expect(extractReferencedVars("{{ .session.id }}", {}, declared)).toEqual([
       "session.id",
     ]);
   });
 
   test("ignores refs that do not match any declared name", () => {
-    expect(extractReferencedVars("{{ .undeclared }}", declared)).toEqual([]);
+    expect(extractReferencedVars("{{ .undeclared }}", {}, declared)).toEqual([]);
   });
 
   test("ignores '.' inside text outside actions", () => {
-    expect(extractReferencedVars("static .greeting text", declared)).toEqual(
+    expect(extractReferencedVars("static .greeting text", {}, declared)).toEqual(
       [],
     );
   });
@@ -352,6 +352,7 @@ describe("extractReferencedVars", () => {
     expect(
       extractReferencedVars(
         "{{ .greeting }} {{ .session.id }} {{ if .greeting }}{{ .git.branch }}{{ end }}",
+        {},
         declared,
       ),
     ).toEqual(["git.branch", "greeting", "session.id"]);
@@ -359,32 +360,32 @@ describe("extractReferencedVars", () => {
 
   test("credits ancestor when ref goes deeper than declared", () => {
     // `.session.id.extra` should still credit `session.id`.
-    expect(extractReferencedVars("{{ .session.id.extra }}", declared)).toEqual([
+    expect(extractReferencedVars("{{ .session.id.extra }}", {}, declared)).toEqual([
       "session.id",
     ]);
   });
 
   test("handles pipeline forms", () => {
-    expect(extractReferencedVars("{{ .greeting | upper }}", declared)).toEqual([
+    expect(extractReferencedVars("{{ .greeting | upper }}", {}, declared)).toEqual([
       "greeting",
     ]);
   });
 
   // [LAW:single-enforcer] String literals must NOT produce false positives.
-  // The raw extractor (extractTemplateRefs in dsl-loader) strips string
+  // The raw extractor (templateReads in loader/refs) strips string
   // literals from `{{ ... }}` bodies before scanning for dotted paths, so
   // a printf-style template containing a literal reference to a declared
   // name does not get falsely credited as a real reference.
   test("ignores dotted refs inside string literals", () => {
     // `.greeting` appears inside a string literal — must NOT be reported.
-    expect(extractReferencedVars(`{{ printf ".greeting" }}`, declared)).toEqual(
+    expect(extractReferencedVars(`{{ printf ".greeting" }}`, {}, declared)).toEqual(
       [],
     );
     // Same with single-quoted and backtick literals.
-    expect(extractReferencedVars(`{{ printf '.greeting' }}`, declared)).toEqual(
+    expect(extractReferencedVars(`{{ printf '.greeting' }}`, {}, declared)).toEqual(
       [],
     );
-    expect(extractReferencedVars("{{ printf `.greeting` }}", declared)).toEqual(
+    expect(extractReferencedVars("{{ printf `.greeting` }}", {}, declared)).toEqual(
       [],
     );
   });
@@ -396,6 +397,7 @@ describe("extractReferencedVars", () => {
     expect(
       extractReferencedVars(
         `{{ printf ".greeting=%s" .session.id }}`,
+        {},
         declared,
       ),
     ).toEqual(["session.id"]);

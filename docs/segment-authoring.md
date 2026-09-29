@@ -460,6 +460,84 @@ available inside a segment's `template`, `bg:` and `fg:`. In a variable
 declaration or a layout `when` there is no segment, and the call fails
 (Mistakes, below).
 
+## Reshaping a bundled segment: git
+
+The bundled git segments are built from the same parts a config can declare,
+so changing what they show is an override of one part, never a copy of the
+whole template. `gitaculous` (the full line, first row) and `git` (the
+one-line summary the `compact` preset uses) both compose these named
+`helpers`, each called as `{{ template "<name>" . }}`:
+
+| helper | renders |
+|--------|---------|
+| `gitBranch` | `⎇ main` — always present (both segments hide without a branch) |
+| `gitRepo` | ` cc-candybar` |
+| `gitOperation` | ` [rebase]` |
+| `gitSha` | ` abc1234` |
+| `gitFlags` | ` SU?!1` — staged, unstaged, untracked, conflicts |
+| `gitAheadBehind` | ` +2/-1` |
+| `gitUpstream` | ` [origin/main +2/-1]` — includes `gitAheadBehind` |
+| `gitStash` | ` (1 stashed)` |
+| `gitAge` | ` ◷ 13m` — time since the last commit |
+
+Every piece except `gitBranch` renders with its own leading space, or renders
+nothing when its fact is absent, so pieces drop and reorder without leaving a
+doubled space. Each fact's colour is a variable holding a palette name —
+`git.color.branch`, `.staged`, `.unstaged`, `.untracked`, `.conflicts`,
+`.ahead`, `.behind`, `.stash` — painted through the `gitPaint` helper, which
+keeps it readable on the cell's background. Everything unpainted wears the
+segment's quiet `fg:`.
+
+The snippets below replace the whole `root` with the one segment so the
+rendered bar is short; drop the `root` line to keep the bundled rows.
+
+Hide one fact — override its piece with an empty body:
+
+```json5 check:pass
+{
+  helpers: { gitSha: "" },
+  root: { h: ["gitaculous"] },
+}
+```
+
+```render
+ 🍫  (git) cc-candybar [rebase] SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m 
+```
+
+Recolour one fact — override its colour variable (any palette name or hex),
+or re-spell it by overriding its piece:
+
+```json5 check:pass
+{
+  variables: { "git.color.behind": { kind: "literal", value: "error" } },
+  helpers: { gitStash: '{{ if gt .git.stash 0 }} ⚑{{ .git.stash }}{{ end }}' },
+  root: { h: ["gitaculous"] },
+}
+```
+
+```render
+ 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] ⚑1 ◷ 13m 
+```
+
+Reorder or choose the groups — override the segment's `template` with the
+pieces you want, in your order. Only `template` changes; the segment keeps
+its bundled `fg:` and `when`:
+
+```json5 check:pass
+{
+  segments: {
+    gitaculous: {
+      template: '{{ template "gitBranch" . }}{{ template "gitFlags" . }}{{ template "gitUpstream" . }}',
+    },
+  },
+  root: { h: ["gitaculous"] },
+}
+```
+
+```render
+ 🍫  ⎇ main SU? [origin/main +2/-1] 
+```
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The

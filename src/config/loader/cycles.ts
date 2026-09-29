@@ -10,7 +10,7 @@ import {
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import { type ValidateCtx } from "./validate-core.js";
-import { extractTemplateRefs } from "./refs.js";
+import { templateReads } from "./refs.js";
 
 // Carries declaration metadata for each graph node so cycle errors report the
 // correct config path (variables.X vs segments.S.vars.X) and correct line.
@@ -108,7 +108,7 @@ function buildTemplateGraph(cfg: DslConfig): {
   // own-segment refs are not aliased here because the runtime has no such
   // aliasing; cross-ref rejects them at load with the namespaced suggestion.
   const addTemplateEdges = (from: string, template: string): void => {
-    for (const ref of extractTemplateRefs(template)) {
+    for (const ref of templateReads(template, cfg.helpers).keys()) {
       if (allVarNames.has(ref)) {
         graph.get(from)!.add(ref);
         continue;

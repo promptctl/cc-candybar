@@ -12,7 +12,7 @@ import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
-import { walkNodes } from "../src/config/dsl-types";
+import { walkNodes, type DslConfig } from "../src/config/dsl-types";
 import { isReservedName } from "../src/config/loader/reserved-namespace";
 import { rootNode } from "../src/config/root";
 import {
@@ -774,9 +774,18 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // `theme` defaults to the config's own palette; passing one renders the
     // same segment under a different theme, which is how the contrast floor
     // below is checked across the whole registry rather than on one theme.
-    function renderSegment(segment: string, theme?: string): string {
+    function renderSegment(
+      segment: string,
+      theme?: string,
+      git: Record<string, unknown> = GIT_PAYLOAD.git,
+      variables: DslConfig["variables"] = {},
+    ): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const cfg = narrowToSegment(parsed, segment);
+      const narrowed = narrowToSegment(parsed, segment);
+      const cfg = {
+        ...narrowed,
+        variables: { ...narrowed.variables, ...variables },
+      };
       const store = new VariableStore();
       const registry = new SourceRegistry(
         store,
@@ -789,14 +798,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const basePalette = paletteForThemeName(
           theme ?? cfg.globals.palette ?? "textual-dark",
         );
-        return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, {
-          style: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding: 1,
-          charset: "unicode",
-          width: Number.POSITIVE_INFINITY,
-        });
+        return renderDsl(
+          cfg,
+          compiled,
+          store,
+          registry,
+          { ...GIT_PAYLOAD, git },
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
+        );
       } finally {
         registry.dispose();
       }
@@ -812,23 +828,33 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(distinct.size).toBeGreaterThan(1);
     });
 
-    // GIT_WORKTREE's `$first` separator var is declared inside the outer
-    // `{{ if or ... }}` gate, not at the template's top level like
-    // DIR_TEMPLATE's `$dir` — a real structural difference a reviewer flagged.
-    // Reassignment via `=` (not `:=`) still walks up to the declaring frame
-    // regardless of nesting depth, so this asserts the actual observable
-    // behavior (single-space-separated counts, never concatenated) rather
-    // than trusting the analogy in the comment above GIT_WORKTREE.
-    test("worktree counts render single-space-separated, never concatenated", () => {
-      const visible = renderSegment("git").replace(ANSI_AND_CAPS, "");
-      expect(visible).toContain("+2 ~3 ?4 !1");
-      expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
-    });
+    // The piece contract (the `git*` helpers): every optional piece carries
+    // its own leading space or renders nothing, so a composition never shows
+    // a doubled or dangling space whichever facts are absent.
+    test.each([
+      [
+        "gitaculous",
+        GIT_PAYLOAD.git,
+        "(git) repo abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed)",
+      ],
+      ["git", GIT_PAYLOAD.git, "⎇ main +1/-1 SU?!1"],
+      ["gitaculous", { branch: "main" }, "(git) ⎇ main"],
+      ["git", { branch: "main" }, "⎇ main"],
+    ])(
+      "%s composes its pieces with single spaces (%#)",
+      (segment, git, text) => {
+        const visible = renderSegment(segment, undefined, git).replace(
+          ANSI_AND_CAPS,
+          "",
+        );
+        expect(visible.trim()).toBe(text);
+      },
+    );
 
     // brandon-segments-3eo.1.1: `git` and `gitaculous` independently typed
     // the same fact's color and drifted (branch accent-vs-primary, stash
-    // colored-vs-not) — caught by live testing, fixed by routing both
-    // templates through the shared GIT_COLOR table. These assert the two
+    // colored-vs-not) — caught by live testing. Both now compose the same
+    // `git*` helper pieces and `git.color.*` variables; these assert the two
     // segments now agree, not just that gitaculous has "more than one color".
     //
     // The truecolor fg immediately preceding `text`'s first occurrence — every
@@ -854,6 +880,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
       colorBeforeText(line, text, "fg");
     const bgBeforeText = (line: string, text: string) =>
       colorBeforeText(line, text, "bg");
+
+    // A fact's colour is a variable, so overriding one variable recolours
+    // exactly that fact.
+    test("a git.color.* variable recolours its fact", () => {
+      const stock = renderSegment("gitaculous");
+      const recoloured = renderSegment(
+        "gitaculous",
+        undefined,
+        GIT_PAYLOAD.git,
+        {
+          "git.color.behind": { kind: "literal", value: "error" },
+        },
+      );
+      const errorFg = fgBeforeText(stock, "!1"); // conflicts are painted `error`
+      expect(fgBeforeText(stock, "-1")).not.toBe(errorFg);
+      expect(fgBeforeText(recoloured, "-1")).toBe(errorFg);
+    });
 
     test("gitaculous colors unstaged and untracked distinctly, not merged into one indicator", () => {
       const line = renderSegment("gitaculous");
@@ -891,24 +934,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // Text that carries no git fact — it only frames one.
       const STRUCTURAL = ["abc1234", "origin/main"];
 
-      test.each(["git", "gitaculous"])(
-        "%s: every painted fact differs from the structural color",
-        (segment) => {
-          const line = renderSegment(segment);
-          const quiet = fgBeforeText(line, STRUCTURAL[0]!);
-          expect(quiet).toBeDefined();
-          // Every other structural token shares that one color...
-          for (const text of STRUCTURAL.slice(1)) {
-            expect(fgBeforeText(line, text)).toBe(quiet);
-          }
-          // ...and it is distinct from the facts, which is the whole point:
-          // more than one color on the line, with the quiet one not among the
-          // painted ones.
-          const distinct = distinctForegrounds(line);
-          expect(distinct.size).toBeGreaterThan(2);
-          expect(distinct.has(quiet!)).toBe(true);
-        },
-      );
+      test("gitaculous: every painted fact differs from the structural color", () => {
+        const line = renderSegment("gitaculous");
+        const quiet = fgBeforeText(line, STRUCTURAL[0]!);
+        expect(quiet).toBeDefined();
+        // Every other structural token shares that one color...
+        for (const text of STRUCTURAL.slice(1)) {
+          expect(fgBeforeText(line, text)).toBe(quiet);
+        }
+        // ...and it is distinct from the facts, which is the whole point:
+        // more than one color on the line, with the quiet one not among the
+        // painted ones.
+        const distinct = distinctForegrounds(line);
+        expect(distinct.size).toBeGreaterThan(2);
+        expect(distinct.has(quiet!)).toBe(true);
+      });
 
       // [LAW:verifiable-goals] The quiet color is a *computed* blend toward the
       // segment's own background, so how legible it ends up is a property of
