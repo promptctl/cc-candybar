@@ -11,11 +11,13 @@
 // fragment IS the empty rows map, the merge's identity, so the two callers and
 // the floor preset all run the same expression [LAW:dataflow-not-control-flow].
 
-import type {
-  ContainerNode,
-  LayoutNode,
-  Root,
-  RootFragment,
+import {
+  childPath,
+  walkNodePaths,
+  type ContainerNode,
+  type LayoutNode,
+  type Root,
+  type RootFragment,
 } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] A row name must be an identifier: it is spliced
@@ -29,8 +31,9 @@ export const ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // [LAW:one-source-of-truth] The name a whole tree's i-th row lowers to. `#`
 // fails ROW_NAME_RE, so a positional row can never collide with — or be
 // shadowed by — an authored one, and is never integer-like.
+const POSITIONAL = "#";
 export function positionalRowName(index: number): string {
-  return `#${index + 1}`;
+  return `${POSITIONAL}${index + 1}`;
 }
 
 // The merge's identity: restages nothing.
@@ -85,9 +88,35 @@ export function rootNode(root: Root): ContainerNode {
 
 // The tree a fragment authors on its own — a whole tree as written, a rows
 // map as the rows it names — for the checks that inspect what an author
-// wrote rather than what renders (cross-ref's per-layout walk).
+// wrote rather than what renders.
 export function fragmentNode(fragment: RootFragment): LayoutNode {
   return isRowsFragment(fragment) ? rootNode(fragment) : fragment;
+}
+
+// [LAW:one-source-of-truth] Every node of a fragment beside the path its
+// author would look for it at — for the checks that report against what an
+// author wrote rather than what renders (cross-ref's per-layout walk). A whole
+// tree is walked as written; a rows map yields the root's own fields at `key`
+// and each row where it was written: `<key>.rows.<name>` for a named row, and
+// the tree position for a positional one, which only a whole tree lowers to
+// (it replaces every row, so the entry index IS that position). A merged
+// root's index is never a row's address: it shifts with rows the author
+// inherited.
+export function* fragmentNodePaths(
+  fragment: RootFragment,
+  key: string,
+): IterableIterator<readonly [LayoutNode, string]> {
+  if (!isRowsFragment(fragment)) {
+    yield* walkNodePaths(fragment, key);
+    return;
+  }
+  yield [rootNode(fragment), key];
+  for (const [i, [name, row]] of Object.entries(fragment.rows).entries()) {
+    yield* walkNodePaths(
+      row,
+      name.startsWith(POSITIONAL) ? childPath(key, i) : `${key}.rows.${name}`,
+    );
+  }
 }
 
 // [LAW:one-type-per-behavior] THE cascade for a root, the same shape as every

@@ -621,27 +621,16 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   };
   const lead: LayoutNode = { kind: "segment", name: EDIT_DONE_SEG };
   const presets: Record<string, PresetDecl> = { ...config.presets };
+  const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
-    const splicedRoot = spliceEditChromeForPreset(
-      config,
-      name,
-      artifacts,
-      lead,
-      tail,
-    );
-    presets[name] = {
-      ...presetByName(config.presets, name),
-      root: splicedRoot,
-    };
+    const root = spliceEditChromeForPreset(config, name, artifacts, lead, tail);
+    roots.push(root);
+    presets[name] = { ...presetByName(config.presets, name), root };
   }
   // [LAW:no-silent-failure] What the chrome reads and the config does not
   // declare (the banner's `.preset.customized`, the session.id every click
   // carries), merged UNDER the config so a user's own declaration wins.
-  const ensured = synthesisInputs(
-    artifacts,
-    [lead, tail],
-    Object.keys(config.variables),
-  );
+  const ensured = synthesisInputs(artifacts, roots, config);
   return {
     ...config,
     variables: {

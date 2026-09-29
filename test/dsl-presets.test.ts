@@ -229,6 +229,23 @@ describe("preset compile diagnostics name the authored path", () => {
     }`);
     expect(msg).toContain("presets.wide.root.children[0].when");
   });
+
+  test("a named row diagnoses under its name, not its index in the merged root", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      root: { rows: { extra: { h: ['hello'], when: '{{ oops ' } } },
+    }`);
+    expect(msg).toContain("root.rows.extra.when");
+    expect(msg).not.toContain("children[");
+  });
+
+  test("a preset's named row diagnoses under the preset's rows", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      presets: { wide: { root: { rows: { extra: { h: [{ seg: 'hello', when: '{{ oops ' }] } } } } },
+    }`);
+    expect(msg).toContain("presets.wide.root.rows.extra.children[0].when");
+  });
 });
 
 // ─── Selection: the render actually changes ───────────────────────────────────

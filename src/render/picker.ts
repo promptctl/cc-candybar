@@ -67,17 +67,18 @@ export function cellWidth(text: string): number {
   return new RichText(text).cellLength;
 }
 
-// [LAW:single-enforcer] The width one option row may fill: term.cols less what
-// the row's own segment spends around it. term.cols is the raw usable width the
-// strip wraps to; the row is itself a styled strip segment, so the joiner
-// brackets it with caps (powerline's lead and tail, capsule's two caps) that
-// FlexStrip counts inside that width, and the segment layout pads every line it
-// emits by the render's intra-cell padding on both sides. A row packed to the
-// full term.cols is pushed past it by both — the maximally-packed middle pages
-// once overflowed and the terminal ate the trailing →. Reserved HERE, at the
-// row-fitting seam, rather than by shrinking the shared term.cols every
-// template reads; stripChromeCols measures the per-shape geometry. The picker and
-// the carousel both fit a row by this one budget.
+// [LAW:single-enforcer] The width one option row may fill: the render's width
+// less what the row's own segment spends around it. The width is the raw
+// usable width the strip wraps to (`.term.cols` in a template); the row is
+// itself a styled strip segment, so the joiner brackets it with caps
+// (powerline's lead and tail, capsule's two caps) that FlexStrip counts inside
+// that width, and the segment layout pads every line it emits by the render's
+// intra-cell padding on both sides. A row packed to the full width is pushed
+// past it by both — the maximally-packed middle pages once overflowed and the
+// terminal ate the trailing →. Reserved HERE, at the row-fitting seam, rather
+// than by shrinking the width every template reads; stripChromeCols measures
+// the per-shape geometry. The picker and the carousel both fit a row by this
+// one budget.
 export function rowBudget(runtime: ActionRuntime): number {
   return Math.max(1, runtime.width - runtime.chromeCols - 2 * runtime.padding);
 }

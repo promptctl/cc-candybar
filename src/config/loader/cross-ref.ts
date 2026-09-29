@@ -7,17 +7,15 @@
 // when the visibility/scoping rules between config parts change.
 
 import JSON5 from "json5";
-import { createEngine } from "@promptctl/go-template-js";
 import {
   hasCacheField,
-  walkNodePaths,
   walkNodes,
   AXIS_OF,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
+  type RootFragment,
   type VariableDecl,
-  parseArm,
 } from "../dsl-types.js";
 import {
   actionBindsTemplateValue,
@@ -33,7 +31,7 @@ import { listGlobalsFieldNames } from "./globals.js";
 import { isExpression } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
-import { fragmentNode, rootNode } from "../root.js";
+import { fragmentNodePaths, rootNode } from "../root.js";
 import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   anchorUnderGate,
@@ -43,12 +41,14 @@ import {
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
+import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
   extractActionRefs,
   extractPickerMenuRefs,
   extractTemplateRefs,
   refResolves,
+  templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
 
@@ -421,11 +421,11 @@ export function validateCrossReferences(
   // fragment names), so an unknown segment is reported against the layout
   // that names it rather than against a row it inherited.
   const checkLayoutTree = (
-    root: LayoutNode,
+    root: RootFragment,
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
-    for (const [node, path] of walkNodePaths(root, layoutKey)) {
+    for (const [node, path] of fragmentNodePaths(root, layoutKey)) {
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
       // segment template, surfaced at load time.
@@ -455,16 +455,12 @@ export function validateCrossReferences(
     }
   };
   const layoutKey = authoredLayoutKey(ctx.source);
-  checkLayoutTree(
-    rootNode(cfg.root),
-    layoutKey,
-    findKeyLine(ctx.source, [layoutKey]),
-  );
+  checkLayoutTree(cfg.root, layoutKey, findKeyLine(ctx.source, [layoutKey]));
   for (const [name, preset] of Object.entries(cfg.presets)) {
     if (preset.root === undefined) continue;
     const presetKey = `presets.${name}.root`;
     const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
-    checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
+    checkLayoutTree(preset.root, presetKey, presetLine);
   }
   // [LAW:one-source-of-truth] Placement counts run over the tree each preset
   // RENDERS, keyed by the path presetRoot reports it authored at — so a
@@ -678,32 +674,6 @@ function declaresStateKey(cfg: DslConfig, key: string): boolean {
   return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
 }
 
-// [LAW:one-source-of-truth] The one scope every reference surface resolves
-// against, built from the same declarations src/dsl/render.ts registers:
-// globals under their bare names, segment locals under segName.varName — and
-// which of those are documents (a json-parsed shell/file source).
-function templateScopeOf(cfg: DslConfig): TemplateScope {
-  const names = new Set<string>();
-  const documents = new Set<string>();
-  const declare = (name: string, v: VariableDecl): void => {
-    names.add(name);
-    if (isDocumentDecl(v)) documents.add(name);
-  };
-  for (const [name, v] of Object.entries(cfg.variables)) declare(name, v);
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    for (const [name, v] of Object.entries(seg.vars ?? {})) {
-      declare(`${segName}.${name}`, v);
-    }
-  }
-  return { names, documents };
-}
-
-function isDocumentDecl(v: VariableDecl): boolean {
-  return (
-    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
-  );
-}
-
 function checkVarRefs(
   ctx: ValidateCtx,
   declPath: string,
@@ -765,9 +735,7 @@ function checkDependsOn(
 // catch it too, but it
 // compiles the SYNTHESIZED trees — the settings menu and edit chrome rewrite
 // every preset root — so its path would name a position the author never
-// wrote (`presets.default.root.children[1]…`). Parse-only: a bare engine,
-// since no function is looked up before evaluation.
-const SYNTAX_ENGINE = createEngine<string>({ fromString: (s) => s });
+// wrote (`presets.default.root.children[1]…`).
 function checkWhenParses(
   ctx: ValidateCtx,
   path: string,

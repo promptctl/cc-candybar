@@ -23,6 +23,7 @@ import type {
 } from "../config/dsl-types.js";
 import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
+import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import {
   addableSegmentDomains,
@@ -407,9 +408,8 @@ export function registerDslConfig(
       style: "powerline",
       charset: DEFAULT_CHARSET,
     }),
-    // Same contract as chromeCols; the floor is the bundled `term.cols`
-    // default, what a row was fitted to before a render published the width.
-    width: 80,
+    // Same contract as chromeCols; the floor is `term.cols`'s own default.
+    width: TERM_COLS_FLOOR,
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // base palette each render; `globals.palette` is the registration-time
     // value, so a compile-only path (no render) still has a real palette.
@@ -916,13 +916,14 @@ export function renderDsl(
     selection?.theme ??
     resolveThemeSelection(undefined, null, config.globals.palette);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
-  // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
-  // the exact wrap width — never a cached or independently-measured copy. This is
-  // the RAW usable width (terminal cols minus the Claude-Code reserve), the honest
-  // meaning every template — incl. user configs reading `.term.cols` — expects.
-  // The picker's strip-chrome reservation is NOT folded in here: that is a
-  // picker-local concern (the strip's end-caps wrap the picker's row, not every
-  // segment), applied at the pagination seam in renderPicker. [LAW:locality-or-seam]
+  // SAME opts.width the strip wraps to (below) and a row fits to (published as
+  // ActionRuntime.width), so a template reads the exact wrap width — never a
+  // cached or independently-measured copy. This is the RAW usable width
+  // (terminal cols minus the Claude-Code reserve), the honest meaning every
+  // template — incl. user configs reading `.term.cols` — expects. The picker's
+  // strip-chrome reservation is NOT folded in here: that is a row-local concern
+  // (the strip's end-caps wrap the picker's row, not every segment), applied at
+  // the fitting seam in rowBudget. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
   // [LAW:one-source-of-truth] `theme.effective` and `look.effective` are each

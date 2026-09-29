@@ -1219,8 +1219,8 @@ the menu is visible under every condition, so its placement may not be gated
 
 **Every config gets the menu.** It needs nothing from yours: whatever it reads
 that your config does not declare — `session.id`, the `.effective` settings,
-`project_dir`, `term.cols` — it declares itself, and your own declaration of
-any of those names wins.
+`project_dir` — it declares itself, and your own declaration of any of those
+names wins.
 
 Everything the menu synthesizes lives under the reserved `settings.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
