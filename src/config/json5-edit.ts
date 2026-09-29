@@ -270,6 +270,45 @@ export function textOf(text: string, node: Node): string {
   return text.slice(node.span.start, node.span.end);
 }
 
+/**
+ * A node's text as a value to splice elsewhere: its continuation lines carry
+ * the indentation of the line it sat on, which `setValue` would otherwise add
+ * to a second time, so that indentation comes off and the text is on LF —
+ * the shape `json5Text` mints, nested by `reindent` wherever it lands.
+ * Comments inside the node travel with it. A line that continues a string
+ * (JSON5's backslash-newline) is the string's own bytes, and keeps them.
+ */
+export function movableTextOf(text: string, node: Node): string {
+  const indent = indentOfLine(text, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at: number): boolean =>
+    literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text, node)
+    .split("\n")
+    .map((line, i) => {
+      const at = lineStart;
+      lineStart += line.length + 1;
+      const own = i > 0 && !inLiteral(at - 1) && line.startsWith(indent);
+      return (own ? line.slice(indent.length) : line).replace(/\r$/, "");
+    })
+    .join("\n");
+}
+
+// Every span inside `node` whose bytes are a string's — a value or a key.
+function literalSpans(node: Node): readonly Span[] {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+
 // ─── Text generation ─────────────────────────────────────────────────────────
 
 const IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -575,9 +614,16 @@ export function setValue(
  * leaves empty — a by-name declaration whose last field is reset returns to
  * tracking the one it overlaid, instead of shadowing it as `{}`. The document
  * root is never pruned: a file that authored one value goes back to `{}`, not
- * to nothing. An absent path returns the text unchanged.
+ * to nothing — and neither is any ancestor within `keep` segments of it, for
+ * an object that is a declaration by its name alone (a preset the user
+ * authored is `{}` once its last field is reset, never gone). An absent path
+ * returns the text unchanged.
  */
-export function deleteValue(text: string, path: readonly string[]): string {
+export function deleteValue(
+  text: string,
+  path: readonly string[],
+  keep = 0,
+): string {
   if (path.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
@@ -588,8 +634,8 @@ export function deleteValue(text: string, path: readonly string[]): string {
     parent === undefined ? undefined : entryOf(parent, path[path.length - 1]!);
   if (entry === undefined || parent?.kind !== "object") return text;
   const pruned = removeMember(text, entry.span);
-  return parentPath.length > 0 && parent.entries.length === 1
-    ? deleteValue(pruned, parentPath)
+  return parentPath.length > keep && parent.entries.length === 1
+    ? deleteValue(pruned, parentPath, keep)
     : pruned;
 }
 

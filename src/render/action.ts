@@ -45,6 +45,8 @@ import {
   VERB_REDO,
   VERB_RESET_CONFIG,
   VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
@@ -192,6 +194,9 @@ export type CompiledActionDecl =
   | { readonly kind: "redo" }
   // Write every unsaved setting — the daemon derives which at click time.
   | { readonly kind: "save" }
+  // Save the bar as a new preset, or delete the preset the template names.
+  | { readonly kind: "preset-save" }
+  | { readonly kind: "preset-delete"; readonly name: Template<RichText> }
   // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
   // the check name is compiled in from the declaration (already gated against
   // CHECKS at load), so the click carries only what the config declared.
@@ -459,6 +464,14 @@ function compileAction(
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
   if ("save" in action) return { kind: "save" };
+  if ("preset" in action) {
+    return action.preset === "save"
+      ? { kind: "preset-save" }
+      : {
+          kind: "preset-delete",
+          name: parseActionTemplate(parse, action.name, name),
+        };
+  }
   // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
   // entry compiled for that name, so there is no second statement of what any
   // of them writes. The loader proves every name resolves; a config assembled
@@ -720,6 +733,22 @@ export function realize(
     case "save":
       return {
         effects: [{ verb: VERB_SAVE, args: [sessionId] }],
+        active: false,
+      };
+    // Never "active": one-shot triggers, like save.
+    case "preset-save":
+      return {
+        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId] }],
+        active: false,
+      };
+    case "preset-delete":
+      return {
+        effects: [
+          {
+            verb: VERB_DELETE_PRESET,
+            args: [sessionId, evalTemplate(c.name, buildScope(store))],
+          },
+        ],
         active: false,
       };
     // Never "active": running the doctor and applying a fix are one-shot

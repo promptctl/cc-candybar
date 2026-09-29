@@ -63,6 +63,7 @@ export const ACTION_KEYS = [
   "undo",
   "redo",
   "save",
+  "preset",
   "doctor",
   "do",
 ] as const;
@@ -109,6 +110,13 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         release it from the session -> no gate of its own:
 //                         each value re-crosses the session gate that admitted
 //                         it, and no value rides the wire
+//   preset: "save"      — write the bar the session renders into the config
+//                         file as a new preset and switch to it -> no gate of
+//                         its own: its values re-cross the session gate
+//   preset: "delete"    — delete the preset `name` (a template, evaluated at
+//     + name              render) from the config file -> no gate of its own:
+//                         the daemon refuses a bundled preset or one the file
+//                         does not declare
 //   do                  — fire several declared actions in one click: the
 //                         first is the click's face (its display rule and
 //                         current-state mark are the region's), the rest ride
@@ -199,6 +207,12 @@ export type ActionDecl =
   | { readonly undo: true }
   | { readonly redo: true }
   | { readonly save: true }
+  // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
+  // daemon names the preset and reads what it holds at click time — while
+  // `delete` names its preset by a template, like `copy`'s text, so one
+  // declaration serves "delete the preset I am in" and "delete this one".
+  | { readonly preset: "save" }
+  | { readonly preset: "delete"; readonly name: string }
   // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a): `run` folds
   // every check over the session's recorded client facts and writes the
   // report into SessionState; `fix` performs the repair the named check's

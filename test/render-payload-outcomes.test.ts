@@ -376,7 +376,11 @@ describe("buildRenderPayload — effective globals projection", () => {
     // left unmentioned, so re-adding a second producer fails here.
     expect("theme" in payload).toBe(false);
     expect("look" in payload).toBe(false);
-    expect(payload.preset).toEqual({ effective: "default", customized: true });
+    expect(payload.preset).toEqual({
+      effective: "default",
+      customized: true,
+      bundled: true,
+    });
     expect(payload.style).toEqual({ effective: "capsule" });
     expect(payload.progression).toEqual({ effective: "primary" });
     expect(payload.charset).toEqual({ effective: "ascii" });

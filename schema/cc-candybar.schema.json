@@ -1105,6 +1105,34 @@
           {
             "type": "object",
             "properties": {
+              "preset": {
+                "const": "save"
+              }
+            },
+            "required": [
+              "preset"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "preset": {
+                "const": "delete"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "preset",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "doctor": {
                 "const": "run"
               }

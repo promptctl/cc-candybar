@@ -113,6 +113,10 @@ const CONFIG_SEG = `${SETTINGS_NS}config`;
 const SAVE_SEG = `${SETTINGS_NS}save`;
 const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
+// ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
+const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
+const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+
 // ─── Reset all (brandon-save-undo-bwi.wt5) ──────────────────────────────────
 //
 // [LAW:composability] `⟲ reset all` is every control's ↺ fired as one click —
@@ -250,8 +254,17 @@ const PRIMARY_CONTROLS: readonly SettingControl[] = [
     domain: "presets",
     // A preset changes the arrangement, and the tray this menu opens takes
     // over the door's row — so the bar cannot show its own first row while the
-    // ring is open. `{{ layoutPreview }}` draws every row of it.
-    beneath: ["{{ layoutPreview }}"],
+    // ring is open. `{{ layoutPreview }}` draws every row of it. Under it, the
+    // presets the user makes (brandon-save-undo-bwi.o6u): keep the bar as a
+    // new one, which the ring then shows current, and delete the one the ring
+    // is on when the user made it.
+    beneath: [
+      "{{ layoutPreview }}",
+      `{{ action "${PRESET_SAVE}" "⊕ save as preset" }}` +
+        `{{ if not .preset.bundled }} ` +
+        `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}` +
+        `{{ end }}`,
+    ],
   },
 ];
 
@@ -622,6 +635,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
       [SAVE_SEG]: { save: true },
+      [PRESET_SAVE]: { preset: "save" },
+      [PRESET_DELETE]: {
+        preset: "delete",
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`,
+      },
     },
     segments: {
       // [LAW:representation] ONE symbol per state, unlike the labelled toggles

@@ -67,6 +67,15 @@ export const VERB_STEP_CONFIG = "step-config";
 // Args: `[sessionId]`: which settings are drafts, and their values, are read
 // at click time from the session itself, never carried by the URL.
 export const VERB_SAVE = "save";
+// Save as preset (brandon-save-undo-bwi.o6u): write the bar the session
+// renders into the config file as a new `presets.custom-N`, then switch the
+// session to it. Args: `[sessionId]` — the name, the arrangement and the
+// settings are all read at click time, like `save`'s drafts.
+export const VERB_SAVE_PRESET = "save-preset";
+// Delete a preset the config file authors (never a bundled one). Args:
+// `[sessionId, name]` — the name the bar showed, so the click removes the
+// preset its label named, and a name the file no longer declares is refused.
+export const VERB_DELETE_PRESET = "delete-preset";
 // [LAW:one-source-of-truth] Return each named config key to its bundled
 // default at every layer that holds it — its paths in the config file, in one
 // write, and the session's pick (resetLayers, src/daemon/setting-drafts.ts).
