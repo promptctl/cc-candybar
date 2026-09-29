@@ -1,13 +1,14 @@
 // The settings the daemon resolves once per render and publishes as an
 // `.effective` projection (src/daemon/render-payload.ts), each with the two keys
-// that write it: the config field a `persist` writes and the SessionState key a
-// `set` writes.
+// that write it: the SessionState key a pick (`set`) writes and the config field
+// a save (src/daemon/setting-drafts.ts) or a `persist` writes.
 //
 // [LAW:one-source-of-truth] THE table. The settings menu mints its controls'
 // keys from these rows (src/config/settings-menu.ts) and the render derives its
 // read-back maps from them (src/render/action.ts), so a setting's triple is
-// spelled here and nowhere else — a dual control cannot write a key whose
-// current value the render does not know how to read back.
+// spelled here and nowhere else — a control cannot write a key whose current
+// value the render does not know how to read back, and a save cannot write a
+// field other than the one the pick it saves stands for.
 // [LAW:one-way-deps] It lives under config/ and imports nothing: config/ sits
 // below render/, which already imports from here, so both sides depend downhill.
 
@@ -80,11 +81,12 @@ export const SETTING_PROJECTIONS: readonly SettingProjection[] =
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar
 // is rendering with — whichever rung (staged, session, config, floor) produced
 // it — so a `persist` and a `set` on a key in SETTING_PROJECTIONS both read
-// back through its `.effective` projection. The settings menu mints its dual
-// controls from the same table, so every one of them has a row here. A `persist` on a field with no row reads back through a var
-// named after the field, which none is, so its current-selection mark is
-// inert (readVar yields ""); a `set` on a key with no row reads back through
-// the `state` variable over that key.
+// back through its `.effective` projection. The settings menu mints its
+// controls from the same table, so every one of them has a row here. A
+// `persist` on a field with no row reads back through a var named after the
+// field, which none is, so its current-selection mark is inert (readVar yields
+// ""); a `set` on a key with no row reads back through the `state` variable
+// over that key.
 export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
   SETTING_PROJECTIONS.map((p) => [p.configKey, p.effectiveVar]),
 );

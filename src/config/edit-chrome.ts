@@ -465,9 +465,8 @@ function wrapWithPresetRows(
 }
 
 // [LAW:one-source-of-truth] The `(?)` is a CELL, and its contract is that the
-// caller joins it to a row it ALREADY HAS — the settings menu pushes it into
-// the row holding `persist?`. Edit mode's rows are the ones spliceContainer
-// just built, so the trigger joins the last of them. Two constraints pin that
+// caller joins it to a row it ALREADY HAS. Edit mode's rows are the ones
+// spliceContainer just built, so the trigger joins the last of them. Two constraints pin that
 // placement and nothing else satisfies both:
 //
 //  - Closed help must cost no LINE. A trigger given its own vertical slot is a

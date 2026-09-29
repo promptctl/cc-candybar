@@ -49,7 +49,7 @@ import {
   registerConfigValidator,
   validateConfigWrite,
 } from "../src/daemon/verbs/config-validators";
-import { writeValue, type EditStore } from "../src/daemon/config-file-store";
+import { writeValues, type EditStore } from "../src/daemon/config-file-store";
 import {
   parsePersistTarget,
   persistPath,
@@ -455,7 +455,7 @@ describe("config-file-store: segment-palette placement", () => {
     }`;
     durable.write(text);
     expect(() =>
-      writeValue(store(), durable.configPath, "segments.ghost.palette", "nord"),
+      writeValues(store(), durable.configPath, [["segments.ghost.palette", "nord"]]),
     ).toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
@@ -528,11 +528,10 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       expect(entry.state.config.segments.sidebar!.palette).toBeUndefined();
 
       await reloads.after(entry, () =>
-        writeValue(
+        writeValues(
           store(),
           durable.configPath,
-          "segments.sidebar.palette",
-          "nord",
+          [["segments.sidebar.palette", "nord"]],
         ),
       );
 
@@ -561,11 +560,10 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
       root: 'sidebar',
     }`);
-    writeValue(
+    writeValues(
       store(),
       durable.configPath,
-      "segments.sidebar.palette",
-      "gruvbox",
+      [["segments.sidebar.palette", "gruvbox"]],
     );
 
     const { cache, cleanups } = makeCache();
@@ -601,11 +599,10 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
       root: { h: ['directory', 'sidebar'] },
     }`);
-    writeValue(
+    writeValues(
       store(),
       durable.configPath,
-      "segments.directory.palette",
-      "nord",
+      [["segments.directory.palette", "nord"]],
     );
 
     const { cache, cleanups } = makeCache();

@@ -440,7 +440,7 @@ describe("the settings menu's theme, look and style controls are carousels", () 
 // brandon-theme-picker-bgw.7g6: which role each row wears is a setting in the
 // ⚙ config row, chosen like every display setting beside it.
 describe("the progression control", () => {
-  test("▶ applies the next progression in this session and the bar's closed cells recolour; ☑ persist? writes globals.progression", () => {
+  test("▶ applies the next progression in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     openCarousel(rt, "progression");
     expect(stripAnsi(rt.render())).toMatch(
@@ -460,12 +460,6 @@ describe("the progression control", () => {
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[1]).not.toEqual(before[1]);
-    // Checked, the same ▶ writes the config file's default and releases the pick.
-    rt.clickWriting("settings.persist", "true");
-    const commit = effectsOf(rt.linkOn("progression", CAROUSEL_NEXT).url);
-    expect(commit.map((e) => [e.verb, e.args[1], e.args[2], e.args[3]])).toEqual([
-      ["set-config", "progression", "primary", "progression"],
-    ]);
     rt.dispose();
   });
 });
@@ -482,17 +476,16 @@ describe("glyphs and colour depth sit in the settings menu, not on the bar", () 
     rt.dispose();
   });
 
-  // They describe the terminal a session runs in, so they follow persist?
-  // like every control beside them: unchecked, ▶ tries the next value in this
-  // session alone and the bar re-centres on it; checked, the same ▶ writes the
-  // config file and releases the session's pick.
+  // They describe the terminal a session runs in, so they are session picks
+  // like every control beside them: ▶ tries the next value in this session
+  // alone and the bar re-centres on it.
   test.each([
-    // [key, current, the trial ▶, the committing ▶ from the trial value]
-    ["charset", "unicode", "ascii", "unicode"],
-    ["colorCompatibility", "truecolor", "256", "ansi"],
+    // [key, current, the trial ▶]
+    ["charset", "unicode", "ascii"],
+    ["colorCompatibility", "truecolor", "256"],
   ])(
-    "%s follows persist?",
-    (key, current, next, after) => {
+    "%s is a session pick",
+    (key, current, next) => {
       const rt = rig(`{}`);
       rt.render();
       rt.clickText("🍫");
@@ -509,11 +502,6 @@ describe("glyphs and colour depth sit in the settings menu, not on the bar", () 
       expect(stripAnsi(rt.render())).toMatch(
         new RegExp(`${CAROUSEL_PREV} ${next} ${CAROUSEL_NEXT}`),
       );
-      rt.clickWriting("settings.persist", "true");
-      const commit = effectsOf(rt.linkOn(key, CAROUSEL_NEXT).url);
-      expect(
-        commit.map((e) => [e.verb, e.args[1], e.args[2], e.args[3]]),
-      ).toEqual([["set-config", key, after, key]]);
       rt.dispose();
     },
   );

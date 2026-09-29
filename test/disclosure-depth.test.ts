@@ -76,11 +76,13 @@ const OPTS = {
 };
 
 // Static effective values, so the bundled settings menu's labels resolve and
-// the bytes carry no environment. One history step each way, so the menu's
-// undo/redo cells render and their colours are checked with the rest.
+// the bytes carry no environment. One history step each way and one unsaved
+// setting, so the menu's undo/redo and save cells render and their colours are
+// checked with the rest.
 const PAYLOAD = {
   session_id: SID,
   history: { undo: 1, redo: 1 },
+  unsaved: 1,
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },

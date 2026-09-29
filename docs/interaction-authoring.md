@@ -76,9 +76,8 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `doctor` / `do` — or, for one control that writes *either* store,
-`set` and `persist` together with a `persistWhen` selector. A `set`, a
-`persist`, or a dual declares exactly one value source:
+`reset` / `undo` / `redo` / `save` / `doctor` / `do`. A `set` or a `persist`
+declares exactly one value source:
 
 | declaration | click effect |
 |---|---|
@@ -88,11 +87,10 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes `globals.<field>` into your **config file** (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
-| `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
 | `{ reset: field }` | delete `globals.<field>` from your config file, so the bundled default shows through again |
-| `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | releases the session key as part of the same write, so the committed default is visible to the session that committed it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
+| `{ save: true }` | write every setting this session has picked but not saved to your config file, in one edit, and drop those picks from the session — see below |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -255,128 +253,67 @@ is required for `set` (through `{ kind: "state" }`), never for `persist`. The
 click still carries the session id, for error-surfacing — every config has
 `session.id`, since the settings menu ensures the inputs it reads.
 
-### One control, two destinations: `persistWhen`
+### Drafts and `save`
 
-A setting with both halves — a session pick and a durable default — used to
-cost two controls: `{{ menu "applyTheme" "▸" "▾" }}` for this session, and
-`📌{{ menu "applyThemeForever" "▸" "▾" }}` for everyone's default. Two controls for one
-setting is one too many to read and two declarations to keep in agreement.
+A session pick of one of the settings the menu offers — theme, look, style,
+progression, charset, colour depth, wrap, padding, preset — is a **draft**
+while it differs from what your config file resolves to on its own. Nothing
+records that: the daemon compares the session with the file on every render
+and publishes how many differ as the payload input `unsaved`. Pick a value and
+then pick your saved one back, and there is nothing to save.
 
-A **dual** action collapses them. It names both destination keys, one shared
-value source, and a `persistWhen` key whose boolean value decides where the
-click lands:
+`{ save: true }` writes every draft to your config file as ONE edit, then
+drops those picks from the session, so the bar reads the file's value from
+then on. The settings menu's `💾 save N` is exactly this, shown while `unsaved`
+is above zero:
 
 ```json5 check:pass
 {
   variables: {
-    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
+    unsaved: { kind: "input", path: "unsaved", type: "number", default: 0 },
   },
   actions: {
-    persistToggle: { set: "persistDefault", cycle: ["false", "true"] },
-    applyTheme: {
-      set: "theme",
-      persist: "palette",
-      persistWhen: "persistDefault",
-      from: "themes",
-    },
+    applyTheme: { set: "theme", from: "themes" },
+    keep: { save: true },
   },
   segments: {
     themeControl: {
-      template: '{{ action "persistToggle" "☐ persist?" "☑ persist?" }} 🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
+    },
+    saveButton: {
+      when: "{{ gt .unsaved 0 }}",
+      template: '{{ action "keep" (printf "💾 save %d" .unsaved) }}',
     },
   },
-  root: { v: ["themeControl"] },
+  root: { v: [{ h: ["themeControl", "saveButton"] }] },
 }
 ```
 
-Read the picker's own click to see what changed: with `persistDefault` unset or
-`"false"` it is a `set-state` write to the session key `theme`; with `"true"` it
-is a `set-config` write to the `globals` field `palette`. Same segment, same
-template, same options — the destination is a value the click carries, not a
-second control.
+Gate the button with `gt`, which renders `true` or `false`: a `when` hides
+only on the literal text `false`, so a bare `{{ .unsaved }}` would leave an
+empty cell at zero.
 
-A durable click carries one more thing: the session key to RELEASE, as a
-trailing segment on the write itself, which the daemon drops only once its own
-write succeeded. It has to. A session pick outranks a durable default
-(that is the precedence chain above), so committing a value while the session
-still holds its own pick would set a default the committing session could never
-see — the bar would not move, and the control would keep writing the same value
-forever. "Make this the default" means "and stop overriding it here", so the
-commit drops the session override and the durable value shows through. It rides
-the write rather than sitting beside it as its own effect, because a click runs
-every effect it carries — a pair would let a rejected write still wipe your
-pick. Nothing to declare: the pairing is what a dual action realizes.
+The click carries nothing but your session id — which settings are drafts, and
+their values, are read at the moment of the click, so the save writes what the
+button counted. The file is the one a `persist` click would write (below). Each
+value is checked again against the gate that admitted it as a pick; a value
+that gate no longer accepts, or a file that cannot be written, refuses the
+whole save loudly, and every draft stays where it was. A save is one step in
+the undo history: undoing it restores the file and the picks together.
 
-The two keys differ here because the session key and the globals field have
-always had different names (`theme` vs `palette`). Where they agree — `look`,
-`style`, `preset`, `autoWrap`, `padding` — write the same name twice; a dual
-always spells both, so no reader has to remember which settings are the
-exception.
-
-The gate does not widen. A dual derives exactly the two validators its two
-halves would have derived separately: an allow-list over the same domain on the
-session key, and one on the globals field. A dual is, precisely, the pair of
-ordinary actions it replaces.
-
-Three sources have no dual form. `int` is a page cursor with no meaning as a
-durable default, and `removeSegment` / `insertSegment` / `insertSegmentFrom` are
-structural edits that are durable by nature — none of them has a second
-destination to choose between:
+`save` carries no key and no value, so anything else is a load error:
 
 ```json5 check:fail
 {
-  variables: {
-    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
-  },
-  actions: {
-    page: {
-      set: "themePage",
-      persist: "padding",
-      persistWhen: "persistDefault",
-      int: true,
-    },
-  },
+  actions: { keep: { save: "theme" } },
   segments: { d: { template: "d" } },
   root: { v: ["d"] },
 }
 ```
 
 ```error
-a dual action declares exactly one value source
+save must be the literal true
 ```
-
-All three keys travel together. Naming one destination and not the other is a
-load error rather than a quietly single-destination action:
-
-```json5 check:fail
-{
-  variables: {
-    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
-  },
-  actions: {
-    applyTheme: {
-      set: "theme",
-      persistWhen: "persistDefault",
-      from: "themes",
-    },
-  },
-  segments: { d: { template: "d" } },
-  root: { v: ["d"] },
-}
-```
-
-```error
-a dual-destination action declares set, persist, persistWhen together
-```
-
-The selector is an ordinary `set` key, so it is yours to shape: name it what
-you like, give it whatever glyphs read best, and put it anywhere the controls it
-governs are visible. Two rules earn their keep. Keep it **session-scoped and
-off by default**, so you arrive able to experiment and committing to a durable
-default is a deliberate act — and a checkbox armed in one session can never
-write a default from another. And never place it above a control it cannot
-affect: a checkbox that silently does nothing for half the rows beneath it is a
-lie the panel tells.
 
 ### The bar's progression
 
@@ -752,8 +689,8 @@ has a step to take.
 }
 ```
 
-A step is one click. A click that writes several things — a durable pin and
-the session pick it releases — is one step, undone together. What counts as
+A step is one click. A click that writes several things — a save and the
+session picks it releases — is one step, undone together. What counts as
 a settings change is a session pick of a setting the menu offers (theme,
 look, style, progression, charset, colour depth, wrap, padding, preset) and
 every write to a config file; opening a menu or paging a picker is not, so
@@ -825,8 +762,7 @@ derives, so nothing a `do` fires could not be clicked alone.
 - **Members fire in the order listed, each against what the bar showed.**
   Every member computes its write from the state the render displayed, not
   from the state an earlier member leaves: a cycle writes the successor of
-  the value on screen, and a dual picks its store from the `persist?` box as
-  it was drawn.
+  the value on screen.
 - **Adjacent session writes are one transaction.** Members that write
   SessionState one after another travel as one batch, checked whole before
   any of it lands, so that run never half-applies. A durable write
@@ -1111,7 +1047,7 @@ that leads it closes the menu. Everything it
 opens in turn drops below:
 
 ```
-❌ ⎘ id ↗ proj ↗ log ↗ repo   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
+❌ ⎘ id ↗ proj ↗ log ↗ repo   ▦ default ▸ ↺   💾 save 2   ⚙ config ▾   🧰 tools ▸   ✎ edit   ↶ undo
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
@@ -1130,11 +1066,12 @@ close.
   bound to the bundled `copySession`/`openProject`/`openTranscript` actions,
   which any template can bind. The menu's tray binds its own reserved copies,
   so overriding one of those actions changes `toolbar`, not the menu.
-- **`persist?`** chooses where every setting in the menu is written: unchecked
-  (the state you arrive in) the click changes this session only; checked, it
-  writes the durable default every session opens with. It is the `persistWhen`
-  selector from the section above, and it is session-scoped — arming it here
-  cannot write a default from another session.
+- **Every setting in the menu changes this session only**, at once. While any
+  of them differs from your config file, `💾 save N` sits beside the preset
+  switcher, counting them; clicking it writes them all to the config file and
+  the cell disappears (see "Drafts and `save`" above). `↶ undo` and `↷ redo`
+  step every one of those changes, saves included, each shown only while it
+  has a step to take.
 - **The preset switcher** and **`✎ edit`** are one click from the toggle,
   because switching arrangement and entering edit mode are what you most often
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
@@ -1142,8 +1079,8 @@ close.
   open menu covers the door's own row, edit chrome included.
 - **`⚙ config`** opens the display settings: theme, look, style, charset (the
   joiner glyphs: `unicode` or `ascii`), colour depth (`truecolor`, `256`,
-  `ansi`, `none`), wrap and padding, each ONE control that follows the
-  checkbox, each with a `↺` that forgets its durable default.
+  `ansi`, `none`), wrap and padding, each ONE control, each with a `↺` that
+  forgets its durable default.
 - **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look
@@ -1403,8 +1340,7 @@ segment sits.
 ```
 
 The apply action must hold a value to centre on: a `{ set, from }` action
-whose key a `state` variable reads back, or a `{ persist, from }` action (a dual
-included). A settings key the daemon resolves every render — `theme`, `look`,
+whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `look`,
 `preset`, `style`, `charset`, `colorCompatibility`, `autoWrap`, `padding` —
 needs no `state` variable: it reads back through its `.effective` projection
 (`theme.effective`), which wins over a `state` variable on the same key, so the
@@ -1502,7 +1438,7 @@ Four things to know about that slot:
 globals.look is not a valid template: expected `{{end}}`
 ```
 
-- **Committing a look with `persist?` replaces the expression** with the name you
+- **Saving a picked look replaces the expression** with the name you
   picked, because `globals.look` is the one slot both live in. That is what
   committing a default means here; keep the expression if you want the rule
   rather than the answer.
@@ -1690,16 +1626,14 @@ name" below).
 
 ## `(?)` — instructions where they are needed
 
-The bar ships two `(?)` affordances, and neither needs anything in your config:
+The bar ships a `(?)` in edit mode, and it needs nothing in your config: it
+trails the bar's last row and explains what `+`, `-` and the `↺ … customized`
+banner do when clicked. Where that row is itself gated by another disclosure
+it takes a line of its own instead, so the `(?)` can never end up hidden
+behind something you have to open first.
 
-- **In edit mode**, trailing the bar's last row — what `+`, `-` and the
-  `↺ … customized` banner do when clicked. Where that row is itself gated by
-  another disclosure it takes a line of its own instead, so the `(?)` can
-  never end up hidden behind something you have to open first.
-- **In the config menu**, beside `persist?` — where the next click lands.
-
-Both are ordinary disclosures. `(?)` closed, `✕` open, one session-scoped state
-key each, and a body that is a row of plain text cells. There is no help widget
+It is an ordinary disclosure. `(?)` closed, `✕` open, one session-scoped state
+key, and a body that is a row of plain text cells. There is no help widget
 and no tooltip type: a `(?)` differs from the group above only in the text its
 trigger binds and in what its body contains.
 

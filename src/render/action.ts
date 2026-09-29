@@ -27,12 +27,7 @@ import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import {
-  actionDestinations,
-  actionIsDual,
-  PERSIST_WHEN,
-  type ActionDecl,
-} from "../config/action.js";
+import type { ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type OptionPalette,
@@ -41,7 +36,6 @@ import {
 import { pickCycleDisplay } from "../config/disclosure.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
-import { parseSessionBoolean } from "../themes/policy.js";
 import type { Progression } from "../themes/decor.js";
 import {
   effectsUrl,
@@ -50,6 +44,7 @@ import {
   VERB_OPEN_VSCODE,
   VERB_REDO,
   VERB_RESET_CONFIG,
+  VERB_SAVE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
@@ -195,28 +190,13 @@ export type CompiledActionDecl =
   // the history (not this action) decides which step moves.
   | { readonly kind: "undo" }
   | { readonly kind: "redo" }
+  // Write every unsaved setting — the daemon derives which at click time.
+  | { readonly kind: "save" }
   // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
   // the check name is compiled in from the declaration (already gated against
   // CHECKS at load), so the click carries only what the config declared.
   | { readonly kind: "doctor-run" }
   | { readonly kind: "doctor-fix"; readonly check: string }
-  // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.3's ONE control
-  // per setting. Both destinations are compiled here as the ordinary
-  // single-destination shapes they are, and `selector` names the session key
-  // whose boolean value picks between them at click time. The destination is
-  // therefore a VALUE flowing through `activeDestination` — every consumer
-  // (realize, the picker, selectDisplay) resolves it once at the top and then
-  // runs the code it has always run, so nothing downstream branches on
-  // "is this dual".
-  | {
-      readonly kind: "dual";
-      readonly selector: string;
-      readonly session: CompiledActionDecl;
-      readonly durable: CompiledActionDecl;
-      // The SessionState key the session half writes, carried so a durable
-      // click can clear it in the same dispatch (see realize's dual arm).
-      readonly sessionKey: string;
-    }
   // [LAW:composability] Several compiled actions fired by one click. `head` is
   // the one the region presents as — its display rule, its current-state mark,
   // and the value a template binds — and `rest` ride along behind it.
@@ -351,34 +331,6 @@ function compileAction(
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
   compiled: CompiledActions,
 ): CompiledActionDecl {
-  // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
-  // the SAME explosion the validator derivations fold over
-  // (actionDestinations), so the click a dual realizes and the gate it derives
-  // come from one statement of what the two halves are. It is matched BEFORE
-  // the `set` arm because a dual carries `set` too.
-  if (actionIsDual(action)) {
-    const [session, durable] = actionDestinations(action);
-    return compileDual(
-      stateKeyToVar.get(action[PERSIST_WHEN]) ?? action[PERSIST_WHEN],
-      action.set,
-      compileAction(
-        parse,
-        name,
-        session!,
-        stateKeyToVar,
-        perConfigDomains,
-        compiled,
-      ),
-      compileAction(
-        parse,
-        name,
-        durable!,
-        stateKeyToVar,
-        perConfigDomains,
-        compiled,
-      ),
-    );
-  }
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
     if ("to" in action) {
@@ -506,6 +458,7 @@ function compileAction(
   }
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
+  if ("save" in action) return { kind: "save" };
   // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
   // entry compiled for that name, so there is no second statement of what any
   // of them writes. The loader proves every name resolves; a config assembled
@@ -523,56 +476,14 @@ function compileAction(
   return { kind: "do", head: head!, rest };
 }
 
-// [LAW:one-source-of-truth] A dual control shows ONE current value and writes
-// relative to the value it showed — so both destinations read back through the
-// DURABLE half's variable, which is the `.effective` projection the daemon
-// resolved for this render (SETTING_PROJECTIONS): the value the
-// bar is actually rendering with, whatever chain produced it. Reading the
-// session key instead would let a cycle's glyph name the effective state while
-// its click stepped from an unwritten session key — the toggle would render
-// "wrap: off" and write "false", a click that visibly does nothing. Arms that
-// carry no `stateVar` (the bounded steppers) read nothing at render by design:
-// their step is relative and resolved daemon-side.
-function compileDual(
-  selectorVar: string,
-  sessionKey: string,
-  session: CompiledActionDecl,
-  durable: CompiledActionDecl,
-): CompiledActionDecl {
-  const readBack =
-    "stateVar" in session && "stateVar" in durable
-      ? { ...session, stateVar: durable.stateVar }
-      : session;
-  return {
-    kind: "dual",
-    selector: selectorVar,
-    session: readBack,
-    durable,
-    sessionKey,
-  };
-}
-
-// [LAW:dataflow-not-control-flow] THE destination fold: which store a dual
-// action writes is the boolean value of its selector key, read from the same
-// live store the rest of the render reads. Total over every compiled action —
-// a single-destination action IS its own destination, and a `do` presents as
-// its head's — so callers resolve through it unconditionally and never test
-// for the dual or `do` kinds. That is what lets a `do` headed by an option
-// action drive a picker: the grid reads the head, the click realizes the whole.
-//
-// [LAW:one-source-of-truth] `parseSessionBoolean` is the one spelling of a
-// boolean in SessionState (themes/policy.ts), the same parse `autoWrap`'s own
-// session half goes through: an unwritten, malformed, or "false" selector all
-// mean the session destination, and only a canonical "true" means durable.
-export function activeDestination(
-  c: CompiledActionDecl,
-  store: VariableStore,
-): CompiledActionDecl {
-  if (c.kind === "do") return activeDestination(c.head, store);
-  if (c.kind !== "dual") return c;
-  return parseSessionBoolean(readVar(store, c.selector)) === true
-    ? c.durable
-    : c.session;
+// [LAW:dataflow-not-control-flow] The action a click PRESENTS as: a `do`
+// presents as its head — its display rule, its current-state mark, the value a
+// template binds — and every other action as itself. Total over every compiled
+// action, so callers resolve through it unconditionally and never test for the
+// `do` kind. That is what lets a `do` headed by an option action drive a
+// picker: the grid reads the head, the click realizes the whole.
+export function presentedAction(c: CompiledActionDecl): CompiledActionDecl {
+  return c.kind === "do" ? presentedAction(c.head) : c;
 }
 
 function parseActionTemplate(
@@ -806,6 +717,11 @@ export function realize(
         effects: [{ verb: VERB_REDO, args: [sessionId] }],
         active: false,
       };
+    case "save":
+      return {
+        effects: [{ verb: VERB_SAVE, args: [sessionId] }],
+        active: false,
+      };
     // Never "active": running the doctor and applying a fix are one-shot
     // triggers; the report they produce is state the ROW segments read.
     case "doctor-run":
@@ -834,52 +750,6 @@ export function realize(
         ],
         active: false,
       };
-    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
-    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
-    // relation are the compiled literals. Same wire shape a literal layout-op
-    // emits, so the daemon's apply-layout-op handler and undo/redo need no
-    // knowledge of where the segment name came from. Never "active": a
-    // structural edit is a one-shot trigger, not a current-selection toggle.
-    // [LAW:dataflow-not-control-flow] The destination is resolved to a value
-    // and the SAME fold runs on it — a dual's realization is its chosen
-    // half's realization, with nothing about persistence duplicated here.
-    // Depth is structurally one: a dual's halves are the single-destination
-    // decls actionDestinations built, which can never be dual themselves.
-    //
-    // [LAW:no-silent-failure] A DURABLE click carries the session key to
-    // RELEASE as a trailing arg on its own write, so the daemon drops it only
-    // after that write succeeded. Without the release the write would be
-    // invisible to the session that made it — every settable global resolves
-    // session pick OVER durable default, so the workflow this menu invites
-    // ("try it here, then tick persist? to commit it") would set a default the
-    // user cannot see and leave the control dead for the rest of the session.
-    // Riding the write rather than sitting beside it is what makes the pair
-    // unsplittable: a click runs every effect it carries, so a rejected write
-    // must not be able to drop the pick on its own.
-    case "dual": {
-      const chosen = activeDestination(c, store);
-      const { effects, active } = realize(
-        chosen,
-        display,
-        boundValue,
-        store,
-        sessionId,
-      );
-      // The durable write carries the session key to RELEASE as one more
-      // segment on itself, so the daemon clears it only after its own write
-      // succeeded. A second effect beside it would not do: `dispatch` runs
-      // every effect in a click by design, so a rejected write would still
-      // wipe the session pick and leave nothing durable in its place.
-      return chosen === c.durable
-        ? {
-            effects: effects.map((e) => ({
-              ...e,
-              args: [...e.args, c.sessionKey],
-            })),
-            active,
-          }
-        : { effects, active };
-    }
     case "do": {
       // [LAW:single-enforcer] The members' effects, head first, concatenated.
       // Every member is realized against the state this render shows, not the
@@ -898,6 +768,12 @@ export function realize(
         active: head.active,
       };
     }
+    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
+    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
+    // relation are the compiled literals. Same wire shape a literal layout-op
+    // emits, so the daemon's apply-layout-op handler and undo/redo need no
+    // knowledge of where the segment name came from. Never "active": a
+    // structural edit is a one-shot trigger, not a current-selection toggle.
     case "layout-op-option": {
       const segment = boundValue ?? display;
       const op: LayoutOp = {
@@ -971,14 +847,13 @@ export function renderAction(
     throw new Error(`action "${name}" is not declared in this config`);
   }
   const store = runtime.store;
-  // [LAW:dataflow-not-control-flow] DISPLAY selection reads the resolved half
-  // (a cycle's glyph is the current member's, whichever store it will write),
-  // while REALIZATION is handed the declaration itself — a dual realizes as
-  // its chosen half PLUS the session clear that keeps a durable write visible,
-  // and that pairing belongs to the one fold that owns the union.
+  // [LAW:dataflow-not-control-flow] DISPLAY selection reads the action the
+  // click presents as, while REALIZATION is handed the declaration itself — a
+  // `do` realizes as every member, and that belongs to the one fold that owns
+  // the union.
   const { display, boundValue } = selectDisplay(
     name,
-    activeDestination(declared, store),
+    presentedAction(declared),
     displays,
     store,
   );

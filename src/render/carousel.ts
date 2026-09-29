@@ -12,11 +12,10 @@
 //
 // [LAW:one-source-of-truth] The carousel owns no position. Its centre IS the
 // action's current value, read through the action's own `stateVar` (for the
-// settings menu's dual controls, the `.effective` projection the bar rendered
+// settings menu's controls, the `.effective` projection the bar rendered
 // with), so the centre and the bar cannot disagree, and there is no cursor key
 // to gate, reset, or leave stale. Each click writes through `realize` — the
-// same fold `{{ action }}` and the picker's option cells use — so a carousel
-// over a dual carries the dual's destination and release like any other click.
+// same fold `{{ action }}` and the picker's option cells use.
 //
 // [LAW:one-way-deps] Lives in render/ beside the picker, injected into the
 // engine by registerDslConfig as data; the generic engine never imports it.

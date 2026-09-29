@@ -16,7 +16,7 @@
 // rename in the synthesis pass must break this helper loudly, not silently stop
 // matching and let every filtered assertion drift.
 
-import { actionDestinations, type ActionDecl } from "../../src/config/action";
+import type { ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
 import {
   EDIT_NS,
@@ -86,15 +86,8 @@ function authorWrittenKeys(config: DslConfig): Set<string> {
   const keys = new Set<string>();
   for (const [name, decl] of Object.entries(config.actions)) {
     if (isSynthesizedActionName(name)) continue;
-    // [LAW:one-source-of-truth] Folded through the SAME explosion the real
-    // derivations use: a DUAL action carries both `set` and `persist`, and
-    // writtenKey's first-match chain below would report only the session half
-    // — silently dropping an authored `persist: "palette"` and letting the
-    // ambient filter swallow the fixture's own contribution.
-    for (const dest of actionDestinations(decl)) {
-      const key = writtenKey(dest);
-      if (key !== undefined) keys.add(key);
-    }
+    const key = writtenKey(decl);
+    if (key !== undefined) keys.add(key);
   }
   return keys;
 }

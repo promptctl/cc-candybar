@@ -34,7 +34,7 @@ import {
   applyLayoutOp as applyLayoutOpToFile,
   deleteValue,
   readValue,
-  writeValue,
+  writeValues,
   type EditStore,
 } from "../config-file-store";
 import {
@@ -43,6 +43,8 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
+import type { DslConfig } from "../../config/dsl-types";
+import { settingDrafts } from "../setting-drafts";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
@@ -56,6 +58,7 @@ import {
   VERB_LOAD_CONFIG,
   VERB_REDO,
   VERB_RESET_CONFIG,
+  VERB_SAVE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
@@ -87,6 +90,10 @@ export interface VerbContext {
   // (src/daemon/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
   readonly history: SettingsHistory;
+  // [LAW:effects-at-boundaries] The config a session renders with, looked up
+  // by the inputs its last render resolved from (the render cache owns it), so
+  // `save` compares the session against the same config the bar was drawn from.
+  readonly configFor: (origin: RenderOrigin) => DslConfig;
 }
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -317,50 +324,6 @@ function wrapStep(n: number, min: number, max: number): number {
   return n > max ? min : n < min ? max : n;
 }
 
-// [LAW:no-ambient-temporal-coupling] The RELEASE half of a durable write, run
-// by the durable handlers themselves AFTER their own write succeeded — never
-// as a separate effect beside them.
-//
-// A dual-destination control commits "make this the durable default AND stop
-// overriding it in this session". Those are one intent, and the session half
-// is destructive: dropping the session pick is only correct if the durable
-// value actually landed. Emitted as two effects, `dispatch` would run the
-// clear even when the persist failed (it runs every effect in a click by
-// design, for independent ones like "write value + close menu") — wiping the
-// user's pick with nothing durable in its place, a lost update whose error
-// message would not even mention it. Ordering that matters belongs inside one
-// handler, not in a hope about the dispatcher.
-//
-// Gated by key MEMBERSHIP (listStateKeys), exactly as reset-config is over the
-// config keyspace: there is no value to validate, only a legitimate target to
-// clear. Absent segment = nothing to release, which is every ordinary persist
-// click [LAW:dataflow-not-control-flow].
-// [LAW:no-ambient-temporal-coupling] The release key is checked BEFORE the
-// durable write and cleared AFTER it — one handler owns that order. A dual's
-// `set` half renamed by a reload between render and click would otherwise
-// refuse only after the file had already changed: a click reported failed
-// whose write landed, with the session pick left shadowing the new default.
-function parseRelease(release: string, verb: string): string | null {
-  if (!release) return null;
-  if (!listStateKeys().includes(release)) {
-    throw new BadVerbArgs(
-      `${verb}: unknown session key "${release}" to release (have: ${listStateKeys().join(", ")})`,
-    );
-  }
-  return release;
-}
-
-function releaseSessionKey(
-  release: string | null,
-  sid: string,
-  ctx: VerbContext,
-  verb: string,
-): void {
-  if (release === null) return;
-  ctx.sessionState.clear(sid, release);
-  ctx.dlog("info", `${verb}: released session key ${release} (session=${sid})`);
-}
-
 // [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
 // snapshot), so the SAME link string fires every render and N rapid clicks each
@@ -465,21 +428,28 @@ function parseRenderOrigin(raw: string): RenderOrigin {
 }
 
 // [LAW:no-silent-failure] A session that has never rendered has no origin
-// and therefore no file to write — a loud BadVerbArgs, not the daemon's
-// own XDG guess.
-function sessionConfigFile(ctx: VerbContext, sid: string): string {
+// and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
+// guess.
+function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   if (raw === null) {
     throw new BadVerbArgs(
       `session ${sid} has not rendered yet — no config file to write`,
     );
   }
-  const origin = parseRenderOrigin(raw);
+  return parseRenderOrigin(raw);
+}
+
+function originConfigFile(origin: RenderOrigin): string {
   return durableConfigPath(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
   );
+}
+
+function sessionConfigFile(ctx: VerbContext, sid: string): string {
+  return originConfigFile(sessionOrigin(ctx, sid));
 }
 
 function editStore(ctx: ClickContext, sid: string): EditStore {
@@ -498,8 +468,8 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
 const setConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", incoming = "", release = ""] = decodeWire(
-    () => decodeSegments(rawValue),
+  const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
+    decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
   if (!key) {
@@ -509,14 +479,12 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const releaseKey = parseRelease(release, "set-config");
   const file = sessionConfigFile(ctx, sid);
-  writeValue(editStore(ctx, sid), file, key, result.value);
+  writeValues(editStore(ctx, sid), file, [[key, result.value]]);
   ctx.dlog(
     "info",
     `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
   );
-  releaseSessionKey(releaseKey, sid, ctx, "set-config");
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
@@ -524,7 +492,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
 // it declares none — rangeParamsForConfig's seed), wrapped and re-validated
 // through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", byRaw = "", release = ""] = decodeWire(() =>
+  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
     decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
@@ -539,7 +507,6 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
-  const releaseKey = parseRelease(release, "step-config");
   const params = rangeParamsForConfig(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -556,12 +523,44 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const next = wrapStep(current + by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValue(editStore(ctx, sid), file, key, result.value);
+  writeValues(editStore(ctx, sid), file, [[key, result.value]]);
   ctx.dlog(
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
   );
-  releaseSessionKey(releaseKey, sid, ctx, "step-config");
+};
+
+// [LAW:no-ambient-temporal-coupling] Save (brandon-save-undo-bwi.hpi): every
+// unsaved setting lands in the config file as ONE write, and only then are
+// the session picks released — one handler owns that order, so a refused
+// write keeps every draft. The drafts are derived at click time by the SAME
+// function the render counts them with, over the config this session renders
+// with, so the click writes exactly what the `💾 save N` cell counted.
+// [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
+// session pick (validateStateWrite): a pick made under a config that has since
+// narrowed its domain is refused loudly here, never written to the file.
+const save: VerbHandler = (value, ctx) => {
+  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const drafts = settingDrafts(ctx.configFor(origin), (key) =>
+    ctx.sessionState.get(sid, key),
+  );
+  if (drafts.length === 0) {
+    throw new BadVerbArgs(`save: session ${sid} has no unsaved settings`);
+  }
+  const pairs = drafts.map((d): readonly [string, string] => {
+    const result = validateStateWrite(d.sessionKey, d.value);
+    if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
+    return [d.configKey, result.value];
+  });
+  const file = originConfigFile(origin);
+  writeValues(editStore(ctx, sid), file, pairs);
+  for (const d of drafts) ctx.sessionState.clear(sid, d.sessionKey);
+  ctx.dlog(
+    "info",
+    `save: ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,
+  );
 };
 
 // [LAW:one-source-of-truth] `reset`: delete the key's path from the session's
@@ -791,6 +790,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SET_CONFIG, setConfig],
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
+  [VERB_SAVE, save],
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
   [VERB_UNDO, undo],
   [VERB_REDO, redo],
@@ -812,6 +812,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_SET_CONFIG,
   VERB_STEP_CONFIG,
   VERB_RESET_CONFIG,
+  VERB_SAVE,
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,

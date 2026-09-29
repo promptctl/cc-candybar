@@ -5,17 +5,15 @@
 // those would pass while the bar diverged.
 //
 // The measuring stick is the epic's, unchanged: a USER config whose `root` is a
-// single row of two segments. Both `(?)` use sites are reached from that shape,
-// because a help affordance that only appears under the bundled default helps
-// nobody who wrote a config.
+// single row of two segments. The `(?)` is reached from that shape, because a
+// help affordance that only appears under the bundled default helps nobody who
+// wrote a config.
 //
 //   1. Identity, not similarity — the strings the bar renders ARE the values
 //      `src/help-text.ts` exports, and `--help` prints those same values.
 //   2. Edit mode explains `+`, `-` and the `↺ customized` banner.
-//   3. The config menu explains `persist?`.
-//   4. Both are declared the same way: one `declareHelp` call, differing only
-//      in the text and the position.
-//   5. Width, mechanically, at 80 and 120 columns.
+//   3. It is declared as every `(?)` is: one `declareHelp` call.
+//   4. Width, mechanically, at 80 and 120 columns.
 
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -34,11 +32,7 @@ import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
-import {
-  EDIT_MODE_HELP,
-  HELP_TEXT,
-  PERSIST_HELP,
-} from "../src/help-text";
+import { EDIT_MODE_HELP, HELP_TEXT } from "../src/help-text";
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -208,16 +202,16 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
       .map(([, seg]) => seg.template);
 
     // Every bundled help line appears as some segment's WHOLE template.
-    for (const line of [...EDIT_MODE_HELP, ...PERSIST_HELP]) {
+    for (const line of EDIT_MODE_HELP) {
       expect(helpTemplates).toContain(line);
     }
     // And nothing else does — no segment carries prose the corpus never saw.
-    const corpus = new Set<string>([...EDIT_MODE_HELP, ...PERSIST_HELP]);
+    const corpus = new Set<string>(EDIT_MODE_HELP);
     for (const t of helpTemplates) expect(corpus.has(t)).toBe(true);
   });
 
   test("--help prints the same values the bar renders", () => {
-    for (const line of [...EDIT_MODE_HELP, ...PERSIST_HELP]) {
+    for (const line of EDIT_MODE_HELP) {
       expect(HELP_TEXT).toContain(line);
     }
   });
@@ -267,51 +261,16 @@ describe("edit mode's (?)", () => {
   });
 });
 
-// ─── 3. The config menu explains persist? ────────────────────────────────────
+// ─── 3. One declaration shape ────────────────────────────────────────────────
 
-describe("the config menu's (?)", () => {
-  test("opens onto what persist? actually does", () => {
-    const rt = buildRuntime();
-    openSettingsMenu(rt);
-
-    const closed = stripAnsi(rt.render(200));
-    expect(closed).toContain("persist?");
-    expect(closed).toContain(HELP_GLYPH_CLOSED);
-    for (const line of PERSIST_HELP) expect(closed).not.toContain(line);
-
-    rt.toggleHelp(rt.render(200));
-    const open = stripAnsi(rt.render(200));
-    for (const line of PERSIST_HELP) expect(open).toContain(line);
-  });
-
-  test("closing the menu takes the open help with it", () => {
-    // A nested disclosure's body hangs on its trigger, and the trigger sits
-    // inside the enclosing body, so an open `(?)` cannot outlive the panel it
-    // explains.
-    const rt = buildRuntime();
-    openSettingsMenu(rt);
-    rt.toggleHelp(rt.render(200));
-    expect(stripAnsi(rt.render(200))).toContain(PERSIST_HELP[0]);
-
-    rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "closed");
-    const out = stripAnsi(rt.render(200));
-    for (const line of PERSIST_HELP) expect(out).not.toContain(line);
-  });
-});
-
-// ─── 4. One declaration shape, two sites ─────────────────────────────────────
-
-describe("both (?) sites are the same declaration", () => {
+describe("the (?) is an ordinary declaration", () => {
   test("each mints a state var, a cycle action and a trigger segment", () => {
     const { config } = buildRuntime();
     const helpNames = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name);
-    // Two use sites, "unrelated" on any reading: different namespaces,
-    // different synthesis passes, different tickets.
-    expect(helpNames).toHaveLength(2);
-    expect(helpNames.some((n) => n.startsWith("edit."))).toBe(true);
-    expect(helpNames.some((n) => n.startsWith("settings."))).toBe(true);
+    expect(helpNames).toHaveLength(1);
+    expect(helpNames.every((n) => n.startsWith("edit."))).toBe(true);
 
     for (const name of helpNames) {
       expect(config.variables[name]).toMatchObject({ kind: "state" });
@@ -333,7 +292,7 @@ describe("both (?) sites are the same declaration", () => {
     const helpGates = deriveActionValidators(config).filter(({ key }) =>
       helpKeys.includes(key),
     );
-    expect(helpGates).toHaveLength(2);
+    expect(helpGates).toHaveLength(1);
     for (const { spec } of helpGates) {
       // The ordinary binary-cycle allow-list every disclosure toggle derives —
       // no bespoke spec kind reaches the wire gate.
@@ -345,7 +304,7 @@ describe("both (?) sites are the same declaration", () => {
   });
 });
 
-// ─── 5. Width, mechanically ──────────────────────────────────────────────────
+// ─── 4. Width, mechanically ──────────────────────────────────────────────────
 
 // [LAW:verifiable-goals] The ticket asks for 80 and 120 columns. Padding is in
 // the matrix too because it is a USER setting (0-16) that multiplies across
@@ -359,12 +318,7 @@ describe.each([
   [80, 2],
   [120, 1],
 ])("at %i columns, padding %i", (width, padding) => {
-  // [LAW:one-type-per-behavior] Two surfaces, one claim: the two bodies differ
-  // only in which corpus they show, so they are two VALUES of one test.
-  test.each([
-    ["edit mode", enterEditMode, EDIT_MODE_HELP],
-    ["the config menu", openSettingsMenu, PERSIST_HELP],
-  ])("open help in %s overflows no line and costs at most one row", (
+  test.each([["edit mode", enterEditMode, EDIT_MODE_HELP]] as const)("open help in %s overflows no line and costs at most one row", (
     _name,
     open,
     corpus,
@@ -397,20 +351,20 @@ describe.each([
   // test opened neither surface, so no `(?)` was on the bar at all and it
   // passed identically with `src/config/help.ts` deleted — hence the presence
   // assertion, which is what makes the width one about help.
-  test.each([
-    ["edit mode", enterEditMode],
-    ["the config menu", openSettingsMenu],
-  ])("closed help in %s overflows no line", (_name, open) => {
+  test.each([["edit mode", enterEditMode]] as const)(
+    "closed help in %s overflows no line",
+    (_name, open) => {
     const rt = buildRuntime(twoSegmentRoot(padding));
     open(rt);
     const shown = rt.lines(width);
 
     expect(shown.some((l) => l.includes(HELP_GLYPH_CLOSED))).toBe(true);
     for (const line of shown) expect(cols(line)).toBeLessThanOrEqual(width);
-  });
+    },
+  );
 });
 
-// ─── 6. A closed trigger costs no row ────────────────────────────────────────
+// ─── 5. A closed trigger costs no row ────────────────────────────────────────
 
 // "Help must not add a row on its own." The `(?)` cell is the asked-for cost;
 // its BODY is free until clicked.
@@ -435,10 +389,7 @@ const triggerLines = (rt: ReturnType<typeof buildRuntime>): string[] =>
   rt.lines(WIDE).filter((l) => l.includes(HELP_GLYPH_CLOSED));
 
 describe("a closed (?) rides a row rather than adding one", () => {
-  test.each([
-    ["edit mode", enterEditMode],
-    ["the config menu", openSettingsMenu],
-  ])("in %s", (_name, open) => {
+  test.each([["edit mode", enterEditMode]] as const)("in %s", (_name, open) => {
     const rt = buildRuntime();
     open(rt);
     const hosts = triggerLines(rt);
@@ -448,7 +399,7 @@ describe("a closed (?) rides a row rather than adding one", () => {
   });
 });
 
-// ─── 7. The placement walk, over root SHAPES ─────────────────────────────────
+// ─── 6. The placement walk, over root SHAPES ─────────────────────────────────
 
 // [LAW:behavior-not-structure] Edit mode's trigger is placed by a walk that has
 // to find the last row of whatever root the user wrote, and every fixture above

@@ -10,7 +10,7 @@
 // goal, realized more strictly here than SessionState's legacy baseline
 // theme/style/toolbar-expanded keys.
 
-import { actionDestinations, type ActionDecl } from "../../config/action";
+import type { ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
@@ -166,39 +166,33 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   return numericGlobalsSeeds(config.globals);
 }
 
-// [LAW:one-source-of-truth] Every preset a config's action table ALREADY
-// targets via a `presets.<name>.root` key (persist OR reset — the
-// contribution is keyed off intent to use structural editing for that
-// preset, not off "this config has any presets block") stays a
-// registered key EVEN when that preset's CURRENT tree has no
-// addable/removable segment for removeTerm/insertTerm to contribute
-// from. Without this, a preset edited down to zero non-exempt segments
-// (spliceContainer then contributes nothing for it at all) would orphan
-// its OWN reset action: the one affordance meant to undo a fully-emptied
-// preset would throw "unknown config key" at the exact moment it's needed
-// most (brandon-layout-edit-2gc.5 PR review). An EMPTY allow-list
-// registers the key (so `reset-config`'s membership check —
-// src/daemon/verbs/index.ts's resetConfig — passes) without granting any
-// illegitimate WRITE: a real persist write still needs a real
-// removeSegment/insertSegment/insertSegmentFrom action elsewhere;
-// mergeContributions unions an empty array with whatever those contribute.
+// [LAW:one-source-of-truth] Every key a config's action table can CLEAR is a
+// registered key, so `reset-config`'s membership check
+// (src/daemon/verbs/index.ts's resetConfig) passes for exactly the keys some
+// declared action targets — a `reset` names its key outright, and a structural
+// `persist` on `presets.<name>.root` makes that root a key its own reset may
+// empty. Membership rides on the reset itself, never on a sibling write action
+// happening to name the same key: the settings menu's ↺ targets fields no
+// action writes by click (a save writes them — src/daemon/setting-drafts.ts),
+// and a preset edited down to zero addable segments contributes no layout op
+// for its root, yet its reset must still resolve.
 //
-// [LAW:no-mode-explosion] Deliberately narrower than "every declared
-// preset" — a config with a `presets` block but ZERO persist/reset actions
-// over it has no structural-editing surface at all, so it registers
-// nothing here, preserving this module's own "zero baseline keys" floor
-// (a globals field, and now a preset's root, is writable only because
-// SOME action names it).
-function presetRootContributions(config: DslConfig): KeySpecContribution[] {
-  const presets = new Set<string>();
-  for (const a of writeDestinations(config)) {
-    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
-    if (key === null) continue;
-    const target = parsePersistTarget(key);
-    if (target?.scope === "preset-root") presets.add(target.preset);
+// An EMPTY allow-list registers the key without granting any WRITE: a real
+// write still needs a real action elsewhere, and mergeKeySpecs unions an empty
+// array with whatever those contribute, whatever their kind.
+//
+// [LAW:no-mode-explosion] A config with no reset and no structural persist
+// registers nothing here, preserving this module's "zero baseline keys" floor
+// (a key is writable or clearable only because SOME action names it).
+function clearableContributions(config: DslConfig): KeySpecContribution[] {
+  const keys = new Set<string>();
+  for (const a of Object.values(config.actions)) {
+    if ("reset" in a) keys.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys.add(presetRootKey(target.preset));
   }
-  return [...presets].map((name) => ({
-    key: presetRootKey(name),
+  return [...keys].map((key) => ({
+    key,
     spec: { kind: "allow-list", allowed: [] },
   }));
 }
@@ -216,20 +210,11 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
     ...addableSegmentDomains(config),
   ]);
   return [
-    ...presetRootContributions(config),
-    ...writeDestinations(config).flatMap((a) =>
+    ...clearableContributions(config),
+    ...Object.values(config.actions).flatMap((a) =>
       actionKeySpecs(a, seeds, perConfigDomains),
     ),
   ];
-}
-
-// [LAW:single-enforcer] Every action as the single-destination declarations it
-// writes through — the SAME explosion state-validators.ts folds over, so a
-// dual-destination action (candybar-settings-ui-aok.3) contributes exactly the
-// `persist` spec its durable half would have contributed alone. One statement
-// of "what are this action's destinations", two derivations reading it.
-function writeDestinations(config: DslConfig): readonly ActionDecl[] {
-  return Object.values(config.actions).flatMap(actionDestinations);
 }
 
 // [LAW:single-enforcer] The SOLE install-site derivation: a config's

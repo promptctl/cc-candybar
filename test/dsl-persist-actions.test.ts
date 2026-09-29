@@ -49,7 +49,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import { persistValueText, writeValue } from "../src/daemon/config-file-store";
+import { persistValueText, writeValues } from "../src/daemon/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { RenderCache } from "../src/daemon/cache/render";
@@ -149,16 +149,15 @@ describe("persistValueText", () => {
   // after this call, so a swallowed failure would let that log lie. Point
   // the write at a path whose parent cannot be a directory (a file standing
   // where one is expected) to force a real fs failure.
-  test("writeValue throws (not silently swallows) when the write fails", () => {
+  test("writeValues throws (not silently swallows) when the write fails", () => {
     const blocker = join(durable.projectDir, "blocker");
     writeFileSync(blocker, "not a directory");
     const impossiblePath = join(blocker, "config.json5");
     expect(() =>
-      writeValue(
+      writeValues(
         { record: () => {}, logger: () => {} },
         impossiblePath,
-        "palette",
-        "nord",
+        [["palette", "nord"]],
       ),
     ).toThrow();
   });
@@ -722,51 +721,6 @@ describe("persist action click → the config file", () => {
         ctx,
       ),
     ).toThrow();
-  });
-
-  // [LAW:verifiable-goals] candybar-settings-ui-aok.3's whole reason for
-  // folding the session release INTO the durable write, rather than emitting
-  // it beside the write as its own effect, is an ORDER guarantee: the release
-  // happens only after the write landed, so a failure can never cost the user
-  // their session pick with nothing durable in its place.
-  //
-  // [LAW:no-ambient-temporal-coupling] The release KEY is checked before the
-  // write, though: an unregistered one — what a stale link carries after a
-  // reload renamed the dual's `set` half — refuses with the file untouched.
-  // The alternative (write, then refuse) is a click reported failed whose
-  // write landed, with the session pick left shadowing the new default.
-  test("a bad release key fails loudly BEFORE the durable write, leaving the file untouched", () => {
-    const config = parseAndValidate(
-      "<test>",
-      `{
-        globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-        actions: { pin: { persist: 'palette', from: 'themes' } },
-        segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
-        root: 's',
-      }`,
-      ALLOWED,
-    );
-    const disposers = deriveConfigActionValidators(config).map(
-      ({ key, spec }) => registerConfigValidator(key, spec),
-    );
-    const sessionState = new SessionState();
-    durable.write(`{ globals: {}, segments: {} }`);
-    durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
-    const enc = (v: string) => encodeURIComponent(v);
-    try {
-      expect(() =>
-        VERBS.get("set-config")!(
-          `${enc("s1")}/${enc("palette")}/${enc("nord")}/${enc("no-such-session-key")}`,
-          ctx,
-        ),
-      ).toThrow(/unknown session key/);
-      expect(globalsInFile()).toEqual({});
-      expect(durable.history().past).toHaveLength(0);
-    } finally {
-      for (const d of disposers) d();
-    }
   });
 });
 

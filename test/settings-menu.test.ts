@@ -63,7 +63,7 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { actionIsDual, type DualActionDecl } from "../src/config/action";
+import type { ActionDecl } from "../src/config/action";
 import { SETTING_PROJECTIONS } from "../src/config/setting-projections";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -190,7 +190,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(body).toContain("↗ proj");
     expect(body).toContain("↗ log");
     expect(body.indexOf("⎘ id")).toBeGreaterThan(-1);
-    expect(body.indexOf("⎘ id")).toBeLessThan(body.indexOf("persist?"));
+    expect(body.indexOf("⎘ id")).toBeLessThan(body.indexOf("⚙ config"));
     dispose();
   });
 
@@ -887,31 +887,33 @@ describe("globals.menuGlyph", () => {
   });
 });
 
-// [LAW:one-source-of-truth] Every dual control the menu mints writes the two
-// keys of one SETTING_PROJECTIONS row, so the render knows how to read its
-// current value back, through a variable the bundled default declares. The
-// menu spreads its keys from that table, so this holds by construction for the
-// controls built from it; the test also covers a dual written any other way.
-describe("every dual control in the settings menu has a setting projection", () => {
+// [LAW:one-source-of-truth] Every control the menu mints picks the session key
+// of one SETTING_PROJECTIONS row, so the render knows how to read its current
+// value back, through a variable the bundled default declares, and a save
+// knows which config field the pick stands for. The menu spreads its keys from
+// that table, so this holds by construction for the controls built from it.
+describe("every settings control has a setting projection", () => {
   const config = parseAndValidate(
     "<user>",
     userConfig(TWO_SEGMENT_ROW),
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const duals = Object.entries(config.actions).filter(
-    (entry): entry is [string, DualActionDecl] => actionIsDual(entry[1]),
+  const controls = Object.entries(config.actions).filter(([name]) =>
+    name.startsWith("settings.apply."),
   );
+  const sessionKey = (a: ActionDecl): string =>
+    "set" in a ? a.set : `(not a set: ${JSON.stringify(a)})`;
 
-  test("the menu mints a dual for every setting in the table", () => {
-    expect(new Set(duals.map(([, a]) => a.set))).toEqual(
+  test("the menu mints a control for every setting in the table", () => {
+    expect(new Set(controls.map(([, a]) => sessionKey(a)))).toEqual(
       new Set(SETTING_PROJECTIONS.map((p) => p.sessionKey)),
     );
   });
 
-  test.each(duals)("%s writes the two keys of one projection", (_name, a) => {
+  test.each(controls)("%s picks the session key of one projection", (_name, a) => {
     expect(SETTING_PROJECTIONS).toContainEqual(
-      expect.objectContaining({ sessionKey: a.set, configKey: a.persist }),
+      expect.objectContaining({ sessionKey: sessionKey(a) }),
     );
   });
 
