@@ -10,6 +10,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { placementDraftKey } from "../src/config/edit-chrome";
 
 const SESSION = "s1";
 
@@ -37,6 +38,7 @@ type Detail = "collapsed" | "expanded";
 function renderPair(
   settings: Record<string, boolean>,
   detail: Detail,
+  session: Readonly<Record<string, string>> = {},
 ): { full: string; lean: string } {
   const config = parseAndValidate(
     "<user>",
@@ -53,6 +55,9 @@ function renderPair(
   );
   const sessionState = new SessionState();
   sessionState.set(SESSION, "git-detail", detail);
+  for (const [key, value] of Object.entries(session)) {
+    sessionState.set(SESSION, key, value);
+  }
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const sink = new Map<string, readonly RichText[]>();
@@ -103,6 +108,8 @@ describe("gitaculous settings", () => {
     ["flags", "collapsed", " SU?"],
     ["flags", "expanded", " SU?"],
     ["operation", "expanded", " [rebase]"],
+    ["repo", "expanded", " repo"],
+    ["upstream", "expanded", " [origin/feature +2/-1]"],
     ["sha", "expanded", " abc1234"],
     ["stash", "expanded", " (1 stashed)"],
     ["age", "expanded", " ◷ 5m"],
@@ -112,26 +119,67 @@ describe("gitaculous settings", () => {
     expect(lean).toBe(full.replace(fact, ""));
   });
 
-  // A piece reads its fact's setting, so a segment of the user's own that
-  // calls it without declaring that setting is refused at load, at the piece.
-  test("a segment calling a piece must declare its setting", () => {
-    const load = (settings: object) =>
-      parseAndValidate(
-        "<user>",
-        JSON.stringify({
-          segments: {
-            mySha: { template: '{{ template "gitSha" . }}', settings },
+  // Configure mode's pick is a session string: "false" must read as false,
+  // or the fact would stay after the user unticks it on the bar.
+  test("a configure-mode draft turns a fact off in its copy only", () => {
+    const { full, lean } = renderPair({}, "expanded", {
+      [placementDraftKey("default", "lean", "sha")]: "false",
+    });
+    expect(full).toContain(" abc1234");
+    expect(lean).toBe(full.replace(" abc1234", ""));
+  });
+
+  // Adding one setting to the bundled segment keeps the six it inherits, which
+  // the bundled pieces go on reading.
+  test("a file's settings merge by name over the bundled ones", () => {
+    const config = parseAndValidate(
+      "<user>",
+      JSON.stringify({
+        segments: {
+          gitaculous: {
+            settings: { compact: { label: "c", domain: "bool", default: false } },
           },
-          root: { h: ["mySha"] },
-        }),
-        new Set(listResolvablePaletteNames()),
-        DEFAULT_DSL_CONFIG,
-      );
-    expect(() => load({})).toThrow(
-      /helpers\.gitSha[^\n]*unknown variable "\.settings\.sha"/,
+        },
+      }),
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(Object.keys(config.segments.gitaculous!.settings ?? {})).toEqual(
+      expect.arrayContaining(["compact", "sha", "flags", "upstream"]),
+    );
+  });
+
+  // A piece reads its fact's setting, so a template of the user's own that
+  // calls it without declaring that setting is refused at load — at the
+  // CALLER, the one place the fix goes, naming the helper it reached through.
+  const load = (decl: object) =>
+    parseAndValidate(
+      "<user>",
+      JSON.stringify({ ...decl, root: { h: ["mySha"] } }),
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+  test("a segment calling a piece must declare its setting", () => {
+    const withSettings = (settings: object) =>
+      load({
+        segments: { mySha: { template: '{{ template "gitSha" . }}', settings } },
+      });
+    expect(() => withSettings({})).toThrow(
+      /segments\.mySha\.template[^\n]*"\.settings\.sha" through helper "gitSha", but segment "mySha" has no setting "sha"/,
     );
     expect(() =>
-      load({ sha: { label: "sha", domain: "bool", default: true } }),
+      withSettings({ sha: { label: "sha", domain: "bool", default: true } }),
     ).not.toThrow();
+  });
+
+  test("a variable calling a piece is told only a segment has settings", () => {
+    expect(() =>
+      load({
+        variables: {
+          shaText: { kind: "template", template: '{{ template "gitSha" . }}' },
+        },
+        segments: { mySha: { template: "{{ .shaText }}" } },
+      }),
+    ).toThrow(/through helper "gitSha", but only a segment has settings/);
   });
 });

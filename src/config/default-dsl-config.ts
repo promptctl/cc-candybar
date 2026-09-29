@@ -734,8 +734,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         aheadBehind: { label: "ahead/behind", domain: "bool", default: true },
         flags: { label: "dirty flags", domain: "bool", default: true },
         operation: { label: "operation", domain: "bool", default: true },
+        repo: { label: "repo name", domain: "bool", default: true },
         sha: { label: "commit hash", domain: "bool", default: true },
         stash: { label: "stash", domain: "bool", default: true },
+        upstream: { label: "upstream", domain: "bool", default: true },
         age: { label: "time since commit", domain: "bool", default: true },
       },
     },
@@ -1496,10 +1498,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // gated on a branch, so it is always present and carries no space. A piece
     // whose fact is optional reads that fact's `.settings.<name>` too, so a
     // segment of your own that calls it declares the same setting (the loader
-    // names the helper and the read when it does not).
+    // names that segment, the setting, and the helper when it does not).
     gitBranch:
       '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
-    gitRepo: '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}',
+    gitRepo:
+      '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
     gitOperation:
       '{{ if and .settings.operation (ne .git.operation "") }} [{{ .git.operation }}]{{ end }}',
     gitSha:
@@ -1518,7 +1521,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       '{{ if gt .git.behind 0 }}{{ template "gitPaint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}' +
       "{{ end }}",
     gitUpstream:
-      '{{ if ne .git.upstream "" }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
+      '{{ if and .settings.upstream (ne .git.upstream "") }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
     gitStash:
       '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
     gitAge:
