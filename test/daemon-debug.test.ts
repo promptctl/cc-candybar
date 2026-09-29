@@ -75,7 +75,7 @@ const TEST_CONFIG_SOURCE = `{
       fg: 'foreground',
     },
   },
-  root: { h: ['intro', 'plain'] },
+  root: { h: ['intro', 'plain', { seg: 'intro', id: 'intro2' }] },
 }`;
 
 // [LAW:single-enforcer] env-state is managed at one place — these hooks —
@@ -115,6 +115,7 @@ function buildPopulatedState(): DaemonDslState {
       // Pre-seed a last-render for one segment so we can verify the snapshot
       // surfaces it. The bzh.2 wiring will produce this map for real.
       ["intro", "(rendered output goes here)"],
+      ["intro2", "(the second placement)"],
     ]),
   };
 }
@@ -303,13 +304,16 @@ describe("introspectSegments with populated state", () => {
     expect(byName.get("plain")?.description).toBeNull();
   });
 
-  test("lastRender comes from the daemon's per-segment map", () => {
+  test("each placement's last render comes from the daemon's per-placement map", () => {
     const state = buildPopulatedState();
-    const segs = introspectSegments(state);
-    const byName = new Map(segs.map((s) => [s.name, s]));
-    expect(byName.get("intro")?.lastRender).toBe("(rendered output goes here)");
-    // Not seeded → null, not undefined or empty string.
-    expect(byName.get("plain")?.lastRender).toBeNull();
+    const byName = new Map(introspectSegments(state).map((s) => [s.name, s]));
+    expect(byName.get("intro")?.placements).toEqual([
+      { id: "intro", lastRender: "(rendered output goes here)" },
+      { id: "intro2", lastRender: "(the second placement)" },
+    ]);
+    expect(byName.get("plain")?.placements).toEqual([
+      { id: "plain", lastRender: null },
+    ]);
   });
 });
 
@@ -417,6 +421,7 @@ describe("introspectConfig with populated state", () => {
       children: [
         { kind: "segment", name: "intro" },
         { kind: "segment", name: "plain" },
+        { kind: "segment", name: "intro", id: "intro2" },
       ],
     }));
     expect(ownDeclNames(Object.keys(config?.variables ?? {})).sort()).toEqual([
@@ -442,6 +447,7 @@ describe("introspectConfig with populated state", () => {
       children: [
         { kind: "segment", name: "intro" },
         { kind: "segment", name: "plain" },
+        { kind: "segment", name: "intro", id: "intro2" },
       ],
     }));
     expect(wireShape.variables.greeting.kind).toBe("literal");

@@ -26,7 +26,8 @@
 import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
-import { walkNodes } from "../config/dsl-types";
+import { placementId, walkNodes } from "../config/dsl-types";
+import { presetNames, presetRoot } from "../config/presets";
 import { rootNode } from "../config/root";
 import { templateReads } from "../config/dsl-loader";
 import type { CompiledConfig } from "../dsl/render";
@@ -196,6 +197,7 @@ export function introspectSegments(
   // snapshot mirrors render order — operators reading the snapshot see the
   // same sequence the bar produces, not an alphabetical reshuffling.
   const segNames = orderedSegmentNames(config);
+  const placed = placementsBySegment(config);
 
   const out: SegmentSnapshot[] = [];
   for (const name of segNames) {
@@ -210,8 +212,28 @@ export function introspectSegments(
         config.helpers,
         declaredNames,
       ),
-      lastRender: lastRenderBySegment.get(name) ?? null,
+      // The render sink is keyed by placement id, so each placement reads
+      // its own.
+      placements: (placed.get(name) ?? []).map((id) => ({
+        id,
+        lastRender: lastRenderBySegment.get(id) ?? null,
+      })),
     });
+  }
+  return out;
+}
+
+// Each segment's placement ids over every tree a preset renders, in walk
+// order, one entry per id.
+function placementsBySegment(config: DslConfig): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const preset of presetNames(config.presets)) {
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const ids = out.get(node.name) ?? [];
+      const id = placementId(node);
+      if (!ids.includes(id)) out.set(node.name, [...ids, id]);
+    }
   }
   return out;
 }

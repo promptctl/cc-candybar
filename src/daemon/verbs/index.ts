@@ -55,7 +55,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -750,17 +749,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op, () => {
-    const config = ctx.configFor(origin);
-    return presetNames(config.presets).map(
-      (preset) => presetRoot(config, preset).node,
-    );
-  });
-  // [LAW:no-ambient-temporal-coupling] Reloaded before the next click can
-  // land, as save's and reset's writes are: an insertion mints its id against
-  // the tree the config renders, so a second `+` on the same segment before
-  // the file watcher fired would mint the id this one just wrote.
-  ctx.reloadConfig(origin);
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(

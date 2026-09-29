@@ -40,8 +40,10 @@ import type {
   PresetDecl,
   Root,
   RootFragment,
+  ValidatedConfig,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
+import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
   hasSegmentRef,
@@ -406,7 +408,7 @@ function layoutPlacementOf(
     if (hasSegmentRef(node, id)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale; it reloads on the next render`,
+    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
   );
 }
 
@@ -471,16 +473,25 @@ function commit(
   before: string | null,
   after: string,
 ): void {
+  loadOrRefuse(file, after);
+  writeConfigText(file, after, store.logger);
+  store.record(file, before, after);
+}
+
+// The config `text` loads to as `file`, or the click's refusal naming why it
+// does not load.
+function loadOrRefuse(file: string, text: string): ValidatedConfig {
   try {
-    validateConfig(loadConfigSource(file, after, DEFAULT_DSL_CONFIG), file);
+    return validateConfig(
+      loadConfigSource(file, text, DEFAULT_DSL_CONFIG),
+      file,
+    );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
       `refused: the config file would not load after this click — ${e.message}`,
     );
   }
-  writeConfigText(file, after, store.logger);
-  store.record(file, before, after);
 }
 
 /** The scalar the file declares at a value target, or undefined. */
@@ -676,9 +687,6 @@ export function applyLayoutOp(
   file: string,
   key: string,
   op: LayoutOp,
-  // Every layout the config renders — where a new placement's id must be
-  // free (`mintPlacement`).
-  rendered: () => readonly LayoutNode[],
 ): NewPlacement | null {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -692,10 +700,18 @@ export function applyLayoutOp(
     subject,
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed } = spliceOp(authored, placement.path, op, rendered);
+  const { after, placed } = spliceOp(authored, placement.path, op, () => {
+    // [LAW:no-ambient-temporal-coupling] Minted over the text this click
+    // splices, never a cached render of it: a hand edit, or a click an
+    // instant earlier, is in the text before any watcher reloads it.
+    const config = loadOrRefuse(file, authored);
+    return presetNames(config.presets).map(
+      (preset) => presetRoot(config, preset).node,
+    );
+  });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale; it reloads on the next render`,
+      `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
   commit(store, file, before, after);

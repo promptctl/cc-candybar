@@ -10,7 +10,9 @@ import {
   describeSettingDomain,
   hasCacheField,
   inSettingDomain,
+  freePlacementId,
   placementId,
+  placementIds,
   walkNodes,
   AXIS_OF,
   type DslConfig,
@@ -368,13 +370,14 @@ export function validateCrossReferences(
       if (node.kind !== "segment") continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
-      checkPlacementSettings(ctx, cfg, node, layoutKey, layoutLine);
     }
     for (const [id, nodes] of byId) {
       if (nodes.length < 2) continue;
+      const seg = nodes[1]!.name;
+      const free = freePlacementId(seg, new Set(byId.keys()));
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${nodes[1]!.name}", id: "${nodes[1]!.name}-2" }. A placement without an "id" takes its segment's name.`,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
         line: layoutLine,
       });
     }
@@ -426,6 +429,7 @@ export function validateCrossReferences(
           line,
         });
       }
+      checkPlacementSettings(ctx, cfg, node, path, line);
     }
   };
   if (authored.root !== undefined) checkLayoutTree(authored.root, "root");
@@ -608,11 +612,7 @@ function checkPresetRootTarget(
   // points a RETIRED segment name at its successor (renamed-segments.ts) —
   // a name nothing declares and no placement holds, so no click of this
   // config's can have removed it.
-  const placed = new Set(
-    [...walkNodes(presetRoot(cfg, presetName).node)].flatMap((n) =>
-      n.kind === "segment" ? [placementId(n)] : [],
-    ),
-  );
+  const placed = new Set(placementIds(presetRoot(cfg, presetName).node));
   const checkRetired = (role: string, id: string): void => {
     if (
       !RENAMED_SEGMENTS.has(id) ||

@@ -192,7 +192,7 @@ export function settingsDeclSpec(): FieldSpec<
           `${at} must be an object of name → { label, domain, default }, got ${describeType(v)}`,
         );
       }
-      const out: Record<string, SettingDecl> = {};
+      const out = Object.create(null) as Record<string, SettingDecl>;
       for (const [name, decl] of Object.entries(v)) {
         if (!SETTING_NAME.test(name)) {
           issue(
@@ -252,7 +252,7 @@ export function placementSettingsSpec(): FieldSpec<
           `a placement's "settings" must be an object of setting name → value, got ${describeType(v)}`,
         );
       }
-      const out: Record<string, SettingValue> = {};
+      const out = Object.create(null) as Record<string, SettingValue>;
       for (const [name, value] of Object.entries(v)) {
         if (isSettingValue(value)) out[name] = value;
         else

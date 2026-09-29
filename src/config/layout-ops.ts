@@ -14,7 +14,7 @@
 // root. This module owns only the op's shape, its wire codec, and the id an
 // insertion mints.
 
-import { placementId, walkNodes, type LayoutNode } from "./dsl-types.js";
+import { freePlacementId, placementIds, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
 // ships. Both address position by placement ID, never by index: `target` and
@@ -86,18 +86,12 @@ export function mintPlacement(
   anchor: string,
   trees: readonly LayoutNode[],
 ): NewPlacement {
-  const ids = (tree: LayoutNode): string[] =>
-    [...walkNodes(tree)].flatMap((n) =>
-      n.kind === "segment" ? [placementId(n)] : [],
-    );
   const taken = new Set(
     trees
-      .map(ids)
+      .map(placementIds)
       .filter((held) => held.includes(anchor))
       .flat(),
   );
-  if (!taken.has(segment)) return { seg: segment };
-  let n = 2;
-  while (taken.has(`${segment}-${n}`)) n++;
-  return { seg: segment, id: `${segment}-${n}` };
+  const id = freePlacementId(segment, taken);
+  return id === segment ? { seg: segment } : { seg: segment, id };
 }

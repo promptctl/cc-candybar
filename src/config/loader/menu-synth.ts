@@ -401,8 +401,10 @@ export function synthesizePlacementMenus(
     // Two menus claiming one identity (same key + same member) cannot be
     // addressed distinctly: for independent menus that is the literal same
     // `{{ menu }}` twice in a segment; for shared-key menus it is two menus
-    // with the same apply name sharing a key.
-    const claimed = new Set<string>();
+    // with the same apply name sharing a key. Each claim records the CALL
+    // that made it: two placements of one segment make the same keyed call,
+    // and its authored key says they share one open state.
+    const claimed = new Map<string, string>();
     for (const node of walkNodes(presetRoot(config, preset).node)) {
       if (node.kind !== "segment") continue;
       const seg = config.segments[node.name];
@@ -413,7 +415,7 @@ export function synthesizePlacementMenus(
       const calls = callsOf.get(node.name)!;
       if (calls === "parse-failed") continue;
       const id = placementId(node);
-      for (const call of calls) {
+      for (const [index, call] of calls.entries()) {
         if (call.kind === "issue" || identityIssue(call.apply) !== undefined) {
           continue;
         }
@@ -439,7 +441,9 @@ export function synthesizePlacementMenus(
         ownerBySynthKey.set(stateKey, owner);
         ownerBySynthKey.set(pageKey, owner);
         const identity = menuActionName(stateKey, member);
-        if (claimed.has(identity)) {
+        const claimant = `${node.name}\0${index}`;
+        const prior = claimed.get(identity);
+        if (prior !== undefined && prior !== claimant) {
           issue(
             node.name,
             `two {{ menu }} disclosures resolve to the same identity ("${identity}") — ${
@@ -450,7 +454,7 @@ export function synthesizePlacementMenus(
           );
           continue;
         }
-        claimed.add(identity);
+        claimed.set(identity, claimant);
         // [LAW:one-source-of-truth] The shared disclosure toggle: members
         // ordered closed-first (an unset/foreign value counts as the first
         // member — the cycle's "unknown ⇒ first" rule — so a never-clicked

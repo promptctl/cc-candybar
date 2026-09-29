@@ -134,6 +134,27 @@ describe("a placement renders with its own settings", () => {
   });
 });
 
+describe("a setting named like an Object member", () => {
+  test("an unset one reads its declared default, never the inherited member", () => {
+    const rt = buildRuntime(`{
+      variables: { ${SESSION} },
+      segments: {
+        tag: {
+          template: '{{ if .settings.toString }}yes{{ else }}no{{ end }}',
+          settings: {
+            toString: { label: 'T', domain: 'bool', default: false },
+            compact: { label: 'C', domain: 'bool', default: false },
+          },
+        },
+      },
+      root: { h: [{ seg: 'tag', settings: { compact: true } }] },
+    }`);
+    rt.render();
+    expect(rt.textOf("tag")).toBe("no");
+    rt.dispose();
+  });
+});
+
 describe("two placements of a menu-hosting segment open independently", () => {
   const SRC = `{
     variables: {
@@ -215,6 +236,23 @@ describe("a placement is named by its id", () => {
       ALLOWED,
     );
     expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
+  });
+
+  test("two placements of a keyed menu share the open state its key names", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: {
+          ${SESSION},
+          'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        },
+        actions: { applyTheme: { set: 'theme', from: 'themes' } },
+        segments: { picker: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}' } },
+        root: { h: ['picker', { seg: 'picker', id: 'picker-2' }] },
+      }`,
+      ALLOWED,
+    );
+    expect(config.variables["menus.k"]).toBeDefined();
   });
 
   test("edit mode labels each placement with its id", () => {
