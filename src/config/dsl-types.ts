@@ -481,7 +481,6 @@ export type ValidatedConfig = DslConfig & {
 export interface Globals {
   readonly default_empty_value?: string;
   readonly default_separator?: string;
-  readonly default_truncate_marker?: string;
   // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig
   // is the JSON-shape mirror, so the name is the authoritative datum and the
   // renderer owns name→Palette resolution. The config default for the base

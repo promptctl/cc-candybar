@@ -89,7 +89,6 @@ const GLOBALS_FIELD_KIND: Readonly<
 > = {
   default_empty_value: "string",
   default_separator: "string",
-  default_truncate_marker: "string",
   palette: "string",
   look: "string",
   preset: "string",

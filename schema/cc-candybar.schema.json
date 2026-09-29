@@ -14,9 +14,6 @@
         "default_separator": {
           "type": "string"
         },
-        "default_truncate_marker": {
-          "type": "string"
-        },
         "palette": {
           "type": "string"
         },
@@ -71,14 +68,6 @@
           "not": {
             "pattern": "^(?:❌|✕)[\\uFE0E\\uFE0F]?$"
           }
-        },
-        "default_bg": {
-          "not": {},
-          "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
-        },
-        "default_fg": {
-          "not": {},
-          "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
         }
       },
       "additionalProperties": false
@@ -1276,9 +1265,6 @@
               "default_separator": {
                 "type": "string"
               },
-              "default_truncate_marker": {
-                "type": "string"
-              },
               "palette": {
                 "type": "string"
               },
@@ -1331,14 +1317,6 @@
               "menuGlyph": {
                 "not": {},
                 "description": "not allowed here — a preset cannot change the settings menu glyph"
-              },
-              "default_bg": {
-                "not": {},
-                "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
-              },
-              "default_fg": {
-                "not": {},
-                "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
               }
             },
             "additionalProperties": false
@@ -1354,9 +1332,6 @@
           "type": "string"
         },
         "default_separator": {
-          "type": "string"
-        },
-        "default_truncate_marker": {
           "type": "string"
         },
         "palette": {
@@ -1411,14 +1386,6 @@
         "menuGlyph": {
           "not": {},
           "description": "not allowed here — the editGlobals fragment cannot change the settings menu glyph"
-        },
-        "default_bg": {
-          "not": {},
-          "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
-        },
-        "default_fg": {
-          "not": {},
-          "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
         }
       },
       "additionalProperties": false

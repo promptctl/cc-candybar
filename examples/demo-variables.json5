@@ -13,7 +13,6 @@
   globals: {
     palette: "dracula",               // base theme name
     default_empty_value: "–",         // rendered when a segment produces nothing
-    default_truncate_marker: "…",     // appended when a segment is clipped
   },
 
   // ── Helpers ─────────────────────────────────────────────────────────────

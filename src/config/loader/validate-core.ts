@@ -209,10 +209,17 @@ export interface RecordSchema<T> {
   // key", …) — the one phrasing that varies per record; everything else is shared.
   readonly noun: string;
   readonly fields: FieldSpecMap<T>;
+  // [LAW:no-silent-failure] Keys this record once admitted, each mapped to what
+  // an author reads instead: why it went and what to write now. A removed key is
+  // NOT a field — it is never parsed, never offered as "Expected one of", and
+  // never emitted into the JSON schema's `properties` — so it is refused with
+  // its pointer here and nowhere else. Absent = the record removed nothing.
+  readonly removed?: Readonly<Record<string, string>>;
 }
 
 // [LAW:dataflow-not-control-flow] The record interpreter: the same unconditional
-// sequence for every record — guard object, reject unknown keys, run each field
+// sequence for every record — guard object, refuse removed keys with their
+// pointer, reject unknown keys, run each field
 // spec, collect the present values. The variability (which fields, required-ness,
 // each field's message) lives in the schema DATA, never in branches here. Returns
 // the assembled record, or null when raw is not an object or a required field
@@ -234,12 +241,19 @@ export function record<T>(
     return null;
   }
 
+  const removed = Object.entries(schema.removed ?? {}).filter(
+    ([key]) => raw[key] !== undefined,
+  );
+  for (const [key, pointer] of removed) {
+    reject(ctx, `${path}.${key}`, `${path}.${key} was removed: ${pointer}`);
+  }
   rejectUnknownKeys(
     ctx,
     path,
     raw,
     schema.noun,
     new Set(Object.keys(schema.fields)),
+    new Set(removed.map(([key]) => `${path}.${key}`)),
   );
   return fields(ctx, schema.fields, path, raw);
 }

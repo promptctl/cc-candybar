@@ -189,13 +189,11 @@ describe("loadDslConfig — globals", () => {
       FILE,
       `{ globals: {
         default_empty_value: "—", default_separator: " ",
-        default_truncate_marker: "…",
       }}`,
     );
     expect(cfg.globals).toEqual({
       default_empty_value: "—",
       default_separator: " ",
-      default_truncate_marker: "…",
     });
   });
 
@@ -213,28 +211,38 @@ describe("loadDslConfig — globals", () => {
     });
   });
 
-  // brandon-config-349: read by nothing since ai7 — a removed key names what
-  // replaced it rather than loading as a silent no-op, wherever globals are
-  // authored.
-  test.each([
-    ["globals", `{ globals: { default_bg: "surface" } }`, "bg", "decoration tint"],
-    ["globals", `{ globals: { default_fg: "text" } }`, "fg", "chosen for contrast"],
-    [
-      "presets.p.globals",
-      `{ presets: { p: { globals: { default_bg: "surface" } } } }`,
-      "bg",
-      "decoration tint",
-    ],
-    ["editGlobals", `{ editGlobals: { default_fg: "text" } }`, "fg", "chosen for contrast"],
-  ])("%s: removed default_%s names its replacement", (at, src, field, instead) => {
+  // brandon-config-349: read by nothing — a removed key names what to write
+  // instead rather than loading as a silent no-op, wherever globals are
+  // authored, and is never offered as a legal key.
+  const REMOVED: ReadonlyArray<readonly [string, string]> = [
+    ["default_bg", "author `bg:` on the segments"],
+    ["default_fg", "author `fg:` on the segments"],
+    ["default_truncate_marker", 'always ends in "…"'],
+  ];
+  const WHERE: ReadonlyArray<readonly [string, (body: string) => string]> = [
+    ["globals", (body) => `{ globals: { ${body} } }`],
+    ["presets.p.globals", (body) => `{ presets: { p: { globals: { ${body} } } } }`],
+    ["editGlobals", (body) => `{ editGlobals: { ${body} } }`],
+  ];
+  test.each(
+    WHERE.flatMap(([at, wrap]) =>
+      REMOVED.map(([key, pointer]) => [`${at}.${key}`, wrap(`${key}: "x"`), pointer] as const),
+    ),
+  )("%s is refused with its pointer", (path, src, pointer) => {
     const err = expectError(src);
     expect(err.issues).toHaveLength(1);
     const issue = err.issues[0]!;
-    expect(issue.path).toBe(`${at}.default_${field}`);
-    expect(issue.message).toContain(`${at}.default_${field} was removed`);
-    expect(issue.message).toContain(instead);
-    expect(issue.message).toContain(`author \`${field}:\` on the segments`);
+    expect(issue.path).toBe(path);
+    expect(issue.message).toContain(`${path} was removed: nothing reads it`);
+    expect(issue.message).toContain(pointer);
     expect(issue.line).toBe(1);
+  });
+
+  test.each(WHERE)("%s: an unknown key does not offer a removed one", (_at, wrap) => {
+    const err = expectError(wrap(`mystery: "x"`));
+    const message = err.issues[0]!.message;
+    expect(message).toContain('"mystery". Expected one of:');
+    for (const [key] of REMOVED) expect(message).not.toContain(key);
   });
 
   test("autoWrap accepts a boolean", () => {

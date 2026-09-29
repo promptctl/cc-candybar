@@ -120,7 +120,6 @@ const menuGlyphSpec: FieldSpec<string> = {
 const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   default_empty_value: optionalStringSpec(),
   default_separator: optionalStringSpec(),
-  default_truncate_marker: optionalStringSpec(),
   palette: paletteOrRuleSpec,
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
@@ -175,18 +174,16 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
 //
 // [LAW:one-type-per-behavior] Both fragments reject the field identically and
 // differ only in the SUBJECT a diagnostic names, so this is one spec taking
-// that noun as data — never two specs that could drift in what they reject. A
-// removed globals field (REMOVED_GLOBALS_FIELDS below) is the same rejection
-// with a different reason, so it is this spec too.
-function rejectedKey(
+// that noun as data — never two specs that could drift in what they reject.
+function fragmentRejection(
   description: string,
   message: (at: string) => string,
-): FieldSpec<never> {
+): FieldSpec<string> {
   return {
     required: false,
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
     // the key at the same moment the validator does.
-    json: { not: {}, description },
+    json: { not: {}, description: `not allowed here — ${description}` },
     parse: (ctx, path, field, raw) => {
       if (raw[field] !== undefined) {
         ctx.issues.push({
@@ -201,8 +198,8 @@ function rejectedKey(
 }
 
 function nestedPresetSpec(subject: string): FieldSpec<string> {
-  return rejectedKey(
-    `not allowed here — ${subject} cannot select a preset`,
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
     (at) =>
       `${at}: ${subject} cannot select a preset. Which preset is active is ` +
       `resolved once, as session pick over globals.preset over "default"; a fragment ` +
@@ -212,55 +209,38 @@ function nestedPresetSpec(subject: string): FieldSpec<string> {
 }
 
 function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
-  return rejectedKey(
-    `not allowed here — ${subject} cannot change the settings menu glyph`,
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
     (at) =>
       `${at}: ${subject} cannot change the settings menu glyph — one menu is shared by ` +
       `every preset. Set it in the top-level globals.menuGlyph instead.`,
   );
 }
 
-// [LAW:no-silent-failure] Fields a config may no longer set, each rejected with
-// the reason and what to write instead — the removed-`layout` species. Spread
-// into every globals schema (top level, preset, editGlobals) so a removed key is
-// refused wherever globals are authored, and kept OUT of GLOBALS_FIELDS so it is
-// never a globals field: no persist target, no settings row, no Globals member.
+// [LAW:no-silent-failure] Keys a globals block may no longer set, each with the
+// pointer the record engine refuses it with — shared by every globals schema
+// (top level, preset, editGlobals), so a removed key is refused wherever globals
+// are authored and never listed as a legal one.
 //
-// `default_bg`/`default_fg` (brandon-config-349) were read by nothing since ai7:
-// an absent `bg:` is the region's decoration tint and an absent `fg:` is text
-// chosen against the background, so there is no fallback slot left to fill.
-interface RemovedGlobals {
-  readonly default_bg?: never;
-  readonly default_fg?: never;
-}
-type GlobalsRecord = Globals & RemovedGlobals;
-
-function removedColourDefault(
-  field: "bg" | "fg",
-  instead: string,
-): FieldSpec<never> {
-  return rejectedKey(
-    `removed: a segment with no ${field}: wears ${instead}`,
-    (at) =>
-      `${at} was removed: nothing reads it — a segment with no \`${field}:\` wears ${instead}. ` +
-      `Delete the key, and author \`${field}:\` on the segments that need a fixed colour.`,
-  );
-}
-
-const REMOVED_GLOBALS_FIELDS: FieldSpecMap<RemovedGlobals> = {
-  default_bg: removedColourDefault(
-    "bg",
-    "the decoration tint of its place in the bar",
-  ),
-  default_fg: removedColourDefault(
-    "fg",
-    "text chosen for contrast against its background",
-  ),
+// brandon-config-349: all three were read by nothing. Since ai7 an absent `bg:`
+// is the decoration tint of the segment's place in the bar and an absent `fg:`
+// is text chosen for contrast against its background, so no fallback slot is
+// left to fill; and no caller ever handed the marker to truncation.
+const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
+  default_bg:
+    "nothing reads it — a segment with no `bg:` wears the decoration tint of its " +
+    "place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg:
+    "nothing reads it — a segment with no `fg:` wears text chosen for contrast against " +
+    "its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker:
+    'nothing reads it — a segment clipped to its `width:` always ends in "…". Delete the key.',
 };
 
-const GLOBALS_SCHEMA: RecordSchema<GlobalsRecord> = {
+const GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "globals key",
-  fields: { ...GLOBALS_FIELDS, ...REMOVED_GLOBALS_FIELDS },
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS,
 };
 
 // [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
@@ -271,9 +251,10 @@ const PRESET_FRAGMENT_REJECTIONS = {
   menuGlyph: nestedMenuGlyphSpec("a preset"),
 };
 
-const PRESET_GLOBALS_SCHEMA: RecordSchema<GlobalsRecord> = {
+const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
-  fields: { ...GLOBALS_SCHEMA.fields, ...PRESET_FRAGMENT_REJECTIONS },
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS,
 };
 
 // A field a preset's own globals fragment may author — every globals field but
@@ -286,10 +267,11 @@ export function isPresetGlobalsField(key: string): key is keyof Globals {
 // rung later in the precedence chain, so they reuse the same table rather than
 // declaring which fields edit mode "supports" — a field added to Globals is
 // edit-settable the same day, with no edit here.
-const EDIT_GLOBALS_SCHEMA: RecordSchema<GlobalsRecord> = {
+const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
   fields: {
-    ...GLOBALS_SCHEMA.fields,
+    ...GLOBALS_FIELDS,
     preset: nestedPresetSpec("the editGlobals fragment"),
     menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
   },
