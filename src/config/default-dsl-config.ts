@@ -39,9 +39,8 @@ import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
-// Factored out of the segments' `template` fields so the git working-tree
-// counts and status icon are shared by the two git-style segments (git,
-// gitaculous) without duplication.
+// Factored out of the segments' `template` fields where a TypeScript value is
+// the only way to share one string between several fields.
 
 // Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
 // else raw. Inline-recomputes the project-relative path because the DSL has no
@@ -79,44 +78,6 @@ const DIR_TEMPLATE =
   "{{ end }}{{ end }}" +
   "{{ abbreviatePath $dir }}";
 
-// Git-fact → semantic palette color, ONE table both the `git` and
-// `gitaculous` segment templates below read from. [LAW:one-source-of-truth]
-// brandon-segments-3eo.1 (the recoloring itself) typed this choice
-// independently into each template's literal string and the two drifted —
-// gitaculous colored branch `accent` where git used `primary`, and left
-// stash uncolored where git used `accent` — caught by live testing
-// (brandon-segments-3eo.1.1). A shared table makes "what color is this
-// fact" a value read twice, not a decision re-typed twice.
-const GIT_COLOR = {
-  branch: "primary",
-  staged: "success",
-  unstaged: "warning",
-  untracked: "accent",
-  conflicts: "error",
-  dirty: "warning",
-  clean: "success",
-  ahead: "success",
-  behind: "warning",
-  stash: "accent",
-} as const;
-
-// Text in a semantic palette colour, floored at TEXT_MIN_CONTRAST to stay
-// legible on the cell it sits on. A theme's `success`/`warning`/`accent` is designed against its own
-// background, not against the vocabulary tint a bar cell wears, so the raw
-// role measured 1.01:1 on `light` and 1.2–1.6:1 across the light themes
-// (brandon-theme-picker-bgw.b2g). `readableOn` moves the colour in OKLCH
-// lightness only, so the hue — the thing that says "staged" or "conflicts" —
-// survives; a colour that already clears the floor is returned unchanged.
-const accent = (role: string, content: string): string =>
-  `{{ fg (readableOn (color "${role}") (bgOf) ${TEXT_MIN_CONTRAST}) ${content} }}`;
-
-// Paint one git fact in its semantic color. The table above holds palette
-// *variable names* (data), and this is the one place a fact becomes an accent,
-// so the fact→color decision and its spelling stay separate concerns.
-// [LAW:one-source-of-truth]
-const paint = (fact: keyof typeof GIT_COLOR, content: string): string =>
-  accent(GIT_COLOR[fact], content);
-
 // How far the two git segments' *structural* text — labels, punctuation,
 // brackets, the sha, the upstream name, the elapsed-time annotation — sits
 // toward their own background, as a percentage. It is applied as the segments'
@@ -147,53 +108,6 @@ export const GIT_QUIET_MIN_CONTRAST = 3;
 const GIT_QUIET_FG =
   `{{ readableOn (mix (color "foreground") (bgOf) ${GIT_QUIET_PCT}) (bgOf) ` +
   `${GIT_QUIET_MIN_CONTRAST} }}`;
-
-// Git working-tree counts — each present count renders in its own semantic
-// palette color (GIT_COLOR above) so a dirty tree reads at a glance,
-// p10k/gitaculous-prompt style, instead of one uniform segment fg. `$first`
-// tracks whether a separator space is still owed before the next present
-// count.
-// [LAW:dataflow-not-control-flow]: one variable carries the "have we emitted
-// yet" state rather than four copies of positional space logic. `$first` is
-// declared inside the outer `{{ if or ... }}` gate (unlike DIR_TEMPLATE's
-// `$dir`, declared at the template's top level) and reassigned via `=` in
-// nested `{{ if }}` blocks below — Go template variable scoping walks up to
-// the declaring frame on `=` regardless of nesting depth, so this still
-// works, just at one more scope level than DIR_TEMPLATE's `$dir`. Verified
-// by test/default-dsl-config.test.ts's "worktree counts render
-// single-space-separated" test, not merely asserted here.
-const GIT_WORKTREE =
-  "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }}" +
-  ` ({{ $first := true }}` +
-  `{{ if gt .git.staged 0 }}${paint("staged", '(printf "+%v" .git.staged)')}{{ $first = false }}{{ end }}` +
-  `{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}${paint("unstaged", '(printf "~%v" .git.unstaged)')}{{ $first = false }}{{ end }}` +
-  `{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}${paint("untracked", '(printf "?%v" .git.untracked)')}{{ $first = false }}{{ end }}` +
-  `{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}${paint("conflicts", '(printf "!%v" .git.conflicts)')}{{ $first = false }}{{ end }}` +
-  "){{ end }}";
-
-// Status icon precedence: conflicts → ⚠, dirty → ●, else clean ✓ — each
-// painted in its state's GIT_COLOR entry.
-const GIT_STATUS =
-  `{{ if eq .git.status "conflicts" }}${paint("conflicts", '"⚠"')}{{ else }}` +
-  `{{ if eq .git.status "dirty" }}${paint("dirty", '"●"')}` +
-  `{{ else }}${paint("clean", '"✓"')}{{ end }}{{ end }}`;
-
-// Every unpainted token here — the repo name, `⎇`, `♯`, the sha, the worktree
-// parentheses, `→`, the upstream name — renders in the segment's quiet `fg:`
-// (GIT_QUIET_FG). Only the operative facts name a color, so the template reads
-// as the line it draws rather than as de-emphasis markup wrapped around it.
-const GIT_TEMPLATE =
-  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}' +
-  `⎇ ${paint("branch", ".git.branch")}` +
-  "{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}" +
-  "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }}" +
-  ` {{ if gt .git.ahead 0 }}${paint("ahead", '(printf "↑%v" .git.ahead)')}{{ end }}` +
-  `{{ if gt .git.behind 0 }}${paint("behind", '(printf "↓%v" .git.behind)')}{{ end }}{{ end }}` +
-  GIT_WORKTREE +
-  "{{ if .git.upstream }} →{{ .git.upstream }}{{ end }}" +
-  `{{ if gt .git.stash 0 }} ${paint("stash", '(printf "⧇ %v" .git.stash)')}{{ end }}` +
-  " " +
-  GIT_STATUS;
 
 // [LAW:dataflow-not-control-flow] Every threshold cascade below is one
 // `ramp <value> "step" <at> <colour> …` call (rich-js `paletteFuncs`): the
@@ -369,6 +283,19 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+    // The palette role each git fact is painted in — data a user overrides one
+    // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
+    // staged/ahead are `success` (ready to commit / unpushed work),
+    // unstaged/behind `warning` (needs attention), untracked/stash `accent`
+    // (told apart from unstaged by glyph, not colour), conflicts `error`.
+    "git.color.branch": { kind: "literal", value: "primary" },
+    "git.color.staged": { kind: "literal", value: "success" },
+    "git.color.unstaged": { kind: "literal", value: "warning" },
+    "git.color.untracked": { kind: "literal", value: "accent" },
+    "git.color.conflicts": { kind: "literal", value: "error" },
+    "git.color.ahead": { kind: "literal", value: "success" },
+    "git.color.behind": { kind: "literal", value: "warning" },
+    "git.color.stash": { kind: "literal", value: "accent" },
 
     // Forge PR/MR — the daemon's git provider resolves the branch's open PR via
     // gh/glab and projects it here. Declaring any of these turns on the network
@@ -717,63 +644,37 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "warning",
       when: "{{ .host.ssh }}",
     },
+    // [LAW:one-source-of-truth] Both git segments are compositions of the SAME
+    // named pieces (the `git*` helpers below), so a fact has one spelling and
+    // one colour whichever segment shows it, and a user reshapes either by
+    // overriding one piece, one `git.color.*` variable, or this one template.
+    // Everything no piece paints — the "(git)" label, repo name, brackets, sha,
+    // the elapsed-time annotation — renders in the quiet `fg:` below, a
+    // template evaluating to a colour: `bgOf` is available there because a
+    // segment's background is resolved before its foreground, so structural
+    // text sits a fixed distance from THIS cell whatever theme or look is in
+    // effect, and the eye lands on the painted facts first.
     git: {
       description:
-        "Branch, sha, ahead/behind, staged/unstaged/untracked/conflict counts, upstream, stash count, and a clean/dirty/conflict glyph.",
-      template: GIT_TEMPLATE,
-      // A computed `fg:` — the field is a template evaluating to a color
-      // reference, and `bgOf` is available here because a segment's background
-      // is resolved before its foreground. Structural text therefore sits a
-      // fixed distance from THIS segment's background whatever theme or look
-      // is in effect.
+        "The one-line git summary: branch, ahead/behind, and S/U/? flags — the same pieces `gitaculous` composes.",
+      template:
+        '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
     },
     gitaculous: {
       description:
-        "The same git state in asyncgit's compact spelling: repo, in-progress operation, sha, S/U/? flags, branch, upstream ±, stash count, and time since the last commit.",
-      // Recolored from raw green/red (render-bugs-pdu.3's era) to semantic
-      // palette names (brandon-segments-3eo.1), then unified against `git`'s
-      // choice of color per fact via the shared GIT_COLOR table above
-      // (brandon-segments-3eo.1.1 — the two had drifted: branch, untracked,
-      // and stash each disagreed with `git`'s coloring of the same fact).
-      // staged/ahead share `success` (positive — ready to commit / unpushed
-      // additions), unstaged/behind share `warning` (needs attention),
-      // untracked/stash share `accent` (their own GIT_COLOR entries, kept
-      // visually distinct from unstaged by using a different glyph, not a
-      // different color, so "U" vs "?" reads apart at a glance), conflicts
-      // gets its own `error`, branch gets `primary`.
-      //
-      // Everything the template does NOT paint — the "(git)" label, repo name,
-      // the operation and upstream brackets, the sha, the elapsed-time
-      // annotation — renders in the segment's quiet `fg:` and recedes, so the
-      // eye lands on the operative colored facts first (brandon-segments-
-      // 3eo.1.1.1: live feedback that "most of it" read as one flat color when
-      // only two facts happened to be present). Note that this needs no markup
-      // in the template — including around `{{ template "formatTimeSince" }}`,
-      // which as a top-level Go-template action could never have been wrapped
-      // in a styling call at all. Making quiet the default rather than a
-      // wrapper is what put that token in reach.
+        "The full git state in asyncgit's compact spelling: repo, in-progress operation, sha, S/U/? flags, branch, upstream ±, stash count, and time since the last commit.",
       template:
         "(git)" +
-        '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +
-        '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}' +
-        '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
-        "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
-        `{{ if gt .git.staged 0 }}${paint("staged", '"S"')}{{ end }}` +
-        `{{ if gt .git.unstaged 0 }}${paint("unstaged", '"U"')}{{ end }}` +
-        `{{ if gt .git.untracked 0 }}${paint("untracked", '"?"')}{{ end }}` +
-        `{{ if gt .git.conflicts 0 }}${paint("conflicts", '(printf "!%v" .git.conflicts)')}{{ end }}` +
-        "{{ end }}" +
-        ` ⎇ ${paint("branch", ".git.branch")}` +
-        '{{ if ne .git.upstream "" }} [{{ .git.upstream }}' +
-        "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
-        `{{ if gt .git.ahead 0 }}${paint("ahead", '(printf "+%v" .git.ahead)')}{{ end }}` +
-        "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
-        `{{ if gt .git.behind 0 }}${paint("behind", '(printf "-%v" .git.behind)')}{{ end }}` +
-        "{{ end }}]{{ end }}" +
-        `{{ if gt .git.stash 0 }} ${paint("stash", '(printf "(%v stashed)" .git.stash)')}{{ end }}` +
-        '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+        '{{ template "gitRepo" . }}' +
+        '{{ template "gitOperation" . }}' +
+        '{{ template "gitSha" . }}' +
+        '{{ template "gitFlags" . }}' +
+        ' {{ template "gitBranch" . }}' +
+        '{{ template "gitUpstream" . }}' +
+        '{{ template "gitStash" . }}' +
+        '{{ template "gitAge" . }}',
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
     },
@@ -1291,6 +1192,47 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // single dot arg — variability flows as data across one boundary, not as a
   // bespoke multi-arg signature.
   helpers: {
+    // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
+    // it sits on: a theme's `success`/`warning`/`accent` is designed against
+    // its own background, not the tint a bar cell wears (the raw role measured
+    // 1.01:1 on `light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
+    // OKLCH lightness, so the hue — the part that says "staged" — survives.
+    // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
+    paint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
+
+    // ─── Git pieces ────────────────────────────────────────────────────────
+    // The named parts the `git` and `gitaculous` segments compose, each called
+    // with the root scope (`{{ template "gitFlags" . }}`). Every optional piece
+    // renders ` <fact>` with its OWN leading space, or nothing — only the piece
+    // knows whether it exists — so pieces reorder and drop without leaving a
+    // doubled or dangling space. `gitBranch` is the exception: the segments are
+    // gated on a branch, so it is always present and carries no space.
+    gitBranch:
+      '⎇ {{ template "paint" (dict "color" .git.color.branch "text" .git.branch) }}',
+    gitRepo: '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}',
+    gitOperation:
+      '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}',
+    gitSha: '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}',
+    gitFlags:
+      "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
+      '{{ if gt .git.staged 0 }}{{ template "paint" (dict "color" .git.color.staged "text" "S") }}{{ end }}' +
+      '{{ if gt .git.unstaged 0 }}{{ template "paint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}' +
+      '{{ if gt .git.untracked 0 }}{{ template "paint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}' +
+      '{{ if gt .git.conflicts 0 }}{{ template "paint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}' +
+      "{{ end }}",
+    gitAheadBehind:
+      "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
+      '{{ if gt .git.ahead 0 }}{{ template "paint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}' +
+      "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
+      '{{ if gt .git.behind 0 }}{{ template "paint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}' +
+      "{{ end }}",
+    gitUpstream:
+      '{{ if ne .git.upstream "" }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
+    gitStash:
+      '{{ if gt .git.stash 0 }} {{ template "paint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
+    gitAge:
+      '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+
     // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
     // unrepresentable through the var-system — type:number with a numeric default
     // owns "missing" upstream — so no null branch is needed here.)

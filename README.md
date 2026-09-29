@@ -100,8 +100,8 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `version` | `◈ v` and the Claude Code version | always |
 | `tmux` | `tmux:` and the tmux session name | inside tmux |
 | `host` | `⇄ user@host` | over SSH |
-| `git` | repo, `⎇` branch, sha, ahead/behind, worktree, upstream, stash, working-tree status | in a repo |
-| `gitaculous` | the same facts in gitaculous's spelling — `(git)`, repo, operation, sha, `S`/`U`/`?`/`!` counts, upstream, stashes, time since the last commit | in a repo |
+| `git` | the one-line summary — `⎇` branch, ahead/behind, `S`/`U`/`?`/`!` flags | in a repo |
+| `gitaculous` | the full line, from the same pieces as `git` — `(git)`, repo, operation, sha, `S`/`U`/`?`/`!` flags, branch, upstream ±, stashes, time since the last commit; each piece overridable ([docs/segment-authoring.md](docs/segment-authoring.md#reshaping-a-bundled-segment-git)) | in a repo |
 | `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
 | `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page (also inside the settings menu) | always |
 | `themeSwitcher` | `◀ <theme> ▶` — the theme the bar is wearing; ◀/▶ switch this session to the previous/next theme | always (not placed by default) |
