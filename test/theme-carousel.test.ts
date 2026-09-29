@@ -564,19 +564,19 @@ describe("the preset control is a carousel with the layout beneath it", () => {
         ["model", "context", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
-      zen: [["settings.menu", "directory", "context"]],
+      zen: [["candybar.menu", "directory", "context"]],
       git: [
-        ["settings.menu", "host", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "host", "directory", "gitaculous", "gitPr"],
         ["model", "context", "activity"],
       ],
       usage: [
-        ["settings.menu", "model", "context", "cacheTimer"],
+        ["candybar.menu", "model", "context", "cacheTimer"],
         ["block", "weekly", "burnrate"],
         ["session", "today", "speed", "tokenSparkline"],
       ],
       dense: [
         [
-          "settings.menu",
+          "candybar.menu",
           "host",
           "directory",
           "gitaculous",

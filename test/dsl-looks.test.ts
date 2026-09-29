@@ -384,7 +384,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
       // No \`look\` state var here on purpose: a SCALAR at \`look\` would shadow the
       // \`look.*\` namespace the label below reads, the same way a json document
       // owns its dotted prefix. The bundled config avoids it by namespacing the
-      // synthesized picks under \`settings.\`.
+      // synthesized picks under \`candybar.\`.
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
       'look.effective': { kind: 'input', path: 'look.effective', default: '' },
     },
