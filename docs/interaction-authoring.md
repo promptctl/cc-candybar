@@ -863,9 +863,11 @@ opts a config in — the loader detects the reference (the same AST-based
 detection `{{ menu }}` uses to find its own placements) and, only then,
 synthesizes:
 
-- `edit.mode` — a `state` variable, closed by default, and `edit.toggle`
-  itself — a binary `cycle` action flipping it open/closed. Wire your own
-  trigger to it, or copy `editControl` above verbatim.
+- `edit.mode` — a `state` variable holding `closed` (the default),
+  `arrange` (the `✚`/`🚫` chrome below), or `configure:<preset>:<id>` (one
+  placement's settings) — and `edit.toggle` itself, a `cycle` action between
+  `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
+  above verbatim.
 - For **every** preset (the `"default"` floor included) and every ordinary
   segment in its resolved root: a `🚫` (a synthesized `removeSegment` action
   behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
@@ -874,9 +876,17 @@ synthesizes:
   added as a second placement with an id of its own) that inserts after it,
   plus one `✚` leading each run — so N segments
   in a row read `✚ [seg1 🚫] ✚ [seg2 🚫] ✚ … [segN 🚫] ✚`. Every affordance is gated on edit
-  mode being open — the same disclosure predicate a group body or a
+  mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
+- A placement whose segment declares `settings` also carries a `⚙` before
+  its `🚫`. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
+  hides every `✚`/`🚫` and hangs one control per setting below that
+  placement's name — shown, with every row holding it, whatever their `when`
+  says, so a setting that hides its own placement can be turned back; the
+  controls write unsaved values that `💾 save` writes into the placement
+  (see "One segment, many placements" in `docs/segment-authoring.md`). One
+  key holds the mode, so configuring another placement closes this one.
 - While edit mode is open each segment reads as its **name**, whether or not
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's

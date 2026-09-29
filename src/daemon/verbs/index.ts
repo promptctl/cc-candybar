@@ -39,6 +39,7 @@ import {
   deleteValues,
   readValue,
   writePreset,
+  writeDrafts,
   writeValues,
   type EditStore,
 } from "../config-file-store";
@@ -48,13 +49,27 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
-import type { DslConfig, Globals } from "../../config/dsl-types";
-import { presetSnapshot, resetLayers, settingDrafts } from "../setting-drafts";
+import {
+  placementId,
+  settingSpelling,
+  walkNodes,
+  type DslConfig,
+  type Globals,
+  type SegmentNode,
+} from "../../config/dsl-types";
+import {
+  placementDrafts,
+  presetSnapshot,
+  type PlacementDraft,
+  resetLayers,
+  settingDrafts,
+} from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
+import { presetNames, presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -615,13 +630,14 @@ const save: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
-  const drafts = settingDrafts(ctx.configFor(origin), (key) =>
-    ctx.sessionState.get(sid, key),
-  );
+  const config = ctx.configFor(origin);
+  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const drafts = settingDrafts(config, pick);
+  const placements = placementDrafts(config, pick);
   // Nothing unsaved is the save's own postcondition already holding — a second
   // click on a bar drawn before the first save released its picks — so it is
   // a recorded no-op, never a failure on the diagnostic strip.
-  if (drafts.length === 0) {
+  if (drafts.length + placements.length === 0) {
     ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
@@ -630,15 +646,39 @@ const save: VerbHandler = (value, ctx) => {
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
     return [d.target, result.value];
   });
+  gatePlacements("save", placements);
   const file = originConfigFile(origin);
-  writeValues(editStore(ctx, sid), file, pairs);
+  writeDrafts(editStore(ctx, sid), file, pairs, placements);
   ctx.reloadConfig(origin);
-  for (const d of drafts) ctx.sessionState.clear(sid, d.sessionKey);
+  for (const key of [
+    ...drafts.map((d) => d.sessionKey),
+    ...placements.map((p) => p.key),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.dlog(
     "info",
-    `save: ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,
+    `save: ${[
+      ...pairs.map(([k, v]) => `${k}=${v}`),
+      ...placements.map(placementLog),
+    ].join(" ")} → ${file} (session=${sid})`,
   );
 };
+
+// [LAW:single-enforcer] A placement's value re-crosses the gate its control's
+// click passed, as a display setting's does.
+const placementLog = (p: PlacementDraft): string =>
+  `${p.preset}/${p.id}.settings.${p.setting}=${settingSpelling(p.value)}`;
+
+function gatePlacements(
+  verb: string,
+  placements: readonly PlacementDraft[],
+): void {
+  for (const p of placements) {
+    const result = validateStateWrite(p.key, settingSpelling(p.value));
+    if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
+  }
+}
 
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders
 // becomes `presets.<name>` in its config file (presetSnapshot), and the
@@ -661,6 +701,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
     return [d.configKey, result.value];
   });
+  gatePlacements("save-preset", snapshot.placements);
   const file = originConfigFile(origin);
   const name = writePreset(
     editStore(ctx, sid),
@@ -668,14 +709,19 @@ const savePreset: VerbHandler = (value, ctx) => {
     snapshot.from,
     snapshot.globals,
     picks,
+    snapshot.placements,
   );
   ctx.reloadConfig(origin);
-  for (const p of SETTING_PROJECTIONS)
-    ctx.sessionState.clear(sid, p.sessionKey);
+  for (const key of [
+    ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
+    ...snapshot.placements.map((p) => p.key),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.dlog(
     "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`)].join(" ")} → ${file} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${file} (session=${sid})`,
   );
 };
 
@@ -735,6 +781,31 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
+// The session keys holding unsaved values of every placement an edit ended:
+// a draft slot of a (preset, id) the config held before the edit and no longer
+// holds after it. Measured over every preset, since a row can be shared — an
+// edit made in one preset's layout can end a placement another renders.
+// [LAW:dataflow-not-control-flow] No branch on the op: an insertion ends
+// nothing, and the comparison says so.
+function endedDrafts(before: DslConfig, after: DslConfig): readonly string[] {
+  const placed = (config: DslConfig, preset: string) =>
+    [...walkNodes(presetRoot(config, preset).node)].filter(
+      (n): n is SegmentNode => n.kind === "segment",
+    );
+  const survivors = new Set(
+    presetNames(after.presets).flatMap((preset) =>
+      placed(after, preset).map((n) => `${preset}\0${placementId(n)}`),
+    ),
+  );
+  return presetNames(before.presets).flatMap((preset) =>
+    placed(before, preset).flatMap((n) =>
+      survivors.has(`${preset}\0${placementId(n)}`)
+        ? []
+        : Object.values(n.drafts ?? {}).map((slot) => slot.key),
+    ),
+  );
+}
+
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -765,12 +836,23 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
+  const before = ctx.configFor(origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
+  // A removed placement's unsaved values end with it: a later placement that
+  // takes its id is a new instance, and must not inherit them. Measured on the
+  // file as it now reads, and released in the same click, so its undo brings
+  // the placement and its drafts back.
+  ctx.reloadConfig(origin);
+  // The unsaved values the edit discards — the fact its log line carries.
+  const released = endedDrafts(before, ctx.configFor(origin)).filter(
+    (draftKey) => ctx.sessionState.get(sid, draftKey) !== null,
+  );
+  for (const draftKey of released) ctx.sessionState.clear(sid, draftKey);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${file} placed=${JSON.stringify(placed)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${file} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
 };
 

@@ -63,7 +63,7 @@ import {
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { effectivePresetName, presetNames } from "../src/config/presets";
@@ -640,7 +640,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     const rt = rig(`{}`);
     openCarousel(rt, "preset");
     const outside = previewLabels(rt.render());
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     rt.sessionState.set(SID, EDIT_LIVE_KEY, "open");
     const rendered = rt.render();
     // Edit mode is on: its chrome is on the bar the preview describes.
@@ -652,7 +652,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
   test("in edit mode's names view the preview draws every placed segment, shown or not", () => {
     const rt = rig(`{}`);
     openCarousel(rt, "preset");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Every segment the default preset places, in order: the labels stand in
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
@@ -667,7 +667,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
   test("in the names view a placement with its own id stands for its segment", () => {
     const rt = rig(`{ root: { rows: { status: { h: ['model', { seg: 'model', id: 'model-2' }] } } } }`);
     openCarousel(rt, "preset");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const rendered = rt.render();
     expect(stripAnsi(rendered)).not.toContain("⚠");
     expect(previewLabels(rendered)[1]).toEqual(["model", "model"]);

@@ -38,13 +38,35 @@ import {
 } from "../disclosure.js";
 import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 
-// [LAW:single-enforcer] The SessionState key edit mode's on/off state lives
-// at, and the toggle action's identity member. Both edit-chrome.ts (every
-// synthesized affordance's `when` gate) and a hand-authored trigger segment
-// read/write these same two names — one declaration, no drift.
+// [LAW:single-enforcer] The SessionState key edit mode's state lives at, and
+// the toggle action's identity member. Both edit-chrome.ts (every synthesized
+// affordance's `when` gate) and a hand-authored trigger segment read/write
+// these same names — one declaration, no drift.
+//
+// [LAW:types-are-the-program] ONE key holds which edit mode is on
+// (brandon-segment-settings-i4n.g64): `closed`, `arrange` (the +/- chrome), or
+// `configure:<id>` (one placement's settings). Configuring two placements at
+// once, or configuring while arranging, is a second value this key would have
+// to hold at the same time — unrepresentable, with nothing to check.
 export const EDIT_MODE_KEY = "edit.mode";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
-export const EDIT_MODE_OPEN = "open";
+export const EDIT_MODE_ARRANGE = "arrange";
+
+// The namespace every placement's unsaved setting value lives under, as a
+// session key and as a variable. No scalar is declared at `edit.draft`, so
+// nothing under it can be shadowed by one — as a preset named `mode` would
+// shadow `edit.mode.…` beside edit mode's own state.
+export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+
+// The member that configures the placement `id` in the layout of the preset
+// whose ident is `presetIdent` — an id is unique only within one preset's
+// tree, so switching presets never carries configure mode onto a different
+// placement that shares the id. Neither part holds a `:` (an ident is
+// `[A-Za-z0-9_]`, and the loader refuses one in an id), so the member names
+// exactly one placement.
+export function configureMember(presetIdent: string, id: string): string {
+  return `configure:${presetIdent}:${id}`;
+}
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
 // always been: a binary toggle over one SessionState key. Naming it as a ref
@@ -53,7 +75,7 @@ export const EDIT_MODE_OPEN = "open";
 export const EDIT_MODE_REF: DisclosureRef = {
   variable: EDIT_MODE_KEY,
   key: EDIT_MODE_KEY,
-  member: EDIT_MODE_OPEN,
+  member: EDIT_MODE_ARRANGE,
 };
 
 // [LAW:one-source-of-truth] The predicate every synthesized +/- chrome
@@ -111,7 +133,10 @@ export function synthesizeEditModeToggle(
     [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
   };
   const actions: Record<string, ActionDecl> = {
-    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(EDIT_MODE_KEY, EDIT_MODE_OPEN),
+    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+      EDIT_MODE_KEY,
+      EDIT_MODE_ARRANGE,
+    ),
   };
   out.variables = { ...(out.variables ?? {}), ...variables };
   out.actions = { ...(out.actions ?? {}), ...actions };

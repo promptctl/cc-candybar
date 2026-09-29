@@ -74,7 +74,7 @@ import { RenderCache } from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
 import {
   EDIT_MODE_KEY,
-  EDIT_MODE_OPEN,
+  EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
@@ -842,7 +842,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
     // The banner is edit chrome: visible only with edit mode open AND the
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
-    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
@@ -894,7 +894,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
   function renderGated(config: ReturnType<typeof buildConfig>): string {
     const store = new VariableStore();
     const sessionState = new SessionState();
-    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(store, "", undefined, sessionState);

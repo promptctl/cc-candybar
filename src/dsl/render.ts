@@ -23,7 +23,7 @@ import type {
   SettingValue,
   SourceDefault,
 } from "../config/dsl-types.js";
-import { parseArm } from "../config/dsl-types.js";
+import { parseArm, parseSettingSpelling } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
@@ -665,11 +665,29 @@ export function registerDslConfig(
   // [LAW:parse-dont-validate] A placement's settings, resolved once against
   // its segment's declaration: the loader proved every value it sets is
   // declared and in its domain, so resolution is a fill of the defaults.
+  // [LAW:one-source-of-truth] A setting configure mode can change reads
+  // through its draft variable (SegmentNode.drafts), whose default IS the
+  // value filled here — so the render shows a session's unsaved pick the
+  // moment it lands, and the file's value while there is none. A pick the
+  // declaration no longer admits parses to nothing and reads as no pick.
+  const store = registry.variableStore;
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
     const declared = config.segments[node.name]?.settings ?? {};
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(declared)) {
-      out[name] = node.settings?.[name] ?? decl.default;
+      const saved = node.settings?.[name] ?? decl.default;
+      const draft = node.drafts?.[name];
+      Object.defineProperty(out, name, {
+        enumerable: true,
+        get:
+          draft === undefined
+            ? () => saved
+            : () =>
+                parseSettingSpelling(
+                  decl,
+                  String(store.read(draft.variable)),
+                ) ?? saved,
+      });
     }
     return Object.freeze(out);
   };

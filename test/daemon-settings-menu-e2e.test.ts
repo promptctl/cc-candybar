@@ -79,7 +79,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       //    closes the menu: the inline tray hid the door's row, so the row's
       //    edit chrome is on screen the moment edit mode is — no close click.
       const bodyOut = await render(sockPath, SID, projectDir);
-      await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "open"));
+      await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
       const editing = await render(sockPath, SID, projectDir);
       expect(stripAnsi(editing)).toContain(DOOR_GLYPH);
       // The menu closed with the same click: its body is gone. (`✎ done`

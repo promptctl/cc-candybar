@@ -234,7 +234,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
       const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
-      rig.sessionState.set(SID, EDIT_MODE_KEY, "open");
+      rig.sessionState.set(SID, EDIT_MODE_KEY, "arrange");
       return rig;
     };
 

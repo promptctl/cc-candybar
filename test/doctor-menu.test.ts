@@ -20,9 +20,9 @@ import {
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
@@ -131,8 +131,8 @@ function buildRuntime(tmux: TmuxHint | null) {
     click(url);
   };
   const openTools = (): void => {
-    clickWriting(SETTINGS_ANCHOR, EDIT_MODE_OPEN);
-    clickWriting(TOOLS_KEY, EDIT_MODE_OPEN);
+    clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    clickWriting(TOOLS_KEY, SETTINGS_OPEN);
   };
   const dispose = (): void => disposers.forEach((d) => d());
   return {

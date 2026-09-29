@@ -40,6 +40,7 @@ import type {
   PresetDecl,
   Root,
   RootFragment,
+  SettingValue,
   ValidatedConfig,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
@@ -56,6 +57,7 @@ import {
   removeSegmentRef,
   restagesFragment,
   rowEntriesOf,
+  setPlacementSetting,
   setValue,
   type Node,
 } from "../config/json5-edit.js";
@@ -515,8 +517,27 @@ export function writeValues(
   file: string,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
+  writeDrafts(store, file, pairs, []);
+}
+
+// One placement's setting as a save writes it: the value, and the placement
+// `id` in the layout `preset` renders that holds it.
+export interface PlacementValue {
+  readonly preset: string;
+  readonly id: string;
+  readonly setting: string;
+  readonly value: SettingValue;
+}
+
+/** `save`'s write: every value key and every placement setting, as ONE tracked write. */
+export function writeDrafts(
+  store: EditStore,
+  file: string,
+  pairs: ReadonlyArray<readonly [key: string, raw: string]>,
+  placements: readonly PlacementValue[],
+): void {
   const before = readConfigText(file);
-  const after = pairs.reduce(
+  const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
         text,
@@ -526,7 +547,72 @@ export function writeValues(
       ),
     before ?? "",
   );
-  commit(store, file, before, after);
+  commit(
+    store,
+    file,
+    before,
+    withPlacements(valued, file, placements, (text) => text),
+  );
+}
+
+// Every placement value laid into `text`, each inside its placement in the row
+// of its preset's layout that holds it — the row materialized first when the
+// file inherits it, as a structural edit's is. `own` runs first, and decides
+// which layer that row is in: a save leaves it where the preset renders it
+// from; save-as-preset moves it into the new preset (ownRow).
+// [LAW:no-silent-failure] A placement no row holds is the stale click's loud
+// error, never a value written somewhere plausible.
+function withPlacements(
+  text: string,
+  file: string,
+  placements: readonly PlacementValue[],
+  own: (text: string, preset: string, id: string) => string,
+): string {
+  return placements.reduce((prior, { preset, id, setting, value }) => {
+    const acc = own(prior, preset, id);
+    const placement = layoutPlacementOf(docOf(acc), preset, id);
+    const set = setPlacementSetting(
+      ensureAuthored(acc, placement),
+      placement.path,
+      id,
+      setting,
+      json5Text(value),
+    );
+    if (set === null) {
+      throw new BadVerbArgs(
+        `${placement.path.join(".")} in ${file} has no placement "${id}" — the bar you clicked is stale (it reloads on the next render)`,
+      );
+    }
+    return set;
+  }, text);
+}
+
+// The row holding `id` in `preset`'s layout, copied into the preset's OWN root
+// when a layer other presets share supplies it — the file's `root` or a
+// bundled row — so a value written into it is this preset's alone. A named
+// row lands at `rows.<row>`, the unit the by-name cascade replaces; a whole
+// tree replaces the preset's root outright.
+// [LAW:no-silent-failure] A tree under a preset that already stages its own
+// rows cannot be copied without discarding them: refused, never clobbered.
+function ownRow(text: string, preset: string, id: string): string {
+  const doc = docOf(text);
+  const own: ConfigPath = ["presets", preset, "root"];
+  for (const [row, { path, unit, node }] of cascadeOf(doc, preset)) {
+    if (!hasSegmentRef(node, id)) continue;
+    if (own.every((key, i) => path[i] === key)) return text;
+    const rowText =
+      unit === null ? movableTextOf(text, node) : json5Text(unit.value);
+    if (row !== TREE_BLOCK) {
+      return setValue(text, [...own, "rows", row], rowText, JSON5_DIALECT);
+    }
+    if (presetLayer(doc, preset) !== null) {
+      throw new BadVerbArgs(
+        `cannot give preset "${preset}" its own copy of ${path.join(".")}: it already stages rows of its own over that tree`,
+      );
+    }
+    return setValue(text, own, rowText, JSON5_DIALECT);
+  }
+  return text;
 }
 
 // [LAW:one-source-of-truth] A preset the user authored is declared by its
@@ -598,6 +684,7 @@ export function writePreset(
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
+  placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
   const before = readConfigText(file);
   const doc = docOf(before ?? "");
@@ -630,7 +717,15 @@ export function writePreset(
     (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
     setValue(before ?? "", own, "{}", JSON5_DIALECT),
   );
-  commit(store, file, before, after);
+  // The placements the session configured, each in a row the new preset
+  // owns — never in a layer the preset it was copied from renders too.
+  const placed = withPlacements(
+    after,
+    file,
+    placements.map((p) => ({ ...p, preset: name })),
+    ownRow,
+  );
+  commit(store, file, before, placed);
   return name;
 }
 

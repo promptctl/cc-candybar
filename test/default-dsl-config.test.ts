@@ -40,7 +40,7 @@ import {
 import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
@@ -1446,7 +1446,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   const freshSession = (key: string, preset: string): string | null =>
     key === "preset" ? preset : null;
   const editingSession = (key: string, preset: string): string | null =>
-    key === EDIT_MODE_KEY ? EDIT_MODE_OPEN : freshSession(key, preset);
+    key === EDIT_MODE_KEY ? EDIT_MODE_ARRANGE : freshSession(key, preset);
 
   function renderPreset(
     name: string,

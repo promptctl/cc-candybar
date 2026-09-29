@@ -12,10 +12,19 @@
 // list it returns, computed at click time over the same session and config,
 // so the button's count and the click's write cannot describe different sets.
 
-import type { DslConfig, Globals } from "../config/dsl-types.js";
+import {
+  parseSettingSpelling,
+  placementId,
+  settingSpelling,
+  walkNodes,
+  type DslConfig,
+  type Globals,
+  type SettingDecl,
+  type SettingValue,
+} from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
-import { presetByName } from "../config/presets.js";
+import { presetByName, presetRoot } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -142,6 +151,80 @@ export function settingDrafts(
   );
 }
 
+// ─── A placement's settings (brandon-segment-settings-i4n.g64) ─────────────
+
+// One placement setting the session renders differently from the file: the
+// value configure mode's control wrote, and where a save puts it — the
+// placement `id` in the layout `preset` renders.
+export interface PlacementDraft {
+  readonly preset: string;
+  readonly id: string;
+  readonly setting: string;
+  // The session key the value is held at — what a save releases.
+  readonly key: string;
+  readonly value: SettingValue;
+}
+
+// Every placement setting the session holds a pick for that differs from the
+// value the file gives that placement, in the preset the session renders — a
+// pick in another preset is one the render ignores, so it is no draft. A pick
+// the declaration no longer admits parses to nothing, and is no draft either:
+// the render shows the file's value for it.
+export function placementDrafts(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): readonly PlacementDraft[] {
+  const { preset } = sessionGlobals(config, sessionPick);
+  return slotsOf(config, preset).flatMap(
+    ({ id, setting, key, decl, saved }) => {
+      const pick = sessionPick(key);
+      const value =
+        pick === null ? undefined : parseSettingSpelling(decl, pick);
+      return value === undefined ||
+        settingSpelling(value) === settingSpelling(saved)
+        ? []
+        : [{ preset, id, setting, key, value }];
+    },
+  );
+}
+
+// Every draft slot in one preset's layout, with what the file gives it. A
+// fact of the config alone, which never changes under a config object — so
+// it is read once per (config, preset), and a render's count reads only the
+// session. [LAW:one-source-of-truth] Derived from the compiled tree, never
+// stored beside it: the memo is keyed by the config it was derived from.
+interface DraftSlotFact {
+  readonly id: string;
+  readonly setting: string;
+  readonly key: string;
+  readonly decl: SettingDecl;
+  readonly saved: SettingValue;
+}
+const SLOTS = new WeakMap<DslConfig, Map<string, readonly DraftSlotFact[]>>();
+function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
+  const byPreset = SLOTS.get(config) ?? new Map();
+  SLOTS.set(config, byPreset);
+  const known = byPreset.get(preset);
+  if (known !== undefined) return known;
+  const slots = [...walkNodes(presetRoot(config, preset).node)].flatMap(
+    (node) =>
+      node.kind !== "segment" || node.drafts === undefined
+        ? []
+        : Object.entries(node.drafts).map(([setting, { key }]) => {
+            const decl = config.segments[node.name]!.settings![setting]!;
+            return {
+              id: placementId(node),
+              setting,
+              key,
+              decl,
+              saved: node.settings?.[setting] ?? decl.default,
+            };
+          }),
+  );
+  byPreset.set(preset, slots);
+  return slots;
+}
+
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders, as
 // a new preset — a copy of the preset it is in (`from`: its arrangement and
 // its globals, rules included, which the writer copies) with every display
@@ -152,6 +235,7 @@ export interface PresetSnapshot {
   readonly from: string;
   readonly globals: Globals;
   readonly picks: readonly SettingDraft[];
+  readonly placements: readonly PlacementDraft[];
 }
 
 export function presetSnapshot(
@@ -175,6 +259,7 @@ export function presetSnapshot(
       () => from,
       (row) => row.configKey,
     ),
+    placements: placementDrafts(config, sessionPick),
   };
 }
 

@@ -28,7 +28,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
@@ -40,6 +40,7 @@ import {
   ADD_GLYPH,
   EDIT_LIVE_DISPLAY,
   REMOVE_GLYPH,
+  CONFIGURE_GLYPH,
 } from "../src/config/edit-chrome";
 
 const SID = "s-help";
@@ -186,7 +187,7 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
 // the bar with a panel hanging open over it.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
-  rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_OPEN);
+  rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 }
 
 // ─── 1. Identity with the corpus, not similarity ─────────────────────────────
@@ -245,10 +246,10 @@ describe("edit mode's (?)", () => {
     for (const line of EDIT_MODE_HELP) expect(reclosed).not.toContain(line);
   });
 
-  test("covers add, remove and the ↺ customized banner", () => {
+  test("covers add, remove, configure and the ↺ customized banner", () => {
     // Coverage is the checkable criterion the ticket names: each affordance
     // edit mode shows gets a line naming what clicking it does.
-    const glyphs = [ADD_GLYPH, REMOVE_GLYPH, "↺"];
+    const glyphs = [ADD_GLYPH, REMOVE_GLYPH, CONFIGURE_GLYPH, "↺"];
     for (const g of glyphs) {
       expect(EDIT_MODE_HELP.some((l) => l.startsWith(g))).toBe(true);
     }

@@ -2066,7 +2066,7 @@
             "properties": {
               "label": {
                 "type": "string",
-                "minLength": 1
+                "pattern": "^[^\\n\\r]+$"
               },
               "domain": {
                 "anyOf": [
@@ -2076,7 +2076,8 @@
                   {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[^/\\n\\r]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -2773,7 +2774,7 @@
             "properties": {
               "label": {
                 "type": "string",
-                "minLength": 1
+                "pattern": "^[^\\n\\r]+$"
               },
               "domain": {
                 "anyOf": [
@@ -2783,7 +2784,8 @@
                   {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^[^/\\n\\r]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
