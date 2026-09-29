@@ -12,8 +12,6 @@
 {
   globals: {
     palette: "dracula",               // base theme name
-    default_bg: "surface",            // fallback bg spec for segments with no bg:
-    default_fg: "foreground",         // fallback fg spec
     default_empty_value: "–",         // rendered when a segment produces nothing
     default_truncate_marker: "…",     // appended when a segment is clipped
   },

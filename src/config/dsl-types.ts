@@ -479,8 +479,6 @@ export type ValidatedConfig = DslConfig & {
 };
 
 export interface Globals {
-  readonly default_bg?: string;
-  readonly default_fg?: string;
   readonly default_empty_value?: string;
   readonly default_separator?: string;
   readonly default_truncate_marker?: string;

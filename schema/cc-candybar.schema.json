@@ -8,12 +8,6 @@
     "globals": {
       "type": "object",
       "properties": {
-        "default_bg": {
-          "type": "string"
-        },
-        "default_fg": {
-          "type": "string"
-        },
         "default_empty_value": {
           "type": "string"
         },
@@ -77,6 +71,14 @@
           "not": {
             "pattern": "^(?:❌|✕)[\\uFE0E\\uFE0F]?$"
           }
+        },
+        "default_bg": {
+          "not": {},
+          "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
+        },
+        "default_fg": {
+          "not": {},
+          "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
         }
       },
       "additionalProperties": false
@@ -1268,12 +1270,6 @@
           "globals": {
             "type": "object",
             "properties": {
-              "default_bg": {
-                "type": "string"
-              },
-              "default_fg": {
-                "type": "string"
-              },
               "default_empty_value": {
                 "type": "string"
               },
@@ -1335,6 +1331,14 @@
               "menuGlyph": {
                 "not": {},
                 "description": "not allowed here — a preset cannot change the settings menu glyph"
+              },
+              "default_bg": {
+                "not": {},
+                "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
+              },
+              "default_fg": {
+                "not": {},
+                "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
               }
             },
             "additionalProperties": false
@@ -1346,12 +1350,6 @@
     "editGlobals": {
       "type": "object",
       "properties": {
-        "default_bg": {
-          "type": "string"
-        },
-        "default_fg": {
-          "type": "string"
-        },
         "default_empty_value": {
           "type": "string"
         },
@@ -1413,6 +1411,14 @@
         "menuGlyph": {
           "not": {},
           "description": "not allowed here — the editGlobals fragment cannot change the settings menu glyph"
+        },
+        "default_bg": {
+          "not": {},
+          "description": "removed: a segment with no bg: wears the decoration tint of its place in the bar"
+        },
+        "default_fg": {
+          "not": {},
+          "description": "removed: a segment with no fg: wears text chosen for contrast against its background"
         }
       },
       "additionalProperties": false

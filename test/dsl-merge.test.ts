@@ -37,7 +37,7 @@ const vert = (...rows: string[][]): LayoutNode => ({
 // not the bundled default's specific shape. Two named rows, so a replaced
 // row's POSITION is observable.
 const DFLT: DslConfig = {
-  globals: { default_bg: "black", default_fg: "white", palette: "textual-dark" },
+  globals: { default_separator: " ", default_empty_value: "-", palette: "textual-dark" },
   variables: {
     foo: { kind: "literal", value: "default-foo" },
     bar: { kind: "literal", value: "default-bar" },
@@ -65,11 +65,11 @@ describe("mergeWithDefault", () => {
   });
 
   test("globals: shallow merge — user wins per field, others retained", () => {
-    const raw: RawDslConfig = { globals: { default_fg: "cyan" } };
+    const raw: RawDslConfig = { globals: { default_empty_value: "cyan" } };
     const out = mergeWithDefault(raw, DFLT);
     expect(out.globals).toEqual({
-      default_bg: "black", // from default
-      default_fg: "cyan", // from user
+      default_separator: " ", // from default
+      default_empty_value: "cyan", // from user
       palette: "textual-dark", // from default
     });
   });
