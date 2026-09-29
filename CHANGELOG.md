@@ -1,3 +1,10 @@
+## [1.81.1](https://github.com/promptctl/cc-candybar/compare/v1.81.0...v1.81.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **menu:** a {{ menu }}'s dropped body survives any style wrapper ([#249](https://github.com/promptctl/cc-candybar/issues/249)) ([4e147f3](https://github.com/promptctl/cc-candybar/commit/4e147f3d78d71cf57a964422bdbe3e16ac4a44a8))
+
 # [1.81.0](https://github.com/promptctl/cc-candybar/compare/v1.80.0...v1.81.0) (2026-09-28)
 
 
