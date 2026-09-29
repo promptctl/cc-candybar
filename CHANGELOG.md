@@ -1,3 +1,10 @@
+# [1.95.0](https://github.com/promptctl/cc-candybar/compare/v1.94.0...v1.95.0) (2026-09-29)
+
+
+### Features
+
+* **segments:** /compact, /model and /clear buttons, one click from the bar ([#271](https://github.com/promptctl/cc-candybar/issues/271)) ([7d8d7d6](https://github.com/promptctl/cc-candybar/commit/7d8d7d6c8c3ad9098d59c4bc11c15284ba23e770))
+
 # [1.94.0](https://github.com/promptctl/cc-candybar/compare/v1.93.0...v1.94.0) (2026-09-29)
 
 
