@@ -328,15 +328,18 @@ save must be the literal true
 ### Save as preset
 
 `{ preset: "save" }` keeps the bar your session renders as a new preset. It
-takes the first free name `custom-1`, `custom-2`, … (rename it in the file),
-copies the arrangement of the preset you are in — comments included — and
-pins in the new preset's `globals` only the settings whose value differs from
-your config file's own `globals`, drafts included. The session switches to the
-new preset and drops the picks it now holds, so the only draft left is the
-switch itself. `{ preset: "delete", name }` removes a preset your file
-declares — and `globals.preset` too when it selects that preset — but never a
-bundled one. Each click is one undo step. The settings menu puts both under
-the preset carousel; this is the same pair on a bar of your own:
+takes the first free name `custom-1`, `custom-2`, … (rename it in the file) and
+copies the preset you are in — its arrangement, comments included, and its
+`globals` — then pins over those every setting your session renders
+differently, drafts included. The session switches to the new preset and
+drops the picks it now holds, so the only draft left is the switch itself.
+`{ preset: "delete", name }` removes a preset your file declares — and
+`globals.preset` too when it selects that preset — but never a bundled one.
+Each click is one undo step. Neither click writes a file that would not load:
+copying a preset that holds a `kind: "group"` (group names are config-wide),
+or deleting one an action still targets, is refused with the loader's own
+message and changes nothing. The settings menu puts both under the preset
+carousel; this is the same pair on a bar of your own:
 
 ```json5 check:pass
 {

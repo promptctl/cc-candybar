@@ -21,6 +21,7 @@ import {
   JSON_DIALECT,
   type Dialect,
   textOf,
+  movableTextOf,
 } from "../src/config/json5-edit";
 
 // The cc-candybar config is the JSON5 consumer; every case below edits it.
@@ -222,6 +223,10 @@ describe("deleteValue", () => {
     expect(deleteValue(`{ globals: {}, segments: { directory: { palette: "nord" } } }`, ["segments", "directory", "palette"])).toBe(`{ globals: {} }`);
     expect(deleteValue(`{ presets: { compact: { root: { h: [] }, globals: { padding: 0 } } } }`, ["presets", "compact", "root"])).toBe(`{ presets: { compact: { globals: { padding: 0 } } } }`);
     expect(deleteValue(`{ a: 1 }`, ["a"])).toBe(`{  }`);
+  });
+
+  test("`keep` stops pruning at a declaration that is one by its name alone", () => {
+    expect(deleteValue(`{ presets: { mine: { root: { h: [] } } } }`, ["presets", "mine", "root"], 2)).toBe(`{ presets: { mine: {  } } }`);
   });
 
   test("an absent path returns the text unchanged; an empty document stays empty", () => {
@@ -496,5 +501,14 @@ describe("setValue — the JSON dialect mints strict JSON", () => {
       JSON_DIALECT,
     );
     expect(JSON.parse(after)).toEqual({ env: { A: "1", X: "1" } });
+  });
+});
+
+describe("movableTextOf", () => {
+  test("the anchor line's indent comes off every line but a string's own continuation", () => {
+    const text = "{\n  a: {\n    w: 'x \\\n    y',\n    b: 1,\n  },\n}";
+    const node = nodeAt(parseDocument(text), ["a"])!;
+    expect(movableTextOf(text, node)).toBe("{\n  w: 'x \\\n    y',\n  b: 1,\n}");
+    expect(JSON5.parse(movableTextOf(text, node)).w).toBe(JSON5.parse(text).a.w);
   });
 });

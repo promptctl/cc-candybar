@@ -28,7 +28,12 @@ import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
 import { writeAtomic } from "../utils/atomic-write.js";
 import path from "node:path";
-import { RAW_DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
+import {
+  DEFAULT_DSL_CONFIG,
+  RAW_DEFAULT_DSL_CONFIG,
+} from "../config/default-dsl-config.js";
+import { loadConfigSource, validateConfig } from "../config/dsl-loader.js";
+import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
   Globals,
   LayoutNode,
@@ -38,7 +43,7 @@ import type {
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
 import {
-  deleteValue as deleteAtPath,
+  deleteValue,
   hasSegmentRef,
   insertSegmentRef,
   json5Text,
@@ -56,11 +61,13 @@ import type { LayoutOp } from "../config/layout-ops.js";
 import {
   parsePersistTarget,
   persistPath,
+  presetGlobalsKey,
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
 import type { DaemonLogger } from "./log.js";
-import { isBundledPreset } from "./bundled-presets.js";
+import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
+import { ident } from "../config/ident.js";
 
 // [LAW:types-are-the-program] Every Globals field's primitive type, keyed by
 // `keyof Globals` — TypeScript forces this map to stay total over Globals, so
@@ -449,12 +456,25 @@ export interface EditStore {
 // [LAW:one-source-of-truth] Every tracked write lands here — the file write
 // and its record in one place, so recording cannot drift from mutation. The
 // file is the truth, so it goes first.
+// [LAW:single-enforcer] THE gate on what a click may write: text the loader
+// accepts, proved by the loader itself before the file changes. A write that
+// would not load (a copied group declared twice, a preset an action still
+// targets) is refused with the loader's own diagnosis, and the file — and
+// everything the verb does after its write — stays as it was.
 function commit(
   store: EditStore,
   file: string,
   before: string | null,
   after: string,
 ): void {
+  try {
+    validateConfig(loadConfigSource(file, after, DEFAULT_DSL_CONFIG), file);
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: the config file would not load after this click — ${e.message}`,
+    );
+  }
   writeConfigText(file, after, store.logger);
   store.record(file, before, after);
 }
@@ -494,6 +514,16 @@ export function writeValues(
   commit(store, file, before, after);
 }
 
+// [LAW:one-source-of-truth] A preset the user authored is declared by its
+// name alone — `presets.mine: {}` still offers `mine` — so a reset that empties
+// it keeps the name; under a bundled name the entry is a delta, and an empty
+// one prunes so the name tracks the bundled preset again.
+function deleteAtPath(text: string, path: ConfigPath): string {
+  const ownPreset =
+    path[0] === "presets" && path.length > 2 && !isBundledPreset(path[1]!);
+  return deleteValue(text, path, ownPreset ? 2 : 0);
+}
+
 /**
  * `reset`'s write: delete the path each key names, as ONE tracked write, so
  * the next reload falls back to the bundled default (or, for a preset root,
@@ -516,34 +546,51 @@ export function deleteValues(
   commit(store, file, before, after);
 }
 
+const SAVED_PRESET_PREFIX = "custom-";
+
+// [LAW:single-enforcer] The name a saved preset takes: the first `custom-N`
+// no preset the written file will declare already holds — the bundled ones
+// and the file's own, read from the very text the write lands in — compared
+// by `ident`, the collapse the loader refuses two preset names sharing.
+function freePresetName(doc: Node | null): string {
+  const declared = doc === null ? undefined : nodeAt(doc, ["presets"]);
+  const taken = new Set(
+    [
+      ...BUNDLED_PRESETS,
+      ...(declared?.kind === "object"
+        ? declared.entries.map((e) => e.key)
+        : []),
+    ].map(ident),
+  );
+  // One more candidate than there are names, so one is always free.
+  return Array.from(
+    { length: taken.size + 1 },
+    (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`,
+  ).find((candidate) => !taken.has(ident(candidate)))!;
+}
+
 /**
- * Save as preset: declare `presets.<name>` as ONE tracked write — the root
- * `from` stages, copied as the file spells it (comments included) or as the
- * bundled preset's authored text, and each `presets.<name>.globals.<field>`
- * the snapshot pins. A preset that stages the config's own root carries no
- * root, and a preset pinning nothing is `{}`: the name alone is the
- * declaration. [LAW:no-silent-failure] A name the file already declares is
- * the stale click — the name was chosen from a config this file no longer
- * is — refused rather than overwritten.
+ * Save as preset: declare `presets.<name>` as ONE tracked write and return the
+ * name — a copy of preset `from`: the root it stages, as the file spells it
+ * (comments included) or as the bundled preset's authored text, and its
+ * `globals`; then each `presets.<name>.globals.<field>` of `picks` over them.
+ * A preset that stages the config's own root carries no root, and one with
+ * nothing to pin is `{}`: the name alone is the declaration.
  */
 export function writePreset(
   store: EditStore,
   file: string,
-  name: string,
   from: string,
-  pairs: ReadonlyArray<readonly [key: string, raw: string]>,
-): void {
+  globals: Globals,
+  picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
+): string {
   const before = readConfigText(file);
   const doc = docOf(before ?? "");
+  const name = freePresetName(doc);
   const own: ConfigPath = ["presets", name];
-  if (has(doc, own) || isBundledPreset(name)) {
-    throw new BadVerbArgs(
-      `cannot save preset "${name}": ${own.join(".")} is already declared — the bar you clicked is stale; it reloads on the next render`,
-    );
-  }
   const staged = presetLayer(doc, from);
-  const root: ReadonlyArray<readonly [ConfigPath, string]> =
-    staged === null
+  const copied: ReadonlyArray<readonly [ConfigPath, string]> = [
+    ...(staged === null
       ? []
       : [
           [
@@ -551,29 +598,34 @@ export function writePreset(
             staged.unit === null
               ? movableTextOf(before ?? "", staged.fragment)
               : json5Text(staged.unit.value),
-          ],
-        ];
-  const values = pairs.map(
-    ([key, raw]) =>
-      [
-        valuePathOf(doc, requireValueTarget(key)),
-        persistValueText(key, raw),
-      ] as const,
-  );
-  const after = [...root, ...values].reduce(
+          ] as const,
+        ]),
+    ...(Object.keys(globals).length === 0
+      ? []
+      : [[[...own, "globals"], json5Text(globals)] as const]),
+  ];
+  const pinned = picks.map(([field, raw]) => {
+    const key = presetGlobalsKey(name, field);
+    return [
+      valuePathOf(doc, requireValueTarget(key)),
+      persistValueText(key, raw),
+    ] as const;
+  });
+  const after = [...copied, ...pinned].reduce(
     (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
     setValue(before ?? "", own, "{}", JSON5_DIALECT),
   );
   commit(store, file, before, after);
+  return name;
 }
 
 /**
  * Delete a preset the file authors, as ONE tracked write — and the file's
  * `globals.preset` with it when that names it, since a default naming no
- * declared preset fails the load. [LAW:single-enforcer] The one gate on what a
- * delete may remove: never a bundled preset (the file's entry there is a
- * delta the bundled preset survives, which `reset` owns), never a name the
- * file does not declare (the stale click).
+ * declared preset fails the load. Never a bundled preset: the file's entry
+ * there is a delta the bundled preset survives, which `reset` owns. Never a
+ * name the file does not declare: the stale click. What else the file says
+ * about the preset (an action targeting it) is commit's to refuse.
  */
 export function deletePreset(
   store: EditStore,
@@ -585,23 +637,27 @@ export function deletePreset(
       `cannot delete preset "${name}": it is bundled — reset its settings instead`,
     );
   }
+  const own: ConfigPath = ["presets", name];
   const before = readConfigText(file);
   const doc = docOf(before ?? "");
-  const own: ConfigPath = ["presets", name];
-  if (before === null || !has(doc, own)) {
+  if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": ${file} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
   }
-  const selected =
-    doc === null ? undefined : nodeAt(doc, ["globals", "preset"]);
+  const selected = nodeAt(doc, ["globals", "preset"]);
   const paths: readonly ConfigPath[] = [
     own,
     ...(selected?.kind === "string" && selected.value === name
       ? [["globals", "preset"]]
       : []),
   ];
-  commit(store, file, before, paths.reduce(deleteAtPath, before));
+  commit(
+    store,
+    file,
+    before,
+    paths.reduce((text, at) => deleteAtPath(text, at), before),
+  );
 }
 
 /**

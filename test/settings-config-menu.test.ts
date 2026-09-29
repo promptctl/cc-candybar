@@ -847,7 +847,7 @@ describe("save as preset", () => {
     expect(out).toContain("◀ custom-1 ▶");
     expect(out).toContain("💾 save 1");
     expect(r.logs).toContainEqual(
-      `save-preset: custom-1 from=narrow presets.custom-1.globals.palette=dracula presets.custom-1.globals.look=dim → ${durable.configPath} (session=${SID})`,
+      `save-preset: custom-1 from=narrow palette=dracula look=dim → ${durable.configPath} (session=${SID})`,
     );
   });
 
@@ -929,6 +929,65 @@ describe("save as preset", () => {
     r.click(link("🗑 delete mine")!);
     expect(durable.parsed()).toEqual({});
     expect(effective().preset).toBe("default");
+  });
+
+  // [LAW:single-enforcer] Every write is proved to load before it lands, so a
+  // click that would break the file changes nothing — not the file, not the
+  // session's picks.
+  test("a preset holding a group cannot be copied — group names are config-wide — and nothing changes", () => {
+    const source = `{
+  segments: { mine: { template: 'mine' } },
+  presets: {
+    grouped: { root: { h: [{ kind: 'group', name: 'extra', label: 'x', children: ['mine'] }] } },
+  },
+}`;
+    start(source, { preset: "grouped", theme: "dracula" });
+    expect(() => r.click(link("⊕ save as preset")!)).toThrow(
+      /would not load after this click[\s\S]*extra/,
+    );
+    expect(durable.text()).toBe(source);
+    expect(["preset", "theme"].map((k) => r.sessionState.get(SID, k))).toEqual([
+      "grouped",
+      "dracula",
+    ]);
+  });
+
+  test("a preset an action targets is not deleted out from under it", () => {
+    const source = `{
+  actions: { resetMine: { reset: 'presets.mine.root' } },
+  presets: { mine: { globals: { padding: 4 } } },
+}`;
+    start(source, { preset: "mine" });
+    expect(() => r.click(link("🗑 delete mine")!)).toThrow(
+      /would not load after this click[\s\S]*resetMine/,
+    );
+    expect(durable.text()).toBe(source);
+    expect(r.sessionState.get(SID, "preset")).toBe("mine");
+  });
+
+  test("the name skips one the file holds under the loader's identifier collapse", () => {
+    const source = `{
+  presets: { custom_1: {} },
+}`;
+    start(source, { preset: "custom_1", theme: "dracula" });
+    r.click(link("⊕ save as preset")!);
+    expect(Object.keys(durable.parsed().presets as object)).toEqual([
+      "custom_1",
+      "custom-2",
+    ]);
+    expect(effective().preset).toBe("custom-2");
+  });
+
+  test("the copy keeps the preset's own globals — those no picker spells too — under the picks", () => {
+    const source = `{
+  presets: { spaced: { globals: { palette: 'nord', default_separator: ' | ' } } },
+}`;
+    start(source, { preset: "spaced", look: "dim" });
+    r.click(link("⊕ save as preset")!);
+    const presets = durable.parsed().presets as Record<string, unknown>;
+    expect(presets["custom-1"]).toEqual({
+      globals: { palette: "nord", default_separator: " | ", look: "dim" },
+    });
   });
 });
 

@@ -45,7 +45,7 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
-import type { DslConfig } from "../../config/dsl-types";
+import type { DslConfig, Globals } from "../../config/dsl-types";
 import { presetSnapshot, resetLayers, settingDrafts } from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
@@ -599,20 +599,26 @@ const savePreset: VerbHandler = (value, ctx) => {
   const snapshot = presetSnapshot(ctx.configFor(origin), (key) =>
     ctx.sessionState.get(sid, key),
   );
-  const pairs = snapshot.globals.map((d): readonly [string, string] => {
+  const picks = snapshot.picks.map((d): readonly [keyof Globals, string] => {
     const result = validateStateWrite(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
-    return [d.target, result.value];
+    return [d.configKey, result.value];
   });
   const file = originConfigFile(origin);
-  writePreset(editStore(ctx, sid), file, snapshot.name, snapshot.from, pairs);
+  const name = writePreset(
+    editStore(ctx, sid),
+    file,
+    snapshot.from,
+    snapshot.globals,
+    picks,
+  );
   ctx.reloadConfig(origin);
   for (const p of SETTING_PROJECTIONS)
     ctx.sessionState.clear(sid, p.sessionKey);
-  ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, snapshot.name);
+  ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.dlog(
     "info",
-    `save-preset: ${[`${snapshot.name} from=${snapshot.from}`, ...pairs.map(([k, v]) => `${k}=${v}`)].join(" ")} → ${file} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`)].join(" ")} → ${file} (session=${sid})`,
   );
 };
 

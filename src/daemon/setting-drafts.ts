@@ -12,10 +12,10 @@
 // list it returns, computed at click time over the same session and config,
 // so the button's count and the click's write cannot describe different sets.
 
-import type { DslConfig } from "../config/dsl-types.js";
+import type { DslConfig, Globals } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
-import { presetByName, presetNames } from "../config/presets.js";
+import { presetByName } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -130,46 +130,37 @@ export function settingDrafts(
 }
 
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders, as
-// a new preset. It takes the first free `custom-N` — the bar has no text
-// input, and a name is renamed in the file — stages the arrangement of the
-// preset the session is in (`from`), and pins every display setting whose
-// value differs from what a preset naming none would render with: a preset's
-// globals are a delta over the config's, exactly as the bundled presets'
-// are. Drafts are included — the session's picks are what it renders.
+// a new preset — a copy of the preset it is in (`from`: its arrangement and
+// its globals, rules included, which the writer copies) with every display
+// setting the session picked differently laid over it. Drafts are included:
+// the session's picks are what it renders. The name is the writer's to
+// choose, from the file it writes.
 export interface PresetSnapshot {
-  readonly name: string;
   readonly from: string;
-  readonly globals: readonly SettingDraft[];
+  readonly globals: Globals;
+  readonly picks: readonly SettingDraft[];
 }
-
-export const SAVED_PRESET_PREFIX = "custom-";
 
 export function presetSnapshot(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): PresetSnapshot {
-  const taken = new Set(presetNames(config.presets));
-  // One more candidate than there are names, so one is always free.
-  const name = Array.from(
-    { length: taken.size + 1 },
-    (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`,
-  ).find((candidate) => !taken.has(candidate))!;
   const session = sessionGlobals(config, sessionPick);
-  const bare = resolveEffectiveGlobals(
-    { ...config, presets: { ...config.presets, [name]: {} } },
-    (key) => (key === SETTINGS.preset.sessionKey ? name : null),
+  const from = resolveEffectiveGlobals(
+    config,
+    (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
     NOT_CUSTOMIZED,
   );
   return {
-    name,
     from: session.preset,
+    globals: presetByName(config.presets, session.preset).globals ?? {},
     // [LAW:types-are-the-program] A preset cannot select a preset: its
     // globals schema refuses `preset`, so the row is not offered.
-    globals: differing(
+    picks: differing(
       SETTING_ROWS.filter(([n]) => n !== "preset"),
       session,
-      () => bare,
-      (row) => presetGlobalsKey(name, row.configKey),
+      () => from,
+      (row) => row.configKey,
     ),
   };
 }

@@ -697,7 +697,8 @@ describe("apply-layout-op click → the config file", () => {
     render();
     const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
     click(resetUrl);
-    expect(durable.parsed().presets).toBeUndefined();
+    // The preset the user authored keeps its name: the action still targets it.
+    expect(durable.parsed().presets).toEqual({ mine: {} });
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(durable.history().past).toHaveLength(1);
     dispose();

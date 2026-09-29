@@ -140,8 +140,38 @@ export function loadConfig(
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
-  const loaded =
-    path === null ? NO_FILE : readParsed(path, dflt, allowedPalettes);
+  return path === null
+    ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) }
+    : loadConfigSource(
+        path,
+        fs.readFileSync(path, "utf-8"),
+        dflt,
+        allowedPalettes,
+      );
+}
+
+/**
+ * loadConfig over text already in hand — the file as it WOULD read, for a
+ * writer that must know its text loads before it lands (config-file-store's
+ * commit). `path` names the text in diagnostics only.
+ */
+export function loadConfigSource(
+  path: string,
+  source: string,
+  dflt: DslConfig,
+  allowedPalettes?: ReadonlySet<string>,
+): LoadedFile & { config: DslConfig } {
+  // [LAW:one-source-of-truth] The names a file may author as a delta are the
+  // segments of the very default the merge lays the file over.
+  const loaded: LoadedFile = {
+    source,
+    ...parseDslFile(
+      path,
+      source,
+      allowedPalettes,
+      inheritableSegmentNames(dflt),
+    ),
+  };
   return { ...loaded, config: mergeWithDefault(loaded.raw, dflt) };
 }
 
@@ -175,25 +205,6 @@ export function unauthored(config: DslConfig): AuthoredConfig {
 // "No user file exists": a uniform merge against an empty raw, no text, no
 // advisories to earn.
 const NO_FILE: LoadedFile = { raw: {}, source: "", warnings: [] };
-
-function readParsed(
-  path: string,
-  dflt: DslConfig,
-  allowedPalettes: ReadonlySet<string> | undefined,
-): LoadedFile {
-  const source = fs.readFileSync(path, "utf-8");
-  // [LAW:one-source-of-truth] The names a file may author as a delta are the
-  // segments of the very default the merge lays the file over.
-  return {
-    source,
-    ...parseDslFile(
-      path,
-      source,
-      allowedPalettes,
-      inheritableSegmentNames(dflt),
-    ),
-  };
-}
 
 /**
  * Promote a merged DslConfig to a ValidatedConfig by running cross-references
