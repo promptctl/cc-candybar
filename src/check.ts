@@ -48,6 +48,8 @@ import {
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
 import {
   effectiveInputs,
+  renderOptionsOf,
+  renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./daemon/render-payload.js";
@@ -378,15 +380,7 @@ export function renderEffective(
     store,
     registry,
     checkPayload(effective),
-    {
-      style: effective.style,
-      separator: effective.separator,
-      width,
-      colorCompatibility: effective.colorCompatibility,
-      wrap: effective.autoWrap,
-      padding: effective.padding,
-      charset: effective.charset,
-    },
+    renderOptionsOf(effective, width),
     {
       onSegmentError: (segName: string, message: string) =>
         failures.set(`segment "${segName}"`, message),
@@ -398,12 +392,7 @@ export function renderEffective(
       onRenderWarning: (message: string) =>
         failures.set("globals.palette", message),
     },
-    {
-      theme: effective.theme,
-      look: effective.look,
-      preset: effective.preset,
-      progression: effective.progression,
-    },
+    renderSelectionOf(effective),
   );
   return { rendered, failures };
 }

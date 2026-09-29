@@ -94,6 +94,8 @@ import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
 import {
   buildRenderPayload,
+  renderOptionsOf,
+  renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./render-payload.js";
@@ -985,7 +987,6 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const rowCap = diagnosticRowCap(hints.termRows);
-      const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] One composition every render: the
       // entry always holds a renderable state (the bundled default until a
       // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
@@ -1028,18 +1029,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // saying why, which is this repo's answer everywhere else that a render can
       // proceed but an author needs to know.
       const renderWarnings: string[] = [];
-      // [LAW:one-source-of-truth] Every renderOpts field below reuses the
-      // SAME `effective` struct the payload was just built from — no second
-      // `?? DEFAULT_X` computation to drift from it.
-      renderOpts.style = effective.style;
-      // The `plain` joiner's cell separator. Assigned unconditionally like
-      // every field around it: `undefined` is a value pickJoiner already
-      // reads as "PlainJoiner's own default", not an absence to branch on.
-      renderOpts.separator = effective.separator;
-      renderOpts.wrap = effective.autoWrap;
-      renderOpts.padding = effective.padding;
-      renderOpts.charset = effective.charset;
-      renderOpts.colorCompatibility = effective.colorCompatibility;
+      // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
+      // `effective` struct the payload was just built from, projected by the one
+      // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
+      // computation to drift from it.
+      const renderOpts = renderOptionsOf(effective, width);
       // [LAW:single-enforcer] renderDsl internally calls
       // `registry.applyInput(payload)` as its first step (see step 1 in
       // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -1062,16 +1056,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           perSegmentSink: entry.state.lastRenderCellsBySegment,
           onRenderWarning: (message: string) => renderWarnings.push(message),
         },
-        {
-          // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
-          // and name together, so renderDsl publishes the `theme.effective` the
-          // bar was actually painted from. No separate basePalette argument: one
-          // would be a second clock free to disagree with that name.
-          theme: effective.theme,
-          look: effective.look,
-          preset: effective.preset,
-          progression: effective.progression,
-        },
+        // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
+        // and name together, so renderDsl publishes the `theme.effective` the
+        // bar was actually painted from. No separate basePalette argument: one
+        // would be a second clock free to disagree with that name.
+        renderSelectionOf(effective),
       );
       // [LAW:one-source-of-truth] Consume the transient click error written by
       // dispatch on partial/total effect failure, then clear it so it shows

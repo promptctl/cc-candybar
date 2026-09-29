@@ -22,6 +22,8 @@ import os from "node:os";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, Globals, VariableDecl } from "../config/dsl-types.js";
+import type { BuildLineOptions } from "../render/strip.js";
+import type { RenderSelection } from "../dsl/render.js";
 import {
   effectivePresetName,
   presetGlobals,
@@ -224,6 +226,38 @@ export function resolveEffectiveGlobals(
       sessionPick("colorCompatibility"),
       globals.colorCompatibility,
     ),
+  };
+}
+
+// The resolved globals as the two arguments renderDsl draws with: the options
+// its joiner and cells read, and the selection it finishes (theme, look, preset,
+// progression). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
+// the demo all project THROUGH these, so a field added to EffectiveGlobals
+// reaches every renderer at once and no caller can leave one out — a hand copy
+// of this projection had already dropped `separator` (brandon-menu-ia-zyf).
+export function renderOptionsOf(
+  effective: EffectiveGlobals,
+  width: number,
+): BuildLineOptions {
+  return {
+    style: effective.style,
+    separator: effective.separator,
+    colorCompatibility: effective.colorCompatibility,
+    wrap: effective.autoWrap,
+    padding: effective.padding,
+    charset: effective.charset,
+    width,
+  };
+}
+
+export function renderSelectionOf(
+  effective: EffectiveGlobals,
+): RenderSelection {
+  return {
+    theme: effective.theme,
+    look: effective.look,
+    preset: effective.preset,
+    progression: effective.progression,
   };
 }
 

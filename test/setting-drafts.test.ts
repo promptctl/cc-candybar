@@ -14,6 +14,12 @@ import { presetGlobals } from "../src/config/presets";
 import { settingDrafts } from "../src/daemon/setting-drafts";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { SETTINGS } from "../src/config/setting-projections";
+import { writeValues } from "../src/daemon/config-file-store";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import JSON5 from "json5";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
@@ -116,4 +122,70 @@ describe("a preset's globals as a write target", () => {
       style: "plain",
     });
   });
+});
+
+// ─── A save under a preset that pins the field (brandon-menu-ia-zyf) ────────
+//
+// A user preset pinning a display global shadows the file's top-level value,
+// so a save written to top-level `globals` would change nothing the bar shows.
+// Measured for EVERY setting, both ways a preset becomes active (the file
+// names it, or the session picks it): the drafts are written through the real
+// `writeValues`, the file is read back, and the file alone must now resolve to
+// what the session rendered — no draft left over. Keyed by setting name, so a
+// new setting is a compile error here until it has a row.
+type PinnedSetting = Exclude<keyof typeof SETTINGS, "preset">;
+const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
+  theme: { pin: "'nord'", pick: "gruvbox" },
+  look: { pin: "'dim'", pick: "vivid" },
+  style: { pin: "'capsule'", pick: "plain" },
+  progression: { pin: "'primary'", pick: "primary-secondary" },
+  charset: { pin: "'ascii'", pick: "unicode" },
+  colorCompatibility: { pin: "'256'", pick: "ansi" },
+  autoWrap: { pin: "false", pick: "true" },
+  padding: { pin: "3", pick: "2" },
+};
+
+describe("a save under a preset that pins the field lands where it renders", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "cc-candybar-drafts-pin-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const save = (source: string, p: Record<string, string>) => {
+    const file = join(dir, "config.json5");
+    writeFileSync(file, source);
+    const before = drafts(source, p);
+    writeValues(
+      { record: () => {}, logger: () => {} },
+      file,
+      before.map(({ target, value }) => [target, value] as const),
+    );
+    const after = readFileSync(file, "utf8");
+    return { before, after, left: drafts(after, p) };
+  };
+
+  test.each(Object.entries(PIN_AND_PICK) as [PinnedSetting, { pin: string; pick: string }][])(
+    "%s",
+    (name, { pin, pick }) => {
+      const { configKey, sessionKey } = SETTINGS[name];
+      const target = `presets.mine.globals.${configKey}`;
+      const preset = `presets: { mine: { globals: { ${configKey}: ${pin} } } }`;
+
+      // The file names the preset: only the field is a draft.
+      const named = save(`{ globals: { preset: 'mine' }, ${preset} }`, {
+        [sessionKey]: pick,
+      });
+      expect(named.before).toEqual([{ sessionKey, value: pick, target }]);
+      expect(named.left).toEqual([]);
+      expect(JSON5.parse(named.after).globals).not.toHaveProperty(configKey);
+
+      // The session picks the preset: it saves too, and the field still lands
+      // in the preset the file will now name (the `landed` resolution).
+      const picked = save(`{ ${preset} }`, { preset: "mine", [sessionKey]: pick });
+      expect(picked.before).toContainEqual({ sessionKey, value: pick, target });
+      expect(picked.left).toEqual([]);
+      expect(JSON5.parse(picked.after).globals).toEqual({ preset: "mine" });
+    },
+  );
 });
