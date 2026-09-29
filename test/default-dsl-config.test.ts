@@ -138,6 +138,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "gitaculous",
         "model",
         "context",
+        // Nested with `context` as one cell unit, when-gated on memento being
+        // installed (brandon-context-ceiling-xta.asv).
+        "ceiling",
         "cacheTimer",
         "block",
         "weekly",

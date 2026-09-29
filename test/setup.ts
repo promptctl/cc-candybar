@@ -44,3 +44,16 @@ process.env.CC_CANDYBAR_SOCKET = path.join(
 // `unchecked`; the e2e test that exercises the release arm points this at a
 // local server of its own.
 process.env.CC_CANDYBAR_REGISTRY_URL = "http://127.0.0.1:1";
+
+// [LAW:single-enforcer] No test daemon finds the host's Claude Code plugins:
+// the bar's memento ceiling (src/memento/edge.ts) reads the plugin registry
+// under CLAUDE_CONFIG_DIR, and a host with memento installed would otherwise
+// put its own ceiling on every test daemon's bar. An empty directory has no
+// registry, so memento is absent. Tests that seed transcripts set their own;
+// the transcript search falls back to the home directory when this one does
+// not exist, exactly as before. test/memento-integration.test.ts finds the
+// host's memento under the home directory on purpose.
+process.env.CLAUDE_CONFIG_DIR = path.join(
+  os.tmpdir(),
+  `cc-candybar-jest-claude-${crypto.randomUUID()}`,
+);

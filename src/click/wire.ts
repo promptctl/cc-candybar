@@ -118,6 +118,12 @@ export const VERB_APPLY_UPDATE = "apply-update";
 export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
 
+// [LAW:effects-at-boundaries] Move the memento plugin's context ceiling for a
+// session. Args: `[sessionId, "set", to]` or `[sessionId, "clear"]`. The move
+// must be one the session's config declares (a `ceiling` action), and `to`
+// reaches memento's own `ceiling` command as one argv entry — never a shell.
+export const VERB_CEILING = "ceiling";
+
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.

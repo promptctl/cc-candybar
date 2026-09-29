@@ -80,7 +80,11 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_CEILING,
 } from "../../click/wire";
+import { ceilingMoveArgs, type CeilingAction } from "../../config/action";
+import type { CeilingMove } from "../../memento/edge";
+import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
 import { doctorReportPairs } from "../../doctor/report";
@@ -97,6 +101,9 @@ export interface VerbContext {
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
+  // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
+  // move that makes a reading stale is the one that drops it.
+  readonly memento: Pick<MementoProvider, "move">;
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/daemon/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
@@ -870,6 +877,43 @@ const doctorFix: VerbHandler = (value, ctx) => {
   writeReport(ctx, sid, after);
 };
 
+// ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────
+
+// [LAW:parse-dont-validate] A click's move is honoured only as one of the
+// `ceiling` actions the session's config declares: the declaration found is
+// the parsed move, so what reaches memento is what the config author wrote,
+// never text a URL made up. The session's recorded render origin supplies the
+// directories memento anchors its project layer on — the ones the bar's
+// reading was taken with.
+const ceiling: VerbHandler = (value, ctx) => {
+  const [sessionId = "", ...args] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const action = Object.values(ctx.configFor(origin).actions)
+    .filter((a): a is CeilingAction => "ceiling" in a)
+    .find((a) => {
+      const declared = ceilingMoveArgs(a);
+      return (
+        declared.length === args.length &&
+        declared.every((d, i) => d === args[i])
+      );
+    });
+  if (action === undefined) {
+    throw new BadVerbArgs(
+      `ceiling: "${args.join(" ")}" is not a move this config declares`,
+    );
+  }
+  const move: CeilingMove =
+    action.ceiling === "set"
+      ? { kind: "set", to: action.to }
+      : { kind: "clear" };
+  ctx.memento.move(
+    { sessionId: sid, projectDir: origin.projectDir, cwd: origin.cwd },
+    move,
+  );
+  ctx.dlog("info", `ceiling: ${args.join(" ")} (session=${sid})`);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -943,6 +987,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
+  [VERB_CEILING, ceiling],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -965,6 +1010,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_CEILING,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

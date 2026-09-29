@@ -50,6 +50,12 @@ export const LAUNCH_CATEGORIES = [
   // The doctor's tmux query — click-driven like the verbs above, and its own
   // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",
+  // The memento plugin's context ceiling (src/memento/edge.ts): `read` asks its
+  // own module for the ceiling in force on a render-cache miss; `move` runs its
+  // `ceiling` command on a click. Separate so daemon-stats tells a render cost
+  // from a click, and neither is rate-limited — clicks on `+` must accumulate.
+  "memento.read",
+  "memento.move",
   "install.plutil",
   "install.osacompile",
   "install.lsregister",

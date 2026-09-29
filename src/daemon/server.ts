@@ -103,6 +103,8 @@ import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
+import { MementoProvider } from "../segments/memento.js";
+import { productionMementoEdge } from "../memento/edge.js";
 import {
   collectDiagnostics,
   composeWithDiagnostics,
@@ -148,6 +150,10 @@ const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
 const activityProvider = new ActivityProvider();
 const tmuxService = new TmuxService();
+// [LAW:single-enforcer] One owner for memento's ceiling: the payload reads
+// through it and the ceiling verb moves through it, so a click drops the very
+// reading it made stale.
+const mementoProvider = new MementoProvider(productionMementoEdge());
 const renderCache = new RenderCache(
   {
     gitService,
@@ -1256,6 +1262,7 @@ const verbCtx = {
   dlog,
   applyUpdate: () => updateWatch.act(),
   doctor: productionEdge(),
+  memento: mementoProvider,
   history: settingsHistory,
   // The config a session's last render resolved from — the same entry the
   // render drew the bar with, so a save compares against the bar the user saw.
@@ -1329,6 +1336,7 @@ const payloadDeps = {
   metricsProvider,
   activityProvider,
   tmuxService,
+  mementoProvider,
   // [LAW:single-enforcer] buildRenderPayload is the one log site for the
   // outcome-carrying provider lanes (git, cache).
   log: dlog,

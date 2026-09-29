@@ -146,6 +146,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   save: markerArm("save"),
   preset: presetArm,
   doctor: doctorArm,
+  ceiling: ceilingArm,
   do: doArm,
 };
 
@@ -177,6 +178,7 @@ function actionDeclJson(): JsonNode {
       markerArmJson("save"),
       ...presetArmJson(),
       ...doctorArmJson(),
+      ...CEILING_ARM_JSON,
       DO_ARM_JSON,
     ],
   };
@@ -376,6 +378,63 @@ function doctorArm(
   }
   return { doctor: "fix", check };
 }
+
+// [LAW:types-are-the-program] `ceiling` is `"set"` with the `to` memento will
+// write, or `"clear"` alone. `to` is only proved to be text: its grammar is
+// memento's, judged by memento when the click runs, never re-spelled here.
+// `function`, not a const arrow, so ACTION_ARMS above can reference it.
+function ceilingArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  const verb = raw.ceiling;
+  const allowed = verb === "clear" ? ["ceiling"] : ["ceiling", "to"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a ceiling action. Expected only: ${allowed.join(", ")}`,
+      );
+  }
+  if (verb === "clear") return { ceiling: "clear" };
+  if (verb !== "set") {
+    issue(
+      ctx,
+      `${path}.ceiling`,
+      `ceiling must be "set" or "clear", got ${describeValue(verb)}`,
+    );
+    return null;
+  }
+  const to = raw.to;
+  if (typeof to !== "string" || to.trim() === "") {
+    issue(
+      ctx,
+      `${path}.to`,
+      `ceiling set needs \`to\`: a memento ceiling value such as "+100_000", "400000" or "off", got ${describeValue(to)}`,
+    );
+    return null;
+  }
+  return { ceiling: "set", to };
+}
+
+// [LAW:one-source-of-truth] The schema members for the two arms `ceilingArm`
+// parses.
+const CEILING_ARM_JSON: readonly JsonNode[] = [
+  {
+    type: "object",
+    properties: { ceiling: { const: "set" }, to: { type: "string" } },
+    required: ["ceiling", "to"],
+    additionalProperties: false,
+  },
+  {
+    type: "object",
+    properties: { ceiling: { const: "clear" } },
+    required: ["ceiling"],
+    additionalProperties: false,
+  },
+];
 
 // [LAW:one-source-of-truth] Two schema members for the two arms `doctorArm`
 // parses, the check enum drawn from the same CHECKS list.

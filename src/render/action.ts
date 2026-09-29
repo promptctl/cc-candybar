@@ -27,7 +27,7 @@ import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import type { ActionDecl } from "../config/action.js";
+import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type OptionPalette,
@@ -54,6 +54,7 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_CEILING,
   type Effect,
 } from "../click/wire.js";
 
@@ -202,6 +203,8 @@ export type CompiledActionDecl =
   // CHECKS at load), so the click carries only what the config declared.
   | { readonly kind: "doctor-run" }
   | { readonly kind: "doctor-fix"; readonly check: string }
+  // The memento ceiling move, compiled in from the declaration.
+  | { readonly kind: "ceiling"; readonly args: readonly string[] }
   // [LAW:composability] Several compiled actions fired by one click. `head` is
   // the one the region presents as — its display rule, its current-state mark,
   // and the value a template binds — and `rest` ride along behind it.
@@ -460,6 +463,12 @@ function compileAction(
     return action.doctor === "run"
       ? { kind: "doctor-run" }
       : { kind: "doctor-fix", check: action.check };
+  }
+  if ("ceiling" in action) {
+    return {
+      kind: "ceiling",
+      args: ceilingMoveArgs(action),
+    };
   }
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
@@ -761,6 +770,13 @@ export function realize(
     case "doctor-fix":
       return {
         effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId, c.check] }],
+        active: false,
+      };
+    // Never "active": a move is a one-shot trigger; the ceiling it leaves is
+    // what the segment's own label reads back from memento.
+    case "ceiling":
+      return {
+        effects: [{ verb: VERB_CEILING, args: [sessionId, ...c.args] }],
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see
