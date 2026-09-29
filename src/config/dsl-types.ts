@@ -31,7 +31,7 @@ import type {
   ProgressionName,
 } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
-import { FOLLOW_BAR, placementThemeNames } from "../themes/policy.js";
+import { FOLLOW_BAR, isPlacementThemeName } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -144,6 +144,9 @@ export interface SegmentNode {
 // variable a template reads it through — minted together, so a reader of the
 // key never looks the variable up to find it.
 export interface DraftSlot {
+  // The placement whose value it is. A name label carries its placement's
+  // `theme` slot too, so the node holding a slot is not always its owner.
+  readonly id: string;
   readonly key: string;
   readonly variable: string;
 }
@@ -915,7 +918,7 @@ export function inSettingDomain(
   const { domain } = decl;
   if (domain === "bool") return typeof value === "boolean";
   if (domain === "theme") {
-    return typeof value === "string" && placementThemeNames().includes(value);
+    return typeof value === "string" && isPlacementThemeName(value);
   }
   if ("min" in domain) {
     return (

@@ -174,7 +174,7 @@ function renderMenu(
             optionItemStyle(
               placement,
               options.distribution,
-              action.basePalette,
+              action,
               requireOptionKind(action, applyName, "menu").paletteOf,
               runtime.activeSegment.drawnAt(),
             ),

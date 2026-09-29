@@ -422,8 +422,19 @@ export function validateCrossReferences(
       if (node.kind !== "segment") continue;
       // [LAW:one-source-of-truth] The anchor is a position, not a declared
       // segment: synthesizeSettingsMenu lowers it in every config, right after
-      // these checks pass.
-      if (isSettingsAnchor(node.name)) continue;
+      // these checks pass. The menu it lowers to is chrome, not a placement:
+      // an `id` or `settings` on it would configure nothing.
+      // [LAW:no-silent-failure]
+      if (isSettingsAnchor(node.name)) {
+        if (node.id !== undefined || node.settings !== undefined) {
+          ctx.issues.push({
+            path,
+            message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings — the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
+            line,
+          });
+        }
+        continue;
+      }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         ctx.issues.push({
           path,

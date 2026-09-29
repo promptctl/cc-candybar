@@ -19,7 +19,7 @@ import {
   type Distribution,
   type Position,
 } from "../themes/decor.js";
-import type { OptionPalette } from "../config/option-domain.js";
+import type { OptionPalette, RenderPalettes } from "../config/option-domain.js";
 import type { ActiveSegment } from "./active-segment.js";
 
 /**
@@ -79,7 +79,7 @@ export function bandItemStyle(
 export function optionItemStyle(
   active: ActiveSegment,
   distribution: Distribution,
-  base: Palette,
+  render: RenderPalettes,
   paletteOf: OptionPalette | undefined,
   drawnAt: ColorDepth,
 ): (position: Position, option: string) => Style {
@@ -87,7 +87,7 @@ export function optionItemStyle(
     return (position) =>
       bandItemStyle(active, { ...position, distribution }, drawnAt);
   }
-  return (_position, option) => appliedCell(paletteOf(option, base), drawnAt);
+  return (_position, option) => appliedCell(paletteOf(option, render), drawnAt);
 }
 
 /**

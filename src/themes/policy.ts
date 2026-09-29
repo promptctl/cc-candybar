@@ -116,6 +116,15 @@ export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
 }
 
+// Membership in `placementThemeNames`, which the render asks of every
+// placement's `theme` each render. The installed themes are fixed for the
+// life of the process, so the set is built once.
+let placementThemeSet: ReadonlySet<string> | undefined;
+export function isPlacementThemeName(name: string): boolean {
+  placementThemeSet ??= new Set(placementThemeNames());
+  return placementThemeSet.has(name);
+}
+
 // --- Per-config member selection ---
 
 // The `effectiveGlobal` instance for every selection whose domain is PER-CONFIG

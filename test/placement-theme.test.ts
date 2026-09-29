@@ -37,7 +37,11 @@ import {
   deriveConfigActionValidators,
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
-import { configureMember, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import {
+  configureMember,
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -131,7 +135,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, render, bgOf, click, ctx, dispose };
+  return { config, compiled, sessionState, render, bgOf, click, ctx, dispose };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -219,6 +223,17 @@ describe("load errors", () => {
     );
   });
 
+  test("an id or settings on the settings menu's anchor, which configures nothing", () => {
+    expect(
+      refusal(
+        configWith(
+          "{ template: 'x' }",
+          `{ seg: 'candybar.menu', settings: { theme: '${PIN}' } }, 'tag'`,
+        ),
+      ),
+    ).toContain(`place it as the bare name "candybar.menu"`);
+  });
+
   test("a segment declaring `theme` itself", () => {
     expect(
       refusal(
@@ -280,6 +295,60 @@ describe("configure mode picks a placement's theme", () => {
     expect(durable.text()).toContain(
       `{ seg: "tag", settings: { theme: "${first}" } }`,
     );
+    rt.dispose();
+  });
+});
+
+describe("configure mode over a placement several presets share", () => {
+  // The label is declared once for every preset holding the placement, so
+  // what is per preset — the configure member it shows under — must not live
+  // on that one declaration, or the last preset synthesized wins it.
+  test("configuring it in the floor preset shows its controls", () => {
+    const rt = buildRuntime(`{
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+      },
+      segments: { tag: { template: 'x' } },
+      root: { v: [{ h: ['tag'] }] },
+      presets: { zzz: { root: { v: [{ h: ['tag'] }] } } },
+    }`);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "tag"));
+    const key = placementDraftKey("default", "tag", "theme");
+    const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
+      effectsOf(u).some((e) => e.args[1] === key),
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    rt.dispose();
+  });
+});
+
+describe("the layout preview while arranging", () => {
+  // In the names view each placement's cell is held by its label, and the
+  // preview draws the label as the placement it stands for — in that
+  // placement's theme: its pin, and its unsaved pick.
+  const previewPalette = (
+    rt: ReturnType<typeof buildRuntime>,
+    segment: string,
+  ): Palette[] =>
+    rt.compiled.menuRuntime.action
+      .layout()
+      .flat()
+      .filter((b) => b.name === segment)
+      .map((b) => b.palette);
+
+  test("a pinned placement keeps its theme, and an unsaved pick shows", () => {
+    const rt = buildRuntime(TWO);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    rt.render(BAR_A);
+    const drawn = previewPalette(rt, "tag");
+    expect(drawn).toHaveLength(2);
+    expect(drawn).toContain(paletteForThemeName(PIN));
+    rt.sessionState.set(SID, placementDraftKey("default", "tag", "theme"), BAR_B);
+    rt.render(BAR_A);
+    expect(previewPalette(rt, "tag")).toEqual([
+      paletteForThemeName(BAR_B),
+      paletteForThemeName(PIN),
+    ]);
     rt.dispose();
   });
 });

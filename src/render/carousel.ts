@@ -205,7 +205,7 @@ export function carouselFuncs(
           optionItemStyle(
             requireActiveSegment(activeSegment, "{{ carousel }}"),
             placedBy(undefined),
-            runtime.basePalette,
+            runtime,
             apply.paletteOf,
             activeSegment.drawnAt(),
           ),

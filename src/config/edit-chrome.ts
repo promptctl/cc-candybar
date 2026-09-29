@@ -27,6 +27,7 @@ import {
   placementId,
   settingSpelling,
   settingsOf,
+  THEME_SETTING,
   walkNodes,
   type ContainerNode,
   type DisclosureRef,
@@ -337,7 +338,7 @@ function configureParts(
       key,
       default: settingSpelling(node.settings?.[name] ?? decl.default),
     };
-    drafts[name] = { key, variable };
+    drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
     ctx.artifacts.segments[segName] = {
       template: settingControl(decl, key, variable, segName, ctx.artifacts),
@@ -374,20 +375,38 @@ export function arrangedSegment(name: string): string | undefined {
 // The name a placement wears in edit mode: its id, which is what tells two
 // placements of one segment apart. Declared as `edit.label:<id>:<segment>` —
 // an id holds no `:` (the loader refuses one), so `arrangedSegment` splits the
-// segment back out exactly. The label says the same thing in every preset, so
-// N presets holding one placement mint one declaration.
+// segment back out exactly. The declaration says the same thing in every
+// preset, so N presets holding one placement mint one; what differs per
+// preset — the configure member it shows under — is on the node.
+//
+// The label holds its placement's cell in the names view, so it wears that
+// placement's theme: the definition's default on the declaration, the
+// placement's own value and its unsaved pick on the node — the same draft
+// slot the placement reads, so the two cannot show different themes.
 function labelChrome(
-  id: string,
-  segName: string,
+  child: SegmentNode,
+  decl: SegmentDecl,
   artifacts: ChromeArtifacts,
   configure: ConfigureParts,
 ): SegmentNode {
-  const name = `${LABEL_NS}${id}:${segName}`;
+  const id = placementId(child);
+  const name = `${LABEL_NS}${id}:${child.name}`;
   artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    when: shownWhile([configure.ref], LABEL_GATE),
+    ...(decl.palette !== undefined && { palette: decl.palette }),
   };
-  return disclosureNode(name, configure.ref, configure.body, "drop");
+  const theme = child.settings?.[THEME_SETTING];
+  return {
+    ...disclosureNode(
+      name,
+      configure.ref,
+      configure.body,
+      "drop",
+      shownWhile([configure.ref], LABEL_GATE),
+    ),
+    ...(theme !== undefined && { settings: { [THEME_SETTING]: theme } }),
+    drafts: { [THEME_SETTING]: configure.drafts[THEME_SETTING]! },
+  };
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -468,8 +487,7 @@ interface SpliceCtx {
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `-` (and, when its segment declares
-// settings, its `⚙`) as its own trail and is followed by one gap
+// segment child carries its `⚙` and `-` as its own trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
 // `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
@@ -512,12 +530,8 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     // Every placement has settings — `theme` at least (settingsOf) — so
     // every placement configures. [LAW:no-defensive-null-guards] cross-ref
     // proved every placed segment is declared.
-    const configure = configureParts(
-      ctx,
-      afterPos,
-      child,
-      settingsOf(ctx.segments[child.name]!),
-    );
+    const decl = ctx.segments[child.name]!;
+    const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
     // The buttons are drawn inside the cell of the placement they act on, in
     // whichever of the two views shows it, so nothing sits between them.
     const trail = trailOf([configure.term, remove]);
@@ -527,7 +541,7 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       ),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(id, child.name, ctx.artifacts, configure), trail },
+      { ...labelChrome(child, decl, ctx.artifacts, configure), trail },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
