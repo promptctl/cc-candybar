@@ -21,14 +21,10 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import { stripAnsi } from "../test/helpers/ansi";
 
 const SID = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-const plain = (s: string): string =>
-  s
-    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[0-9;]*m/g, "");
-
 const door = { [SETTINGS_ANCHOR]: SETTINGS_OPEN };
 const config = { ...door, [`${SETTINGS_NS}config`]: SETTINGS_OPEN };
 const ring = (name: string, base: Record<string, string>) => ({
@@ -67,14 +63,15 @@ function renderToday(preset: string, width: number, state: Record<string, string
   );
 }
 
+const widest = new Map<string, number>();
 console.log("# Part 1 — today, rendered");
 for (const preset of ["default", "compact"]) {
   for (const width of [80, 200]) {
     for (const [name, state] of Object.entries(STATES)) {
       console.log(`--- ${preset} ${name} @${width}`);
-      for (const line of plain(renderToday(preset, width, state)).split("\n")) {
-        console.log(`[${cellLen(line)}] ${line}`);
-      }
+      const lines = stripAnsi(renderToday(preset, width, state)).split("\n");
+      for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
+      widest.set(`${preset} ${name} @${width}`, Math.max(...lines.map((l) => cellLen(l))));
     }
   }
 }
@@ -84,9 +81,9 @@ const model = (cells: readonly string[]): number =>
 const PROPOSED: Record<string, readonly string[]> = {
   "today door row (validates model)": ["❌", "⎘ id ↗ proj ↗ log ↗ repo", "/compact /model /clear", "▦ default ▸ ↺", "💾 save 1", "⚙ config ▸", "🧰 tools ▸", "✎ edit", "↶ undo", "↷ redo"],
   "today config row (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 secondary-accent ▸ ↺", "🔣 unicode ▸ ↺", "🌈 truecolor ▸ ↺", "☑ wrap ↺", "◀ padding 1 ▶ ↺", "☑ update notice ↺", "⟲ reset all"],
-  "door line 1": ["❌", "▦ default ▸"],
-  "door line 1 + save cell": ["❌", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲"],
-  "door line 1 + reset confirm": ["❌", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
+  "door line 1": ["✕", "▦ default ▸"],
+  "door line 1 + save cell": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲"],
+  "door line 1 + reset confirm": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
   "door line 2: tabs": ["✕", "⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
   "door line 2: tabs, two marked": ["✕", "⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools"],
   "session links": ["✕", "⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config"],
@@ -101,4 +98,17 @@ const PROPOSED: Record<string, readonly string[]> = {
 console.log("\n# Part 2 — proposed, modelled at padding 1");
 for (const [name, cells] of Object.entries(PROPOSED)) {
   console.log(`${model(cells)}\t+${2 * cells.length}/padding step\t${name}`);
+}
+
+// The model is only as good as its fit to today's render: each validating row
+// must equal the widest line Part 1 rendered for that state, or the script fails.
+const VALIDATES: Record<string, string> = {
+  "today door row (validates model)": "default door @200",
+  "today config row (validates model)": "default config @200",
+};
+for (const [row, rendered] of Object.entries(VALIDATES)) {
+  const modelled = model(PROPOSED[row]);
+  if (modelled !== widest.get(rendered)) {
+    throw new Error(`model drift: ${row} = ${modelled}, ${rendered} rendered ${widest.get(rendered)}`);
+  }
 }
