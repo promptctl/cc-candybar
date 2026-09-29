@@ -10,7 +10,8 @@
 // into whatever window has focus is exactly what this must never do.
 
 import type { ClientHints } from "../daemon/protocol.js";
-import { launchSync, type LaunchCategory } from "../proc/launch.js";
+import type { LaunchCategory } from "../proc/launch.js";
+import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
 import type { SlashLine } from "./slash-line.js";
@@ -57,20 +58,15 @@ export function typeSlash(
 const THEN = ";";
 const BUFFER = "cc-candybar-slash";
 
-function tmux(hint: TmuxHint, category: LaunchCategory, args: string[]) {
-  const result = launchSync({
-    bin: "tmux",
-    args: ["-S", hint.socket, ...args],
-    timeoutMs: 2000,
-    category,
-  });
-  if (!result.ok) {
-    const detail =
-      result.error ??
-      [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-    throw new Error(`tmux ${args[0]} failed (${detail})`);
-  }
-  return result.stdout;
+function tmux(
+  hint: TmuxHint,
+  category: LaunchCategory,
+  args: string[],
+  stdinInput?: string,
+): string {
+  const run = runTmux(hint, category, args, stdinInput);
+  if (run.kind === "failed") throw new Error(run.reason);
+  return run.stdout;
 }
 
 function read(hint: TmuxHint): PaneSnapshot {
@@ -93,32 +89,39 @@ function read(hint: TmuxHint): PaneSnapshot {
 // it after the submit. The line goes in as a BRACKETED paste: sent as keys, a
 // long line reads as a paste and swallows the Enter after it as a newline;
 // the paste's end marker makes the Enter a keystroke whatever the timing.
+// The line reaches the buffer over stdin, never as an argument: tmux reads an
+// argument ending in `;` as a command separator and drops it, so
+// `/compact keep the api;` would be typed without its last character.
 function type(hint: TmuxHint, line: SlashLine): void {
-  tmux(hint, "claude-input.type", [
-    "set-buffer",
-    "-b",
-    BUFFER,
-    "--",
+  tmux(
+    hint,
+    "claude-input.type",
+    [
+      "load-buffer",
+      "-b",
+      BUFFER,
+      "-",
+      THEN,
+      "send-keys",
+      "-t",
+      hint.pane,
+      "C-s",
+      THEN,
+      "paste-buffer",
+      "-p",
+      "-d",
+      "-b",
+      BUFFER,
+      "-t",
+      hint.pane,
+      THEN,
+      "send-keys",
+      "-t",
+      hint.pane,
+      "Enter",
+    ],
     line,
-    THEN,
-    "send-keys",
-    "-t",
-    hint.pane,
-    "C-s",
-    THEN,
-    "paste-buffer",
-    "-p",
-    "-d",
-    "-b",
-    BUFFER,
-    "-t",
-    hint.pane,
-    THEN,
-    "send-keys",
-    "-t",
-    hint.pane,
-    "Enter",
-  ]);
+  );
 }
 
 export function productionClaudeInputEdge(): ClaudeInputEdge {

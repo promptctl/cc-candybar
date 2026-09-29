@@ -819,7 +819,7 @@ const applyUpdate: VerbHandler = (value, ctx) => {
 export const SESSION_CLIENT_HINTS_KEY = "client-hints";
 
 // [LAW:no-silent-failure] A session that has never rendered has no hints —
-// a loud BadVerbArgs, not a doctor run over a guessed "not in tmux".
+// a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
 function sessionHints(
   ctx: VerbContext,
   sid: string,
@@ -827,7 +827,7 @@ function sessionHints(
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
     throw new BadVerbArgs(
-      `session ${sid} has not rendered yet — no client facts to diagnose`,
+      `session ${sid} has not rendered yet — no client facts are recorded for it`,
     );
   }
   let parsed: unknown;
@@ -951,7 +951,9 @@ const slash: VerbHandler = (value, ctx) => {
       "warn",
       `slash: ${line} refused — ${result.reason} (session=${sid})`,
     );
-    throw new Error(`${line} was not typed: ${result.reason}`);
+    // The pane's own state refused the click — the user's to change, like a
+    // store refusal, so BAD_REQUEST; a tmux failure throws from the edge.
+    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
   ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };

@@ -26,6 +26,7 @@ import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
 import { linkUrls } from "./helpers/ansi";
+import { __resetRateLimitsForTest } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -55,6 +56,17 @@ const SCREENS = {
   queued: box("❯ Press up to edit queued messages", "  ctrl+x ctrl+s to send now"),
   multiline: [...box("❯ first line of a draft").slice(0, 5), "  second line", RULE, ...BAR],
   stashed: box("❯ ", "Ctrl+Y to paste deleted text · › stashed"),
+  // Measured: a stash held while messages queue keeps its own hint row
+  // directly above the box, the queue's hint above that.
+  queuedStashed: [
+    "❯ queued one",
+    "  ctrl+x ctrl+s to send now",
+    `${" ".repeat(40)}› stashed`,
+    RULE,
+    "❯ Press up to edit queued messages",
+    RULE,
+    ...BAR,
+  ],
   permission: [
     "❯ Run exactly this bash command: python3 -c 'print(42)' > out.txt",
     "",
@@ -141,12 +153,17 @@ describe("parseSlashLine: a line is one slash command, and only text", () => {
 
 let dir: string;
 let savedPath: string | undefined;
-const HINT: TmuxHint = { socket: "/tmp/tmux-501/default", pane: "%7", truecolor: null };
+// A socket inside the test's own directory: were the stub ever bypassed, a
+// real tmux would find no server there instead of typing into a live pane.
+let HINT: TmuxHint;
 
 beforeEach(() => {
+  __resetRateLimitsForTest();
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slash-"));
+  HINT = { socket: path.join(dir, "tmux.sock"), pane: "%7", truecolor: null };
   // One line per argument, a line of `@@` after each invocation; a `display`
-  // prints the pane mode and the served screen, as the real pair does.
+  // prints the pane mode and the served screen, as the real pair does, and a
+  // `load-buffer` keeps what arrived on stdin.
   fs.writeFileSync(
     path.join(dir, "tmux"),
     [
@@ -154,6 +171,7 @@ beforeEach(() => {
       `for a in "$@"; do printf '%s\\n' "$a"; done >> "${dir}/argv"`,
       `echo @@ >> "${dir}/argv"`,
       `if [ "$3" = display ]; then cat "${dir}/mode" "${dir}/screen"; fi`,
+      `if [ "$3" = load-buffer ]; then cat > "${dir}/stdin"; fi`,
     ].join("\n"),
     { mode: 0o755 },
   );
@@ -183,8 +201,12 @@ function runtime(tmux: TmuxHint | null) {
   const config = parseAndValidate(
     "<user>",
     `{
-      actions: { compact: { slash: "/compact" }, pickModel: { slash: "/model opus" } },
-      segments: { cmds: { template: '{{ action "compact" "⊘" }} {{ action "pickModel" "✱" }}' } },
+      actions: {
+        compact: { slash: "/compact" },
+        pickModel: { slash: "/model opus" },
+        keepApi: { slash: "/compact keep the api;" },
+      },
+      segments: { cmds: { template: '{{ action "compact" "⊘" }} {{ action "pickModel" "✱" }} {{ action "keepApi" "⌘" }}' } },
       globals: {},
       root: { h: ['cmds'] },
     }`,
@@ -220,6 +242,7 @@ describe("a slash click", () => {
     expect(rt.urls.map((u) => effectsOf(u))).toEqual([
       [{ verb: VERB_SLASH, args: ["s1", "/compact"] }],
       [{ verb: VERB_SLASH, args: ["s1", "/model opus"] }],
+      [{ verb: VERB_SLASH, args: ["s1", "/compact keep the api;"] }],
     ]);
   });
 
@@ -231,13 +254,30 @@ describe("a slash click", () => {
       ["-S", HINT.socket, "display", "-p", "-t", "%7", "#{pane_in_mode}", ";", "capture-pane", "-p", "-t", "%7"],
       [
         "-S", HINT.socket,
-        "set-buffer", "-b", "cc-candybar-slash", "--", "/model opus", ";",
+        "load-buffer", "-b", "cc-candybar-slash", "-", ";",
         "send-keys", "-t", "%7", "C-s", ";",
         "paste-buffer", "-p", "-d", "-b", "cc-candybar-slash", "-t", "%7", ";",
         "send-keys", "-t", "%7", "Enter",
       ],
     ]);
+    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/model opus");
     expect(rt.logged).toContain("slash: typed /model opus into %7 (session=s1)");
+  });
+
+  test("a line ending in `;` is typed whole: tmux never parses it as a separator", () => {
+    serve(SCREENS.idle);
+    const rt = runtime(HINT);
+    clickUrl(rt.urls[2]!, rt.ctx);
+    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/compact keep the api;");
+    expect(invocations()[1]).not.toContain("/compact keep the api;");
+  });
+
+  test("a double-click types once: the second is refused before tmux is asked", () => {
+    serve(SCREENS.idle);
+    const rt = runtime(HINT);
+    clickUrl(rt.urls[0]!, rt.ctx);
+    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/rate-limited/);
+    expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
   });
 
   test("outside tmux: refused in the bar, and tmux is never run", () => {
@@ -252,6 +292,7 @@ describe("a slash click", () => {
   test.each([
     ["a permission dialog", SCREENS.permission, false, /not at its prompt/],
     ["a held stash", SCREENS.stashed, false, /stashed prompt/],
+    ["a held stash behind queued messages", SCREENS.queuedStashed, false, /stashed prompt/],
     ["copy mode", SCREENS.idle, true, /copy mode/],
   ])("%s: read, refused, nothing typed", (_, screen, inMode, reason) => {
     serve(screen, inMode);
@@ -264,7 +305,7 @@ describe("a slash click", () => {
     const rt = runtime(HINT);
     const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/clear"] }]);
     expect(() => clickUrl(forged, rt.ctx)).toThrow(
-      /"\/clear" is not a command this config declares \(it declares: \/compact, \/model opus\)/,
+      /"\/clear" is not a command this config declares \(it declares: \/compact, \/model opus, \/compact keep the api;\)/,
     );
     expect(invocations()).toEqual([]);
   });

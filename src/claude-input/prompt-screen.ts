@@ -30,8 +30,10 @@ export type PromptState =
 
 // The input box is the last two rules on the screen with the `❯` prompt
 // directly under the first; the hint row directly above it names a held stash
-// (`… · › stashed`). A dialog draws its own `❯` indented under text, never
-// directly under a rule.
+// (`… · › stashed`), queued messages or not. A dialog draws its own `❯`
+// indented under text, never directly under a rule. A rule starts in column 0
+// only as Claude Code's chrome: transcript text is indented under its `⏺`, and
+// a markdown `---` draws no rule at all.
 const RULE = /^─{20,}/;
 const PROMPT = /^❯(\s|$)/;
 const STASHED = /›\s*stashed$/;
