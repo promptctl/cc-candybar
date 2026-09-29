@@ -556,7 +556,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
         ["settings.menu", "host", "directory", "gitaculous"],
         ["model", "context", "cacheTimer", "block", "weekly", "activity"],
       ],
-      compact: [["settings.menu", "directory", "git", "context"]],
+      compact: [["settings.menu", "directory", "gitaculous", "context"]],
       verbose: [
         ["settings.menu", "directory", "gitaculous", "gitPr"],
         ["model", "context", "cacheTimer", "block", "weekly", "burnrate"],

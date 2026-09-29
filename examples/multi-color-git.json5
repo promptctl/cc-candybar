@@ -5,9 +5,9 @@
 // conflicts — gets its OWN semantic palette color instead of one uniform
 // segment `fg`, so a dirty tree reads at a glance without parsing the text
 // (the p10k / gitaculous-style terminal-prompt convention). The bundled
-// `git`/`gitaculous` segments follow the same convention, composed from named
+// `gitaculous` segment follows the same convention, composed from named
 // `helpers` and `git.color.*` variables — to hide, recolour, or reorder one of
-// THEIR facts, override that one helper or variable (docs/segment-authoring.md,
+// ITS facts, override that one helper or variable (docs/segment-authoring.md,
 // "Reshaping a bundled segment: git"). This file is the other case: a git cell
 // written from scratch, as one annotated template.
 //

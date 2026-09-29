@@ -645,7 +645,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
 {
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
-    addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "git", relation: "after" },
+    addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "gitaculous", relation: "after" },
   },
   segments: {
     editControl: {
@@ -653,7 +653,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
     },
   },
   presets: {
-    compact: { root: { h: ["directory", "git"] } },
+    compact: { root: { h: ["directory", "gitaculous"] } },
   },
   root: "editControl",
 }

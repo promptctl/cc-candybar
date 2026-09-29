@@ -296,6 +296,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     "git.color.ahead": { kind: "literal", value: "success" },
     "git.color.behind": { kind: "literal", value: "warning" },
     "git.color.stash": { kind: "literal", value: "accent" },
+    // Which of its two forms `gitaculous` shows — per session, flipped by the
+    // arrow at its right edge (the `gitDetail` action). The default is the form
+    // every session starts in: redeclare this variable with
+    // `default: "expanded"` to start with the full line.
+    "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
 
     // Forge PR/MR — the daemon's git provider resolves the branch's open PR via
     // gh/glab and projects it here. Declaring any of these turns on the network
@@ -644,37 +649,26 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "warning",
       when: "{{ .host.ssh }}",
     },
-    // [LAW:one-source-of-truth] Both git segments are compositions of the SAME
-    // named pieces (the `git*` helpers below), so a fact has one spelling and
-    // one colour whichever segment shows it, and a user reshapes either by
-    // overriding one piece, one `git.color.*` variable, or this one template.
+    // [LAW:one-source-of-truth] One git segment, two forms: `gitCollapsed` (the
+    // summary) and `gitExpanded` (every fact), each a composition of the named
+    // `git*` pieces below, so a fact has one spelling and one colour in both
+    // forms, and a user reshapes either by overriding one piece, one form, or
+    // one `git.color.*` variable. The arrow is the segment's last cell content:
+    // a `cycle` action over the session's `git.detail`, so each Claude session
+    // keeps its own choice — nothing here a user config cannot also write.
     // Everything no piece paints — the "(git)" label, repo name, brackets, sha,
-    // the elapsed-time annotation — renders in the quiet `fg:` below, a
-    // template evaluating to a colour: `bgOf` is available there because a
-    // segment's background is resolved before its foreground, so structural
-    // text sits a fixed distance from THIS cell whatever theme or look is in
-    // effect, and the eye lands on the painted facts first.
-    git: {
-      description:
-        "The one-line git summary: branch, ahead/behind, and S/U/? flags — the same pieces `gitaculous` composes.",
-      template:
-        '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
-      fg: GIT_QUIET_FG,
-      when: '{{ ne .git.branch "" }}',
-    },
+    // the elapsed-time annotation, the arrow — renders in the quiet `fg:`
+    // below, a template evaluating to a colour: `bgOf` is available there
+    // because a segment's background is resolved before its foreground, so
+    // structural text sits a fixed distance from THIS cell whatever theme or
+    // look is in effect, and the eye lands on the painted facts first.
     gitaculous: {
       description:
-        "The full git state in asyncgit's compact spelling: repo, in-progress operation, sha, S/U/? flags, branch, upstream ±, stash count, and time since the last commit.",
+        "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact — repo, in-progress operation, sha, upstream ±, stash count, time since the last commit.",
       template:
-        "(git)" +
-        '{{ template "gitRepo" . }}' +
-        '{{ template "gitOperation" . }}' +
-        '{{ template "gitSha" . }}' +
-        '{{ template "gitFlags" . }}' +
-        ' {{ template "gitBranch" . }}' +
-        '{{ template "gitUpstream" . }}' +
-        '{{ template "gitStash" . }}' +
-        '{{ template "gitAge" . }}',
+        '{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
+        '{{ else }}{{ template "gitCollapsed" . }}{{ end }}' +
+        ' {{ action "gitDetail" "▸" "◂" }}',
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
     },
@@ -991,6 +985,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // points at into this session. Gated by the themes domain it names, the
     // same allow-list the settings menu's theme control derives.
     stepTheme: { set: "theme", from: "themes" },
+    // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
+    gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────
@@ -1089,9 +1085,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // situation where a user most wants a different arrangement and least
     // wants to hand-write one. Keeps only the three facts a split pane most
     // needs at a glance (where am I / what's the git state / how much context
-    // is left), the quiet one-line `git` segment rather than the multi-fact
-    // `gitaculous`, and `padding: 0` to buy back the chrome a narrow column
-    // can't spare.
+    // is left), and `padding: 0` to buy back the chrome a narrow column can't
+    // spare. `gitaculous` starts collapsed here as everywhere, so the git state
+    // costs a narrow column only the summary until someone asks for more.
     //
     // [LAW:no-silent-failure] A session that switches TO compact is never
     // stranded: synthesizeSettingsMenu splices the global settings menu — and
@@ -1106,7 +1102,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "directory" },
-          { kind: "segment", name: "git" },
+          { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "context" },
         ],
       },
@@ -1200,12 +1196,26 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
     gitPaint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
 
-    // ─── Git pieces ────────────────────────────────────────────────────────
-    // The named parts the `git` and `gitaculous` segments compose, each called
+    // ─── Git forms and pieces ──────────────────────────────────────────────
+    // The two forms `gitaculous` switches between, each composed of the pieces
+    // below. Override one to change what that form shows.
+    gitCollapsed:
+      '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
+    gitExpanded:
+      "(git)" +
+      '{{ template "gitRepo" . }}' +
+      '{{ template "gitOperation" . }}' +
+      '{{ template "gitSha" . }}' +
+      '{{ template "gitFlags" . }}' +
+      ' {{ template "gitBranch" . }}' +
+      '{{ template "gitUpstream" . }}' +
+      '{{ template "gitStash" . }}' +
+      '{{ template "gitAge" . }}',
+    // The named parts the two forms compose, each called
     // with the root scope (`{{ template "gitFlags" . }}`). Every optional piece
     // renders ` <fact>` with its OWN leading space, or nothing — only the piece
     // knows whether it exists — so pieces reorder and drop without leaving a
-    // doubled or dangling space. `gitBranch` is the exception: the segments are
+    // doubled or dangling space. `gitBranch` is the exception: the segment is
     // gated on a branch, so it is always present and carries no space.
     gitBranch:
       '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',

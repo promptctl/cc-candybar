@@ -1556,7 +1556,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual([
         "directory",
-        "git",
+        "gitaculous",
         "context",
       ]);
       expect(entry.state.authoredRoots.has("compact")).toBe(false);
@@ -1572,9 +1572,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         );
       compactRemove("directory");
       expect(durable.parsed().presets).toEqual({
-        compact: { root: { h: ["git", "context"] } },
+        compact: { root: { h: ["gitaculous", "context"] } },
       });
-      compactRemove("git");
+      compactRemove("gitaculous");
       compactRemove("context");
       expect(durable.parsed().presets).toEqual({
         compact: { root: { h: [] } },
@@ -1626,7 +1626,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(restored.state.authoredRoots.has("compact")).toBe(false);
       expect(presetNamesOf(restored, "compact")).toEqual([
         "directory",
-        "git",
+        "gitaculous",
         "context",
       ]);
     } finally {

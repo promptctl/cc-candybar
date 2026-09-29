@@ -55,6 +55,9 @@ import {
 // branch, so a future rename is one row here, not new control flow.
 export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
   gitTaculous: "gitaculous",
+  // The one-line summary became the collapsed form of `gitaculous`
+  // (brandon-git-segment-ixf.tl0).
+  git: "gitaculous",
 };
 
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
