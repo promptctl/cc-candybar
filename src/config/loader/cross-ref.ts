@@ -526,7 +526,7 @@ export function validateCrossReferences(
       // against the action table on the merged config — so a segment can
       // reference a default-provided action — through every helper the field
       // calls, exactly as its variable reads do.
-      for (const [aref, { site, via }] of templateActionRefs(
+      for (const { name: aref, site, via } of templateActionRefs(
         tpl,
         cfg.helpers,
       )) {
@@ -537,7 +537,7 @@ export function validateCrossReferences(
           checkHelperIssue(
             ctx,
             via,
-            `template references unknown action "${aref}"${inOptions}`,
+            `Template references unknown action "${aref}"${inOptions}`,
           );
           continue;
         }

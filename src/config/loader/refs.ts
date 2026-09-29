@@ -1,9 +1,10 @@
 // [LAW:dataflow-not-control-flow] Best-effort extraction of the references a
-// template string makes — dotted variable refs, `action "name"` refs, and
-// `picker "apply" "page"` refs. Pure text walks over `{{ … }}` blocks: no
-// full template parse (that is the engine's compile-time job). This file changes
-// when the surface grammar of those refs changes; the cross-ref/cycle passes
-// consume the sets it returns without re-deriving them.
+// template string makes — dotted variable refs, and the actions an `action`,
+// `picker`, `menu` or `carousel` binds — through the template's own text and
+// every helper it reaches. Pure text walks over `{{ … }}` blocks: no full
+// template parse (that is the engine's compile-time job). Every question is a
+// fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
+// fold over it, never a second walker, or it is blind to helpers again.
 
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
@@ -108,7 +109,7 @@ function* scopedBlocks(
 // argument hands the helper — null when the argument names no path (a
 // `dict`, a pipeline): the reads that built it are the caller's own, spelled
 // where it was built, and the helper's refs on it name nothing.
-const TEMPLATE_KEYWORD_RE = /\btemplate\s+$/;
+const TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
 function* helperCalls(
   code: string,
   dot: Dot,
@@ -160,7 +161,11 @@ function* callGraphBlocks(
     for (const { code, dot } of [...scopedBlocks(src, root)]) {
       yield { code, dot, root, via };
       for (const call of [...helperCalls(code, dot, root)]) {
-        const body = helpers[call.name];
+        // An own key only: `helpers` is a plain object, and a call naming
+        // `toString` must find no helper, not Object.prototype's.
+        const body = Object.hasOwn(helpers, call.name)
+          ? helpers[call.name]
+          : undefined;
         const key = `${call.name}\0${call.at ?? "\0"}`;
         if (body === undefined || chain.has(call.name) || walked.has(key))
           continue;
@@ -220,8 +225,9 @@ export type ActionSite = "action" | "options";
 // its page cursor is synthesized from identity, and the dict's option-name
 // literals must never be misread as action refs — and a `carousel` binds only
 // its apply action too. One scan arms on any keyword with that keyword's own
-// arg count [LAW:single-enforcer].
-const BINDING_KEYWORD_RE = /\b(action|picker|menu|carousel)\s+$/;
+// arg count [LAW:single-enforcer]. A keyword after `.` or `$` is a field read
+// (`eq .menu "open"`), never a call.
+const BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel)\s+$/;
 const NAME_ARGS: Readonly<Record<string, number>> = {
   action: 1,
   picker: 2,
@@ -250,19 +256,26 @@ function* actionBindings(
 
 // [LAW:single-enforcer] Every action a template binds — through its own text
 // and every reachable helper's (`callGraphBlocks`), exactly as its reads are
-// found — each with how it was first bound and the helper whose body spells
-// it (`null` = the template itself), so a load error names the body to fix.
+// found — once per body that binds it: the name, how that body first binds it,
+// and the helper whose body spells it (`null` = the template itself). Per body,
+// not per name, so a misspelling bound in two bodies is reported at both.
+export interface ActionRef {
+  readonly name: string;
+  readonly site: ActionSite;
+  readonly via: string | null;
+}
 export function templateActionRefs(
   template: string,
   helpers: Readonly<Record<string, string>>,
-): ReadonlyMap<string, { site: ActionSite; via: string | null }> {
-  const refs = new Map<string, { site: ActionSite; via: string | null }>();
+): readonly ActionRef[] {
+  const refs = new Map<string, ActionRef>();
   for (const { code, via } of callGraphBlocks(template, helpers)) {
     for (const { name, site } of actionBindings(code)) {
-      if (!refs.has(name)) refs.set(name, { site, via });
+      const key = `${name}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { name, site, via });
     }
   }
-  return refs;
+  return [...refs.values()];
 }
 
 // [LAW:types-are-the-program] What a template reference resolves against:

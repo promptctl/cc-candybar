@@ -218,7 +218,7 @@ describe("84s — action refs through helpers", () => {
       root: "s",
     }`);
     expect(message).toMatch(
-      /helpers\.btn[^\n]*template references unknown action "nosuch"/,
+      /helpers\.btn[^\n]*Template references unknown action "nosuch"/,
     );
   });
 
@@ -232,7 +232,7 @@ describe("84s — action refs through helpers", () => {
       root: "s",
     }`);
     expect(message).toMatch(
-      /helpers\.inner[^\n]*template references unknown action "ghost"/,
+      /helpers\.inner[^\n]*Template references unknown action "ghost"/,
     );
   });
 
@@ -245,6 +245,52 @@ describe("84s — action refs through helpers", () => {
     expect(message).toMatch(
       /helpers\.ring[^\n]*unknown action "nope" \(in a picker, menu or carousel\)/,
     );
+  });
+
+  test("a picker in a helper names a misspelled page action", () => {
+    const message = issuesOf(`{
+      actions: { applyTheme: { set: "theme", from: "themes" } },
+      helpers: { grid: '{{ picker "applyTheme" "typoPage" }}' },
+      segments: { s: { template: '{{ template "grid" . }}' } },
+      root: "s",
+    }`);
+    expect(message).toMatch(
+      /helpers\.grid[^\n]*unknown action "typoPage" \(in a picker, menu or carousel\)/,
+    );
+    expect(message).not.toMatch(/unknown action "applyTheme"/);
+  });
+
+  test("one misspelling bound in a helper and in the segment is reported at both", () => {
+    const message = issuesOf(`{
+      helpers: { btn: '{{ action "nosuch" "x" }}' },
+      segments: {
+        s: { template: '{{ template "btn" . }}{{ action "nosuch" "y" }}' },
+      },
+      root: "s",
+    }`);
+    expect(message).toMatch(/helpers\.btn[^\n]*unknown action "nosuch"/);
+    expect(message).toMatch(
+      /segments\.s\.template[^\n]*unknown action "nosuch"/,
+    );
+  });
+
+  test("a field named like a binding keyword is a read, not a call", () => {
+    const message = issuesOf(`{
+      variables: { menu: { kind: "literal", value: "open" } },
+      helpers: { h: '{{ if eq $.menu "open" }}x{{ end }}{{ if eq .menu "open" }}y{{ end }}' },
+      segments: { s: { template: '{{ template "h" . }}' } },
+      root: "s",
+    }`);
+    expect(message).not.toMatch(/unknown action/);
+  });
+
+  test("a call naming an Object.prototype key finds no helper", () => {
+    expect(() =>
+      build(`{
+        segments: { s: { template: '{{ template "toString" (dict "a" 1) }}' } },
+        root: "s",
+      }`),
+    ).not.toThrow(TypeError);
   });
 
   test("a helper reached from two segments is reported once", () => {
