@@ -534,8 +534,8 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
-// against the value the file declares (or, when it declares none, the value
-// the session's config shows — configKeySeed), wrapped and re-validated
+// against the value the file declares (or, when it declares none, the session
+// config's own top-level field — configKeySeed), wrapped and re-validated
 // through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
