@@ -160,11 +160,12 @@ describe("state-validators registry contract", () => {
     expect(listStateKeys()).not.toContain("mode-2");
   });
 
-  test("registerStateValidator throws on a kind change for a live key", () => {
+  test("registerStateValidator throws on an incoherent spec for a live key", () => {
     // [LAW:types-are-the-program] A state key has ONE key shape. Registering
-    // an allow-list spec for a key already held as an int page index (or vice
-    // versa) is a contradiction no merged validator could honor — it throws at
-    // registration, not silently keeps whichever kind loaded first.
+    // a non-integer allow-list for a key already held as an int page index is
+    // a contradiction no merged validator could honor — it throws at
+    // registration (the same merge a single action table is held to), not
+    // silently keeps whichever loaded first.
     const dispose = registerStateValidator("kind-clash", { kind: "int" });
     try {
       expect(() =>
@@ -172,7 +173,7 @@ describe("state-validators registry contract", () => {
           kind: "allow-list",
           allowed: ["a"],
         }),
-      ).toThrow(/already a int state key/);
+      ).toThrow(/key "kind-clash" is an integer spec .* non-integer value\(s\) to it \(a\)/);
       // The rejected registration left the int gate intact.
       expect(validateStateWrite("kind-clash", "5").ok).toBe(true);
     } finally {

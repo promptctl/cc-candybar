@@ -1276,6 +1276,12 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ).state.config,
+  reloadConfig: (origin: RenderOrigin) =>
+    renderCache.reload(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ),
 };
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render

@@ -94,6 +94,9 @@ export interface VerbContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
+  // Reload that config from disk now, so the next render reads what a click
+  // just wrote rather than waiting on the file watcher.
+  readonly reloadConfig: (origin: RenderOrigin) => void;
 }
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -534,11 +537,12 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
 // file as ONE write. The drafts are derived at click time by the SAME function
 // the render counts them with, over the config this session renders with, so
 // the click writes exactly what the `💾 save N` cell counted.
-// [LAW:no-ambient-temporal-coupling] The session's picks are KEPT: once the
-// reload lands, the file resolves to them and they stop being drafts by
-// derivation. Releasing them here instead would leave every render between
-// this write and the watcher's reload drawing the old file with no picks — the
-// bar would flash back to the settings the user just saved.
+// [LAW:no-ambient-temporal-coupling] One handler owns the order write → reload
+// → release. The picks are released only once the session's config has
+// reloaded the file that now holds them, so no render in between draws the old
+// file without them; released, the session follows the file again — a later
+// hand edit, another session's save, a reset — instead of pinning over it. A
+// refused write throws before either, keeping every draft.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (validateStateWrite): a value the gate no longer admits is
 // refused loudly here, never written to the file.
@@ -550,8 +554,8 @@ const save: VerbHandler = (value, ctx) => {
     ctx.sessionState.get(sid, key),
   );
   // Nothing unsaved is the save's own postcondition already holding — a second
-  // click on a bar drawn before the first save's reload — so it is a recorded
-  // no-op, never a failure on the diagnostic strip.
+  // click on a bar drawn before the first save released its picks — so it is
+  // a recorded no-op, never a failure on the diagnostic strip.
   if (drafts.length === 0) {
     ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
     return;
@@ -563,6 +567,8 @@ const save: VerbHandler = (value, ctx) => {
   });
   const file = originConfigFile(origin);
   writeValues(editStore(ctx, sid), file, pairs);
+  ctx.reloadConfig(origin);
+  for (const d of drafts) ctx.sessionState.clear(sid, d.sessionKey);
   ctx.dlog(
     "info",
     `save: ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,

@@ -276,14 +276,6 @@ function validatorForSpec(
   );
 }
 
-function buildValidatorFromSpecs(
-  key: string,
-  specs: readonly DerivedValidatorSpec[],
-  noun: string,
-): KeyValidator {
-  return validatorForSpec(key, mergeKeySpecs(key, specs, noun), noun);
-}
-
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key
 // and collapse each key's specs into the one spec that gates it. `noun`
 // names the keyspace (default "state" — the original, sole caller before
@@ -315,11 +307,15 @@ interface BaselineEntry {
   readonly permanent: true;
   readonly validator: KeyValidator;
 }
+// [LAW:single-enforcer] Every live contribution to the key and the ONE spec
+// mergeKeySpecs folds them into — the same coherence rule a single config's
+// action table merges by, so whether two configs may share a key is decided
+// where whether two actions may is, never by a second kind check here.
 interface DerivedEntry {
   readonly permanent: false;
-  readonly kind: DerivedValidatorSpec["kind"];
-  validator: KeyValidator;
   readonly specs: DerivedValidatorSpec[];
+  merged: DerivedValidatorSpec;
+  validator: KeyValidator;
 }
 type ValidatorEntry = BaselineEntry | DerivedEntry;
 
@@ -347,7 +343,7 @@ export interface ValidatorRegistry {
 // be confused for the other keyspace's gate.
 //
 // [LAW:no-silent-fallbacks] An unknown key is a caller-visible rejection
-// (validate) or a loud throw (a baseline re-claim, a kind clash) — never a
+// (validate) or a loud throw (a baseline re-claim, an incoherent merge) — never a
 // silent accept-and-store.
 export function createValidatorRegistry(
   baseline: Readonly<Record<string, KeyValidator>>,
@@ -387,23 +383,19 @@ export function createValidatorRegistry(
               `re-claimed (built-in keys: ${[...baselineKeys()].join(", ")})`,
           );
         }
-        if (existing.kind !== spec.kind) {
-          throw new Error(
-            `register: key "${key}" is already a ${existing.kind} ${noun} key; ` +
-              `cannot also register it as ${spec.kind}. A ${noun} key has one ` +
-              `key shape — a menu page index (int) and a button allow-list ` +
-              `cannot share a key.`,
-          );
-        }
+        // Merge BEFORE committing: an incoherent pair throws with the entry
+        // exactly as it was.
+        const merged = mergeKeySpecs(key, [...existing.specs, spec], noun);
         existing.specs.push(spec);
-        existing.validator = buildValidatorFromSpecs(key, existing.specs, noun);
+        existing.merged = merged;
+        existing.validator = validatorForSpec(key, merged, noun);
       } else {
-        const specs = [spec];
+        const merged = mergeKeySpecs(key, [spec], noun);
         entries.set(key, {
           permanent: false,
-          kind: spec.kind,
-          validator: buildValidatorFromSpecs(key, specs, noun),
-          specs,
+          specs: [spec],
+          merged,
+          validator: validatorForSpec(key, merged, noun),
         });
       }
       let active = true;
@@ -417,7 +409,8 @@ export function createValidatorRegistry(
         if (entry.specs.length === 0) {
           entries.delete(key);
         } else {
-          entry.validator = buildValidatorFromSpecs(key, entry.specs, noun);
+          entry.merged = mergeKeySpecs(key, entry.specs, noun);
+          entry.validator = validatorForSpec(key, entry.merged, noun);
         }
       };
     },
@@ -443,15 +436,11 @@ export function createValidatorRegistry(
 
     rangeParamsFor(key) {
       const entry = entries.get(key);
-      if (!entry || entry.permanent || entry.kind !== "range") return null;
-      const spec = mergeKeySpecs(key, entry.specs, noun);
-      if (spec.kind !== "range") {
-        throw new Error(
-          `rangeParamsFor: key "${key}" holds range specs but the merge ` +
-            `produced a ${spec.kind} spec — the entry-kind invariant is broken.`,
-        );
+      if (!entry || entry.permanent || entry.merged.kind !== "range") {
+        return null;
       }
-      return { min: spec.min, max: spec.max, seed: spec.seed };
+      const { min, max, seed } = entry.merged;
+      return { min, max, seed };
     },
   };
 }

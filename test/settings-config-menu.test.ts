@@ -82,46 +82,61 @@ function rig(
   durable?: DurableConfig,
   width: number = Number.POSITIVE_INFINITY,
 ): {
-  config: ValidatedConfig;
+  readonly config: ValidatedConfig;
   sessionState: SessionState;
   logs: string[];
   render: () => string;
   click: (url: string) => void;
   dispose: () => void;
 } {
-  const config = parseAndValidate(
-    "<user>",
-    source,
-    ALLOWED,
-    DEFAULT_DSL_CONFIG,
-  );
   const sessionState = new SessionState();
   durable?.write(source);
   durable?.seedOrigin(sessionState, SID);
-  const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
-  // A save compares the session against the config this rig renders with.
+  // Everything the daemon's cache entry holds for one config — rebuilt whole
+  // on a reload, the old registry and gates disposed first, exactly as
+  // RenderCache.reloadInto swaps an entry's state.
+  const load = (text: string) => {
+    const config = parseAndValidate(
+      "<user>",
+      text,
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const disposers = [
+      ...deriveActionValidators(config).map(({ key, spec }) =>
+        registerStateValidator(key, spec),
+      ),
+      ...deriveConfigActionValidators(config).map(({ key, spec }) =>
+        registerConfigValidator(key, spec),
+      ),
+      () => registry.dispose(),
+    ];
+    return { config, store, registry, compiled, disposers };
+  };
+  let entry = load(source);
   const logs: string[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
-    configFor: () => config,
+    configFor: () => entry.config,
+    reloadConfig: () => {
+      const next = load(durable!.text()!);
+      entry.disposers.forEach((d) => d());
+      entry = next;
+    },
   };
   return {
-    config,
+    get config() {
+      return entry.config;
+    },
     sessionState,
     logs,
-    render: () =>
-      renderDsl(
+    render: () => {
+      const { config, compiled, store, registry } = entry;
+      return renderDsl(
         config,
         compiled,
         store,
@@ -174,7 +189,8 @@ function rig(
             config.globals.palette,
           ),
         },
-      ),
+      );
+    },
     click: (url: string) => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
@@ -185,10 +201,7 @@ function rig(
         handler(e.value, ctx);
       }
     },
-    dispose: () => {
-      for (const d of disposers) d();
-      registry.dispose();
-    },
+    dispose: () => entry.disposers.forEach((d) => d()),
   };
 }
 
@@ -235,7 +248,11 @@ describe("the save action", () => {
 
   test("a save carries nothing: any other value or key is a load error", () => {
     expect(() =>
-      parseAndValidate("<test>", withActions(`{ s: { save: 'theme' } }`), ALLOWED),
+      parseAndValidate(
+        "<test>",
+        withActions(`{ s: { save: 'theme' } }`),
+        ALLOWED,
+      ),
     ).toThrow(/save must be the literal true/);
     expect(() =>
       parseAndValidate(
@@ -348,49 +365,44 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(plain(r.render())).not.toContain("💾");
   });
 
-  // What the next reload renders with: the file the save wrote, through the
-  // same cascade the rig parsed the original with.
-  const reloaded = (): ValidatedConfig =>
-    parseAndValidate("<user>", durable.text()!, ALLOWED, DEFAULT_DSL_CONFIG);
-
-  test("save writes every draft in one edit, and once it reloads nothing is left to save", () => {
+  test("save writes every draft in one edit, reloads, releases the picks, and the cell is gone", () => {
     r.click(wrapUrl());
     r.click(paddingUp());
     r.click(saveUrl()!);
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.autoWrap).toBe(false);
     expect(globals.padding).toBe(2);
-    // The picks stay: the bar keeps showing them through the reload, and the
-    // reloaded file resolves to them, so they are no longer drafts.
-    expect(r.sessionState.get(SID, "autoWrap")).toBe("false");
-    expect(r.sessionState.get(SID, "padding")).toBe("2");
-    expect(
-      settingDrafts(reloaded(), (key) => r.sessionState.get(SID, key)),
-    ).toEqual([]);
+    expect(r.sessionState.get(SID, "autoWrap")).toBeNull();
+    expect(r.sessionState.get(SID, "padding")).toBeNull();
+    // The very next render reads the reloaded file: the saved values, and
+    // nothing left to save — no frame of the old file without the picks.
+    const after = plain(r.render());
+    expect(after).toContain("wrap: off");
+    expect(after).toContain("padding 2");
+    expect(after).not.toContain("💾");
     // The save's event names what it wrote and where.
     expect(r.logs).toContainEqual(
       `save: autoWrap=false padding=2 → ${durable.configPath} (session=${SID})`,
     );
-    // ONE step in the history, and it is the file write alone.
-    expect(durable.history(SID).past.at(-1)!).toEqual([
-      expect.objectContaining({ kind: "file", file: durable.configPath }),
+    // ONE step in the history: the save's file write and its release together.
+    const step = durable.history(SID).past.at(-1)!;
+    expect(step.filter((c) => c.kind === "file")).toEqual([
+      expect.objectContaining({ file: durable.configPath }),
     ]);
+    expect(step.filter((c) => c.kind === "session")).toEqual(
+      expect.arrayContaining([
+        { kind: "session", key: "autoWrap", before: "false", after: null },
+        { kind: "session", key: "padding", before: "2", after: null },
+      ]),
+    );
   });
 
-  test("a second save with nothing unsaved is a recorded no-op", () => {
+  test("a second click on a bar drawn before the save is a recorded no-op", () => {
     r.click(paddingUp());
     const url = saveUrl()!;
     r.click(url);
-    // The bar the second click came from was drawn before the reload.
     const saved = durable.text();
     const depth = durable.history(SID).past.length;
-    expect(
-      settingDrafts(reloaded(), (key) => r.sessionState.get(SID, key)),
-    ).toEqual([]);
-    // Re-point the rig's config at the reloaded file, as the reload would.
-    r.dispose();
-    r = rig(saved!, durable);
-    r.sessionState.set(SID, "padding", "2");
     expect(() => r.click(url)).not.toThrow();
     expect(durable.text()).toBe(saved);
     expect(durable.history(SID).past).toHaveLength(depth);
@@ -461,8 +473,7 @@ describe("a pick leaves the picker open", () => {
     const first = r.render();
     r.click(arrow(first, "▶"));
     const second = r.render();
-    const theme = (rendered: string) =>
-      /🎨 (\S+)/.exec(plain(rendered))![1]!;
+    const theme = (rendered: string) => /🎨 (\S+)/.exec(plain(rendered))![1]!;
     expect(theme(first)).not.toBe(theme(opened));
     expect(theme(second)).not.toBe(theme(first));
     // Still open after each pick, centred on what was picked.

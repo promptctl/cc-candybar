@@ -54,6 +54,9 @@ export function testVerbContext(
     configFor: () => {
       throw new Error("save: no config lookup in this test");
     },
+    reloadConfig: () => {
+      throw new Error("save: no config reload in this test");
+    },
   };
 }
 

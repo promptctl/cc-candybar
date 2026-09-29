@@ -21,8 +21,8 @@
 // session pick — a DRAFT — and `💾 save N` the one way a draft reaches the
 // file, so this test drives that over the real socket: the theme control emits
 // only a session `set-state` write, the save cell appears counting the drafts
-// while the file stays untouched, and one save click writes them all.
-// Asserted on the wire and the file — not on the compiled
+// while the file stays untouched, and one save click writes them all and
+// releases the picks. Asserted on the wire and the file — not on the compiled
 // action — so the draft/save split is proven where it actually happens.
 
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -200,7 +200,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       expect(twoDrafts).toContain("💾 save 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
-      // ── Save: one click writes both drafts to the file.
+      // ── Save: one click writes both drafts to the file and releases them.
       const saveUrl = findUrl(linkUrls(twoDrafts), (effects) =>
         effects.some((e) => e.verb === "save"),
       );
@@ -220,8 +220,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(afterClicks).toContain(`🎨 ${targetTheme}`);
 
-      // …and the SAVING session shows it too, with nothing left to save: once
-      // the reload lands, the file resolves to the session's picks.
+      // …and the SAVING session shows it too, with nothing left to save: the
+      // save reloaded the file and released the picks.
       const committing = await renderUntil(
         sockPath,
         SID,

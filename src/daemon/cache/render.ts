@@ -366,6 +366,18 @@ export class RenderCache {
     return entry;
   }
 
+  // Re-read an entry from disk NOW, for a caller that just wrote its file and
+  // must not act on the old config until the reload has landed (a save
+  // releasing the picks the file now holds). The watcher still fires later;
+  // a second reload of unchanged bytes is idempotent.
+  reload(
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+  ): void {
+    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile));
+  }
+
   // Re-populate `entry` from the current state of disk (watcher-driven).
   //
   // - Load success: dispose the prior state, swap the fresh one in.

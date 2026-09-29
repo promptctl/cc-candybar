@@ -28,6 +28,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -182,9 +183,14 @@ function buildRuntime(
       registerConfigValidator(key, spec),
     ),
   ];
+  // The config a save compares against, re-read from the file on a reload.
+  let current: DslConfig = config;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, history),
-    configFor: () => config,
+    configFor: () => current,
+    reloadConfig: () => {
+      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    },
   };
   // The whole URL through the verb table, exactly as the daemon's handleClick
   // does — one click, one journal, one step.
@@ -376,17 +382,15 @@ describe("undo/redo click → the session's settings history", () => {
     runtime.dispose();
   });
 
-  test("a save is one step: undoing it restores the file and leaves the picks as drafts", () => {
+  test("a save and the session picks it releases are one step, undone together", () => {
     const runtime = buildRuntime(SRC);
     press(runtime, "pickTheme");
     press(runtime, "pickPadding");
     const original = durable.text()!;
     press(runtime, "keep");
     expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
-    // The picks stay: the reloaded file resolves to them, so they are no
-    // longer drafts, and nothing about the session changed.
-    expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
-    expect(runtime.sessionState.get("s1", "padding")).toBe("3");
+    expect(runtime.sessionState.get("s1", "theme")).toBeNull(); // released
+    expect(runtime.sessionState.get("s1", "padding")).toBeNull();
     expect(durable.history().past).toHaveLength(3);
 
     press(runtime, "back");
@@ -396,6 +400,7 @@ describe("undo/redo click → the session's settings history", () => {
 
     press(runtime, "fwd");
     expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
+    expect(runtime.sessionState.get("s1", "theme")).toBeNull();
     runtime.dispose();
   });
 

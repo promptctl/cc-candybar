@@ -90,7 +90,7 @@ declares exactly one value source:
 | `{ reset: field }` | delete `globals.<field>` from your config file, so the bundled default shows through again |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
-| `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit — see below |
+| `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -266,8 +266,9 @@ or look your config no longer declares) is never a draft.
 `{ save: true }` writes every draft to your config file as ONE edit. Each
 lands where the next reload reads it: a field the saved preset's own `globals`
 names goes into `presets.<name>.globals`, since a top-level value would be
-shadowed there, and every other field into `globals`. The picks stay in the
-session, and once the file reloads they match it, so nothing is left to save.
+shadowed there, and every other field into `globals`. The daemon reloads the
+file before it drops those picks from the session, so the bar reads the saved
+values from the very next render and follows the file from then on.
 The settings menu's `💾 save N` is exactly this, shown while `unsaved` is
 above zero:
 
@@ -302,8 +303,8 @@ their values, are read at the moment of the click, so the save writes what the
 button counted. The file is the one a `persist` click would write (below). Each
 value is checked again against the gate that admitted it as a pick; a value
 that gate no longer accepts, or a file that cannot be written, refuses the
-whole save loudly, and the file stays as it was. A save is one step in the
-undo history: undoing it restores the file, and the picks are drafts again.
+whole save loudly, and every draft stays where it was. A save is one step in
+the undo history: undoing it restores the file and the picks together.
 
 `save` carries no key and no value, so anything else is a load error:
 
