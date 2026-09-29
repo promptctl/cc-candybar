@@ -97,31 +97,40 @@ function* helperCalls(
 // refs of every helper it hands a root-relative dot to, followed through
 // helpers those call. A helper's `.x` is relative to the argument it was
 // given, so it is a root read only when that argument is `.` or a `.a.b` path
-// — a helper fed a `dict` reads the dict. Each ref maps to the helper it was
-// reached through (`null` = the template itself), so a load error can name
-// the body that spells it. Every reader — reachability, cross-ref, cycles,
-// introspection — asks this, so none is blind to a helper's reads.
+// — a helper fed a `dict` reads the dict. A helper already on the call chain
+// is not followed again: a recursive walker (`{{ template "walk" .child }}`)
+// hands itself a longer path each time, so the path cannot be what stops it.
+// Each ref maps to the helper whose body spells it (`null` = the template
+// itself), so a load error names the body to fix. Every reader —
+// reachability, cross-ref, cycles, introspection — asks this, so none is blind
+// to a helper's reads.
 export function templateReads(
   template: string,
   helpers: Readonly<Record<string, string>>,
 ): ReadonlyMap<string, string | null> {
   const reads = new Map<string, string | null>();
-  const seen = new Set<string>();
-  const walk = (src: string, prefix: string, via: string | null): void => {
+  const walk = (
+    src: string,
+    prefix: string,
+    via: string | null,
+    chain: ReadonlySet<string>,
+  ): void => {
     for (const ref of dottedRefs(src)) {
       if (!reads.has(prefix + ref)) reads.set(prefix + ref, via);
     }
     // Collected before recursing: the scan's regexes are shared globals.
     for (const call of [...helperCalls(src)]) {
       const body = helpers[call.name];
-      const at = prefix + call.prefix;
-      const key = `${call.name}\0${at}`;
-      if (body === undefined || seen.has(key)) continue;
-      seen.add(key);
-      walk(body, at, via ?? call.name);
+      if (body === undefined || chain.has(call.name)) continue;
+      walk(
+        body,
+        prefix + call.prefix,
+        call.name,
+        new Set([...chain, call.name]),
+      );
     }
   };
-  walk(template, "", null);
+  walk(template, "", null, new Set());
   return reads;
 }
 

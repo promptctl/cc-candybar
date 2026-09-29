@@ -2043,13 +2043,25 @@ describe("templateReads", () => {
       ).toEqual({ "git.sha": null });
     });
 
-    test("nested calls follow through and name the outermost helper", () => {
+    test("nested calls follow through and name the helper that spells the ref", () => {
       expect(
         readsOf('{{ template "outer" . }}', {
           outer: '{{ template "inner" . }}',
           inner: "{{ .git.stash }}",
         }),
-      ).toEqual({ "git.stash": "outer" });
+      ).toEqual({ "git.stash": "inner" });
+    });
+
+    test("a helper recursing on a growing path terminates", () => {
+      expect(
+        readsOf('{{ template "walk" .tree }}', {
+          walk: '{{ .name }}{{ if .child }}{{ template "walk" .child }}{{ end }}',
+        }),
+      ).toEqual({
+        tree: null,
+        "tree.name": "walk",
+        "tree.child": "walk",
+      });
     });
 
     test("a self-calling helper terminates", () => {
