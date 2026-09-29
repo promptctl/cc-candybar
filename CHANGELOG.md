@@ -1,3 +1,10 @@
+## [1.83.1](https://github.com/promptctl/cc-candybar/compare/v1.83.0...v1.83.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **settings-menu:** the menu appears in every config, ensuring the inputs it reads ([#253](https://github.com/promptctl/cc-candybar/issues/253)) ([9d20fa6](https://github.com/promptctl/cc-candybar/commit/9d20fa6e8951905dbe34cf1b56d0470dc68dc4a5))
+
 # [1.83.0](https://github.com/promptctl/cc-candybar/compare/v1.82.0...v1.83.0) (2026-09-29)
 
 
