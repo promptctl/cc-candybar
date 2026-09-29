@@ -530,15 +530,18 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   );
 };
 
-// [LAW:no-ambient-temporal-coupling] Save (brandon-save-undo-bwi.hpi): every
-// unsaved setting lands in the config file as ONE write, and only then are
-// the session picks released — one handler owns that order, so a refused
-// write keeps every draft. The drafts are derived at click time by the SAME
-// function the render counts them with, over the config this session renders
-// with, so the click writes exactly what the `💾 save N` cell counted.
+// Save (brandon-save-undo-bwi.hpi): every unsaved setting lands in the config
+// file as ONE write. The drafts are derived at click time by the SAME function
+// the render counts them with, over the config this session renders with, so
+// the click writes exactly what the `💾 save N` cell counted.
+// [LAW:no-ambient-temporal-coupling] The session's picks are KEPT: once the
+// reload lands, the file resolves to them and they stop being drafts by
+// derivation. Releasing them here instead would leave every render between
+// this write and the watcher's reload drawing the old file with no picks — the
+// bar would flash back to the settings the user just saved.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
-// session pick (validateStateWrite): a pick made under a config that has since
-// narrowed its domain is refused loudly here, never written to the file.
+// session pick (validateStateWrite): a value the gate no longer admits is
+// refused loudly here, never written to the file.
 const save: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -552,11 +555,10 @@ const save: VerbHandler = (value, ctx) => {
   const pairs = drafts.map((d): readonly [string, string] => {
     const result = validateStateWrite(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
-    return [d.configKey, result.value];
+    return [d.target, result.value];
   });
   const file = originConfigFile(origin);
   writeValues(editStore(ctx, sid), file, pairs);
-  for (const d of drafts) ctx.sessionState.clear(sid, d.sessionKey);
   ctx.dlog(
     "info",
     `save: ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,

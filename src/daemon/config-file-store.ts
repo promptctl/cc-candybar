@@ -104,7 +104,9 @@ const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 export function persistValueText(key: string, raw: string): string {
   const target = requireValueTarget(key);
   const kind =
-    target.scope === "globals" ? GLOBALS_FIELD_KIND[target.field] : "string";
+    target.scope === "segment-palette"
+      ? "string"
+      : GLOBALS_FIELD_KIND[target.field];
   if (kind === "string") return JSON.stringify(raw);
   if (kind === "number") {
     const n = Number(raw);

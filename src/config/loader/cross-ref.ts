@@ -223,7 +223,7 @@ export function validateCrossReferences(
     if (target === null) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, or a "presets.<name>.root" target`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, or a "presets.<name>.root" target`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
@@ -251,6 +251,17 @@ export function validateCrossReferences(
         target.preset,
         a,
       );
+      continue;
+    }
+    if (
+      target.scope === "preset-globals" &&
+      !presetNames(cfg.presets).includes(target.preset)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
       continue;
     }
     if (target.scope !== "segment-palette") continue;

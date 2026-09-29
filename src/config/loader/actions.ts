@@ -104,6 +104,16 @@ function validateActionDecl(
     );
     return null;
   }
+  // [LAW:no-silent-failure] The removed dual arm names its replacement, as
+  // every removed grammar does, rather than the generic arity error below.
+  if ("persistWhen" in raw) {
+    issue(
+      ctx,
+      path,
+      `${path}.persistWhen was removed: declare the \`set\` alone — a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`,
+    );
+    return null;
+  }
   const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
   if (present.length !== 1) {
     issue(

@@ -9,12 +9,15 @@
 // spelled here and nowhere else — a control cannot write a key whose current
 // value the render does not know how to read back, and a save cannot write a
 // field other than the one the pick it saves stands for.
-// [LAW:one-way-deps] It lives under config/ and imports nothing: config/ sits
-// below render/, which already imports from here, so both sides depend downhill.
+// [LAW:one-way-deps] It lives under config/ and imports only config/'s own
+// types: config/ sits below render/, which already imports from here, so both
+// sides depend downhill.
+
+import type { Globals } from "./dsl-types.js";
 
 export interface SettingProjection {
   // The globals field a durable `persist` writes.
-  readonly configKey: string;
+  readonly configKey: keyof Globals;
   // The SessionState key a `set` writes. It differs from `configKey` where
   // history made them differ (`palette` is `theme` in the session), which is
   // why each row spells both rather than deriving one from the other.

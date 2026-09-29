@@ -376,15 +376,17 @@ describe("undo/redo click → the session's settings history", () => {
     runtime.dispose();
   });
 
-  test("a save and the session picks it releases are one step, undone together", () => {
+  test("a save is one step: undoing it restores the file and leaves the picks as drafts", () => {
     const runtime = buildRuntime(SRC);
     press(runtime, "pickTheme");
     press(runtime, "pickPadding");
     const original = durable.text()!;
     press(runtime, "keep");
     expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
-    expect(runtime.sessionState.get("s1", "theme")).toBeNull(); // released
-    expect(runtime.sessionState.get("s1", "padding")).toBeNull();
+    // The picks stay: the reloaded file resolves to them, so they are no
+    // longer drafts, and nothing about the session changed.
+    expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
+    expect(runtime.sessionState.get("s1", "padding")).toBe("3");
     expect(durable.history().past).toHaveLength(3);
 
     press(runtime, "back");
@@ -394,7 +396,6 @@ describe("undo/redo click → the session's settings history", () => {
 
     press(runtime, "fwd");
     expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
-    expect(runtime.sessionState.get("s1", "theme")).toBeNull();
     runtime.dispose();
   });
 

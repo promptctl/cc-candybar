@@ -245,6 +245,18 @@ describe("the save action", () => {
       ),
     ).toThrow(/Unknown key "key" on a save action/);
   });
+
+  test("the removed persistWhen dual names save as its replacement", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        withActions(
+          `{ s: { set: 'theme', persist: 'palette', persistWhen: 'p', from: 'themes' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(/persistWhen was removed: declare the `set` alone .*save: true/);
+  });
 });
 
 // ─── 2–5. The menu, from a two-segment root ──────────────────────────────────
@@ -336,31 +348,33 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(plain(r.render())).not.toContain("💾");
   });
 
-  test("save writes every draft in one edit, releases the picks, and the cell is gone", () => {
+  // What the next reload renders with: the file the save wrote, through the
+  // same cascade the rig parsed the original with.
+  const reloaded = (): ValidatedConfig =>
+    parseAndValidate("<user>", durable.text()!, ALLOWED, DEFAULT_DSL_CONFIG);
+
+  test("save writes every draft in one edit, and once it reloads nothing is left to save", () => {
     r.click(wrapUrl());
     r.click(paddingUp());
     r.click(saveUrl()!);
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.autoWrap).toBe(false);
     expect(globals.padding).toBe(2);
-    expect(r.sessionState.get(SID, "autoWrap")).toBeNull();
-    expect(r.sessionState.get(SID, "padding")).toBeNull();
-    expect(plain(r.render())).not.toContain("💾");
+    // The picks stay: the bar keeps showing them through the reload, and the
+    // reloaded file resolves to them, so they are no longer drafts.
+    expect(r.sessionState.get(SID, "autoWrap")).toBe("false");
+    expect(r.sessionState.get(SID, "padding")).toBe("2");
+    expect(
+      settingDrafts(reloaded(), (key) => r.sessionState.get(SID, key)),
+    ).toEqual([]);
     // The save's event names what it wrote and where.
     expect(r.logs).toContainEqual(
       `save: autoWrap=false padding=2 → ${durable.configPath} (session=${SID})`,
     );
-    // ONE step in the history: the save's file write and its release together.
-    const step = durable.history(SID).past.at(-1)!;
-    expect(step.filter((c) => c.kind === "file")).toEqual([
-      expect.objectContaining({ file: durable.configPath }),
+    // ONE step in the history, and it is the file write alone.
+    expect(durable.history(SID).past.at(-1)!).toEqual([
+      expect.objectContaining({ kind: "file", file: durable.configPath }),
     ]);
-    expect(step.filter((c) => c.kind === "session")).toEqual(
-      expect.arrayContaining([
-        { kind: "session", key: "autoWrap", before: "false", after: null },
-        { kind: "session", key: "padding", before: "2", after: null },
-      ]),
-    );
   });
 
   test("a refused write keeps every draft and leaves the file as it was", () => {
@@ -379,14 +393,14 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(plain(r.render())).toContain("💾 save 2");
   });
 
-  test("a pick the gate no longer admits is refused before the file is touched", () => {
+  test("a pick the render ignores is no draft, and a save leaves it be", () => {
     r.click(paddingUp());
     r.sessionState.set(SID, "theme", "no-such-theme");
-    const before = durable.text();
-    expect(() => r.click(saveUrl()!)).toThrow(/save: .*no-such-theme/);
-    expect(durable.text()).toBe(before);
-    expect(r.sessionState.get(SID, "padding")).toBe("2");
-    expect(r.sessionState.get(SID, "theme")).toBe("no-such-theme");
+    expect(plain(r.render())).toContain("💾 save 1");
+    r.click(saveUrl()!);
+    const globals = durable.parsed().globals as Record<string, unknown>;
+    expect(globals.padding).toBe(2);
+    expect(globals).not.toHaveProperty("palette");
   });
 });
 
