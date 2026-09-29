@@ -411,10 +411,12 @@ rendering it was built from source other than the `src/` beside it — an
 identity check, so a checkout to an older commit trips it too — or, for a
 published install, when the registry's latest release is newer than the
 installed one. Its `[disable]` affordance IS
-`{ persist: "updateNotice", to: "false" }` — the config file, durably. Like the
-other display globals it has a session half, the settings menu's
-`☑ update notice` toggle, read back as `.updateNotice.effective`, so it is how
-a disabled notice is turned back on from the bar. The row's own `[dismiss]` is
+`{ persist: "updateNotice", to: "false" }` — the config file, durably — and
+sets this session's pick to `false` in the same click, since a session pick
+outranks the file. Like the other display globals it has a session half, the
+settings menu's `☑ update notice` toggle, read back as
+`.updateNotice.effective`, so it is how a disabled notice is turned back on
+from the bar. The row's own `[dismiss]` is
 a different thing: it writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
 something newer appears.

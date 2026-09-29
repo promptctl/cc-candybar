@@ -64,7 +64,6 @@ import {
   presetSnapshot,
   type PlacementDraft,
   resetLayers,
-  settingSessionKeys,
   settingDrafts,
 } from "../setting-drafts";
 import {
@@ -564,26 +563,15 @@ function originConfigFile(origin: RenderOrigin): string {
   );
 }
 
+function sessionConfigFile(ctx: VerbContext, sid: string): string {
+  return originConfigFile(sessionOrigin(ctx, sid));
+}
+
 function editStore(ctx: ClickContext, sid: string): EditStore {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
     logger: ctx.dlog,
   };
-}
-
-// [LAW:one-source-of-truth] A durable write of a setting is what the bar
-// shows next: the session's pick of that setting would outrank the file, so
-// the file is reloaded and then the pick released — save's order
-// [LAW:no-ambient-temporal-coupling], so no render between draws the pick's
-// absence over a file that does not yet hold the value.
-function releaseToFile(
-  ctx: VerbContext,
-  sid: string,
-  origin: RenderOrigin,
-  key: string,
-): void {
-  ctx.reloadConfig(origin);
-  for (const k of settingSessionKeys(key)) ctx.sessionState.clear(sid, k);
 }
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
@@ -606,10 +594,8 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const origin = sessionOrigin(ctx, sid);
-  const file = originConfigFile(origin);
+  const file = sessionConfigFile(ctx, sid);
   writeValues(editStore(ctx, sid), file, [[key, result.value]]);
-  releaseToFile(ctx, sid, origin, key);
   ctx.dlog(
     "info",
     `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
@@ -659,7 +645,6 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), file, [[key, result.value]]);
-  releaseToFile(ctx, sid, origin, key);
   ctx.dlog(
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,

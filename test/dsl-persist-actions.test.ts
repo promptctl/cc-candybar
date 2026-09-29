@@ -404,7 +404,7 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
     }
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, sessionState, render, click, dispose };
+  return { config, store, render, click, dispose };
 }
 
 describe("persist action click → the config file", () => {
@@ -446,18 +446,6 @@ describe("persist action click → the config file", () => {
     expect(durable.history().past).toEqual([
       durable.fileStep(original, written),
     ]);
-    dispose();
-  });
-
-  // A session pick outranks the file, so a durable write that left it in
-  // place would change the file and not the bar (the update notice's
-  // [disable] over a session's ☑ update notice).
-  test("a durable write releases the session's pick of that setting", () => {
-    const { render, click, sessionState, dispose } = buildPersistRuntime(SRC);
-    sessionState.set("s1", "theme", "gruvbox");
-    click(ownUrls(render())[0]!);
-    expect(globalsInFile()).toEqual({ palette: "nord" });
-    expect(sessionState.get("s1", "theme")).toBeNull();
     dispose();
   });
 

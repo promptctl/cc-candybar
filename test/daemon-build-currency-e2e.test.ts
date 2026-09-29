@@ -14,7 +14,12 @@ import path from "node:path";
 
 import { sourceDigest } from "../src/source-digest";
 import { PACKAGE_VERSION } from "../src/version";
-import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD } from "../src/daemon/update-notice";
+import {
+  UPDATE_DISMISSED_KEY,
+  UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
+} from "../src/daemon/update-notice";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   click,
   linkUrls,
@@ -189,6 +194,32 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       await renderUntil(
         sock,
         "bc-disable",
+        s.projectDir,
+        (r) => !hasNotice(r),
+        "the bar without the update notice",
+      );
+    });
+  });
+
+  // The settings menu's ☑ update notice is a session pick, which outranks the
+  // file: a disable that wrote only the file would leave the notice up.
+  test("[disable] hides the notice over a session that switched it on from the menu", async () => {
+    const s = scratchLayout("edited");
+    await withDaemon(s, {}, async (sock) => {
+      const before = await render(sock, "bc-disable-pick", s.projectDir);
+      await click(
+        sock,
+        effectsUrl([
+          {
+            verb: VERB_SET_STATE,
+            args: ["bc-disable-pick", UPDATE_NOTICE_SESSION_KEY, "true"],
+          },
+        ]),
+      );
+      await click(sock, affordance(before, "set-config", UPDATE_NOTICE_FIELD));
+      await renderUntil(
+        sock,
+        "bc-disable-pick",
         s.projectDir,
         (r) => !hasNotice(r),
         "the bar without the update notice",

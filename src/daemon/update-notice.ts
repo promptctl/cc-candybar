@@ -19,6 +19,7 @@
 // registrations.
 
 import type { Globals } from "../config/dsl-types";
+import { SETTINGS } from "../config/setting-projections";
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -76,6 +77,10 @@ export type Update =
 // Globals so a rename there fails here at compile time.
 export const UPDATE_DISMISSED_KEY = "update.dismissed";
 export const UPDATE_NOTICE_FIELD = "updateNotice" satisfies keyof Globals;
+// The session half of the same setting (the settings menu's toggle). A disable
+// writes both layers: the file so every session starts disabled, and this
+// session's pick, which outranks the file and may hold `true` from the toggle.
+export const UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
 
 // What a dismissal names: the newer thing's identity, so a dismissal lapses
 // the moment something newer again appears — the digest for source (the
@@ -207,6 +212,10 @@ export function updateNotice(
         {
           verb: VERB_SET_CONFIG,
           args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"],
+        },
+        {
+          verb: VERB_SET_STATE,
+          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"],
         },
       ]),
     ),
@@ -409,6 +418,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       // Daemon-lifetime registration: the disposer would only matter to a
       // watch that is torn down, and the daemon exits instead.
       registerConfigValidator(UPDATE_NOTICE_FIELD, {
+        kind: "allow-list",
+        allowed: ["false"],
+      });
+      registerStateValidator(UPDATE_NOTICE_SESSION_KEY, {
         kind: "allow-list",
         allowed: ["false"],
       });
