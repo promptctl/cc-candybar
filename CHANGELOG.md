@@ -1,3 +1,10 @@
+## [1.97.2](https://github.com/promptctl/cc-candybar/compare/v1.97.1...v1.97.2) (2026-09-29)
+
+
+### Bug Fixes
+
+* **themes:** one name per palette — delete the dark/light aliases ([#279](https://github.com/promptctl/cc-candybar/issues/279)) ([52c44fc](https://github.com/promptctl/cc-candybar/commit/52c44fcbe28e45f83cfd27ca8427d4ff4dd8e5c0))
+
 ## [1.97.1](https://github.com/promptctl/cc-candybar/compare/v1.97.0...v1.97.1) (2026-09-29)
 
 
