@@ -1,3 +1,11 @@
+# [1.91.0](https://github.com/promptctl/cc-candybar/compare/v1.90.0...v1.91.0) (2026-09-29)
+
+
+### Features
+
+* **actions:** a slash action types a declared command into this Claude Code session ([#267](https://github.com/promptctl/cc-candybar/issues/267)) ([601e3fe](https://github.com/promptctl/cc-candybar/commit/601e3fe83aed67e3da077844be4ee00fcf4d2e59))
+* **segments:** configure one placement's settings from the bar ([#266](https://github.com/promptctl/cc-candybar/issues/266)) ([0147b73](https://github.com/promptctl/cc-candybar/commit/0147b73e4e9a5798a50d5c7682e12b265f10bcef))
+
 # [1.90.0](https://github.com/promptctl/cc-candybar/compare/v1.89.0...v1.90.0) (2026-09-29)
 
 
