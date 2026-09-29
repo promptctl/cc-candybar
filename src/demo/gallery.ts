@@ -19,13 +19,11 @@
 
 import process from "node:process";
 
-import { listThemePalettes } from "@promptctl/rich-js";
-
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { prepareConfig, renderEffective } from "../check.js";
+import { listResolvablePaletteNames } from "../themes/policy.js";
 
-// Palettes, not aliases: an alias renders its target's bar under another name.
-const THEMES = listThemePalettes();
+const THEMES = listResolvablePaletteNames();
 const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
 const WIDTH = (process.stdout.columns ?? 200) - LABEL;
 

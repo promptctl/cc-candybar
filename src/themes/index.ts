@@ -4,7 +4,6 @@
 // hydration, all color math, and the anchor rule — cc-candybar keeps no color
 // arithmetic of its own.
 export {
-  resolvePaletteName,
   THEME_FLOOR,
   LOOK_FLOOR,
   EXPRESSION_SLOTS,

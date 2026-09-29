@@ -418,14 +418,14 @@ describe("resolveThemeSelection", () => {
     });
   });
 
-  test("an alias decides under the name the AUTHOR wrote, not the resolved one", () => {
-    // `Palette.name` cannot stand in for the label: resolvePaletteName folds
-    // aliases, so a user who picked `dark` must still read `dark`.
-    const decided = resolveThemeSelection(undefined, "dark", undefined);
-    expect(decided).toMatchObject({ kind: "decided", name: "dark" });
-    expect(decided.kind === "decided" && decided.value.name).toBe(
-      getThemePalette("textual-dark")!.name,
-    );
+  test("a session pick naming no installed theme falls through to the config rung", () => {
+    // `dark` was an alias of textual-dark until brandon-theme-picker-bgw.exj.dw1;
+    // a session that picked it before then holds a name nothing installs.
+    expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
+      kind: "decided",
+      name: "nord",
+      value: getThemePalette("nord"),
+    });
   });
 
   test("an expression is undecided only when no higher rung decided", () => {

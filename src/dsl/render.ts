@@ -903,9 +903,7 @@ export interface RenderSelection {
   // argument any more: renderDsl is the one producer of `theme.effective` (under a
   // rule nobody upstream knows the answer), so a palette arriving separately from
   // the name it is labelled with would be a second clock free to say gruvbox while
-  // the label said nord. `Palette.name` cannot stand in for the name either —
-  // `resolvePaletteName` folds aliases, so a user who picked `dark` would be
-  // labelled `textual-dark`.
+  // the label said nord.
   readonly theme?: ThemeSelection;
   // The resolved preset NAME: effectivePresetName over SessionState/globals,
   // collapsed to the floor if stale. Selects which of `compiled.roots` this

@@ -22,17 +22,6 @@ import {
 } from "@promptctl/rich-js";
 import { PROGRESSIONS, type ProgressionName } from "./decor.js";
 
-// --- Theme name aliasing ---
-
-const THEME_ALIASES: Record<string, string> = {
-  dark: "textual-dark",
-  light: "textual-light",
-};
-
-export function resolvePaletteName(name: string): string {
-  return THEME_ALIASES[name] ?? name;
-}
-
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
 // when nothing above it decided. Spelled once because three things reach it — a
 // config declaring no `palette`, a session pick naming nothing installed, and an
@@ -89,18 +78,15 @@ export function effectiveGlobal<T>(
   return staged ?? picked ?? configDefault ?? floor;
 }
 
-function listThemeAliases(): readonly string[] {
-  return Object.keys(THEME_ALIASES);
-}
-
 // [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
-// is exactly registry names ∪ aliases — the same inputs resolvePaletteName +
-// getThemePalette accept. "custom" and "random" are deliberately absent: neither
-// names a concrete palette (custom needs inline colors; random is a per-session
-// sentinel). Config validators that gate a palette PULL (DSL `palette:` field)
-// must reuse this, not re-derive it.
+// is exactly the registry's names: one name per palette, so a picker or a
+// carousel stepping this list never lands on a palette it already showed, and
+// a label always names the palette the bar wears. "custom" and "random" are
+// deliberately absent: neither names a concrete palette (custom needs inline
+// colors; random is a per-session sentinel). Config validators that gate a
+// palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
 export function listResolvablePaletteNames(): readonly string[] {
-  return [...listThemePalettes(), ...listThemeAliases()];
+  return listThemePalettes();
 }
 
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold
