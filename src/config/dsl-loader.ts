@@ -93,11 +93,7 @@ export {
 export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";
-export {
-  templateReads,
-  extractActionRefs,
-  extractPickerMenuRefs,
-} from "./loader/refs.js";
+export { templateReads } from "./loader/refs.js";
 
 // ─── Three-stage pipeline ────────────────────────────────────────────────────
 

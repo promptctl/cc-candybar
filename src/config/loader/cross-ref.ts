@@ -56,8 +56,7 @@ import {
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
-  extractActionRefs,
-  extractPickerMenuRefs,
+  templateActionRefs,
   templateReads,
   refResolves,
   templateScopeOf,
@@ -522,31 +521,31 @@ export function validateCrossReferences(
         segCtx: segName,
         settings,
       });
-      // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
-      // action table on the merged config so a segment can reference a
-      // default-provided action.
-      for (const aref of extractActionRefs(tpl)) {
-        if (!Object.prototype.hasOwnProperty.call(cfg.actions, aref)) {
-          ctx.issues.push({
-            path: `segments.${segName}.${field}`,
-            message: `${field} references unknown action "${aref}"`,
-            line: findKeyLine(ctx.source, ["segments", segName, field]),
-          });
+      // [LAW:locality-or-seam] `{{ action "name" … }}` refs, and the option
+      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}` lays out, resolve
+      // against the action table on the merged config — so a segment can
+      // reference a default-provided action — through every helper the field
+      // calls, exactly as its variable reads do.
+      for (const [aref, { site, via }] of templateActionRefs(
+        tpl,
+        cfg.helpers,
+      )) {
+        if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
+        const inOptions =
+          site === "options" ? " (in a picker, menu or carousel)" : "";
+        if (via !== null) {
+          checkHelperIssue(
+            ctx,
+            via,
+            `template references unknown action "${aref}"${inOptions}`,
+          );
+          continue;
         }
-      }
-      // [LAW:locality-or-seam] A `{{ picker "apply" "page" … }}` OR `{{ menu
-      // "apply" "page" … }}` references two named actions — both resolve against
-      // the action table at load, same existence-check shape as a bare action ref.
-      // A menu binds the same pair as a picker, so it routes through the SAME
-      // check rather than failing only when the disclosure is opened.
-      for (const pref of extractPickerMenuRefs(tpl)) {
-        if (!Object.prototype.hasOwnProperty.call(cfg.actions, pref)) {
-          ctx.issues.push({
-            path: `segments.${segName}.${field}`,
-            message: `${field} references unknown action "${pref}" (in a picker, menu or carousel)`,
-            line: findKeyLine(ctx.source, ["segments", segName, field]),
-          });
-        }
+        ctx.issues.push({
+          path: `segments.${segName}.${field}`,
+          message: `${field} references unknown action "${aref}"${inOptions}`,
+          line: findKeyLine(ctx.source, ["segments", segName, field]),
+        });
       }
     }
   }
@@ -969,7 +968,11 @@ function checkTemplateRefs(
       continue;
     }
     if (via !== null) {
-      checkHelperRef(ctx, via, ref);
+      checkHelperIssue(
+        ctx,
+        via,
+        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
+      );
       continue;
     }
     const namespaced =
@@ -986,12 +989,16 @@ function checkTemplateRefs(
   }
 }
 
-// A helper's unknown ref is the helper's error, reported at the helper — the
+// A helper's unknown ref — a variable or an action — is the helper's error,
+// reported at the helper — the
 // one place the author fixes it, in their file when they override a bundled
-// helper — and ONCE, however many templates reach it at that path.
-function checkHelperRef(ctx: ValidateCtx, helper: string, ref: string): void {
+// helper — and ONCE, however many templates reach it.
+function checkHelperIssue(
+  ctx: ValidateCtx,
+  helper: string,
+  message: string,
+): void {
   const path = `helpers.${helper}`;
-  const message = `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`;
   if (ctx.issues.some((i) => i.path === path && i.message === message)) return;
   ctx.issues.push({
     path,

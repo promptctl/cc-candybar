@@ -196,3 +196,87 @@ describe("bdi.2 — config-level shared helper templates", () => {
     expect(render(withHelper, { x: 9 })).toBe(render(without, { x: 9 }));
   });
 });
+
+// [LAW:verifiable-goals] brandon-config-refs-84s: the actions a template binds
+// are found through the helpers it calls, exactly as its variable reads are —
+// so an unknown action spelled in a helper is a LOAD error at that helper, not
+// a render-time ⚠.
+describe("84s — action refs through helpers", () => {
+  const issuesOf = (source: string): string => {
+    try {
+      build(source);
+    } catch (e) {
+      return (e as Error).message;
+    }
+    return "";
+  };
+
+  test("an unknown action in a helper called with `.` is a load error at the helper", () => {
+    const message = issuesOf(`{
+      helpers: { btn: '{{ action "nosuch" "x" }}' },
+      segments: { s: { template: '{{ template "btn" . }}' } },
+      root: "s",
+    }`);
+    expect(message).toMatch(
+      /helpers\.btn[^\n]*template references unknown action "nosuch"/,
+    );
+  });
+
+  test("a helper handed a dict, and a helper's helper, are both followed", () => {
+    const message = issuesOf(`{
+      helpers: {
+        outer: '{{ template "inner" (dict "a" 1) }}',
+        inner: '{{ action "ghost" "x" }}',
+      },
+      segments: { s: { template: '{{ template "outer" . }}' } },
+      root: "s",
+    }`);
+    expect(message).toMatch(
+      /helpers\.inner[^\n]*template references unknown action "ghost"/,
+    );
+  });
+
+  test("a picker or carousel in a helper names its unknown option action", () => {
+    const message = issuesOf(`{
+      helpers: { ring: '{{ carousel "nope" }}' },
+      segments: { s: { template: '{{ template "ring" . }}' } },
+      root: "s",
+    }`);
+    expect(message).toMatch(
+      /helpers\.ring[^\n]*unknown action "nope" \(in a picker, menu or carousel\)/,
+    );
+  });
+
+  test("a helper reached from two segments is reported once", () => {
+    const message = issuesOf(`{
+      helpers: { btn: '{{ action "nosuch" "x" }}' },
+      segments: {
+        a: { template: '{{ template "btn" . }}' },
+        b: { template: '{{ template "btn" . }}' },
+      },
+      root: { h: ["a", "b"] },
+    }`);
+    expect(message.match(/unknown action "nosuch"/g)).toHaveLength(1);
+  });
+
+  test("a declared action bound in a helper loads and renders its region", () => {
+    const source = `{
+      actions: { go: { copy: "hello" } },
+      helpers: { btn: '{{ action "go" "GO" }}' },
+      segments: { s: { template: '{{ template "btn" . }}' } },
+      root: "s",
+    }`;
+    expect(stripAnsi(render(source, { session_id: "abc" }))).toContain("GO");
+  });
+
+  test("a {{ menu }} in a helper stays a load error", () => {
+    const message = issuesOf(`{
+      actions: { pick: { set: "k", from: ["a", "b"] } },
+      variables: { k: { kind: "state", key: "k", default: "a" } },
+      helpers: { m: '{{ menu "pick" "▸" "▾" }}' },
+      segments: { s: { template: '{{ template "m" . }}' } },
+      root: "s",
+    }`);
+    expect(message).toMatch(/helper "m" uses \{\{ menu \}\}/);
+  });
+});
