@@ -10,6 +10,7 @@ import {
   describeSettingDomain,
   hasCacheField,
   inSettingDomain,
+  settingOrderProblems,
   settingsOf,
   type SettingDecl,
   freePlacementId,
@@ -45,6 +46,7 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
+import { retiredVariableMessage } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
@@ -468,6 +470,14 @@ export function validateCrossReferences(
   // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of Object.entries(cfg.variables)) {
     checkVarRefs(ctx, `variables.${name}`, v, templateScope);
+    const retired = retiredVariableMessage(name);
+    if (retired !== undefined) {
+      ctx.issues.push({
+        path: `variables.${name}`,
+        message: retired,
+        line: findKeyLine(ctx.source, ["variables", name]),
+      });
+    }
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
@@ -497,6 +507,7 @@ export function validateCrossReferences(
     // `.settings.<name>` — the placement's value for each setting the
     // segment declares, and nothing else under that name.
     const settings = settingsOf(seg);
+    checkSettingOrder(ctx, segName, settings);
     const segScope = withSettingsScope(templateScope, settings);
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
@@ -668,6 +679,68 @@ function withSettingsScope(
   };
 }
 
+// [LAW:no-silent-failure] A declaration's `atLeast` relations, over the MERGED
+// settings (a file may redeclare one setting of a bundled segment, and the
+// setting it names may be the bundled one): each names another range setting
+// of the segment, and the defaults stand together under every relation.
+function checkSettingOrder(
+  ctx: ValidateCtx,
+  segName: string,
+  settings: Readonly<Record<string, SettingDecl>>,
+): void {
+  const at = (name: string): string => `segments.${segName}.settings.${name}`;
+  const push = (name: string, message: string): void => {
+    ctx.issues.push({
+      path: at(name),
+      message: `${at(name)}: ${message}`,
+      line: findKeyLine(ctx.source, ["segments", segName, "settings", name]),
+    });
+  };
+  const unresolved = unresolvedFloors(settings);
+  for (const [name, floor] of unresolved) {
+    push(
+      name,
+      `atLeast "${floor}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`,
+    );
+  }
+  if (unresolved.length > 0) return;
+  const defaults = Object.fromEntries(
+    Object.entries(settings).map(([n, d]) => [n, d.default]),
+  );
+  for (const { setting, message } of settingOrderProblems(settings, defaults)) {
+    push(setting, `the defaults do not stand together: ${message}`);
+  }
+}
+
+const isRange = (decl: SettingDecl | undefined): boolean =>
+  typeof decl?.domain === "object" && "min" in decl.domain;
+
+// Each `atLeast` that names no OTHER range setting of the segment, as
+// [setting, the name it gives]. The relations are asked of values only when
+// this is empty — the declaration reports it once, never each placement.
+function unresolvedFloors(
+  settings: Readonly<Record<string, SettingDecl>>,
+): ReadonlyArray<readonly [string, string]> {
+  return Object.entries(settings).flatMap(([name, { domain }]) => {
+    if (typeof domain !== "object" || !("min" in domain)) return [];
+    const floor = domain.atLeast;
+    if (floor === undefined) return [];
+    const target = Object.prototype.hasOwnProperty.call(settings, floor)
+      ? settings[floor]
+      : undefined;
+    return floor !== name && isRange(target) ? [] : [[name, floor] as const];
+  });
+}
+
+function rangeSettingNames(
+  settings: Readonly<Record<string, SettingDecl>>,
+  except: string,
+): string[] {
+  return Object.entries(settings)
+    .filter(([n, decl]) => n !== except && isRange(decl))
+    .map(([n]) => n);
+}
+
 // [LAW:no-silent-failure] A placement's setting values, against the merged
 // declaration of its segment: every name must be one it declares, every value
 // inside that setting's domain. A placement of an undeclared segment is
@@ -702,6 +775,21 @@ function checkPlacementSettings(
         line,
       });
     }
+  }
+  // Values out of their domains were reported above; the relations are asked
+  // of the placement's resolved values only once every one is a member.
+  const resolved = Object.fromEntries(
+    Object.entries(declared).map(([n, d]) => [
+      n,
+      node.settings?.[n] ?? d.default,
+    ]),
+  );
+  const members = Object.entries(resolved).every(([n, v]) =>
+    inSettingDomain(declared[n]!, v),
+  );
+  if (!members || unresolvedFloors(declared).length > 0) return;
+  for (const { message } of settingOrderProblems(declared, resolved)) {
+    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
   }
 }
 

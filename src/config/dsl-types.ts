@@ -906,6 +906,48 @@ export type SettingDecl =
 export interface SettingRange {
   readonly min: number;
   readonly max: number;
+  // How far one click of configure mode's stepper moves the value (authored
+  // optionally; 1 when absent). A value between steps is still a member —
+  // the step is the control's stride, not the domain.
+  readonly step: number;
+  // Another range setting of the same segment this one may never fall below
+  // (brandon-settings-coverage-g4p.lx2): the ordering a `ramp`'s ascending
+  // stops need, declared where the stops are, so it is refused where it is
+  // written (`settingOrderProblems`) instead of discovered by the render.
+  readonly atLeast?: string;
+}
+
+// [LAW:single-enforcer] THE check of a placement's settings against each
+// other — the loader asks it of a declaration's defaults and of every
+// placement's values, and the set-state verbs of every unsaved pick before it
+// lands, so "these settings may stand together" has one answer. `values`
+// holds every declared setting's resolved value; each problem names the
+// setting that fell below its floor.
+export interface SettingOrderProblem {
+  readonly setting: string;
+  readonly message: string;
+}
+
+export function settingOrderProblems(
+  decls: Readonly<Record<string, SettingDecl>>,
+  values: Readonly<Record<string, SettingValue>>,
+): readonly SettingOrderProblem[] {
+  return Object.entries(decls).flatMap(([name, decl]) => {
+    const { domain } = decl;
+    if (typeof domain !== "object" || !("min" in domain)) return [];
+    const floor = domain.atLeast;
+    if (floor === undefined) return [];
+    const value = values[name] as number;
+    const least = values[floor] as number;
+    return value >= least
+      ? []
+      : [
+          {
+            setting: name,
+            message: `"${name}" (${value}) is below "${floor}" (${least}) — ${decl.label} must be at least ${decls[floor]!.label}`,
+          },
+        ];
+  });
 }
 
 // [LAW:single-enforcer] THE membership test of a setting's domain — the

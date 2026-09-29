@@ -329,7 +329,7 @@ describe("load errors", () => {
   test.each([
     [`on: { label: 'On', domain: 'bool', default: 'no' }`, `default must be true or false, got "no"`],
     [`on: { label: 'On', domain: [], default: 'a' }`, `a list domain must be a non-empty list of words`],
-    [`on: { label: 'On', domain: { min: 3, max: 1 }, default: 2 }`, `a range domain is { min, max } with integers min ≤ max`],
+    [`on: { label: 'On', domain: { min: 3, max: 1 }, default: 2 }`, `a range domain is { min, max, step?, atLeast? } with integers min ≤ max`],
     [`on: { domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
     [`on: { label: 'a\\nb', domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
     [`on: { label: 'On', domain: ['', 'a'], default: 'a' }`, `a list domain's words must be non-empty, slash-free, and newline-free`],

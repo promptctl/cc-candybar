@@ -50,7 +50,12 @@ const SETTING_DECL_JSON = {
           type: "object",
           additionalProperties: false,
           required: ["min", "max"],
-          properties: { min: { type: "integer" }, max: { type: "integer" } },
+          properties: {
+            min: { type: "integer" },
+            max: { type: "integer" },
+            step: { type: "integer", minimum: 1 },
+            atLeast: SETTING_NAME_JSON,
+          },
         },
       ],
     },
@@ -59,6 +64,7 @@ const SETTING_DECL_JSON = {
 };
 
 const DECL_KEYS = ["label", "domain", "default"];
+const RANGE_KEYS = ["min", "max", "step", "atLeast"];
 
 function issue(ctx: ValidateCtx, path: string, message: string): undefined {
   ctx.issues.push({
@@ -111,20 +117,28 @@ function parseDomain(
     return words;
   }
   if (isPlainObject(raw)) {
-    const { min, max } = raw;
-    const extra = Object.keys(raw).filter((k) => k !== "min" && k !== "max");
+    const { min, max, step = 1, atLeast } = raw;
+    const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
     if (
       extra.length === 0 &&
       Number.isInteger(min) &&
       Number.isInteger(max) &&
-      (min as number) <= (max as number)
+      (min as number) <= (max as number) &&
+      Number.isInteger(step) &&
+      (step as number) >= 1 &&
+      (atLeast === undefined || typeof atLeast === "string")
     ) {
-      return { min: min as number, max: max as number };
+      return {
+        min: min as number,
+        max: max as number,
+        step: step as number,
+        ...(atLeast !== undefined && { atLeast }),
+      };
     }
     return issue(
       ctx,
       path,
-      `a range domain is { min, max } with integers min ≤ max, got ${JSON.stringify(raw)}`,
+      `a range domain is { min, max, step?, atLeast? } with integers min ≤ max, a whole step ≥ 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`,
     );
   }
   return issue(

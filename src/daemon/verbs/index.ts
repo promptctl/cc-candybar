@@ -57,8 +57,10 @@ import {
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
+import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
 import {
   placementDrafts,
+  placementPickProblems,
   presetSnapshot,
   type PlacementDraft,
   resetLayers,
@@ -344,6 +346,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
     }
     validated.push({ key, value: result.value });
   }
+  refuseDisorderedPicks(ctx, sid, "set-state", validated);
   // [LAW:single-enforcer] One write call, one log line format. setBatch
   // is the seam that owns reactive atomicity — every pair lands before
   // observers fire, so an autorun never sees half-applied batch state.
@@ -420,12 +423,36 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   const next = wrapStep(clamped + by, params.min, params.max);
   const result = validateStateWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
+  refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.sessionState.set(sid, key, result.value);
   ctx.dlog(
     "info",
     `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
   );
 };
+
+// [LAW:no-silent-failure] An unsaved pick of a placement's setting lands only
+// if the placement's settings still stand together (placementPickProblems) —
+// a threshold stepped past its neighbour is refused here, in the bar, rather
+// than written for the render's `ramp` to fail on. A write that holds no
+// placement's setting asks nothing of the session's config.
+function refuseDisorderedPicks(
+  ctx: VerbContext,
+  sid: string,
+  verb: string,
+  writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
+): void {
+  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  if (picks.length === 0) return;
+  const problems = placementPickProblems(
+    ctx.configFor(sessionOrigin(ctx, sid)),
+    (k) => ctx.sessionState.get(sid, k),
+    picks,
+  );
+  if (problems.length > 0) {
+    throw new BadVerbArgs(`${verb}: refused — ${problems.join("; ")}`);
+  }
+}
 
 function clampTo(params: RangeParams, n: number): number {
   return Math.max(params.min, Math.min(params.max, n));

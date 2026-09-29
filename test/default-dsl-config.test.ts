@@ -1213,25 +1213,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).toContain("-");
     });
 
-    test("config override of block.budget.warningThreshold flows through to bg classification", () => {
+    test("a placement's errorAt setting flows through to bg classification", () => {
       // [LAW:one-source-of-truth] The threshold lives in one place — the
-      // variable declaration — and a user file's override flows through
-      // mergeWithDefault's variables-by-name spread. Same percentage,
-      // different threshold → different bg classification → different
-      // ANSI bytes. If the template were still reading a literal 80
-      // these two renders would be byte-identical.
-      const renderBlock = (warningThreshold: number, util: number): string => {
+      // placement's `errorAt` setting. Same percentage, different threshold
+      // → different bg classification → different ANSI bytes. If the
+      // template were still reading a literal 80 these two renders would be
+      // byte-identical.
+      const renderBlock = (errorAt: number, util: number): string => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
-        const blockOnly = {
-          ...narrowToSegment(parsed, "block"),
-          variables: {
-            ...parsed.variables,
-            "block.budget.warningThreshold": {
-              kind: "literal" as const,
-              value: warningThreshold,
-            },
-          },
-        };
+        const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore();
         const registry = new SourceRegistry(
           store,
@@ -1297,6 +1287,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const renderSession = (
       payload: Record<string, unknown>,
       userSource?: string,
+      settings?: Readonly<Record<string, number>>,
     ): string => {
       const source = userSource ?? "{}";
       const raw = parseDslConfig("<user>", source);
@@ -1304,7 +1295,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source },
         "<user>",
       );
-      const sessionOnly = narrowToSegment(config, "session");
+      const sessionOnly = narrowToSegment(config, "session", settings);
       const store = new VariableStore();
       // The merged bundled default declares `activeStyle`/`stylePage` as state
       // vars; SessionState is required to declare them, exactly as the daemon
@@ -1378,44 +1369,24 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(renderSession(PAYLOAD)).toEqual(preBudget);
     });
 
-    test("user override of session.budget.amount surfaces the budgetStatus suffix", () => {
-      // [LAW:one-source-of-truth] The knob lives in one variable declaration;
-      // the user file's override flows through mergeWithDefault's
-      // variables-by-name spread. cost 8.5 / amount 10 = 85% ≥ warn 80 → " !85%".
-      const line = renderSession(
-        PAYLOAD,
-        JSON.stringify({
-          variables: {
-            "session.budget.amount": { kind: "literal", value: 10 },
-          },
-        }),
-      );
+    test("a placement's budget setting surfaces the budgetStatus suffix", () => {
+      // [LAW:one-source-of-truth] The knob is the placement's `budget`
+      // setting. cost 8.5 / budget 10 = 85% ≥ warn 80 → " !85%".
+      const line = renderSession(PAYLOAD, undefined, { budget: 10 });
       expect(line).toContain("!85%");
     });
 
-    test("user override of session.budget.warningThreshold reclassifies the suffix", () => {
-      // cost 6 / amount 10 = 60%: below the default warn 80 → " +60%";
+    test("a placement's warnAt setting reclassifies the suffix", () => {
+      // cost 6 / budget 10 = 60%: below the default warn 80 → " +60%";
       // with warn 50 the same spend reads " !60%". Same cost, different
-      // threshold → different bytes, proving the template reads the variable,
+      // threshold → different bytes, proving the template reads the setting,
       // not a baked-in literal.
       const spend = { session: { cost: 6, tokens: 1000 } };
-      const defaultWarn = renderSession(
-        spend,
-        JSON.stringify({
-          variables: {
-            "session.budget.amount": { kind: "literal", value: 10 },
-          },
-        }),
-      );
-      const tightWarn = renderSession(
-        spend,
-        JSON.stringify({
-          variables: {
-            "session.budget.amount": { kind: "literal", value: 10 },
-            "session.budget.warningThreshold": { kind: "literal", value: 50 },
-          },
-        }),
-      );
+      const defaultWarn = renderSession(spend, undefined, { budget: 10 });
+      const tightWarn = renderSession(spend, undefined, {
+        budget: 10,
+        warnAt: 50,
+      });
       expect(defaultWarn).toContain("+60%");
       expect(tightWarn).toContain("!60%");
     });
