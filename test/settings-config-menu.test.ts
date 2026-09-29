@@ -310,8 +310,9 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(out).toContain("🎨 tokyo-night"); // theme
     expect(out).toContain("◐ none"); // look
     expect(out).toContain("✦ powerline"); // style
-    expect(out).toContain("wrap: on"); // autoWrap
+    expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
+    expect(out).toContain("☑ update notice"); // updateNotice
     // Nothing picked, nothing to save.
     expect(out).not.toContain("💾");
     expect(saveUrl()).toBeUndefined();
@@ -337,7 +338,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   test("a pick is a draft: the bar follows it, 💾 save counts it, the file is untouched", () => {
     const before = durable.text();
     r.click(wrapUrl());
-    expect(plain(r.render())).toContain("wrap: off");
+    expect(plain(r.render())).toContain("☐ wrap");
     expect(plain(r.render())).toContain("💾 save 1");
     r.click(paddingUp());
     expect(plain(r.render())).toContain("💾 save 2");
@@ -361,7 +362,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     r.click(wrapUrl());
     expect(plain(r.render())).toContain("💾 save 1");
     r.click(wrapUrl());
-    expect(plain(r.render())).toContain("wrap: on");
+    expect(plain(r.render())).toContain("☑ wrap");
     expect(plain(r.render())).not.toContain("💾");
   });
 
@@ -377,7 +378,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     // The very next render reads the reloaded file: the saved values, and
     // nothing left to save — no frame of the old file without the picks.
     const after = plain(r.render());
-    expect(after).toContain("wrap: off");
+    expect(after).toContain("☐ wrap");
     expect(after).toContain("padding 2");
     expect(after).not.toContain("💾");
     // The save's event names what it wrote and where.

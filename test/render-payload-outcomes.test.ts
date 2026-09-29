@@ -387,9 +387,9 @@ describe("buildRenderPayload — effective globals projection", () => {
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });
     expect(payload.padding).toEqual({ effective: 3 });
-    // The daemon consumes these two itself — `updateNotice` gates the notice
-    // channel, `separator` feeds the joiner — and no template reads them.
-    expect(payload).not.toHaveProperty("updateNotice");
+    // `updateNotice` gates the notice channel AND labels its settings-menu
+    // toggle; `separator` only feeds the joiner, and no template reads it.
+    expect(payload.updateNotice).toEqual({ effective: true });
     expect(payload).not.toHaveProperty("separator");
   });
 });

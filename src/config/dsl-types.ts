@@ -559,7 +559,7 @@ export interface Globals {
   // true. The notice's own `[disable]` click writes `false` here, so this is
   // the one durable "never show it" switch; a per-session, per-version
   // dismissal lives in SessionState instead.
-  // [config-only] `globals.updateNotice ?? true`; no SessionState half.
+  // A session's pick over this — `effectiveUpdateNotice` resolves both.
   readonly updateNotice?: boolean;
 
   // The legacy display.colorCompatibility knob: the color depth rich-js

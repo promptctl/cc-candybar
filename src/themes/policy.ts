@@ -622,6 +622,22 @@ export function effectiveAutoWrap(
   );
 }
 
+// Whether the update notice may render, as data — effectiveAutoWrap's twin
+// over the other boolean setting, with its own floor.
+export function effectiveUpdateNotice(
+  stagedUpdateNotice: boolean | undefined,
+  sessionUpdateNotice: string | null,
+  globalsUpdateNotice: boolean | undefined,
+): boolean {
+  return effectiveGlobal(
+    stagedUpdateNotice,
+    sessionUpdateNotice,
+    globalsUpdateNotice,
+    DEFAULT_UPDATE_NOTICE,
+    parseSessionBoolean,
+  );
+}
+
 // The intra-cell padding a render uses, as data. A session value outside
 // PADDING_RANGE falls through to the config default, the same rule every other
 // field here follows: the gate already refuses out-of-range clicks, so a value

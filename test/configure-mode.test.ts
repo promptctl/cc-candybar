@@ -8,7 +8,7 @@
 //   - In arrange mode every placement carries a ⚙: `theme` is a setting each
 //     one has (brandon-settings-menu-6c5), declared or not.
 //   - Configure mode hangs one control per declared setting below that
-//     placement, generated from its domain: a toggle, a word cycle, a stepper.
+//     placement, generated from its domain: a toggle, a word carousel, a stepper.
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
@@ -157,14 +157,18 @@ function buildRuntime(
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
-  // The one link whose click writes `value` to `key` — or, for a stepper
-  // (`step-state`), steps `key` by `value`.
+  // A link whose click writes `value` to `key` — or, for a stepper
+  // (`step-state`), steps `key` by `value`. A carousel over two words draws
+  // the other one behind both its arrows, so there may be more than one; they
+  // are one click.
   const urlWriting = (out: string, key: string, value: string): string => {
-    const hits = linkUrls(out).filter((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+    const hits = new Set(
+      linkUrls(out).filter((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      ),
     );
-    expect(hits).toHaveLength(1);
-    return hits[0]!;
+    expect(hits.size).toBe(1);
+    return [...hits][0]!;
   };
   const dispose = (): void => disposers.forEach((d) => d());
   return { config, sessionState, render, click, urlWriting, ctx, dispose };
@@ -241,7 +245,7 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(text).toContain("plain");
     // …and vcs2's controls, one per setting, hang below it — its own values.
     expect(text).toContain("☐ detail");
-    expect(text).toContain("form: long");
+    expect(text).toContain("form ◀ long ▶");
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text.match(/☐ detail|☑ detail/g)).toHaveLength(1);
 
@@ -251,8 +255,8 @@ describe("configure mode: one placement's settings at a time", () => {
     );
     rt.click(other!);
     const again = stripAnsi(rt.render());
-    expect(again).toContain("form: short");
-    expect(again).not.toContain("form: long");
+    expect(again).toContain("form ◀ short ▶");
+    expect(again).not.toContain("form ◀ long ▶");
     expect(again.match(/☐ detail|☑ detail/g)).toHaveLength(1);
     rt.dispose();
   });
@@ -261,14 +265,14 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "vcs2"));
-    // The flag toggles, the word list cycles, the stepper steps and wraps.
+    // The flag toggles, the word carousel picks, the stepper steps and wraps.
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "1"));
     const text = stripAnsi(rt.render());
     expect(text).toContain("D-short-3");
     expect(text).toContain("☑ detail");
-    expect(text).toContain("form: short");
+    expect(text).toContain("form ◀ short ▶");
     expect(text).toMatch(/◀ depth 3 ▶/);
     // The bare placement of the same segment is untouched.
     expect(text).toContain("d-short-2");
@@ -568,7 +572,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const rt = buildRuntime(src);
     expect(stripAnsi(rt.render())).not.toContain("d-long-2");
     rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "vcs2"));
-    expect(stripAnsi(rt.render())).toContain("form: long");
+    expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
     rt.dispose();
   });
 
@@ -593,7 +597,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "vcs2"));
     expect(stripAnsi(rt.render())).not.toContain("form:");
     rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("b", "vcs2"));
-    expect(stripAnsi(rt.render())).toContain("form: long");
+    expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
     rt.dispose();
   });
 

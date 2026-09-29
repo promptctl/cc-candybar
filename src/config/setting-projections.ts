@@ -25,6 +25,9 @@ export interface SettingProjection {
   // The input variable holding the value the bar is rendering with, whichever
   // rung (staged, session, config, floor) produced it.
   readonly effectiveVar: string;
+  // What the setting's control is called on the bar — a glyph where the
+  // control shows its value beside it, a word where it does not.
+  readonly label: string;
 }
 
 export const SETTINGS = {
@@ -32,6 +35,7 @@ export const SETTINGS = {
     configKey: "palette",
     sessionKey: "theme",
     effectiveVar: "theme.effective",
+    label: "🎨",
   },
   // `preset` is a projection like the rest: the preset carousel sits on the
   // settings menu's always-visible first row, where "which arrangement am I
@@ -40,46 +44,75 @@ export const SETTINGS = {
     configKey: "preset",
     sessionKey: "preset",
     effectiveVar: "preset.effective",
+    label: "▦",
   },
   look: {
     configKey: "look",
     sessionKey: "look",
     effectiveVar: "look.effective",
+    label: "◐",
   },
   style: {
     configKey: "style",
     sessionKey: "style",
     effectiveVar: "style.effective",
+    label: "✦",
   },
   progression: {
     configKey: "progression",
     sessionKey: "progression",
     effectiveVar: "progression.effective",
+    label: "🎼",
   },
   charset: {
     configKey: "charset",
     sessionKey: "charset",
     effectiveVar: "charset.effective",
+    label: "🔣",
   },
   colorCompatibility: {
     configKey: "colorCompatibility",
     sessionKey: "colorCompatibility",
     effectiveVar: "colorCompatibility.effective",
+    label: "🌈",
   },
   autoWrap: {
     configKey: "autoWrap",
     sessionKey: "autoWrap",
     effectiveVar: "autoWrap.effective",
+    label: "wrap",
   },
   padding: {
     configKey: "padding",
     sessionKey: "padding",
     effectiveVar: "padding.effective",
+    label: "padding",
+  },
+  updateNotice: {
+    configKey: "updateNotice",
+    sessionKey: "updateNotice",
+    effectiveVar: "updateNotice.effective",
+    label: "update notice",
   },
 } as const satisfies Record<string, SettingProjection>;
 
 export const SETTING_PROJECTIONS: readonly SettingProjection[] =
   Object.values(SETTINGS);
+
+// [LAW:types-are-the-program] Every globals field with no row above, and why
+// the bar offers no control for it (brandon-settings-coverage-g4p.zoj, the
+// list Brandon confirmed). Keyed by exactly the fields SETTINGS leaves out, so
+// a new globals field is a compile error until it has a row — and with it a
+// control generated from its declared domain — or a reason here.
+type ControlledField = (typeof SETTINGS)[keyof typeof SETTINGS]["configKey"];
+
+export const UNCONTROLLED_GLOBALS: Readonly<
+  Record<Exclude<keyof Globals, ControlledField>, string>
+> = {
+  default_empty_value: "free text: no control shape fits it",
+  default_separator: "free text: no control shape fits it",
+  menuGlyph: "free text: no control shape fits it",
+};
 
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar
 // is rendering with — whichever rung (staged, session, config, floor) produced
