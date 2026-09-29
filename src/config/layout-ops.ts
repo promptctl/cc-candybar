@@ -69,20 +69,33 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
 }
 
 // What an insertion writes into the layout: the bare segment name — whose id
-// is that name — while no placement in the tree already holds it, else the
-// segment under the first free `<name>-<n>`, n from 2. Ids are unique per
-// tree (cross-ref.ts), so the insertion must never mint one already taken.
+// is that name — while no placement already holds it, else the segment under
+// the first free `<name>-<n>`, n from 2. Ids are unique per tree
+// (cross-ref.ts), so the insertion must never mint one already taken.
 export type NewPlacement =
   | { readonly seg: string }
   | { readonly seg: string; readonly id: string };
 
-// [LAW:single-enforcer] THE id an insertion mints, over every id in the tree
-// the preset renders — the tree the uniqueness rule is checked over.
-export function mintPlacement(segment: string, tree: LayoutNode): NewPlacement {
-  const taken = new Set<string>();
-  for (const node of walkNodes(tree)) {
-    if (node.kind === "segment") taken.add(placementId(node));
-  }
+// [LAW:single-enforcer] THE id an insertion mints, free in every tree the
+// insertion reaches. The layer it writes (`root.rows.<row>`, a shared
+// fragment) can reach presets other than the one clicked — and the new
+// placement lands beside `anchor`, so the trees it reaches are exactly the
+// trees that hold `anchor`.
+export function mintPlacement(
+  segment: string,
+  anchor: string,
+  trees: readonly LayoutNode[],
+): NewPlacement {
+  const ids = (tree: LayoutNode): string[] =>
+    [...walkNodes(tree)].flatMap((n) =>
+      n.kind === "segment" ? [placementId(n)] : [],
+    );
+  const taken = new Set(
+    trees
+      .map(ids)
+      .filter((held) => held.includes(anchor))
+      .flat(),
+  );
   if (!taken.has(segment)) return { seg: segment };
   let n = 2;
   while (taken.has(`${segment}-${n}`)) n++;

@@ -55,7 +55,7 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetRoot } from "../../config/presets";
+import { presetNames, presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -750,13 +750,12 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
-  const placed = applyLayoutOpToFile(
-    editStore(ctx, sid),
-    file,
-    key,
-    op,
-    (preset) => presetRoot(ctx.configFor(origin), preset).node,
-  );
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op, () => {
+    const config = ctx.configFor(origin);
+    return presetNames(config.presets).map(
+      (preset) => presetRoot(config, preset).node,
+    );
+  });
   // [LAW:no-ambient-temporal-coupling] Reloaded before the next click can
   // land, as save's and reset's writes are: an insertion mints its id against
   // the tree the config renders, so a second `+` on the same segment before

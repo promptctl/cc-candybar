@@ -205,7 +205,7 @@ export interface NodeRenderCtx {
   // (`cc-candybar check`, a blind authoring agent's eyes) can turn it into a
   // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
   // (the registry-dispose contract) — see RenderObservers.onSegmentError.
-  readonly onSegmentError?: (segName: string, message: string) => void;
+  readonly onSegmentError?: (placementId: string, message: string) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only hands over a
   // segment's templates and gets back what evaluating them produced.
@@ -648,7 +648,7 @@ const segmentType: NodeType<"segment"> = {
       return [...rows, ...ledBody];
     } catch (err) {
       const message = (err as Error).message ?? String(err);
-      ctx.onSegmentError?.(node.name, message);
+      ctx.onSegmentError?.(node.id, message);
       // The error cell is a row of the band the segment sits on, like any
       // inline line — a broken segment inside an open body still gets its ✕.
       // A cell is one line: the message's own line breaks (a parse error's
@@ -659,7 +659,7 @@ const segmentType: NodeType<"segment"> = {
       return [
         {
           cells: applySegmentLayout(
-            [new RichText(`⚠ ${node.name}: ${oneLine}`, { end: "" })],
+            [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
             {
               width: "auto",
               justify: "left",
@@ -693,7 +693,7 @@ function errorTrail(
       trail: undefined,
     }).fragments;
   } catch (err) {
-    ctx.onSegmentError?.(node.name, (err as Error).message ?? String(err));
+    ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
     return [];
   }
 }

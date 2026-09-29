@@ -18,7 +18,7 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
-import { linkUrls } from "./helpers/ansi";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { mintPlacement } from "../src/config/layout-ops";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
@@ -175,6 +175,54 @@ describe("two placements of a menu-hosting segment open independently", () => {
   });
 });
 
+describe("a placement is named by its id", () => {
+  test("a placement whose settings break its template is the one the error names", () => {
+    const rt = buildRuntime(`{
+      variables: { ${SESSION} },
+      segments: {
+        tag: {
+          template: '{{ if .settings.boom }}{{ ramp 1 "step" 5 "#ff0000" 1 "#0000ff" }}{{ end }}ok',
+          settings: { boom: { label: 'Boom', domain: 'bool', default: false } },
+        },
+      },
+      root: { h: ['tag', { seg: 'tag', id: 'broken', settings: { boom: true } }] },
+    }`);
+    const text = stripAnsi(rt.render());
+    expect(rt.textOf("tag")).toBe("ok");
+    expect(text).toContain("⚠ broken: ");
+    rt.dispose();
+  });
+
+  test("two presets may give one id to two different menu-hosting segments", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: {
+          ${SESSION},
+          'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        },
+        actions: { applyTheme: { set: 'theme', from: 'themes' } },
+        segments: {
+          menuA: { template: 'A {{ menu "applyTheme" "▸" "▾" }}' },
+          menuB: { template: 'B {{ menu "applyTheme" "▸" "▾" }}' },
+        },
+        presets: {
+          a: { root: { h: [{ seg: 'menuA', id: 'picker' }] } },
+          b: { root: { h: [{ seg: 'menuB', id: 'picker' }] } },
+        },
+      }`,
+      ALLOWED,
+    );
+    expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
+  });
+
+  test("edit mode labels each placement with its id", () => {
+    const config = parseAndValidate("<test>", CLOCK_SRC, ALLOWED);
+    expect(config.segments["edit.label:utcClock"]?.template).toBe('{{ "utcClock" }}');
+    expect(config.segments["edit.label:clock"]?.template).toBe('{{ "clock" }}');
+  });
+});
+
 // Every refusal names what is wrong and where.
 describe("load errors", () => {
   const withSegment = (settings: string, root: string, template = "x") => `{
@@ -258,6 +306,16 @@ describe("load errors", () => {
     ).toContain(`variable "settings.x" is named under "settings"`);
   });
 
+  test("the settings menu's retired anchor name points at its successor", () => {
+    expect(
+      refusal(`{
+        variables: { ${SESSION} },
+        segments: { s: { template: 'x' } },
+        root: { h: ['settings.menu', 's'] },
+      }`),
+    ).toContain(`was renamed to "candybar.menu"`);
+  });
+
   test("a placement id holding the layout-op delimiter", () => {
     expect(
       refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: 'a:b' }] }`)),
@@ -273,11 +331,21 @@ describe("edit mode addresses placements by id", () => {
   });
 
   test("an insertion keeps the segment's name as its id while it is free, else mints the next", () => {
-    expect(mintPlacement("git", tree(["dir"]))).toEqual({ seg: "git" });
-    expect(mintPlacement("git", tree(["git"]))).toEqual({ seg: "git", id: "git-2" });
-    expect(mintPlacement("git", tree(["git"], ["git", "git-2"]))).toEqual({
+    expect(mintPlacement("git", "dir", [tree(["dir"])])).toEqual({ seg: "git" });
+    expect(mintPlacement("git", "git", [tree(["git"])])).toEqual({ seg: "git", id: "git-2" });
+    expect(mintPlacement("git", "git", [tree(["git"], ["git", "git-2"])])).toEqual({
       seg: "git",
       id: "git-3",
+    });
+  });
+
+  test("an insertion's id is free in every tree holding its anchor, since the layer it writes can reach other presets", () => {
+    expect(
+      mintPlacement("git", "dir", [tree(["dir"], ["git"]), tree(["dir"], ["git", "git-2"])]),
+    ).toEqual({ seg: "git", id: "git-3" });
+    // A tree without the anchor never receives the insertion.
+    expect(mintPlacement("git", "dir", [tree(["dir"]), tree(["git"])])).toEqual({
+      seg: "git",
     });
   });
 

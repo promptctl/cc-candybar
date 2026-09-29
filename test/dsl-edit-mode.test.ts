@@ -398,10 +398,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
         trails.set(node.name, node.trail);
       }
     }
+    const removal = (trail: string | undefined) =>
+      /"(edit\.default\.remove\.[^"]+)"/.exec(trail ?? "")?.[1];
     for (const seg of ["directory", "git", "trigger"]) {
-      const remove = `"edit.default.remove.${seg}"`;
-      expect(trails.get(seg)).toContain(remove);
-      expect(trails.get(`edit.label:${seg}`)).toContain(remove);
+      const remove = removal(trails.get(seg));
+      expect(config.actions[remove!]).toMatchObject({ removeSegment: seg });
+      expect(removal(trails.get(`edit.label:${seg}`))).toBe(remove);
     }
   });
 

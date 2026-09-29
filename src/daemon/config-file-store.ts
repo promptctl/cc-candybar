@@ -676,9 +676,9 @@ export function applyLayoutOp(
   file: string,
   key: string,
   op: LayoutOp,
-  // The layout a preset renders — where a new placement's id must be free
-  // (`mintPlacement`).
-  renderedOf: (preset: string) => LayoutNode,
+  // Every layout the config renders — where a new placement's id must be
+  // free (`mintPlacement`).
+  rendered: () => readonly LayoutNode[],
 ): NewPlacement | null {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -692,9 +692,7 @@ export function applyLayoutOp(
     subject,
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed } = spliceOp(authored, placement.path, op, () =>
-    renderedOf(target.preset),
-  );
+  const { after, placed } = spliceOp(authored, placement.path, op, rendered);
   if (after === null) {
     throw new BadVerbArgs(
       `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale; it reloads on the next render`,
@@ -706,18 +704,18 @@ export function applyLayoutOp(
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
 // a removal places nothing; an insertion places the segment under the id
-// `mintPlacement` finds free in the tree the preset renders.
+// `mintPlacement` finds free in every tree it reaches.
 function spliceOp(
   text: string,
   path: ConfigPath,
   op: LayoutOp,
-  rendered: () => LayoutNode,
+  rendered: () => readonly LayoutNode[],
 ): { readonly after: string | null; readonly placed: NewPlacement | null } {
   switch (op.op) {
     case "remove":
       return { after: removeSegmentRef(text, path, op.target), placed: null };
     case "insert": {
-      const placed = mintPlacement(op.segment, rendered());
+      const placed = mintPlacement(op.segment, op.anchor, rendered());
       return {
         after: insertSegmentRef(text, path, placed, op.anchor, op.relation),
         placed,

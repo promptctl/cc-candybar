@@ -12,6 +12,9 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, string> = new Map([
   // The one-line summary became the collapsed form of `gitaculous`
   // (brandon-git-segment-ixf.tl0).
   ["git", "gitaculous"],
+  // The settings menu's anchor left `settings.` so `.settings` could be a
+  // placement's own settings (brandon-segment-settings-i4n).
+  ["settings.menu", "candybar.menu"],
 ]);
 
 export function renamedHint(name: string): string {

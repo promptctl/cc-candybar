@@ -836,7 +836,7 @@ export interface RenderObservers {
   // data and fold them into its text verdict. Trusted non-throwing (the
   // registry-dispose contract): an observer that throws is a caller bug
   // surfaced loudly, never caught and absorbed by the render walk.
-  readonly onSegmentError?: (segName: string, message: string) => void;
+  readonly onSegmentError?: (placementId: string, message: string) => void;
   // [LAW:no-silent-failure] Optional observer for a resolution this render had to
   // complete for itself and could not honour — today exactly one thing: a
   // `globals.palette` RULE whose result names no installed theme

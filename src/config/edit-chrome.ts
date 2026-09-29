@@ -182,14 +182,17 @@ function chromeCell(
 
 // The `-` affordance (drawn `🚫`) for one placement, addressed by its id: a literal
 // `removeSegment` action, and the `{{ action }}` that clicks it, carried as the
-// segment node's own `trail` so it is drawn inside that segment's cell.
+// segment node's own `trail` so it is drawn inside that segment's cell. The
+// action is named by its POSITION, as an insertion's is: an id is free text,
+// and `ident` would collapse `git-2` and `git_2` onto one action.
 function removeTerm(
   presetIdent: string,
   rootKey: string,
+  posIdent: string,
   id: string,
   artifacts: ChromeArtifacts,
 ): string {
-  const actionName = `${EDIT_NS}${presetIdent}.remove.${ident(id)}`;
+  const actionName = `${EDIT_NS}${presetIdent}.remove.${posIdent}`;
   artifacts.actions[actionName] = {
     persist: rootKey,
     removeSegment: id,
@@ -216,10 +219,10 @@ export function arrangedSegment(name: string): string | undefined {
 // The name a content segment wears in edit mode. Keyed by segment name alone —
 // the label says the same thing in every preset — so N presets placing one
 // segment mint one declaration.
-function labelChrome(segName: string, artifacts: ChromeArtifacts): SegmentNode {
-  const name = `${LABEL_NS}${segName}`;
+function labelChrome(id: string, artifacts: ChromeArtifacts): SegmentNode {
+  const name = `${LABEL_NS}${id}`;
   artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(segName)}" }}`,
+    template: `{{ "${escapeTemplateLiteral(id)}" }}`,
     when: LABEL_GATE,
   };
   return { kind: "segment", name };
@@ -341,24 +344,30 @@ function spliceContainer(
       continue;
     }
     const id = placementId(child);
-    const insert = (relation: "before" | "after") =>
+    const insert = (relation: "before" | "after", posIdent: string) =>
       insertTerm(
         presetIdent,
         rootKey,
-        String(posCounter.n++),
+        posIdent,
         domainName,
         id,
         relation,
         artifacts,
       );
-    const leading = i === firstContent ? [insert("before")] : [];
-    const after = insert("after");
+    const leading =
+      i === firstContent ? [insert("before", String(posCounter.n++))] : [];
+    const afterPos = String(posCounter.n++);
+    const after = insert("after", afterPos);
     // The remove button is drawn inside the cell of the segment it removes,
     // in whichever of the two views shows it, so nothing sits between them.
-    const remove = removeTerm(presetIdent, rootKey, id, artifacts);
+    // Every content segment has exactly one `after` insertion, so its
+    // position names the removal too.
+    const remove = removeTerm(presetIdent, rootKey, afterPos, id, artifacts);
     const cells: LayoutNode[] = [
       ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
-      { ...labelChrome(child.name, artifacts), trail: remove },
+      // Labelled by the placement's id: two placements of one segment are
+      // told apart by it, and a bare placement's id is its segment's name.
+      { ...labelChrome(id, artifacts), trail: remove },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
