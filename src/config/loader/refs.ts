@@ -13,24 +13,35 @@ const DOTTED_REF_RE =
 // string literals intact. A block closes at the first `}}` OUTSIDE a string
 // literal, as the engine's own lexer closes it: a literal carrying `}}` (a
 // display, an escaped glyph) is text, and a regex ending at the first `}}`
-// would read the rest of that literal as code. An unclosed action yields
-// nothing: it is the engine's parse error to report. Every extractor below
-// reads its blocks from here.
+// would read the rest of that literal as code. A `/* … */` comment is skipped
+// the same way, and left out of the block: it is neither code nor a literal,
+// and an apostrophe in it opens nothing. An unclosed action yields nothing:
+// it is the engine's parse error to report. Every extractor below reads its
+// blocks from here.
 function* templateBlocks(template: string): IterableIterator<string> {
   let open = template.indexOf("{{");
   while (open !== -1) {
+    let block = "";
     let i = open + 2;
     while (i < template.length && !template.startsWith("}}", i)) {
+      if (template.startsWith("/*", i)) {
+        const close = template.indexOf("*/", i + 2);
+        i = close === -1 ? template.length : close + 2;
+        continue;
+      }
+      const start = i;
       const quote = template[i]!;
       i += 1;
-      if (quote !== '"' && quote !== "'" && quote !== "`") continue;
-      while (i < template.length && template[i] !== quote) {
-        i += template[i] === "\\" && quote !== "`" ? 2 : 1;
+      if (quote === '"' || quote === "'" || quote === "`") {
+        while (i < template.length && template[i] !== quote) {
+          i += template[i] === "\\" && quote !== "`" ? 2 : 1;
+        }
+        i += 1;
       }
-      i += 1;
+      block += template.slice(start, i);
     }
     if (i >= template.length) return;
-    yield template.slice(open + 2, i);
+    yield block;
     open = template.indexOf("{{", i + 2);
   }
 }

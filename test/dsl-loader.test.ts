@@ -1973,6 +1973,12 @@ describe("extractTemplateRefs", () => {
     ]).toEqual(["y", "w"]);
   });
 
+  test("a comment is neither code nor the start of a literal", () => {
+    expect([
+      ...extractTemplateRefs("{{/* don't .x */}}{{ .a }} it's {{- /* .z */ .b }}"),
+    ]).toEqual(["a", "b"]);
+  });
+
   test("multiple refs across blocks", () => {
     const refs = extractTemplateRefs(
       "{{ .a }} static {{ .b | upper }} {{ if .c }}{{ .d }}{{ end }}",
