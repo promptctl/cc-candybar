@@ -30,7 +30,7 @@ import {
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
 const SID = "s-edit-look";
@@ -132,7 +132,7 @@ afterEach(() => {
 });
 
 const enterEditMode = (s: SessionState) =>
-  setState(s, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+  setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 const leaveEditMode = (s: SessionState) => setState(s, EDIT_MODE_KEY, "closed");
 
 describe("edit mode's look — a staged globals fragment", () => {

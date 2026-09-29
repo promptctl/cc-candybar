@@ -242,7 +242,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       segments: { a: { template: 'A' }, b: { template: 'B' }, solo: { template: 'S' }, c: { template: 'C' } },
       root: { v: [ { h: ['a', 'b'] }, 'solo', { h: ['c'] } ] },
     }`);
-    rt.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    rt.sessionState.set("s1", EDIT_MODE_KEY, "arrange");
     rt.sessionState.set("s1", EDIT_LIVE_KEY, "open");
     rt.render();
     const live = new Map(["a", "solo"].map((c) => [c, rt.bgOf(c)]));

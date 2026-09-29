@@ -16,6 +16,7 @@ import {
   removeSegmentRef,
   restagesFragment,
   rowEntriesOf,
+  setPlacementSetting,
   setValue as setValueIn,
   JSON5_DIALECT,
   JSON_DIALECT,
@@ -398,6 +399,38 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
     expect(hasSegmentRef(fragment, "demo")).toBe(true);
     expect(hasSegmentRef(fragment, "z")).toBe(true);
     expect(hasSegmentRef(fragment, "nope")).toBe(false);
+  });
+});
+
+describe("setPlacementSetting — a value lands inside its placement", () => {
+  const src = `{ root: { rows: {
+    a: { h: ["x", { seg: "x", id: "x2" }, { kind: "segment", name: "y", settings: { n: 1 } }] }, // row a
+    sys: "demo",
+  } } }`;
+
+  test("a bare ref takes the spelling that carries values; nothing else moves", () => {
+    expect(setPlacementSetting(src, ["root"], "x", "on", "true")).toBe(
+      src.replace(`["x", `, `[{ seg: "x", settings: { on: true } }, `),
+    );
+  });
+
+  test("an object ref gains a settings object, or one more member of it", () => {
+    expect(setPlacementSetting(src, ["root"], "x2", "on", "false")).toBe(
+      src.replace(`{ seg: "x", id: "x2" }`, `{ seg: "x", id: "x2", settings: { on: false } }`),
+    );
+    expect(setPlacementSetting(src, ["root"], "y", "n", "2")).toBe(
+      src.replace(`settings: { n: 1 }`, `settings: { n: 2 }`),
+    );
+    expect(setPlacementSetting(src, ["root"], "y", "form", `"long"`)).toBe(
+      src.replace(`settings: { n: 1 }`, `settings: { n: 1, form: "long" }`),
+    );
+  });
+
+  test("a bare-string row is normalized first, and a missing id is null", () => {
+    expect(setPlacementSetting(src, ["root"], "demo", "on", "true")).toBe(
+      src.replace(`sys: "demo"`, `sys: { h: [{ seg: "demo", settings: { on: true } }] }`),
+    );
+    expect(setPlacementSetting(src, ["root"], "nope", "on", "true")).toBeNull();
   });
 });
 

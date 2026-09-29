@@ -29,7 +29,10 @@ import {
   presetGlobals,
   presetRoot,
 } from "../config/presets.js";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../config/loader/edit-mode.js";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../config/loader/edit-mode.js";
 import {
   effectiveAutoWrap,
   resolveLookSelection,
@@ -178,7 +181,7 @@ export function resolveEffectiveGlobals(
   // is the whole of "no render-walk branch on edit mode": there is no branch
   // here either, so there is none to leak downstream.
   const staged: Partial<Globals> =
-    sessionPick(EDIT_MODE_KEY) === EDIT_MODE_OPEN ? config.editGlobals : {};
+    sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
   return {
     preset,
     presetCustomized: presetCustomized(preset),

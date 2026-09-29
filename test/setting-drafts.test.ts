@@ -84,7 +84,7 @@ describe("settingDrafts", () => {
   });
 
   test("edit mode's staged globals are never a draft", () => {
-    expect(drafts(FILE, { "edit.mode": "open" })).toEqual([]);
+    expect(drafts(FILE, { "edit.mode": "arrange" })).toEqual([]);
   });
 });
 

@@ -63,8 +63,8 @@ import {
   VERDICT_UNRUN,
 } from "../doctor/report.js";
 import {
+  EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
-  EDIT_MODE_OPEN,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
 import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
@@ -88,9 +88,9 @@ import {
 // click and the body's `when` cannot address different keys.
 export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
 
-// The disclosure's open member. Same spelling edit mode uses for its own binary
-// toggle — a binary disclosure holds the CLOSED sentinel or this.
-const SETTINGS_OPEN = EDIT_MODE_OPEN;
+// The open member of every binary disclosure this menu mints — each holds the
+// CLOSED sentinel or this.
+export const SETTINGS_OPEN = "open";
 
 // The body's content segments. `.1` scoped the body to what its acceptance
 // names — switch presets, enter edit mode; `.3` adds the config menu below
@@ -877,7 +877,7 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
   );
   artifacts.actions[EDIT_TOGGLE_ACTION] = disclosureCycleAction(
     EDIT_MODE_KEY,
-    EDIT_MODE_OPEN,
+    EDIT_MODE_ARRANGE,
   );
 }
 

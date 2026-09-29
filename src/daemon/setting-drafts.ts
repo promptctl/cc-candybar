@@ -12,10 +12,18 @@
 // list it returns, computed at click time over the same session and config,
 // so the button's count and the click's write cannot describe different sets.
 
-import type { DslConfig, Globals } from "../config/dsl-types.js";
+import {
+  parseSettingSpelling,
+  placementId,
+  settingSpelling,
+  walkNodes,
+  type DslConfig,
+  type Globals,
+  type SettingValue,
+} from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import { presetGlobalsKey } from "../config/loader/persist-target.js";
-import { presetByName } from "../config/presets.js";
+import { presetByName, presetRoot } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -139,6 +147,61 @@ export function settingDrafts(
       row.configKey in fragment
         ? presetGlobalsKey(session.preset, row.configKey)
         : row.configKey,
+  );
+}
+
+// ─── A placement's settings (brandon-segment-settings-i4n.g64) ─────────────
+
+// One placement setting the session renders differently from the file: the
+// value configure mode's control wrote, and where a save puts it — the
+// placement `id` in the layout `preset` renders.
+export interface PlacementDraft {
+  readonly preset: string;
+  readonly id: string;
+  readonly setting: string;
+  // The session key the value is held at — what a save releases.
+  readonly key: string;
+  readonly value: SettingValue;
+}
+
+// Every placement setting the session holds a pick for that differs from the
+// value the file gives that placement, in the preset the session renders — a
+// pick in another preset is one the render ignores, so it is no draft. A pick
+// the declaration no longer admits parses to nothing, and is no draft either:
+// the render shows the file's value for it.
+export function placementDrafts(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): readonly PlacementDraft[] {
+  const { preset } = sessionGlobals(config, sessionPick);
+  return [...walkNodes(presetRoot(config, preset).node)].flatMap((node) =>
+    node.kind !== "segment" || node.drafts === undefined
+      ? []
+      : Object.entries(node.drafts).flatMap(([setting, variable]) => {
+          const decl = config.segments[node.name]!.settings![setting]!;
+          const held = config.variables[variable];
+          // [LAW:no-silent-failure] Edit chrome mints the variable beside the
+          // field that names it; a name that reads nothing is drift there.
+          if (held?.kind !== "state") {
+            throw new Error(
+              `placement "${placementId(node)}": draft variable "${variable}" is not a declared state variable`,
+            );
+          }
+          const pick = sessionPick(held.key);
+          const value =
+            pick === null ? undefined : parseSettingSpelling(decl, pick);
+          return value === undefined || settingSpelling(value) === held.default
+            ? []
+            : [
+                {
+                  preset,
+                  id: placementId(node),
+                  setting,
+                  key: held.key,
+                  value,
+                },
+              ];
+        }),
   );
 }
 

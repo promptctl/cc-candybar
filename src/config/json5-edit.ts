@@ -578,7 +578,19 @@ export function setValue(
     const eol = eolOf(text);
     return `{${eol}  ${reindent(entryText(path, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
   }
-  let node: Node = parseDocument(text);
+  return setBelow(text, parseDocument(text), path, valueText, dialect);
+}
+
+// setValue's descent, from any object node of the document rather than its
+// root — how a value lands inside an array element, which no key path names.
+function setBelow(
+  text: string,
+  start: Node,
+  path: readonly string[],
+  valueText: string,
+  dialect: Dialect,
+): string {
+  let node = start;
   for (let i = 0; i < path.length; i++) {
     if (node.kind !== "object") {
       throw new Json5EditError(
@@ -816,4 +828,37 @@ export function insertSegmentRef(
   const pair =
     relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
   return splice(src, ref.span.start, ref.span.end, pair);
+}
+
+/**
+ * Set one setting of the placement `id` in the layout tree rooted at
+ * `rootPath`: `settings.<setting>` inside it, the bare ref `"git"` becoming
+ * `{ seg: "git", settings: { … } }` — the spelling that carries values —
+ * with every other byte kept. Returns null when the tree holds no such
+ * placement.
+ */
+export function setPlacementSetting(
+  text: string,
+  rootPath: readonly string[],
+  id: string,
+  setting: string,
+  valueText: string,
+): string | null {
+  const hit = refAt(text, rootPath, id);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  // A placement is written inline, so its first setting mints an inline
+  // object rather than the block a new nested path would get.
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`,
+    );
+  }
+  return entryOf(ref, "settings") === undefined
+    ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT)
+    : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }

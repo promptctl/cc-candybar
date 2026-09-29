@@ -40,6 +40,7 @@ import type {
   PresetDecl,
   Root,
   RootFragment,
+  SettingValue,
   ValidatedConfig,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
@@ -56,6 +57,7 @@ import {
   removeSegmentRef,
   restagesFragment,
   rowEntriesOf,
+  setPlacementSetting,
   setValue,
   type Node,
 } from "../config/json5-edit.js";
@@ -515,8 +517,34 @@ export function writeValues(
   file: string,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
+  writeDrafts(store, file, pairs, []);
+}
+
+// One placement's setting as a save writes it: the value, and the placement
+// `id` in the layout `preset` renders that holds it.
+export interface PlacementValue {
+  readonly preset: string;
+  readonly id: string;
+  readonly setting: string;
+  readonly value: SettingValue;
+}
+
+/**
+ * `save`'s write: every value key and every placement setting, as ONE tracked
+ * write. A placement's value lands inside the placement, in the row of the
+ * preset's layout that holds it — the row materialized first when the file
+ * inherits it, as a structural edit's is.
+ * [LAW:no-silent-failure] A placement no row holds is the stale click's loud
+ * error, never a value written somewhere plausible.
+ */
+export function writeDrafts(
+  store: EditStore,
+  file: string,
+  pairs: ReadonlyArray<readonly [key: string, raw: string]>,
+  placements: readonly PlacementValue[],
+): void {
   const before = readConfigText(file);
-  const after = pairs.reduce(
+  const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
         text,
@@ -526,6 +554,22 @@ export function writeValues(
       ),
     before ?? "",
   );
+  const after = placements.reduce((text, { preset, id, setting, value }) => {
+    const placement = layoutPlacementOf(docOf(text), preset, id);
+    const set = setPlacementSetting(
+      ensureAuthored(text, placement),
+      placement.path,
+      id,
+      setting,
+      json5Text(value),
+    );
+    if (set === null) {
+      throw new BadVerbArgs(
+        `${placement.path.join(".")} in ${file} has no placement "${id}" — the bar you clicked is stale (it reloads on the next render)`,
+      );
+    }
+    return set;
+  }, valued);
   commit(store, file, before, after);
 }
 

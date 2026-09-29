@@ -600,6 +600,16 @@ The segment's `when`, `bg:` and `fg:` read the same `.settings` as its
 template. No variable may be named `settings` or `settings.<x>` — inside a
 segment that name is the placement's.
 
+A declared setting is also changeable from the bar. In edit mode each
+placement whose segment declares settings carries a `⚙` beside its `🚫`;
+clicking it configures that one placement: the `+`/`-` chrome goes away and
+one control per setting hangs below the cell (a toggle for `"bool"`, a cycle
+for a word list, a `◀ ▶` stepper for `{ min, max }`), bounded by the
+declaration. A change shows at once and is unsaved until `💾 save`, which
+writes it into that placement in the config file — a bare `"modelTag"`
+becomes `{ seg: "modelTag", settings: { … } }`. One placement is configured at
+a time.
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The

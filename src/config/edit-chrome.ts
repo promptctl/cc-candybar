@@ -21,10 +21,11 @@
 // are indistinguishable at render. Nothing here is a new render concept.
 
 import { synthesisInputs } from "./synthesis-inputs.js";
-import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
+import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
   placementId,
+  settingSpelling,
   type ContainerNode,
   type DisclosureRef,
   type DslConfig,
@@ -32,6 +33,7 @@ import {
   type PresetDecl,
   type SegmentDecl,
   type SegmentNode,
+  type SettingDecl,
   type VariableDecl,
 } from "./dsl-types.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
@@ -39,7 +41,9 @@ import type { ResolvedDomain } from "./option-domain.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
+  configureMember,
   EDIT_MODE_GATE,
+  EDIT_MODE_KEY,
   EDIT_MODE_REF,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
@@ -76,6 +80,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 export const REMOVE_GLYPH = "🚫";
 export const ADD_GLYPH = "✚";
+export const CONFIGURE_GLYPH = "⚙";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -180,26 +185,131 @@ function chromeCell(
   return { kind: "segment", name };
 }
 
-// The `-` affordance (drawn `🚫`) for one placement, addressed by its id: a literal
-// `removeSegment` action, and the `{{ action }}` that clicks it, carried as the
-// segment node's own `trail` so it is drawn inside that segment's cell. The
+// The `-` affordance (drawn `🚫`) for one placement, addressed by its id: a
+// literal `removeSegment` action, and the `{{ action }}` that clicks it. The
 // action is named by its POSITION, as an insertion's is: an id is free text,
 // and `ident` would collapse `git-2` and `git_2` onto one action.
-function removeTerm(
-  presetIdent: string,
-  rootKey: string,
-  posIdent: string,
-  id: string,
-  artifacts: ChromeArtifacts,
-): string {
-  const actionName = `${EDIT_NS}${presetIdent}.remove.${posIdent}`;
-  artifacts.actions[actionName] = {
-    persist: rootKey,
+function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+  ctx.artifacts.actions[actionName] = {
+    persist: ctx.rootKey,
     removeSegment: id,
   };
-  // A trail is not a segment, so no segment `when` hides it: it carries edit
-  // mode's gate itself.
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}{{ action "${actionName}" "${REMOVE_GLYPH}" }}{{ end }}`;
+  return `{{ action "${actionName}" "${REMOVE_GLYPH}" }}`;
+}
+
+// The affordances drawn inside a placement's own cell — its `⚙` when it has
+// settings, then its `🚫` — carried as the segment node's `trail` so nothing
+// sits between a placement and what acts on it. A trail is not a segment, so
+// no segment `when` hides it: it carries arrange mode's gate itself.
+function trailOf(terms: readonly string[]): string {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${terms.join("")}{{ end }}`;
+}
+
+// ─── Configure mode (brandon-segment-settings-i4n.g64) ──────────────────────
+
+// [LAW:one-source-of-truth] THE session key an unsaved value of one
+// placement's setting lives at: the preset (a placement's id is unique only in
+// the tree one preset renders), the id, and the setting. A setting name is an
+// identifier and a preset's ident holds no `.`, so the last segment is always
+// the setting and the second the preset — the key names one value.
+export function placementDraftKey(
+  presetIdent: string,
+  id: string,
+  setting: string,
+): string {
+  return `${EDIT_NS}draft.${presetIdent}.${id}.${setting}`;
+}
+
+// The control for one setting, generated from its declaration: a toggle for a
+// flag, a cycle through a word list, a stepper over a range. Each writes the
+// setting's draft key through an action whose gate is the declared domain, so
+// a click cannot write a value the setting may not hold.
+// [LAW:types-are-the-program] Total over SettingDecl's three domain arms.
+function settingControl(
+  decl: SettingDecl,
+  key: string,
+  variable: string,
+  actionName: string,
+  artifacts: ChromeArtifacts,
+): string {
+  const label = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    artifacts.actions[actionName] = { set: key, cycle: ["false", "true"] };
+    return `{{ action "${actionName}" "☐ ${label}" "☑ ${label}" }}`;
+  }
+  if ("min" in domain) {
+    for (const by of [-1, 1]) {
+      artifacts.actions[`${actionName}.${by < 0 ? "down" : "up"}`] = {
+        set: key,
+        min: domain.min,
+        max: domain.max,
+        by,
+      };
+    }
+    return (
+      `{{ action "${actionName}.down" "◀" }} ` +
+      `${label} {{ .${variable} }} ` +
+      `{{ action "${actionName}.up" "▶" }}`
+    );
+  }
+  artifacts.actions[actionName] = { set: key, cycle: [...domain] };
+  const displays = domain.map(
+    (word) => `"${label}: ${escapeTemplateLiteral(word)}"`,
+  );
+  return `{{ action "${actionName}" ${displays.join(" ")} }}`;
+}
+
+// What configure mode adds to one placement that has settings: the `⚙` that
+// enters it, the controls it hangs below the placement while it is on, and the
+// draft variables those controls write and the placement reads `.settings`
+// through. The body is a disclosure over edit mode's one key at this
+// placement's `configure:<id>` member, so its `✕` writes that key closed and
+// entering any other mode — arranging, or configuring another placement —
+// closes it by overwriting the value it is open on.
+function configureParts(
+  ctx: SpliceCtx,
+  posIdent: string,
+  node: SegmentNode,
+  decls: Readonly<Record<string, SettingDecl>>,
+): {
+  readonly term: string;
+  readonly opens: SegmentNode["opens"];
+  readonly drafts: Readonly<Record<string, string>>;
+} {
+  const id = placementId(node);
+  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
+  const member = configureMember(id);
+  const enter = `${prefix}.configure.${posIdent}`;
+  ctx.artifacts.actions[enter] = { set: EDIT_MODE_KEY, to: member };
+  const drafts: Record<string, string> = {};
+  const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
+    const key = placementDraftKey(ctx.presetIdent, id, name);
+    // Named by position so it is a template field path (`.edit.p.draft.d3.x`);
+    // the key, not the name, is what a session holds across reloads.
+    const variable = `${prefix}.draft.d${posIdent}.${name}`;
+    ctx.artifacts.variables[variable] = {
+      kind: "state",
+      key,
+      default: settingSpelling(node.settings?.[name] ?? decl.default),
+    };
+    drafts[name] = variable;
+    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    ctx.artifacts.segments[segName] = {
+      template: settingControl(decl, key, variable, segName, ctx.artifacts),
+    };
+    return { kind: "segment", name: segName };
+  });
+  return {
+    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
+    opens: {
+      ref: { variable: EDIT_MODE_KEY, key: EDIT_MODE_KEY, member },
+      body: { kind: "container", direction: "horizontal", children: controls },
+      placement: "drop",
+    },
+    drafts,
+  };
 }
 
 // `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
@@ -246,19 +356,17 @@ function labelChrome(
 // per-file timing does not have), so parity is achieved by sharing the
 // functions, not by re-deriving the shape.
 function insertTerm(
-  presetIdent: string,
-  rootKey: string,
+  ctx: SpliceCtx,
   posIdent: string,
-  domainName: OptionDomain,
   anchor: string,
   relation: "before" | "after",
-  artifacts: ChromeArtifacts,
 ): { readonly host: string; readonly template: string } {
+  const { presetIdent, artifacts } = ctx;
   const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
   artifacts.actions[applyName] = {
-    persist: rootKey,
-    insertSegmentFrom: domainName,
+    persist: ctx.rootKey,
+    insertSegmentFrom: ADDABLE_DOMAIN,
     anchor,
     relation,
   };
@@ -305,8 +413,20 @@ function insertTerm(
   };
 }
 
+// One splice's context, threaded unchanged through the recursion.
+// `posCounter` is shared by reference so position identifiers stay unique
+// across the WHOLE preset tree, not just one container.
+interface SpliceCtx {
+  readonly presetIdent: string;
+  readonly rootKey: string;
+  readonly segments: DslConfig["segments"];
+  readonly artifacts: ChromeArtifacts;
+  readonly posCounter: { n: number };
+}
+
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `-` as its own trail and is followed by one gap
+// segment child carries its `-` (and, when its segment declares
+// settings, its `⚙`) as its own trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
 // `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
@@ -314,16 +434,7 @@ function insertTerm(
 // untouched — but the disclosure BODY a segment hangs (a group's children,
 // the settings rows) recurses like any container, so the cells inside an
 // open group keep their `+`/`-` while the toggle that opens it has none.
-// `posCounter` is threaded by reference so position identifiers stay unique
-// across the WHOLE preset tree, not just one container.
-function spliceContainer(
-  node: ContainerNode,
-  presetIdent: string,
-  rootKey: string,
-  domainName: OptionDomain,
-  artifacts: ChromeArtifacts,
-  posCounter: { n: number },
-): ContainerNode {
+function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
   const children: LayoutNode[] = [];
   // [LAW:one-source-of-truth] The leading `+`'s position is "before the
   // first CONTENT segment", not "before the first child": a row led by exempt
@@ -334,14 +445,7 @@ function spliceContainer(
     (child) => child.kind === "segment" && !isChromeExempt(child.name),
   );
   const splice = (body: ContainerNode): ContainerNode =>
-    spliceContainer(
-      body,
-      presetIdent,
-      rootKey,
-      domainName,
-      artifacts,
-      posCounter,
-    );
+    spliceContainer(body, ctx);
   for (const [i, child] of node.children.entries()) {
     if (child.kind === "container") {
       children.push(splice(child));
@@ -353,36 +457,39 @@ function spliceContainer(
       continue;
     }
     const id = placementId(child);
-    const insert = (relation: "before" | "after", posIdent: string) =>
-      insertTerm(
-        presetIdent,
-        rootKey,
-        posIdent,
-        domainName,
-        id,
-        relation,
-        artifacts,
-      );
     const leading =
-      i === firstContent ? [insert("before", String(posCounter.n++))] : [];
-    const afterPos = String(posCounter.n++);
-    const after = insert("after", afterPos);
-    // The remove button is drawn inside the cell of the segment it removes,
-    // in whichever of the two views shows it, so nothing sits between them.
+      i === firstContent
+        ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
+        : [];
+    const afterPos = String(ctx.posCounter.n++);
+    const after = insertTerm(ctx, afterPos, id, "after");
     // Every content segment has exactly one `after` insertion, so its
-    // position names the removal too.
-    const remove = removeTerm(presetIdent, rootKey, afterPos, id, artifacts);
+    // position names its removal and its configuration too.
+    const remove = removeTerm(ctx, afterPos, id);
+    // [LAW:dataflow-not-control-flow] A placement with no settings has an
+    // empty declaration, and configures to nothing: no `⚙`, no body.
+    const decls = ctx.segments[child.name]?.settings ?? {};
+    const configure =
+      Object.keys(decls).length === 0
+        ? null
+        : configureParts(ctx, afterPos, child, decls);
+    // The buttons are drawn inside the cell of the placement they act on, in
+    // whichever of the two views shows it, so nothing sits between them.
+    const trail = trailOf([...(configure ? [configure.term] : []), remove]);
     const cells: LayoutNode[] = [
-      ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
+      ...leading.map((lead) =>
+        chromeCell(lead.host, lead.template, ctx.artifacts),
+      ),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(id, child.name, artifacts), trail: remove },
+      { ...labelChrome(id, child.name, ctx.artifacts), trail },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
-        trail: remove,
+        trail,
+        ...(configure && { opens: configure.opens, drafts: configure.drafts }),
       },
-      chromeCell(after.host, after.template, artifacts),
+      chromeCell(after.host, after.template, ctx.artifacts),
     ];
     // [LAW:one-type-per-behavior] A content segment and its affordances are
     // ONE unit of the row: a horizontal container holding them, so the row
@@ -547,23 +654,18 @@ function spliceEditChromeForPreset(
   tail: LayoutNode,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
-  const rootKey = presetRootKey(presetName);
-  const domainName = ADDABLE_DOMAIN;
-  const presetIdent = ident(presetName);
-  const posCounter = { n: 0 };
-  const spliced = spliceContainer(
-    node,
-    presetIdent,
-    rootKey,
-    domainName,
+  const ctx: SpliceCtx = {
+    presetIdent: ident(presetName),
+    rootKey: presetRootKey(presetName),
+    segments: config.segments,
     artifacts,
-    posCounter,
-  );
+    posCounter: { n: 0 },
+  };
   return wrapWithPresetRows(
-    spliced,
+    spliceContainer(node, ctx),
     presetName,
-    presetIdent,
-    rootKey,
+    ctx.presetIdent,
+    ctx.rootKey,
     artifacts,
     lead,
     tail,

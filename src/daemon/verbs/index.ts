@@ -39,6 +39,7 @@ import {
   deleteValues,
   readValue,
   writePreset,
+  writeDrafts,
   writeValues,
   type EditStore,
 } from "../config-file-store";
@@ -48,8 +49,17 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
-import type { DslConfig, Globals } from "../../config/dsl-types";
-import { presetSnapshot, resetLayers, settingDrafts } from "../setting-drafts";
+import {
+  settingSpelling,
+  type DslConfig,
+  type Globals,
+} from "../../config/dsl-types";
+import {
+  placementDrafts,
+  presetSnapshot,
+  resetLayers,
+  settingDrafts,
+} from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
   SETTINGS,
@@ -606,13 +616,14 @@ const save: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
-  const drafts = settingDrafts(ctx.configFor(origin), (key) =>
-    ctx.sessionState.get(sid, key),
-  );
+  const config = ctx.configFor(origin);
+  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const drafts = settingDrafts(config, pick);
+  const placements = placementDrafts(config, pick);
   // Nothing unsaved is the save's own postcondition already holding — a second
   // click on a bar drawn before the first save released its picks — so it is
   // a recorded no-op, never a failure on the diagnostic strip.
-  if (drafts.length === 0) {
+  if (drafts.length + placements.length === 0) {
     ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
@@ -621,13 +632,28 @@ const save: VerbHandler = (value, ctx) => {
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
     return [d.target, result.value];
   });
+  for (const p of placements) {
+    const result = validateStateWrite(p.key, settingSpelling(p.value));
+    if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
+  }
   const file = originConfigFile(origin);
-  writeValues(editStore(ctx, sid), file, pairs);
+  writeDrafts(editStore(ctx, sid), file, pairs, placements);
   ctx.reloadConfig(origin);
-  for (const d of drafts) ctx.sessionState.clear(sid, d.sessionKey);
+  for (const key of [
+    ...drafts.map((d) => d.sessionKey),
+    ...placements.map((p) => p.key),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.dlog(
     "info",
-    `save: ${pairs.map(([k, v]) => `${k}=${v}`).join(" ")} → ${file} (session=${sid})`,
+    `save: ${[
+      ...pairs.map(([k, v]) => `${k}=${v}`),
+      ...placements.map(
+        (p) =>
+          `${p.preset}/${p.id}.settings.${p.setting}=${settingSpelling(p.value)}`,
+      ),
+    ].join(" ")} → ${file} (session=${sid})`,
   );
 };
 

@@ -229,8 +229,8 @@ describe("the global settings menu is reachable from a user config", () => {
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    clickWriting(render(), EDIT_MODE_KEY, "open");
-    expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("open");
+    clickWriting(render(), EDIT_MODE_KEY, "arrange");
+    expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
     // The same click closed the menu, so the door's row is back — with its
     // edit chrome — and no close click is needed to reach it.
     expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);

@@ -28,7 +28,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
@@ -186,7 +186,7 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
 // the bar with a panel hanging open over it.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
-  rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_OPEN);
+  rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 }
 
 // ─── 1. Identity with the corpus, not similarity ─────────────────────────────

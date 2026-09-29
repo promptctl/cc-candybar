@@ -50,6 +50,7 @@ import {
 import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {
+  EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
@@ -297,7 +298,7 @@ describe("edit mode is in every config", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     expect(config.actions[EDIT_TOGGLE_ACTION]).toEqual({
       set: EDIT_MODE_KEY,
-      cycle: ["closed", "open"],
+      cycle: ["closed", EDIT_MODE_ARRANGE],
     });
     expect(config.variables[EDIT_MODE_KEY]).toEqual({
       kind: "state",
@@ -415,12 +416,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "directory: { width: 'fill', template: 'd',",
     );
     const { render, click, dispose } = buildEditRuntime(src);
-    const open = (key: string) =>
+    const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
       )!;
-    click(open(EDIT_MODE_KEY));
-    click(open(EDIT_LIVE_KEY));
+    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    click(open(EDIT_LIVE_KEY, "open"));
     const row = stripAnsi(render(60))
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
@@ -431,12 +432,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("a segment that fails to render keeps its `-` beside its ⚠", () => {
     const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
     const { render, click, dispose } = buildEditRuntime(src);
-    const open = (key: string) =>
+    const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "open"),
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
       )!;
-    click(open(EDIT_MODE_KEY));
-    click(open(EDIT_LIVE_KEY));
+    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    click(open(EDIT_LIVE_KEY, "open"));
     const out = render();
     expect(stripAnsi(out)).toMatch(new RegExp(`⚠ git: [^\n]*${REMOVE_GLYPH}`));
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
@@ -447,7 +448,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     click(toggle);
@@ -514,7 +515,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     click(toggle);
@@ -559,7 +560,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    ctx.sessionState.set("s1", EDIT_MODE_KEY, "open");
+    ctx.sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const liveToggle = (rendered: string, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -603,7 +604,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     expect(toggleUrl).toBeDefined();
@@ -639,7 +640,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // Open edit mode.
     const openUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     click(openUrl);
@@ -713,7 +714,7 @@ describe("a segment row's chrome rides its row", () => {
     const closed = stripAnsi(render()).split("\n");
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     click(toggleUrl);
@@ -734,7 +735,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
     const basePalette = getThemePalette("textual-dark"!);
-    sessionState.set("s1", EDIT_MODE_KEY, "open");
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const renderWith = (padding: number): string =>
       renderDsl(
         config,

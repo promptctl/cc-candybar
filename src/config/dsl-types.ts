@@ -130,6 +130,13 @@ export interface SegmentNode {
   // button, which has to sit against the segment it removes. Synthesis-only,
   // like `opens`.
   readonly trail?: string;
+  // Where this placement's unsaved setting values live (brandon-segment-
+  // settings-i4n.g64): setting name → the `state` variable configure mode's
+  // controls write, whose default is the value `settings` resolves to. The
+  // placement's templates read `.settings` through these, so a pick shows the
+  // moment it is made and `💾 save` writes it into the placement.
+  // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
+  readonly drafts?: Readonly<Record<string, string>>;
 }
 
 // [LAW:one-source-of-truth] THE identity of a placement: its authored `id`,
@@ -874,6 +881,33 @@ export function inSettingDomain(
     );
   }
   return typeof value === "string" && domain.includes(value);
+}
+
+// [LAW:one-source-of-truth] A setting value as a SessionState string, and
+// back. A session holds strings, so a pick crosses the click wire in this
+// spelling and the render parses it against the declaration — `undefined` for
+// a string the domain does not hold (a pick made before the declaration
+// changed), which the caller reads as "no pick", as a stale theme name is.
+export function settingSpelling(value: SettingValue): string {
+  return String(value);
+}
+
+export function parseSettingSpelling(
+  decl: SettingDecl,
+  raw: string,
+): SettingValue | undefined {
+  const { domain } = decl;
+  const value: SettingValue =
+    domain === "bool"
+      ? raw === "true"
+        ? true
+        : raw === "false"
+          ? false
+          : raw
+      : "min" in domain && /^-?\d+$/.test(raw)
+        ? Number(raw)
+        : raw;
+  return inSettingDomain(decl, value) ? value : undefined;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

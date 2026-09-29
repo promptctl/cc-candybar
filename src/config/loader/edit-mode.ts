@@ -38,13 +38,25 @@ import {
 } from "../disclosure.js";
 import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 
-// [LAW:single-enforcer] The SessionState key edit mode's on/off state lives
-// at, and the toggle action's identity member. Both edit-chrome.ts (every
-// synthesized affordance's `when` gate) and a hand-authored trigger segment
-// read/write these same two names — one declaration, no drift.
+// [LAW:single-enforcer] The SessionState key edit mode's state lives at, and
+// the toggle action's identity member. Both edit-chrome.ts (every synthesized
+// affordance's `when` gate) and a hand-authored trigger segment read/write
+// these same names — one declaration, no drift.
+//
+// [LAW:types-are-the-program] ONE key holds which edit mode is on
+// (brandon-segment-settings-i4n.g64): `closed`, `arrange` (the +/- chrome), or
+// `configure:<id>` (one placement's settings). Configuring two placements at
+// once, or configuring while arranging, is a second value this key would have
+// to hold at the same time — unrepresentable, with nothing to check.
 export const EDIT_MODE_KEY = "edit.mode";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
-export const EDIT_MODE_OPEN = "open";
+export const EDIT_MODE_ARRANGE = "arrange";
+
+// The member that configures the placement `id`. An id holds no `:` (the
+// loader refuses one), so the member names exactly one placement.
+export function configureMember(id: string): string {
+  return `configure:${id}`;
+}
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
 // always been: a binary toggle over one SessionState key. Naming it as a ref
@@ -53,7 +65,7 @@ export const EDIT_MODE_OPEN = "open";
 export const EDIT_MODE_REF: DisclosureRef = {
   variable: EDIT_MODE_KEY,
   key: EDIT_MODE_KEY,
-  member: EDIT_MODE_OPEN,
+  member: EDIT_MODE_ARRANGE,
 };
 
 // [LAW:one-source-of-truth] The predicate every synthesized +/- chrome
@@ -111,7 +123,10 @@ export function synthesizeEditModeToggle(
     [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
   };
   const actions: Record<string, ActionDecl> = {
-    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(EDIT_MODE_KEY, EDIT_MODE_OPEN),
+    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+      EDIT_MODE_KEY,
+      EDIT_MODE_ARRANGE,
+    ),
   };
   out.variables = { ...(out.variables ?? {}), ...variables };
   out.actions = { ...(out.actions ?? {}), ...actions };
