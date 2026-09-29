@@ -197,7 +197,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         configEnv: detectConfigEnv(process.env),
         // Conditional too: absent is the default directory. The daemon reads
         // settings.json from THIS session's Claude Code directory.
-        claudeConfigDir: detectClaudeConfigDir(process.env),
+        claudeConfigDir: detectClaudeConfigDir(process.env, process.cwd()),
       },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The

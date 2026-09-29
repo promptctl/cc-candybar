@@ -12,25 +12,27 @@ import { JSON_DIALECT } from "./config/json5-edit.js";
 export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 
 // [LAW:single-enforcer] Only the statusline CLIENT can observe this: Claude
-// Code spawns it with Claude Code's exact environment, while the daemon is
-// detached and one-per-user, its env answering for whichever session spawned
-// it. So the client reports the raw value as the `claudeConfigDir` hint and
-// the daemon resolves the directory per session with `claudeConfigDir` —
-// exactly the move `configEnv` made (brandon-config-5g8). Total over the
-// environment: unset or empty is `undefined`, the default directory.
+// Code spawns it with Claude Code's exact environment and working directory,
+// while the daemon is detached and one-per-user, its env and cwd answering for
+// whichever session spawned it. So the client resolves the directory — the
+// variable's first entry (the transcript search in src/utils/claude.ts reads
+// the same list), made absolute against the client's own cwd — and reports it
+// as the `claudeConfigDir` hint, exactly the move `configEnv` made
+// (brandon-config-5g8). Mirrored by the Rust client
+// (detect_claude_config_dir). Total over the environment: unset or empty is
+// `undefined`, the default directory.
 export function detectClaudeConfigDir(
   env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
 ): string | undefined {
-  const value = env[CLAUDE_CONFIG_DIR_ENV] ?? "";
-  return value === "" ? undefined : value;
+  const first = (env[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0]!.trim();
+  return first === "" ? undefined : path.resolve(cwd, first);
 }
 
-// Claude Code's configuration directory for a session whose environment
-// carried `raw` as CLAUDE_CONFIG_DIR: its first entry (the transcript search
-// in src/utils/claude.ts reads the same variable), else ~/.claude.
-export function claudeConfigDir(raw: string | undefined): string {
-  const configured = raw?.split(",")[0]?.trim();
-  return configured || path.join(os.homedir(), ".claude");
+// Claude Code's configuration directory: the one a client detected, else the
+// default, ~/.claude.
+export function claudeConfigDir(detected: string | undefined): string {
+  return detected ?? path.join(os.homedir(), ".claude");
 }
 
 // [LAW:one-source-of-truth] THE location of Claude Code's user settings file

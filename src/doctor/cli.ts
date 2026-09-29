@@ -36,12 +36,13 @@ function reportLine({ check, verdict }: CheckReport): string {
 export function doctorPlan(
   edge: DoctorEdge,
   env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
 ): CliPlan {
   let facts: DoctorFacts;
   try {
     facts = gatherFacts(edge, {
       tmux: detectTmuxHint(env),
-      claudeConfigDir: detectClaudeConfigDir(env),
+      claudeConfigDir: detectClaudeConfigDir(env, cwd),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -62,7 +63,7 @@ export function runDoctorCli(args: readonly string[]): never {
     );
     process.exit(EXIT_USAGE);
   }
-  const plan = doctorPlan(productionEdge(), process.env);
+  const plan = doctorPlan(productionEdge(), process.env, process.cwd());
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);

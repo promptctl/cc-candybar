@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Socket } from "node:net";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
@@ -97,9 +98,9 @@ export interface RenderRequest {
 //   • `claudeConfigDir` absent — the client's Claude Code runs with no
 //     CLAUDE_CONFIG_DIR (or the client is too old to say; both mean the
 //     default directory, what every reader assumed before the hint existed).
-//     Present, it is the variable's raw value, resolved by `claudeConfigDir`
-//     (src/claude-settings.ts) into the directory whose settings.json that
-//     session's Claude Code reads.
+//     Present, it is the absolute directory the client resolved from it
+//     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
+//     settings.json that session's Claude Code reads.
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
@@ -124,7 +125,7 @@ export function parseClientHints(
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
   const configEnv = sanitizeConfigPath(req.configEnv);
-  const claudeConfigDir = sanitizeNonEmpty(req.claudeConfigDir);
+  const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
@@ -135,12 +136,12 @@ export function parseClientHints(
   };
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary. A non-string or
-// empty value is "not reported" (`undefined`); the raw text passes unchanged,
-// because the value's own grammar (a comma list, first entry wins) belongs to
-// its one resolver, `claudeConfigDir`.
-function sanitizeNonEmpty(v: unknown): string | undefined {
-  return typeof v === "string" && v !== "" ? v : undefined;
+// [LAW:no-defensive-null-guards] exception: trust boundary. Both clients
+// resolve the directory against their own cwd before sending it, so anything
+// but an absolute path is a frame no client of ours builds — "not reported"
+// (`undefined`), never a path the daemon would resolve against ITS cwd.
+function sanitizeAbsolutePath(v: unknown): string | undefined {
+  return typeof v === "string" && path.isAbsolute(v) ? v : undefined;
 }
 
 // [LAW:single-enforcer] The one rule for a client-supplied explicit config

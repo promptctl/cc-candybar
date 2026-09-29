@@ -536,7 +536,7 @@ describe("buildRenderPayload — autocompact lane", () => {
     const logs: LogEntry[] = [];
     const { payload, asked } = await run(
       ok(400_000),
-      { claudeConfigDir: "/home/u/.claude-work, /ignored" },
+      { claudeConfigDir: "/home/u/.claude-work" },
       logs,
     );
     expect(asked).toEqual(["/home/u/.claude-work/settings.json"]);

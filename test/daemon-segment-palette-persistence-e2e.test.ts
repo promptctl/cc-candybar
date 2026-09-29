@@ -27,6 +27,7 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 import { linkUrls, withoutLinks } from "./helpers/ansi";
+import { detectClaudeConfigDir } from "../src/claude-settings";
 
 jest.setTimeout(30_000);
 
@@ -59,6 +60,9 @@ async function render(
         },
         args: [],
         cwd,
+        // The hint the real client sends: test/setup.ts's empty Claude Code
+        // directory, never the host's settings.
+        claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
       },
       REPLY_BUDGET_MS,
     );

@@ -20,6 +20,7 @@ import path from "node:path";
 import {
   claudeConfigDir,
   claudeInstalledPluginsPath,
+  detectClaudeConfigDir,
 } from "../claude-settings.js";
 import { launch, launchSync, type LaunchResult } from "../proc/launch.js";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
@@ -257,7 +258,7 @@ export function productionMementoEdge(): MementoEdge {
   // answers for whichever session spawned it rather than the session asking;
   // the per-session `claudeConfigDir` hint is the cure (brandon-claude-config-dir-89x).
   const registry = claudeInstalledPluginsPath(
-    claudeConfigDir(process.env.CLAUDE_CONFIG_DIR),
+    claudeConfigDir(detectClaudeConfigDir(process.env, process.cwd())),
   );
   return {
     locate: (projectDir) => locateIn(registry, projectDir),
