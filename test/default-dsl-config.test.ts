@@ -150,7 +150,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
     // deliberately absent from the default `root`.
     for (const optIn of [
-      "git",
       "session",
       "today",
       "speed",
@@ -683,7 +682,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
-  // brandon-segments-3eo.1: the `git` and `gitaculous` segment templates each
+  // brandon-segments-3eo.1: both forms of the `gitaculous` segment
   // render every git fact (branch, staged/unstaged/untracked/conflicts,
   // ahead/behind) in its own semantic palette color instead of one uniform
   // segment fg, p10k-style. Feeding a payload where every fact is nonzero and
@@ -774,11 +773,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // `theme` defaults to the config's own palette; passing one renders the
     // same segment under a different theme, which is how the contrast floor
     // below is checked across the whole registry rather than on one theme.
+    // The form `gitaculous` shows is the session's `git-detail` state, so a
+    // test picks one by writing it into the session the payload names.
+    const detailState = (detail: "collapsed" | "expanded"): SessionState => {
+      const state = new SessionState();
+      state.set(GIT_PAYLOAD.session_id, "git-detail", detail);
+      return state;
+    };
+    const EXPANDED = () => detailState("expanded");
+
     function renderSegment(
       segment: string,
       theme?: string,
       git: Record<string, unknown> = GIT_PAYLOAD.git,
       variables: DslConfig["variables"] = {},
+      sessionState: SessionState = new SessionState(),
     ): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const narrowed = narrowToSegment(parsed, segment);
@@ -787,12 +796,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore();
-      const registry = new SourceRegistry(
-        store,
-        "",
-        undefined,
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", undefined, sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -818,44 +822,150 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
     }
 
-    test("git segment renders more than one distinct color across staged/unstaged/untracked/conflicts/ahead/behind", () => {
-      const distinct = distinctForegrounds(renderSegment("git"));
-      expect(distinct.size).toBeGreaterThan(1);
-    });
-
-    test("gitaculous segment renders more than one distinct color across the same facts", () => {
-      const distinct = distinctForegrounds(renderSegment("gitaculous"));
-      expect(distinct.size).toBeGreaterThan(1);
-    });
-
-    // The piece contract (the `git*` helpers): every optional piece carries
-    // its own leading space or renders nothing, so a composition never shows
-    // a doubled or dangling space whichever facts are absent.
-    test.each([
-      [
-        "gitaculous",
-        GIT_PAYLOAD.git,
-        "(git) repo abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed)",
-      ],
-      ["git", GIT_PAYLOAD.git, "⎇ main +1/-1 SU?!1"],
-      ["gitaculous", { branch: "main" }, "(git) ⎇ main"],
-      ["git", { branch: "main" }, "⎇ main"],
-    ])(
-      "%s composes its pieces with single spaces (%#)",
-      (segment, git, text) => {
-        const visible = renderSegment(segment, undefined, git).replace(
-          ANSI_AND_CAPS,
-          "",
+    test.each(["collapsed", "expanded"] as const)(
+      "the %s form renders more than one distinct color across the facts",
+      (detail) => {
+        const line = renderSegment(
+          "gitaculous",
+          undefined,
+          GIT_PAYLOAD.git,
+          {},
+          detailState(detail),
         );
-        expect(visible.trim()).toBe(text);
+        expect(distinctForegrounds(line).size).toBeGreaterThan(1);
       },
     );
 
-    // brandon-segments-3eo.1.1: `git` and `gitaculous` independently typed
-    // the same fact's color and drifted (branch accent-vs-primary, stash
-    // colored-vs-not) — caught by live testing. Both now compose the same
-    // `git*` helper pieces and `git.color.*` variables; these assert the two
-    // segments now agree, not just that gitaculous has "more than one color".
+    // The epic's checkpoint repo states, in both forms. The piece contract
+    // (the `git*` helpers) is what keeps every row single-spaced: each
+    // optional piece carries its own leading space or renders nothing. The
+    // arrow is the last content in both forms — ▸ offers more, ◂ takes it
+    // back — and a directory outside any repo has no branch, so the segment
+    // is absent in either form.
+    const REBASING = {
+      branch: "feature",
+      repoName: "repo",
+      sha: "abc1234",
+      staged: 1,
+      unstaged: 2,
+      untracked: 3,
+      conflicts: 0,
+      ahead: 2,
+      behind: 1,
+      upstream: "origin/feature",
+      operation: "rebase",
+      stash: 1,
+      status: "dirty",
+      timeSinceCommit: 0,
+    };
+    const CLEAN = {
+      branch: "main",
+      repoName: "repo",
+      sha: "abc1234",
+      upstream: "origin/main",
+    };
+    const NO_UPSTREAM = { branch: "spike", repoName: "repo", sha: "abc1234" };
+    test.each([
+      ["collapsed", REBASING, "⎇ feature +2/-1 SU? ▸"],
+      [
+        "expanded",
+        REBASING,
+        "(git) repo [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◂",
+      ],
+      ["collapsed", CLEAN, "⎇ main ▸"],
+      ["expanded", CLEAN, "(git) repo abc1234 ⎇ main [origin/main] ◂"],
+      ["collapsed", NO_UPSTREAM, "⎇ spike ▸"],
+      ["expanded", NO_UPSTREAM, "(git) repo abc1234 ⎇ spike ◂"],
+      ["collapsed", GIT_PAYLOAD.git, "⎇ main +1/-1 SU?!1 ▸"],
+      [
+        "expanded",
+        GIT_PAYLOAD.git,
+        "(git) repo abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed) ◂",
+      ],
+      ["collapsed", { branch: "" }, ""],
+      ["expanded", { branch: "" }, ""],
+    ] as const)("%s: %j reads %j", (detail, git, text) => {
+      const visible = renderSegment(
+        "gitaculous",
+        undefined,
+        git,
+        {},
+        detailState(detail),
+      ).replace(ANSI_AND_CAPS, "");
+      expect(visible.trim()).toBe(text);
+    });
+
+    // A session that never clicked starts collapsed: the form is the state
+    // variable's default, which a user redeclares to start expanded.
+    test("a session starts in the form git.detail defaults to", () => {
+      const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
+      expect(strip(renderSegment("gitaculous"))).toBe("⎇ main +1/-1 SU?!1 ▸");
+      expect(
+        strip(
+          renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {
+            "git.detail": {
+              kind: "state",
+              key: "git-detail",
+              default: "expanded",
+            },
+          }),
+        ),
+      ).toMatch(/^\(git\) .* ◂$/);
+    });
+
+    // The arrow is one clickable region, and a click on it flips the form
+    // through the same gate and verb table the daemon dispatches through.
+    test("clicking the arrow expands, and clicking it again collapses", () => {
+      const parsed = parseAndValidate("<default>", SERIALIZED);
+      const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
+        registerStateValidator(key, spec),
+      );
+      const state = new SessionState();
+      const arrow = (line: string) => {
+        const urls = linkUrls(line);
+        expect(urls).toHaveLength(1);
+        return urls[0]!;
+      };
+      const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
+      try {
+        const collapsed = renderSegment(
+          "gitaculous",
+          undefined,
+          GIT_PAYLOAD.git,
+          {},
+          state,
+        );
+        expect(strip(collapsed)).toMatch(/▸$/);
+        clickUrl(arrow(collapsed), testVerbContext(state));
+        expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe(
+          "expanded",
+        );
+
+        const expanded = renderSegment(
+          "gitaculous",
+          undefined,
+          GIT_PAYLOAD.git,
+          {},
+          state,
+        );
+        expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
+        clickUrl(arrow(expanded), testVerbContext(state));
+        expect(
+          strip(
+            renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),
+          ),
+        ).toBe(strip(collapsed));
+      } finally {
+        for (const dispose of disposers) dispose();
+      }
+    });
+
+    // brandon-segments-3eo.1.1: the one-line and full git segments
+    // independently typed the same fact's color and drifted (branch
+    // accent-vs-primary, stash colored-vs-not) — caught by live testing. The
+    // two forms now compose the same `git*` helper pieces and `git.color.*`
+    // variables; these assert the two forms agree, not just that the full
+    // form has "more than one color".
     //
     // The truecolor fg immediately preceding `text`'s first occurrence — every
     // colored token here is wrapped by exactly one palette function, which
@@ -898,7 +1008,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(fgBeforeText(recoloured, "-1")).toBe(errorFg);
     });
 
-    test("gitaculous colors unstaged and untracked distinctly, not merged into one indicator", () => {
+    test("unstaged and untracked are colored distinctly, not merged into one indicator", () => {
       const line = renderSegment("gitaculous");
       const unstagedFg = fgBeforeText(line, "U");
       const untrackedFg = fgBeforeText(line, "?");
@@ -907,15 +1017,24 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(unstagedFg).not.toBe(untrackedFg);
     });
 
-    test("gitaculous colors the branch the same as git does", () => {
-      const gitFg = fgBeforeText(renderSegment("git"), "main");
-      const gitaculousFg = fgBeforeText(renderSegment("gitaculous"), "main");
-      expect(gitFg).toBeDefined();
-      expect(gitFg).toBe(gitaculousFg);
+    test("both forms color the branch alike", () => {
+      const collapsedFg = fgBeforeText(renderSegment("gitaculous"), "main");
+      const expandedFg = fgBeforeText(
+        renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, EXPANDED()),
+        "main",
+      );
+      expect(collapsedFg).toBeDefined();
+      expect(collapsedFg).toBe(expandedFg);
     });
 
-    test("gitaculous colors the stash count instead of leaving it plain", () => {
-      const line = renderSegment("gitaculous");
+    test("the expanded form colors the stash count instead of leaving it plain", () => {
+      const line = renderSegment(
+        "gitaculous",
+        undefined,
+        GIT_PAYLOAD.git,
+        {},
+        EXPANDED(),
+      );
       const stashFg = fgBeforeText(line, "(2 stashed)");
       const plainFg = fgBeforeText(line, "abc1234"); // sha: structural, never painted
       expect(stashFg).toBeDefined();
@@ -934,8 +1053,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // Text that carries no git fact — it only frames one.
       const STRUCTURAL = ["abc1234", "origin/main"];
 
-      test("gitaculous: every painted fact differs from the structural color", () => {
-        const line = renderSegment("gitaculous");
+      test("expanded: every painted fact differs from the structural color", () => {
+        const line = renderSegment(
+          "gitaculous",
+          undefined,
+          GIT_PAYLOAD.git,
+          {},
+          EXPANDED(),
+        );
         const quiet = fgBeforeText(line, STRUCTURAL[0]!);
         expect(quiet).toBeDefined();
         // Every other structural token shares that one color...
@@ -960,7 +1085,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       test.each(listResolvablePaletteNames())(
         "quiet structural text clears WCAG large-text contrast under theme %s",
         (theme) => {
-          const line = renderSegment("gitaculous", theme);
+          const line = renderSegment(
+            "gitaculous",
+            theme,
+            GIT_PAYLOAD.git,
+            {},
+            EXPANDED(),
+          );
           const quiet = fgBeforeText(line, "abc1234");
           expect(quiet).toBeDefined();
           const bg = bgBeforeText(line, "abc1234");

@@ -645,7 +645,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
 {
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
-    addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "git", relation: "after" },
+    addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "gitaculous", relation: "after" },
   },
   segments: {
     editControl: {
@@ -653,7 +653,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
     },
   },
   presets: {
-    compact: { root: { h: ["directory", "git"] } },
+    compact: { root: { h: ["directory", "gitaculous"] } },
   },
   root: "editControl",
 }
@@ -1012,7 +1012,7 @@ bounded stepper (`min`/`max`/`by`), because a palette is a NAME, not a
 number.
 
 "A segment your config declares" includes the bundled ones — `directory`,
-`git`, `model`, and the rest merge into every config by name — so
+`gitaculous`, `model`, and the rest merge into every config by name — so
 `segments.model.palette` is a legal target in a file that never mentions
 `model`. The first write adds exactly one field: `segments` merge by name
 and then by field, so a declaration under a bundled name is a delta over it,

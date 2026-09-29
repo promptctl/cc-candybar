@@ -132,7 +132,9 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
   const runs = parseRuns(render());
   const runFor = (glyph: string): Run | undefined =>
     runs.find((r) => r.text.trim() === glyph);
-  const segmentRun = runs.find((r) => r.text.includes("(git)"));
+  // The structural text the segment's own fg paints: the branch glyph, which
+  // leads the collapsed form a session starts in.
+  const segmentRun = runs.find((r) => r.text.includes("⎇"));
 
   test("the segment renders a default-fg run and the colored glyphs as separate runs", () => {
     expect(segmentRun).toBeDefined();

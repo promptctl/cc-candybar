@@ -116,7 +116,7 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫  ⇄ tester@tester-box  ~/c/c/src  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m 
+ 🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
@@ -462,15 +462,18 @@ declaration or a layout `when` there is no segment, and the call fails
 
 ## Reshaping a bundled segment: git
 
-The bundled git segments are built from the same parts a config can declare,
-so changing what they show is an override of one part, never a copy of the
-whole template. `gitaculous` (the full line, first row) and `git` (the
-one-line summary the `compact` preset uses) both compose these named
-`helpers`, each called as `{{ template "<name>" . }}`:
+The bundled git segment is built from the same parts a config can declare,
+so changing what it shows is an override of one part, never a copy of the
+whole template. `gitaculous` has two forms, each a named helper:
+`gitCollapsed`, the summary every session starts in, and `gitExpanded`, every
+fact. The `▸` at its right edge expands it and the `◂` collapses it again —
+a `cycle` action (`gitDetail`) over a per-session `state` variable
+(`git.detail`), so each Claude session keeps its own choice. Both forms
+compose these named `helpers`, each called as `{{ template "<name>" . }}`:
 
 | helper | renders |
 |--------|---------|
-| `gitBranch` | `⎇ main` — always present (both segments hide without a branch) |
+| `gitBranch` | `⎇ main` — always present (the segment hides without a branch) |
 | `gitRepo` | ` cc-candybar` |
 | `gitOperation` | ` [rebase]` |
 | `gitSha` | ` abc1234` |
@@ -491,17 +494,50 @@ segment's quiet `fg:`.
 The snippets below replace the whole `root` with the one segment so the
 rendered bar is short; drop the `root` line to keep the bundled rows.
 
-Hide one fact — override its piece with an empty body:
+Choose what the summary shows — override the form, listing the pieces you
+want in your order:
 
 ```json5 check:pass
 {
-  helpers: { gitSha: "" },
+  helpers: {
+    gitCollapsed: '{{ template "gitBranch" . }}{{ template "gitFlags" . }}{{ template "gitStash" . }}',
+  },
   root: { h: ["gitaculous"] },
 }
 ```
 
 ```render
- 🍫  (git) cc-candybar [rebase] SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m 
+ 🍫  ⎇ main SU? (1 stashed) ▸ 
+```
+
+Start every session expanded — redeclare the state variable with the other
+default. The arrow still collapses it for the session that clicks:
+
+```json5 check:pass
+{
+  variables: {
+    "git.detail": { kind: "state", key: "git-detail", default: "expanded" },
+  },
+  root: { h: ["gitaculous"] },
+}
+```
+
+```render
+ 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+```
+
+Hide one fact — override its piece with an empty body. A piece is shared, so
+the fact leaves both forms:
+
+```json5 check:pass
+{
+  helpers: { gitFlags: "" },
+  root: { h: ["gitaculous"] },
+}
+```
+
+```render
+ 🍫  ⎇ main +2/-1 ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -510,32 +546,13 @@ or re-spell it by overriding its piece:
 ```json5 check:pass
 {
   variables: { "git.color.behind": { kind: "literal", value: "error" } },
-  helpers: { gitStash: '{{ if gt .git.stash 0 }} ⚑{{ .git.stash }}{{ end }}' },
+  helpers: { gitBranch: 'on {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}' },
   root: { h: ["gitaculous"] },
 }
 ```
 
 ```render
- 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] ⚑1 ◷ 13m 
-```
-
-Reorder or choose the groups — override the segment's `template` with the
-pieces you want, in your order. Only `template` changes; the segment keeps
-its bundled `fg:` and `when`:
-
-```json5 check:pass
-{
-  segments: {
-    gitaculous: {
-      template: '{{ template "gitBranch" . }}{{ template "gitFlags" . }}{{ template "gitUpstream" . }}',
-    },
-  },
-  root: { h: ["gitaculous"] },
-}
-```
-
-```render
- 🍫  ⎇ main SU? [origin/main +2/-1] 
+ 🍫  on main +2/-1 SU? ▸ 
 ```
 
 ## Mistakes and the errors they produce

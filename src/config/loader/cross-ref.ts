@@ -36,6 +36,7 @@ import {
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
+import { renamedHint } from "./renamed-segments.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
@@ -46,16 +47,6 @@ import {
   templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
-
-// [LAW:one-source-of-truth] The renamed built-in segments: old name → current
-// name. A user config (which merges on top of the bundled default) that names a
-// renamed segment in `root` finds no matching declaration and would otherwise
-// get the generic "does not match any declared segment" error. This map turns
-// that into a migration pointer [LAW:no-silent-failure] — data, not a per-name
-// branch, so a future rename is one row here, not new control flow.
-export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
-  gitTaculous: "gitaculous",
-};
 
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
 // in loader/presets.ts's per-file structural pass (where a round-1 version
@@ -268,7 +259,7 @@ export function validateCrossReferences(
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})`,
+        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
@@ -416,14 +407,9 @@ export function validateCrossReferences(
       // these checks pass.
       if (isSettingsAnchor(node.name)) continue;
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
-        const renamed = RENAMED_SEGMENTS[node.name];
-        const hint =
-          renamed !== undefined
-            ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
-            : "";
         ctx.issues.push({
           path,
-          message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
+          message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
           line,
         });
       }
@@ -592,37 +578,19 @@ function checkPresetRootTarget(
     });
     return;
   }
-  const missing = (segName: string): boolean =>
-    !Object.prototype.hasOwnProperty.call(cfg.segments, segName);
-  if (hasRemove && "removeSegment" in a && missing(a.removeSegment)) {
+  // [LAW:single-enforcer] One spelling for every tree-op segment reference.
+  const checkDeclared = (role: string, segName: string): void => {
+    if (Object.prototype.hasOwnProperty.call(cfg.segments, segName)) return;
     ctx.issues.push({
       path: at,
-      message: `actions.${name}: removeSegment "${a.removeSegment}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
+      message: `actions.${name}: ${role} "${segName}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})${renamedHint(segName)}`,
       line,
     });
-  }
-  if (hasInsert && "insertSegment" in a) {
-    if (missing(a.insertSegment)) {
-      ctx.issues.push({
-        path: at,
-        message: `actions.${name}: insertSegment "${a.insertSegment}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
-        line,
-      });
-    }
-    if (missing(a.anchor)) {
-      ctx.issues.push({
-        path: at,
-        message: `actions.${name}: anchor "${a.anchor}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
-        line,
-      });
-    }
-  }
-  if (hasInsertFrom && "insertSegmentFrom" in a && missing(a.anchor)) {
-    ctx.issues.push({
-      path: at,
-      message: `actions.${name}: anchor "${a.anchor}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
-      line,
-    });
+  };
+  if ("removeSegment" in a) checkDeclared("removeSegment", a.removeSegment);
+  if ("insertSegment" in a) checkDeclared("insertSegment", a.insertSegment);
+  if ("insertSegment" in a || "insertSegmentFrom" in a) {
+    checkDeclared("anchor", a.anchor);
   }
 }
 
