@@ -153,7 +153,7 @@ Tell the user the previews are in the bash output above, then display:
 1. **default** -- Two rows: an identity row (directory, git) over a status row (model, context window, cache timer, 5-hour block usage, weekly usage). Good default.
 2. **compact** -- One row (directory, git, context window) with no cell padding. For narrow terminals and split panes.
 3. **verbose** -- The default's two rows plus pull-request, burn-rate, token-speed and token-sparkline segments. Maximum information.
-4. **zen** -- One quiet row (directory, context window) in plain style under the dim look. For heads-down work.
+4. **zen** -- One quiet row (directory, context window) in plain style under the dim look, so it replaces the style picked in Step 4. For heads-down work.
 5. **git** -- The open pull request beside the git state, over a status row cut to model, context window and activity. For branch-and-review work.
 6. **usage** -- Every cost and limit segment, one concern per row: context and cache, the rate-limit windows and burn rate, then session and today spend and token speed. For watching a budget.
 7. **dense** -- The default's segments plus session spend on one row with no cell padding, wrapped only where the terminal runs out. For wide terminals.
