@@ -25,7 +25,6 @@ import {
   presetRootKey,
 } from "../../config/loader/persist-target";
 import {
-  clampSeed,
   createValidatorRegistry,
   mergeContributions,
   type DerivedValidatorSpec,
@@ -59,7 +58,6 @@ export function rangeParamsForConfig(key: string): RangeParams | null {
 // UI-only paging concept with no meaning as a persisted config default.
 function actionKeySpecs(
   a: ActionDecl,
-  seeds: ReadonlyMap<string, number>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): KeySpecContribution[] {
   if (!("persist" in a)) return [];
@@ -148,21 +146,17 @@ function actionKeySpecs(
   return [
     {
       key: a.persist,
-      spec: {
-        kind: "range",
-        min: a.min,
-        max: a.max,
-        seed: clampSeed(seeds.get(a.persist), a.min, a.max),
-      },
+      spec: { kind: "range", min: a.min, max: a.max },
     },
   ];
 }
 
-// [LAW:one-source-of-truth] The seed for a bounded `persist` key (e.g. a
-// padding stepper) is the merged config's OWN globals field — the value the
-// bar renders with today, not silently `min`.
-function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
-  return numericGlobalsSeeds(config.globals);
+// [LAW:one-source-of-truth] What a stepped config key holds before the file
+// declares it: the config's own globals field, or the field's floor
+// (numericGlobalsSeeds). null for a key that is no numeric globals field.
+export function configKeySeed(config: DslConfig, key: string): string | null {
+  const seed = numericGlobalsSeeds(config.globals).get(key);
+  return seed === undefined ? null : String(seed);
 }
 
 // [LAW:one-source-of-truth] Every key a config's action table can CLEAR is a
@@ -197,7 +191,6 @@ function clearableContributions(config: DslConfig): KeySpecContribution[] {
 }
 
 function actionContributions(config: DslConfig): KeySpecContribution[] {
-  const seeds = configKeySeeds(config);
   // [LAW:one-source-of-truth] The "addable segment" domains
   // (edit-chrome.ts's `addableSegmentDomains`) merge in here alongside
   // looks/presets — the same per-preset seam `insertSegmentFrom` resolves
@@ -211,7 +204,7 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   return [
     ...clearableContributions(config),
     ...Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, seeds, perConfigDomains),
+      actionKeySpecs(a, perConfigDomains),
     ),
   ];
 }

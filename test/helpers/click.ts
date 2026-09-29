@@ -18,10 +18,25 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_FIX,
 } from "../../src/click/wire";
-import { VERBS } from "../../src/daemon/verbs";
+import {
+  VERBS,
+  SESSION_RENDER_ORIGIN_KEY,
+  encodeRenderOrigin,
+} from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
+import type { DslConfig } from "../../src/config/dsl-types";
+
+// The record a session's render leaves behind, which a click resolves its
+// config from: a session only clicks links its own render drew.
+export function recordRender(sessionState: SessionStateRW, sessionId: string): void {
+  sessionState.set(
+    sessionId,
+    SESSION_RENDER_ORIGIN_KEY,
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+  );
+}
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
 // silent log and an update act that refuses loudly — no test here has an
@@ -33,6 +48,7 @@ import { SettingsHistory } from "../../src/daemon/settings-history";
 export function testVerbContext(
   sessionState: SessionStateRW,
   history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
+  config?: DslConfig,
 ): VerbContext {
   return {
     sessionState,
@@ -49,10 +65,14 @@ export function testVerbContext(
       },
       claudeSettingsPath: "/nonexistent/settings.json",
     },
-    // Same posture again: a test that drives a save hands in the config its
-    // session renders with; reaching this one is a test bug.
+    // The config the session renders with: a test whose click reads it (a
+    // save, a step from an unset key) hands it in; reaching the lookup
+    // without one is a test bug.
     configFor: () => {
-      throw new Error("save: no config lookup in this test");
+      if (config === undefined) {
+        throw new Error("configFor: this test handed in no config");
+      }
+      return config;
     },
     // A reload rebuilds the render cache's entry from the file. This context
     // holds no render cache, so there is nothing to rebuild: the file a click

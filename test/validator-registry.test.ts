@@ -13,11 +13,10 @@ describe("a registry key shared across configs", () => {
       kind: "allow-list",
       allowed: [],
     });
-    registry.register("padding", { kind: "range", min: 0, max: 16, seed: 1 });
+    registry.register("padding", { kind: "range", min: 0, max: 16 });
     expect(registry.rangeParamsFor("padding")).toEqual({
       min: 0,
       max: 16,
-      seed: 1,
     });
     expect(registry.validate("padding", "4")).toMatchObject({ ok: true });
     expect(registry.validate("padding", "40")).toEqual({
@@ -31,7 +30,7 @@ describe("a registry key shared across configs", () => {
 
   test("an incoherent pair throws, and leaves the key as it was", () => {
     const registry = createValidatorRegistry({}, "config");
-    registry.register("padding", { kind: "range", min: 0, max: 16, seed: 1 });
+    registry.register("padding", { kind: "range", min: 0, max: 16 });
     expect(() =>
       registry.register("padding", { kind: "allow-list", allowed: ["wide"] }),
     ).toThrow(/non-integer/);
@@ -39,7 +38,6 @@ describe("a registry key shared across configs", () => {
     expect(registry.rangeParamsFor("padding")).toEqual({
       min: 0,
       max: 16,
-      seed: 1,
     });
   });
 });

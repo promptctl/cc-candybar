@@ -45,16 +45,13 @@ export type DerivedValidatorSpec =
   | { readonly kind: "int" }
   | { readonly kind: "allow-list"; readonly allowed: readonly string[] }
   | {
-      // [LAW:one-source-of-truth] A bounded-integer state key (a stepper's
-      // value). `min`/`max` gate the value; `seed` is the value an UNSET key
-      // reads as — sourced from the backing default so the first relative
-      // click steps from the same number the bar displays (not silently from
-      // `min`). The validator ignores `seed` (it only clamps); the caller
-      // reads it via rangeParamsFor when the key is unset.
+      // A bounded-integer key (a stepper's value): `min`/`max` gate it. What
+      // an UNSET key steps from is not here: this registry merges every loaded
+      // config, and that value is a fact about ONE session's config, so the
+      // step verbs resolve it at click time.
       readonly kind: "range";
       readonly min: number;
       readonly max: number;
-      readonly seed: number;
     };
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair —
@@ -68,20 +65,6 @@ export interface KeySpecContribution {
 }
 
 const INT_RE = /^-?\d+$/;
-
-// [LAW:one-source-of-truth] The unset seed for a stepped key is the backing
-// default — the SAME number the bar displays before the first click — so the
-// first relative step doesn't silently start from `min`. Absent or
-// non-integer default falls back to `min` (the historical render-side
-// behavior).
-export function clampSeed(
-  seed: number | undefined,
-  min: number,
-  max: number,
-): number {
-  if (seed === undefined) return min;
-  return Math.max(min, Math.min(max, seed));
-}
 
 // [LAW:one-type-per-behavior] The "values come from list Y" pattern IS the
 // canonical widget-config use case (theme picker draws from themes(), style
@@ -239,8 +222,7 @@ export function mergeKeySpecs(
           `or point that click at a distinct key.`,
       );
     }
-    const seed = clampSeed(ranges[0]!.seed, min, max);
-    return { kind: "range", min, max, seed };
+    return { kind: "range", min, max };
   }
   return { kind: "int" };
 }
@@ -300,7 +282,6 @@ export function mergeContributions(
 export interface RangeParams {
   readonly min: number;
   readonly max: number;
-  readonly seed: number;
 }
 
 interface BaselineEntry {
@@ -439,8 +420,8 @@ export function createValidatorRegistry(
       if (!entry || entry.permanent || entry.merged.kind !== "range") {
         return null;
       }
-      const { min, max, seed } = entry.merged;
-      return { min, max, seed };
+      const { min, max } = entry.merged;
+      return { min, max };
     },
   };
 }

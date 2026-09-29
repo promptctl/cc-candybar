@@ -33,7 +33,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { testVerbContext, effectsOf, boldUrls } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf, boldUrls } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   parseEffects,
@@ -98,7 +98,8 @@ function buildRuntime(src: string, sessionId = "s1") {
     registerStateValidator(key, spec),
   );
   const sideEffects: SideEffect[] = [];
-  const ctx: VerbContext = testVerbContext(sessionState);
+  recordRender(sessionState, sessionId);
+  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -485,10 +486,10 @@ describe("2de.12 — bounded set action", () => {
     dispose();
   });
 
-  test("two bounded actions on one key merge to a single range gate carrying the seed", () => {
+  test("two bounded actions on one key merge to a single range gate", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
-      { key: "level", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
+      { key: "level", spec: { kind: "range", min: 0, max: 60 } },
     ]);
   });
 

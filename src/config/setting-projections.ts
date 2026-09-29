@@ -99,3 +99,13 @@ export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
 // bar still wears a theme (brandon-theme-picker-bgw.exj).
 export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
   new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));
+
+export type SettingName = keyof typeof SETTINGS;
+
+// The setting whose SessionState key a step click names.
+export const SESSION_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
+  (Object.keys(SETTINGS) as SettingName[]).map((name) => [
+    SETTINGS[name].sessionKey,
+    name,
+  ]),
+);
