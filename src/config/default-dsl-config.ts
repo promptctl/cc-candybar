@@ -35,7 +35,7 @@ import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
-import type { SlashLine } from "../claude-input/slash-line.js";
+import { slashLine } from "../claude-input/slash-line.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
 // same one the renderer holds chosen text to (textOn).
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
@@ -1126,14 +1126,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The `autocompact` segment's controls. [LAW:one-source-of-truth] One
     // action per window Claude Code accepts, so the lines a click can type are
     // exactly AUTOCOMPACT_WINDOWS; the segment picks one by name.
-    // [LAW:parse-dont-validate] The casts claim nothing unchecked: this whole
-    // literal is parsed through the loader below (DEFAULT_DSL_CONFIG), which
-    // is where every line becomes a SlashLine or fails the module load.
-    "autocompact.auto": { slash: "/autocompact auto" as SlashLine },
+    "autocompact.auto": { slash: slashLine("/autocompact auto") },
     ...Object.fromEntries(
       AUTOCOMPACT_WINDOWS.map((w) => [
         `autocompact.${w}`,
-        { slash: `/autocompact ${w}` as SlashLine },
+        { slash: slashLine(`/autocompact ${w}`) },
       ]),
     ),
   },

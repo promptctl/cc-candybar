@@ -395,29 +395,29 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     // The bar tray's own /clear links: its arm key, or the line itself.
     const clearLinks = () =>
       rt.links().filter((l) =>
-        l.effects.some((e) => e.args[1] === "commands.clearArmed" || e.args[1] === "/clear"),
+        l.effects.some((e) => e.args[1] === "commands.clear" || e.args[1] === "/clear"),
       );
     // Disarmed, no link in the tray can type /clear.
     const [arm] = clearLinks();
     expect(clearLinks()).toHaveLength(1);
     expect(arm!.effects).toEqual([
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "armed"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "armed"] },
     ]);
     clickUrl(arm!.url, rt.ctx);
     expect(invocations()).toEqual([]);
 
-    // Armed: a confirm that types /clear and disarms, and a ✕ that only disarms.
+    // Armed: a confirm that disarms and types /clear, and a ✕ that only disarms.
     const [confirm, cancel] = clearLinks();
     expect(confirm!.effects).toEqual([
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "disarmed"] },
       { verb: VERB_SLASH, args: ["s1", "/clear"] },
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "disarmed"] },
     ]);
     expect(cancel!.effects).toEqual([
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clearArmed", "disarmed"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "disarmed"] },
     ]);
     clickUrl(confirm!.url, rt.ctx);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
-    expect(rt.sessionState.get("s1", "commands.clearArmed")).toBe("disarmed");
+    expect(rt.sessionState.get("s1", "commands.clear")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
     rt.dispose();
   });
@@ -426,14 +426,14 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     const rt = tray(null);
     const armed = () => rt.links().find((l) => typedLines(l.effects).includes("/clear"));
     clickUrl(
-      rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clearArmed"))!.url,
+      rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear"))!.url,
       rt.ctx,
     );
     expect(() => clickUrl(armed()!.url, rt.ctx)).toThrow(/not running inside tmux/);
     expect(rt.sessionState.get("s1", "click.error")).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );
-    expect(rt.sessionState.get("s1", "commands.clearArmed")).toBe("disarmed");
+    expect(rt.sessionState.get("s1", "commands.clear")).toBe("disarmed");
     expect(invocations()).toEqual([]);
     rt.dispose();
   });
@@ -444,7 +444,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       do: ["candybar.menu.toggle", "candybar.resetAll.disarm", "candybar.commands.clear.disarm"],
     });
     expect(rt.config.actions["candybar.commands.clear.disarm"]).toEqual({
-      set: "candybar.commands.clearArmed",
+      set: "candybar.commands.clear",
       to: "disarmed",
     });
     rt.dispose();

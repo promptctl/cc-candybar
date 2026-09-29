@@ -31,3 +31,11 @@ export function parseSlashLine(raw: unknown): ParsedSlashLine {
         reason: `a slash command is "/" then its name, e.g. "/compact" or "/model opus", on one line with no control characters, got ${JSON.stringify(raw)}`,
       };
 }
+
+// A line the source itself spells. A refusal is a defect in this program, so
+// it fails the module load rather than waiting for the loader to find it.
+export function slashLine(raw: string): SlashLine {
+  const parsed = parseSlashLine(raw);
+  if (parsed.kind === "refused") throw new Error(parsed.reason);
+  return parsed.line;
+}
