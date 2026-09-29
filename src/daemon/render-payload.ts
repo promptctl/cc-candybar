@@ -328,6 +328,11 @@ export interface RenderPayload extends ClaudeHookData {
   // something to step. Required: the daemon always holds a history, empty is
   // `{ undo: 0, redo: 0 }`.
   readonly history: HistoryDepth;
+  // [LAW:one-source-of-truth] How many settings this session has picked that
+  // the config file does not already resolve to — the drafts a `save` writes
+  // (src/daemon/setting-drafts.ts), derived every render so the menu's
+  // `💾 save N` exists exactly while there is something to save.
+  readonly unsaved: number;
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -1014,6 +1019,9 @@ export async function buildRenderPayload(
   // the client saw). Fusing them would put a config-precedence chain and a
   // trust boundary behind one name.
   hints: ClientHints,
+  // How many settings this session holds unsaved (src/daemon/setting-drafts.ts),
+  // derived by the caller from the config and session it rendered with.
+  unsaved: number,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -1234,6 +1242,7 @@ export async function buildRenderPayload(
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
     history: deps.history(hookData.session_id),
+    unsaved,
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

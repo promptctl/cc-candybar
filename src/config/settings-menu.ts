@@ -43,7 +43,6 @@ import {
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
-  type SegmentNode,
   type VariableDecl,
 } from "./dsl-types.js";
 import {
@@ -57,8 +56,6 @@ import {
   disclosureStateVar,
   disclosureTrigger,
 } from "./disclosure.js";
-import { declareHelp } from "./help.js";
-import { PERSIST_HELP } from "../help-text.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
   doctorReportKeys,
@@ -78,7 +75,6 @@ import type { OptionDomain } from "./option-domain.js";
 import { SETTINGS, type SettingProjection } from "./setting-projections.js";
 import { synthesisInputs } from "./synthesis-inputs.js";
 import {
-  BOOLEAN_FALSE,
   BOOLEAN_MEMBERS,
   BOOLEAN_TRUE,
   PADDING_RANGE,
@@ -97,8 +93,8 @@ export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
 const SETTINGS_OPEN = EDIT_MODE_OPEN;
 
 // The body's content segments. `.1` scoped the body to what its acceptance
-// names — switch presets, enter edit mode; `.3` adds the persist? selector
-// beside them and the config menu below them.
+// names — switch presets, enter edit mode; `.3` adds the config menu below
+// them.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
 const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
@@ -106,32 +102,16 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
-// [LAW:one-source-of-truth] ONE control per setting. The bar's old drawer spelled
-// each of theme/style/look/preset TWICE — `{{ menu "applyTheme" }}` for the
-// session beside `📌{{ menu "applyThemeForever" }}` for the durable default —
-// two controls a reader had to reconcile at every glance, and two declarations
-// an author had to keep in agreement. Here each setting is one control bound
-// to one DUAL action, and the `persist?` selector beside them chooses which
-// store every one of those controls writes [LAW:dataflow-not-control-flow].
-//
-// [LAW:no-mode-explosion] persist? is not a mode: it is a value in
-// SessionState that the compiled action reads at click time. Nothing branches
-// on it — not the synthesis (which mints the same tree either way), not the
-// render walk, and not the daemon's writers, which are the same two writers
-// they were before this menu existed.
-//
-// The selector sits in the menu's FIRST row, above and beside every control it
-// governs, so it never stands over a row it cannot affect: every setting under
-// it — preset here, theme/look/style/progression/charset/colour depth/wrap/padding in the
-// config row — is dual.
-const PERSIST_SEG = `${SETTINGS_NS}persist`;
+// [LAW:one-source-of-truth] ONE control per setting, and every control writes
+// the session: a pick is a DRAFT until it is saved (brandon-save-undo-bwi.hpi).
+// The drafts are derived, never flagged — src/daemon/setting-drafts.ts compares
+// the session with what the config file resolves — and `💾 save N` exists
+// exactly while there are N of them, writing all of them to the file in one
+// click. There is no destination selector to consult: where a click lands is
+// the same place every time, and saving is its own, visible act.
 const CONFIG_SEG = `${SETTINGS_NS}config`;
-
-// The selector's own state key, session-scoped and unchecked by default: you
-// arrive in experimentation mode, and committing a value to every future
-// session is a deliberate act. It also means a checkbox left armed yesterday
-// cannot silently write a durable default today — SessionState is per session.
-const PERSIST_KEY = PERSIST_SEG;
+const SAVE_SEG = `${SETTINGS_NS}save`;
+const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
 // [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
 // than as gate strings: every gate below — and every `(?)` nested inside them —
@@ -194,12 +174,6 @@ const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
 const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
 const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 
-// The `(?)` that explains `persist?` — the one control in this menu whose
-// behaviour a user cannot infer from its label, which is exactly why the ticket
-// named it as a required use site. Its body says what the NEXT click does, in
-// the same two sentences `--help` prints.
-const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
-
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
 // picker. The settings menu is a narrow panel — two open drop-downs would
@@ -210,9 +184,10 @@ const PICKER_KEY = `${SETTINGS_NS}pickers`;
 // [LAW:types-are-the-program] One row of the config menu, as data: everything
 // that differs between "theme" and "padding" is a field here, so the six
 // controls below are six VALUES and the synthesis that mints them is written
-// once. A control names the two keys its dual action writes (they differ where
-// history made them differ — SessionState "theme" over globals field
-// "palette"), the variable whose value it displays, and its value source.
+// once. A control names the two keys a setting has — the session key its pick
+// writes and the config field its save and ↺ write (they differ where history
+// made them differ — SessionState "theme" over globals field "palette") — the
+// variable whose value it displays, and its value source.
 //
 // A control labels itself with its `effectiveVar` — the value the bar is
 // ACTUALLY rendering with, whatever produced it — rather than with its own
@@ -310,9 +285,9 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
 
 // The two settings whose affordance is not a picker: wrapping is a toggle (two
 // members, so a menu would be a drop-down over a binary) and padding is a
-// stepper over a range (16 picker cells for a value you nudge). Both are dual
-// exactly like the pickers — only the affordance differs, so they carry the
-// same key record and only their `domain` is absent.
+// stepper over a range (16 picker cells for a value you nudge). Both are
+// session writes exactly like the pickers — only the affordance differs, so
+// they carry the same key record and only their `domain` is absent.
 //
 // [LAW:one-source-of-truth] Declared as records rather than typed inline at
 // each use, so every key in SETTINGS_WRITTEN_KEYS below traces to one
@@ -341,8 +316,8 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
   ...CONFIG_CONTROLS,
 ];
 
-// [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — both
-// destinations of every control it mints. Unlike the `settings.` names, these
+// [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
+// session key every control picks and the config field its save and ↺ write. Unlike the `settings.` names, these
 // are ordinary words a config can own (`theme`, `padding`, …), so a reader
 // cannot tell from the key alone whether the menu or the author wrote it. This
 // set is the menu's own answer to "which keys do I write", derived from the
@@ -509,34 +484,23 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 // today because it hangs on a trigger the closed menu does not render. The
 // walk colours the body on the door's band and the config row on the
 // band ⚙ opens one depth further (candybar-render-ai7.9).
-function expandAnchor(
-  node: AnchoredRoot | LayoutNode,
-  help: SegmentNode,
-): LayoutNode {
+function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
       ? disclosureNode(
           node.name,
           SETTINGS_REF,
-          // What the menu is FOR — the quick-action tray, the persist? selector that says where every
-          // setting below it lands, the preset switcher, the door into the
-          // config menu, and the door into edit mode.
+          // What the menu is FOR — the quick-action tray, the preset
+          // switcher and, beside it while there is something to save, the
+          // save cell; the door into the config menu, the door into edit
+          // mode, and the history's undo/redo.
           {
             kind: "container",
             direction: "horizontal",
             children: [
               { kind: "segment", name: TOOLBAR_SEG },
-              { kind: "segment", name: PERSIST_SEG },
-              // The `(?)` rides the row that already exists, immediately
-              // after the control it explains — so closed help costs no row
-              // and widens the bar by one cell, and open help reads as an
-              // answer to the checkbox on its left. Mid-row, unlike edit
-              // mode's `(?)`, which trails the content it wraps: this menu is
-              // its own subtree, so a cell placed inside it moves no node of
-              // the bar around it, and the adjacency IS the affordance. Its
-              // body drops below this row, before the config row's.
-              help,
               ...PRIMARY_CONTROLS.map(controlNode),
+              { kind: "segment", name: SAVE_SEG },
               // The display settings, behind their own disclosure so the
               // menu opens narrow.
               disclosureNode(
@@ -583,15 +547,15 @@ function expandAnchor(
         )
       : node;
   }
-  return expandContainer(node, help);
+  return expandContainer(node);
 }
 
 function expandContainer<
   N extends { readonly children: readonly LayoutNode[] },
->(node: N, help: SegmentNode): N {
+>(node: N): N {
   return {
     ...node,
-    children: node.children.map((child) => expandAnchor(child, help)),
+    children: node.children.map((child) => expandAnchor(child)),
   };
 }
 
@@ -610,10 +574,7 @@ interface MenuArtifacts {
 // self-collision a second `kind: "group"` node would be: group names are one
 // synthesis-wide namespace, so a group embedded in two preset roots declares
 // itself twice.
-function settingsArtifacts(doorGlyph: string): {
-  artifacts: MenuArtifacts;
-  help: SegmentNode;
-} {
+function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   const artifacts: MenuArtifacts = {
     variables: {
       [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
@@ -632,14 +593,7 @@ function settingsArtifacts(doorGlyph: string): {
       [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
       [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
-      // [LAW:one-source-of-truth] The selector is an ordinary session cycle
-      // over the one boolean spelling SessionState uses — off first, because
-      // an unwritten key counts as the first member and the menu opens in
-      // experimentation mode.
-      [PERSIST_SEG]: {
-        set: PERSIST_KEY,
-        cycle: [BOOLEAN_FALSE, BOOLEAN_TRUE],
-      },
+      [SAVE_SEG]: { save: true },
     },
     segments: {
       // [LAW:representation] ONE symbol per state, unlike the labelled toggles
@@ -658,11 +612,13 @@ function settingsArtifacts(doorGlyph: string): {
         ),
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      // [LAW:representation] The checkbox states what the NEXT write does,
-      // which is why the glyph and the word live together: "☑ persist?" is
-      // the whole explanation of where the click below it lands.
-      [PERSIST_SEG]: {
-        template: `{{ action "${PERSIST_SEG}" "☐ persist?" "☑ persist?" }}`,
+      // [LAW:dataflow-not-control-flow] The cell exists exactly while there is
+      // something to save — `gt` renders the literal "false" at zero, the only
+      // text a `when` hides on — and it says how much, so a click never
+      // commits more than the user can see is pending.
+      [SAVE_SEG]: {
+        when: `{{ gt .${UNSAVED_VAR} 0 }}`,
+        template: `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
       },
       [CONFIG_SEG]: {
         template: disclosureTrigger(
@@ -683,8 +639,8 @@ function settingsArtifacts(doorGlyph: string): {
       },
       // [LAW:one-type-per-behavior] Both non-picker controls read the same
       // `.effective` projection their picker siblings read, and write the
-      // same two stores through the same dual arm — a toggle and a stepper
-      // are affordances over one behavior, not two kinds of setting.
+      // session exactly as they do — a toggle and a stepper are affordances
+      // over one behavior, not two kinds of setting.
       [WRAP_SEG]: {
         template:
           `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
@@ -702,10 +658,12 @@ function settingsArtifacts(doorGlyph: string): {
       },
     },
   };
-  artifacts.variables[PERSIST_KEY] = {
-    kind: "state",
-    key: PERSIST_KEY,
-    default: BOOLEAN_FALSE,
+  // The count the daemon publishes every render (RenderPayload.unsaved).
+  artifacts.variables[UNSAVED_VAR] = {
+    kind: "input",
+    path: "unsaved",
+    type: "number",
+    default: 0,
   };
   artifacts.variables[CONFIG_SEG] = disclosureStateVar(
     CONFIG_SEG,
@@ -718,18 +676,7 @@ function settingsArtifacts(doorGlyph: string): {
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
   declareHistorySteps(artifacts);
-  // [LAW:one-source-of-truth] The `(?)` is minted here, with the panel it
-  // belongs to, and its NODE is returned so `expandAnchor` places it by the
-  // value it is handed rather than by re-deriving names this pass already
-  // owns. Nested in SETTINGS_REF, so closing the menu takes the open help with
-  // it.
-  const help = declareHelp(
-    PERSIST_HELP_SEG,
-    PERSIST_HELP,
-    [SETTINGS_REF],
-    artifacts,
-  );
-  return { artifacts, help };
+  return artifacts;
 }
 
 function declareHistorySteps(artifacts: MenuArtifacts): void {
@@ -778,10 +725,8 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
 // table that describes them. A picker control is a glyph, its live value, the
 // toggle that opens its carousel over its domain, and the ↺ that forgets its
-// durable default; wrap and padding are a cycle and a stepper instead. Every apply action here is DUAL
-// — one declaration naming both destination keys and the selector that chooses
-// between them — so the panel spells each setting exactly once and the click
-// carries the destination as data [LAW:dataflow-not-control-flow].
+// durable default; wrap and padding are a cycle and a stepper instead. Every
+// apply action here is a session `set` — a draft the save cell commits.
 //
 // A pick leaves its carousel open, re-centred on what it applied
 // (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
@@ -791,31 +736,21 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // keys, not tree positions.
 //
 // [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
-// and `deriveConfigActionValidators` each explode these dual declarations
-// (actionDestinations) and derive the same specs they would have derived from
-// the pair of single-destination actions this replaces — so the writable-key
-// surface is byte-for-byte what it was when a drawer spelled both halves.
+// derives each session key's gate from these `set`s, and a save re-validates
+// every draft through that same gate before it touches the file.
 function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of PICKER_CONTROLS) {
     const apply = controlApply(c.name);
-    artifacts.actions[apply] = {
-      set: c.sessionKey,
-      persist: c.configKey,
-      persistWhen: PERSIST_KEY,
-      from: c.domain,
-    };
+    artifacts.actions[apply] = { set: c.sessionKey, from: c.domain };
     // [LAW:one-source-of-truth] ↺ clears the DURABLE default only — the one
     // write the user cannot otherwise take back, since a session value dies
-    // with the session. Its target is the config key the dual's durable half
-    // writes, read from the same record, so the two can never name different
-    // settings.
+    // with the session. Its target is the config key a save writes, read from
+    // the same record, so the two can never name different settings.
     artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
     declareControlRow(c, artifacts);
   }
   artifacts.actions[controlApply(WRAP.name)] = {
     set: WRAP.sessionKey,
-    persist: WRAP.configKey,
-    persistWhen: PERSIST_KEY,
     cycle: [...BOOLEAN_MEMBERS],
   };
   artifacts.actions[controlReset(WRAP.name)] = { reset: WRAP.configKey };
@@ -828,8 +763,6 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       `${controlApply(PADDING.name)}.${by < 0 ? "down" : "up"}`
     ] = {
       set: PADDING.sessionKey,
-      persist: PADDING.configKey,
-      persistWhen: PERSIST_KEY,
       ...PADDING_RANGE,
       by,
     };
@@ -893,15 +826,13 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 // own declaration of the same name wins, exactly as edit chrome's ensured
 // inputs do.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
-  const { artifacts, help } = settingsArtifacts(
-    config.globals.menuGlyph ?? DOOR_GLYPH,
-  );
+  const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
   ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
   const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
-    const root = expandAnchor(withAnchor(node), help);
+    const root = expandAnchor(withAnchor(node));
     roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }

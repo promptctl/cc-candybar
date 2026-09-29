@@ -26,11 +26,6 @@ export const EDIT_MODE_HELP = [
   "↺ resets layout",
 ] as const;
 
-export const PERSIST_HELP = [
-  "☐ this session only",
-  "☑ default for every session",
-] as const;
-
 export const HELP_TEXT = `
 cc-candybar - Beautiful powerline statusline for Claude Code
 
@@ -54,8 +49,8 @@ Configuration:
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
   quick actions, preset switching, edit mode, and a config menu of
   clickable theme/look/style/progression/charset/colour-depth/wrap/padding
-  controls. The \`persist?\` checkbox there chooses where a change lands:
-  ${PERSIST_HELP.join(", ")}.
+  controls. A change applies to this session at once; 💾 save appears while
+  you have unsaved changes and writes them to your config file.
   Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a
   failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
 

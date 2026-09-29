@@ -70,7 +70,9 @@ import {
   SESSION_RENDER_ORIGIN_KEY,
   SESSION_CLIENT_HINTS_KEY,
   encodeRenderOrigin,
+  type RenderOrigin,
 } from "./verbs";
+import { settingDrafts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { setLaunchStats } from "../proc/launch";
@@ -1002,9 +1004,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // with the tree that actually rendered. That is why it arrives as
       // a closure over this entry rather than a lookup inside the resolver.
       const { authoredRoots } = entry.state;
+      const sessionPick = (key: string): string | null =>
+        sessionState.get(req.hookData.session_id, key);
       const effective: EffectiveGlobals = resolveEffectiveGlobals(
         entry.state.config,
-        (key: string) => sessionState.get(req.hookData.session_id, key),
+        sessionPick,
         (preset: string) => authoredRoots.has(preset),
       );
       const payload = await buildRenderPayload(
@@ -1014,6 +1018,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         entry.state.neededInputPaths(effective.preset),
         effective,
         hints,
+        settingDrafts(entry.state.config, sessionPick).length,
       );
       // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
       // and could not honour — today a `globals.palette` rule naming no installed
@@ -1263,6 +1268,20 @@ const verbCtx = {
   applyUpdate: () => updateWatch.act(),
   doctor: productionEdge(),
   history: settingsHistory,
+  // The config a session's last render resolved from — the same entry the
+  // render drew the bar with, so a save compares against the bar the user saw.
+  configFor: (origin: RenderOrigin) =>
+    renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ).state.config,
+  reloadConfig: (origin: RenderOrigin) =>
+    renderCache.reload(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ),
 };
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render

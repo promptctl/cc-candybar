@@ -49,6 +49,14 @@ export function testVerbContext(
       },
       claudeSettingsPath: "/nonexistent/settings.json",
     },
+    // Same posture again: a test that drives a save hands in the config its
+    // session renders with; reaching this one is a test bug.
+    configFor: () => {
+      throw new Error("save: no config lookup in this test");
+    },
+    reloadConfig: () => {
+      throw new Error("save: no config reload in this test");
+    },
   };
 }
 

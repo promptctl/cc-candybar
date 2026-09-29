@@ -1,23 +1,16 @@
-// [LAW:verifiable-goals] Acceptance for candybar-settings-ui-aok.3 — ONE
-// control per setting, with a `persist?` checkbox that chooses where the click
-// lands — measured the way the epic demands: from a user config whose `root`
-// is a single row of two segments, which is the shape that broke every
-// interactive surface in the first place.
+// [LAW:verifiable-goals] Acceptance for the settings menu's config controls —
+// ONE control per setting (candybar-settings-ui-aok.3), every one of them a
+// session pick that stays a DRAFT until it is saved (brandon-save-undo-bwi.hpi)
+// — measured from a user config whose `root` is a single row of two segments,
+// the shape that broke every interactive surface in the first place.
 //
-//   1. The loader proves the DUAL ActionDecl arm: both destination keys plus
-//      the selector key, one shared value source, rejecting the sources that
-//      have no second destination to choose between (`int`, the layout ops).
-//   2. A dual derives EXACTLY the gates its two single-destination halves
-//      would have derived — asserted by deriving both and comparing, so the
-//      claim "this adds no gate surface" is checked against the real
-//      derivations rather than restated.
-//   3. The rendered click's DESTINATION follows the checkbox: unchecked ⇒
-//      set-state on the session key and NO durable link anywhere in the bar;
-//      checked ⇒ set-config on the config key and no session link. Same
-//      config, same segments, same template — a value chose the store.
-//   4. Nothing branches on the checkbox but the checkbox: the two renders are
-//      identical text apart from the ☐/☑ glyph, so the layout the walk
-//      produces is provably independent of persist state.
+//   1. `save` is a marker action: `{ save: true }` and nothing else.
+//   2. Every control writes the SESSION key; the only durable links on the bar
+//      are the ↺ resets.
+//   3. A pick is a draft: `💾 save N` appears, counting them, while the config
+//      file is untouched; a pick back to the saved value is no draft at all.
+//   4. Save writes every draft to the file in ONE edit, releases the picks, and
+//      the cell is gone; a refused save keeps every draft and the file.
 //   5. The controls are REACHABLE from that two-segment root: the menu the
 //      user cannot delete carries them.
 
@@ -43,6 +36,8 @@ import {
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { settingDrafts } from "../src/daemon/setting-drafts";
+import { chmodSync } from "node:fs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf } from "./helpers/click";
@@ -87,36 +82,61 @@ function rig(
   durable?: DurableConfig,
   width: number = Number.POSITIVE_INFINITY,
 ): {
-  config: ValidatedConfig;
+  readonly config: ValidatedConfig;
+  sessionState: SessionState;
+  logs: string[];
   render: () => string;
   click: (url: string) => void;
   dispose: () => void;
 } {
-  const config = parseAndValidate(
-    "<user>",
-    source,
-    ALLOWED,
-    DEFAULT_DSL_CONFIG,
-  );
   const sessionState = new SessionState();
   durable?.write(source);
   durable?.seedOrigin(sessionState, SID);
-  const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
-  const ctx: VerbContext = testVerbContext(sessionState, durable?.historyFor(sessionState));
+  // Everything the daemon's cache entry holds for one config — rebuilt whole
+  // on a reload, the old registry and gates disposed first, exactly as
+  // RenderCache.reloadInto swaps an entry's state.
+  const load = (text: string) => {
+    const config = parseAndValidate(
+      "<user>",
+      text,
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const disposers = [
+      ...deriveActionValidators(config).map(({ key, spec }) =>
+        registerStateValidator(key, spec),
+      ),
+      ...deriveConfigActionValidators(config).map(({ key, spec }) =>
+        registerConfigValidator(key, spec),
+      ),
+      () => registry.dispose(),
+    ];
+    return { config, store, registry, compiled, disposers };
+  };
+  let entry = load(source);
+  const logs: string[] = [];
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
+    dlog: (_level, msg) => logs.push(msg),
+    configFor: () => entry.config,
+    reloadConfig: () => {
+      const next = load(durable!.text()!);
+      entry.disposers.forEach((d) => d());
+      entry = next;
+    },
+  };
   return {
-    config,
-    render: () =>
-      renderDsl(
+    get config() {
+      return entry.config;
+    },
+    sessionState,
+    logs,
+    render: () => {
+      const { config, compiled, store, registry } = entry;
+      return renderDsl(
         config,
         compiled,
         store,
@@ -155,6 +175,10 @@ function rig(
               config.globals.padding,
             ),
           },
+          // The daemon derives this per render (server.ts) through the same
+          // function the save verb writes from.
+          unsaved: settingDrafts(config, (key) => sessionState.get(SID, key))
+            .length,
         },
         opts(width),
         undefined,
@@ -165,7 +189,8 @@ function rig(
             config.globals.palette,
           ),
         },
-      ),
+      );
+    },
     click: (url: string) => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
@@ -176,10 +201,7 @@ function rig(
         handler(e.value, ctx);
       }
     },
-    dispose: () => {
-      for (const d of disposers) d();
-      registry.dispose();
-    },
+    dispose: () => entry.disposers.forEach((d) => d()),
   };
 }
 
@@ -206,195 +228,61 @@ function plain(rendered: string): string {
   return stripAnsi(rendered);
 }
 
-// ─── 1. The dual ActionDecl arm ──────────────────────────────────────────────
+// ─── 1. The save marker ──────────────────────────────────────────────────────
 
-describe("the dual-destination action arm", () => {
-  const base = (actions: string) => `{
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      persist: { kind: 'state', key: 'persist', default: 'false' },
-    },
+describe("the save action", () => {
+  const withActions = (actions: string) => `{
     actions: ${actions},
-    segments: { d: { template: 'd', bg: 'surface', fg: 'foreground' } },
+    segments: { d: { template: 'd' } },
     root: { h: ['d'] },
   }`;
 
-  test("set + persist + persistWhen + from parses as one declaration", () => {
+  test("{ save: true } parses as a save", () => {
     const config = parseAndValidate(
       "<test>",
-      base(
-        `{ t: { set: 'theme', persist: 'palette', persistWhen: 'persist', from: 'themes' } }`,
-      ),
+      withActions(`{ s: { save: true } }`),
       ALLOWED,
     );
-    expect(config.actions.t).toEqual({
-      set: "theme",
-      persist: "palette",
-      persistWhen: "persist",
-      from: "themes",
-    });
+    expect(config.actions.s).toEqual({ save: true });
   });
 
-  test("cycle and bounded value sources parse too — both destinations share them", () => {
-    const config = parseAndValidate(
-      "<test>",
-      base(
-        `{
-          w: { set: 'autoWrap', persist: 'autoWrap', persistWhen: 'persist', cycle: ['true','false'] },
-          p: { set: 'padding', persist: 'padding', persistWhen: 'persist', min: 0, max: 16, by: 1 },
-        }`,
-      ),
-      ALLOWED,
-    );
-    expect(config.actions.w).toMatchObject({ cycle: ["true", "false"] });
-    expect(config.actions.p).toMatchObject({ min: 0, max: 16, by: 1 });
-  });
-
-  test("persistWhen without both destinations is a load error", () => {
+  test("a save carries nothing: any other value or key is a load error", () => {
     expect(() =>
       parseAndValidate(
         "<test>",
-        base(`{ t: { set: 'theme', persistWhen: 'persist', from: 'themes' } }`),
+        withActions(`{ s: { save: 'theme' } }`),
         ALLOWED,
       ),
-    ).toThrow(ConfigError);
-  });
-
-  test("`int` has no dual form — a page cursor has no durable meaning", () => {
+    ).toThrow(/save must be the literal true/);
     expect(() =>
       parseAndValidate(
         "<test>",
-        base(
-          `{ t: { set: 'page', persist: 'padding', persistWhen: 'persist', int: true } }`,
+        withActions(`{ s: { save: true, key: 'theme' } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/Unknown key "key" on a save action/);
+  });
+
+  test("the removed persistWhen dual names save as its replacement", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        withActions(
+          `{ s: { set: 'theme', persist: 'palette', persistWhen: 'p', from: 'themes' } }`,
         ),
         ALLOWED,
       ),
-    ).toThrow(ConfigError);
-  });
-
-  test("a structural layout op has no dual form — it is durable by nature", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        base(
-          `{ t: { set: 'x', persist: 'presets.default.root', persistWhen: 'persist', removeSegment: 'd' } }`,
-        ),
-        ALLOWED,
-      ),
-    ).toThrow(ConfigError);
-  });
-
-  // [LAW:no-silent-failure] A selector naming nothing loads cleanly and then
-  // does nothing FOREVER: the compiled action falls back to the raw key name,
-  // reads it, finds nothing, and an unreadable selector parses as "session".
-  // The checkbox flips a value no control reads and the destination never
-  // moves, with no error anywhere — working software, permanently wrong.
-  test("persistWhen naming an undeclared state key is a load error", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        base(
-          `{ t: { set: 'theme', persist: 'palette', persistWhen: 'persistt', from: 'themes' } }`,
-        ),
-        ALLOWED,
-      ),
-    ).toThrow(/is not a declared state key/);
-  });
-
-  // A segment-local state variable is a legitimate selector: render.ts's
-  // stateKeyToVar registers segment `vars` alongside global ones, and that map
-  // is what a dual's selector resolves through at click time. A load check
-  // that only saw the global scope would reject configs that work.
-  test("a segment-local state variable is a legal selector", () => {
-    const config = parseAndValidate(
-      "<test>",
-      `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-        actions: { t: { set: 'theme', persist: 'palette', persistWhen: 'flag', from: 'themes' } },
-        segments: {
-          d: {
-            template: 'd', bg: 'surface', fg: 'foreground',
-            vars: { flag: { kind: 'state', key: 'flag', default: 'false' } },
-          },
-        },
-        root: { h: ['d'] },
-      }`,
-      ALLOWED,
-    );
-    expect(config.actions.t).toMatchObject({ persistWhen: "flag" });
-  });
-
-  test("two value sources at once is a load error, as it is for set/persist", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        base(
-          `{ t: { set: 'theme', persist: 'palette', persistWhen: 'persist', from: 'themes', to: 'nord' } }`,
-        ),
-        ALLOWED,
-      ),
-    ).toThrow(ConfigError);
+    ).toThrow(/persistWhen was removed: declare the `set` alone .*save: true/);
   });
 });
 
-// ─── 2. The derived gate is the union of the two halves ──────────────────────
-
-describe("a dual derives exactly what its two halves derive", () => {
-  const withActions = (actions: string) =>
-    parseAndValidate(
-      "<test>",
-      `{
-        variables: {
-          'session.id': { kind: 'input', path: 'session_id', default: '' },
-          persist: { kind: 'state', key: 'persist', default: 'false' },
-        },
-        actions: ${actions},
-        segments: { d: { template: 'd', bg: 'surface', fg: 'foreground' } },
-        root: { h: ['d'] },
-      }`,
-      ALLOWED,
-    );
-
-  // [LAW:single-enforcer] The claim is that a dual widens nothing: the pair of
-  // specs it derives is the pair two ordinary actions would derive. Comparing
-  // the two derivations directly is what makes that a checked fact rather than
-  // a comment — a dual that smuggled a wider allow-list would fail here.
-  test("session and config gates match the equivalent single-destination pair", () => {
-    const dual = withActions(
-      `{ t: { set: 'look', persist: 'look', persistWhen: 'persist', from: 'looks' } }`,
-    );
-    const split = withActions(
-      `{
-        s: { set: 'look', from: 'looks' },
-        p: { persist: 'look', from: 'looks' },
-      }`,
-    );
-    expect(deriveActionValidators(dual)).toEqual(deriveActionValidators(split));
-    expect(deriveConfigActionValidators(dual)).toEqual(
-      deriveConfigActionValidators(split),
-    );
-  });
-
-  test("a bounded dual derives the same range on both keys", () => {
-    const dual = withActions(
-      `{ p: { set: 'padding', persist: 'padding', persistWhen: 'persist', min: 0, max: 16, by: 1 } }`,
-    );
-    const state = deriveActionValidators(dual).find((c) => c.key === "padding");
-    const config = deriveConfigActionValidators(dual).find(
-      (c) => c.key === "padding",
-    );
-    expect(state?.spec).toMatchObject({ kind: "range", min: 0, max: 16 });
-    expect(config?.spec).toMatchObject({ kind: "range", min: 0, max: 16 });
-  });
-});
-
-// ─── 3–5. The menu, from a two-segment root ──────────────────────────────────
+// ─── 2–5. The menu, from a two-segment root ──────────────────────────────────
 
 describe("the config menu, reached from a user config whose root is one row", () => {
   let r: ReturnType<typeof rig>;
-  // A durable click edits the session's config file for real, so this suite
-  // hands the rig a temp file (and a temp edit history) for the duration —
-  // never the developer's own config.
+  // A save edits the session's config file for real, so this suite hands the
+  // rig a temp file (and a temp edit history) for the duration — never the
+  // developer's own config.
   let durable: DurableConfig;
 
   beforeEach(() => {
@@ -415,6 +303,19 @@ describe("the config menu, reached from a user config whose root is one row", ()
     durable.dispose();
   });
 
+  const wrapUrl = (): string =>
+    writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
+  const paddingUp = (): string =>
+    links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "▶" &&
+        effectsOf(l.url).some((e) => e.args[1] === "padding"),
+    )!.url;
+  const saveUrl = (): string | undefined =>
+    links(r.render()).find((l) =>
+      effectsOf(l.url).some((e) => e.verb === "save"),
+    )?.url;
+
   test("every setting the menu owns is one control, reachable from that root", () => {
     const out = plain(r.render());
     // One labelled control each, showing the value the bar actually rendered.
@@ -424,132 +325,114 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(out).toContain("✦ powerline"); // style
     expect(out).toContain("wrap: on"); // autoWrap
     expect(out).toContain("padding 1"); // padding
-    expect(out).toContain("☐ persist?"); // the destination selector
+    // Nothing picked, nothing to save.
+    expect(out).not.toContain("💾");
+    expect(saveUrl()).toBeUndefined();
   });
 
-  test("unchecked: the theme control writes the SESSION key and nothing durable", () => {
-    const before = r.render();
-    // Open the theme picker so its option cells render.
-    const themeMenu = writesTo(before, "menus.settings_pickers").find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
-    );
-    expect(themeMenu).toBeDefined();
-    r.click(themeMenu!);
-
-    const open = r.render();
-    expect(writesTo(open, "theme").length).toBeGreaterThan(0);
-    expect(writesTo(open, "palette").every(isReset)).toBe(true);
-  });
-
-  test("checked: the SAME control writes the durable key and nothing session-scoped", () => {
-    const persistToggle = writesTo(r.render(), "settings.persist")[0];
-    expect(persistToggle).toBeDefined();
-    r.click(persistToggle!);
-    expect(plain(r.render())).toContain("☑ persist?");
-
+  test("every control writes the session key; the only durable links are the ↺ resets", () => {
+    // Open the theme ring so its option cells render too.
     const themeMenu = writesTo(r.render(), "menus.settings_pickers").find((u) =>
       effectsOf(u).some((e) => e.args[2] === "settings.apply.theme"),
     );
     r.click(themeMenu!);
-
     const open = r.render();
-    expect(writesTo(open, "palette").some((u) => !isReset(u))).toBe(true);
-    // The session key appears only as the RELEASE segment of the durable write
-    // — never as a write of its own. That release is what keeps a durable
-    // write visible to the session that made it (a session pick outranks a
-    // durable default), and riding the write means a rejected write cannot
-    // drop the pick.
-    const applyEffects = effectsOf(
-      writesTo(open, "palette").find((u) => !isReset(u))!,
-    );
-    expect(
-      applyEffects.some(
-        (e) => e.verb === "set-config" && e.args[3] === "theme",
-      ),
-    ).toBe(true);
-    expect(
-      applyEffects.some((e) => e.verb === "set-state" && e.args[1] === "theme"),
-    ).toBe(false);
+    expect(writesTo(open, "theme").length).toBeGreaterThan(0);
+    for (const url of linkUrls(open)) {
+      const durableWrites = effectsOf(url).filter((e) =>
+        ["set-config", "step-config"].includes(e.verb),
+      );
+      expect(durableWrites).toEqual([]);
+    }
+    expect(writesTo(open, "palette").every(isReset)).toBe(true);
   });
 
-  // [LAW:verifiable-goals] The workflow this menu invites, end to end: try a
-  // value in the session, tick persist?, commit it. Before the session clear
-  // rode along with the durable write, this sequence left the durable default
-  // invisible and the control dead — every further click recomputed the same
-  // successor and changed nothing on screen.
-  test("try-then-commit leaves the control live and the bar showing the committed value", () => {
-    const wrapUrl = (): string =>
-      writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
-    expect(plain(r.render())).toContain("wrap: on");
-
-    // Try it: session-only, the bar follows.
+  test("a pick is a draft: the bar follows it, 💾 save counts it, the file is untouched", () => {
+    const before = durable.text();
     r.click(wrapUrl());
     expect(plain(r.render())).toContain("wrap: off");
+    expect(plain(r.render())).toContain("💾 save 1");
+    r.click(paddingUp());
+    expect(plain(r.render())).toContain("💾 save 2");
+    expect(durable.text()).toBe(before);
+  });
 
-    // Commit it: the durable write lands AND the session override is dropped,
-    // so the bar keeps showing what was committed rather than freezing on the
-    // session value that would otherwise outrank it.
-    r.click(writesTo(r.render(), "settings.persist")[0]!);
+  test("a pick back to the saved value is no draft", () => {
     r.click(wrapUrl());
-    const committed = r.render();
-    expect(
-      effectsOf(writesTo(committed, "autoWrap").find((u) => !isReset(u))!).some(
-        (e) => e.verb === "set-config",
-      ),
-    ).toBe(true);
+    expect(plain(r.render())).toContain("💾 save 1");
+    r.click(wrapUrl());
+    expect(plain(r.render())).toContain("wrap: on");
+    expect(plain(r.render())).not.toContain("💾");
+  });
 
-    // …and the session override is GONE, which is the half of the fix this rig
-    // can see: the label falls back to the value the config resolves, the slot
-    // the durable write now fills. (That the durable value then shows through
-    // needs the config-file reload this rig has no RenderCache for — the
-    // real-daemon e2e covers it, with a cold restart on top.) The write itself
-    // landed in the file: the cycle's successor of the tried-out "off" is
-    // "on", so that is the durable default now.
-    expect(plain(committed)).toContain("wrap: on");
-    expect((durable.parsed().globals as { autoWrap?: boolean }).autoWrap).toBe(
-      true,
+  test("save writes every draft in one edit, reloads, releases the picks, and the cell is gone", () => {
+    r.click(wrapUrl());
+    r.click(paddingUp());
+    r.click(saveUrl()!);
+    const globals = durable.parsed().globals as Record<string, unknown>;
+    expect(globals.autoWrap).toBe(false);
+    expect(globals.padding).toBe(2);
+    expect(r.sessionState.get(SID, "autoWrap")).toBeNull();
+    expect(r.sessionState.get(SID, "padding")).toBeNull();
+    // The very next render reads the reloaded file: the saved values, and
+    // nothing left to save — no frame of the old file without the picks.
+    const after = plain(r.render());
+    expect(after).toContain("wrap: off");
+    expect(after).toContain("padding 2");
+    expect(after).not.toContain("💾");
+    // The save's event names what it wrote and where.
+    expect(r.logs).toContainEqual(
+      `save: autoWrap=false padding=2 → ${durable.configPath} (session=${SID})`,
+    );
+    // ONE step in the history: the save's file write and its release together.
+    const step = durable.history(SID).past.at(-1)!;
+    expect(step.filter((c) => c.kind === "file")).toEqual([
+      expect.objectContaining({ file: durable.configPath }),
+    ]);
+    expect(step.filter((c) => c.kind === "session")).toEqual(
+      expect.arrayContaining([
+        { kind: "session", key: "autoWrap", before: "false", after: null },
+        { kind: "session", key: "padding", before: "2", after: null },
+      ]),
     );
   });
 
-  // The bounded arm is a genuinely different code path from the pickers': a
-  // stepper carries no stateVar and emits a RELATIVE nudge, so it skips the
-  // readback compileDual does for the cycle and option arms. Both destinations
-  // are therefore asserted at each state — an incomplete switch that left the
-  // session step live beside the durable one would pass a "contains" check.
-  test("the padding stepper follows the checkbox, and only one destination at a time", () => {
-    const stepVerbs = (rendered: string): string[] =>
-      writesTo(rendered, "padding")
-        .flatMap((u) => effectsOf(u))
-        .filter((e) => e.args[1] === "padding")
-        .map((e) => e.verb);
-
-    const unchecked = stepVerbs(r.render());
-    expect(unchecked).toContain("step-state");
-    expect(unchecked).not.toContain("step-config");
-
-    r.click(writesTo(r.render(), "settings.persist")[0]!);
-
-    const checked = stepVerbs(r.render());
-    expect(checked).toContain("step-config");
-    expect(checked).not.toContain("step-state");
+  test("a second click on a bar drawn before the save is a recorded no-op", () => {
+    r.click(paddingUp());
+    const url = saveUrl()!;
+    r.click(url);
+    const saved = durable.text();
+    const depth = durable.history(SID).past.length;
+    expect(() => r.click(url)).not.toThrow();
+    expect(durable.text()).toBe(saved);
+    expect(durable.history(SID).past).toHaveLength(depth);
+    expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
   });
 
-  // [LAW:dataflow-not-control-flow] The epic's own guardrail, as a test: no
-  // render-walk branch on persist state. If the walk branched — a different
-  // segment, a different row, a hidden control — the two renders would differ
-  // by more than the glyph the checkbox itself owns. They differ by exactly
-  // that one character, so the destination is carried by the click, not by a
-  // different bar being drawn.
-  test("checking persist? changes the checkbox glyph and nothing else on screen", () => {
-    const unchecked = plain(r.render());
-    r.click(writesTo(r.render(), "settings.persist")[0]!);
-    const checked = plain(r.render());
-    // Every visible cell is byte-identical but the checkbox itself: same
-    // segments, same order, same labels, same values. The destination moved;
-    // the bar did not.
-    expect(checked).toContain("☑ persist?");
-    expect(unchecked).toContain("☐ persist?");
-    expect(checked.replace("☑ persist?", "☐ persist?")).toBe(unchecked);
+  test("a refused write keeps every draft and leaves the file as it was", () => {
+    r.click(wrapUrl());
+    r.click(paddingUp());
+    const before = durable.text();
+    chmodSync(durable.projectDir, 0o500);
+    try {
+      expect(() => r.click(saveUrl()!)).toThrow(/config write failed/);
+    } finally {
+      chmodSync(durable.projectDir, 0o755);
+    }
+    expect(durable.text()).toBe(before);
+    expect(r.sessionState.get(SID, "autoWrap")).toBe("false");
+    expect(r.sessionState.get(SID, "padding")).toBe("2");
+    expect(plain(r.render())).toContain("💾 save 2");
+  });
+
+  test("a pick the render ignores is no draft, and a save leaves it be", () => {
+    r.click(paddingUp());
+    r.sessionState.set(SID, "theme", "no-such-theme");
+    expect(plain(r.render())).toContain("💾 save 1");
+    r.click(saveUrl()!);
+    const globals = durable.parsed().globals as Record<string, unknown>;
+    expect(globals.padding).toBe(2);
+    expect(globals).not.toHaveProperty("palette");
   });
 });
 
@@ -590,8 +473,7 @@ describe("a pick leaves the picker open", () => {
     const first = r.render();
     r.click(arrow(first, "▶"));
     const second = r.render();
-    const theme = (rendered: string) =>
-      /🎨 (\S+)/.exec(plain(rendered))![1]!;
+    const theme = (rendered: string) => /🎨 (\S+)/.exec(plain(rendered))![1]!;
     expect(theme(first)).not.toBe(theme(opened));
     expect(theme(second)).not.toBe(theme(first));
     // Still open after each pick, centred on what was picked.

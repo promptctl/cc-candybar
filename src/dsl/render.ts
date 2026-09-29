@@ -537,8 +537,8 @@ export function registerDslConfig(
   // variable over the same key: the current value of a setting is the one the
   // bar is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
   // centres on the theme the bar wears even when the session never picked one
-  // — the read-back compileDual gives the settings menu's controls, so a bar
-  // control and the menu cannot disagree (brandon-theme-picker-bgw.exj).
+  // — the same read-back the settings menu's controls get, so a bar control
+  // and the menu cannot disagree (brandon-theme-picker-bgw.exj).
   const stateKeyToVar = new Map<string, string>();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in config.variables) stateKeyToVar.set(key, name);

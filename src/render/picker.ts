@@ -28,7 +28,7 @@ import type { Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
-  activeDestination,
+  presentedAction,
   linkFragment,
   realize,
   readVar,
@@ -202,8 +202,9 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 //
 // [LAW:single-enforcer] Exported so the one thing a caller needs BEFORE the grid
 // renders — the option domain's own painter, for `optionItemStyle` — is read
-// through the same resolution renderPicker itself makes, dual half included.
-// A second lookup could disagree with the grid about which half is live.
+// through the same resolution renderPicker itself makes, a `do`'s head
+// included. A second lookup could disagree with the grid about which action
+// the options belong to.
 export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
@@ -212,15 +213,12 @@ export function requireOptionKind(
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
 > {
-  // [LAW:dataflow-not-control-flow] A dual-destination action resolves to the
-  // half its selector names BEFORE the kind check, so a picker over a dual is
-  // a picker over whichever option kind is live — the grid, its current-mark,
-  // and its close folding are the code they already were. The check below then
-  // still names a real, single-destination kind in its error.
+  // [LAW:dataflow-not-control-flow] A `do` resolves to its head BEFORE the
+  // kind check, so a picker over a `do` headed by an option action is a picker
+  // over that option kind — the grid, its current-mark, and its close folding
+  // are the code they already were.
   const declared = runtime.compiled.get(name);
-  const action = declared
-    ? activeDestination(declared, runtime.store)
-    : declared;
+  const action = declared ? presentedAction(declared) : declared;
   if (
     !action ||
     (action.kind !== "set-option" &&
@@ -255,11 +253,11 @@ export function renderPicker(
   itemStyle: ItemStyle,
 ): RichText {
   const apply = requireOptionKind(runtime, applyName, "picker");
-  // [LAW:one-source-of-truth] The GRID reads the resolved half above (its
+  // [LAW:one-source-of-truth] The GRID reads the presented action above (its
   // options, its current-mark); the CLICK is realized from the declaration
   // itself, through the same fold `{{ action }}` uses. That is what carries a
-  // dual's session clear into a picked option — the picker never learns what a
-  // dual is, and there is no second projection of "what does this option
+  // `do`'s followers into a picked option — the picker never learns what a
+  // `do` is, and there is no second projection of "what does this option
   // write" to drift from realize's.
   const declared = runtime.compiled.get(applyName)!;
   const store = runtime.store;
@@ -314,7 +312,7 @@ export function renderPicker(
   // followed by the close writes — concatenated, nothing more. The daemon's
   // dispatch joins adjacent session writes into one atomic batch, so a session
   // pick and its close land together, and a durable pick (set-config, a layout
-  // op, a dual's release) keeps its own verb and its place before the close.
+  // op) keeps its own verb and its place before the close.
   // This is the same concatenation a `do` action's members get: one rule for
   // "several writes, one click", not one per producer.
   const closeEffects = closeOnPick

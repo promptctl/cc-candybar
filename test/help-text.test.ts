@@ -11,7 +11,7 @@ describe("HELP_TEXT", () => {
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     expect(HELP_TEXT).toMatch(/theme\/look\/style\/progression\/charset\/colour-depth\/wrap\/padding\s+controls/i);
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
-    expect(HELP_TEXT).toMatch(/persist\?/);
+    expect(HELP_TEXT).toMatch(/💾 save/);
   });
 
   // brandon-check-m2a. A flag nobody is told about is a flag nobody uses: the

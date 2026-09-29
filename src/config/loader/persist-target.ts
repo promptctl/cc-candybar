@@ -18,11 +18,20 @@
 // authors it.
 
 import type { Globals } from "../dsl-types.js";
-import { isGlobalsField } from "./globals.js";
+import { isGlobalsField, isPresetGlobalsField } from "./globals.js";
 
 export type PersistTarget =
   | { readonly scope: "globals"; readonly field: keyof Globals }
   | { readonly scope: "segment-palette"; readonly segment: string }
+  // One preset's own globals fragment — the layer that wins over `globals`
+  // for every field it names while that preset is active (presetGlobals,
+  // src/config/presets.ts), so a value meant to hold under the preset lands
+  // here or is shadowed.
+  | {
+      readonly scope: "preset-globals";
+      readonly preset: string;
+      readonly field: keyof Globals;
+    }
   // The layout one preset renders. A structural edit (remove/insert a
   // segment) lands in the ROW of the cascade that holds the segment —
   // `presets.<name>.root` or the config's own `root`, the file's or the
@@ -45,6 +54,9 @@ const SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
 // occurrence of that anchored suffix and correctly recovers the full name
 // for ANY preset name, dotted or not — round-tripping presetRootKey exactly.
 const PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+// The same greedy name and anchored suffix; the field is one a preset fragment
+// may author (never a dotted name).
+const PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
 
 // [LAW:one-source-of-truth] THE builder for a preset's root key — the
 // inverse of PRESET_ROOT_KEY's parse. edit-chrome.ts's synthesis and
@@ -54,11 +66,24 @@ export function presetRootKey(name: string): string {
   return `presets.${name}.root`;
 }
 
+// THE builder for a preset-globals key — the inverse of PRESET_GLOBALS_KEY.
+export function presetGlobalsKey(name: string, field: keyof Globals): string {
+  return `presets.${name}.globals.${field}`;
+}
+
 export function parsePersistTarget(key: string): PersistTarget | null {
   if (isGlobalsField(key)) return { scope: "globals", field: key };
   const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
   if (segmentMatch)
     return { scope: "segment-palette", segment: segmentMatch[1]! };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2]!)) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1]!,
+      field: globalsMatch[2],
+    };
+  }
   const presetMatch = PRESET_ROOT_KEY.exec(key);
   return presetMatch ? { scope: "preset-root", preset: presetMatch[1]! } : null;
 }
@@ -71,7 +96,12 @@ export type ConfigPath = readonly string[];
 export function persistPath(
   target: Exclude<PersistTarget, { scope: "preset-root" }>,
 ): ConfigPath {
-  return target.scope === "globals"
-    ? ["globals", target.field]
-    : ["segments", target.segment, "palette"];
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+  }
 }

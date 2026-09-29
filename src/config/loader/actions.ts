@@ -20,7 +20,6 @@
 
 import {
   ACTION_KEYS,
-  PERSIST_WHEN,
   type ActionDecl,
   type ActionKey,
   type OptionDomain,
@@ -105,15 +104,15 @@ function validateActionDecl(
     );
     return null;
   }
-  // [LAW:dataflow-not-control-flow] A dual-destination action
-  // (candybar-settings-ui-aok.3) carries BOTH `set` and `persist`, so it
-  // cannot be reached through the exactly-one-of eliminator below —
-  // `persistWhen` is its own discriminator, and its presence selects the arm
-  // exactly as the presence of `set` selects that one. The dual arm owns its
-  // own siblings (the two destination keys plus its value source), like every
-  // other arm here.
-  if (PERSIST_WHEN in raw) {
-    return valueSourceAction(ctx, path, raw, "dual", DUAL_ARMS);
+  // [LAW:no-silent-failure] The removed dual arm names its replacement, as
+  // every removed grammar does, rather than the generic arity error below.
+  if ("persistWhen" in raw) {
+    issue(
+      ctx,
+      path,
+      `${path}.persistWhen was removed: declare the \`set\` alone — a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`,
+    );
+    return null;
   }
   const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
   if (present.length !== 1) {
@@ -144,6 +143,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   reset: resetArm,
   undo: markerArm("undo"),
   redo: markerArm("redo"),
+  save: markerArm("save"),
   doctor: doctorArm,
   do: doArm,
 };
@@ -168,12 +168,12 @@ function actionDeclJson(): JsonNode {
     anyOf: [
       ...SET_ARMS.map((arm) => arm.json),
       ...PERSIST_ARMS.map((arm) => arm.json),
-      ...DUAL_ARMS.map((arm) => arm.json),
       templateArmJson("copy"),
       templateArmJson("open"),
       templateArmJson("reset"),
       markerArmJson("undo"),
       markerArmJson("redo"),
+      markerArmJson("save"),
       ...doctorArmJson(),
       DO_ARM_JSON,
     ],
@@ -234,14 +234,20 @@ function resetArm(
   return key === null ? null : { reset: key };
 }
 
-// [LAW:one-type-per-behavior] `undo`/`redo` are copy/open/reset's shape one
-// step further reduced: a single required key whose only legal VALUE is the
-// literal `true` (mirrors intMarkerSpec — a marker, not data), because there
-// is no key to name: the history they step is one stack per session, not
-// a per-target write. `function`, not a const
-// arrow, so ACTION_ARMS above (built before this declaration in source
+// [LAW:one-type-per-behavior] `undo`/`redo`/`save` are copy/open/reset's shape
+// one step further reduced: a single required key whose only legal VALUE is
+// the literal `true` (mirrors intMarkerSpec — a marker, not data), because
+// there is no key to name: the history they step is one stack per session, and
+// the settings a save writes are the session's own drafts. `function`, not a
+// const arrow, so ACTION_ARMS above (built before this declaration in source
 // order) can reference it directly via hoisting.
-function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
+type MarkerKey = "undo" | "redo" | "save";
+const MARKER_SUBJECT: Record<MarkerKey, string> = {
+  undo: "it steps the session's settings history",
+  redo: "it steps the session's settings history",
+  save: "it saves the session's unsaved settings",
+};
+function markerArm(key: MarkerKey): ArmParse<ActionDecl> {
   return (ctx, path, raw) => {
     for (const k of Object.keys(raw)) {
       if (k !== key)
@@ -255,7 +261,7 @@ function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
       issue(
         ctx,
         `${path}.${key}`,
-        `${key} must be the literal true (it takes no key — it steps the history of the session's config file), got ${describeValue(raw[key])}`,
+        `${key} must be the literal true (it takes no key — ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`,
       );
       return null;
     }
@@ -266,7 +272,7 @@ function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
 // [LAW:one-source-of-truth] Mirrors templateArmJson's shape one level
 // narrower: the value schema is `const: true`, not `type: string` — a
 // marker action carries no data, on the wire or in the schema.
-function markerArmJson(key: "undo" | "redo"): JsonNode {
+function markerArmJson(key: MarkerKey): JsonNode {
   return {
     type: "object",
     properties: { [key]: { const: true } },
@@ -418,100 +424,47 @@ function slashFreeString(
   return v;
 }
 
-// [LAW:types-are-the-program] Which KEYS a value-source action carries beside
-// its value source, as data — one for a single-destination `set`/`persist`,
-// three for a `dual` (both destination keys plus the selector naming which is
-// written). Every consumer below (the key validation, the unknown-key
-// allow-list, the emitted JSON schema, the reconstructed member) reads this
-// one table, so adding the dual arm never meant a second dispatcher: the
-// discriminator stopped being ONE key and became a LIST of them, and the
-// existing machinery folds over the list [LAW:dataflow-not-control-flow].
-type Discriminator = "set" | "persist" | "dual";
+// [LAW:types-are-the-program] The key naming a value-source action's
+// destination — `set` (SessionState) or `persist` (the config file) — with the
+// noun its messages use.
+type Discriminator = "set" | "persist";
 
-const DISCRIMINATOR_KEYS: Readonly<
-  Record<Discriminator, ReadonlyArray<readonly [string, string]>>
-> = {
-  set: [["set", "the SessionState key to write"]],
-  persist: [["persist", "the config globals field to write"]],
-  dual: [
-    ["set", "the SessionState key written while persistWhen is off"],
-    ["persist", "the config globals field written while persistWhen is on"],
-    [
-      PERSIST_WHEN,
-      "the SessionState key whose boolean value chooses the destination",
-    ],
-  ],
+const DISCRIMINATOR_NOUN: Readonly<Record<Discriminator, string>> = {
+  set: "the SessionState key to write",
+  persist: "the config globals field to write",
 };
 
-// [LAW:dataflow-not-control-flow] The discriminator keys are validated once
-// for every value source (they are shared across all arms of that
-// discriminator), before the source is detected — so a bad key and an
-// ambiguous source both surface in one pass. They are therefore NOT fields of
+// [LAW:dataflow-not-control-flow] The destination key is validated once for
+// every value source, before the source is detected — so a bad key and an
+// ambiguous source both surface in one pass. It is therefore NOT a field of
 // any arm's `fields` map; the arm parses only the value-source payload, and
-// the dispatcher re-attaches them.
-//
-// [LAW:no-silent-failure] Returns null when ANY key fails, after reporting
-// every one of them — the caller threads that null exactly as it threads a
-// failed payload, so a partly-valid dual never reconstructs into a member
-// missing a destination.
-function validateDiscriminatorKeys(
+// the dispatcher re-attaches it.
+function validateDiscriminatorKey(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
   discriminator: Discriminator,
 ): Record<string, string> | null {
-  const out: Record<string, string> = {};
-  const keys = DISCRIMINATOR_KEYS[discriminator];
-  let ok = true;
-  for (const [key, noun] of keys) {
-    // [LAW:no-silent-failure] An ABSENT key gets the shape, not a type
-    // mismatch. A single-destination arm cannot reach this (its key is the
-    // discriminator that selected the arm), so this only ever fires on a dual
-    // that named one destination and not the other — where "persist must be a
-    // string, got undefined" describes the symptom and teaches nothing, and
-    // the author needs to be told the three keys travel together.
-    if (!(key in raw)) {
-      issue(
-        ctx,
-        path,
-        `${key} is required here (${noun}) — a dual-destination action declares ${keys
-          .map(([k]) => k)
-          .join(", ")} together, plus one value source`,
-      );
-      ok = false;
-      continue;
-    }
-    const value = slashFreeString(
-      ctx,
-      path,
-      key,
-      raw,
-      `${key} key must be non-empty (${noun})`,
-      (v) => `${key} key "${v}" contains "/" — keys must be slash-free`,
-    );
-    if (value === null) {
-      ok = false;
-      continue;
-    }
-    out[key] = value;
-  }
-  // [LAW:no-silent-failure] Every failing key is reported before returning, so
-  // an author who omits two of a dual's three keys sees both in one pass —
-  // matching every other multi-issue check in this file, and matching what the
-  // comment above promises.
-  return ok ? out : null;
+  const noun = DISCRIMINATOR_NOUN[discriminator];
+  const value = slashFreeString(
+    ctx,
+    path,
+    discriminator,
+    raw,
+    `${discriminator} key must be non-empty (${noun})`,
+    (v) => `${discriminator} key "${v}" contains "/" — keys must be slash-free`,
+  );
+  return value === null ? null : { [discriminator]: value };
 }
 
 // [LAW:one-source-of-truth] The wire verb name a discriminator's writes
 // travel over — `set-state` for `set` (SessionState), `set-config` for
-// `persist` (the config file), and BOTH for a dual, whose one
-// value crosses whichever wire the selector names. Threaded into the shared
-// field specs below so their "cannot be delivered on the X wire" messages
-// name the wire the value actually crosses, and the field/value noun ("set
-// value" / "persist value") names the actual action kind, not always `set`.
+// `persist` (the config file). Threaded into the shared field specs below so
+// their "cannot be delivered on the X wire" messages name the wire the value
+// actually crosses, and the field/value noun ("set value" / "persist value")
+// names the actual action kind, not always `set`.
 function wireName(discriminator: Discriminator): string {
-  if (discriminator === "set") return "set-state";
-  return discriminator === "persist" ? "set-config" : "set-state/set-config";
+  return discriminator === "set" ? "set-state" : "set-config";
 }
 
 // [LAW:types-are-the-program] Each value source's payload as a field map — the
@@ -541,15 +494,6 @@ const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
 const INT_FIELDS: FieldSpecMap<{ int: true }> = { int: intMarkerSpec() };
 const CYCLE_FIELDS_SET: FieldSpecMap<{ cycle: readonly string[] }> = {
   cycle: cycleSpec("set"),
-};
-const TO_FIELDS_DUAL: FieldSpecMap<{ to: string }> = {
-  to: setLiteralSpec("dual"),
-};
-const FROM_FIELDS_DUAL: FieldSpecMap<{ from: OptionDomain }> = {
-  from: fromSpec("dual"),
-};
-const CYCLE_FIELDS_DUAL: FieldSpecMap<{ cycle: readonly string[] }> = {
-  cycle: cycleSpec("dual"),
 };
 const CYCLE_FIELDS_PERSIST: FieldSpecMap<{ cycle: readonly string[] }> = {
   cycle: cycleSpec("persist"),
@@ -658,7 +602,7 @@ function valueSourceArm<P extends object>(
 ): ValueSourceArm {
   const fullKeys = Object.keys(fieldMap);
   const detect = detectKeys ?? fullKeys;
-  const keys = DISCRIMINATOR_KEYS[discriminator].map(([k]) => k);
+  const keys = [discriminator];
   const inner: ArmParse<P> = (ctx, path, raw) =>
     fields(ctx, fieldMap, path, raw);
   const source = objectJson(fieldMap) as {
@@ -720,19 +664,6 @@ const PERSIST_ARMS: readonly ValueSourceArm[] = [
   ),
 ];
 
-// [LAW:one-type-per-behavior] A dual declares any value source BOTH
-// destinations share — `set` minus `int` (a page cursor has no durable
-// meaning), which is also `persist` minus its structural-edit arms (those are
-// persist-only by design, so they have no destination to choose between).
-// The field maps are the SET ones with dual wording, so a dual's value obeys
-// exactly the shape a `set` and a `persist` of that source each obey.
-const DUAL_ARMS: readonly ValueSourceArm[] = [
-  valueSourceArm("dual", TO_FIELDS_DUAL),
-  valueSourceArm("dual", FROM_FIELDS_DUAL),
-  valueSourceArm("dual", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("dual", CYCLE_FIELDS_DUAL),
-];
-
 // [LAW:one-source-of-truth] The clause list, not the joined string, is the
 // data that varies per discriminator — the "or" belongs on the LAST clause
 // only, and which clause is last differs between `set` (ends at cycle) and
@@ -781,7 +712,7 @@ function valueSourceAction(
   discriminator: Discriminator,
   arms: readonly ValueSourceArm[],
 ): ActionDecl | null {
-  const keys = validateDiscriminatorKeys(ctx, path, raw, discriminator);
+  const keys = validateDiscriminatorKey(ctx, path, raw, discriminator);
 
   const present = arms.filter((arm) => arm.detect.some((k) => k in raw));
   if (present.length !== 1) {

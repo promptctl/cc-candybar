@@ -540,12 +540,10 @@ export const DEFAULT_UPDATE_NOTICE = true;
 // `cycle: [...]` toggle writes and the parse below reads. Spelled once so a
 // toggle cannot write a member the resolver refuses to parse.
 // [LAW:one-source-of-truth] The two members, named, because their ORDER is
-// meaningful and differs per control: a cycle's members are ordered
-// default-state-first (an unwritten key counts as the first member and clicks
-// to the second), so `autoWrap` — on by default — cycles ["true","false"]
-// while `persist?` — off by default — cycles [BOOLEAN_FALSE, BOOLEAN_TRUE].
-// Spelling the members rather than reversing the pair keeps each declaration's
-// default state readable at its own site.
+// meaningful: a cycle's members are ordered default-state-first (an unwritten
+// key counts as the first member and clicks to the second), so `autoWrap` — on
+// by default — cycles ["true","false"], and a toggle that starts off would
+// cycle [BOOLEAN_FALSE, BOOLEAN_TRUE].
 export const BOOLEAN_TRUE = "true";
 export const BOOLEAN_FALSE = "false";
 export const BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE] as const;
@@ -569,10 +567,8 @@ export const PADDING_RANGE = { min: 0, max: 16 } as const;
 // [LAW:one-source-of-truth] Exported because SessionState holds strings and
 // BOOLEAN_MEMBERS above is the one spelling of a boolean in that store — so
 // every reader of a boolean session key parses it HERE, not with its own
-// truthiness rule. The second reader is the dual-destination action's
-// `persistWhen` selector (src/render/action.ts): "is persist? checked" is the
-// same question `autoWrap`'s toggle asks of its own key, and a bespoke
-// `raw !== ""` there would accept values this parse rejects.
+// truthiness rule; a bespoke `raw !== ""` would accept values this parse
+// rejects.
 export function parseSessionBoolean(raw: string): boolean | null {
   return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
 }

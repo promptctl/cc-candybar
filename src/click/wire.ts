@@ -56,20 +56,17 @@ export const VERB_LOAD_CONFIG = "load-config";
 // the SAME file-watcher path a hand edit already takes. Args: `[sessionId, key, value]` — the
 // sessionId is carried only for click.error surfacing, exactly like
 // set-state; the write itself is daemon-global, not session-scoped.
-// A durable write takes an OPTIONAL trailing segment: the SessionState key to
-// RELEASE once the write has succeeded. A dual-destination control
-// (candybar-settings-ui-aok.3) commits "make this the durable default AND stop
-// overriding it in this session" — one intent, whose session half must not
-// happen if the durable half failed. Carried as one more segment on the write
-// itself rather than as a second effect beside it, because `dispatch` runs
-// every effect in a click by design; a pair would let a rejected write still
-// wipe the user's pick. Args: `[sessionId, key, value, releaseKey?]`.
 export const VERB_SET_CONFIG = "set-config";
 // [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-file
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by, releaseKey?]` — the same optional release segment
-// set-config takes, for the same reason.
+// `[sessionId, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
+// [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
+// settings (src/daemon/setting-drafts.ts) to its config file, then release
+// them from the session — one handler, so a refused write keeps every draft.
+// Args: `[sessionId]`: which settings are drafts, and their values, are read
+// at click time from the session itself, never carried by the URL.
+export const VERB_SAVE = "save";
 // [LAW:one-source-of-truth] The gated undo for `persist`: deletes one key's
 // path from the config file, restoring the bundled-default value on the next
 // reload. Args: `[sessionId, key]`.
@@ -168,9 +165,8 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
 // any of it — so a `do` action's session members, or a picker option and its
 // close writes, land together or not at all, whichever producer built the URL.
 // Only adjacency merges: effects still run in the order the click lists them, so
-// a durable write between two session writes (a dual's release included) keeps
-// its place, and a different session id starts a new run rather than borrowing
-// the previous one's. The tail stays encoded — splitVerb one level down splits
+// a durable write between two session writes keeps its place, and a different
+// session id starts a new run rather than borrowing the previous one's. The tail stays encoded — splitVerb one level down splits
 // `<sid>/<pairs…>`, and joining encoded pair runs is the codec's own join.
 export function batchSessionWrites(
   effects: readonly ParsedEffect[],

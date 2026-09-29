@@ -1151,8 +1151,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // i.e. a whole arrangement of the bar rather than one knob. A preset is to
   // configuration what a look is to a theme, and rides the identical seam:
   // selected per session via the `preset` SessionState key — or pinned as the
-  // durable default via `globals.preset` — through the settings menu's ONE
-  // dual preset control (src/config/settings-menu.ts), resolved as session
+  // durable default via `globals.preset` — through the settings menu's preset
+  // control and its save (src/config/settings-menu.ts), resolved as session
   // pick over globals.preset over this floor.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
   // stdlib is present in every merged config by construction, exactly as

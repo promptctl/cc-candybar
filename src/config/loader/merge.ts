@@ -13,7 +13,11 @@
 // specific consumer, a cycle. Callers who want "the bundled default" import
 // DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
 
-import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
+import {
+  type DslConfig,
+  type PresetDecl,
+  type RawDslConfig,
+} from "../dsl-types.js";
 import { EMPTY_ROWS, mergeRoot } from "../root.js";
 
 /**
@@ -54,7 +58,10 @@ export function mergeWithDefault(
     // restating its globals; the bundled stdlib (incl. the "default"
     // empty-fragment floor effectivePresetName collapses to) survives every
     // merge by construction, exactly as looks' "none" does.
-    presets: overlayByName(dflt.presets, raw.presets ?? {}),
+    presets: overlayByName(
+      dflt.presets,
+      presetDeltas(dflt.presets, raw.presets ?? {}),
+    ),
     // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
     // `globals` cascade above, not the by-name cascades around it, because it
     // IS a globals fragment: a user retuning edit mode's separator says nothing
@@ -66,6 +73,26 @@ export function mergeWithDefault(
     // from the bundled default.
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
+}
+
+// A preset's own `globals` is a globals fragment, so it merges FIELD by field
+// like every other one: a file retuning `presets.compact.globals.padding` —
+// what `💾 save` writes for a field the active preset authors
+// (src/daemon/setting-drafts.ts) — says nothing about the fragment's other
+// fields. The delta's fragment is laid over the base's before the overlay
+// replaces the member's `globals` field whole.
+function presetDeltas(
+  base: Readonly<Record<string, PresetDecl>>,
+  over: Readonly<Record<string, PresetDecl>>,
+): Readonly<Record<string, PresetDecl>> {
+  return Object.fromEntries(
+    Object.entries(over).map(([name, delta]) => [
+      name,
+      delta.globals === undefined
+        ? delta
+        : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } },
+    ]),
+  );
 }
 
 // [LAW:single-enforcer] The by-name overlay whose members merge FIELD by

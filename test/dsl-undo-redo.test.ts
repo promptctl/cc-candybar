@@ -28,6 +28,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -182,7 +183,15 @@ function buildRuntime(
       registerConfigValidator(key, spec),
     ),
   ];
-  const ctx: VerbContext = testVerbContext(sessionState, history);
+  // The config a save compares against, re-read from the file on a reload.
+  let current: DslConfig = config;
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, history),
+    configFor: () => current,
+    reloadConfig: () => {
+      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    },
+  };
   // The whole URL through the verb table, exactly as the daemon's handleClick
   // does — one click, one journal, one step.
   const click = (url: string): void => {
@@ -204,6 +213,7 @@ const ACTION_ORDER = [
   "pickPadding",
   "back",
   "fwd",
+  "keep",
 ] as const;
 
 const SRC = `{
@@ -218,6 +228,7 @@ const SRC = `{
     pickPadding: { set: 'padding', to: '3' },
     back: { undo: true },
     fwd: { redo: true },
+    keep: { save: true },
   },
   segments: {
     directory: { template: 'd', bg: 'surface', fg: 'foreground' },
@@ -371,26 +382,25 @@ describe("undo/redo click → the session's settings history", () => {
     runtime.dispose();
   });
 
-  test("a durable write and the session pick it releases are one step, undone together", () => {
-    const src = SRC.replace(
-      "pinDracula: { persist: 'palette', to: 'dracula' },",
-      "pinDracula: { set: 'theme', persist: 'palette', persistWhen: 'durable', to: 'dracula' },",
-    ).replace(
-      "variables: {",
-      "variables: { durable: { kind: 'state', key: 'durable', default: 'true' },",
-    );
-    const runtime = buildRuntime(src);
-    runtime.sessionState.set("s1", "durable", "true");
-    runtime.sessionState.set("s1", "theme", "gruvbox");
+  test("a save and the session picks it releases are one step, undone together", () => {
+    const runtime = buildRuntime(SRC);
+    press(runtime, "pickTheme");
+    press(runtime, "pickPadding");
     const original = durable.text()!;
-    press(runtime, "pinDracula");
-    expect(globals().palette).toBe("dracula");
+    press(runtime, "keep");
+    expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
     expect(runtime.sessionState.get("s1", "theme")).toBeNull(); // released
-    expect(durable.history().past).toHaveLength(1);
+    expect(runtime.sessionState.get("s1", "padding")).toBeNull();
+    expect(durable.history().past).toHaveLength(3);
 
     press(runtime, "back");
     expect(durable.text()).toBe(original);
-    expect(runtime.sessionState.get("s1", "theme")).toBe("gruvbox");
+    expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
+    expect(runtime.sessionState.get("s1", "padding")).toBe("3");
+
+    press(runtime, "fwd");
+    expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
+    expect(runtime.sessionState.get("s1", "theme")).toBeNull();
     runtime.dispose();
   });
 

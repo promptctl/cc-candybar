@@ -104,7 +104,9 @@ const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 export function persistValueText(key: string, raw: string): string {
   const target = requireValueTarget(key);
   const kind =
-    target.scope === "globals" ? GLOBALS_FIELD_KIND[target.field] : "string";
+    target.scope === "segment-palette"
+      ? "string"
+      : GLOBALS_FIELD_KIND[target.field];
   if (kind === "string") return JSON.stringify(raw);
   if (kind === "number") {
     const n = Number(raw);
@@ -466,20 +468,26 @@ export function readValue(
   return node !== undefined && "value" in node ? node.value : undefined;
 }
 
-/** `persist`'s write: set the value the key names, tracked in history. */
-export function writeValue(
+/**
+ * Set the value each key names, as ONE tracked write: `persist` writes one
+ * pair, `save` every draft. The splices fold over the text in memory and the
+ * file is written once, so a reload can never read a half-saved file.
+ */
+export function writeValues(
   store: EditStore,
   file: string,
-  key: string,
-  raw: string,
+  pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
-  const target = requireValueTarget(key);
   const before = readConfigText(file);
-  const after = setValue(
+  const after = pairs.reduce(
+    (text, [key, raw]) =>
+      setValue(
+        text,
+        valuePathOf(docOf(text), requireValueTarget(key)),
+        persistValueText(key, raw),
+        JSON5_DIALECT,
+      ),
     before ?? "",
-    valuePathOf(docOf(before ?? ""), target),
-    persistValueText(key, raw),
-    JSON5_DIALECT,
   );
   commit(store, file, before, after);
 }
