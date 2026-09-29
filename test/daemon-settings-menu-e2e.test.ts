@@ -82,7 +82,9 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "open"));
       const editing = await render(sockPath, SID, projectDir);
       expect(stripAnsi(editing)).toContain(DOOR_GLYPH);
-      expect(stripAnsi(editing)).not.toContain("✎ done");
+      // The menu closed with the same click: its body is gone. (`✎ done`
+      // shows either way — it leads edit mode's own top row.)
+      expect(stripAnsi(editing)).not.toContain("⚙ config");
       expect(
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,

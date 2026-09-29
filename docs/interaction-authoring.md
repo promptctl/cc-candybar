@@ -863,19 +863,22 @@ synthesizes:
   itself — a binary `cycle` action flipping it open/closed. Wire your own
   trigger to it, or copy `editControl` above verbatim.
 - For **every** preset (the `"default"` floor included) and every ordinary
-  segment in its resolved root: a `-` (a synthesized `removeSegment` action
-  behind `{{ action }}`) immediately after it, sharing one cell with a `+`
-  (a synthesized `insertSegmentFrom` action behind `{{ menu }}`, ranging
-  every declared segment not already in that preset's tree) that inserts
-  after it, plus one `+` leading each run — so N segments in a row read
-  `+ seg1 [- +] seg2 [- +] … segN [- +]`. Every affordance is gated on edit
+  segment in its resolved root: a `🚫` (a synthesized `removeSegment` action
+  behind `{{ action }}`) drawn inside the segment's own cell, then a `✚` in
+  a cell of its own (a synthesized `insertSegmentFrom` action behind
+  `{{ menu }}`, ranging every declared segment not already in that preset's
+  tree) that inserts after it, plus one `✚` leading each run — so N segments
+  in a row read `✚ [seg1 🚫] ✚ [seg2 🚫] ✚ … [segN 🚫] ✚`. Every affordance is gated on edit
   mode being open — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - While edit mode is open each segment reads as its **name**, whether or not
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
-  `(?)`) puts the live output back.
+  `(?)`) puts the live output back; a segment hidden right now then has no
+  cell, so its `🚫` goes with it.
+- A row above the bar, led by `✎ done`, which fires `edit.toggle` — the way
+  out, without reopening the menu edit mode was entered from.
 
 **This is demand-driven, not automatic — but the demand is usually already
 there.** A config that never references `edit.toggle` gets none of this — no

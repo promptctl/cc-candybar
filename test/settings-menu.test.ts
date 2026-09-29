@@ -232,8 +232,8 @@ describe("the global settings menu is reachable from a user config", () => {
       u.includes("apply-layout-op"),
     );
     expect(editing.length).toBeGreaterThan(0);
-    // Leaving is the mirror: open the menu, ✎ done, and land on the plain bar.
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    // Leaving needs no trip back into the menu: edit mode's own `✎ done`,
+    // top left, lands on the plain bar.
     clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);

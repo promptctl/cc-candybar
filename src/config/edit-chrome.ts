@@ -71,6 +71,9 @@ import {
 export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
+export const EDIT_DONE_SEG = `${EDIT_NS}done`;
+export const REMOVE_GLYPH = "🚫";
+export const ADD_GLYPH = "✚";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -202,7 +205,9 @@ function removeTerm(
     persist: rootKey,
     removeSegment: segName,
   };
-  return `{{ action "${actionName}" "-" }}`;
+  // A trail is not a segment, so no segment `when` hides it: it carries edit
+  // mode's gate itself.
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}{{ action "${actionName}" "${REMOVE_GLYPH}" }}{{ end }}`;
 }
 
 // `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
@@ -284,7 +289,7 @@ function insertTerm(
   // a tint the terminal's colour depth may flatten. The `✕` names it.
   return {
     host: chromeSegName,
-    template: `{{ menu "${applyName}" "+" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
+    template: `{{ menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
   };
 }
 
@@ -347,15 +352,18 @@ function spliceContainer(
       );
     const leading = i === firstContent ? [insert("before")] : [];
     const after = insert("after");
+    // The remove button is drawn inside the cell of the segment it removes,
+    // in whichever of the two views shows it, so nothing sits between them.
+    const remove = removeTerm(presetIdent, rootKey, child.name, artifacts);
     const cells: LayoutNode[] = [
       ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
-      labelChrome(child.name, artifacts),
-      { ...spliced, when: inNamesView("false", child.when ?? "true") },
-      chromeCell(
-        after.host,
-        `${removeTerm(presetIdent, rootKey, child.name, artifacts)} ${after.template}`,
-        artifacts,
-      ),
+      { ...labelChrome(child.name, artifacts), trail: remove },
+      {
+        ...spliced,
+        when: inNamesView("false", child.when ?? "true"),
+        trail: remove,
+      },
+      chromeCell(after.host, after.template, artifacts),
     ];
     // [LAW:one-type-per-behavior] A content segment and its affordances are
     // ONE unit of the row: a horizontal container holding them, so the row
@@ -408,6 +416,7 @@ function wrapWithPresetRows(
   presetIdent: string,
   rootKey: string,
   artifacts: ChromeArtifacts,
+  lead: LayoutNode,
   tail: LayoutNode,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
@@ -446,7 +455,13 @@ function wrapWithPresetRows(
     kind: "container",
     direction: "vertical",
     children: [
-      { kind: "segment", name: chromeSegName },
+      // The way out leads the top row, top left, where it is found without
+      // reopening the menu edit mode was entered from.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [lead, { kind: "segment", name: chromeSegName }],
+      },
       // The `(?)`'s body drops BELOW the row the trigger rides while the
       // disclosure is open, like every other disclosure body in this codebase.
       withTrailingCell(splicedRoot, tail),
@@ -524,6 +539,7 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
+  lead: LayoutNode,
   tail: LayoutNode,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
@@ -545,6 +561,7 @@ function spliceEditChromeForPreset(
     presetIdent,
     rootKey,
     artifacts,
+    lead,
     tail,
   );
 }
@@ -606,12 +623,20 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     direction: "horizontal",
     children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
   };
+  // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
+  // `✎ edit` fires, so the two cannot disagree about what "edit mode" is.
+  artifacts.segments[EDIT_DONE_SEG] = {
+    template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ done" }}`,
+    when: EDIT_MODE_GATE,
+  };
+  const lead: LayoutNode = { kind: "segment", name: EDIT_DONE_SEG };
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
     const splicedRoot = spliceEditChromeForPreset(
       config,
       name,
       artifacts,
+      lead,
       tail,
     );
     presets[name] = {

@@ -1054,6 +1054,7 @@ export function renderDsl(
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly trail: Template<RichText> | undefined;
     },
   ): EvaluatedSegment => {
     try {
@@ -1074,6 +1075,9 @@ export function renderDsl(
         scope,
       );
       const fragments = templates.body.evaluate(scope);
+      // Evaluated while the segment is still entered, so its colours read the
+      // cell it is drawn in.
+      const trail = templates.trail?.evaluate(scope) ?? [];
       // Read only where something hangs open under the segment: a band that
       // can never be drawn (a hue with no state) throws when it is opened,
       // never from a closed cell or a body cell that merely deals it.
@@ -1095,7 +1099,7 @@ export function renderDsl(
         },
         disclosure,
       };
-      return { styles, fragments, drops: active.drops };
+      return { styles, fragments, trail, drops: active.drops };
     } finally {
       compiled.activeSegment.current = null;
     }

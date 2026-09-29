@@ -47,7 +47,7 @@ import {
   evaluateWhen,
   applySegmentLayout,
 } from "../template-engine/index.js";
-import type { LaidCell } from "../template-engine/layout.js";
+import { stripItem, type LaidCell } from "../template-engine/layout.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -63,6 +63,7 @@ export interface CompiledSegmentNode {
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
   readonly opens?: CompiledOpens;
+  readonly trail?: Template<RichText>;
 }
 export interface CompiledOpens {
   readonly open: Template<RichText>;
@@ -201,6 +202,7 @@ export interface NodeRenderCtx {
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly trail: Template<RichText> | undefined;
     },
   ): EvaluatedSegment;
   // Resolve a segment name to its decl + compiled form (the driver closes over
@@ -252,6 +254,7 @@ export interface SegmentStyles {
 export interface EvaluatedSegment {
   readonly styles: SegmentStyles;
   readonly fragments: readonly RichText[];
+  readonly trail: readonly RichText[];
   readonly drops: readonly RichText[];
 }
 
@@ -432,6 +435,9 @@ const segmentType: NodeType<"segment"> = {
           placement: node.opens.placement,
         },
       }),
+      ...(node.trail !== undefined && {
+        trail: cctx.parse(node.trail, "trail"),
+      }),
     };
   },
   render(node, ctx) {
@@ -474,11 +480,16 @@ const segmentType: NodeType<"segment"> = {
       // a menu can sit anywhere in the template, under any wrapper, and
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
-      const { styles, fragments, drops } = ctx.evaluateSegment(
+      const { styles, fragments, trail, drops } = ctx.evaluateSegment(
         node.name,
         palette,
         ctx.region,
-        { bg: segCompiled.bg, fg: segCompiled.fg, body: segCompiled.template },
+        {
+          bg: segCompiled.bg,
+          fg: segCompiled.fg,
+          body: segCompiled.template,
+          trail: node.trail,
+        },
       );
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
@@ -551,8 +562,11 @@ const segmentType: NodeType<"segment"> = {
       // Each inline line is a ROW of the band this segment sits on.
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
-      ).map((line) => ({
-        cells: applySegmentLayout(line, layout),
+      ).map((line, i) => ({
+        cells: applySegmentLayout(line, {
+          ...layout,
+          trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
+        }),
         band: "own",
         span: "shared",
       }));
@@ -581,7 +595,7 @@ const segmentType: NodeType<"segment"> = {
           [
             ...laidLines.flatMap((line) => line.cells),
             ...bodyTail.flatMap(leadOf),
-          ].map((c) => c.text),
+          ].map(stripItem),
         );
       }
       // Below row 0 every line is a drop: menu bands first (template order),
