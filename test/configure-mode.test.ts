@@ -55,6 +55,8 @@ import {
   type SegmentNode,
 } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
+import { encodeLayoutOp } from "../src/config/layout-ops";
+import { presetRootKey } from "../src/config/loader/persist-target";
 import { placementDrafts } from "../src/daemon/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -475,6 +477,55 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       )?.settings;
     expect(settingsIn("custom-1")).toEqual({ form: "long", detail: true });
     expect(settingsIn("p")).toEqual({ form: "long" });
+    rt.dispose();
+  });
+
+  // The layout a preset shares with others — the file's own `root`, as one
+  // tree or by named row — is copied into the new preset before a value lands
+  // in it, so saving as a preset changes no other preset.
+  test.each([
+    ["a whole-tree root", SRC],
+    [
+      "a root of named rows",
+      SRC.replace(
+        "root: { v: [",
+        "root: { rows: { main: ",
+      ).replace(/\] \},\n  \] \},\n\}/, "] },\n  } },\n}"),
+    ],
+  ])("save as preset from %s leaves the preset it copied untouched", (_label, src) => {
+    durable.write(src);
+    const rt = buildRuntime(src);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs2"));
+    rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+    const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
+    const settingsIn = (preset: string) =>
+      [...walkNodes(presetRoot(saved, preset).node)].find(
+        (n): n is SegmentNode =>
+          n.kind === "segment" && placementId(n) === "vcs2",
+      )?.settings;
+    expect(settingsIn("custom-1")).toEqual({ form: "long", detail: true });
+    expect(settingsIn("default")).toEqual({ form: "long" });
+    rt.dispose();
+  });
+
+  test("removing a placement releases its unsaved values", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("vcs"));
+    rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "detail"), "true"));
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const remove = rt.urlWriting(
+      rt.render(),
+      presetRootKey("default"),
+      encodeLayoutOp({ op: "remove", target: "vcs" }),
+    );
+    rt.click(remove);
+    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBeNull();
+    // One click, one step: its undo brings the placement and its draft back.
+    VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    expect(durable.text()).toBe(SRC);
+    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
     rt.dispose();
   });
 });

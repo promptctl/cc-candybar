@@ -547,20 +547,29 @@ export function writeDrafts(
       ),
     before ?? "",
   );
-  commit(store, file, before, withPlacements(valued, file, placements));
+  commit(
+    store,
+    file,
+    before,
+    withPlacements(valued, file, placements, (text) => text),
+  );
 }
 
 // Every placement value laid into `text`, each inside its placement in the row
 // of its preset's layout that holds it — the row materialized first when the
-// file inherits it, as a structural edit's is.
+// file inherits it, as a structural edit's is. `own` runs first, and decides
+// which layer that row is in: a save leaves it where the preset renders it
+// from; save-as-preset moves it into the new preset (ownRow).
 // [LAW:no-silent-failure] A placement no row holds is the stale click's loud
 // error, never a value written somewhere plausible.
 function withPlacements(
   text: string,
   file: string,
   placements: readonly PlacementValue[],
+  own: (text: string, preset: string, id: string) => string,
 ): string {
-  return placements.reduce((acc, { preset, id, setting, value }) => {
+  return placements.reduce((prior, { preset, id, setting, value }) => {
+    const acc = own(prior, preset, id);
     const placement = layoutPlacementOf(docOf(acc), preset, id);
     const set = setPlacementSetting(
       ensureAuthored(acc, placement),
@@ -576,6 +585,34 @@ function withPlacements(
     }
     return set;
   }, text);
+}
+
+// The row holding `id` in `preset`'s layout, copied into the preset's OWN root
+// when a layer other presets share supplies it — the file's `root` or a
+// bundled row — so a value written into it is this preset's alone. A named
+// row lands at `rows.<row>`, the unit the by-name cascade replaces; a whole
+// tree replaces the preset's root outright.
+// [LAW:no-silent-failure] A tree under a preset that already stages its own
+// rows cannot be copied without discarding them: refused, never clobbered.
+function ownRow(text: string, preset: string, id: string): string {
+  const doc = docOf(text);
+  const own: ConfigPath = ["presets", preset, "root"];
+  for (const [row, { path, unit, node }] of cascadeOf(doc, preset)) {
+    if (!hasSegmentRef(node, id)) continue;
+    if (own.every((key, i) => path[i] === key)) return text;
+    const rowText =
+      unit === null ? movableTextOf(text, node) : json5Text(unit.value);
+    if (row !== TREE_BLOCK) {
+      return setValue(text, [...own, "rows", row], rowText, JSON5_DIALECT);
+    }
+    if (presetLayer(doc, preset) !== null) {
+      throw new BadVerbArgs(
+        `cannot give preset "${preset}" its own copy of ${path.join(".")}: it already stages rows of its own over that tree`,
+      );
+    }
+    return setValue(text, own, rowText, JSON5_DIALECT);
+  }
+  return text;
 }
 
 // [LAW:one-source-of-truth] A preset the user authored is declared by its
@@ -680,12 +717,13 @@ export function writePreset(
     (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
     setValue(before ?? "", own, "{}", JSON5_DIALECT),
   );
-  // The placements the session configured, in the copy of their layout the
-  // new preset now holds.
+  // The placements the session configured, each in a row the new preset
+  // owns — never in a layer the preset it was copied from renders too.
   const placed = withPlacements(
     after,
     file,
     placements.map((p) => ({ ...p, preset: name })),
+    ownRow,
   );
   commit(store, file, before, placed);
   return name;

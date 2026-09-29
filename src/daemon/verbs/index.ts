@@ -50,7 +50,9 @@ import {
 } from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import {
+  placementId,
   settingSpelling,
+  walkNodes,
   type DslConfig,
   type Globals,
 } from "../../config/dsl-types";
@@ -65,7 +67,9 @@ import {
   SETTING_PROJECTIONS,
   SETTINGS,
 } from "../../config/setting-projections";
-import { decodeLayoutOp } from "../../config/layout-ops";
+import { decodeLayoutOp, type LayoutOp } from "../../config/layout-ops";
+import { parsePersistTarget } from "../../config/loader/persist-target";
+import { presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -768,6 +772,25 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
+// The session keys holding unsaved values of the placement a removal ends —
+// none for an insertion, which ends no placement. The slots are the compiled
+// placement's own (SegmentNode.drafts), so the keys are the ones its controls
+// wrote.
+function endedDrafts(
+  config: DslConfig,
+  key: string,
+  op: LayoutOp,
+): readonly string[] {
+  const target = parsePersistTarget(key);
+  if (op.op !== "remove" || target?.scope !== "preset-root") return [];
+  return [...walkNodes(presetRoot(config, target.preset).node)].flatMap(
+    (node) =>
+      node.kind === "segment" && placementId(node) === op.target
+        ? Object.values(node.drafts ?? {}).map((slot) => slot.key)
+        : [],
+  );
+}
+
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -798,7 +821,12 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
+  const ended = endedDrafts(ctx.configFor(origin), key, op);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
+  // A removed placement's unsaved values end with it: a later placement that
+  // takes its id is a new instance, and must not inherit them. Released in
+  // the same click, so its undo brings the placement and its drafts back.
+  for (const draftKey of ended) ctx.sessionState.clear(sid, draftKey);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(
