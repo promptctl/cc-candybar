@@ -8,3 +8,17 @@ import path from "node:path";
 export function claudeSettingsPath(): string {
   return path.join(os.homedir(), ".claude", "settings.json");
 }
+
+// Claude Code's record of the plugins installed for this user — where each
+// one's files live, at which scope. Read to find the memento plugin
+// (src/memento/edge.ts), whose context ceiling the bar shows and moves. Under
+// `CLAUDE_CONFIG_DIR` when Claude Code runs with one (its first entry — the
+// transcript search in src/utils/claude.ts reads the same variable).
+export function claudeInstalledPluginsPath(): string {
+  const configured = process.env.CLAUDE_CONFIG_DIR?.split(",")[0]?.trim();
+  return path.join(
+    configured || path.join(os.homedir(), ".claude"),
+    "plugins",
+    "installed_plugins.json",
+  );
+}

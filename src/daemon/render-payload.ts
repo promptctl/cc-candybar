@@ -64,6 +64,8 @@ import type {
   ToolTally,
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
+import type { MementoProvider } from "../segments/memento.js";
+import type { CeilingReading } from "../memento/edge.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type {
   Charset,
@@ -397,7 +399,24 @@ export interface RenderPayload extends ClaudeHookData {
   readonly metrics?: MetricsPayload;
   // The one non-quantity family (brandon-activity-ue7): what Claude is DOING.
   readonly activity?: ActivityPayload;
+  // The memento plugin's context ceiling for this session; missing when
+  // memento is not installed for the project.
+  readonly memento?: MementoPayload;
 }
+
+// [LAW:no-silent-failure] Two shapes, never mixed: memento's reading, or its
+// refusal. A refusal is the state in which memento's Stop hook is failing too
+// — its gate off for this session with nothing else to say so — so it
+// travels to the bar as text, never as a missing field.
+export type MementoPayload =
+  | {
+      // Tokens; 0 when a layer turned the ceiling off.
+      readonly ceiling: number;
+      readonly off: boolean;
+      // The session's own layer as written, "" when it has none.
+      readonly session: string;
+    }
+  | { readonly error: string };
 
 // Flattened projection of GitInfo: every field shape the parity bindings
 // reference. [LAW:one-type-per-behavior] Same absence policy as
@@ -601,6 +620,7 @@ export interface RenderPayloadDeps {
   readonly metricsProvider: MetricsProvider;
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
+  readonly mementoProvider: MementoProvider;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
@@ -1100,6 +1120,7 @@ export async function buildRenderPayload(
     tmuxSession,
     cacheExpiry,
     speed,
+    memento,
   ] = await Promise.all([
     lane("git", wants("git"), () =>
       deps.gitProvider.getGitInfo(
@@ -1144,6 +1165,14 @@ export async function buildRenderPayload(
         nowMs,
       ),
     ),
+    // The same session and anchors memento's Stop hook resolves with.
+    lane("memento", wants("memento"), () =>
+      deps.mementoProvider.getCeiling({
+        sessionId: hookData.session_id,
+        projectDir: hookData.workspace?.project_dir ?? "",
+        cwd: cwd ?? hookData.workspace?.current_dir ?? "",
+      }),
+    ),
   ]);
   // [LAW:effects-at-boundaries] The projections are pure folds returning data
   // (payload fragment + failure descriptions); the log effect happens once,
@@ -1171,6 +1200,8 @@ export async function buildRenderPayload(
   const activityValue = take(activity);
   const tmuxValue = take(tmuxSession);
   const cacheValue = take(cacheExpiry);
+  const mementoValue = projectMemento(memento);
+  if (memento.kind === "failed") failures.push(`memento: ${memento.reason}`);
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
@@ -1321,7 +1352,35 @@ export async function buildRenderPayload(
     }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
     ...(activityPayload !== undefined && { activity: activityPayload }),
+    ...(mementoValue !== undefined && { memento: mementoValue }),
   };
+}
+
+// [LAW:effects-at-boundaries] Pure: memento's outcome in, the payload shape
+// out. Absent (not installed) drops the family, so its segment hides.
+const lastLine = (text: string): string =>
+  text.trim().split("\n").at(-1)!.trim();
+
+export function projectMemento(
+  outcome: Outcome<CeilingReading>,
+): MementoPayload | undefined {
+  switch (outcome.kind) {
+    case "absent":
+      return undefined;
+    case "failed":
+      // A bar cell is one line; a refusal may be a Python traceback. The last
+      // line names the fault (memento's own refusals are one sentence; Python
+      // puts the exception last) — the whole text is in the daemon log.
+      return { error: lastLine(outcome.reason) };
+    case "ok": {
+      const { ceiling, session } = outcome.value;
+      return {
+        ceiling: ceiling === "off" ? 0 : ceiling,
+        off: ceiling === "off",
+        session: session ?? "",
+      };
+    }
+  }
 }
 
 // [LAW:effects-at-boundaries] The activity projection is pure: the provider's

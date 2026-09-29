@@ -65,6 +65,7 @@ export const ACTION_KEYS = [
   "save",
   "preset",
   "doctor",
+  "ceiling",
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
@@ -221,12 +222,30 @@ export type ActionDecl =
   // already declared. No `set`, so no validator derives (like copy/open).
   | { readonly doctor: "run" }
   | { readonly doctor: "fix"; readonly check: string }
+  // [LAW:one-source-of-truth] The memento plugin's context ceiling for the
+  // clicked session: `set` hands `to` — memento's own value grammar, `+100_000`
+  // / `400000` / `off` — to memento's `ceiling set session`, `clear` removes
+  // the session's layer. Nothing here parses `to`: memento is the one judge
+  // of its grammar, and refuses at the click (src/memento/edge.ts). The
+  // declared moves are also the verb's allow-list, so a URL can make only the
+  // moves the session's config offers.
+  | { readonly ceiling: "set"; readonly to: string }
+  | { readonly ceiling: "clear" }
   // [LAW:composability] One click, several effects, built from actions that
   // already exist rather than from a new write vocabulary: entering edit mode
   // and closing the menu it was entered from is `edit.toggle` and a close,
   // named together. The tuple type states the one structural fact — there is
   // always a head, the member whose display the region shows.
   | { readonly do: readonly [string, ...string[]] };
+
+export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
+
+// [LAW:one-source-of-truth] A ceiling move as the click wire carries it after
+// the session id — the one spelling the renderer emits and the verb compares
+// a click against the config's declared moves with.
+export function ceilingMoveArgs(a: CeilingAction): readonly string[] {
+  return a.ceiling === "set" ? ["set", a.to] : ["clear"];
+}
 
 // [LAW:types-are-the-program] Does this action take the value it writes from
 // the TEMPLATE (a picker's bound option, a cursor's integer)? Such an action

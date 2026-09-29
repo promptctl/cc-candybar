@@ -484,6 +484,29 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 100,
     },
 
+    // The memento plugin's context ceiling for this session — the daemon asks
+    // memento's own module for it (src/memento/edge.ts). ceiling -1 (default)
+    // ⇒ memento is not installed for this project ⇒ the `ceiling` segment's
+    // `when` hides it. `off` ⇒ a layer lifted the ceiling (ceiling reads 0).
+    // `session` is the session's own layer as written, "" when it has none.
+    // [LAW:no-silent-failure] `error` is memento's refusal — an unreadable
+    // layer, the state in which memento's own gate has stopped for this
+    // session — and the only field set when it is.
+    "memento.ceiling": {
+      kind: "input",
+      path: "memento.ceiling",
+      type: "number",
+      default: -1,
+    },
+    "memento.off": {
+      kind: "input",
+      path: "memento.off",
+      type: "boolean",
+      default: false,
+    },
+    "memento.session": { kind: "input", path: "memento.session", default: "" },
+    "memento.error": { kind: "input", path: "memento.error", default: "" },
+
     // Metrics — daemon fetches via MetricsProvider; numeric.
     "metrics.lastResponseTime": {
       kind: "input",
@@ -837,6 +860,26 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}',
       when: "{{ gt .context.totalTokens 0 }}",
     },
+    // Beside `context` wherever it stands, since the two numbers are read
+    // against each other: how full the context is, and where memento will ask
+    // the session to hand off. The controls move this session's own layer —
+    // memento's `ceiling set session` — and `↺` appears only while there is
+    // one to clear, or while a refusal may be that layer's own (clearing a
+    // layer memento cannot read restores its gate). Absent when memento is
+    // not installed, or Claude Code has it disabled.
+    ceiling: {
+      description:
+        "The memento plugin's context ceiling for this session: − and + move it by 100K, ∞ lifts it, ↺ drops this session's own setting.",
+      template:
+        '{{ if ne .memento.error "" }}⌈ ⚠ {{ .memento.error }} {{ action "ceiling.clear" "↺" }}{{ else }}⌈ ' +
+        '{{ if .memento.off }}off{{ else }}{{ template "formatTokenCount" .memento.ceiling }} ' +
+        '{{ action "ceiling.lower" "−" }} {{ action "ceiling.raise" "+" }} {{ action "ceiling.off" "∞" }}{{ end }}' +
+        '{{ if ne .memento.session "" }} {{ action "ceiling.clear" "↺" }}{{ end }}{{ end }}',
+      // [LAW:no-silent-failure] An unreadable layer paints `error`: memento's
+      // gate is off for this session until someone fixes the file it names.
+      bg: '{{ if ne .memento.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+      when: '{{ or (ge .memento.ceiling 0) (ne .memento.error "") }}',
+    },
     metrics: {
       description:
         "Response times, session duration, message count, and lines added/removed.",
@@ -951,7 +994,16 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "model" },
-          { kind: "segment", name: "context" },
+          // One cell unit: the ceiling reads against the context use beside it,
+          // and hidden (no memento) it takes no colour slot from the row.
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "ceiling" },
+            ],
+          },
           { kind: "segment", name: "cacheTimer" },
           { kind: "segment", name: "block" },
           { kind: "segment", name: "weekly" },
@@ -987,6 +1039,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     stepTheme: { set: "theme", from: "themes" },
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
+    // The `ceiling` segment's controls: memento's own value grammar, handed to
+    // its `ceiling set session` (or `clear session`) for the clicked session.
+    // These declarations are also the only moves the ceiling verb accepts.
+    "ceiling.raise": { ceiling: "set", to: "+100_000" },
+    "ceiling.lower": { ceiling: "set", to: "-100_000" },
+    "ceiling.off": { ceiling: "set", to: "off" },
+    "ceiling.clear": { ceiling: "clear" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────
@@ -1138,7 +1197,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             direction: "horizontal",
             children: [
               { kind: "segment", name: "model" },
-              { kind: "segment", name: "context" },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: "context" },
+                  { kind: "segment", name: "ceiling" },
+                ],
+              },
               { kind: "segment", name: "cacheTimer" },
               { kind: "segment", name: "block" },
               { kind: "segment", name: "weekly" },
@@ -1223,7 +1289,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             direction: "horizontal",
             children: [
               { kind: "segment", name: "model" },
-              { kind: "segment", name: "context" },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: "context" },
+                  { kind: "segment", name: "ceiling" },
+                ],
+              },
               { kind: "segment", name: "cacheTimer" },
             ],
           },
@@ -1265,7 +1338,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "model" },
-          { kind: "segment", name: "context" },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "ceiling" },
+            ],
+          },
           { kind: "segment", name: "cacheTimer" },
           { kind: "segment", name: "block" },
           { kind: "segment", name: "weekly" },

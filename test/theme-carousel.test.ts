@@ -556,12 +556,12 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     expect(rows).toEqual({
       default: [
         ["candybar.menu", "host", "directory", "gitaculous"],
-        ["model", "context", "cacheTimer", "block", "weekly", "activity"],
+        ["model", "context", "ceiling", "cacheTimer", "block", "weekly", "activity"],
       ],
       compact: [["candybar.menu", "directory", "gitaculous", "context"]],
       verbose: [
         ["candybar.menu", "directory", "gitaculous", "gitPr"],
-        ["model", "context", "cacheTimer", "block", "weekly", "burnrate"],
+        ["model", "context", "ceiling", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
       zen: [["candybar.menu", "directory", "context"]],
@@ -570,7 +570,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
         ["model", "context", "activity"],
       ],
       usage: [
-        ["candybar.menu", "model", "context", "cacheTimer"],
+        ["candybar.menu", "model", "context", "ceiling", "cacheTimer"],
         ["block", "weekly", "burnrate"],
         ["session", "today", "speed", "tokenSparkline"],
       ],
@@ -582,6 +582,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
           "gitaculous",
           "model",
           "context",
+          "ceiling",
           "cacheTimer",
           "block",
           "weekly",
@@ -657,7 +658,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     // context, cache timer, or activity).
     const placed = [
       ["menu", "host", "directory", "gitaculous"],
-      ["model", "context", "cacheTimer", "block", "weekly", "activity"],
+      ["model", "context", "ceiling", "cacheTimer", "block", "weekly", "activity"],
     ];
     expect(previewLabels(rt.render())).toEqual(placed);
     rt.dispose();

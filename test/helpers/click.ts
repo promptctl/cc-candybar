@@ -17,6 +17,7 @@ import {
   VERB_STEP_STATE,
   VERB_UNDO,
   VERB_DOCTOR_FIX,
+  VERB_CEILING,
 } from "../../src/click/wire";
 import {
   VERBS,
@@ -65,6 +66,12 @@ export function testVerbContext(
       },
       claudeSettingsPath: "/nonexistent/settings.json",
     },
+    // And for memento: a test that drives a ceiling click hands in its own.
+    memento: {
+      move: () => {
+        throw new Error("ceiling: no memento provider in this test");
+      },
+    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key) hands it in; reaching the lookup
     // without one is a test bug.
@@ -104,6 +111,7 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_REDO,
   VERB_APPLY_LAYOUT_OP,
   VERB_DOCTOR_FIX,
+  VERB_CEILING,
 ]);
 function decodeArgs(verb: string, value: string): string[] {
   return MULTI_ARG_VERBS.has(verb)

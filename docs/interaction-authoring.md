@@ -76,7 +76,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `save` / `doctor` / `do`. A `set` or a `persist`
+`reset` / `undo` / `redo` / `save` / `doctor` / `ceiling` / `do`. A `set` or a `persist`
 declares exactly one value source:
 
 | declaration | click effect |
@@ -98,6 +98,8 @@ declares exactly one value source:
 | `{ open: "template" }` | open the evaluated target in the editor |
 | `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
 | `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
+| `{ ceiling: "set", to: "+100_000" }` | move this session's context ceiling in the memento plugin — `to` is memento's own value grammar (`350000`, `+100_000`, `-100_000`, `off`), handed to its `ceiling set session` and judged only by memento; its refusal is the click's error. A click is honoured only as a move the config declares |
+| `{ ceiling: "clear" }` | drop this session's own ceiling layer (memento's `ceiling clear session`), so the project's or user's ceiling applies again |
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
