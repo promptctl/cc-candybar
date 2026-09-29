@@ -133,7 +133,7 @@ function type(hint: TmuxHint, line: SlashLine): Typed {
     ? { kind: "typed" }
     : {
         kind: "refused",
-        reason: `a command was typed into this pane moments ago (${run.reason})`,
+        reason: `cc-candybar typed a command moments ago — click again in a second (${run.reason})`,
       };
 }
 

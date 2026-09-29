@@ -98,7 +98,8 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
   "doctor.tmux": 1000,
   // A double-click is refused rather than typing and submitting its command
-  // twice. Only the typing is limited: a click the pane refused typed
+  // twice. Daemon-wide, so two sessions typing in one second collide. Only
+  // the typing is limited: a click the pane refused typed
   // nothing, so clicking again once the dialog is closed goes through.
   "claude-input.type": 1000,
 };

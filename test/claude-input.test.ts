@@ -276,7 +276,7 @@ describe("a slash click", () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     clickUrl(rt.urls[0]!, rt.ctx);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/typed into this pane moments ago/);
+    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/typed a command moments ago/);
     expect(rt.sessionState.get("s1", "click.error")).toMatch(/\/compact was not typed/);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
