@@ -3,22 +3,15 @@
 //
 // `width: "fill"` cannot be resolved where it is authored: a segment knows its own
 // content and nothing about its siblings, and the leftover is a fact about the ROW.
-// So the segment states a demand on its cell (markFill, template-engine/layout.ts)
-// and this module resolves every demand in one place, immediately before the row is
-// serialized — the one seam where the cells and the width are both in hand
-// [LAW:single-enforcer].
-//
-// Composition needed no change for this: `composeBlocks` concatenates the same cell
-// objects, so a demand rides through every container level untouched.
+// So the segment states a demand on its cell (`LaidCell.fill`,
+// template-engine/layout.ts) and this module resolves every demand in one place,
+// immediately before the row is serialized — the one seam where the cells and the
+// width are both in hand [LAW:single-enforcer].
 
 import type { RichText } from "@promptctl/rich-js";
 import { cellLen } from "@promptctl/rich-js";
 
-import {
-  fillDemandOf,
-  sizeCell,
-  type CellSizing,
-} from "../template-engine/layout.js";
+import { sizeCell, type LaidCell } from "../template-engine/layout.js";
 import { renderStripCells, type BuildLineOptions } from "./strip.js";
 import { INVISIBLE } from "./ansi.js";
 
@@ -30,10 +23,11 @@ function visibleCols(serialized: string): number {
 }
 
 /**
- * Give every fill-demanding cell in one row its share of the leftover width.
+ * Give every fill-demanding cell in one row its share of the leftover width, and
+ * return the row as the strip items it serializes to.
  *
- * Returns the cells unchanged when nothing demanded fill — the common path, which
- * pays one scan — and when the width is not finite, because "the rest of the row"
+ * Leaves every cell content-sized when nothing demanded fill — the common path,
+ * which pays one scan — and when the width is not finite, because "the rest of the row"
  * means nothing against an unbounded row (the demo and the check command render at
  * Infinity, and a content-sized cell is the honest answer there).
  *
@@ -46,14 +40,13 @@ function visibleCols(serialized: string): number {
  * own separator text, so the theory would have to track user data to stay true.
  */
 export function resolveFill(
-  cells: readonly RichText[],
+  row: readonly LaidCell[],
   options: BuildLineOptions,
 ): readonly RichText[] {
-  const demands: Array<{ cell: RichText; how: CellSizing }> = [];
-  for (const cell of cells) {
-    const how = fillDemandOf(cell);
-    if (how !== undefined) demands.push({ cell, how });
-  }
+  const cells = row.map((c) => c.text);
+  const demands = row.flatMap(({ text, fill }) =>
+    fill === undefined ? [] : [{ cell: text, how: fill }],
+  );
   if (demands.length === 0) return cells;
   if (!Number.isFinite(options.width)) return cells;
 

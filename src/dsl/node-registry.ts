@@ -47,6 +47,7 @@ import {
   evaluateWhen,
   applySegmentLayout,
 } from "../template-engine/index.js";
+import type { LaidCell } from "../template-engine/layout.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ export interface Line<C> {
   readonly band: "own" | "deeper";
   readonly span: "shared" | "row";
 }
-export type RenderedLine = Line<RichText>;
+export type RenderedLine = Line<LaidCell>;
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -533,7 +534,7 @@ const segmentType: NodeType<"segment"> = {
       // inside (a `{{ menu }}` body, a nested disclosure's rows) already has
       // its own and gets none. Every line then returns as a row of a DEEPER
       // band, so the band this trigger sits on never leads it again.
-      const leadOf = (line: RenderedLine): readonly RichText[] =>
+      const leadOf = (line: RenderedLine): readonly LaidCell[] =>
         line.band === "own" ? closeLead : [];
       const ledBody: RenderedLines = bodyTail.map((line) => ({
         cells: [...leadOf(line), ...line.cells],
@@ -575,10 +576,13 @@ const segmentType: NodeType<"segment"> = {
       // the body laid no row). A disclosure body's cells belong to the
       // segments in it, each of which sinks its own.
       if (ctx.perSegmentSink !== undefined) {
-        ctx.perSegmentSink.set(node.name, [
-          ...laidLines.flatMap((line) => line.cells),
-          ...bodyTail.flatMap(leadOf),
-        ]);
+        ctx.perSegmentSink.set(
+          node.name,
+          [
+            ...laidLines.flatMap((line) => line.cells),
+            ...bodyTail.flatMap(leadOf),
+          ].map((c) => c.text),
+        );
       }
       // Below row 0 every line is a drop: menu bands first (template order),
       // then the disclosure body, in the order they hang under the trigger.
@@ -605,10 +609,12 @@ const segmentType: NodeType<"segment"> = {
       return [
         {
           cells: [
-            new RichText(`⚠ ${node.name}: ${oneLine}`, {
-              end: "",
-              noWrap: true,
-            }),
+            {
+              text: new RichText(`⚠ ${node.name}: ${oneLine}`, {
+                end: "",
+                noWrap: true,
+              }),
+            },
           ],
           band: "own",
           span: "shared",

@@ -124,28 +124,22 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
   }
 }
 
-// [LAW:dataflow-not-control-flow] A fill demand is a VALUE riding the cell, not a
-// shape in the walk's return type, so composition needs no change at all — `composeBlocks` concatenates the
-// same cell objects, so the demand survives every container level for free, and
-// only the row about to be serialized resolves anything.
-const FILL_DEMAND = Symbol("cc-candybar.fillDemand");
-type FillCell = RichText & { [FILL_DEMAND]?: CellSizing };
-
-// The sizing intent travels with the demand, because the late pass is the one
-// that finally sizes the cell and it cannot ask the segment declaration again.
-export function markFill(cell: RichText, how: CellSizing): RichText {
-  (cell as FillCell)[FILL_DEMAND] = how;
-  return cell;
-}
-
-export function fillDemandOf(cell: RichText): CellSizing | undefined {
-  return (cell as FillCell)[FILL_DEMAND];
+// [LAW:types-are-the-program] What one segment line lays out to: the ONE strip
+// item it contributes, and — for a `width: "fill"` segment — its demand for the
+// row's leftover width, with the sizing intent the row needs to honour it (the row
+// finally sizes the cell and cannot ask the segment declaration again). The demand
+// is a declared field of the cell, so code that rebuilds the text of a laid cell
+// either carries the demand across or fails to typecheck; `resolveFill`
+// (src/render/fill.ts) is the one place a laid cell becomes bare text again.
+export interface LaidCell {
+  readonly text: RichText;
+  readonly fill?: CellSizing;
 }
 
 export function applySegmentLayout(
   cells: readonly RichText[],
   options: SegmentLayoutOptions,
-): RichText[] {
+): LaidCell[] {
   const {
     width,
     justify,
@@ -163,11 +157,11 @@ export function applySegmentLayout(
   // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
   // the cell's wrapping style, so the segment bg is continuous.
   const cell = collapseToCell(cells, baseStyle).pad(padding);
-  if (width === "auto") return [cell];
+  if (width === "auto") return [{ text: cell }];
   const how: CellSizing = { justify, truncate, truncateMarker };
   // "fill" leaves the cell content-sized and states its demand; the row resolves
   // it, since the leftover depends on siblings this call cannot see.
-  if (width === "fill") return [markFill(cell, how)];
+  if (width === "fill") return [{ text: cell, fill: how }];
   sizeCell(cell, width, how);
-  return [cell];
+  return [{ text: cell }];
 }
