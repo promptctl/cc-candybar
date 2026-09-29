@@ -70,6 +70,8 @@ import {
 import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
+import { commandTray } from "./command-tray.js";
+import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import { SETTINGS, type SettingProjection } from "./setting-projections.js";
@@ -99,6 +101,8 @@ const EDIT_SEG = `${SETTINGS_NS}edit`;
 const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
+const COMMANDS_SEG = `${SETTINGS_NS}commands`;
+const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
@@ -128,10 +132,6 @@ const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 // is always made in the view the arming click was made in, however that view
 // was later closed.
 const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-const RESET_ALL_ARM = `${RESET_ALL_SEG}.arm`;
-const RESET_ALL_DISARM = `${RESET_ALL_SEG}.disarm`;
-const RESET_ALL_ARMED = "armed";
-const RESET_ALL_DISARMED = "disarmed";
 // The door's and the config panel's own open/close cycles, each fired beside
 // the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
@@ -376,6 +376,14 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
 const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
+const RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "⟲ reset all", confirm: "⟲ confirm reset all" },
+  ALL_CONTROLS.map((c) => controlReset(c.name)),
+);
+// [LAW:one-source-of-truth] Every two-click step the door can bring into view,
+// so the door disarms each of them without anyone remembering to list one.
+const CONFIRMS = [RESET_ALL, COMMANDS] as const;
 const controlCarousel = (name: string): string =>
   `${SETTINGS_NS}carousel.${name}`;
 const controlBeneath = (name: string, row: number): string =>
@@ -537,6 +545,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
             direction: "horizontal",
             children: [
               { kind: "segment", name: TOOLBAR_SEG },
+              { kind: "segment", name: COMMANDS_SEG },
               ...PRIMARY_CONTROLS.map(controlNode),
               { kind: "segment", name: SAVE_SEG },
               // The display settings, behind their own disclosure so the
@@ -620,9 +629,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, RESET_ALL_DISARM] },
+      [SETTINGS_ANCHOR]: {
+        do: [DOOR_TOGGLE, ...CONFIRMS.map((c) => c.disarm)],
+      },
       [CONFIG_TOGGLE]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
-      [CONFIG_SEG]: { do: [CONFIG_TOGGLE, RESET_ALL_DISARM] },
+      [CONFIG_SEG]: { do: [CONFIG_TOGGLE, RESET_ALL.disarm] },
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
@@ -634,6 +645,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
       [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
+      ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
       [PRESET_SAVE]: { preset: "save" },
       [PRESET_DELETE]: {
@@ -658,6 +670,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         ),
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS.template },
       // [LAW:dataflow-not-control-flow] The cell exists exactly while there is
       // something to save — `gt` renders the literal "false" at zero, the only
       // text a `when` hides on — and it says how much, so a click never
@@ -702,12 +715,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
       },
-      [RESET_ALL_SEG]: {
-        template:
-          `{{ if eq .${RESET_ALL_SEG} "${RESET_ALL_ARMED}" }}` +
-          `{{ action "${RESET_ALL_SEG}" "⟲ confirm reset all" }}` +
-          `{{ else }}{{ action "${RESET_ALL_ARM}" "⟲ reset all" }}{{ end }}`,
-      },
+      [RESET_ALL_SEG]: { template: RESET_ALL.template },
     },
   };
   // The count the daemon publishes every render (RenderPayload.unsaved).
@@ -725,11 +733,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     TOOLS_SEG,
     DISCLOSURE_CLOSED,
   );
-  artifacts.variables[RESET_ALL_SEG] = {
-    kind: "state",
-    key: RESET_ALL_SEG,
-    default: RESET_ALL_DISARMED,
-  };
+  Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
   declareHistorySteps(artifacts);
@@ -826,17 +830,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
   }
   artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
-  artifacts.actions[RESET_ALL_ARM] = {
-    set: RESET_ALL_SEG,
-    to: RESET_ALL_ARMED,
-  };
-  artifacts.actions[RESET_ALL_DISARM] = {
-    set: RESET_ALL_SEG,
-    to: RESET_ALL_DISARMED,
-  };
-  artifacts.actions[RESET_ALL_SEG] = {
-    do: [RESET_ALL_DISARM, ...ALL_CONTROLS.map((c) => controlReset(c.name))],
-  };
+  Object.assign(artifacts.actions, RESET_ALL.actions);
 }
 
 // [LAW:one-type-per-behavior] Every picker control mints the same row — the

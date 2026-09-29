@@ -653,6 +653,20 @@ describe("reset returns settings to the bundled default", () => {
     expect(durable.text()).toBe(before);
   });
 
+  test("the armed reset all offers a ✕ that disarms it without resetting", () => {
+    const before = durable.text();
+    r.click(labelled("⟲ reset all")!);
+    const cancel = links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "✕" &&
+        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
+    )!.url;
+    r.click(cancel);
+    expect(labelled("⟲ confirm reset all")).toBeUndefined();
+    expect(labelled("⟲ reset all")).toBeDefined();
+    expect(durable.text()).toBe(before);
+  });
+
   test("closing ⚙ config any way and reopening it disarms reset all", () => {
     r.click(labelled("⟲ reset all")!);
     // Close the panel through the ✕ that leads its row — not the door.
