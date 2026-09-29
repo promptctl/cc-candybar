@@ -54,7 +54,7 @@ describe("shipped examples load and render through the real cascade", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     // [LAW:no-silent-failure] A variable that fails to declare is collected, not
     // thrown — surface it here so a broken example var fails the test loudly.
     expect(compiled.loadWarnings).toEqual([]);

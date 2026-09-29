@@ -186,7 +186,10 @@ function shellReader(
   signal: AbortSignal,
 ): SourceReader {
   return {
-    where: `output of "${command}"`,
+    // The directory is part of the origin: a command that asks about "this
+    // repo" answers differently per session, so every failure — exit, regex
+    // no-match, JSON parse — names where it ran.
+    where: `output of "${command}" in ${cwd}`,
     read: async () => {
       const r = await launch({
         bin: "/bin/sh",

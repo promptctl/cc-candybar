@@ -210,7 +210,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
       undefined,
       new SessionState(),
     );
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     try {
       const rendered = renderDsl(
         config,
@@ -258,7 +258,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     // The daemon's cache installs the derived gate at config load; mirror it so
     // the click below passes through the real validator.
     const disposers = deriveActionValidators(config).map(({ key, spec }) =>
@@ -405,7 +405,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const render = (pct: number, staged?: string): string =>
       renderDsl(
         config,
@@ -625,7 +625,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
       new SessionState(),
     );
     try {
-      expect(() => registerDslConfig(config, registry)).toThrow(
+      expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
         /globals\.look/,
       );
     } finally {

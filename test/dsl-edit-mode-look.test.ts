@@ -68,7 +68,7 @@ function buildRuntime(source: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // [LAW:single-enforcer] The real derived gate — the sole authority on what a
   // click may write. Registering it here is what makes the set-state calls
   // below travel the same road a real click travels.

@@ -440,22 +440,37 @@ describe("SourceRegistry — shell: basic", () => {
     registry.dispose();
   });
 
-  it("runs the command in its declared cwd, and a failure names that cwd", async () => {
+  it("runs the command in its declared cwd, and every failure names that cwd", async () => {
     const a = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-a-")));
     const b = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-b-")));
+    const gone = path.join(b, "removed-worktree");
+    const { store, registry } = make();
     try {
-      const { store, registry } = make();
       registry.declareShell("inA", "pwd -P", { cwd: a, parse: TEXT, cache: { kind: "never" } });
       registry.declareShell("inB", "pwd -P", { cwd: b, parse: TEXT, cache: { kind: "never" } });
       registry.declareShell("bad", "exit 4", { cwd: b, parse: TEXT, cache: { kind: "never" } });
-      await settle();
+      registry.declareShell("miss", "echo x", {
+        cwd: b,
+        parse: { kind: "regex", regex: /(y)/, default: undefined },
+        cache: { kind: "never" },
+      });
+      registry.declareShell("gone", "echo x", { cwd: gone, parse: TEXT, cache: { kind: "never" } });
+      expect(await registry.settled(5000)).toEqual([]);
       expect(store.read("inA")).toBe(a);
       expect(store.read("inB")).toBe(b);
       expect(registry.getLastError("bad")!.message).toBe(
         `shell "exit 4" exited with code 4 in ${b}`,
       );
-      registry.dispose();
+      expect(registry.getLastError("miss")!.message).toMatch(
+        new RegExp(`regex no-match.* in output of "echo x" in ${b}$`),
+      );
+      // A removed working directory is named as such — Node's own text
+      // (`spawn /bin/sh ENOENT`) would blame the shell.
+      expect(registry.getLastError("gone")!.message).toBe(
+        `shell "echo x" spawn-error: working directory does not exist: ${gone} in ${gone}`,
+      );
     } finally {
+      registry.dispose();
       fs.rmSync(a, { recursive: true, force: true });
       fs.rmSync(b, { recursive: true, force: true });
     }

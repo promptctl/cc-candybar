@@ -392,9 +392,12 @@ const configProgression = (config: ValidatedConfig): ProgressionName =>
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  opts?: { cwd?: string; clock?: () => Date },
+  // [LAW:no-silent-fallbacks] `cwd` is required: it is the directory `git`
+  // and `shell` sources run in, and the daemon's own process.cwd() is
+  // whichever shell spawned it — a default here would be that wrong answer.
+  opts: { cwd: string; clock?: () => Date },
 ): CompiledConfig {
-  const cwd = opts?.cwd ?? process.cwd();
+  const cwd = opts.cwd;
 
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
   // action runtime. Engine creation amortizes across all of this config's segment
@@ -509,7 +512,7 @@ export function registerDslConfig(
       // derived click gate admits.
       presets: { fn: () => presetOptions, argTypes: [] },
     },
-    opts?.clock,
+    opts.clock,
     // [LAW:one-source-of-truth] The registry's drawn-depth clock: this
     // engine's `readableOn` floors at the same depth its variables' do.
     registry.drawnAt,

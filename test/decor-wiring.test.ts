@@ -82,7 +82,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const store = new VariableStore();
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry);
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, progression?: ProgressionName): string =>
     renderDsl(
@@ -528,7 +528,7 @@ describe("a band whose nested hue has no state", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
-    const compiled = registerDslConfig(config, registry);
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const errors: string[] = [];
     const out = renderDsl(
       config,
