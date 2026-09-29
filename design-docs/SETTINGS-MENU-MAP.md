@@ -4,15 +4,16 @@ The settings menu's structure, for brandon-menu-ia-q30.1ws. Implementation ticke
 
 ## Structure
 
-The door opens onto one row: the preset control, then five tabs. One tab is open at a time, and its body drops below the row.
+The door opens onto two lines. The first holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time, and its body drops below the tabs.
 
 ```
-❌  ▦ default ▸  ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+❌  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
+✕  ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ```
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
-- **Save, undo, redo, reset all** trail the row as one cell, `💾 save 3 ↶ ↷ ⟲`, shown only when there is something to save or step (brandon-save-undo-bwi.hpi, .jby, .wt5).
+- **Save, undo, redo, reset all** follow the preset as one cell, `💾 save 3 ↶ ↷ ⟲`, shown only when there is something to save or step (brandon-save-undo-bwi.hpi, .jby, .wt5).
 
 | Tab | Holds |
 |---|---|
@@ -91,14 +92,12 @@ Added by me, at Brandon's request to fill out the list:
 
 | Row | Cells |
 |---|---|
-| Door row: preset + tabs | 77 |
-| … with `💾 save 3 ↶ ↷ ⟲` | 99, wraps |
+| Door line 1: preset / with save cell / with reset confirm | 20 / 38 / 49 |
+| Door line 2: tabs / two tabs marked `•` | 62 / 66 |
 | `⚡ session` links / commands | 50 / 52 |
 | `🎨 look` / long names / all four drifted | 63 / 73 / 77 |
 | `📐 layout` | 55 |
 | `🧰 tools` | 17 |
-
-The door row fits at 80 only while the save cell is hidden.
 
 ## Also recorded
 
