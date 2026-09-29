@@ -37,7 +37,11 @@ import {
   writeValue,
   type EditStore,
 } from "../config-file-store";
-import type { Journal, SettingsHistory } from "../settings-history";
+import {
+  describeStep,
+  type Journal,
+  type SettingsHistory,
+} from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
@@ -623,16 +627,20 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
 const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  ctx.history.undo(sid);
-  ctx.dlog("info", `undo (session=${sid})`);
+  // The click's own earlier changes are a step of their own first, so one
+  // click behaves exactly as the same clicks made one at a time.
+  ctx.journal.commit();
+  const step = ctx.history.undo(sid);
+  ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
 // undo's mirror — steps the same history forward one click.
 const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  ctx.history.redo(sid);
-  ctx.dlog("info", `redo (session=${sid})`);
+  ctx.journal.commit();
+  const step = ctx.history.redo(sid);
+  ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
@@ -873,16 +881,30 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // runs inside a journal it opens and commits. `dispatch` folds its effects
 // through the RAW leaf table, so a click of N effects is one journal and one
 // step, never N. The commit runs even when a handler threw — whatever landed
-// before the throw is real, so it is recorded.
+// before the throw is real, so it is recorded. [LAW:no-silent-failure] A
+// commit that fails too never hides the handler's own error: the click
+// reports both.
 function journaled(
   handler: VerbHandler,
 ): (value: string, ctx: VerbContext) => void {
   return (value, ctx) => {
     const journal = ctx.history.begin();
+    const failures: unknown[] = [];
     try {
       handler(value, { ...ctx, sessionState: journal.sessionState, journal });
-    } finally {
+    } catch (e) {
+      failures.push(e);
+    }
+    try {
       journal.commit();
+    } catch (e) {
+      failures.push(e);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new Error(
+        failures.map((e) => String((e as Error).message ?? e)).join("; "),
+      );
     }
   };
 }

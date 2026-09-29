@@ -23,7 +23,7 @@
 //      edit or another session's write — and never overwrites it.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -38,7 +38,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import type { SettingsHistory } from "../src/daemon/settings-history";
+import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
   deriveConfigActionValidators,
@@ -519,5 +519,91 @@ describe("undo/redo click → the session's settings history", () => {
     expect(durable.history().past).toHaveLength(50);
     expect(durable.history().future).toEqual([]);
     runtime.dispose();
+  });
+});
+
+describe("settings history: a step lands whole, and records only what landed", () => {
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-undoredo-atomic-");
+  });
+  afterEach(() => {
+    chmodSync(durable.projectDir, 0o700);
+    durable.dispose();
+  });
+
+  test("an undo whose file write fails puts back the session change it already made", () => {
+    const sessionState = new SessionState();
+    const history = durable.historyFor(sessionState);
+    const file = durable.configPath;
+    const journal = history.begin();
+    journal.sessionState.set("s1", "theme", "nord"); // recorded first
+    writeFileSync(file, "{ after: 1 }");
+    journal.file("s1", file, "{ before: 1 }", "{ after: 1 }");
+    journal.commit();
+
+    chmodSync(durable.projectDir, 0o500); // the file write cannot land
+    expect(() => history.undo("s1")).toThrow(/config write failed/);
+    expect(sessionState.get("s1", "theme")).toBe("nord");
+    expect(durable.text()).toBe("{ after: 1 }");
+    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0 });
+
+    chmodSync(durable.projectDir, 0o700); // and once it can, the step is intact
+    history.undo("s1");
+    expect(sessionState.get("s1", "theme")).toBeNull();
+    expect(durable.text()).toBe("{ before: 1 }");
+  });
+
+  test("a session write that throws records no step", () => {
+    const inner = new SessionState();
+    const throwing = {
+      get: (sid: string, key: string) => inner.get(sid, key),
+      set: () => {
+        throw new Error("store refused");
+      },
+      setBatch: () => {
+        throw new Error("store refused");
+      },
+      clear: (sid: string, key: string) => inner.clear(sid, key),
+    };
+    const history = new SettingsHistory(throwing, () => {});
+    const journal = history.begin();
+    expect(() => journal.sessionState.set("s1", "theme", "nord")).toThrow(
+      /store refused/,
+    );
+    journal.commit();
+    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0 });
+  });
+
+  test("an undo in the same click as a change undoes that change, as two clicks would", () => {
+    const src = SRC.replace(
+      "back: { undo: true },",
+      "back: { undo: true }, pickThenUndo: { do: ['pickTheme', 'back'] },",
+    ).replace('"pickPadding"', '"pickThenUndo"');
+    const runtime = buildRuntime(src);
+    runtime.sessionState.set("s1", "theme", "gruvbox");
+    press(runtime, "pickPadding"); // the slot now renders pickThenUndo
+    expect(runtime.sessionState.get("s1", "theme")).toBe("gruvbox");
+    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 1 });
+    press(runtime, "fwd");
+    expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
+    runtime.dispose();
+  });
+
+  test("history is bounded by bytes: the session that changed least recently goes first", () => {
+    const history = new SettingsHistory(new SessionState(), () => {});
+    const big = (c: string): string => c.repeat(2 * 1024 * 1024);
+    const step = (sid: string, file: string, from: string, to: string): void => {
+      const journal = history.begin();
+      journal.file(sid, file, big(from), big(to));
+      journal.commit();
+    };
+    step("old", "/a", "a", "b"); // 4 MB
+    step("new", "/b", "c", "d"); // 4 MB — 8 MB total, at the bound
+    expect(history.depth("old")).toEqual({ undo: 1, redo: 0 });
+    step("new", "/b", "d", "e"); // 12 MB — over it
+    expect(history.depth("old")).toEqual({ undo: 0, redo: 0 });
+    expect(history.depth("new")).toEqual({ undo: 2, redo: 0 });
+    step("new", "/b", "e", "f"); // a lone session over it loses its oldest step
+    expect(history.depth("new")).toEqual({ undo: 2, redo: 0 });
   });
 });

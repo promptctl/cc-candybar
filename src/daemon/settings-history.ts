@@ -80,17 +80,21 @@ const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey),
 );
 
-// [LAW:carrying-cost] A file change holds two whole-file snapshots, so both
-// dimensions are bounded: steps per session, and sessions (least recently
-// changed dropped first). Oldest steps fall off first.
+// [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
+// history costs is its bytes, held in memory and rewritten on every step. It
+// is bounded three ways: steps per session, sessions, and total snapshot text.
+// Over either shared bound, the session that changed least recently goes
+// first; a lone session over the byte bound loses its oldest steps.
 const MAX_STEPS = 50;
 const MAX_SESSIONS = 32;
+const MAX_BYTES = 8 * 1024 * 1024;
 
 const EMPTY: SessionHistory = { past: [], future: [] };
 
 // Records one click's changes. Handlers write through `sessionState` (which
-// records settings keys as it writes them) and report their config-file
-// writes through `file`; `commit` turns what was recorded into one step.
+// records settings keys once they are written) and report their config-file
+// writes through `file`; `commit` turns what was recorded so far into one
+// step and starts the next one empty.
 export interface Journal {
   readonly sessionState: SessionStateRW;
   file(
@@ -148,29 +152,38 @@ export class SettingsHistory {
       pending.set(sessionId, changes);
     };
     const inner = this.sessionState;
-    const noteKey = (sessionId: string, key: string, after: string | null) => {
-      if (!SETTING_SESSION_KEYS.has(key)) return;
-      note(sessionId, {
-        kind: "session",
-        key,
-        before: inner.get(sessionId, key),
-        after,
-      });
+    // A change is recorded only once its write has landed, and its `after` is
+    // what the store then reads — a write that throws records nothing.
+    const recorded = (
+      sessionId: string,
+      keys: readonly string[],
+      write: () => void,
+    ): void => {
+      const before = keys
+        .filter((key) => SETTING_SESSION_KEYS.has(key))
+        .map((key) => ({ key, before: inner.get(sessionId, key) }));
+      write();
+      for (const { key, before: b } of before) {
+        note(sessionId, {
+          kind: "session",
+          key,
+          before: b,
+          after: inner.get(sessionId, key),
+        });
+      }
     };
     const sessionState: SessionStateRW = {
       get: (sessionId, key) => inner.get(sessionId, key),
-      set: (sessionId, key, value) => {
-        noteKey(sessionId, key, value);
-        inner.set(sessionId, key, value);
-      },
-      setBatch: (sessionId, pairs) => {
-        for (const { key, value } of pairs) noteKey(sessionId, key, value);
-        inner.setBatch(sessionId, pairs);
-      },
-      clear: (sessionId, key) => {
-        noteKey(sessionId, key, null);
-        inner.clear(sessionId, key);
-      },
+      set: (sessionId, key, value) =>
+        recorded(sessionId, [key], () => inner.set(sessionId, key, value)),
+      setBatch: (sessionId, pairs) =>
+        recorded(
+          sessionId,
+          pairs.map((p) => p.key),
+          () => inner.setBatch(sessionId, pairs),
+        ),
+      clear: (sessionId, key) =>
+        recorded(sessionId, [key], () => inner.clear(sessionId, key)),
     };
     return {
       sessionState,
@@ -191,11 +204,13 @@ export class SettingsHistory {
             future: [],
           });
         }
+        pending.clear();
       },
     };
   }
 
-  undo(sessionId: string): void {
+  // Returns the step it restored, so the caller can say what changed.
+  undo(sessionId: string): Step {
     const { past, future } = this.history(sessionId);
     const step = past.at(-1);
     if (step === undefined) {
@@ -206,9 +221,10 @@ export class SettingsHistory {
       past: past.slice(0, -1),
       future: capped([...future, step]),
     });
+    return step;
   }
 
-  redo(sessionId: string): void {
+  redo(sessionId: string): Step {
     const { past, future } = this.history(sessionId);
     const step = future.at(-1);
     if (step === undefined) {
@@ -219,11 +235,13 @@ export class SettingsHistory {
       past: capped([...past, step]),
       future: future.slice(0, -1),
     });
+    return step;
   }
 
-  // [LAW:no-silent-failure] Every change is checked before any is written, so
-  // a step lands whole or not at all. A stale target is refused by name, and
-  // its now-unreachable changes leave both stacks (see the header).
+  // [LAW:no-silent-failure] A step lands whole or not at all: every change is
+  // checked before any is written, and a write that fails puts back the ones
+  // already written before the error goes on. A stale target is refused by
+  // name, and its now-unreachable changes leave both stacks (see the header).
   private apply(
     sessionId: string,
     step: Step,
@@ -242,7 +260,18 @@ export class SettingsHistory {
         `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
     }
-    for (const change of step) this.write(sessionId, change, change[to]);
+    const written: Change[] = [];
+    try {
+      for (const change of step) {
+        this.write(sessionId, change, change[to]);
+        written.push(change);
+      }
+    } catch (e) {
+      for (const change of written.reverse()) {
+        this.write(sessionId, change, change[from]);
+      }
+      throw e;
+    }
   }
 
   private read(sessionId: string, change: Change): string | null {
@@ -261,19 +290,41 @@ export class SettingsHistory {
     }
   }
 
-  // Move-to-end keeps insertion order as recency, so the cap drops the
-  // session that changed least recently.
+  // Move-to-end keeps insertion order as recency, so the bounds drop the
+  // session that changed least recently. The new state is adopted only once
+  // it is saved, so memory never holds a step the file could not.
   private put(sessionId: string, history: SessionHistory): void {
-    this.state.delete(sessionId);
+    const next = new Map(this.state);
+    next.delete(sessionId);
     if (history.past.length > 0 || history.future.length > 0) {
-      this.state.set(sessionId, history);
+      next.set(sessionId, history);
     }
-    for (const oldest of this.state.keys()) {
-      if (this.state.size <= MAX_SESSIONS) break;
-      this.state.delete(oldest);
+    while (next.size > MAX_SESSIONS || weight(next) > MAX_BYTES) {
+      const [oldest, h] = next.entries().next().value!;
+      if (next.size > 1) next.delete(oldest);
+      else next.set(oldest, withoutOldestStep(h));
     }
-    this.storage.save(Object.fromEntries(this.state));
+    this.storage.save(Object.fromEntries(next));
+    this.state = next;
   }
+}
+
+function weight(state: ReadonlyMap<string, SessionHistory>): number {
+  let bytes = 0;
+  for (const { past, future } of state.values()) {
+    for (const step of [...past, ...future]) {
+      for (const c of step) {
+        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
+      }
+    }
+  }
+  return bytes;
+}
+
+function withoutOldestStep({ past, future }: SessionHistory): SessionHistory {
+  return past.length > 0
+    ? { past: past.slice(1), future }
+    : { past, future: future.slice(1) };
 }
 
 function capped(steps: readonly Step[]): readonly Step[] {
@@ -284,6 +335,10 @@ function without(steps: readonly Step[], gone: ReadonlySet<string>): Step[] {
   return steps
     .map((step) => step.filter((c) => !gone.has(identity(c))))
     .filter((step) => step.length > 0);
+}
+
+export function describeStep(step: Step): string {
+  return step.map(describe).join(", ");
 }
 
 function describe(change: Change): string {
