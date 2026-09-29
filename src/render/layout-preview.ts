@@ -93,7 +93,7 @@ export function renderLayoutPreview(
       i === 0 ? blocks : [new RichText("\n"), ...blocks],
     ),
   );
-  preview.noWrap = true;
+  preview.overflow = "ignore";
   preview.end = "";
   return preview;
 }
@@ -112,6 +112,7 @@ export function layoutPreviewFuncs(
           ledRowBudget(runtime),
         ),
       argTypes: [],
+      arity: { kind: "exact" },
       returnType: "T",
     },
   };

@@ -35,6 +35,7 @@ import {
   type ActiveSegmentRef,
 } from "./active-segment.js";
 import { optionItemStyle } from "./band-style.js";
+import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   assemble,
   cellWidth,
@@ -177,21 +178,11 @@ export function carouselFuncs(
       // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
       // neighbours are what makes it wide. Omitted = as many as fit.
       //
-      // [LAW:no-silent-failure] The slot is `float`, not `int`: the engine's
-      // `int` gate truncates 1.5 to 1 before this body runs, so a cap that is
-      // not a count of levels would become some other ring silently. And the
-      // engine repeats the trailing slot, so a third argument would be
-      // accepted and dropped — both are refused here, by name.
+      // The `int` gate refuses a fractional cap; the body refuses a negative
+      // one and a surplus argument, since the engine repeats the trailing slot.
       fn: (applyName: string, neighbours?: number, ...extra: number[]) => {
-        if (extra.length > 0) {
-          throw new Error(
-            `carousel "${applyName}": takes at most one neighbours count after the action name, got ${1 + extra.length}`,
-          );
-        }
-        if (
-          neighbours !== undefined &&
-          !(Number.isInteger(neighbours) && neighbours >= 0)
-        ) {
+        refuseSurplus(`carousel "${applyName}"`, ["neighbours"], extra);
+        if (neighbours !== undefined && neighbours < 0) {
           throw new Error(
             `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
           );
@@ -212,7 +203,8 @@ export function carouselFuncs(
           cap,
         );
       },
-      argTypes: ["string", "float"],
+      argTypes: ["string", "int"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

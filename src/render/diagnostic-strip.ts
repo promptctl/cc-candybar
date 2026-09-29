@@ -259,7 +259,7 @@ function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
   // is not a fold, and a 1–2 cell terminal simply cannot hold one.
   const fold = asCellCol(Math.max(2, opts.width - 1));
   const cell = (word: string, style: Style): RichText =>
-    new RichText(`${word} `, { style, end: "", noWrap: true });
+    new RichText(`${word} `, { style, end: "", overflow: "ignore" });
   return ch.lines.flatMap((line, i) => {
     // The prefix takes the line's first click, so the glyph is part of the
     // same affordance as the words after it.
@@ -296,7 +296,7 @@ function trailerRow(
   const { fullText, failedConfigFile } = links;
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const frag = (text: string, style: Style): RichText =>
-    new RichText(text, { style, end: "", noWrap: true });
+    new RichText(text, { style, end: "", overflow: "ignore" });
   const more =
     elided > 0
       ? [
@@ -330,6 +330,6 @@ function trailerRow(
       p.truncate(Math.max(1, opts.width - fixedWidth), { mode: "middle" }),
     );
   const row = RichText.fromFragments([...fixed, ...path]).truncate(opts.width);
-  row.noWrap = true;
+  row.overflow = "ignore";
   return renderStripCells([row], opts);
 }

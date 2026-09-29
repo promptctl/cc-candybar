@@ -505,12 +505,16 @@ export function registerDslConfig(
       // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
       // projection of the "looks" option domain. Injected here — not in the
       // static FuncMap — because the domain is this config's looks block.
-      looks: { fn: () => lookNames, argTypes: [] },
+      looks: { fn: () => lookNames, argTypes: [], arity: { kind: "exact" } },
       // The presets domain's twin of the binding above — same per-config
       // reason, same shape. A hand-authored `range presets` and a
       // `{{ menu "applyPreset" }}` therefore enumerate the same names the
       // derived click gate admits.
-      presets: { fn: () => presetOptions, argTypes: [] },
+      presets: {
+        fn: () => presetOptions,
+        argTypes: [],
+        arity: { kind: "exact" },
+      },
     },
     opts.clock,
     // [LAW:one-source-of-truth] The registry's drawn-depth clock: this

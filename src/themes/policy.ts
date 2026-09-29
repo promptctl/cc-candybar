@@ -20,7 +20,6 @@ import {
   listThemePalettes,
   type ThemeKey,
 } from "@promptctl/rich-js";
-import type { ColorSystemSpec } from "@promptctl/rich-js/widgets";
 import { PROGRESSIONS, type ProgressionName } from "./decor.js";
 
 // --- Theme name aliasing ---
@@ -447,11 +446,12 @@ export function effectiveCharset(
 // Same species as CHARSETS: a closed render-vocabulary enum hosted in this leaf
 // policy module so the config loader (validation + JSON-schema emit) and the
 // render layer both derive from one literal without a config↔render cycle
-// [LAW:one-way-deps]. `satisfies` ties every member to rich-js's
-// ColorSystemSpec at compile time WITHOUT widening the derived union — if
-// rich-js renames a depth, this literal fails to compile rather than drifting.
+// [LAW:one-way-deps]. Every member is a name rich-js's `resolveColorSystem`
+// accepts; it takes a bare `string` and throws on a name it does not know, so
+// test/option-domain.test.ts runs each member through it rather than the
+// compiler holding the two vocabularies together.
 //
-// Deliberately NARROWER than ColorSystemSpec: "auto" (and null) are excluded.
+// Deliberately NARROWER than rich-js's vocabulary: "auto" is excluded.
 // The daemon is long-lived and detached, so its process env is NOT the client
 // terminal's — rich-js env detection would silently downsample against the
 // wrong terminal [LAW:no-silent-failure]. Honoring "auto" needs a client
@@ -462,7 +462,7 @@ export const COLOR_COMPATIBILITIES = [
   "256",
   "ansi",
   "none",
-] as const satisfies readonly ColorSystemSpec[];
+] as const;
 export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
 
 // [LAW:one-source-of-truth] The one statement of the globals.colorCompatibility

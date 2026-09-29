@@ -68,11 +68,12 @@ describe("the clock seam is injectable", () => {
 
 describe("domain funcs win the registration-order collisions", () => {
   // [LAW:one-source-of-truth] sprigConversions also defines `int`, but the
-  // var-system cast (registered last) must win — it preserves floats where
-  // sprig's int truncates. `int 3.9` → "3.9" is only possible if the domain
-  // func is the live one.
-  test("int is the var-system cast (preserves float), not sprig's truncating int", () => {
-    expect(evalText("{{ int 3.9 }}")).toBe("3.9");
+  // var-system cast (registered last) must win — it refuses a string that is
+  // not a number where sprig's quietly returns 0. It truncates as sprig's does:
+  // an int parameter refuses a fractional, so the cast is how one is dropped.
+  test("int is the var-system cast (loud on a non-number), truncating toward zero", () => {
+    expect(() => evalText('{{ int "abc" }}')).toThrow(/Cannot cast "abc" to number/);
+    expect(evalText("{{ int 3.9 }}")).toBe("3");
     expect(evalText("{{ int true }}")).toBe("1");
   });
 

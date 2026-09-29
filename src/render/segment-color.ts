@@ -66,6 +66,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       return active.bg.hex;
     }) as TemplateFunc["fn"],
     argTypes: [],
+    arity: { kind: "exact" },
     returnType: "string",
   };
 
@@ -78,6 +79,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     fn: (() =>
       requireActiveSegment(ref, "{{ tint }}").tint.hex) as TemplateFunc["fn"],
     argTypes: [],
+    arity: { kind: "exact" },
     returnType: "string",
   };
 
@@ -108,15 +110,19 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       empty: string,
       easing?: string,
       ...stops: string[]
-    ) =>
-      renderGauge({
+    ) => {
+      // [LAW:single-enforcer] `ramp` owns the tail's shape: an easing with no
+      // stop reaches its ColorRamp, which refuses it at the first cell.
+      const ramped =
+        easing === undefined ? undefined : [easing, ...flattenStops(stops)];
+      return renderGauge({
         value,
         max,
         width,
         filled,
         empty,
         colourAt:
-          easing === undefined || stops.length === 0
+          ramped === undefined
             ? undefined
             : (position) =>
                 String(
@@ -124,13 +130,17 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
                     (palette.ramp as TemplateFunc).fn as (
                       ...args: Array<number | string>
                     ) => unknown
-                  )(position, easing, ...flattenStops(stops)),
+                  )(position, ...ramped),
                 ),
-      })) as TemplateFunc["fn"],
+      });
+    }) as TemplateFunc["fn"],
     // "float" for the two measurements (a percentage need not be whole), "int"
-    // for the cell count, then the glyph pair, the easing, and a repeating
-    // trailing slot for the stops.
-    argTypes: ["float", "float", "int", "string", "string", "string", "string"],
+    // for the cell count, the glyph pair, then a repeating string slot for the
+    // optional easing and its stops — Go's spelling of an optional tail is a
+    // variadic one, so the gate requires the five and `ramp` refuses an easing
+    // with no stop.
+    argTypes: ["float", "float", "int", "string", "string", "string"],
+    arity: { kind: "variadic" },
     returnType: "T",
   };
 

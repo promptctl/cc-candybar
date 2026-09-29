@@ -244,6 +244,7 @@ export function menuFuncs(runtime: MenuRuntime): FuncMap {
         return renderMenu(applyName, displays, options, runtime);
       },
       argTypes: ["string", "value"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

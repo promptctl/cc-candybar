@@ -880,10 +880,10 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
 
   test.each([
     ["-1", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got -1"],
-    // Not truncated to 1: the engine's int gate would, silently.
-    ["1.5", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got 1.5"],
+    // Refused at the engine's int gate, never truncated to 1.
+    ["1.5", "expected integer; found 1.5"],
     // Not dropped: the engine repeats a trailing slot.
-    ["0 2", "takes at most one neighbours count after the action name, got 2"],
+    ["0 2", "takes at most 1 optional argument (neighbours), got 2"],
   ])("neighbours %s is a loud render error", (args, message) => {
     const rt = rig(`{
       variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },

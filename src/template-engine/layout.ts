@@ -89,7 +89,7 @@ function collapseToCell(
 ): RichText {
   const merged = RichText.fromFragments(cells);
   merged.end = "";
-  merged.noWrap = true;
+  merged.overflow = "ignore";
   if (baseStyle !== undefined && !baseStyle.isNull) merged.style = baseStyle;
   return merged;
 }

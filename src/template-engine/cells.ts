@@ -70,7 +70,7 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
       : fragments;
   const cell = RichText.fromFragments(layered);
   cell.end = "";
-  cell.noWrap = true;
+  cell.overflow = "ignore";
   // [LAW:one-source-of-truth] For a single-fragment cell (a link cell, or a
   // single-styled non-link fragment), the cell's wrapping style IS that
   // fragment's effective style. This keeps the link / linked-region claim

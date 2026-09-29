@@ -99,7 +99,7 @@ export function renderThemePreview(
     fragments.push(cell);
   }
   const preview = RichText.fromFragments(fragments);
-  preview.noWrap = true;
+  preview.overflow = "ignore";
   preview.end = "";
   return preview;
 }
@@ -118,6 +118,7 @@ export function themePreviewFuncs(
           ledRowBudget(runtime),
         ),
       argTypes: [],
+      arity: { kind: "exact" },
       returnType: "T",
     },
   };

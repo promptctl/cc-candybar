@@ -17,7 +17,7 @@
 // `paged` flag selects the available width passed to `paginate` (term.cols vs
 // Infinity). Infinite width ⇒ one page ⇒ the long line wraps via FlexStrip; finite
 // ⇒ a sliced page with ←/→. The same fold, same emit pipeline; the width value
-// (and the matching noWrap) select the shape.
+// (and the matching overflow) select the shape.
 //
 // [LAW:one-way-deps] Lives in render/ (depends on template-engine/ + ./action.js),
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
@@ -37,6 +37,7 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
+import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -136,9 +137,10 @@ export function paginate(
 
 // [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
 // separators into ONE RichText (a picker is one `{{ picker }}` expression, so it
-// must emit one value; the option/affordance cells ride as spans on it). `noWrap`
-// is the `paged` value: a paged page is one line that must not wrap; a wrap-mode
-// run is the long line FlexStrip is ALLOWED to break across lines.
+// must emit one value; the option/affordance cells ride as spans on it). Its
+// overflow is the `paged` value: a paged page is one unbounded line (`"ignore"`:
+// no break, no cut — the page already fits); a wrap-mode run is the long line
+// FlexStrip is ALLOWED to break across lines.
 export function assemble(frags: readonly RichText[], paged: boolean): RichText {
   const spaced: RichText[] = [];
   for (const frag of frags) {
@@ -146,7 +148,7 @@ export function assemble(frags: readonly RichText[], paged: boolean): RichText {
     spaced.push(frag);
   }
   const assembled = RichText.fromFragments(spaced);
-  assembled.noWrap = paged;
+  assembled.overflow = paged ? "ignore" : undefined;
   assembled.end = "";
   return assembled;
 }
@@ -360,11 +362,11 @@ export function renderPicker(
 // recolors live and LEAVES THE MENU OPEN so themes can be tried in a row — the
 // baseline UX; the ✕ affordance closes), `closeOnPick=true` is the opt-in where a
 // pick ALSO writes the page key closed; `paged=false` is one wrapping page,
-// `paged=true` slices into ←/→ pages at the live width. `enforceArgTypes`
-// validates only the values actually passed (it loops over arity), so an omitted
-// trailing bool arrives `undefined` and resolves to the default here — no arity
-// error, and order is preserved so existing callers (which pass both) are
-// untouched. Authoring stay-open + paged is `{{ picker "a" "p" false true }}`.
+// `paged=true` slices into ←/→ pages at the live width. Go spells an optional
+// tail as a variadic parameter, so the gate requires the two action names and
+// types every bool after them, an omitted bool arrives `undefined` and resolves
+// to the default here, and the body refuses a third. Authoring stay-open +
+// paged is `{{ picker "a" "p" false true }}`.
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the picker.
@@ -379,7 +381,9 @@ export function pickerFuncs(
         pageName: string,
         closeOnPick?: boolean,
         paged?: boolean,
+        ...extra: boolean[]
       ) => {
+        refuseSurplus(`picker "${applyName}"`, ["closeOnPick", "paged"], extra);
         // [LAW:one-source-of-truth] The standalone picker's page cursor comes
         // from its NAMED set-int action (the documented desugaring surface);
         // closing means paging to -1, the when-gate idiom its host row reads
@@ -409,7 +413,8 @@ export function pickerFuncs(
           ),
         );
       },
-      argTypes: ["string", "string", "bool", "bool"],
+      argTypes: ["string", "string", "bool"],
+      arity: { kind: "variadic" },
       returnType: "T",
     },
   };

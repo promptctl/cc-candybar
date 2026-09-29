@@ -52,7 +52,7 @@ export {
 
 export interface BuildLineOptions {
   style: StripStyle;
-  // [LAW:types-are-the-program] Narrower than rich-js ColorSystemSpec on
+  // [LAW:types-are-the-program] Narrower than rich-js's colour-system names on
   // purpose: the four explicit depths only. "auto"/null never reach a render —
   // the daemon is detached, so env detection would read the wrong terminal;
   // the loader rejects "auto" at the trust boundary (see COLOR_COMPATIBILITIES
@@ -150,7 +150,11 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
   if (known !== undefined) return known;
   const joiner = pickJoiner(options.style, options.charset, options.separator);
   const cell = (bgcolor: string): RichText =>
-    new RichText("x", { end: "", noWrap: true, style: new Style({ bgcolor }) });
+    new RichText("x", {
+      end: "",
+      overflow: "ignore",
+      style: new Style({ bgcolor }),
+    });
   const width = (cells: RichText[]): number =>
     new RichText(
       renderToString(new Strip(cells, joiner), { colorSystem: null }).replace(
@@ -191,7 +195,9 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
     bgcolor: seg.bgHex || undefined,
     color: seg.fgHex || undefined,
   });
-  return new RichText(seg.text, { style, end: "", noWrap: true }).pad(padding);
+  return new RichText(seg.text, { style, end: "", overflow: "ignore" }).pad(
+    padding,
+  );
 }
 
 /**
