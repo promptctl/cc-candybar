@@ -1599,6 +1599,57 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline's own block glyphs
   });
 
+  // brandon-presets-a3i.rcx — each added preset pinned to the promise its
+  // comment makes, not merely to rendering without error.
+  const visibleLines = (rendered: string): string[] =>
+    rendered.replace(INVISIBLE, "").split("\n");
+  const payloadWithPrAndHistory = (
+    base: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    ...base,
+    git: {
+      ...(base.git as object),
+      prUrl: "https://example.com/pr/181",
+      prNumber: 181,
+    },
+    speed: { history: "10,25,15,30,20" },
+  });
+
+  test("zen is one plain row under the dim look", () => {
+    const effective = resolveEffectiveGlobals(
+      DEFAULT_DSL_CONFIG,
+      (key) => (key === "preset" ? "zen" : null),
+      () => false,
+    );
+    expect(effective.style).toBe("plain");
+    expect(effective.look).toMatchObject({ kind: "decided", name: "dim" });
+    expect(visibleLines(renderPreset("zen", 80).rendered)).toHaveLength(1);
+  });
+
+  test("git puts the open PR beside the git state", () => {
+    const lines = visibleLines(
+      renderPreset("git", 200, payloadWithPrAndHistory).rendered,
+    );
+    expect(lines.find((l) => l.includes("⇆ #181"))).toContain("⎇ main");
+  });
+
+  test("usage shows spend: this session and today", () => {
+    const line = renderPreset("usage", 200, payloadWithPrAndHistory)
+      .rendered.replace(INVISIBLE, "");
+    expect(line).toContain("§ "); // session
+    expect(line).toContain("☉ "); // today
+    expect(line).toContain("to 5h"); // burnrate
+    expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline
+  });
+
+  test("dense is one line where the default needs two, and still wraps when narrow", () => {
+    expect(visibleLines(renderPreset("default", 200).rendered)).toHaveLength(2);
+    expect(visibleLines(renderPreset("dense", 200).rendered)).toHaveLength(1);
+    expect(
+      visibleLines(renderPreset("dense", 80).rendered).length,
+    ).toBeGreaterThan(1);
+  });
+
   // brandon-layout-edit-2gc.5 — the visible diagnostic for a preset whose
   // root the config file authors (candybar-config-dqe's `customized`):
   // edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY

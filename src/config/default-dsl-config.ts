@@ -1156,6 +1156,126 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         ],
       },
     },
+
+    // For heads-down work where the bar should stay out of the way: one row,
+    // only where you are and how much context is left, powerline chrome traded
+    // for plain text and the whole bar receded under the `dim` look. It is the
+    // quiet end of the library the way `verbose` is the loud one — `compact`
+    // saves width, this saves attention.
+    zen: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "context" },
+        ],
+      },
+      globals: { style: "plain", look: "dim" },
+    },
+
+    // For branch-and-PR work — juggling reviews, rebases, several branches:
+    // the identity row gains the open PR (`gitPr`, opt-in elsewhere) beside
+    // the git state, and the status row keeps only what that work checks
+    // between pushes (model, context, what Claude is doing), dropping the
+    // rate-limit windows that matter to a long solo session instead.
+    git: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "host" },
+              { kind: "segment", name: "directory" },
+              { kind: "segment", name: "gitaculous" },
+              { kind: "segment", name: "gitPr" },
+            ],
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "activity" },
+            ],
+          },
+        ],
+      },
+    },
+
+    // For watching spend and limits — a long session near a budget or a rate
+    // limit: every cost and limit segment the bundled library declares, one
+    // concern per row. Row 1 is this conversation (context, cache), row 2 the
+    // rate-limit windows and how fast they are burning, row 3 money (this
+    // session, today across every session) and throughput. It is the one
+    // preset that stages `session` and `today`, which no other arrangement
+    // shows.
+    usage: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "cacheTimer" },
+            ],
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "block" },
+              { kind: "segment", name: "weekly" },
+              { kind: "segment", name: "burnrate" },
+            ],
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "session" },
+              { kind: "segment", name: "today" },
+              { kind: "segment", name: "speed" },
+              { kind: "segment", name: "tokenSparkline" },
+            ],
+          },
+        ],
+      },
+    },
+
+    // For a wide terminal that should give the bar as few lines as possible:
+    // the default's two rows, plus spend, poured into ONE row with no padding,
+    // which the width-based auto-wrap folds only where the terminal actually
+    // runs out — so a wide window gets one line and a narrow one still gets
+    // every segment. `activity` stays last for the same reason it does in the
+    // default: it is the cell that reflows.
+    dense: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "host" },
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "gitaculous" },
+          { kind: "segment", name: "model" },
+          { kind: "segment", name: "context" },
+          { kind: "segment", name: "cacheTimer" },
+          { kind: "segment", name: "block" },
+          { kind: "segment", name: "weekly" },
+          { kind: "segment", name: "session" },
+          { kind: "segment", name: "activity" },
+        ],
+      },
+      globals: { padding: 0 },
+    },
   },
 
   // [LAW:one-source-of-truth] What edit mode LOOKS like, as config a user can

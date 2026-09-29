@@ -564,11 +564,36 @@ describe("the preset control is a carousel with the layout beneath it", () => {
         ["model", "context", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
+      zen: [["settings.menu", "directory", "context"]],
+      git: [
+        ["settings.menu", "host", "directory", "gitaculous", "gitPr"],
+        ["model", "context", "activity"],
+      ],
+      usage: [
+        ["settings.menu", "model", "context", "cacheTimer"],
+        ["block", "weekly", "burnrate"],
+        ["session", "today", "speed", "tokenSparkline"],
+      ],
+      dense: [
+        [
+          "settings.menu",
+          "host",
+          "directory",
+          "gitaculous",
+          "model",
+          "context",
+          "cacheTimer",
+          "block",
+          "weekly",
+          "session",
+          "activity",
+        ],
+      ],
     });
     registry.dispose();
   });
 
-  test.each(["default", "compact", "verbose"])(
+  test.each(["default", "compact", "verbose", "zen", "git", "usage", "dense"])(
     "%s: the preview draws the segments the closed bar draws, row for row, in the colours they wear",
     (preset) => {
       const rt = rig(`{}`);
@@ -643,16 +668,17 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     openCarousel(rt, "preset");
     const seen: string[] = [];
     const rowCounts: number[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 7; i++) {
       rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
       seen.push(rt.sessionState.get(SID, "preset")!);
       rowCounts.push(previewLabels(rt.render()).length);
     }
-    expect(seen).toEqual(["compact", "verbose", "default"]);
-    // Compact is one row; the others stack status under identity (verbose's
-    // third row is gated off by this payload). The full per-preset layouts are
-    // pinned by "every bundled preset's rows" above.
-    expect(rowCounts).toEqual([1, 2, 2]);
+    expect(seen).toEqual(["compact", "verbose", "zen", "git", "usage", "dense", "default"]);
+    // Compact, zen and dense are one row; the others stack two (verbose's
+    // third row and usage's block/weekly/burnrate row are gated off by this
+    // payload, which carries no rate-limit window). The full per-preset layouts
+    // are pinned by "every bundled preset's rows" above.
+    expect(rowCounts).toEqual([1, 2, 1, 2, 2, 1, 2]);
     rt.dispose();
   });
 
