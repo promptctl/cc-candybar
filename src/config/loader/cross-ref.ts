@@ -36,7 +36,7 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
-import { isExpression } from "../../themes/policy.js";
+import { isExpression, retiredThemeNote } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
@@ -63,7 +63,6 @@ import {
   templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
-import { retiredThemeNote } from "./retired-themes.js";
 
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
 // in loader/presets.ts's per-file structural pass (where a round-1 version

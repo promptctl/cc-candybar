@@ -13,7 +13,7 @@ import {
   type SourceKind,
 } from "../dsl-types.js";
 import { findKeyLine, type ConfigIssue } from "./diagnostics.js";
-import { retiredThemeNote } from "./retired-themes.js";
+import { retiredThemeNote } from "../../themes/policy.js";
 
 export interface ValidateCtx {
   readonly source: string;

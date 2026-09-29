@@ -20,6 +20,7 @@ import {
   finishSelection,
   FOLLOW_BAR,
   resolveSelection,
+  retiredThemeNote,
   THEME_FLOOR,
   type Decided,
   type Selection,
@@ -159,7 +160,7 @@ export function decideThemeName(
   const named = namedTheme(name);
   if (named !== null) return named;
   onUnresolvable(
-    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme`,
+    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme${retiredThemeNote(name)}`,
   );
   return themeFloor();
 }

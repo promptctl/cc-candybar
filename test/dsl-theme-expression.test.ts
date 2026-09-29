@@ -490,4 +490,10 @@ describe("decideThemeName", () => {
     expect(said[0]).toContain("nope");
     expect(said[0]).toContain(THEME_FLOOR);
   });
+
+  test("a rule rendering a retired name is told the theme that replaced it", () => {
+    const said: string[] = [];
+    decideThemeName("light", (m) => said.push(m));
+    expect(said[0]).toMatch(/"light" was retired; write "textual-light"/);
+  });
 });
