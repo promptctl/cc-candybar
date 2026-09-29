@@ -24,6 +24,7 @@ import {
   ConfigError,
   mergeWithDefault,
   parseDslConfig,
+  unauthored,
   validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -106,7 +107,7 @@ describe("looks block — loader validation", () => {
       parseDslConfig("<looks>", `{ globals: { look: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(merged, "<looks>", "", ALLOWED)).toThrow(
+    expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).toThrow(
       /globals\.look "vapor" does not match any declared look \(have: none, vivid, muted, dim, bright, inverted\)/,
     );
   });
@@ -116,7 +117,7 @@ describe("looks block — loader validation", () => {
       parseDslConfig("<looks>", `{ globals: { look: "vivid" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(merged, "<looks>", "", ALLOWED)).not.toThrow();
+    expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).not.toThrow();
   });
 });
 
@@ -599,13 +600,13 @@ describe("globals.look as an expression — a look chosen by data", () => {
       DEFAULT_DSL_CONFIG,
     );
     expect(() =>
-      validateConfig(withExpr, "<looks-expr>", "", ALLOWED),
+      validateConfig(unauthored(withExpr), "<looks-expr>", ALLOWED),
     ).not.toThrow();
     const withName = mergeWithDefault(
       parseDslConfig("<looks-expr>", `{ globals: { look: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(withName, "<looks-expr>", "", ALLOWED)).toThrow(
+    expect(() => validateConfig(unauthored(withName), "<looks-expr>", ALLOWED)).toThrow(
       /globals\.look "vapor" does not match any declared look/,
     );
   });

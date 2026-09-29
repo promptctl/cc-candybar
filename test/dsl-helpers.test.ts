@@ -45,9 +45,8 @@ const EMPTY_DEFAULT: DslConfig = {
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(
-    mergeWithDefault(raw, dflt),
+    { config: mergeWithDefault(raw, dflt), raw, source: source },
     "<test>",
-    source,
   ) as ValidatedConfig;
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());

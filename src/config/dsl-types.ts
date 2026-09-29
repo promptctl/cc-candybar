@@ -247,7 +247,9 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
 
 // [LAW:one-source-of-truth] The diagnostic path of a node's subtrees, spelled
 // once for the compile (node-registry.ts) and the load-time checks
-// (cross-ref.ts), so an error names the same place from either.
+// (cross-ref.ts). The two walk different trees — the compile the synthesized
+// one, cross-ref the file's own fragment — so only cross-ref's path is one the
+// author wrote; that is why every check of what a file wrote lives there.
 export const childPath = (path: string, i: number): string =>
   `${path}.children[${i}]`;
 export const bodyPath = (path: string): string => `${path}.opens.body`;

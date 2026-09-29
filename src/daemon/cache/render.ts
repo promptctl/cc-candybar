@@ -487,20 +487,15 @@ export class RenderCache {
     // sole producer of `ValidatedConfig`. The renderer accepts only
     // `ValidatedConfig`, so the compiler enforces the chain — there is no
     // "skip validate" path that typechecks downstream.
-    // [LAW:one-source-of-truth] Thread the source through to validateConfig so
-    // cross-ref diagnostics on the daemon path carry real line numbers and the
-    // authored-surface (root vs layout) discriminator works — the file is read
-    // once inside loadConfig, not re-read here.
-    const {
-      config: merged,
-      raw,
-      source,
-      warnings: fileWarnings,
-    } = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
+    // [LAW:one-source-of-truth] Hand validateConfig the whole read, so
+    // cross-ref diagnostics on the daemon path name the file's own paths and
+    // lines — the file is read once inside loadConfig, not re-read here.
+    const loaded = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
+    const { config: merged, raw } = loaded;
     // Appended before validation so a cross-ref failure still carries the
     // file's own advisory (a duplicate key names its line beside the error).
-    warnings.push(...fileWarnings);
-    const config = validateConfig(merged, resolvedPath ?? "<default>", source);
+    warnings.push(...loaded.warnings);
+    const config = validateConfig(loaded, resolvedPath ?? "<default>");
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so

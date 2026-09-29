@@ -18,6 +18,7 @@ import { rootNode } from "../src/config/root";
 import {
   parseDslConfig,
   mergeWithDefault,
+  unauthored,
   validateConfig,
 } from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -387,7 +388,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
-    const configA = validateConfig(mergedA, "<test>", A_SRC, ALLOWED);
+    const configA = validateConfig(
+      { config: mergedA, raw: rawA, source: A_SRC },
+      "<test>",
+      ALLOWED,
+    );
 
     const configDefault = parseAndValidate("<default>", SERIALIZED, ALLOWED);
 
@@ -1116,17 +1121,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
       payload: Record<string, unknown>,
       userSource?: string,
     ): string => {
-      const merged = mergeWithDefault(
-        parseDslConfig("<user>", userSource ?? "{}"),
-        DEFAULT_DSL_CONFIG,
-      );
-      // [FRAMING:representation] `source` is the text validation errors quote
-      // from — it must be the config actually being validated (`merged`), not
-      // the bundled default's serialization.
+      const source = userSource ?? "{}";
+      const raw = parseDslConfig("<user>", source);
       const config = validateConfig(
-        merged,
-        "<merged>",
-        JSON.stringify(merged, null, 2),
+        { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source },
+        "<user>",
       );
       const sessionOnly = narrowToSegment(config, "session");
       const store = new VariableStore();
@@ -1265,7 +1264,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // require (the `ValidatedConfig` brand `validateConfig` stamps) — the same
   // gate every production caller (daemon, check.ts) passes through, run once
   // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
-  const VALIDATED = validateConfig(DEFAULT_DSL_CONFIG);
+  const VALIDATED = validateConfig(unauthored(DEFAULT_DSL_CONFIG));
 
   // The one place "which session am I" varies across this suite: the preset
   // pick, plus (for the edit-mode sweep) the edit-mode key. Every other key is

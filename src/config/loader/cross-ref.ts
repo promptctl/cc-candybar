@@ -6,7 +6,6 @@
 // user surface can reference default-provided segments/actions. This file changes
 // when the visibility/scoping rules between config parts change.
 
-import JSON5 from "json5";
 import {
   hasCacheField,
   walkNodes,
@@ -14,6 +13,7 @@ import {
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
+  type RawDslConfig,
   type RootFragment,
   type VariableDecl,
 } from "../dsl-types.js";
@@ -42,7 +42,7 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
-import { isPlainObject, type ValidateCtx } from "./validate-core.js";
+import { type ValidateCtx } from "./validate-core.js";
 import {
   extractActionRefs,
   extractPickerMenuRefs,
@@ -113,6 +113,7 @@ function presetIdentCollisions(
 export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
+  authored: RawDslConfig,
 ): void {
   // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
   // block (a user's default may be a bundled look — same reason every cross-ref
@@ -417,23 +418,23 @@ export function validateCrossReferences(
       )
     );
   }
-  // Walks what the author WROTE at this key (a whole tree, or the rows a
-  // fragment names), so an unknown segment is reported against the layout
-  // that names it rather than against a row it inherited.
-  const checkLayoutTree = (
-    root: RootFragment,
-    layoutKey: string,
-    layoutLine: number | undefined,
-  ): void => {
+  // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
+  // fragment at this key, never the merged root — so a node is reported at
+  // the path, and on the line, the author would look for it, and a row they
+  // inherited is not theirs to be told about. The tree that renders is checked
+  // below (placement counts); an inherited row names only bundled segments,
+  // which no file can remove.
+  const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     for (const [node, path] of fragmentNodePaths(root, layoutKey)) {
+      const line = findKeyLine(ctx.source, path.split("."));
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
       // segment template, surfaced at load time.
       if (node.when !== undefined) {
         checkTemplateRefs(ctx, `${path}.when`, node.when, templateScope, {
-          line: layoutLine,
+          line,
         });
-        checkWhenParses(ctx, `${path}.when`, node.when, layoutLine);
+        checkWhenParses(ctx, `${path}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       // [LAW:one-source-of-truth] The anchor is a position, not a declared
@@ -447,20 +448,18 @@ export function validateCrossReferences(
             ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
             : "";
         ctx.issues.push({
-          path: layoutKey,
+          path,
           message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
-          line: layoutLine,
+          line,
         });
       }
     }
   };
-  const layoutKey = authoredLayoutKey(ctx.source);
-  checkLayoutTree(cfg.root, layoutKey, findKeyLine(ctx.source, [layoutKey]));
-  for (const [name, preset] of Object.entries(cfg.presets)) {
-    if (preset.root === undefined) continue;
-    const presetKey = `presets.${name}.root`;
-    const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
-    checkLayoutTree(preset.root, presetKey, presetLine);
+  if (authored.root !== undefined) checkLayoutTree(authored.root, "root");
+  for (const [name, preset] of Object.entries(authored.presets ?? {})) {
+    if (preset.root !== undefined) {
+      checkLayoutTree(preset.root, `presets.${name}.root`);
+    }
   }
   // [LAW:one-source-of-truth] Placement counts run over the tree each preset
   // RENDERS, keyed by the path presetRoot reports it authored at — so a
@@ -785,20 +784,4 @@ function checkTemplateRefs(
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
-}
-
-// [LAW:one-source-of-truth] The authored top-level layout surface, read from the
-// PARSED top-level keys (`root` wins; the loader already rejects authoring both).
-// A structural read — not a text search — so a nested key named `root`/`layout`
-// can never misclassify the config. Empty/unparseable source (the bundled
-// default, no file) has no surface; defaults to the historical `layout` label.
-function authoredLayoutKey(source: string): "root" | "layout" {
-  try {
-    const parsed = JSON5.parse(source);
-    if (isPlainObject(parsed) && "root" in parsed) return "root";
-  } catch {
-    // No source to read (default config) or unparseable — fall through. A real
-    // syntax error is already reported by parseDslConfig before cross-ref runs.
-  }
-  return "layout";
 }

@@ -48,12 +48,11 @@ const configPath = process.argv[2] ?? join(here, "statusline.json5");
 // cascade; validate promotes its result to the `ValidatedConfig` the renderer
 // accepts, so the chain is type-enforced.
 const ALLOWED = new Set(listResolvablePaletteNames());
-const { config: merged, source } = loadConfig(
+const config = validateConfig(
+  loadConfig(configPath, DEFAULT_DSL_CONFIG, ALLOWED),
   configPath,
-  DEFAULT_DSL_CONFIG,
   ALLOWED,
 );
-const config = validateConfig(merged, configPath, source, ALLOWED);
 
 // The demo has no SessionState, so every resolution below is the config default
 // over its floor. The PRESET resolves first — its fragment supplies the display

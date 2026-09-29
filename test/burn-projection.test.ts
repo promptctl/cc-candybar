@@ -207,9 +207,8 @@ function renderBurnrate(payload: Record<string, unknown>): string {
     ALLOWED,
   );
   const cfg = validateConfig(
-    mergeWithDefault(raw, DEFAULT_DSL_CONFIG),
+    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: "{}" },
     "<test>",
-    "{}",
     ALLOWED,
   );
   const store = new VariableStore();

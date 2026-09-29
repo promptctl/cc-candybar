@@ -12,7 +12,6 @@
 // the floor preset all run the same expression [LAW:dataflow-not-control-flow].
 
 import {
-  childPath,
   walkNodePaths,
   type ContainerNode,
   type LayoutNode,
@@ -31,9 +30,8 @@ export const ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // [LAW:one-source-of-truth] The name a whole tree's i-th row lowers to. `#`
 // fails ROW_NAME_RE, so a positional row can never collide with — or be
 // shadowed by — an authored one, and is never integer-like.
-const POSITIONAL = "#";
 export function positionalRowName(index: number): string {
-  return `${POSITIONAL}${index + 1}`;
+  return `#${index + 1}`;
 }
 
 // The merge's identity: restages nothing.
@@ -93,15 +91,13 @@ export function fragmentNode(fragment: RootFragment): LayoutNode {
   return isRowsFragment(fragment) ? rootNode(fragment) : fragment;
 }
 
-// [LAW:one-source-of-truth] Every node of a fragment beside the path its
-// author would look for it at — for the checks that report against what an
-// author wrote rather than what renders (cross-ref's per-layout walk). A whole
-// tree is walked as written; a rows map yields the root's own fields at `key`
-// and each row where it was written: `<key>.rows.<name>` for a named row, and
-// the tree position for a positional one, which only a whole tree lowers to
-// (it replaces every row, so the entry index IS that position). A merged
-// root's index is never a row's address: it shifts with rows the author
-// inherited.
+// [LAW:one-source-of-truth] Every node of an AUTHORED fragment beside the
+// path its author would look for it at — for the checks that report against
+// what a file wrote rather than what renders (cross-ref's per-layout walk). A
+// whole tree is walked as written; a rows map yields the root's own fields at
+// `key` and each row at `<key>.rows.<name>`. Only a file's own fragment has
+// these addresses: a merged root has lowered a whole tree to positional rows,
+// whose index is no longer where anything was written.
 export function* fragmentNodePaths(
   fragment: RootFragment,
   key: string,
@@ -111,11 +107,8 @@ export function* fragmentNodePaths(
     return;
   }
   yield [rootNode(fragment), key];
-  for (const [i, [name, row]] of Object.entries(fragment.rows).entries()) {
-    yield* walkNodePaths(
-      row,
-      name.startsWith(POSITIONAL) ? childPath(key, i) : `${key}.rows.${name}`,
-    );
+  for (const [name, row] of Object.entries(fragment.rows)) {
+    yield* walkNodePaths(row, `${key}.rows.${name}`);
   }
 }
 

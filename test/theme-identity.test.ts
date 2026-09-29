@@ -26,7 +26,7 @@ import {
 
 import { checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { validateConfig } from "../src/config/dsl-loader";
+import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -118,7 +118,7 @@ function seams(rendered: string): Seam[] {
 }
 
 const THEMES = listThemePalettes();
-const CONFIG = validateConfig(DEFAULT_DSL_CONFIG, "<bundled default>", "");
+const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>");
 
 // Every progression × every bundled look (brandon-theme-picker-bgw.7g6): each
 // is a runtime pick, so each fact below holds whichever one the user is in,

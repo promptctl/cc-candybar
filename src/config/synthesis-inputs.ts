@@ -5,9 +5,9 @@
 // trees it RETURNS — the author's nodes inside them included, whose reads
 // cross-ref has already resolved against the same scope, so reading the trees
 // the bar renders costs nothing and misses nothing the pass minted — and gets
-// back the declarations to merge UNDER the config. They are derived from what the artifacts read, never a hand-kept
-// list, so a read a later control adds is ensured with no second place to
-// update.
+// back the declarations to merge UNDER the config. They are derived from what
+// the artifacts read, never a hand-kept list, so a read a later control adds
+// is ensured with no second place to update.
 
 import type { ActionDecl } from "./action.js";
 import {

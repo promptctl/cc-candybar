@@ -25,8 +25,10 @@ function heapUsed(): number {
 }
 
 function registerStdlib() {
-  const { config: merged, source } = loadConfig(null, DEFAULT_DSL_CONFIG);
-  const config = validateConfig(merged, "<default>", source);
+  const config = validateConfig(
+    loadConfig(null, DEFAULT_DSL_CONFIG),
+    "<default>",
+  );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   return { registry, compiled: registerDslConfig(config, registry, { cwd: "/tmp" }) };

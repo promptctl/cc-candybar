@@ -6,6 +6,7 @@
 
 import {
   mergeWithDefault,
+  unauthored,
   validateConfig,
   ConfigError,
 } from "../src/config/dsl-loader";
@@ -233,7 +234,7 @@ describe("validateConfig", () => {
     // synthesis passes add the chrome every bar carries; what was merged
     // passes through untouched.
     const merged = mergeWithDefault({}, DFLT);
-    const validated = validateConfig(merged, "<test>");
+    const validated = validateConfig(unauthored(merged), "<test>");
     expect(validated.root).toBe(merged.root);
     expect(validated.globals).toBe(merged.globals);
     for (const [name, seg] of Object.entries(merged.segments)) {
@@ -246,7 +247,7 @@ describe("validateConfig", () => {
       ...DFLT,
       root: rootOf(vert(["does-not-exist"])),
     };
-    expect(() => validateConfig(merged, "<test>")).toThrow(ConfigError);
+    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(ConfigError);
   });
 
   test("throws ConfigError when a merged template references an unknown variable", () => {
@@ -257,6 +258,6 @@ describe("validateConfig", () => {
         a: { template: " {{ .does_not_exist }} " } as SegmentDecl,
       },
     };
-    expect(() => validateConfig(merged, "<test>")).toThrow(ConfigError);
+    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(ConfigError);
   });
 });

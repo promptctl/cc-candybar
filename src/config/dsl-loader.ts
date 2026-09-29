@@ -117,9 +117,9 @@ export {
  * resolves explicitly by importing DEFAULT_DSL_CONFIG themselves.
  *
  * [LAW:one-source-of-truth] The source and the parsed raw shape are returned
- * alongside the config so the caller can hand the source to validateConfig —
- * cross-ref diagnostics (line numbers, the authored-surface discriminator) are
- * derived from it — and ask the raw shape what the file itself AUTHORS (which
+ * alongside the config, so the whole result is validateConfig's input —
+ * cross-ref diagnostics walk the fragments the file wrote and quote its lines
+ * — and the caller can ask the raw shape what the file itself AUTHORS (which
  * preset roots it declares; candybar-config-dqe's `preset.customized`), all
  * from one read rather than a re-read or a re-parse downstream.
  *
@@ -149,6 +149,27 @@ interface LoadedFile {
   readonly raw: RawDslConfig;
   readonly source: string;
   readonly warnings: readonly string[];
+}
+
+// [LAW:one-source-of-truth] What validation needs from one read: the merged
+// config it promotes, and the file it was merged FROM — the raw fragments the
+// author wrote and the text they wrote them in — so a diagnostic names the
+// author's own path and line. loadConfig's result is one.
+export interface AuthoredConfig {
+  readonly config: DslConfig;
+  readonly raw: RawDslConfig;
+  readonly source: string;
+}
+
+// A config no file was merged into (the bundled default validated on its own,
+// a test's hand-built tree) authored every layout it carries, so its own root
+// and presets are what the layout checks walk.
+export function unauthored(config: DslConfig): AuthoredConfig {
+  return {
+    config,
+    raw: { root: config.root, presets: config.presets },
+    source: "",
+  };
 }
 
 // "No user file exists": a uniform merge against an empty raw, no text, no
@@ -185,14 +206,13 @@ function readParsed(
  * [LAW:single-enforcer] One cast site, here, exclusive.
  */
 export function validateConfig(
-  config: DslConfig,
+  { config, raw, source }: AuthoredConfig,
   filePath = "<config>",
-  source = "",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
 ): ValidatedConfig {
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = { source, issues, allowedPalettes, groups: [] };
-  validateCrossReferences(ctx, config);
+  validateCrossReferences(ctx, config, raw);
   validateNoCycles(ctx, config);
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);

@@ -312,15 +312,11 @@ export async function prepareConfig(
   cwd: string,
   warnings: string[],
 ): Promise<PreparedConfig> {
-  const {
-    config: merged,
-    source,
-    warnings: fileWarnings,
-  } = loadConfig(configPath, DEFAULT_DSL_CONFIG);
+  const loaded = loadConfig(configPath, DEFAULT_DSL_CONFIG);
   // The file's own advisories (an editability notice naming a duplicate key)
   // land before validation, so a fatal outcome still carries them.
-  warnings.push(...fileWarnings);
-  const config = validateConfig(merged, configPath ?? "<default>", source);
+  warnings.push(...loaded.warnings);
+  const config = validateConfig(loaded, configPath ?? "<default>");
 
   const store = new VariableStore();
   const registry = new SourceRegistry(

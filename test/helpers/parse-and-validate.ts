@@ -44,6 +44,9 @@ export function parseAndValidate(
     allowedPalettes,
     inheritableSegmentNames(dflt),
   );
-  const merged = mergeWithDefault(raw, dflt);
-  return validateConfig(merged, filePath, source, allowedPalettes);
+  return validateConfig(
+    { config: mergeWithDefault(raw, dflt), raw, source },
+    filePath,
+    allowedPalettes,
+  );
 }
