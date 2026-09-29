@@ -284,7 +284,7 @@ export interface ActionRuntime {
 }
 
 /** A segment the layout places, with the palette it renders in. */
-export interface PreviewSegment extends PlacedSegment {
+export interface PreviewSegment extends Omit<PlacedSegment, "settings"> {
   readonly palette: Palette;
 }
 

@@ -69,8 +69,8 @@ const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
 //
 // [LAW:one-type-per-behavior] A spec of its own rather than a flag on the shared
 // `paletteSpec`, because the two slots genuinely differ in behaviour now: a
-// per-segment `palette:` is a static pin frozen at registration, so a rule there
-// could never be settled per render and must stay a load error. Both reach the
+// segment's `palette:` is the default of its placements' `theme` setting, whose
+// domain holds theme NAMES, so a rule there must stay a load error. Both reach the
 // one `validatePaletteName`, so the name policy itself cannot drift.
 //
 // [LAW:dataflow-not-control-flow] The exemption reads the SAME `isExpression`

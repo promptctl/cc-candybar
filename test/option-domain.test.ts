@@ -141,6 +141,9 @@ describe("option-domain registry", () => {
 // render.
 describe("a colour-valued domain resolves its own painter", () => {
   const BASE = paletteForThemeName("textual-dark");
+  // The drawn palette differs from the base on purpose, so a painter that
+  // reads the wrong one of the two is caught.
+  const RENDER = { basePalette: BASE, palette: paletteForThemeName("nord") };
 
   test("`themes` answers with that theme's own palette, through the one name -> Palette enforcer", () => {
     const { members, paletteOf } = resolveOptionDomain("themes", new Map());
@@ -148,15 +151,16 @@ describe("a colour-valued domain resolves its own painter", () => {
     for (const name of members) {
       // Identity, not just equality: paletteForThemeName memoizes per resolved
       // name, so the painter must BE that memo rather than a second construction.
-      expect(paletteOf!(name, BASE)).toBe(paletteForThemeName(name));
+      expect(paletteOf!(name, RENDER)).toBe(paletteForThemeName(name));
     }
   });
 
   test("`themes` ignores the base it is handed — a theme is not an adaptation of anything", () => {
     const { members, paletteOf } = resolveOptionDomain("themes", new Map());
     const [first, second] = members as [string, string];
-    expect(paletteOf!(first, BASE)).toBe(
-      paletteOf!(first, paletteForThemeName(second)),
+    const other = paletteForThemeName(second);
+    expect(paletteOf!(first, RENDER)).toBe(
+      paletteOf!(first, { basePalette: other, palette: other }),
     );
   });
 
@@ -178,11 +182,22 @@ describe("a colour-valued domain resolves its own painter", () => {
     const domains = perConfigDomainsFor({ looks, presets: {} });
     const { members, paletteOf } = resolveOptionDomain("looks", domains);
     expect(members).toEqual(["none", "dim"]);
-    expect(paletteOf!("dim", BASE)).toBe(transposedPalette(BASE, looks.dim));
+    expect(paletteOf!("dim", RENDER)).toBe(transposedPalette(BASE, looks.dim));
     // The identity key is byte-exact through transposePalette's fast path, so
     // the floor answers with the base itself — the honest "picking this changes
     // nothing".
-    expect(paletteOf!("none", BASE)).toBe(transposedPalette(BASE, looks.none));
+    expect(paletteOf!("none", RENDER)).toBe(transposedPalette(BASE, looks.none));
+  });
+
+  test("`placementThemes` answers `bar` with the palette the bar is DRAWN in, and a theme with its own", () => {
+    const { members, paletteOf } = resolveOptionDomain(
+      "placementThemes",
+      new Map(),
+    );
+    expect(members[0]).toBe("bar");
+    // A placement that follows the bar renders in the base under the look.
+    expect(paletteOf!("bar", RENDER)).toBe(RENDER.palette);
+    expect(paletteOf!("gruvbox", RENDER)).toBe(paletteForThemeName("gruvbox"));
   });
 
   test("every domain whose members are not colours has no painter", () => {
@@ -206,7 +221,7 @@ describe("a colour-valued domain resolves its own painter", () => {
       () => BASE,
     );
     try {
-      expect(resolveOptionDomain("painted-31z", new Map()).paletteOf!("one", BASE)).toBe(BASE);
+      expect(resolveOptionDomain("painted-31z", new Map()).paletteOf!("one", RENDER)).toBe(BASE);
     } finally {
       dispose();
     }

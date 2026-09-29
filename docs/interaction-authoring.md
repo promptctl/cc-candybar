@@ -879,8 +879,8 @@ synthesizes:
   mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
-- A placement whose segment declares `settings` also carries a `⚙` before
-  its `🚫`. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
+- Every placement also carries a `⚙` before its `🚫` — every placement has
+  at least the `theme` setting. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
   hides every `✚`/`🚫` and hangs one control per setting below that
   placement's name — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
@@ -1042,9 +1042,10 @@ mode at all (the pattern above).
 ### Persisting a per-segment field: `segments.<name>.palette`
 
 Every `persist`/`reset` target so far has named a `globals` field — the
-whole-bar default. A segment's own `palette:` (overrides `globals.palette`
-for that ONE segment, ignoring the session theme entirely — see the segment
-config reference) is a *different* field shape, but the SAME mechanism
+whole-bar default. A segment's own `palette:` (the theme every placement of
+that ONE segment wears unless a placement sets its own `theme`, ignoring the
+session theme — see "One segment, many placements" in
+`docs/segment-authoring.md`) is a *different* field shape, but the SAME mechanism
 reaches it: spell the target `segments.<name>.palette` instead of a bare
 `globals` field name, where `<name>` is a segment your config actually
 declares.
@@ -1452,8 +1453,8 @@ Selection reuses the standard seam: one session key (`look`), one action with
 (session pick wins); `.look.effective` is the resolved active name for
 trigger labels. The bundled stdlib (`none`, `vivid`, `muted`, `dim`, `bright`,
 `inverted`) merges under your names — `none` is the identity look and the
-resolution floor. A per-segment `palette:` pin ignores the look, exactly as it
-ignores the session theme.
+resolution floor. A placement whose `theme` setting names a theme ignores the
+look, exactly as it ignores the session theme.
 
 ```json5 check:pass
 {

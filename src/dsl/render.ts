@@ -23,7 +23,11 @@ import type {
   SettingValue,
   SourceDefault,
 } from "../config/dsl-types.js";
-import { parseArm, parseSettingSpelling } from "../config/dsl-types.js";
+import {
+  parseArm,
+  parseSettingSpelling,
+  settingsOf,
+} from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
@@ -59,7 +63,7 @@ import {
   effectiveProgression,
   isExpression,
   LOOK_FLOOR,
-  paletteForThemeName,
+  placementPalette,
   resolveThemeSelection,
   THEME_FLOOR,
   transposedPalette,
@@ -604,9 +608,9 @@ export function registerDslConfig(
     }
   }
 
-  // Pre-parse all segment templates and pre-resolve per-segment palettes once.
-  // renderDsl calls evaluate() only — parse() and palette resolution never
-  // run in the hot render path.
+  // Pre-parse all segment templates once.
+  // renderDsl calls evaluate() only — parse() never runs in the hot render
+  // path.
   // [LAW:no-defensive-null-guards] Object.create(null) — segment names come from
   // user config; a null-prototype object prevents __proto__/constructor/prototype
   // from being treated as segment data.
@@ -632,16 +636,6 @@ export function registerDslConfig(
       template: parseField(seg.template, "template"),
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
       fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
-      // [LAW:one-source-of-truth] Freeze ONLY the explicit per-segment `palette:`
-      // override — a deliberate static pin that intentionally ignores the live
-      // session theme. The base theme (session ?? globals ?? default) is the
-      // per-render basePalette; folding globals.palette in here too would freeze
-      // it per segment and the stale copy would shadow basePalette, so a session
-      // theme change could never recolor the bar.
-      palette:
-        seg.palette !== undefined
-          ? paletteForThemeName(seg.palette)
-          : undefined,
     };
   }
 
@@ -672,7 +666,9 @@ export function registerDslConfig(
   // declaration no longer admits parses to nothing and reads as no pick.
   const store = registry.variableStore;
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
-    const declared = config.segments[node.name]?.settings ?? {};
+    // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
+    // is declared.
+    const declared = settingsOf(config.segments[node.name]!);
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(declared)) {
       const saved = node.settings?.[name] ?? decl.default;
@@ -689,7 +685,9 @@ export function registerDslConfig(
                 ) ?? saved,
       });
     }
-    return Object.freeze(out);
+    // settingsOf always declares `theme`, over the theme domain, whose values
+    // are names — the one cast from the record to what it provably holds.
+    return Object.freeze(out) as PlacementSettings;
   };
   const compileNode = <N extends LayoutNode>(
     node: N,
@@ -703,7 +701,7 @@ export function registerDslConfig(
           : parseNodeField(node.when, path, "when"),
       parse: (src, field) => parseNodeField(src, path, field),
       compileChild: compileNode,
-      settingsOf: resolvedSettings,
+      placementSettings: resolvedSettings,
     };
     // [LAW:types-are-the-program] The registry pairs each kind with the
     // compile that returns that kind's own compiled arm (nodeType's documented
@@ -1223,15 +1221,15 @@ export function renderDsl(
   };
   compiled.menuRuntime.action.layout = () =>
     layoutRows(root, shown).map((row) =>
-      row.flatMap((placed) => {
-        const name = arrangedSegment(placed.name);
+      row.flatMap(({ name: placedName, address, settings }) => {
+        const name = arrangedSegment(placedName);
         return name === undefined
           ? []
           : [
               {
-                ...placed,
                 name,
-                palette: compiled.segments[name]!.palette ?? palette,
+                address,
+                palette: placementPalette(settings.theme, palette),
               },
             ];
       }),

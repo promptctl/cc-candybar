@@ -18,6 +18,7 @@ import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import {
   finishSelection,
+  FOLLOW_BAR,
   resolvePaletteName,
   resolveSelection,
   THEME_FLOOR,
@@ -32,7 +33,7 @@ const transposeCache = new Map<string, Palette>();
  * The Palette for a theme name (aliases resolved). Memoized.
  *
  * [LAW:single-enforcer] The one place a theme name becomes a Palette —
- * the per-render base palette and per-segment `palette:` overrides both flow
+ * the per-render base palette and every placement's pinned `theme` both flow
  * through here. A name that does not resolve is registry/resolver drift, never
  * user error: the loader validates `globals.palette` and the set-state verb
  * validates session theme values against the resolvable set, so by the time a
@@ -51,10 +52,20 @@ export function paletteForThemeName(name: string): Palette {
   return palette;
 }
 
+// [LAW:one-source-of-truth] THE palette a placement renders in, from its
+// `theme` setting: the bar's own palette (the render's theme under its look)
+// when it follows the bar, else the named theme — a pin, which ignores the
+// bar's theme and look alike. The render's walk and the placement-theme
+// picker's option cells both read it, so an option paints what picking it
+// would draw.
+export function placementPalette(theme: string, bar: Palette): Palette {
+  return theme === FOLLOW_BAR ? bar : paletteForThemeName(theme);
+}
+
 // [LAW:single-enforcer] THE name → base Palette construction, and the one memo
 // over it. Answering null rather than throwing is what lets its two callers
 // differ in the only way they must: a PRE-VALIDATED name (a config default the
-// loader checked, a session pick the set-state gate admitted, a per-segment pin)
+// loader checked, a session pick the set-state gate admitted, a placement's `theme`)
 // treats absence as registry drift and throws above; a name a RULE produced
 // (brandon-themes-dzl) treats it as an author mistake, collapses to the floor and
 // reports. Two absence policies, one construction — a second `getThemePalette`

@@ -403,7 +403,7 @@ export function pickerFuncs(
           optionItemStyle(
             requireActiveSegment(activeSegment, "{{ picker }}"),
             placedBy(undefined),
-            runtime.basePalette,
+            runtime,
             requireOptionKind(runtime, applyName, "picker").paletteOf,
             activeSegment.drawnAt(),
           ),

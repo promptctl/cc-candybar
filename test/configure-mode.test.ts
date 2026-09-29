@@ -5,8 +5,8 @@
 //
 //   - Edit mode is ONE key: `closed | arrange | configure:<id>`. Configuring a
 //     second placement replaces the first; configuring hides arrange's +/-.
-//   - In arrange mode a placement whose segment declares settings carries a
-//     ⚙; one that declares none carries none.
+//   - In arrange mode every placement carries a ⚙: `theme` is a setting each
+//     one has (brandon-settings-menu-6c5), declared or not.
 //   - Configure mode hangs one control per declared setting below that
 //     placement, generated from its domain: a toggle, a word cycle, a stepper.
 //   - A control writes a draft: only that placement renders it, `💾 save`
@@ -193,13 +193,14 @@ function placementOf(config: DslConfig, id: string): SegmentNode {
 }
 
 describe("configure mode: one placement's settings at a time", () => {
-  test("arrange mode offers ⚙ on exactly the placements whose segment declares settings", () => {
+  test("arrange mode offers ⚙ on every placement — theme is a setting each one has", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     expect(configureUrls(rt.render())).toEqual([]);
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const urls = configureUrls(rt.render());
-    // Two placements of `vcs`; `plain` declares nothing. Each ⚙ is drawn in
+    // Two placements of `vcs`, and `plain`, which declares nothing but still
+    // has `theme` (brandon-settings-menu-6c5). Each ⚙ is drawn in
     // the label and the live view, so a placement's url shows up once per view
     // it is drawn in — one member per placement is what counts.
     const members = new Set(
@@ -209,6 +210,7 @@ describe("configure mode: one placement's settings at a time", () => {
       new Set([
         configureMember("default", "vcs"),
         configureMember("default", "vcs2"),
+        configureMember("default", "plain"),
       ]),
     );
     expect(stripAnsi(rt.render())).toContain(CONFIGURE_GLYPH);
@@ -293,12 +295,13 @@ describe("configure mode: one placement's settings at a time", () => {
       false,
     );
     // Edit mode's key admits closed, arrange, and a configure member per
-    // configurable placement — never one naming a placement with no settings.
-    expect(
-      validateStateWrite(EDIT_MODE_KEY, configureMember("default", "vcs2")).ok,
-    ).toBe(true);
+    // placement — never one naming no placement of this preset.
     expect(
       validateStateWrite(EDIT_MODE_KEY, configureMember("default", "plain")).ok,
+    ).toBe(true);
+    expect(
+      validateStateWrite(EDIT_MODE_KEY, configureMember("default", "absent"))
+        .ok,
     ).toBe(false);
     rt.dispose();
   });
@@ -307,7 +310,15 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "vcs"));
-    rt.click(rt.urlWriting(rt.render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED));
+    // One control per row — detail, form, depth, theme — and every row of an
+    // open body leads with its ✕.
+    const closes = linkUrls(rt.render()).filter((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+      ),
+    );
+    expect(closes).toHaveLength(4);
+    rt.click(closes[0]!);
     expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
     expect(stripAnsi(rt.render())).not.toContain("form:");
     rt.dispose();

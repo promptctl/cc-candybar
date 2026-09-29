@@ -50,6 +50,7 @@ export {
   decideThemeName,
   resolveThemeSelection,
   declaredBasePalette,
+  placementPalette,
 } from "./palette-resolvers.js";
 export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";
 

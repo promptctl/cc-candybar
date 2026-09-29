@@ -10,6 +10,8 @@ import {
   describeSettingDomain,
   hasCacheField,
   inSettingDomain,
+  settingsOf,
+  type SettingDecl,
   freePlacementId,
   placementId,
   placementIds,
@@ -420,8 +422,19 @@ export function validateCrossReferences(
       if (node.kind !== "segment") continue;
       // [LAW:one-source-of-truth] The anchor is a position, not a declared
       // segment: synthesizeSettingsMenu lowers it in every config, right after
-      // these checks pass.
-      if (isSettingsAnchor(node.name)) continue;
+      // these checks pass. The menu it lowers to is chrome, not a placement:
+      // an `id` or `settings` on it would configure nothing.
+      // [LAW:no-silent-failure]
+      if (isSettingsAnchor(node.name)) {
+        if (node.id !== undefined || node.settings !== undefined) {
+          ctx.issues.push({
+            path,
+            message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings — the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
+            line,
+          });
+        }
+        continue;
+      }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         ctx.issues.push({
           path,
@@ -483,13 +496,14 @@ export function validateCrossReferences(
     // [LAW:one-source-of-truth] A segment's own templates also read
     // `.settings.<name>` — the placement's value for each setting the
     // segment declares, and nothing else under that name.
-    const segScope = withSettingsScope(templateScope, seg.settings);
+    const settings = settingsOf(seg);
+    const segScope = withSettingsScope(templateScope, settings);
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
         segCtx: segName,
-        settings: seg.settings,
+        settings,
       });
       // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
       // action table on the merged config so a segment can reference a
@@ -643,18 +657,15 @@ const SETTINGS_SCOPE_PREFIX = "settings.";
 // adds (src/template-engine/scope.ts), and no others.
 function withSettingsScope(
   scope: TemplateScope,
-  settings: SegmentDecl["settings"],
+  settings: Readonly<Record<string, SettingDecl>>,
 ): TemplateScope {
-  const names = Object.keys(settings ?? {});
-  return names.length === 0
-    ? scope
-    : {
-        ...scope,
-        names: new Set([
-          ...scope.names,
-          ...names.map((n) => SETTINGS_SCOPE_PREFIX + n),
-        ]),
-      };
+  return {
+    ...scope,
+    names: new Set([
+      ...scope.names,
+      ...Object.keys(settings).map((n) => SETTINGS_SCOPE_PREFIX + n),
+    ]),
+  };
 }
 
 // [LAW:no-silent-failure] A placement's setting values, against the merged
@@ -672,7 +683,7 @@ function checkPlacementSettings(
     ? cfg.segments[node.name]!
     : undefined;
   if (seg === undefined) return;
-  const declared = seg.settings ?? {};
+  const declared = settingsOf(seg);
   const where = `${layoutKey}: placement "${placementId(node)}" of segment "${node.name}"`;
   for (const [setting, value] of Object.entries(node.settings ?? {})) {
     const decl = Object.prototype.hasOwnProperty.call(declared, setting)
@@ -680,7 +691,7 @@ function checkPlacementSettings(
       : undefined;
     const problem =
       decl === undefined
-        ? `sets "${setting}", which segment "${node.name}" does not declare (${Object.keys(declared).length === 0 ? "it declares no settings" : `it declares: ${Object.keys(declared).join(", ")}`})`
+        ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})`
         : inSettingDomain(decl, value)
           ? undefined
           : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
@@ -804,7 +815,7 @@ function checkTemplateRefs(
       const declared = Object.keys(opts.settings ?? {});
       ctx.issues.push({
         path: declPath,
-        message: `Template reads ".${ref}", but segment "${opts.segCtx}" declares no setting "${ref.slice(SETTINGS_SCOPE_PREFIX.length)}" (${declared.length === 0 ? "it declares no settings" : `it declares: ${declared.join(", ")}`}) — declare it under segments.${opts.segCtx}.settings`,
+        message: `Template reads ".${ref}", but segment "${opts.segCtx}" has no setting "${ref.slice(SETTINGS_SCOPE_PREFIX.length)}" (it has: ${declared.join(", ")}) — declare it under segments.${opts.segCtx}.settings`,
         line: opts.line ?? findKeyLine(ctx.source, declPath.split(".")),
       });
       continue;

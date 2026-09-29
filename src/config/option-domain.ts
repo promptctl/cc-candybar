@@ -31,11 +31,13 @@ import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
+  placementThemeNames,
   PROGRESSION_NAMES,
   STRIP_STYLES,
 } from "../themes/policy.js";
 import {
   paletteForThemeName,
+  placementPalette,
   transposedPalette,
 } from "../themes/palette-resolvers.js";
 import { presetNames } from "./presets.js";
@@ -56,13 +58,19 @@ export type OptionDomainResolver = () => readonly string[];
 // charsets, an inline array, edit mode's addable segment names) has no answer,
 // which is exactly the absence below.
 //
-// `base` is the palette the render's LOOK applies to — never a palette that has
-// already been transposed. `transposedPalette` must not be chained: its memo
-// keys on the base palette's NAME, which transposition preserves, so
-// transposing an already-looked palette both double-pays OKLCH quantization and
-// collides the shared memo (gruvbox+vivid vs gruvbox+dim+vivid). The render
-// publishes its base on ActionRuntime for exactly this reason.
-export type OptionPalette = (option: string, base: Palette) => Palette;
+// `render` is the render's two palettes. `basePalette` is the one the render's
+// LOOK applies to — never a palette that has already been transposed.
+// `transposedPalette` must not be chained: its memo keys on the base palette's
+// NAME, which transposition preserves, so transposing an already-looked
+// palette both double-pays OKLCH quantization and collides the shared memo
+// (gruvbox+vivid vs gruvbox+dim+vivid). `palette` is the base under the look —
+// what the bar is drawn in, and so what an option that follows the bar paints
+// in. The render publishes both on ActionRuntime for exactly this reason.
+export interface RenderPalettes {
+  readonly basePalette: Palette;
+  readonly palette: Palette;
+}
+export type OptionPalette = (option: string, render: RenderPalettes) => Palette;
 
 // [LAW:one-source-of-truth] Resolving a domain yields the DOMAIN, not one facet
 // of it. Members and "how a member paints itself" are two things the SAME
@@ -110,6 +118,15 @@ registerBuiltinDomain(
   "themes",
   () => listResolvablePaletteNames(),
   (option) => paletteForThemeName(option),
+);
+// [LAW:one-source-of-truth] What a placement's `theme` setting may hold —
+// the bar's theme or any installed one — named so configure mode's picker
+// and the click gate derive from the same members. An option paints in what
+// the placement would render in: `bar` in the palette the bar is drawn in, a
+// theme in its own, through the one `placementPalette` the walk uses.
+export const PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, (option, render) =>
+  placementPalette(option, render.palette),
 );
 registerBuiltinDomain("styles", () => STRIP_STYLES);
 // Not colour-valued in the `paletteOf` sense: a progression chooses which of
@@ -189,8 +206,8 @@ export function perConfigDomainsFor(config: {
         // palette (see OptionPalette).
         // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
         // so a member always names a declared look.
-        paletteOf: (option: string, base: Palette) =>
-          transposedPalette(base, config.looks[option]!),
+        paletteOf: (option: string, render: RenderPalettes) =>
+          transposedPalette(render.basePalette, config.looks[option]!),
       },
     ],
     // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable

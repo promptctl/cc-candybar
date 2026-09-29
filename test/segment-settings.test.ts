@@ -296,7 +296,7 @@ describe("load errors", () => {
     expect(
       refusal(withSegment(BOOL, `{ h: [{ seg: 's', settings: { off: true } }] }`)),
     ).toContain(
-      `placement "s" of segment "s" sets "off", which segment "s" does not declare (it declares: on)`,
+      `placement "s" of segment "s" sets "off", which segment "s" does not declare (it has: on, theme)`,
     );
   });
 
@@ -322,7 +322,7 @@ describe("load errors", () => {
     expect(
       refusal(withSegment(BOOL, `{ h: ['s'] }`, "{{ .settings.off }}")),
     ).toContain(
-      `Template reads ".settings.off", but segment "s" declares no setting "off" (it declares: on)`,
+      `Template reads ".settings.off", but segment "s" has no setting "off" (it has: on, theme)`,
     );
   });
 

@@ -104,6 +104,27 @@ export function listResolvablePaletteNames(): readonly string[] {
   return [...listThemePalettes(), ...listThemeAliases()];
 }
 
+// [LAW:types-are-the-program] What a placement's `theme` setting may hold
+// (brandon-settings-menu-6c5): the bar's own theme, or any installed one.
+// "Follow the bar" is a MEMBER of the domain, not the absence of a value, so
+// a placement always holds a theme and nothing downstream asks whether it has
+// one. No installed theme is named `bar` (pinned in
+// test/placement-theme.test.ts), so the two can never be confused.
+export const FOLLOW_BAR = "bar";
+
+export function placementThemeNames(): readonly string[] {
+  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
+}
+
+// Membership in `placementThemeNames`, which the render asks of every
+// placement's `theme` each render. The installed themes are fixed for the
+// life of the process, so the set is built once.
+let placementThemeSet: ReadonlySet<string> | undefined;
+export function isPlacementThemeName(name: string): boolean {
+  placementThemeSet ??= new Set(placementThemeNames());
+  return placementThemeSet.has(name);
+}
+
 // --- Per-config member selection ---
 
 // The `effectiveGlobal` instance for every selection whose domain is PER-CONFIG

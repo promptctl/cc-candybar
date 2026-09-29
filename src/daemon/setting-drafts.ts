@@ -14,8 +14,8 @@
 
 import {
   parseSettingSpelling,
-  placementId,
   settingSpelling,
+  settingsOf,
   walkNodes,
   type DslConfig,
   type Globals,
@@ -206,14 +206,16 @@ function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
   SLOTS.set(config, byPreset);
   const known = byPreset.get(preset);
   if (known !== undefined) return known;
-  const slots = [...walkNodes(presetRoot(config, preset).node)].flatMap(
+  // One fact per slot: a name label reads its placement's `theme` slot, so a
+  // slot can be held by two nodes, which resolve it identically.
+  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
     (node) =>
       node.kind !== "segment" || node.drafts === undefined
         ? []
-        : Object.entries(node.drafts).map(([setting, { key }]) => {
-            const decl = config.segments[node.name]!.settings![setting]!;
+        : Object.entries(node.drafts).map(([setting, { id, key }]) => {
+            const decl = settingsOf(config.segments[node.name]!)[setting]!;
             return {
-              id: placementId(node),
+              id,
               setting,
               key,
               decl,
@@ -221,6 +223,7 @@ function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
             };
           }),
   );
+  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
   byPreset.set(preset, slots);
   return slots;
 }

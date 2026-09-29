@@ -39,6 +39,7 @@ import {
   childPath,
   placementId,
 } from "../config/dsl-types.js";
+import { placementPalette } from "../themes/palette-resolvers.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -107,15 +108,13 @@ export type Compiled<N extends LayoutNode> = Extract<
   { kind: N["kind"] }
 >;
 
-// Pre-parsed templates and pre-resolved palette for one segment, built once at
-// registration. A `segment` node names one; render looks it up via
+// Pre-parsed templates for one segment, built once at registration. A `segment` node names one; render looks it up via
 // ctx.lookupSegment.
 export interface CompiledSegment {
   readonly when?: Template<RichText>;
   readonly template: Template<RichText>;
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
-  readonly palette?: Palette;
 }
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
@@ -167,12 +166,16 @@ export interface NodeCompileCtx {
   compileChild<N extends LayoutNode>(node: N, path: string): Compiled<N>;
   // The resolved settings of a segment placement: the driver holds the
   // declarations they resolve against.
-  settingsOf(node: SegmentNode): PlacementSettings;
+  placementSettings(node: SegmentNode): PlacementSettings;
 }
 
 // What a placement's templates read as `.settings`: a frozen, null-prototype
-// record, so no inherited name resolves as a setting.
-export type PlacementSettings = Readonly<Record<string, SettingValue>>;
+// record, so no inherited name resolves as a setting. `theme` is always there
+// (settingsOf) and always a theme's name or `bar` — the domain it resolves
+// against holds nothing else.
+export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
+  readonly theme: string;
+};
 
 // [LAW:single-enforcer] The render-time context. `visible` is THIS node's
 // computed visibility (the driver ANDs node.when with the parent's).
@@ -347,6 +350,7 @@ function composeBlocks<C>(
 export interface PlacedSegment {
   readonly name: string;
   readonly address: Address;
+  readonly settings: PlacementSettings;
 }
 
 // [LAW:one-source-of-truth] The rows a compiled tree lays its CLOSED segments
@@ -367,7 +371,11 @@ export function layoutRows(
     if (!shown(n)) return [];
     if (n.kind === "segment") {
       return [
-        { cells: [{ name: n.name, address }], band: "own", span: "shared" },
+        {
+          cells: [{ name: n.name, address, settings: n.settings }],
+          band: "own",
+          span: "shared",
+        },
       ];
     }
     return composeBlocks(
@@ -455,7 +463,7 @@ const segmentType: NodeType<"segment"> = {
       when: cctx.when,
       name: node.name,
       id: placementId(node),
-      settings: cctx.settingsOf(node),
+      settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...(node.opens !== undefined && {
@@ -498,11 +506,12 @@ const segmentType: NodeType<"segment"> = {
     try {
       if (!evaluateWhen(segCompiled.when, scope)) return [];
 
-      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette: an explicit `palette:` pin, or the render's palette (the base
-      // theme under the look). A pin IGNORES the look exactly as it ignores the
-      // session theme — the pin's presence is the discriminator.
-      const palette = segCompiled.palette ?? ctx.palette;
+      // [LAW:dataflow-not-control-flow] The per-placement variability is
+      // WHICH palette, and it is a value: this placement's `theme` setting,
+      // the render's palette (the base theme under the look) when it follows
+      // the bar, else the named theme, which ignores the look as it ignores
+      // the session theme.
+      const palette = placementPalette(node.settings.theme, ctx.palette);
 
       // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
       // `fg:`, and every `{{ color }}` in its body resolve from this same
