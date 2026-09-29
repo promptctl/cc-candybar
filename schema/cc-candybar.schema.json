@@ -8,19 +8,10 @@
     "globals": {
       "type": "object",
       "properties": {
-        "default_bg": {
-          "type": "string"
-        },
-        "default_fg": {
-          "type": "string"
-        },
         "default_empty_value": {
           "type": "string"
         },
         "default_separator": {
-          "type": "string"
-        },
-        "default_truncate_marker": {
           "type": "string"
         },
         "palette": {
@@ -1268,19 +1259,10 @@
           "globals": {
             "type": "object",
             "properties": {
-              "default_bg": {
-                "type": "string"
-              },
-              "default_fg": {
-                "type": "string"
-              },
               "default_empty_value": {
                 "type": "string"
               },
               "default_separator": {
-                "type": "string"
-              },
-              "default_truncate_marker": {
                 "type": "string"
               },
               "palette": {
@@ -1346,19 +1328,10 @@
     "editGlobals": {
       "type": "object",
       "properties": {
-        "default_bg": {
-          "type": "string"
-        },
-        "default_fg": {
-          "type": "string"
-        },
         "default_empty_value": {
           "type": "string"
         },
         "default_separator": {
-          "type": "string"
-        },
-        "default_truncate_marker": {
           "type": "string"
         },
         "palette": {

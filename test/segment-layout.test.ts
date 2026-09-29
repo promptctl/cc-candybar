@@ -114,7 +114,6 @@ describe("fill width — content-sized, carrying its demand", () => {
     expect(laid!.fill).toEqual({
       justify: "right",
       truncate: "middle",
-      truncateMarker: "…",
     });
   });
 
@@ -227,7 +226,7 @@ describe("justify — center", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 5. Truncate — right (default marker "…")
+// 5. Truncate — right (marker "…")
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("truncate — right", () => {
@@ -289,24 +288,7 @@ describe("multi-cell truncation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 7. Custom marker
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("custom truncate marker", () => {
-  test("two-char marker on right", () => {
-    const result = laidText([cell("hello world")], {
-      width: 7,
-      justify: "left",
-      padding: 0,
-      truncate: "right",
-      truncateMarker: ">>",
-    });
-    expect(result[0]!.plain).toBe("hello>>");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 8. baseStyle on the merged cell
+// 7. baseStyle on the merged cell
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("baseStyle on the merged cell", () => {
@@ -347,7 +329,7 @@ describe("baseStyle on the merged cell", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 9. Truncation through heterogeneous-fg interior — bzh.9 limitation is gone
+// 8. Truncation through heterogeneous-fg interior — bzh.9 limitation is gone
 // ────────────────────────────────────────────────────────────────────────────
 // [LAW:types-are-the-program] With RichText as the cell type, truncation
 // preserves spans by construction. The bzh.9 "parts-based cell loses per-

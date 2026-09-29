@@ -97,7 +97,7 @@ function expectIssue(
 
 describe("loadDslConfig — JSON5 syntax", () => {
   test("malformed JSON throws with line/col", () => {
-    const err = expectError("{ globals: { default_bg: ");
+    const err = expectError("{ globals: { default_separator: ");
     expect(err.issues).toHaveLength(1);
     expect(err.issues[0]!.message).toMatch(/JSON5 syntax error/);
     expect(err.issues[0]!.line).toBeGreaterThan(0);
@@ -107,9 +107,9 @@ describe("loadDslConfig — JSON5 syntax", () => {
     const cfg = parseAndValidate(
       FILE,
       `// a comment
-{ globals: { default_bg: "blue", }, /* trailing comma OK */ }`,
+{ globals: { default_separator: "|", }, /* trailing comma OK */ }`,
     );
-    expect(cfg.globals.default_bg).toBe("blue");
+    expect(cfg.globals.default_separator).toBe("|");
   });
 
   test("root must be an object", () => {
@@ -188,17 +188,12 @@ describe("loadDslConfig — globals", () => {
     const cfg = parseAndValidate(
       FILE,
       `{ globals: {
-        default_bg: "black", default_fg: "white",
         default_empty_value: "—", default_separator: " ",
-        default_truncate_marker: "…",
       }}`,
     );
     expect(cfg.globals).toEqual({
-      default_bg: "black",
-      default_fg: "white",
       default_empty_value: "—",
       default_separator: " ",
-      default_truncate_marker: "…",
     });
   });
 
@@ -209,11 +204,45 @@ describe("loadDslConfig — globals", () => {
     });
   });
 
-  test("non-string default_bg is rejected", () => {
-    expectIssue(`{ globals: { default_bg: 42 } }`, {
-      path: "globals.default_bg",
-      message: "globals.default_bg must be a string",
+  test("non-string default_separator is rejected", () => {
+    expectIssue(`{ globals: { default_separator: 42 } }`, {
+      path: "globals.default_separator",
+      message: "globals.default_separator must be a string",
     });
+  });
+
+  // brandon-config-349: read by nothing — a removed key names what to write
+  // instead rather than loading as a silent no-op, wherever globals are
+  // authored, and is never offered as a legal key.
+  const REMOVED: ReadonlyArray<readonly [string, string]> = [
+    ["default_bg", "author `bg:` on the segments"],
+    ["default_fg", "author `fg:` on the segments"],
+    ["default_truncate_marker", 'always ends in "…"'],
+  ];
+  const WHERE: ReadonlyArray<readonly [string, (body: string) => string]> = [
+    ["globals", (body) => `{ globals: { ${body} } }`],
+    ["presets.p.globals", (body) => `{ presets: { p: { globals: { ${body} } } } }`],
+    ["editGlobals", (body) => `{ editGlobals: { ${body} } }`],
+  ];
+  test.each(
+    WHERE.flatMap(([at, wrap]) =>
+      REMOVED.map(([key, pointer]) => [`${at}.${key}`, wrap(`${key}: "x"`), pointer] as const),
+    ),
+  )("%s is refused with its pointer", (path, src, pointer) => {
+    const err = expectError(src);
+    expect(err.issues).toHaveLength(1);
+    const issue = err.issues[0]!;
+    expect(issue.path).toBe(path);
+    expect(issue.message).toContain(`${path} was removed: nothing reads it`);
+    expect(issue.message).toContain(pointer);
+    expect(issue.line).toBe(1);
+  });
+
+  test.each(WHERE)("%s: an unknown key does not offer a removed one", (_at, wrap) => {
+    const err = expectError(wrap(`mystery: "x"`));
+    const message = err.issues[0]!.message;
+    expect(message).toContain('"mystery". Expected one of:');
+    for (const [key] of REMOVED) expect(message).not.toContain(key);
   });
 
   test("autoWrap accepts a boolean", () => {
@@ -1927,12 +1956,12 @@ describe("loadDslConfig — cycle detection", () => {
 describe("loadDslConfig — error aggregation", () => {
   test("multiple unrelated errors all reported in one throw", () => {
     const err = expectError(
-      `{ globals: { default_bg: 42 }, variables: { x: { kind: "wat" } }, segments: { s: {} } }`,
+      `{ globals: { default_separator: 42 }, variables: { x: { kind: "wat" } }, segments: { s: {} } }`,
     );
     expect(err.issues.length).toBeGreaterThanOrEqual(3);
     expect(err.issues.map((i) => i.path)).toEqual(
       expect.arrayContaining([
-        "globals.default_bg",
+        "globals.default_separator",
         "variables.x.kind",
         "segments.s.template",
       ]),
@@ -1966,7 +1995,6 @@ describe("loadDslConfig — valid corpus", () => {
   test("full-featured DSL config covering every source kind", () => {
     const source = `{
       globals: {
-        default_bg: "panel", default_fg: "text",
         default_separator: " ",
       },
       variables: {
@@ -2202,8 +2230,8 @@ describe("findKeyLine", () => {
   });
 
   test("works with double-quoted keys", () => {
-    const src = `{ "globals": { "default_bg": "x" } }`;
-    expect(findKeyLine(src, ["globals", "default_bg"])).toBe(1);
+    const src = `{ "globals": { "palette": "x" } }`;
+    expect(findKeyLine(src, ["globals", "palette"])).toBe(1);
   });
 
   test("returns undefined when key not found", () => {

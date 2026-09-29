@@ -1,7 +1,7 @@
 // [LAW:types-are-the-program] The globals schema: a fixed set of string fields
 // plus a validated palette name, declared as DATA and interpreted by the record
 // engine. This file changes when a global default field is added or removed —
-// add a key to GLOBALS_SCHEMA and Globals; the engine does the rest.
+// add a key to GLOBALS_FIELDS and Globals; the engine does the rest.
 
 import { type Globals } from "../dsl-types.js";
 import {
@@ -118,11 +118,8 @@ const menuGlyphSpec: FieldSpec<string> = {
 // this map, so a field added here is automatically settable from a preset —
 // there is no second list to remember to grow.
 const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
-  default_bg: optionalStringSpec(),
-  default_fg: optionalStringSpec(),
   default_empty_value: optionalStringSpec(),
   default_separator: optionalStringSpec(),
-  default_truncate_marker: optionalStringSpec(),
   palette: paletteOrRuleSpec,
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
@@ -163,11 +160,6 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: colorCompatibilitySpec,
   menuGlyph: menuGlyphSpec,
-};
-
-const GLOBALS_SCHEMA: RecordSchema<Globals> = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
 };
 
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
@@ -225,6 +217,32 @@ function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
   );
 }
 
+// [LAW:no-silent-failure] Keys a globals block may no longer set, each with the
+// pointer the record engine refuses it with — shared by every globals schema
+// (top level, preset, editGlobals), so a removed key is refused wherever globals
+// are authored and never listed as a legal one.
+//
+// brandon-config-349: all three were read by nothing. Since ai7 an absent `bg:`
+// is the decoration tint of the segment's place in the bar and an absent `fg:`
+// is text chosen for contrast against its background, so no fallback slot is
+// left to fill; and no caller ever handed the marker to truncation.
+const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
+  default_bg:
+    "nothing reads it — a segment with no `bg:` wears the decoration tint of its " +
+    "place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg:
+    "nothing reads it — a segment with no `fg:` wears text chosen for contrast against " +
+    "its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker:
+    'nothing reads it — a segment clipped to its `width:` always ends in "…". Delete the key.',
+};
+
+const GLOBALS_SCHEMA: RecordSchema<Globals> = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS,
+};
+
 // [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
 // field table with exactly one field swapped for its rejection — not a
 // hand-listed subset that a future globals field could be forgotten from.
@@ -236,6 +254,7 @@ const PRESET_FRAGMENT_REJECTIONS = {
 const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
   fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS,
 };
 
 // A field a preset's own globals fragment may author — every globals field but
@@ -250,6 +269,7 @@ export function isPresetGlobalsField(key: string): key is keyof Globals {
 // edit-settable the same day, with no edit here.
 const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
   fields: {
     ...GLOBALS_FIELDS,
     preset: nestedPresetSpec("the editGlobals fragment"),
@@ -306,14 +326,14 @@ export function editGlobalsJson(): JsonNode {
 }
 
 // [LAW:one-source-of-truth] THE membership check for "is this a real Globals
-// field" — derived from GLOBALS_SCHEMA.fields, the same declaration
+// field" — derived from GLOBALS_FIELDS, the same declaration
 // validateGlobals/globalsJson interpret, so a `persist`/`reset` action's
 // target key is checked against exactly the field set a hand-authored
 // `globals: {...}` block would be. Used by cross-ref.ts (candybar-config-
 // engine-71o.2) to catch a typo'd persist target at config-load time instead
 // of a confusing click-time "invariant broken" error.
 const GLOBALS_FIELD_NAMES: ReadonlySet<string> = new Set(
-  Object.keys(GLOBALS_SCHEMA.fields),
+  Object.keys(GLOBALS_FIELDS),
 );
 export function isGlobalsField(key: string): key is keyof Globals {
   return GLOBALS_FIELD_NAMES.has(key);

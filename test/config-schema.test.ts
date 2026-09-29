@@ -51,7 +51,7 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     "rows-form root with a bar-level when",
     `{ segments: { a: { template: 'a' } }, root: { rows: { extra: 'a' }, when: '{{ true }}' } }`,
   ],
-  ["globals only", `{ globals: { palette: 'dracula', default_bg: 'surface' } }`],
+  ["globals only", `{ globals: { palette: 'dracula', default_separator: ' ' } }`],
   [
     "A-grammar multi-row layout (v-arm)",
     `{
@@ -194,6 +194,17 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   // `layout:` was removed in 2de.19 — schema rejects (unknown key via additionalProperties),
   // loader rejects (migration error). Both surfaces correctly reject it.
   ["removed layout key", `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`],
+  // brandon-config-349: removed globals keys — closed out by the schema's
+  // `additionalProperties: false` (never listed, so never completed), refused by
+  // the loader with its pointer, wherever globals are authored.
+  ...["default_bg", "default_fg", "default_truncate_marker"].flatMap(
+    (key) =>
+      [
+        [`removed globals.${key}`, `{ globals: { ${key}: 'x' } }`],
+        [`removed presets.p.globals.${key}`, `{ presets: { p: { globals: { ${key}: 'x' } } } }`],
+        [`removed editGlobals.${key}`, `{ editGlobals: { ${key}: 'x' } }`],
+      ] as const,
+  ),
   // A node must carry its mandatory fields — the loader reports a missing
   // direction/name (→ throws), so the schema must require them too. The empty
   // object once passed all three arms vacuously; the required-ness closes that,

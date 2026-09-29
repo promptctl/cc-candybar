@@ -42,7 +42,6 @@ const cols = (line: string): number => cellLen(line.replace(INVISIBLE, ""));
 const SIZING: CellSizing = {
   justify: "left",
   truncate: "right",
-  truncateMarker: "…",
 };
 
 function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {

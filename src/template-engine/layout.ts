@@ -44,8 +44,6 @@ export interface SegmentLayoutOptions {
    * sit between cells; padding sits inside the bg fill).
    */
   padding: number;
-  /** Glyph inserted at the overflow cut point. Default "…". */
-  truncateMarker?: string;
   /**
    * Style for synthesized whitespace — RichText pads using plain spaces.
    * The padding inherits the cell's wrapping style at render time, so the
@@ -97,19 +95,18 @@ function collapseToCell(
 }
 
 // [LAW:single-enforcer] The ONE sizing op: over a width, truncate with the
-// authored mode and marker; under it, align with the authored justify. Called
+// authored mode and the one marker "…"; under it, align with the authored justify. Called
 // for an authored integer width below, and again by the row's fill resolution
 // once the leftover is known — a second spelling would drift the first time a
 // truncation mode changes.
 export interface CellSizing {
   readonly justify: JustifyMode;
   readonly truncate: TruncateMode;
-  readonly truncateMarker: string;
 }
 
 export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
   if (cell.cellLength > width) {
-    cell.truncate(width, { mode: how.truncate, marker: how.truncateMarker });
+    cell.truncate(width, { mode: how.truncate, marker: "…" });
   } else if (cell.cellLength < width) {
     cell.align(how.justify, width);
   }
@@ -159,15 +156,7 @@ export function applySegmentLayout(
   cells: readonly RichText[],
   options: SegmentLayoutOptions,
 ): LaidCell[] {
-  const {
-    width,
-    justify,
-    truncate,
-    truncateMarker = "…",
-    baseStyle,
-    padding,
-    trail = [],
-  } = options;
+  const { width, justify, truncate, baseStyle, padding, trail = [] } = options;
 
   if (cells.length === 0) return [];
 
@@ -191,7 +180,7 @@ export function applySegmentLayout(
           ),
         };
   if (width === "auto") return [{ text: cell, ...tail }];
-  const how: CellSizing = { justify, truncate, truncateMarker };
+  const how: CellSizing = { justify, truncate };
   // "fill" leaves the cell content-sized and states its demand; the row resolves
   // it, since the leftover depends on siblings this call cannot see.
   if (width === "fill") return [{ text: cell, fill: how, ...tail }];

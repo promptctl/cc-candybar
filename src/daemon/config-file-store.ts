@@ -87,11 +87,8 @@ import { ident } from "../config/ident.js";
 const GLOBALS_FIELD_KIND: Readonly<
   Record<keyof Globals, "string" | "number" | "boolean">
 > = {
-  default_bg: "string",
-  default_fg: "string",
   default_empty_value: "string",
   default_separator: "string",
-  default_truncate_marker: "string",
   palette: "string",
   look: "string",
   preset: "string",
