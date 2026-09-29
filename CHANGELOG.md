@@ -1,3 +1,10 @@
+# [1.87.0](https://github.com/promptctl/cc-candybar/compare/v1.86.0...v1.87.0) (2026-09-29)
+
+
+### Features
+
+* **settings:** save the bar as a new preset, and delete a preset you made ([#261](https://github.com/promptctl/cc-candybar/issues/261)) ([58bb446](https://github.com/promptctl/cc-candybar/commit/58bb4466a0e0d74482ff4d287933b100668fb161))
+
 # [1.86.0](https://github.com/promptctl/cc-candybar/compare/v1.85.0...v1.86.0) (2026-09-29)
 
 
