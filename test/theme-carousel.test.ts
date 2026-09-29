@@ -663,6 +663,16 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     rt.dispose();
   });
 
+  test("in the names view a placement with its own id stands for its segment", () => {
+    const rt = rig(`{ root: { rows: { status: { h: ['model', { seg: 'model', id: 'model-2' }] } } } }`);
+    openCarousel(rt, "preset");
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    const rendered = rt.render();
+    expect(stripAnsi(rendered)).not.toContain("⚠");
+    expect(previewLabels(rendered)[1]).toEqual(["model", "model"]);
+    rt.dispose();
+  });
+
   test("▶ rotates through every preset and wraps, the preview following the preset it applied", () => {
     const rt = rig(`{}`);
     openCarousel(rt, "preset");

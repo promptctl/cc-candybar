@@ -212,15 +212,24 @@ const LABEL_NS = `${EDIT_NS}label:`;
 // every other edit-mode cell is an affordance over the arrangement, not part
 // of it; anything else is itself.
 export function arrangedSegment(name: string): string | undefined {
-  if (name.startsWith(LABEL_NS)) return name.slice(LABEL_NS.length);
+  if (name.startsWith(LABEL_NS)) {
+    const label = name.slice(LABEL_NS.length);
+    return label.slice(label.indexOf(":") + 1);
+  }
   return name.startsWith(EDIT_NS) ? undefined : name;
 }
 
-// The name a content segment wears in edit mode. Keyed by segment name alone —
-// the label says the same thing in every preset — so N presets placing one
-// segment mint one declaration.
-function labelChrome(id: string, artifacts: ChromeArtifacts): SegmentNode {
-  const name = `${LABEL_NS}${id}`;
+// The name a placement wears in edit mode: its id, which is what tells two
+// placements of one segment apart. Declared as `edit.label:<id>:<segment>` —
+// an id holds no `:` (the loader refuses one), so `arrangedSegment` splits the
+// segment back out exactly. The label says the same thing in every preset, so
+// N presets holding one placement mint one declaration.
+function labelChrome(
+  id: string,
+  segName: string,
+  artifacts: ChromeArtifacts,
+): SegmentNode {
+  const name = `${LABEL_NS}${id}:${segName}`;
   artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
     when: LABEL_GATE,
@@ -367,7 +376,7 @@ function spliceContainer(
       ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(id, artifacts), trail: remove },
+      { ...labelChrome(id, child.name, artifacts), trail: remove },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),

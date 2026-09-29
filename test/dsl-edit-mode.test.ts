@@ -403,7 +403,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     for (const seg of ["directory", "git", "trigger"]) {
       const remove = removal(trails.get(seg));
       expect(config.actions[remove!]).toMatchObject({ removeSegment: seg });
-      expect(removal(trails.get(`edit.label:${seg}`))).toBe(remove);
+      expect(removal(trails.get(`edit.label:${seg}:${seg}`))).toBe(remove);
     }
   });
 

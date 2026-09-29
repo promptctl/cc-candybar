@@ -20,6 +20,7 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { mintPlacement } from "../src/config/layout-ops";
+import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
 import { definedStyle } from "../src/template-engine/cells.js";
@@ -218,8 +219,9 @@ describe("a placement is named by its id", () => {
 
   test("edit mode labels each placement with its id", () => {
     const config = parseAndValidate("<test>", CLOCK_SRC, ALLOWED);
-    expect(config.segments["edit.label:utcClock"]?.template).toBe('{{ "utcClock" }}');
-    expect(config.segments["edit.label:clock"]?.template).toBe('{{ "clock" }}');
+    expect(config.segments["edit.label:utcClock:clock"]?.template).toBe('{{ "utcClock" }}');
+    expect(config.segments["edit.label:clock:clock"]?.template).toBe('{{ "clock" }}');
+    expect(arrangedSegment("edit.label:utcClock:clock")).toBe("clock");
   });
 });
 
