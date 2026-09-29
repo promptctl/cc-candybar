@@ -1,3 +1,10 @@
+# [1.90.0](https://github.com/promptctl/cc-candybar/compare/v1.89.0...v1.90.0) (2026-09-29)
+
+
+### Features
+
+* **segments:** the memento context ceiling beside context use, moved from the bar ([#265](https://github.com/promptctl/cc-candybar/issues/265)) ([46d4269](https://github.com/promptctl/cc-candybar/commit/46d4269c168d44d0b57638de35d8645f4c03a3b0))
+
 # [1.89.0](https://github.com/promptctl/cc-candybar/compare/v1.88.0...v1.89.0) (2026-09-29)
 
 
