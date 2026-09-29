@@ -12,7 +12,7 @@ import { claudeSettingsPath } from "../claude-settings.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
-import { launchSync } from "../proc/launch.js";
+import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { DoctorFacts, Fix, TermFeatures, TmuxFacts } from "./checks.js";
 
@@ -27,31 +27,17 @@ export interface DoctorEdge {
 // the client attached to the pane — `RGB` in it is tmux saying both it and the
 // outer terminal do truecolor (verified on tmux 3.6a: `…,osc7,RGB,sixel,…`).
 function probeTmux(hint: TmuxHint): TermFeatures {
-  const result = launchSync({
-    bin: "tmux",
-    args: [
-      "-S",
-      hint.socket,
-      "display",
-      "-p",
-      "-t",
-      hint.pane,
-      "#{client_termfeatures}",
-    ],
-    timeoutMs: 2000,
-    category: "doctor.tmux",
-  });
-  if (!result.ok) {
-    // `error` is a whole sentence when present (rate-limited, timeout, spawn);
-    // a non-zero exit has only its stderr to say.
-    const detail =
-      result.error ??
-      [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-    return { kind: "failed", reason: `tmux display -p failed (${detail})` };
-  }
+  const run = runTmux(hint, "doctor.tmux", [
+    "display",
+    "-p",
+    "-t",
+    hint.pane,
+    "#{client_termfeatures}",
+  ]);
+  if (run.kind !== "ok") return { kind: "failed", reason: run.reason };
   return {
     kind: "ok",
-    value: result.stdout
+    value: run.stdout
       .trim()
       .split(",")
       .filter((f) => f !== ""),

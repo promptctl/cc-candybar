@@ -124,6 +124,11 @@ export const VERB_DOCTOR_FIX = "doctor-fix";
 // reaches memento's own `ceiling` command as one argv entry — never a shell.
 export const VERB_CEILING = "ceiling";
 
+// [LAW:effects-at-boundaries] Type a slash command into the session's Claude
+// Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
+// be one a `slash` action in the session's config declares.
+export const VERB_SLASH = "slash";
+
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.

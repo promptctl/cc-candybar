@@ -55,6 +55,7 @@ import {
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_CEILING,
+  VERB_SLASH,
   type Effect,
 } from "../click/wire.js";
 
@@ -205,6 +206,8 @@ export type CompiledActionDecl =
   | { readonly kind: "doctor-fix"; readonly check: string }
   // The memento ceiling move, compiled in from the declaration.
   | { readonly kind: "ceiling"; readonly args: readonly string[] }
+  // The declared slash command, compiled in from the declaration.
+  | { readonly kind: "slash"; readonly line: string }
   // [LAW:composability] Several compiled actions fired by one click. `head` is
   // the one the region presents as — its display rule, its current-state mark,
   // and the value a template binds — and `rest` ride along behind it.
@@ -470,6 +473,7 @@ function compileAction(
       args: ceilingMoveArgs(action),
     };
   }
+  if ("slash" in action) return { kind: "slash", line: action.slash };
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
   if ("save" in action) return { kind: "save" };
@@ -777,6 +781,12 @@ export function realize(
     case "ceiling":
       return {
         effects: [{ verb: VERB_CEILING, args: [sessionId, ...c.args] }],
+        active: false,
+      };
+    // Never "active": typing a command is a one-shot trigger.
+    case "slash":
+      return {
+        effects: [{ verb: VERB_SLASH, args: [sessionId, c.line] }],
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see

@@ -81,14 +81,20 @@ import {
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_CEILING,
+  VERB_SLASH,
 } from "../../click/wire";
-import { ceilingMoveArgs, type CeilingAction } from "../../config/action";
+import {
+  ceilingMoveArgs,
+  type CeilingAction,
+  type SlashAction,
+} from "../../config/action";
 import type { CeilingMove } from "../../memento/edge";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
 import { doctorReportPairs } from "../../doctor/report";
 import { applyFix, gatherFacts, type DoctorEdge } from "../../doctor/edge";
+import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -104,6 +110,9 @@ export interface VerbContext {
   // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
   // move that makes a reading stale is the one that drops it.
   readonly memento: Pick<MementoProvider, "move">;
+  // [LAW:effects-at-boundaries] The tmux pane read and the typing
+  // (src/claude-input/edge.ts), handed in so a test drives them with fakes.
+  readonly claudeInput: ClaudeInputEdge;
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/daemon/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
@@ -810,7 +819,7 @@ const applyUpdate: VerbHandler = (value, ctx) => {
 export const SESSION_CLIENT_HINTS_KEY = "client-hints";
 
 // [LAW:no-silent-failure] A session that has never rendered has no hints —
-// a loud BadVerbArgs, not a doctor run over a guessed "not in tmux".
+// a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
 function sessionHints(
   ctx: VerbContext,
   sid: string,
@@ -818,7 +827,7 @@ function sessionHints(
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
     throw new BadVerbArgs(
-      `session ${sid} has not rendered yet — no client facts to diagnose`,
+      `session ${sid} has not rendered yet — no client facts are recorded for it`,
     );
   }
   let parsed: unknown;
@@ -914,6 +923,41 @@ const ceiling: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `ceiling: ${args.join(" ")} (session=${sid})`);
 };
 
+// ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────
+
+// [LAW:parse-dont-validate] A click's line is honoured only as one a `slash`
+// action in the session's config declares — the declaration found supplies
+// the SlashLine typed, so the URL chooses among the config's lines and can
+// add none. The pane is the one the session's last render reported.
+const slash: VerbHandler = (value, ctx) => {
+  const [sessionId = "", line = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const declared = Object.values(
+    ctx.configFor(sessionOrigin(ctx, sid)).actions,
+  ).filter((a): a is SlashAction => "slash" in a);
+  const action = declared.find((a) => a.slash === line);
+  if (action === undefined) {
+    throw new BadVerbArgs(
+      `${JSON.stringify(line)} is not a command this config declares (it declares: ${declared.map((a) => a.slash).join(", ") || "none"})`,
+    );
+  }
+  const result = typeSlash(
+    ctx.claudeInput,
+    sessionHints(ctx, sid).tmux,
+    action.slash,
+  );
+  if (result.kind === "refused") {
+    ctx.dlog(
+      "warn",
+      `slash: ${line} refused — ${result.reason} (session=${sid})`,
+    );
+    // The pane's own state refused the click — the user's to change, like a
+    // store refusal, so BAD_REQUEST; a tmux failure throws from the edge.
+    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
+  }
+  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -988,6 +1032,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_CEILING, ceiling],
+  [VERB_SLASH, slash],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1011,6 +1056,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_CEILING,
+  VERB_SLASH,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

@@ -56,6 +56,11 @@ export const LAUNCH_CATEGORIES = [
   // from a click, and neither is rate-limited — clicks on `+` must accumulate.
   "memento.read",
   "memento.move",
+  // Typing a slash command into a session's Claude Code pane
+  // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
+  // is safe, `type` sends the keys.
+  "claude-input.read",
+  "claude-input.type",
   "install.plutil",
   "install.osacompile",
   "install.lsregister",
@@ -92,6 +97,11 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   "click.open": 1000,
   // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
   "doctor.tmux": 1000,
+  // A double-click is refused rather than typing and submitting its command
+  // twice. Daemon-wide, so two sessions typing in one second collide. Only
+  // the typing is limited: a click the pane refused typed
+  // nothing, so clicking again once the dialog is closed goes through.
+  "claude-input.type": 1000,
 };
 
 // [LAW:one-source-of-truth] Last-attempt timestamp per category — the data

@@ -1194,6 +1194,19 @@
           {
             "type": "object",
             "properties": {
+              "slash": {
+                "type": "string",
+                "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
+              }
+            },
+            "required": [
+              "slash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "do": {
                 "type": "array",
                 "items": {

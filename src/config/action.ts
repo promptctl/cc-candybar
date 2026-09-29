@@ -31,6 +31,7 @@
 // constant), and an inline array is its own domain, needing no registration
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
+import type { SlashLine } from "../claude-input/slash-line.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -66,6 +67,7 @@ export const ACTION_KEYS = [
   "preset",
   "doctor",
   "ceiling",
+  "slash",
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
@@ -118,6 +120,9 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //     + name              render) from the config file -> no gate of its own:
 //                         the daemon refuses a bundled preset or one the file
 //                         does not declare
+//   slash               — type the declared slash command into this
+//                         session's Claude Code prompt -> no gate: the verb
+//                         honours only lines the config declares
 //   do                  — fire several declared actions in one click: the
 //                         first is the click's face (its display rule and
 //                         current-state mark are the region's), the rest ride
@@ -231,6 +236,11 @@ export type ActionDecl =
   // moves the session's config offers.
   | { readonly ceiling: "set"; readonly to: string }
   | { readonly ceiling: "clear" }
+  // [LAW:parse-dont-validate] Type a slash command into the clicked session's
+  // Claude Code prompt (src/claude-input/edge.ts). The line is a `SlashLine`,
+  // proved at load, and a click is honoured only as a line some declared
+  // `slash` action holds, so a URL cannot make up what gets typed.
+  | { readonly slash: SlashLine }
   // [LAW:composability] One click, several effects, built from actions that
   // already exist rather than from a new write vocabulary: entering edit mode
   // and closing the menu it was entered from is `edit.toggle` and a close,
@@ -239,6 +249,7 @@ export type ActionDecl =
   | { readonly do: readonly [string, ...string[]] };
 
 export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
+export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 
 // [LAW:one-source-of-truth] A ceiling move as the click wire carries it after
 // the session id — the one spelling the renderer emits and the verb compares
