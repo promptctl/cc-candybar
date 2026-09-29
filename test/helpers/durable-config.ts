@@ -2,7 +2,7 @@
 // (candybar-config-dqe). A test that drives persist/reset/undo/redo clicks
 // through the real verb handlers needs exactly what a real session has: a
 // config file the session "rendered from", the render origin that names it
-// in SessionState, and the daemon's edit history beside it. This fixture
+// in SessionState, and the daemon's settings history beside it. This fixture
 // stands those three up under one temp root and tears them down together,
 // so no suite re-spells the origin key or the history path.
 //
@@ -17,8 +17,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
 import type { SessionStateRW } from "../../src/daemon/session-state";
-import type { FileHistory } from "../../src/daemon/config-file-store";
-import { configEditHistoryPath } from "../../src/daemon/paths";
+import {
+  SettingsHistory,
+  fileHistoryStorage,
+  type SessionHistory,
+  type Step,
+} from "../../src/daemon/settings-history";
+import { settingsHistoryPath } from "../../src/daemon/paths";
 import {
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,
@@ -37,8 +42,12 @@ export interface DurableConfig {
   text(): string | null;
   /** The file parsed as JSON5 (throws when absent). */
   parsed(): Record<string, unknown>;
-  /** The history stack of `configPath` (or `file`) — empty until its first edit. */
-  history(file?: string): FileHistory;
+  /** Session `sessionId`'s history as the file holds it — empty until its first step. */
+  history(sessionId?: string): SessionHistory;
+  /** A settings history over `sessionState`, stored in this fixture's state dir. */
+  historyFor(sessionState: SessionStateRW): SettingsHistory;
+  /** The one-change step a single write to `file` (default `configPath`) records. */
+  fileStep(before: string | null, after: string, file?: string): Step;
   /**
    * What the render handler records so a click resolves this file — or, with
    * `configFile`, the explicit path the session's render was composed from.
@@ -85,19 +94,28 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     projectDir: root,
     configPath,
     xdgConfigPath: join(root, "xdg-config", "cc-candybar", "config.json5"),
-    historyPath: configEditHistoryPath(),
+    historyPath: settingsHistoryPath(),
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    // The history file itself is created by the first edit, so before one an
+    // The history file itself is created by the first step, so before one an
     // absent file and an absent entry both read as the empty stack.
-    history: (file = configPath) =>
+    history: (sessionId = "s1") =>
       (
-        JSON.parse(readOrNull(configEditHistoryPath()) ?? "{}") as Record<
+        JSON.parse(readOrNull(settingsHistoryPath()) ?? "{}") as Record<
           string,
-          FileHistory
+          SessionHistory
         >
-      )[file] ?? { past: [], future: [] },
+      )[sessionId] ?? { past: [], future: [] },
+    fileStep: (before, after, file = configPath) => [
+      { kind: "file", file, before, after },
+    ],
+    historyFor: (sessionState) =>
+      new SettingsHistory(
+        sessionState,
+        () => {},
+        fileHistoryStorage(settingsHistoryPath(), () => {}),
+      ),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,

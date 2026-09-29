@@ -34,12 +34,14 @@ import {
   applyLayoutOp as applyLayoutOpToFile,
   deleteValue,
   readValue,
-  redoEdit,
-  undoEdit,
   writeValue,
   type EditStore,
 } from "../config-file-store";
-import { configEditHistoryPath } from "../paths";
+import {
+  describeStep,
+  type Journal,
+  type SettingsHistory,
+} from "../settings-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
@@ -81,6 +83,16 @@ export interface VerbContext {
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
+  // [LAW:one-source-of-truth] The one undo history over every settings change
+  // (src/daemon/settings-history.ts). The verb table opens a journal on it
+  // around each click, so a handler records by writing, never by remembering.
+  readonly history: SettingsHistory;
+}
+
+// What a handler runs with: the daemon's context, with `sessionState` the
+// click's journaling view of it and `journal` where its file writes report.
+export interface ClickContext extends VerbContext {
+  readonly journal: Journal;
 }
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
@@ -89,7 +101,7 @@ export interface VerbContext {
 // the dispatcher in server.ts converts that to a RENDER_FAILED response.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
-export type VerbHandler = (value: string, ctx: VerbContext) => void;
+export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
 import { BadVerbArgs } from "../verb-error";
 export { BadVerbArgs };
@@ -470,8 +482,11 @@ function sessionConfigFile(ctx: VerbContext, sid: string): string {
   );
 }
 
-function editStore(ctx: VerbContext): EditStore {
-  return { historyPath: configEditHistoryPath(), logger: ctx.dlog };
+function editStore(ctx: ClickContext, sid: string): EditStore {
+  return {
+    record: (file, before, after) => ctx.journal.file(sid, file, before, after),
+    logger: ctx.dlog,
+  };
 }
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
@@ -496,7 +511,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
   const releaseKey = parseRelease(release, "set-config");
   const file = sessionConfigFile(ctx, sid);
-  writeValue(editStore(ctx), file, key, result.value);
+  writeValue(editStore(ctx, sid), file, key, result.value);
   ctx.dlog(
     "info",
     `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
@@ -541,7 +556,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const next = wrapStep(current + by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValue(editStore(ctx), file, key, result.value);
+  writeValue(editStore(ctx, sid), file, key, result.value);
   ctx.dlog(
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
@@ -563,7 +578,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
     );
   }
   const file = sessionConfigFile(ctx, sid);
-  deleteValue(editStore(ctx), file, key);
+  deleteValue(editStore(ctx, sid), file, key);
   ctx.dlog("info", `reset-config: ${key} ← ${file} (session=${sid})`);
 };
 
@@ -596,43 +611,36 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
     );
   }
   const file = sessionConfigFile(ctx, sid);
-  applyLayoutOpToFile(editStore(ctx), file, key, op);
+  applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
   ctx.dlog(
     "info",
     `apply-layout-op: ${key} ${result.value} → ${file} (session=${sid})`,
   );
 };
 
-// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the history
-// of edits to the session's config file back one entry — the file the
-// session's render resolved, so one project's undo can never revert a write
-// made to another's. No key, no value — the history (config-file-store.ts)
-// owns which entry moves and what it restores; this handler is pure plumbing
-// between the wire and it.
-// [LAW:no-silent-failure] An empty stack is a loud BAD_REQUEST (dispatch's
-// aggregator turns it into a transient click.error), never a silent no-op —
-// the ticket's own done-gate. A file hand-edited since the entry is a loud
-// refusal from the store, surfaced the same way.
-const undoConfig: VerbHandler = (value, ctx) => {
+// [LAW:one-source-of-truth] Step the session's settings history
+// (settings-history.ts) back one click — whatever that click changed, in the
+// session or in a config file. No key, no value: the history owns which step
+// moves and what it restores; this handler is plumbing between the wire and
+// it. [LAW:no-silent-failure] An empty stack and a stale target are loud
+// BAD_REQUESTs, surfaced as a transient click.error.
+const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const file = sessionConfigFile(ctx, sid);
-  if (undoEdit(editStore(ctx), file) === null) {
-    throw new BadVerbArgs("undo: history is empty, nothing to undo");
-  }
-  ctx.dlog("info", `undo: ${file} (session=${sid})`);
+  // The click's own earlier changes are a step of their own first, so one
+  // click behaves exactly as the same clicks made one at a time.
+  ctx.journal.commit();
+  const step = ctx.history.undo(sid);
+  ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
-// [LAW:one-source-of-truth] undo's mirror — steps the same history forward
-// one entry.
-const redoConfig: VerbHandler = (value, ctx) => {
+// undo's mirror — steps the same history forward one click.
+const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const file = sessionConfigFile(ctx, sid);
-  if (redoEdit(editStore(ctx), file) === null) {
-    throw new BadVerbArgs("redo: nothing to redo");
-  }
-  ctx.dlog("info", `redo: ${file} (session=${sid})`);
+  ctx.journal.commit();
+  const step = ctx.history.redo(sid);
+  ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
@@ -784,8 +792,8 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
-  [VERB_UNDO, undoConfig],
-  [VERB_REDO, redoConfig],
+  [VERB_UNDO, undo],
+  [VERB_REDO, redo],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -868,13 +876,50 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   }
 };
 
+// [LAW:single-enforcer] One click is one undoable step, so the step boundary
+// is the click boundary: every entry of the table the daemon looks up against
+// runs inside a journal it opens and commits. `dispatch` folds its effects
+// through the RAW leaf table, so a click of N effects is one journal and one
+// step, never N. The commit runs even when a handler threw — whatever landed
+// before the throw is real, so it is recorded. [LAW:no-silent-failure] A
+// commit that fails too never hides the handler's own error: the click
+// reports both.
+function journaled(
+  handler: VerbHandler,
+): (value: string, ctx: VerbContext) => void {
+  return (value, ctx) => {
+    const journal = ctx.history.begin();
+    const failures: unknown[] = [];
+    try {
+      handler(value, { ...ctx, sessionState: journal.sessionState, journal });
+    } catch (e) {
+      failures.push(e);
+    }
+    try {
+      journal.commit();
+    } catch (e) {
+      failures.push(e);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new Error(
+        failures.map((e) => String((e as Error).message ?? e)).join("; "),
+      );
+    }
+  };
+}
+
 // [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
 // every leaf verb plus the one `dispatch` wrapper. Old scrollback links that
 // name a leaf verb directly still resolve here; new renders all emit `dispatch`.
-export const VERBS: ReadonlyMap<string, VerbHandler> = new Map<
+export const VERBS: ReadonlyMap<
   string,
-  VerbHandler
->([...LEAF_VERBS, [VERB_DISPATCH, dispatch]]);
+  (value: string, ctx: VerbContext) => void
+> = new Map(
+  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(
+    ([verb, handler]) => [verb, journaled(handler)] as const,
+  ),
+);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),

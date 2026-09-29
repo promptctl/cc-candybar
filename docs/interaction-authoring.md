@@ -91,7 +91,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
 | `{ reset: field }` | delete `globals.<field>` from your config file, so the bundled default shows through again |
 | `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | releases the session key as part of the same write, so the committed default is visible to the session that committed it |
-| `{ undo: true }` | step the config file's edit history (one stack per file) one entry back — restores whatever a PRIOR `persist`/`reset`/layout edit changed, any key, not just the one this action names (it names none) |
+| `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
@@ -201,7 +201,7 @@ it or a human found it and hand-edited it, and this one is no different.
 `reset` is the delete half: it removes the path `persist` writes
 (`globals.<field>`), so the bundled default shows through again. A path your
 file never authored is left alone — nothing is written and nothing enters the
-edit history.
+undo history.
 
 The file a click writes is the config file your session's config search
 resolves to at the moment of the click — the same search the render runs
@@ -723,16 +723,18 @@ itself special. The gate mirrors `insertSegment`'s: the derived allow-list is
 the encoded op token for every domain member, so a click naming a segment the
 domain never listed decodes to nothing the gate admits.
 
-### Undoing/redoing any durable write: `undo` / `redo`
+### Undoing/redoing any settings change: `undo` / `redo`
 
 `reset` deletes ONE named path outright — the coarse "forget this setting"
-case. `undo`/`redo` are its fine-grained siblings: they step the history of
-every durable write ever made to your config file — a theme pin, a
-padding nudge, a segment-palette pin, a `removeSegment`/`insertSegment`
-structural edit, an edit-mode `+`/`-`, a `reset` — back and forth, one entry
-at a time, regardless of which key or which config declared the action that
-made the write. Neither carries a key: there is nothing to name, since the
-history itself decides which entry moves.
+case. `undo`/`redo` step your session's settings history: every settings
+change the session's clicks made, wherever it landed — a theme picked for this
+session, a theme pin in the config file, a padding nudge, a segment-palette
+pin, a `removeSegment`/`insertSegment` structural edit, an edit-mode `+`/`-`,
+a `reset` — back and forth, one click at a time, regardless of which key or
+which config declared the action that made it. Neither carries a key: there is
+nothing to name, since the history itself decides which step moves. The
+bundled settings menu carries `↶ undo` and `↷ redo`, each shown only while it
+has a step to take.
 
 ```json5 check:pass
 {
@@ -751,33 +753,36 @@ history itself decides which entry moves.
 }
 ```
 
-Each history entry is a whole-file snapshot of one config file before and
-after one edit, kept in `$XDG_STATE_HOME/cc-candybar/config-edit-history.json`,
-fifty entries deep — the oldest fall off, so a long-running daemon's history
-cannot grow without limit. `undo` writes the entry's `before` text back over
-the file. A first-ever write's `before` is the absent file, so undoing it
-removes the file rather than leaving an empty one the loader rejects.
+A step is one click. A click that writes several things — a durable pin and
+the session pick it releases — is one step, undone together. What counts as
+a settings change is a session pick of a setting the menu offers (theme,
+look, style, progression, charset, colour depth, wrap, padding, preset) and
+every write to a config file; opening a menu or paging a picker is not, so
+undo never walks back through navigation. A click that changes nothing (a
+pick of the value already in place) records no step.
 
-`undo` restores that snapshot only while the file still reads exactly as the
-entry's `after`. If you hand-edited the file since — or another daemon did —
-the click refuses, loudly, with `undo: <file> has changed since that edit —
-refusing to overwrite it`, and the entry stays where it is: overwriting would
-destroy work the history never saw. `redo` makes the mirror check against the
-entry's `before`. Your hand edit always stands; the way past the refusal is
-to edit the file again yourself.
+The history is kept per session in
+`$XDG_STATE_HOME/cc-candybar/settings-history.json`, fifty steps deep — the
+oldest fall off. A config-file change holds the whole file before and after,
+so `undo` writes the `before` text back; a first-ever write's `before` is the
+absent file, so undoing it removes the file rather than leaving an empty one
+the loader rejects.
 
-The history is **one stack per config file, not per session** — a durable
-write lands in the file your session's config search resolves to, and `undo`/`redo`
-step that file's stack. A daemon serving several projects keeps a stack for
-each file, so an undo from one project can never revert a write made to
-another's. Two sessions rendering the same file share its stack and can see
-each other's undos; that is the deliberate consequence of one shared bar
-default, not a bug.
+`undo` applies a step only while everything it touched still reads exactly
+as the step left it; `redo` makes the mirror check. If the config file changed
+since — you hand-edited it, or **another session** wrote to it — the click
+refuses, loudly, naming the file (`undo: <file> changed since that edit —
+refusing to overwrite it; this session's undo history no longer steps it`),
+and writes nothing. Every step this session holds for that file chains
+through the state that is now gone, so they all leave this session's history
+at that moment; its other steps stay undoable. Another session's changes are
+never in your history: two sessions on one config file each undo only their
+own clicks, and neither can overwrite the other's.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
-loud, transient message in the bar (`undo: history is empty, nothing to undo`
+loud, transient message in the bar (`undo: nothing to undo`
 / `redo: nothing to redo`, on the same `click.error` channel any failed click
-surfaces through), never a silent no-op. A fresh durable write after an
+surfaces through), never a silent no-op. A fresh settings change after an
 `undo` abandons whatever was undone (the classic redo-stack branch: `redo`
 truncates rather than staying reachable past a new edit).
 

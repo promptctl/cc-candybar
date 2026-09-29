@@ -528,7 +528,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -592,7 +592,7 @@ describe("apply-layout-op click → the config file", () => {
     // And the edit is ONE whole-file history entry — the same shape a
     // persist/reset records, so undo needs no layout-specific path.
     expect(durable.history().past).toEqual([
-      { before: original, after: written },
+      durable.fileStep(original, written),
     ]);
     dispose();
   });
@@ -707,7 +707,7 @@ describe("apply-layout-op click → the config file", () => {
     const { dispose } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
     expect(() =>
@@ -942,7 +942,7 @@ function fireVerb(verb: string, ctx: VerbContext, ...args: string[]): void {
 // reads the same store the render published into.
 function originCtx(sessionState: SessionState, sessionId = "s1"): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
-  return testVerbContext(sessionState);
+  return testVerbContext(sessionState, durable.historyFor(sessionState));
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {

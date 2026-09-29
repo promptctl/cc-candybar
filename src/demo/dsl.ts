@@ -14,6 +14,7 @@
 // time) populate the store and shows the line come alive, exactly as the daemon
 // re-renders on each status-line tick.
 
+import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -85,6 +86,7 @@ const payload = {
     project_dir: process.cwd(),
   },
   ...effectiveInputs(effective),
+  history: EMPTY_HISTORY_DEPTH,
 };
 
 // A fresh store + registry for this run. (A hot-reloading daemon would

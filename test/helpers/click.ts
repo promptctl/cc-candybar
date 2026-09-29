@@ -21,14 +21,22 @@ import {
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
+import { SettingsHistory } from "../../src/daemon/settings-history";
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
 // silent log and an update act that refuses loudly — no test here has an
 // update watch, so an apply-update click reaching it is a test bug, never a
 // silent no-op. [LAW:no-silent-failure]
-export function testVerbContext(sessionState: SessionStateRW): VerbContext {
+// The history is ephemeral unless the caller hands one in: a test that is not
+// isolated from the real state dir must never write the daemon's history file
+// (test/helpers/durable-config.ts hands in one under its own temp root).
+export function testVerbContext(
+  sessionState: SessionStateRW,
+  history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
+): VerbContext {
   return {
     sessionState,
+    history,
     dlog: () => {},
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");

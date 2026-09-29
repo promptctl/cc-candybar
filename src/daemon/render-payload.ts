@@ -16,6 +16,7 @@
 // that mirror this shape; user configs MUST agree (a path that doesn't
 // resolve falls back to the variable's declared default).
 
+import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import os from "node:os";
 import type { ClaudeHookData } from "../utils/claude.js";
@@ -321,6 +322,12 @@ export interface RenderPayload extends ClaudeHookData {
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };
   readonly padding: { readonly effective: number };
+  // [LAW:one-source-of-truth] How many steps this session's settings history
+  // can undo and redo (src/daemon/settings-history.ts), read from the history
+  // itself every render, so the menu's `↶`/`↷` exist exactly while there is
+  // something to step. Required: the daemon always holds a history, empty is
+  // `{ undo: 0, redo: 0 }`.
+  readonly history: HistoryDepth;
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -555,6 +562,8 @@ export interface RenderPayloadDeps {
   // an ETA and the reset countdown beside it agree on the instant. Omitted ⇒
   // wall clock; tests inject a frozen clock for determinism.
   readonly clock?: () => Date;
+  // The session's undo/redo depth — SettingsHistory.depth in the daemon.
+  readonly history: (sessionId: string) => HistoryDepth;
 }
 
 // ─── Rate-limit projection (pure) ──────────────────────────────────────────────
@@ -1224,6 +1233,7 @@ export async function buildRenderPayload(
     // are those exact values. No `wants` gate: each costs nothing (already in
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
+    history: deps.history(hookData.session_id),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

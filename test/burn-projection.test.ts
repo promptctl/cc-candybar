@@ -7,6 +7,7 @@
 // session too young to project yields ABSENCE (a missing field → the -1 default
 // → "—"), never a fabricated number.
 
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildRenderPayload,
   projectCostPerHour,
@@ -97,6 +98,7 @@ function depsWith(
     },
     tmuxService: { getSessionId: async () => ABSENT },
     log: () => {},
+    history: () => EMPTY_HISTORY_DEPTH,
     clock: () => new Date(NOW_MS),
     ...overrides,
   } as unknown as RenderPayloadDeps;

@@ -11,6 +11,7 @@
 // between-turns / a too-stale baseline yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   mkdtempSync,
   writeFileSync,
@@ -251,6 +252,7 @@ function depsWith(
     metricsProvider: { getMetricsInfo: async () => ABSENT },
     tmuxService: { getSessionId: async () => ABSENT },
     log: () => {},
+    history: () => EMPTY_HISTORY_DEPTH,
     clock: () => new Date(1000),
     ...overrides,
   } as unknown as RenderPayloadDeps;

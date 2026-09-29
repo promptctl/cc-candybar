@@ -23,7 +23,7 @@ import { NODE_FLAGS } from "./cli-flags";
 export const EDIT_MODE_HELP = [
   "✚ inserts here",
   "🚫 removes its segment",
-  "↺ undoes edits",
+  "↺ resets layout",
 ] as const;
 
 export const PERSIST_HELP = [

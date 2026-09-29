@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 
@@ -61,6 +62,7 @@ const DEPS = {
   activityProvider: { getActivityInfo: async () => ABSENT },
   tmuxService: { getSessionId: async () => ABSENT },
   log: () => {},
+  history: () => EMPTY_HISTORY_DEPTH,
 } as unknown as RenderPayloadDeps;
 
 const HOOK = {
