@@ -813,10 +813,13 @@ function checkTemplateRefs(
     if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
       const through = via === null ? "" : ` through helper "${via}"`;
       const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
+      // `settings` is passed exactly for a segment's own templates — the ones
+      // a placement renders; a variable (a segment-local one included) has no
+      // placement, so no declaration could make its read valid.
       const message =
-        opts?.segCtx === undefined
-          ? `Template reads ".${ref}"${through}, but only a segment has settings — call it from a segment that declares "${setting}"`
-          : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings ?? {}).join(", ")}) — declare it under segments.${opts.segCtx}.settings`;
+        opts?.segCtx === undefined || opts.settings === undefined
+          ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings — call it from a segment that declares "${setting}"`
+          : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) — declare it under segments.${opts.segCtx}.settings`;
       ctx.issues.push({
         path: declPath,
         message,

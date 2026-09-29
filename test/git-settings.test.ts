@@ -180,6 +180,26 @@ describe("gitaculous settings", () => {
         },
         segments: { mySha: { template: "{{ .shaText }}" } },
       }),
-    ).toThrow(/through helper "gitSha", but only a segment has settings/);
+    ).toThrow(
+      /through helper "gitSha", but only a segment's own templates have settings/,
+    );
+  });
+
+  test("a segment-local variable is told the same, whatever the segment declares", () => {
+    expect(() =>
+      load({
+        segments: {
+          mySha: {
+            template: "{{ .mySha.text }}",
+            settings: { sha: { label: "sha", domain: "bool", default: true } },
+            vars: {
+              text: { kind: "template", template: '{{ template "gitSha" . }}' },
+            },
+          },
+        },
+      }),
+    ).toThrow(
+      /through helper "gitSha", but only a segment's own templates have settings/,
+    );
   });
 });
