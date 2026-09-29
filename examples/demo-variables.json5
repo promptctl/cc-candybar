@@ -346,7 +346,7 @@
     },
 
     // ── Git (native kind) vs input kind ──────────────────────────────────
-    // kind:"git" fields used here; the default config's `git` segment uses
+    // kind:"git" fields used here; the default config's `gitaculous` segment uses
     // kind:"input" for the full 12-field payload surface.
     demoGit: {
       template: ' ⎇ {{ .demo.git.branch }}{{ if .demo.git.dirty }} ●{{ end }}{{ if .demo.git.ahead }} ↑{{ .demo.git.ahead }}{{ end }}{{ if gt (int .demo.git.stash) 0 }} ⧇{{ .demo.git.stash }}{{ end }} ',
