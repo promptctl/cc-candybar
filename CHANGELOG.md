@@ -1,3 +1,10 @@
+# [1.85.0](https://github.com/promptctl/cc-candybar/compare/v1.84.0...v1.85.0) (2026-09-29)
+
+
+### Features
+
+* **git-segment:** the git segments are assembled from named pieces a user overrides one at a time ([#257](https://github.com/promptctl/cc-candybar/issues/257)) ([af894b4](https://github.com/promptctl/cc-candybar/commit/af894b494c03b824de41086a77d7dcedb0c61963))
+
 # [1.84.0](https://github.com/promptctl/cc-candybar/compare/v1.83.2...v1.84.0) (2026-09-29)
 
 
