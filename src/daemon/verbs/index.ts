@@ -48,7 +48,7 @@ import { resetLayers, settingDrafts } from "../setting-drafts";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
-  batchSessionWrites,
+  batchAdjacentWrites,
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
   VERB_APPLY_UPDATE,
@@ -575,31 +575,39 @@ const save: VerbHandler = (value, ctx) => {
   );
 };
 
-// [LAW:one-source-of-truth] `reset`: return the key to its bundled default at
-// every layer that can hold it (resetLayers) — its paths in the session's
-// config file, as one write, and the session's own pick. Gated by key
-// MEMBERSHIP (listConfigKeys) rather than a value domain — there is no value
-// to validate, only a legitimate target to clear.
+// [LAW:one-source-of-truth] `reset`: return each key to its bundled default
+// at every layer that can hold it (resetLayers) — their paths in the session's
+// config file, as ONE write, and the session's own picks. A `do` over several
+// resets arrives here as one effect (batchAdjacentWrites), so reset all is one
+// write, one reload, and one undo step. Gated by key MEMBERSHIP
+// (listConfigKeys) rather than a value domain — there is no value to
+// validate, only a legitimate target to clear — and every key is checked
+// before anything is written, so a batch lands whole or not at all.
 // [LAW:no-ambient-temporal-coupling] Save's order, for the same reason: the
-// file is written and reloaded before the pick is released, so no render in
-// between draws the pick's absence over a file that still holds the value.
+// file is written and reloaded before the picks are released, so no render in
+// between draws a pick's absence over a file that still holds the value.
 const resetConfig: VerbHandler = (value, ctx) => {
-  const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(value));
+  const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  if (!key || !listConfigKeys().includes(key)) {
+  const known = listConfigKeys();
+  const unknown =
+    keys.length === 0 ? [""] : keys.filter((k) => !known.includes(k));
+  if (unknown.length > 0) {
     throw new BadVerbArgs(
-      `reset-config: unknown config key "${key}" (have: ${listConfigKeys().join(", ")})`,
+      `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
-  const layers = resetLayers(key);
-  deleteValues(editStore(ctx, sid), file, layers.fileKeys);
+  const layers = keys.map(resetLayers);
+  const fileKeys = layers.flatMap((l) => l.fileKeys);
+  const sessionKeys = layers.flatMap((l) => l.sessionKeys);
+  deleteValues(editStore(ctx, sid), file, fileKeys);
   ctx.reloadConfig(origin);
-  for (const k of layers.sessionKeys) ctx.sessionState.clear(sid, k);
+  for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.dlog(
     "info",
-    `reset-config: ${[...layers.fileKeys, ...layers.sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${file} (session=${sid})`,
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${file} (session=${sid})`,
   );
 };
 
@@ -846,8 +854,8 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
 // dispatcher folds the list, running EVERY effect through the leaf table, after
-// batchSessionWrites has joined each run of adjacent session writes into the
-// one set-state batch that lands whole or not at all. The
+// batchAdjacentWrites has joined each run of adjacent set-state (or
+// reset-config) effects into the one batch that lands whole. The
 // effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
 // compound branch. [LAW:no-silent-fallbacks] Every effect runs even if an
 // earlier one failed; failures accumulate in `errors`. An unknown or
@@ -870,7 +878,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
   let sessionId: string | null = null;
-  for (const { verb, value } of batchSessionWrites(parseEffects(rawValue))) {
+  for (const { verb, value } of batchAdjacentWrites(parseEffects(rawValue))) {
     // Extract session ID from the first session-bearing effect for error
     // display — every SESSION_FIRST_VERBS member carries it as its first
     // segment, so a failing step surfaces in the bar like any other.

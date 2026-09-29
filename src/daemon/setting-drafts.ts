@@ -107,15 +107,17 @@ export function settingDrafts(
   });
 }
 
-// [LAW:one-source-of-truth] What a `reset` of one config key clears — the
-// inverse of where a save lands. A setting lives in three places: the session's
-// pick, the file's top-level `globals.<field>`, and a preset's own fragment
-// (`presets.<p>.globals.<field>`, where a save lands when that preset names
-// the field). Reset clears all three, so the bar returns to the bundled
-// default under whichever preset is showing. A fragment is cleared only for a
-// preset the BUNDLED default declares: there the file's entry is a delta over
-// the bundled one, while a preset the user authored is the user's own content
-// — deleting its pin would rewrite (or, as the last field, prune away) the
+// [LAW:one-source-of-truth] What a `reset` of one config key clears: every
+// layer between the bundled default and the bar. A setting lives in three
+// places: the session's pick, the file's top-level `globals.<field>`, and a
+// preset's own fragment (`presets.<p>.globals.<field>`, where a save lands when
+// that preset names the field). Reset clears all three, so the bar returns to
+// the bundled default under whichever bundled preset is showing. A fragment is
+// cleared only for a preset the BUNDLED default declares: there the file's
+// entry is a delta over the bundled one, while a preset the user authored is
+// the user's own content, its pin included — even one a save overwrote, since
+// the bundled default has no value for a preset it does not declare, and
+// deleting the pin would rewrite (or, as the last field, prune away) the
 // preset itself. Any other key — a segment's palette pin, a preset root — is
 // one path in the file and no session key.
 export interface ResetLayers {

@@ -41,13 +41,13 @@ export type { OptionDomain } from "./option-domain.js";
 // mutates per-session SessionState, `persist` mutates the config's DEFAULT
 // by writing the config FILE itself (candybar-config-dqe — the one durable
 // store; the write splices the value in place so the file's comments
-// survive). `reset` deletes that key's path from the file — the gated undo
-// `persist` needs, since a machine write with no way back would be a
-// one-way ratchet.
+// survive). `reset` returns that key to its bundled default — its paths in
+// the file and the session's pick (resetLayers) — the gated way back a
+// machine write needs, since one with no way back would be a one-way ratchet.
 //
 // [LAW:one-source-of-truth] `undo`/`redo` (brandon-layout-edit-2gc.2) are
-// `reset`'s FINE-GRAINED siblings: `reset` deletes one named key outright
-// (the coarse "forget this default" case); `undo`/`redo` step the session's
+// `reset`'s FINE-GRAINED siblings: `reset` returns one named key to the
+// bundled default outright (the coarse "forget this setting" case); `undo`/`redo` step the session's
 // history of every settings change — session picks and config-file writes
 // alike — back and forth. Neither carries a key: the history is one stack per
 // session (src/daemon/settings-history.ts), so the action is a bare marker,

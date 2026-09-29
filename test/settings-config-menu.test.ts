@@ -84,6 +84,10 @@ function rig(
   readonly config: ValidatedConfig;
   sessionState: SessionState;
   logs: string[];
+  // One entry per reload, holding the file text and the session's picks at the
+  // moment it ran — so a test can pin how many reloads a click cost and that
+  // the picks were still held while the file reloaded.
+  reloads: { text: string; picks: Record<string, string | null> }[];
   render: () => string;
   click: (url: string) => void;
   dispose: () => void;
@@ -117,11 +121,18 @@ function rig(
   };
   let entry = load(source);
   const logs: string[] = [];
+  const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
+      reloads.push({
+        text: durable!.text()!,
+        picks: Object.fromEntries(
+          ["theme", "look", "padding"].map((k) => [k, sessionState.get(SID, k)]),
+        ),
+      });
       const next = load(durable!.text()!);
       entry.disposers.forEach((d) => d());
       entry = next;
@@ -133,6 +144,7 @@ function rig(
     },
     sessionState,
     logs,
+    reloads,
     render: () => {
       const { config, compiled, store, registry } = entry;
       return renderDsl(
@@ -499,6 +511,9 @@ describe("reset returns settings to the bundled default", () => {
     r.sessionState.set(SID, "theme", "dracula");
     expect(plain(r.render())).toContain("🎨 dracula");
     r.click(resetOf("palette"));
+    expect(r.reloads).toEqual([
+      { text: durable.text(), picks: { theme: "dracula", look: null, padding: null } },
+    ]);
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
     const theme = DEFAULT_DSL_CONFIG.globals.palette as string;
@@ -548,6 +563,12 @@ describe("reset returns settings to the bundled default", () => {
     const depth = durable.history(SID).past.length;
     r.click(labelled("⟲ reset all")!);
     r.click(labelled("⟲ confirm reset all")!);
+
+    // Every setting's reset in one click is ONE write and ONE reload, made
+    // while the session still held its picks — released only after.
+    expect(r.reloads).toEqual([
+      { text: durable.text(), picks: { theme: null, look: "dim", padding: "5" } },
+    ]);
 
     const parsed = durable.parsed() as {
       globals?: Record<string, unknown>;

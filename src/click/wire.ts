@@ -67,9 +67,10 @@ export const VERB_STEP_CONFIG = "step-config";
 // Args: `[sessionId]`: which settings are drafts, and their values, are read
 // at click time from the session itself, never carried by the URL.
 export const VERB_SAVE = "save";
-// [LAW:one-source-of-truth] The gated undo for `persist`: deletes one key's
-// path from the config file, restoring the bundled-default value on the next
-// reload. Args: `[sessionId, key]`.
+// [LAW:one-source-of-truth] Return each named config key to its bundled
+// default at every layer that holds it — its paths in the config file, in one
+// write, and the session's pick (resetLayers, src/daemon/setting-drafts.ts).
+// Args: `[sessionId, key, …key]`.
 export const VERB_RESET_CONFIG = "reset-config";
 // [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
 // verb — a THIRD write semantic beside set-config's plain overwrite and
@@ -83,7 +84,7 @@ export const VERB_RESET_CONFIG = "reset-config";
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // [LAW:one-source-of-truth] A step of the session's settings history
 // (src/daemon/settings-history.ts) — the fine-grained sibling of
-// VERB_RESET_CONFIG's coarse "delete one key". Args: `[sessionId]` — there is
+// VERB_RESET_CONFIG's coarse "back to the bundled default". Args: `[sessionId]` — there is
 // no key: the history is one stack of clicks per session, not a per-key log.
 // An empty stack, or a target changed since the step, is a loud BAD_REQUEST
 // surfaced through click.error like any other verb failure, never a silent
@@ -159,35 +160,43 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
   return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 
-// [LAW:single-enforcer] One click's consecutive session writes are one
-// SessionState transaction. A run of ADJACENT set-state effects for one session
-// becomes one batch, which the set-state handler validates whole before writing
-// any of it — so a `do` action's session members, or a picker option and its
-// close writes, land together or not at all, whichever producer built the URL.
-// Only adjacency merges: effects still run in the order the click lists them, so
-// a durable write between two session writes keeps its place, and a different
-// session id starts a new run rather than borrowing the previous one's. The tail stays encoded — splitVerb one level down splits
-// `<sid>/<pairs…>`, and joining encoded pair runs is the codec's own join.
-export function batchSessionWrites(
+// [LAW:single-enforcer] One click's consecutive writes of one kind are one
+// write. A run of ADJACENT effects of a batched verb for one session becomes a
+// single effect whose tail carries every member's arguments: set-state's pairs,
+// which its handler validates whole before writing any of them, so a `do`
+// action's session members, or a picker option and its close writes, land
+// together or not at all; and reset-config's keys, which its handler clears in
+// one file write and one reload, so `⟲ reset all` is one write however many
+// settings it names. Only adjacency merges: effects still run in the order the
+// click lists them, so an effect between two writes keeps its place, and a
+// different verb or session id starts a new run rather than borrowing the
+// previous one's. The tail stays encoded — splitVerb one level down splits
+// `<sid>/<args…>`, and joining encoded runs is the codec's own join.
+const BATCHED_VERBS: ReadonlySet<string> = new Set([
+  VERB_SET_STATE,
+  VERB_RESET_CONFIG,
+]);
+
+export function batchAdjacentWrites(
   effects: readonly ParsedEffect[],
 ): ParsedEffect[] {
   return effects.reduce<ParsedEffect[]>((out, e) => {
     const prev = out.at(-1);
-    const joined = prev && joinSessionWrites(prev, e);
+    const joined = prev && joinWrites(prev, e);
     return joined ? [...out.slice(0, -1), joined] : [...out, e];
   }, []);
 }
 
-// Two effects as one set-state batch, or undefined when they are not two
-// session writes for the same session.
-function joinSessionWrites(
+// Two effects as one batch, or undefined when they are not the same batched
+// verb for the same session.
+function joinWrites(
   a: ParsedEffect,
   b: ParsedEffect,
 ): ParsedEffect | undefined {
-  if (a.verb !== VERB_SET_STATE || b.verb !== VERB_SET_STATE) return undefined;
+  if (a.verb !== b.verb || !BATCHED_VERBS.has(a.verb)) return undefined;
   const [x, y] = [splitVerb(a.value), splitVerb(b.value)];
   return x.verb === y.verb
-    ? { verb: VERB_SET_STATE, value: `${x.verb}/${x.value}/${y.value}` }
+    ? { verb: a.verb, value: `${x.verb}/${x.value}/${y.value}` }
     : undefined;
 }
 

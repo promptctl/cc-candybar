@@ -126,6 +126,7 @@ const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 const RESET_ALL_ARM = `${RESET_ALL_SEG}.arm`;
 const RESET_ALL_DISARM = `${RESET_ALL_SEG}.disarm`;
 const RESET_ALL_ARMED = "armed";
+const RESET_ALL_DISARMED = "disarmed";
 // The door's own open/close cycle, fired by the door beside the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
 
@@ -332,6 +333,14 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
   ...CONFIG_CONTROLS,
 ];
 
+// [LAW:one-source-of-truth] Every control the menu mints, of every shape — the
+// keys it writes and the resets `⟲ reset all` fires both read this one list.
+const ALL_CONTROLS: readonly KeyedSetting[] = [
+  ...PICKER_CONTROLS,
+  WRAP,
+  PADDING,
+];
+
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write. Unlike the `settings.` names, these
 // are ordinary words a config can own (`theme`, `padding`, …), so a reader
@@ -341,10 +350,7 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
 // authorship check (test/helpers/ambient-chrome.ts) can never drift from what
 // the synthesis actually declares.
 export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
-  [...PICKER_CONTROLS, WRAP, PADDING].flatMap((c) => [
-    c.sessionKey,
-    c.configKey,
-  ]),
+  ALL_CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
 // [LAW:one-source-of-truth] A control's three names, derived from its one
@@ -697,10 +703,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     TOOLS_SEG,
     DISCLOSURE_CLOSED,
   );
-  artifacts.variables[RESET_ALL_SEG] = disclosureStateVar(
-    RESET_ALL_SEG,
-    DISCLOSURE_CLOSED,
-  );
+  artifacts.variables[RESET_ALL_SEG] = {
+    kind: "state",
+    key: RESET_ALL_SEG,
+    default: RESET_ALL_DISARMED,
+  };
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
   declareHistorySteps(artifacts);
@@ -803,13 +810,10 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
   };
   artifacts.actions[RESET_ALL_DISARM] = {
     set: RESET_ALL_SEG,
-    to: DISCLOSURE_CLOSED,
+    to: RESET_ALL_DISARMED,
   };
   artifacts.actions[RESET_ALL_SEG] = {
-    do: [
-      RESET_ALL_DISARM,
-      ...[...PICKER_CONTROLS, WRAP, PADDING].map((c) => controlReset(c.name)),
-    ],
+    do: [RESET_ALL_DISARM, ...ALL_CONTROLS.map((c) => controlReset(c.name))],
   };
 }
 
