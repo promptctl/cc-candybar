@@ -21,12 +21,11 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
-  effectiveAutoWrap,
-  effectivePadding,
-  listResolvablePaletteNames,
-} from "../src/themes/policy";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
+  effectiveInputs,
+  resolveEffectiveGlobals,
+} from "../src/daemon/render-payload";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -56,17 +55,6 @@ const TWO_SEGMENT_ROOT = `{
   globals: {},
   root: { h: ['directory', 'model'] },
 }`;
-
-function opts(width: number) {
-  return {
-    style: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    charset: "unicode" as const,
-    width,
-  };
-}
 
 // [LAW:one-source-of-truth] One rig: parse the user file through the real
 // cascade (merged on the bundled default, validated — which is where the
@@ -147,6 +135,14 @@ function rig(
     reloads,
     render: () => {
       const { config, compiled, store, registry } = entry;
+      // [LAW:one-source-of-truth] The daemon's own resolution (server.ts):
+      // one `resolveEffectiveGlobals` over the session's picks feeds the
+      // payload's `.effective` labels, the render options and the selection,
+      // so a preset that pins a global reaches this bar exactly as it reaches
+      // the daemon's.
+      const sessionPick = (key: string): string | null =>
+        sessionState.get(SID, key);
+      const effective = resolveEffectiveGlobals(config, sessionPick, () => false);
       return renderDsl(
         config,
         compiled,
@@ -162,48 +158,30 @@ function rig(
             project_dir: "/tmp",
             added_dirs: [],
           },
-          // [LAW:one-source-of-truth] The daemon resolves these per render
-          // from SessionState over the config's globals (server.ts's
-          // EffectiveGlobals); mirroring that here — through the same policy
-          // functions, not a restated rule — is what lets an assertion read
-          // the LABEL after a click instead of only the click's URL.
-          // `theme`/`look` are absent on purpose: renderDsl publishes both
-          // `.effective` values itself, so they ride in the SELECTION below and a
-          // value here would be overwritten (brandon-themes-dzl).
-          style: { effective: "powerline" },
-          preset: { effective: "default" },
-          autoWrap: {
-            effective: effectiveAutoWrap(
-              undefined,
-              sessionState.get(SID, "autoWrap"),
-              config.globals.autoWrap,
-            ),
-          },
-          padding: {
-            effective: effectivePadding(
-              undefined,
-              sessionState.get(SID, "padding"),
-              config.globals.padding,
-            ),
-          },
+          ...effectiveInputs(effective),
           // The daemon derives this per render (server.ts) through the same
           // function the save verb writes from.
-          unsaved: settingDrafts(config, (key) => sessionState.get(SID, key))
-            .length,
+          unsaved: settingDrafts(config, sessionPick).length,
           // What the daemon publishes from the session's settings history.
           history: {
             undo: durable?.history(SID).past.length ?? 0,
             redo: durable?.history(SID).future.length ?? 0,
           },
         },
-        opts(width),
+        {
+          style: effective.style,
+          colorCompatibility: effective.colorCompatibility,
+          wrap: effective.autoWrap,
+          padding: effective.padding,
+          charset: effective.charset,
+          width,
+        },
         undefined,
         {
-          theme: resolveThemeSelection(
-            undefined,
-            sessionState.get(SID, "theme"),
-            config.globals.palette,
-          ),
+          theme: effective.theme,
+          look: effective.look,
+          preset: effective.preset,
+          progression: effective.progression,
         },
       );
     },
@@ -447,6 +425,67 @@ describe("the config menu, reached from a user config whose root is one row", ()
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.padding).toBe(2);
     expect(globals).not.toHaveProperty("palette");
+  });
+});
+
+// ─── 5b. Save under a preset that pins the setting (brandon-menu-ia-zyf) ────
+//
+// A user preset pinning a display global shadows the file's top-level value,
+// so a save written there would change nothing the bar shows: the carousel
+// would re-centre on the pin and every further save repeat the same no-op.
+const PINNING_PRESET = `{
+  globals: { preset: 'narrow' },
+  presets: { narrow: { globals: { style: 'capsule' } } },
+  root: { h: ['directory', 'model'] },
+}`;
+
+describe("save under a preset that pins the setting", () => {
+  let r: ReturnType<typeof rig>;
+  let durable: DurableConfig;
+
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-settings-pin-");
+    r = rig(PINNING_PRESET, durable);
+    r.click(writesTo(r.render(), "settings.menu")[0]!);
+    r.click(writesTo(r.render(), "settings.config")[0]!);
+    r.click(
+      writesTo(r.render(), "menus.settings_pickers").find((u) =>
+        effectsOf(u).some((e) => e.args[2] === "settings.apply.style"),
+      )!,
+    );
+  });
+  afterEach(() => {
+    r.dispose();
+    durable.dispose();
+  });
+
+  test("the save lands in the preset's own globals and the bar renders it", () => {
+    expect(plain(r.render())).toContain("✦ capsule");
+    const pickPlain = writesTo(r.render(), "style").find((u) =>
+      effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === "plain"),
+    );
+    r.click(pickPlain!);
+    expect(plain(r.render())).toContain("💾 save 1");
+    const save = links(r.render()).find((l) =>
+      effectsOf(l.url).some((e) => e.verb === "save"),
+    )!.url;
+    r.click(save);
+
+    const parsed = durable.parsed() as {
+      globals: Record<string, unknown>;
+      presets: { narrow: { globals: Record<string, unknown> } };
+    };
+    expect(parsed.presets.narrow.globals.style).toBe("plain");
+    expect(parsed.globals).not.toHaveProperty("style");
+    expect(r.sessionState.get(SID, "style")).toBeNull();
+    // The pick is released, so what renders now is the file alone: the style
+    // moved, and nothing is left to save.
+    const after = plain(r.render());
+    expect(after).toContain("✦ plain");
+    expect(after).not.toContain("💾");
+    expect(r.logs).toContainEqual(
+      `save: presets.narrow.globals.style=plain → ${durable.configPath} (session=${SID})`,
+    );
   });
 });
 
