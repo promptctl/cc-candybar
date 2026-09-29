@@ -1,3 +1,10 @@
+# [1.94.0](https://github.com/promptctl/cc-candybar/compare/v1.93.0...v1.94.0) (2026-09-29)
+
+
+### Features
+
+* **segments:** each gitaculous copy chooses which optional facts it shows ([#270](https://github.com/promptctl/cc-candybar/issues/270)) ([70a84b1](https://github.com/promptctl/cc-candybar/commit/70a84b1c6b71d7dbe0918b1f059fbc9267069d3f))
+
 # [1.93.0](https://github.com/promptctl/cc-candybar/compare/v1.92.0...v1.93.0) (2026-09-29)
 
 
