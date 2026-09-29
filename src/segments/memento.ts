@@ -29,40 +29,47 @@ const keyOf = (s: CeilingScope): string =>
 // render asks memento afresh and draws what the move actually left.
 export class MementoProvider {
   private readonly readings = new Map<string, Entry>();
+  // [LAW:no-ambient-temporal-coupling] The one read a key may cache from. A
+  // move replaces it, so a read that was already in flight when the click
+  // landed is handed to its caller but never cached as the session's reading
+  // — it describes the layer before the move.
   private readonly inFlight = new Map<
     string,
     Promise<Outcome<CeilingReading>>
   >();
-  // [LAW:no-ambient-temporal-coupling] Bumped by every move, so a read that
-  // was already in flight when the click landed is handed to its caller but
-  // never cached as the session's reading — it describes the layer before
-  // the move.
-  private readonly moves = new Map<string, number>();
 
   constructor(
     private readonly edge: MementoEdge,
     private readonly now: () => number = Date.now,
   ) {}
 
-  // absent — memento is not installed for this project; failed — memento
-  // refused (an unreadable layer: the very state that switches its gate off).
+  // absent — memento is not installed (or not enabled) for this project;
+  // failed — memento refused (an unreadable layer: the very state that
+  // switches its gate off). An expired reading is still drawn while its
+  // replacement is fetched: a python spawn does not fit in a render's budget,
+  // so only a session with no reading at all waits on one.
   getCeiling(scope: CeilingScope): Promise<Outcome<CeilingReading>> {
     const key = keyOf(scope);
     const cached = this.readings.get(key);
     if (cached && this.now() - cached.at < READING_TTL_MS) {
       return Promise.resolve(cached.outcome);
     }
-    const pending = this.inFlight.get(key);
-    if (pending) return pending;
-    const epoch = this.moves.get(key) ?? 0;
+    const fetched = this.inFlight.get(key) ?? this.fetch(key, scope);
+    return cached ? Promise.resolve(cached.outcome) : fetched;
+  }
+
+  private fetch(
+    key: string,
+    scope: CeilingScope,
+  ): Promise<Outcome<CeilingReading>> {
     const located = this.edge.locate(scope.projectDir);
-    const fetched = (
+    const fetched: Promise<Outcome<CeilingReading>> = (
       located.kind === "ok"
         ? this.edge.read(located.value, scope)
         : Promise.resolve(located)
     )
       .then((outcome) => {
-        if ((this.moves.get(key) ?? 0) !== epoch) return outcome;
+        if (this.inFlight.get(key) !== fetched) return outcome;
         this.readings.delete(key);
         this.readings.set(key, { outcome, at: this.now() });
         while (this.readings.size > MAX_ENTRIES) {
@@ -71,7 +78,6 @@ export class MementoProvider {
         return outcome;
       })
       .finally(() => {
-        // A move may already have replaced this read with a newer one.
         if (this.inFlight.get(key) === fetched) this.inFlight.delete(key);
       });
     this.inFlight.set(key, fetched);
@@ -86,18 +92,19 @@ export class MementoProvider {
       throw new Error(
         located.kind === "failed"
           ? located.reason
-          : "memento is not installed for this project",
+          : "memento is not installed or not enabled for this project",
       );
     }
     const key = keyOf(scope);
     try {
       this.edge.move(located.value, scope, m);
     } finally {
-      // Dropped even when memento refused: the refusal may name a layer that
+      // Replaced even when memento refused: the refusal may name a layer that
       // changed under it, which the next render should show as it now stands.
+      // The render after the click joins this read instead of starting one.
       this.readings.delete(key);
       this.inFlight.delete(key);
-      this.moves.set(key, (this.moves.get(key) ?? 0) + 1);
+      void this.fetch(key, scope);
     }
   }
 }

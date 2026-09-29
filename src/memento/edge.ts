@@ -48,7 +48,7 @@ export type CeilingMove =
 
 export interface MementoEdge {
   // The installed plugin's root directory for a session in `projectDir`;
-  // absent when memento is not installed there.
+  // absent when memento is not installed there, or Claude Code has it disabled.
   readonly locate: (projectDir: string) => Outcome<string>;
   readonly read: (
     root: string,
@@ -63,6 +63,7 @@ const CEILING_MODULE = path.join("lib", "ceiling_config.py");
 const CEILING_COMMAND = path.join("skills", "ceiling", "bin", "ceiling");
 
 interface PluginInstall {
+  readonly key: string;
   readonly scope: string;
   readonly installPath: string;
   readonly projectPath?: string;
@@ -94,10 +95,32 @@ function installsOf(registry: unknown, file: string): PluginInstall[] {
           throw new Error(`${file}: an install of "${key}" has no scope/path`);
         }
         return typeof projectPath === "string"
-          ? { scope, installPath, projectPath }
-          : { scope, installPath };
+          ? { key, scope, installPath, projectPath }
+          : { key, scope, installPath };
       });
     });
+}
+
+// Whether Claude Code runs the plugin `key`: its settings layers name it in
+// `enabledPlugins`, the project-local file over the project's over the user's
+// (the one beside the registry). Only an explicit `false` in the layer that
+// wins is a disabled plugin — `/plugin disable` leaves the install listed, and
+// a bar showing that install's ceiling would advertise a gate no hook runs.
+function enabledIn(files: readonly string[], key: string): Outcome<boolean> {
+  let enabled = true;
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue;
+    let named: unknown;
+    try {
+      const settings = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+      named = (settings as { enabledPlugins?: Record<string, unknown> })
+        ?.enabledPlugins?.[key];
+    } catch (e) {
+      return failed(`memento lookup: ${file}: ${(e as Error).message}`);
+    }
+    if (typeof named === "boolean") enabled = named;
+  }
+  return ok(enabled);
 }
 
 // The install in force for a session in `projectDir`: one scoped to that
@@ -114,6 +137,16 @@ export function locateIn(file: string, projectDir: string): Outcome<string> {
     installs.find((i) => i.projectPath === projectDir) ??
     installs.find((i) => i.scope === "user");
   if (install === undefined) return ABSENT;
+  const enabled = enabledIn(
+    [
+      path.join(path.dirname(path.dirname(file)), "settings.json"),
+      path.join(projectDir, ".claude", "settings.json"),
+      path.join(projectDir, ".claude", "settings.local.json"),
+    ],
+    install.key,
+  );
+  if (enabled.kind !== "ok") return enabled;
+  if (!enabled.value) return ABSENT;
   const missing = [CEILING_MODULE, CEILING_COMMAND].filter(
     (rel) => !fs.existsSync(path.join(install.installPath, rel)),
   );

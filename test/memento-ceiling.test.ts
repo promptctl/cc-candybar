@@ -129,10 +129,13 @@ describe("the ceiling segment", () => {
     expect(rt.text()).not.toContain("+");
   });
 
-  test("memento's refusal is shown in the cell", () => {
+  test("memento's refusal is shown in the cell, with the clear that can repair it", () => {
     const rt = runtime({ error: "memento config: /x/memento.conf line 2 sets 'ceilng'" });
-    expect(rt.text()).toContain("⌈ ⚠ memento config: /x/memento.conf line 2 sets 'ceilng'");
-    expect(ceilingUrls(rt.raw())).toEqual([]);
+    expect(rt.text()).toContain("⌈ ⚠ memento config: /x/memento.conf line 2 sets 'ceilng' ↺");
+    const urls = ceilingUrls(rt.raw());
+    expect(urls.map((u) => effectsOf(u)[0]!.args.slice(1))).toEqual([["clear"]]);
+    clickUrl(urls[0]!, rt.ctx);
+    expect(rt.moves.map((m) => m.move)).toEqual([{ kind: "clear" }]);
   });
 
   test("a click moves the session's layer, anchored where its render was", () => {
@@ -214,6 +217,30 @@ describe("locateIn", () => {
     expect((out as { reason: string }).reason).toContain("lib/ceiling_config.py");
   });
 
+  test("disabled in Claude Code's settings: absent; the project-local layer wins", () => {
+    const user = plugin("user");
+    // Claude Code's layout: settings.json beside plugins/installed_plugins.json.
+    const file = path.join(dir, "plugins", "installed_plugins.json");
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ plugins: { "memento@memento": [{ scope: "user", installPath: user }] } }),
+    );
+    const project = path.join(dir, "proj");
+    fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
+    const settings = (f: string, enabled: boolean) =>
+      fs.writeFileSync(f, JSON.stringify({ enabledPlugins: { "memento@memento": enabled } }));
+    settings(path.join(dir, "settings.json"), false);
+    expect(locateIn(file, project)).toEqual(ABSENT);
+    settings(path.join(project, ".claude", "settings.local.json"), true);
+    expect(locateIn(file, project)).toEqual(ok(user));
+    settings(path.join(project, ".claude", "settings.local.json"), false);
+    settings(path.join(dir, "settings.json"), true);
+    expect(locateIn(file, project)).toEqual(ABSENT);
+    fs.writeFileSync(path.join(project, ".claude", "settings.json"), "{ nope");
+    expect(locateIn(file, project).kind).toBe("failed");
+  });
+
   test("a registry that is not the expected shape fails, naming the file", () => {
     const file = path.join(dir, "installed_plugins.json");
     fs.writeFileSync(file, "{ nope");
@@ -246,6 +273,12 @@ describe("parseReading / projectMemento", () => {
   test("the payload: absent drops the family, failed carries the reason", () => {
     expect(projectMemento(ABSENT)).toBeUndefined();
     expect(projectMemento(failed("bad line"))).toEqual({ error: "bad line" });
+    // One bar row: a traceback projects the line naming the fault.
+    expect(
+      projectMemento(
+        failed('Traceback (most recent call last):\n  File "<string>", line 4\nImportError: cannot import name \'ceiling_in\'\n'),
+      ),
+    ).toEqual({ error: "ImportError: cannot import name 'ceiling_in'" });
     expect(projectMemento(ok({ ceiling: "off", session: null }))).toEqual({
       ceiling: 0,
       off: true,
@@ -287,14 +320,18 @@ describe("MementoProvider", () => {
   const A = ok({ ceiling: 350_000, session: null });
   const B = ok({ ceiling: 450_000, session: "450000" });
 
-  test("a reading stands for its TTL, then memento is asked again", async () => {
+  test("a reading stands for its TTL; past it, it is drawn while memento is asked again", async () => {
     let now = 0;
     const f = fakeEdge([A, B]);
     const p = new MementoProvider(f.edge, () => now);
     expect(await p.getCeiling(SCOPE)).toEqual(A);
     now = 9_999;
     expect(await p.getCeiling(SCOPE)).toEqual(A);
+    expect(f.reads).toHaveLength(1);
     now = 10_000;
+    // The render does not wait on the spawn: it draws the expired reading.
+    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    expect(f.reads).toHaveLength(2);
     expect(await p.getCeiling(SCOPE)).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
@@ -305,7 +342,10 @@ describe("MementoProvider", () => {
     await p.getCeiling(SCOPE);
     p.move(SCOPE, { kind: "set", to: "+100_000" });
     expect(f.moves).toEqual([{ kind: "set", to: "+100_000" }]);
+    // The click already asked memento; the render joins that read.
+    expect(f.reads).toHaveLength(2);
     expect(await p.getCeiling(SCOPE)).toEqual(B);
+    expect(f.reads).toHaveLength(2);
   });
 
   test("a read in flight when a move lands is not cached", async () => {

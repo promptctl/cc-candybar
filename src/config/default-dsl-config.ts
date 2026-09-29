@@ -864,12 +864,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // against each other: how full the context is, and where memento will ask
     // the session to hand off. The controls move this session's own layer —
     // memento's `ceiling set session` — and `↺` appears only while there is
-    // one to clear. Absent when memento is not installed.
+    // one to clear, or while a refusal may be that layer's own (clearing a
+    // layer memento cannot read restores its gate). Absent when memento is
+    // not installed, or Claude Code has it disabled.
     ceiling: {
       description:
         "The memento plugin's context ceiling for this session: − and + move it by 100K, ∞ lifts it, ↺ drops this session's own setting.",
       template:
-        '{{ if ne .memento.error "" }}⌈ ⚠ {{ .memento.error }}{{ else }}⌈ ' +
+        '{{ if ne .memento.error "" }}⌈ ⚠ {{ .memento.error }} {{ action "ceiling.clear" "↺" }}{{ else }}⌈ ' +
         '{{ if .memento.off }}off{{ else }}{{ template "formatTokenCount" .memento.ceiling }} ' +
         '{{ action "ceiling.lower" "−" }} {{ action "ceiling.raise" "+" }} {{ action "ceiling.off" "∞" }}{{ end }}' +
         '{{ if ne .memento.session "" }} {{ action "ceiling.clear" "↺" }}{{ end }}{{ end }}',

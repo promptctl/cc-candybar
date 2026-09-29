@@ -1358,6 +1358,9 @@ export async function buildRenderPayload(
 
 // [LAW:effects-at-boundaries] Pure: memento's outcome in, the payload shape
 // out. Absent (not installed) drops the family, so its segment hides.
+const lastLine = (text: string): string =>
+  text.trim().split("\n").at(-1)!.trim();
+
 export function projectMemento(
   outcome: Outcome<CeilingReading>,
 ): MementoPayload | undefined {
@@ -1365,7 +1368,10 @@ export function projectMemento(
     case "absent":
       return undefined;
     case "failed":
-      return { error: outcome.reason };
+      // A bar cell is one line; a refusal may be a Python traceback. The last
+      // line names the fault (memento's own refusals are one sentence; Python
+      // puts the exception last) — the whole text is in the daemon log.
+      return { error: lastLine(outcome.reason) };
     case "ok": {
       const { ceiling, session } = outcome.value;
       return {
