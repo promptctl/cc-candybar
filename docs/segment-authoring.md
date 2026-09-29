@@ -83,9 +83,11 @@ shape, invoked by the same name:
 printf '%s\n' '{"period": "September", "spent": 42.5, "limit": 120, "spentPct": 35, "timePct": 20}'
 ```
 
-The command runs under `/bin/sh -c` with the daemon's environment, so the
-script is either on the daemon's `PATH` or spelled as an absolute path. A
-command the shell cannot find fails its run with `exited with code 127`, and
+The command runs under `/bin/sh -c` in the session's working directory (the
+`cwd` Claude Code reports), so a command that asks about "this repo" answers
+for the session's repo. It runs with the daemon's environment, so the script
+is either on the daemon's `PATH` or spelled as an absolute path. A command the
+shell cannot find fails its run with `exited with code 127`, and
 what that failure renders as depends on the `default` you declare (Step 2).
 
 ## Step 2 — the source: one `shell` variable, one document
@@ -853,10 +855,10 @@ echo 'budget: unavailable'
 
 Every segment reading the document renders `⚠` naming the variable, then the
 reason: `JSON parse failed: Unexpected token 'b', "budget: unavailable` for
-this script, `shell "budget-broken" exited with code 127` for one the shell
-cannot find, `file unreadable: <path>` for a `file` source. A `default` would
-render instead, quietly — which is what you want in the bar, and why the
-mistake to avoid is the missing `default`, not the broken script:
+this script, `shell "budget-broken" exited with code 127 in <cwd>` for one
+the shell cannot find, `file unreadable: <path>` for a `file` source. A
+`default` would render instead, quietly — which is what you want in the bar,
+and why the mistake to avoid is the missing `default`, not the broken script:
 
 ```json5 check:fail
 {

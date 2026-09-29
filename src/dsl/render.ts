@@ -268,6 +268,7 @@ function declareOne(
 
     case "shell":
       registry.declareShell(name, decl.command, {
+        cwd,
         cache: toCachePolicy(decl.cache),
         parse: toSourceParse(decl.parse, decl.default),
       });

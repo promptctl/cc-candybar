@@ -9,6 +9,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -175,6 +176,38 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
       expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  // brandon-lit-widget-3xo.rvo: a `shell` source runs in its entry's cwd, not
+  // the detached daemon's, so one config rendered from two checkouts asks each
+  // command about its own directory.
+  test("a shell source runs in its entry's cwd", async () => {
+    const { cache, cleanups } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const cfg = join(dir, "shared.json5");
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          variables: {
+            here: { kind: "shell", command: "pwd -P", cache: { never: true } },
+          },
+        }),
+      );
+      const a = realpathSync(mkdtempSync(join(tmpdir(), "ccb-entry-a-")));
+      const b = realpathSync(mkdtempSync(join(tmpdir(), "ccb-entry-b-")));
+      cleanups.push(() => rmSync(a, { recursive: true, force: true }));
+      cleanups.push(() => rmSync(b, { recursive: true, force: true }));
+      const inA = cache.getOrCreate(a, a, cfg).state;
+      const inB = cache.getOrCreate(b, b, cfg).state;
+      expect(await inA.registry.settled(5000)).toEqual([]);
+      expect(await inB.registry.settled(5000)).toEqual([]);
+      expect(inA.store.read("here")).toBe(a);
+      expect(inB.store.read("here")).toBe(b);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
