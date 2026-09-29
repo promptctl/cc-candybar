@@ -1566,11 +1566,30 @@ describe("bundled preset library renders clean at every width — brandon-preset
     }
   });
 
+  // The powerline joiner's arrow in the unicode charset (rich-js's glyph).
+  const POWERLINE_ARROW = "\uE0B0";
+  const visible = (rendered: string): string => rendered.replace(INVISIBLE, "");
+  const visibleLines = (rendered: string): string[] =>
+    visible(rendered).split("\n");
+  // gitPr and tokenSparkline gate on data checkPayload's bundled fixture
+  // doesn't carry (no live PR, no speed history yet); the tests that promise
+  // their content supply both through `withPayload`.
+  const payloadWithPrAndHistory = (
+    base: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    ...base,
+    git: {
+      ...(base.git as object),
+      prUrl: "https://example.com/pr/181",
+      prNumber: 181,
+    },
+    speed: { history: "10,25,15,30,20" },
+  });
+
   // [LAW:carrying-cost] The compact preset's whole reason to exist is fitting
   // where the default doesn't — pin that it actually renders NARROWER than
   // the floor at the same width, not merely that it renders.
   test("compact renders a shorter visible line than the default floor", () => {
-    const visible = (s: string): string => s.replace(INVISIBLE, "");
     const compactLine = visible(renderPreset("compact", 200).rendered);
     const defaultLine = visible(renderPreset("default", 200).rendered);
     expect(compactLine.length).toBeLessThan(defaultLine.length);
@@ -1584,15 +1603,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // both via `withPayload` rather than either skipping the assertion or
   // mutating the shared fixture other suites assert literal values against.
   test("verbose surfaces every opt-in segment's own content", () => {
-    const line = renderPreset("verbose", 200, (base) => ({
-      ...base,
-      git: {
-        ...(base.git as object),
-        prUrl: "https://example.com/pr/181",
-        prNumber: 181,
-      },
-      speed: { history: "10,25,15,30,20" },
-    })).rendered.replace(INVISIBLE, "");
+    const line = visible(
+      renderPreset("verbose", 200, payloadWithPrAndHistory).rendered,
+    );
     expect(line).toContain("⇆ #181"); // gitPr
     expect(line).toContain("to 5h"); // burnrate
     expect(line).toContain("⇅ out"); // speed
@@ -1601,19 +1614,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
 
   // brandon-presets-a3i.rcx — each added preset pinned to the promise its
   // comment makes, not merely to rendering without error.
-  const visibleLines = (rendered: string): string[] =>
-    rendered.replace(INVISIBLE, "").split("\n");
-  const payloadWithPrAndHistory = (
-    base: Record<string, unknown>,
-  ): Record<string, unknown> => ({
-    ...base,
-    git: {
-      ...(base.git as object),
-      prUrl: "https://example.com/pr/181",
-      prNumber: 181,
-    },
-    speed: { history: "10,25,15,30,20" },
-  });
 
   test("zen is one plain row under the dim look", () => {
     const effective = resolveEffectiveGlobals(
@@ -1623,7 +1623,18 @@ describe("bundled preset library renders clean at every width — brandon-preset
     );
     expect(effective.style).toBe("plain");
     expect(effective.look).toMatchObject({ kind: "decided", name: "dim" });
-    expect(visibleLines(renderPreset("zen", 80).rendered)).toHaveLength(1);
+    const zen = renderPreset("zen", 200).rendered;
+    expect(visibleLines(zen)).toHaveLength(1);
+    // The bytes, not only the resolution: no powerline arrow, and the look
+    // recolours the bar — a session that picks `none` over the preset's
+    // look draws the same row in other colours.
+    expect(renderPreset("default", 200).rendered).toContain(POWERLINE_ARROW);
+    expect(zen).not.toContain(POWERLINE_ARROW);
+    const undimmed = renderPreset("zen", 200, undefined, (key, preset) =>
+      key === "look" ? "none" : freshSession(key, preset),
+    ).rendered;
+    expect(visible(undimmed)).toBe(visible(zen));
+    expect(undimmed).not.toBe(zen);
   });
 
   test("git puts the open PR beside the git state", () => {
@@ -1631,14 +1642,20 @@ describe("bundled preset library renders clean at every width — brandon-preset
       renderPreset("git", 200, payloadWithPrAndHistory).rendered,
     );
     expect(lines.find((l) => l.includes("⇆ #181"))).toContain("⎇ main");
+    // What sets it apart from verbose, which also stages gitPr: the status
+    // row drops the rate-limit windows the default shows.
+    expect(visible(renderPreset("default", 200).rendered)).toContain("◑ ");
+    expect(lines.join("\n")).not.toContain("◑ ");
   });
 
   test("usage shows spend: this session and today", () => {
-    const line = renderPreset("usage", 200, payloadWithPrAndHistory)
-      .rendered.replace(INVISIBLE, "");
+    const line = visible(
+      renderPreset("usage", 200, payloadWithPrAndHistory).rendered,
+    );
     expect(line).toContain("§ "); // session
     expect(line).toContain("☉ "); // today
     expect(line).toContain("to 5h"); // burnrate
+    expect(line).toContain("⇅ out"); // speed
     expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline
   });
 

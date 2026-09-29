@@ -1109,7 +1109,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       globals: { padding: 0 },
     },
 
-    // Verbose arrangement surfacing every segment that is declared but NOT in
+    // Verbose arrangement surfacing four segments that are declared but NOT in
     // the default root (gitPr, burnrate, speed, tokenSparkline — see each
     // segment's own "declared-but-opt-in" comment above) alongside the
     // default's own two rows, for a user who wants the full usage-monitor
@@ -1175,10 +1175,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
 
     // For branch-and-PR work — juggling reviews, rebases, several branches:
-    // the identity row gains the open PR (`gitPr`, opt-in elsewhere) beside
-    // the git state, and the status row keeps only what that work checks
-    // between pushes (model, context, what Claude is doing), dropping the
-    // rate-limit windows that matter to a long solo session instead.
+    // the identity row gains the open PR (`gitPr`, which the default leaves
+    // out) beside the git state, and the status row keeps only what that work
+    // checks between pushes (model, context, what Claude is doing), dropping
+    // the rate-limit windows that matter to a long solo session instead.
     git: {
       root: {
         kind: "container",
@@ -1212,8 +1212,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // concern per row. Row 1 is this conversation (context, cache), row 2 the
     // rate-limit windows and how fast they are burning, row 3 money (this
     // session, today across every session) and throughput. It is the one
-    // preset that stages `session` and `today`, which no other arrangement
-    // shows.
+    // preset that stages `today`.
     usage: {
       root: {
         kind: "container",

@@ -19,7 +19,7 @@ readonly TEMPLATE="${PLUGIN_ROOT}/templates/config.json"
 readonly THEMES=(dark light nord tokyo-night rose-pine gruvbox catppuccin-mocha dracula solarized-dark monokai)
 readonly STYLES=(powerline capsule plain)
 readonly CHARSETS=(unicode ascii)
-readonly PRESETS=(default compact verbose)
+readonly PRESETS=(default compact verbose zen git usage dense)
 
 THEME="${THEMES[0]}"
 STYLE="${STYLES[0]}"

@@ -525,15 +525,15 @@ different way of working:
 
 - `"compact"` — one row (directory, git, context) at `padding: 0`, for narrow
   terminals and split panes.
-- `"verbose"` — the default's own rows plus a third, surfacing every segment the
-  default declares but leaves opt-in (`gitPr`, `burnrate`, `speed`,
+- `"verbose"` — the default's own rows plus a third, surfacing four segments
+  the default declares but leaves out (`gitPr`, `burnrate`, `speed`,
   `tokenSparkline`).
 - `"zen"` — one quiet row (directory, context) in `plain` style under the `dim`
   look, for heads-down work.
 - `"git"` — the open PR beside the git state, and a status row cut to model,
   context and activity, for branch-and-review work.
-- `"usage"` — every cost and limit segment, one concern per row, including the
-  per-session and today spend (`session`, `today`) nothing else stages.
+- `"usage"` — every cost and limit segment, one concern per row, including
+  today's spend across every session (`today`), which no other preset stages.
 - `"dense"` — the default's segments plus session spend on one row at
   `padding: 0`, which auto-wrap folds only where the terminal runs out.
 

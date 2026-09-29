@@ -66,7 +66,7 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { effectivePresetName } from "../src/config/presets";
+import { effectivePresetName, presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -593,7 +593,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     registry.dispose();
   });
 
-  test.each(["default", "compact", "verbose", "zen", "git", "usage", "dense"])(
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     "%s: the preview draws the segments the closed bar draws, row for row, in the colours they wear",
     (preset) => {
       const rt = rig(`{}`);
@@ -668,12 +668,14 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     openCarousel(rt, "preset");
     const seen: string[] = [];
     const rowCounts: number[] = [];
-    for (let i = 0; i < 7; i++) {
+    const names = presetNames(DEFAULT_DSL_CONFIG.presets);
+    for (let i = 0; i < names.length; i++) {
       rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
       seen.push(rt.sessionState.get(SID, "preset")!);
       rowCounts.push(previewLabels(rt.render()).length);
     }
-    expect(seen).toEqual(["compact", "verbose", "zen", "git", "usage", "dense", "default"]);
+    // ▶ steps through the domain in order and wraps back to where it started.
+    expect(seen).toEqual([...names.slice(1), names[0]]);
     // Compact, zen and dense are one row; the others stack two (verbose's
     // third row and usage's block/weekly/burnrate row are gated off by this
     // payload, which carries no rate-limit window). The full per-preset layouts
