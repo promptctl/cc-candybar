@@ -57,14 +57,14 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     `{
       segments: { dir: { template: '{{ .cwd }}' }, git: { template: '{{ .git.branch }}' } },
       variables: { cwd: { kind: 'literal', value: '~' }, 'git.branch': { kind: 'literal', value: 'main' } },
-      root: { v: [{ h: ['dir', 'git'] }, 'dir'] },
+      root: { v: [{ h: ['dir', 'git'] }, { seg: 'dir', id: 'dir2' }] },
     }`,
   ],
   [
     "A-grammar conditional row (when on v children)",
     `{
       segments: { a: { template: 'a' }, b: { template: 'b' } },
-      root: { v: [{ h: ['a', 'b'] }, { seg: 'a', when: '{{ true }}' }] },
+      root: { v: [{ h: ['a', 'b'] }, { seg: 'a', id: 'a2', when: '{{ true }}' }] },
     }`,
   ],
   [
@@ -149,7 +149,7 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
         v: [
           { seg: "a", when: "{{ true }}" },
           { h: ["b", "c"], when: "{{ false }}" },
-          { v: ["a"], when: "{{ true }}" },
+          { v: [{ seg: "a", id: "a2" }], when: "{{ true }}" },
         ],
       },
     }`,

@@ -301,8 +301,10 @@ describe("2de.4 — loader proves the group invariants", () => {
     root: { kind: 'container', direction: 'vertical', children: [${groups}] },
   }`;
 
-  const group = (fields: string) =>
-    `{ kind: 'group', ${fields}, children: [{ kind: 'segment', name: 'body' }] }`;
+  // Each placement of `body` is its own instance, so a second group's copy
+  // carries its own id.
+  const group = (fields: string, bodyId = "body") =>
+    `{ kind: 'group', ${fields}, children: [{ kind: 'segment', name: 'body', id: '${bodyId}' }] }`;
 
   test("a non-identifier name is rejected", () => {
     expectIssue(
@@ -367,7 +369,7 @@ describe("2de.4 — loader proves the group invariants", () => {
   test("sibling groups sharing a key with one open: true parse, default = its name", () => {
     const src = withGroups(
       `${group(`name: 'a', label: 'a', key: 'menu', open: true`)},
-       ${group(`name: 'b', label: 'b', key: 'menu'`)}`,
+       ${group(`name: 'b', label: 'b', key: 'menu'`, "bodyB")}`,
     );
     const config = parseAndValidate("<test>", src, ALLOWED);
     expect(config.variables["groups.a"]).toEqual({

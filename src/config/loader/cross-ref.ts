@@ -7,7 +7,12 @@
 // when the visibility/scoping rules between config parts change.
 
 import {
+  describeSettingDomain,
   hasCacheField,
+  inSettingDomain,
+  freePlacementId,
+  placementId,
+  placementIds,
   walkNodes,
   AXIS_OF,
   type DslConfig,
@@ -15,6 +20,8 @@ import {
   type PresetDecl,
   type RawDslConfig,
   type RootFragment,
+  type SegmentDecl,
+  type SegmentNode,
   type VariableDecl,
 } from "../dsl-types.js";
 import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
@@ -27,7 +34,6 @@ import { isExpression } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
-import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   anchorUnderGate,
   countAnchors,
@@ -36,7 +42,7 @@ import {
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
-import { renamedHint } from "./renamed-segments.js";
+import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import {
@@ -289,6 +295,19 @@ export function validateCrossReferences(
   // and depends_on lists alike: a name's meaning is a pure function of the
   // name string, never of which segment declares or renders it.
   const templateScope = templateScopeOf(cfg);
+  // [LAW:one-source-of-truth] `.settings` in a segment's templates is its
+  // placement's settings, so no variable may be stored under that name — it
+  // would be a second thing `.settings.x` could mean. Asked of the store's own
+  // key set, which holds segment locals too (`<segment>.<var>`).
+  for (const name of templateScope.names) {
+    if (name !== "settings" && !name.startsWith(SETTINGS_SCOPE_PREFIX))
+      continue;
+    ctx.issues.push({
+      path: "variables",
+      message: `variable "${name}" is named under "settings", which a segment's templates read as its placement's own settings (.settings.<name>) — rename it`,
+      line: findKeyLine(ctx.source, ["variables", name]),
+    });
+  }
 
   // [LAW:single-enforcer] ONE pre-order walk owns every layout cross-ref:
   // each segment a layout names must resolve to a declared segment — in the
@@ -315,15 +334,11 @@ export function validateCrossReferences(
   // (the preset's fragment merged over the config's root, presetRoot), because
   // a `{ rows }` fragment and a row it inherits can each place one.
   //
-  // [LAW:types-are-the-program] A menu-hosting segment placed twice in one
-  // layout is the same ambiguity one level down: its disclosure open-state is
-  // keyed by segment name, so two placements would share one state and a
-  // click on either would toggle both. Identity stays name-derived (no
-  // placement path threaded into the key); two disclosures = two named
-  // segments. Counted over the same rendered tree, for the same reason.
-  const menuHosts = Object.entries(cfg.segments)
-    .filter(([, seg]) => segmentReferencesMenu(seg.template))
-    .map(([name]) => name);
+  // [LAW:types-are-the-program] Every placement's identity is its id
+  // (`placementId`), and one id names one placement: a menu's open state,
+  // edit mode's `🚫`, and the config-file editor all address a placement by
+  // it, so two placements sharing one would share all three. Counted over the
+  // same rendered tree, for the same reason.
   const checkPlacementCounts = (
     tree: LayoutNode,
     layoutKey: string,
@@ -350,20 +365,21 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
-    const placements = new Map<string, number>();
+    const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind === "segment") {
-        placements.set(node.name, (placements.get(node.name) ?? 0) + 1);
-      }
+      if (node.kind !== "segment") continue;
+      const id = placementId(node);
+      byId.set(id, [...(byId.get(id) ?? []), node]);
     }
-    for (const name of menuHosts) {
-      if ((placements.get(name) ?? 0) > 1) {
-        ctx.issues.push({
-          path: layoutKey,
-          message: `segment "${name}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
-          line: layoutLine,
-        });
-      }
+    for (const [id, nodes] of byId) {
+      if (nodes.length < 2) continue;
+      const seg = nodes[1]!.name;
+      const free = freePlacementId(seg, new Set(byId.keys()));
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
+        line: layoutLine,
+      });
     }
   };
   // [LAW:no-silent-failure] The bar reads two steps of an address — the
@@ -413,6 +429,7 @@ export function validateCrossReferences(
           line,
         });
       }
+      checkPlacementSettings(ctx, cfg, node, path, line);
     }
   };
   if (authored.root !== undefined) checkLayoutTree(authored.root, "root");
@@ -463,18 +480,17 @@ export function validateCrossReferences(
     // bg/fg/when are templates too, so an unknown ref in them is a load error, not
     // a render-time surprise. Same existence-check shape as layout→segments; runs
     // on the merged config so a segment can reference a default-provided action.
+    // [LAW:one-source-of-truth] A segment's own templates also read
+    // `.settings.<name>` — the placement's value for each setting the
+    // segment declares, and nothing else under that name.
+    const segScope = withSettingsScope(templateScope, seg.settings);
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
-      checkTemplateRefs(
-        ctx,
-        `segments.${segName}.${field}`,
-        tpl,
-        templateScope,
-        {
-          segCtx: segName,
-        },
-      );
+      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
+        segCtx: segName,
+        settings: seg.settings,
+      });
       // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
       // action table on the merged config so a segment can reference a
       // default-provided action.
@@ -531,8 +547,8 @@ export function validateCrossReferences(
 // the preset name must be real (mirrors globals.preset's check earlier in
 // this function), the arm pairing must make sense for this scope (only
 // removeSegment/insertSegment address a tree — a `to`/`from`/cycle/bounded
-// literal has no meaning as "a tree"), and every segment name
-// the op names must be declared.
+// literal has no meaning as "a tree"), and a segment an insertion names must
+// be declared. The placements an op addresses by id are the click's to check.
 const TREE_OP_ARMS = [
   "removeSegment",
   "insertSegment",
@@ -587,10 +603,94 @@ function checkPresetRootTarget(
       line,
     });
   };
-  if ("removeSegment" in a) checkDeclared("removeSegment", a.removeSegment);
+  // [LAW:single-enforcer] A removal's target and an insertion's anchor are
+  // PLACEMENT ids, which name positions in a tree the op itself rewrites — an
+  // authored `removeSegment` names a placement that is gone once it has run,
+  // so a load-time check would refuse the very config its own click wrote.
+  // The one enforcer is the click: the file store refuses an id the tree no
+  // longer holds, loudly, and leaves the file untouched. The load still
+  // points a RETIRED segment name at its successor (renamed-segments.ts) —
+  // a name nothing declares and no placement holds, so no click of this
+  // config's can have removed it.
+  const placed = new Set(placementIds(presetRoot(cfg, presetName).node));
+  const checkRetired = (role: string, id: string): void => {
+    if (
+      !RENAMED_SEGMENTS.has(id) ||
+      placed.has(id) ||
+      Object.prototype.hasOwnProperty.call(cfg.segments, id)
+    ) {
+      return;
+    }
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: ${role} "${id}" names no placement${renamedHint(id)}`,
+      line,
+    });
+  };
+  if ("removeSegment" in a) checkRetired("removeSegment", a.removeSegment);
   if ("insertSegment" in a) checkDeclared("insertSegment", a.insertSegment);
   if ("insertSegment" in a || "insertSegmentFrom" in a) {
-    checkDeclared("anchor", a.anchor);
+    checkRetired("anchor", a.anchor);
+  }
+}
+
+// `.settings.` — a read under it is one of the placement's settings.
+const SETTINGS_SCOPE_PREFIX = "settings.";
+
+// [LAW:one-source-of-truth] The scope a segment's own templates check
+// against: everything any template may read, plus `settings.<name>` for each
+// setting the segment declares — the same keys the render's placement scope
+// adds (src/template-engine/scope.ts), and no others.
+function withSettingsScope(
+  scope: TemplateScope,
+  settings: SegmentDecl["settings"],
+): TemplateScope {
+  const names = Object.keys(settings ?? {});
+  return names.length === 0
+    ? scope
+    : {
+        ...scope,
+        names: new Set([
+          ...scope.names,
+          ...names.map((n) => SETTINGS_SCOPE_PREFIX + n),
+        ]),
+      };
+}
+
+// [LAW:no-silent-failure] A placement's setting values, against the merged
+// declaration of its segment: every name must be one it declares, every value
+// inside that setting's domain. A placement of an undeclared segment is
+// reported by the layout walk; nothing here is asked of it.
+function checkPlacementSettings(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  node: SegmentNode,
+  layoutKey: string,
+  line: number | undefined,
+): void {
+  const seg = Object.prototype.hasOwnProperty.call(cfg.segments, node.name)
+    ? cfg.segments[node.name]!
+    : undefined;
+  if (seg === undefined) return;
+  const declared = seg.settings ?? {};
+  const where = `${layoutKey}: placement "${placementId(node)}" of segment "${node.name}"`;
+  for (const [setting, value] of Object.entries(node.settings ?? {})) {
+    const decl = Object.prototype.hasOwnProperty.call(declared, setting)
+      ? declared[setting]!
+      : undefined;
+    const problem =
+      decl === undefined
+        ? `sets "${setting}", which segment "${node.name}" does not declare (${Object.keys(declared).length === 0 ? "it declares no settings" : `it declares: ${Object.keys(declared).join(", ")}`})`
+        : inSettingDomain(decl, value)
+          ? undefined
+          : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
+    if (problem !== undefined) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${where} ${problem}`,
+        line,
+      });
+    }
   }
 }
 
@@ -689,12 +789,24 @@ function checkTemplateRefs(
     // never a resolution rule. When a failing bare ref would resolve under
     // this segment's namespace, the message names the namespaced form.
     segCtx?: string;
+    // The settings that segment declares, so a read of one it does not
+    // declare says which it does.
+    settings?: SegmentDecl["settings"];
   },
 ): void {
   for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
     if (via !== null) {
       checkHelperRef(ctx, via, ref);
+      continue;
+    }
+    if (opts?.segCtx !== undefined && ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
+      const declared = Object.keys(opts.settings ?? {});
+      ctx.issues.push({
+        path: declPath,
+        message: `Template reads ".${ref}", but segment "${opts.segCtx}" declares no setting "${ref.slice(SETTINGS_SCOPE_PREFIX.length)}" (${declared.length === 0 ? "it declares no settings" : `it declares: ${declared.join(", ")}`}) — declare it under segments.${opts.segCtx}.settings`,
+        line: opts.line ?? findKeyLine(ctx.source, declPath.split(".")),
+      });
       continue;
     }
     const namespaced =

@@ -5,14 +5,16 @@
 // (the helper IS the trigger): one `state` var per menu state key (default
 // "closed"), one `cycle` action per (state key, member), AND — bn5.6 — the
 // picker body's page cursor (a `state` var + int action named by menuPageKey)
-// per state key, all under the reserved `menus.` namespace. Everything lands in
-// the raw sections so it merges over the default and, crucially, so
+// per state key, all under the reserved `menus.` namespace, so
 // `deriveActionValidators(config.actions)` derives the click gates from them
 // through the ONE existing path — a menu toggle and its page cursor are gated
 // like every other set, no parallel verb. [LAW:single-enforcer]
 //
-// Runs in `parseDslConfig` after group synthesis and after every section parsed,
-// so the reserved-namespace collision check sees the fully-parsed user sections.
+// Two halves, run where each one's facts exist. `checkMenuDecls` runs in
+// `parseDslConfig` over what one file wrote: the reservation and every call's
+// shape. `synthesizePlacementMenus` runs in `validateConfig` over the trees
+// that render, because a menu's key is its PLACEMENT's
+// (brandon-segment-settings-i4n).
 //
 // [LAW:types-are-the-program] WHICH segments host a menu, and with WHAT apply
 // action + options, is read from the parsed AST (`referencedCalls` → `argExprs`
@@ -32,7 +34,7 @@ import {
 } from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
 import { fragmentNode } from "../root.js";
-import type { Mutable, ValidateCtx } from "./validate-core.js";
+import type { ValidateCtx } from "./validate-core.js";
 import {
   menuActionName,
   menuMember,
@@ -49,10 +51,14 @@ import {
   disclosureStateVar,
 } from "../disclosure.js";
 import {
+  placementId,
   walkNodes,
+  type DslConfig,
   type RawDslConfig,
   type VariableDecl,
 } from "../dsl-types.js";
+import { presetNames, presetRoot } from "../presets.js";
+import type { ConfigIssue } from "./diagnostics.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   MENU_NS,
@@ -178,7 +184,7 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   // [LAW:no-silent-failure] An accordion key is the one authored name that never
   // becomes a declaration, so `reservedNamespaceCollisions` cannot see it — and
   // `menuStateKey` collapses it through `ident()`, which is where a reserved
-  // namespace leaks: every spelling of `settings.pickers` collapses to the state
+  // namespace leaks: every spelling of `candybar.pickers` collapses to the state
   // key the settings menu's picker accordion mints, and a shared key joining an
   // accordion is the mechanism BY DESIGN, so the join was silent (brandon-menus-du8).
   // Gated here, at load, because this pass sees exactly the AUTHORED menus: the
@@ -238,9 +244,9 @@ function menuIssue(ctx: ValidateCtx, path: string, message: string): void {
   ctx.issues.push({ path, message, line: findKeyLine(ctx.source, ["root"]) });
 }
 
-export function synthesizeMenuDecls(
+export function checkMenuDecls(
   ctx: ValidateCtx,
-  out: Mutable<RawDslConfig>,
+  out: Readonly<RawDslConfig>,
 ): void {
   // [LAW:single-enforcer] The `menus.` namespace is reserved UNCONDITIONALLY — a
   // user name under it is rejected whether or not any menu is placed this load, so
@@ -304,142 +310,174 @@ export function synthesizeMenuDecls(
     }
   }
 
-  // One state var per state key (default "closed"); one cycle action per
-  // (stateKey, member); one page-cursor var + int action per state key.
-  // [LAW:dataflow-not-control-flow] Independent menus each contribute their own
-  // key; shared-key menus contribute distinct members to one key, and the
-  // same-key validator merge unions them into one accordion gate.
-  const stateKeys = new Set<string>();
-  const actions: Record<string, ActionDecl> = {};
-  // Guard against two menus claiming one identity (same key + same member): for
-  // independent menus that means the literal same `{{ menu }}` twice in a
-  // segment; for shared-key menus it means two menus with the same apply name
-  // sharing a key — neither can be addressed distinctly, so reject.
-  const claimed = new Set<string>();
-  // [LAW:types-are-the-program] A synthesized key is `ident()`-normalized so it
-  // carries no separators; that normalization is lossy (`a-b` and `a_b`
-  // collapse), so two DISTINCT declarations could map to one key and silently
-  // share state (an unintended accordion). Track the raw "owner" each
-  // synthesized name (state key AND its derived page key) legitimately belongs
-  // to — a shared key is owned by its raw key string (every sibling agrees); an
-  // independent menu by its raw (segment, apply). A second owner on the same
-  // name is a collision, rejected at load so it is unrepresentable
-  // [LAW:no-silent-failure] rather than corrupting grouping. Registering the
-  // page key too closes the cross-shape aliasing corner (e.g. an apply action
-  // named "page" in segment "s" vs the page cursor of a shared key "s").
-  const ownerBySynthKey = new Map<string, string>();
-
+  // [LAW:no-silent-failure] Every call's SHAPE is the segment's own fact, so
+  // it is checked here, where the author wrote it. The keys a call derives
+  // are a fact about each PLACEMENT, so they are minted after merge
+  // (synthesizePlacementMenus below), over the trees that render.
   for (const [segName, { template }] of Object.entries(segments)) {
     // A delta inheriting its template declares no menus of its own: the
-    // bundled template's were synthesized when the bundled default parsed
-    // and reach this config through the by-name merge.
+    // bundled template's were checked when the bundled default parsed.
     if (template === undefined || !segmentReferencesMenu(template)) continue;
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
-      // [LAW:no-silent-failure] Every non-ok argument shape (missing apply,
-      // non-literal apply, the removed positional tail, a non-literal or
-      // malformed options dict) surfaces here as one load error with the
-      // analysis's migration-pointing text.
-      if (call.kind === "issue") {
+      const message =
+        call.kind === "issue" ? call.message : identityIssue(call.apply);
+      if (message !== undefined) {
         menuIssue(
           ctx,
           `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} ${call.message}.`,
+          `segment "${segName}" has a {{ menu }} ${message}.`,
         );
-        continue;
       }
-      const { apply, options } = call;
-      // [LAW:types-are-the-program] An empty apply name → empty member, and the
-      // store returns "" for an absent state key, so `open = read === member`
-      // would be true before any click — the menu would render open spuriously.
-      // Reject it (the member must never alias the absent-state sentinel).
-      if (apply === "") {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} with an empty apply-action name — an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action.`,
-        );
-        continue;
-      }
-      const member = menuMember(apply);
-      // [LAW:types-are-the-program] A member equal to the closed sentinel makes
-      // the cycle [closed, "closed"] — two identical members, leaving the menu
-      // unopenable. The only apply name that breaks a menu; reject it at load.
-      if (member === DISCLOSURE_CLOSED) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action.`,
-        );
-        continue;
-      }
-      const stateKey = menuStateKey(segName, apply, options.key);
-      const pageKey = menuPageKey(stateKey);
-      // The raw declaration these keys legitimately belong to. Shared-key
-      // siblings all share one owner (their raw key); an independent menu owns
-      // its keys alone (its raw segment+apply, NUL-joined so the two parts
-      // can't run together).
-      const owner =
-        options.key !== undefined
-          ? `key ${options.key}`
-          : `ind ${segName} ${apply}`;
-      const clashKey = [stateKey, pageKey].find((k) => {
-        const prior = ownerBySynthKey.get(k);
-        return prior !== undefined && prior !== owner;
-      });
-      if (clashKey !== undefined) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
-        );
-        continue;
-      }
-      ownerBySynthKey.set(stateKey, owner);
-      ownerBySynthKey.set(pageKey, owner);
-      const identity = menuActionName(stateKey, member);
-      if (claimed.has(identity)) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `two {{ menu }} disclosures resolve to the same identity ("${identity}") — ${
-            options.key !== undefined
-              ? `menus sharing key "${options.key}" must have distinct apply actions`
-              : `a segment cannot contain two menus over the same apply action "${apply}"`
-          }.`,
-        );
-        continue;
-      }
-      claimed.add(identity);
-      stateKeys.add(stateKey);
-      // [LAW:one-source-of-truth] The shared disclosure toggle: members ordered
-      // closed-first (an unset/foreign value counts as the first member — the
-      // cycle's "unknown ⇒ first" rule — so a never-clicked menu renders ▸ and a
-      // click opens it; a shared key holding one member auto-closes its siblings).
-      actions[identity] = disclosureCycleAction(stateKey, member);
     }
   }
+}
 
-  if (stateKeys.size === 0) return;
-
-  const variables: Record<string, VariableDecl> = {};
-  for (const stateKey of stateKeys) {
-    variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-    // [LAW:one-source-of-truth] The synthesized page cursor — the half a blind
-    // author used to hand-declare and forget, silently freezing the picker on
-    // page 0 (renderPicker read an unbound key as "" → clamp 0). Both halves
-    // are emitted together, named by menuPageKey, so the pairing is a
-    // construction, not a convention: the state VAR (named by the key, the
-    // disclosure-var convention) is what the renderer reads the live page
-    // through; the int ACTION is what deriveActionValidators derives the ←/→/✕
-    // wire gate from — the one existing path, no parallel gate
-    // [LAW:single-enforcer].
-    const pageKey = menuPageKey(stateKey);
-    variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-    actions[pageKey] = { set: pageKey, int: true };
+// [LAW:types-are-the-program] The two apply names that cannot be a member. An
+// empty one aliases the absent-state sentinel ("") — the store reads "" for an
+// unset key, so `open = read === member` would hold before any click. One
+// equal to the closed sentinel makes the cycle [closed, "closed"], leaving the
+// menu unopenable.
+function identityIssue(apply: string): string | undefined {
+  if (apply === "") {
+    return `with an empty apply-action name — an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
   }
+  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
+  }
+  return undefined;
+}
 
-  out.variables = { ...(out.variables ?? {}), ...variables };
-  out.actions = { ...(out.actions ?? {}), ...actions };
+// [LAW:one-source-of-truth] The keys every PLACEMENT's menus read and write
+// (brandon-segment-settings-i4n): one `state` var per state key (default
+// "closed"), one cycle action per (state key, member), and one page cursor per
+// state key — minted over every tree a preset renders, since a menu's
+// identity is its placement's id, not its segment's name. Two placements of
+// one menu-hosting segment therefore open independently, and a bare
+// placement, whose id is its segment's name, derives the key it always did.
+// Everything lands in the config's own sections, so
+// `deriveActionValidators(config.actions)` derives the click gates through
+// the ONE existing path [LAW:single-enforcer].
+//
+// Runs from validateConfig once cross-ref has proved every placement names a
+// declared segment and every id is unique in its tree; the issues it finds
+// are key collisions only a merged, placed config can have.
+export function synthesizePlacementMenus(
+  config: DslConfig,
+  issues: ConfigIssue[],
+): DslConfig {
+  const variables: Record<string, VariableDecl> = {};
+  const actions: Record<string, ActionDecl> = {};
+  // Each segment's template parsed once, however many placements it has.
+  const callsOf = new Map<string, readonly MenuAnalysis[] | "parse-failed">();
+  // One collision, found in every tree that holds it, is reported once.
+  const reported = new Set<string>();
+  const issue = (segName: string, message: string): void => {
+    const path = `segments.${segName}`;
+    if (reported.has(`${path}\0${message}`)) return;
+    reported.add(`${path}\0${message}`);
+    issues.push({ path, message });
+  };
+  // [LAW:one-source-of-truth] An id is unique within ONE tree, so the
+  // identities ids derive are checked per tree: two presets may give one id
+  // to two placements, which never render together. What a tree mints is a
+  // function of the identity alone, so the union over trees is the same
+  // declaration however many trees mint it.
+  for (const preset of presetNames(config.presets)) {
+    // [LAW:types-are-the-program] A synthesized key is `ident()`-normalized
+    // so it carries no separators; that normalization is lossy (`a-b` and
+    // `a_b` collapse), so two DISTINCT declarations could map to one key and
+    // silently share state (an unintended accordion). Track the raw "owner"
+    // each synthesized name (state key AND its derived page key) legitimately
+    // belongs to — a shared key is owned by its raw key string (every sibling
+    // agrees); an independent menu by its raw (placement, apply). A second
+    // owner on the same name is a collision, rejected so it is unrepresentable
+    // [LAW:no-silent-failure] rather than corrupting grouping. Registering the
+    // page key too closes the cross-shape aliasing corner (e.g. an apply
+    // action named "page" in placement "s" vs the page cursor of a shared
+    // key "s").
+    const ownerBySynthKey = new Map<string, string>();
+    // Two menus claiming one identity (same key + same member) cannot be
+    // addressed distinctly: for independent menus that is the literal same
+    // `{{ menu }}` twice in a segment; for shared-key menus it is two menus
+    // with the same apply name sharing a key. Each claim records the CALL
+    // that made it: two placements of one segment make the same keyed call,
+    // and its authored key says they share one open state.
+    const claimed = new Map<string, string>();
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const seg = config.segments[node.name];
+      if (seg === undefined) continue;
+      if (!callsOf.has(node.name)) {
+        callsOf.set(node.name, parseCalls(seg.template));
+      }
+      const calls = callsOf.get(node.name)!;
+      if (calls === "parse-failed") continue;
+      const id = placementId(node);
+      for (const [index, call] of calls.entries()) {
+        if (call.kind === "issue" || identityIssue(call.apply) !== undefined) {
+          continue;
+        }
+        const { apply, options } = call;
+        const member = menuMember(apply);
+        const stateKey = menuStateKey(id, apply, options.key);
+        const pageKey = menuPageKey(stateKey);
+        const owner =
+          options.key !== undefined
+            ? `key ${options.key}`
+            : `ind ${id} ${apply}`;
+        const clashKey = [stateKey, pageKey].find((k) => {
+          const prior = ownerBySynthKey.get(k);
+          return prior !== undefined && prior !== owner;
+        });
+        if (clashKey !== undefined) {
+          issue(
+            node.name,
+            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
+          );
+          continue;
+        }
+        ownerBySynthKey.set(stateKey, owner);
+        ownerBySynthKey.set(pageKey, owner);
+        const identity = menuActionName(stateKey, member);
+        const claimant = `${node.name}\0${index}`;
+        const prior = claimed.get(identity);
+        if (prior !== undefined && prior !== claimant) {
+          issue(
+            node.name,
+            `two {{ menu }} disclosures resolve to the same identity ("${identity}") — ${
+              options.key !== undefined
+                ? `menus sharing key "${options.key}" must have distinct apply actions`
+                : `a segment cannot contain two menus over the same apply action "${apply}"`
+            }.`,
+          );
+          continue;
+        }
+        claimed.set(identity, claimant);
+        // [LAW:one-source-of-truth] The shared disclosure toggle: members
+        // ordered closed-first (an unset/foreign value counts as the first
+        // member — the cycle's "unknown ⇒ first" rule — so a never-clicked
+        // menu renders ▸ and a click opens it; a shared key holding one
+        // member auto-closes its siblings).
+        actions[identity] = disclosureCycleAction(stateKey, member);
+        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
+        // [LAW:one-source-of-truth] The synthesized page cursor — the half a
+        // blind author used to hand-declare and forget, silently freezing the
+        // picker on page 0. Both halves are emitted together, named by
+        // menuPageKey, so the pairing is a construction, not a convention:
+        // the state VAR is what the renderer reads the live page through; the
+        // int ACTION is what deriveActionValidators derives the ←/→/✕ wire
+        // gate from — the one existing path, no parallel gate
+        // [LAW:single-enforcer].
+        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+        actions[pageKey] = { set: pageKey, int: true };
+      }
+    }
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...variables },
+    actions: { ...config.actions, ...actions },
+  };
 }

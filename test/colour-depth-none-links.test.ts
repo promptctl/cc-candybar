@@ -113,8 +113,8 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
     // Open the 🍫 door, ⚙ config, then the 🌈 colour depth ring — the clicks a user makes.
     const opened = (v: string) => v !== DISCLOSURE_CLOSED;
     click(render(), SETTINGS_ANCHOR, opened);
-    click(render(), "settings.config", opened);
-    click(render(), "menus.settings_pickers", (v) =>
+    click(render(), "candybar.config", opened);
+    click(render(), "menus.candybar_pickers", (v) =>
       v.endsWith("colorCompatibility"),
     );
 

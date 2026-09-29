@@ -622,10 +622,14 @@ preset`), because the file does not remember which of you wrote it.
 A preset's `root` is data you write once. `removeSegment` and `insertSegment`
 are the click-driven seam for changing it: `persist` a *structural* edit
 against `presets.<name>.root` — the config-file path of the preset's own
-`root` — instead of naming a value source. Both are fully literal — the
-segment name(s), and for `insertSegment` an `anchor` and a `relation` of
-`"before"` or `"after"` — so each declared action is exactly one legal
-request, gated the same one-value way a literal `persist … to` already is.
+`root` — instead of naming a value source. Both are fully literal — a
+`removeSegment` names a placement's id (a bare `"model"` placement's id is
+`model`), an `insertSegment` names the segment to place plus the `anchor`
+placement's id and a `relation` of `"before"` or `"after"` — so each declared
+action is exactly one legal request, gated the same one-value way a literal
+`persist … to` already is. An inserted segment keeps its own name as its id
+while that id is free, and is written as `{ seg, id: "<name>-2" }` (the next
+free number) when it is not.
 
 ```json5 check:pass
 {
@@ -676,7 +680,7 @@ clicked segment — and edits that row.
 
 A click whose target or anchor the tree no longer holds — the bar rendered
 before a later edit removed that segment — is a loud click error (`… holds
-no segment "model" — the bar you clicked is stale; it reloads on the next
+no placement "model" — the bar you clicked is stale; it reloads on the next
 render`), never a silent drop. The file and the history are untouched, and
 the next render rebuilds the chrome against the current tree.
 
@@ -863,8 +867,9 @@ synthesizes:
   segment in its resolved root: a `🚫` (a synthesized `removeSegment` action
   behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
   in a cell of its own (a synthesized `insertSegmentFrom` action behind
-  `{{ menu }}`, ranging every declared segment not already in that preset's
-  tree) that inserts after it, plus one `✚` leading each run — so N segments
+  `{{ menu }}`, ranging every declared segment — one already on the bar is
+  added as a second placement with an id of its own) that inserts after it,
+  plus one `✚` leading each run — so N segments
   in a row read `✚ [seg1 🚫] ✚ [seg2 🚫] ✚ … [segN 🚫] ✚`. Every affordance is gated on edit
   mode being open — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
@@ -1083,14 +1088,14 @@ A segment's `palette:` has no SessionState half — `persist` is its only seam,
 so there is no session `set` twin to pair it with. (The display globals
 `charset`, `colorCompatibility`, `autoWrap` and `padding` do have one.)
 
-### The global settings menu: `settings.menu`
+### The global settings menu: `candybar.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
 global settings menu, rendered as `🍫`. It is one symbol per state rather than a
 label plus an arrow: `🍫` closed, `❌` open. By default it is the leading cell of
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
-is shared by every preset). Place the reserved `settings.menu` segment name
+is shared by every preset). Place the reserved `candybar.menu` segment name
 yourself to move it anywhere else.
 
 ```json5 check:pass
@@ -1165,7 +1170,7 @@ drop-down open, so you can try several in a row; the `✕` leading each of its
 rows closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
-where it goes, by placing the reserved segment name `settings.menu` in your
+where it goes, by placing the reserved segment name `candybar.menu` in your
 layout — the anchor. Place it and the menu renders there; leave it out and the
 menu leads the bar's first row. Nothing else differs between the two:
 the same toggle, the same body, the same clicks.
@@ -1174,7 +1179,7 @@ the same toggle, the same body, the same clicks.
 {
   root: { v: [
     { h: ["directory", "gitaculous"] },
-    { h: ["settings.menu", "model", "context"] },
+    { h: ["candybar.menu", "model", "context"] },
   ] },
 }
 ```
@@ -1186,8 +1191,8 @@ placement would be two toggles fighting over it:
 ```json5 check:fail
 {
   root: { v: [
-    { h: ["directory", "settings.menu"] },
-    { h: ["model", "settings.menu"] },
+    { h: ["directory", "candybar.menu"] },
+    { h: ["model", "candybar.menu"] },
   ] },
 }
 ```
@@ -1205,7 +1210,7 @@ anchor may not sit under a `when` or inside a group's body:
 ```json5 check:fail
 {
   root: { v: [
-    { h: ["directory", "settings.menu"], when: "{{ ne .git.branch \"\" }}" },
+    { h: ["directory", "candybar.menu"], when: "{{ ne .git.branch \"\" }}" },
   ] },
 }
 ```
@@ -1219,7 +1224,7 @@ that your config does not declare — `session.id`, the `.effective` settings,
 `project_dir` — it declares itself, and your own declaration of any of those
 names wins.
 
-Everything the menu synthesizes lives under the reserved `settings.` namespace
+Everything the menu synthesizes lives under the reserved `candybar.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
 the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
 reserved namespace" below). Edit mode also treats those names as structural: no
@@ -1290,7 +1295,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 |---|---|---|---|
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
-| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `settings.`) is a load error |
+| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`) is a load error |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the style pick closing its
@@ -1827,7 +1832,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A `{{ menu }}` accordion key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `settings.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `settings.pickers`, `settings-pickers`, and `settings_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `settings.`), not only this one:
+The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`), not only this one:
 
 ```json5 check:fail
 {
@@ -1836,7 +1841,7 @@ The bundled settings menu's four config pickers share the accordion key `setting
   },
   segments: {
     themePicker: {
-      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "settings-pickers") }}',
+      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar-pickers") }}',
     },
   },
   root: { rows: { identity: { h: ["directory", "themePicker"] } } },
@@ -1844,7 +1849,7 @@ The bundled settings menu's four config pickers share the accordion key `setting
 ```
 
 ```error
-segment "themePicker" has a {{ menu }} whose accordion key "settings-pickers" lands in the reserved "settings." namespace — a key is collapsed to an identifier ("settings-pickers" becomes "menus.settings_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
+segment "themePicker" has a {{ menu }} whose accordion key "candybar-pickers" lands in the reserved "candybar." namespace — a key is collapsed to an identifier ("candybar-pickers" becomes "menus.candybar_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit
@@ -1910,7 +1915,11 @@ uses {{ menu }} in its "when" — a menu is only valid in a segment's "template"
 helper "themeMenu" uses {{ menu }}, but a menu must live directly in a segment template — its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.
 ```
 
-### A menu-hosting segment placed twice
+### A segment placed twice under one id
+
+A placement's `id` is what its menus' open state is keyed by, so two
+placements of one segment need two ids — a bare `"trigger"` takes the
+segment's name as its id:
 
 ```json5 check:fail
 {
@@ -1921,7 +1930,17 @@ helper "themeMenu" uses {{ menu }}, but a menu must live directly in a segment t
 ```
 
 ```error
-hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.
+root has 2 placements with the id "trigger"
+```
+
+Give the second its own id and each copy's menu opens on its own:
+
+```json5 check:pass
+{
+  actions: { applyTheme: { set: "theme", from: "themes" } },
+  segments: { trigger: { template: '🎨 {{ menu "applyTheme" "▸" "▾" }}' } },
+  root: { v: [ "trigger", { h: [{ seg: "trigger", id: "trigger2" }] } ] },
+}
 ```
 
 ### Squatting a reserved namespace
@@ -2113,20 +2132,23 @@ use `to`, `from`, or `cycle` like every other palette-shaped target:
 is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead
 ```
 
-### `removeSegment` naming an undeclared segment
+### `insertSegment` naming an undeclared segment
 
-Same load-time check as `segments.<name>.palette`, one seam over:
+Same load-time check as `segments.<name>.palette`, one seam over. (A
+`removeSegment` target and an `anchor` are placement ids, which the op itself
+adds and removes, so the click checks them instead: a click naming an id the
+bar no longer holds is refused and the file is left as it was.)
 
 ```json5 check:fail
 {
-  actions: { dropGhost: { persist: "presets.compact.root", removeSegment: "ghost" } },
+  actions: { addGhost: { persist: "presets.compact.root", insertSegment: "ghost", anchor: "sidebar", relation: "after" } },
   segments: { sidebar: { template: "sidebar" } },
   presets: { compact: { root: "sidebar" } },
 }
 ```
 
 ```error
-removeSegment "ghost" is not a declared segment
+insertSegment "ghost" is not a declared segment
 ```
 
 ### A value source other than `removeSegment`/`insertSegment`/`insertSegmentFrom` over a preset-root target

@@ -1503,18 +1503,14 @@ const AUTHORED_PALETTE_NAMES = new Set(
   ].filter((name): name is string => name !== undefined),
 );
 
-// [LAW:single-enforcer] Run the authored literal through the SAME
-// parse → synthesize pipeline every user config goes through (JSON5 stage +
-// synthesizeMenuDecls' `menus.*` synthesis, and any future group/menu
-// synthesis pass) instead of hand-duplicating that logic here. Without this,
-// the zero-config daemon path (loadConfig: no config file found ⇒ raw={},
-// merged directly against this constant — see src/config/dsl-loader.ts and
-// src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
-// `{{ menu (dict "key" …) }}` accordion pairing (the settings menu's pickers,
-// brandon-theming-8uj.1) would render its glyph, but clicking it would reject
-// with "unknown state key" — the synthesis that derives a menu's `menus.*`
-// state var + cycle action only ever ran over TEXT a user typed, never over
-// this TS literal. Round-tripping through JSON is exactly what
+// [LAW:single-enforcer] Run the authored literal through the SAME parse
+// pipeline every user config goes through (JSON5 stage + group synthesis and
+// the parse-time checks) instead of hand-duplicating that logic here. Without
+// this, the zero-config daemon path (loadConfig: no config file found ⇒
+// raw={}, merged directly against this constant — see src/config/dsl-loader.ts
+// and src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
+// synthesis that only ever ran over TEXT a user typed, never over this TS
+// literal. Round-tripping through JSON is exactly what
 // test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
 // so this is the same well-tested path, run once here instead of skipped.
 export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(

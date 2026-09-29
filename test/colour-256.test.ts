@@ -283,9 +283,9 @@ function forEachStage(
   const STAGES: Record<(typeof STAGE_NAMES)[number], (rendered: string) => string | null> = {
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
-    "preset picker": (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("preset")),
-    config: (r) => opener(r, "settings.config", () => true),
-    "theme picker": (r) => opener(r, "menus.settings_pickers", (v) => v.endsWith("theme")),
+    "preset picker": (r) => opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
+    config: (r) => opener(r, "candybar.config", () => true),
+    "theme picker": (r) => opener(r, "menus.candybar_pickers", (v) => v.endsWith("theme")),
   };
   const config = parseAndValidate(
     "<test>",

@@ -76,7 +76,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // declarations or not at all.
   //
   // [LAW:one-source-of-truth] The exemption is `isReservedName`, the predicate
-  // that already means "synthesized, not authored" — a `groups.`/`settings.`/
+  // that already means "synthesized, not authored" — a `groups.`/`candybar.`/
   // `edit.`/`menus.` name is minted by a synthesis pass, and
   // reservedNamespaceCollisions REFUSES a hand-authored declaration under it, so
   // such a segment could not carry an authored description even in principle.
@@ -98,7 +98,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind !== "segment") continue;
-      // Array form: a synthesized segment's name (e.g. "settings.menu")
+      // Array form: a synthesized segment's name (e.g. "candybar.menu")
       // contains a literal dot, which toHaveProperty's default dotted-path
       // string form would otherwise misread as nested access.
       expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([node.name]);
@@ -280,8 +280,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // tap would dispatch, so the controls this test exercises render.
       clickUrl(
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [SID, "settings.config", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.config", "open"] },
         ]),
         testVerbContext(sessionState),
       );

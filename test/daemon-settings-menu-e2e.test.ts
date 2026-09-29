@@ -123,8 +123,8 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         sockPath,
         urlWriting(
           await bar(),
-          "menus.settings_pickers",
-          "settings.apply.preset",
+          "menus.candybar_pickers",
+          "candybar.apply.preset",
         ),
       );
 

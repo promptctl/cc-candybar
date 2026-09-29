@@ -53,7 +53,10 @@ import {
   validateSegments,
 } from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRootFragment } from "./loader/layout.js";
-import { synthesizeMenuDecls } from "./loader/menu-synth.js";
+import {
+  checkMenuDecls,
+  synthesizePlacementMenus,
+} from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
@@ -228,6 +231,13 @@ export function validateConfig(
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
   }
+  // [LAW:one-source-of-truth] A menu's keys are its PLACEMENT's, so they are
+  // minted over the trees that render — which exist only now, merged and
+  // cross-referenced — before the settings menu and edit chrome add their own.
+  const withMenus = synthesizePlacementMenus(config, issues);
+  if (issues.length > 0) {
+    throw new ConfigError(filePath, issues);
+  }
   // [LAW:one-source-of-truth] Edit-mode's CHROME half (brandon-layout-edit-
   // 2gc.3), synthesized HERE — not in parseDslConfig alongside the toggle —
   // because it needs the fully merged, preset-resolved tree cross-ref/cycles
@@ -237,10 +247,10 @@ export function validateConfig(
   // cycle checking, exactly as group/menu synthesis's output doesn't either.
   // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.1's global settings
   // menu, spliced BEFORE edit chrome so edit chrome walks the final content tree
-  // and treats the menu's reserved `settings.` names as chrome-exempt — the
+  // and treats the menu's reserved `candybar.` names as chrome-exempt — the
   // full ordering argument lives in settings-menu.ts's header, beside the pass
   // it governs.
-  const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(config));
+  const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
   return withChrome as ValidatedConfig;
 }
 
@@ -411,13 +421,10 @@ function validateTopLevel(
   // default and cross-ref like any user declaration), and user names under the
   // reserved namespace are rejected against the fully-parsed sections.
   synthesizeGroupDecls(ctx, out);
-  // [LAW:one-source-of-truth] Menu synthesis runs AFTER group synthesis (a group
-  // body may host menu-bearing segments) and after every section parsed: each
-  // menu placement detected in the root walk emits its state var + cycle action
-  // into the raw sections, so they merge over the default, derive the click gate
-  // through deriveActionValidators, and collide loudly with any user name under
-  // the reserved namespace.
-  synthesizeMenuDecls(ctx, out);
+  // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
+  // call's shape, checked where the author wrote them; the keys each placement
+  // derives are minted after merge (validateConfig).
+  checkMenuDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
   // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger
@@ -429,7 +436,7 @@ function validateTopLevel(
   // here and synthesizes NOTHING here: the tree it must be present in only
   // exists after merge (a user `root` replaces the default's), so the artifacts
   // are minted in validateConfig. The reservation is unconditional all the same,
-  // mirroring every other namespace above — "you never author settings.*" is a
+  // mirroring every other namespace above — "you never author candybar.*" is a
   // stable contract, not a rule that switches on when the pass happens to fire.
   reservedNamespaceCollisions(
     ctx,

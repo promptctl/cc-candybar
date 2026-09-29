@@ -103,8 +103,8 @@ function formatSegments(segments: readonly SegmentSnapshot[]): string {
     if (seg.referencedVars.length > 0) {
       lines.push(`    vars      ${seg.referencedVars.join(", ")}`);
     }
-    if (seg.lastRender !== null) {
-      lines.push(`    last      ${seg.lastRender}`);
+    for (const { id, lastRender } of seg.placements) {
+      if (lastRender !== null) lines.push(`    last      ${id}: ${lastRender}`);
     }
   }
   return lines.join("\n") + "\n";

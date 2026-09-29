@@ -747,11 +747,14 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const file = sessionConfigFile(ctx, sid);
-  applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
+  const origin = sessionOrigin(ctx, sid);
+  const file = originConfigFile(origin);
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
+  // The placement an insertion wrote — its id minted here, at click time — is
+  // the one fact of the edit the op token does not already carry.
   ctx.dlog(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${file} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${file} placed=${JSON.stringify(placed)} (session=${sid})`,
   );
 };
 

@@ -13,8 +13,9 @@
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import type { CheckReport } from "./checks.js";
+import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
-export const DOCTOR_NS = "settings.doctor.";
+export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 
 export const VERDICT_OK = "ok";
 export const VERDICT_FAILED = "failed";

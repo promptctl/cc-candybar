@@ -85,14 +85,14 @@ describe("formatDebug", () => {
           description: "what the repo is doing",
           template: "{{ .git.branch }}",
           referencedVars: ["git.branch"],
-          lastRender: null,
+          placements: [],
         },
         {
           name: "mine",
           description: null,
           template: "x",
           referencedVars: [],
-          lastRender: null,
+          placements: [],
         },
       ],
     };

@@ -189,8 +189,8 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     // A carousel opened inside ⚙'s body is its own disclosure's body
     // (brandon-theme-picker-bgw.ef6): each of its rows — the ring and the
     // preview under it — is led by that disclosure's ✕ alone, never ⚙'s or 🍫's.
-    const pickers = sharedMenuStateKey("settings.pickers");
-    rt.clickWriting(lines, pickers, "settings.apply.theme");
+    const pickers = sharedMenuStateKey("candybar.pickers");
+    rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
     expect(lines).toHaveLength(4);
     for (const row of lines.slice(2)) {
@@ -205,7 +205,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(1);
 
-    // 🧰 tools opens a VERTICAL body whose rows are bare `settings.` segments
+    // 🧰 tools opens a VERTICAL body whose rows are bare `candybar.` segments
     // — chrome-exempt, so no edit-mode row wraps them: the segment itself
     // leads its row (a user group's rows reach the lead through the row edit
     // chrome wraps them in, which is why this case is pinned here as well).
@@ -238,8 +238,8 @@ const GROUPS = `{
   },
   root: { v: [
     { h: ['a'] },
-    { kind: 'group', name: 'one', label: 'one', key: 'acc', children: ['b', { h: ['c', 'd'] }, 'a'] },
-    { kind: 'group', name: 'two', label: 'two', key: 'acc', children: ['d'] },
+    { kind: 'group', name: 'one', label: 'one', key: 'acc', children: ['b', { h: ['c', 'd'] }, { seg: 'a', id: 'a2' }] },
+    { kind: 'group', name: 'two', label: 'two', key: 'acc', children: [{ seg: 'd', id: 'd2' }] },
   ] },
 }`;
 
@@ -284,9 +284,9 @@ const DROPS = `{
     { h: ['a'] },
     { kind: 'group', name: 'wide', label: 'wide', children: [
       { h: ['m', 'c'] },
-      { h: [{ v: ['b', 'd'] }, 'a'] },
+      { h: [{ v: ['b', 'd'] }, { seg: 'a', id: 'a2' }] },
     ] },
-    { kind: 'group', name: 'bare', label: 'bare', children: [{ seg: 'b', when: 'false' }] },
+    { kind: 'group', name: 'bare', label: 'bare', children: [{ seg: 'b', id: 'b2', when: 'false' }] },
   ] },
 }`;
 

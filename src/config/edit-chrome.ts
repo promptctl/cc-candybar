@@ -24,6 +24,7 @@ import { synthesisInputs } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
 import {
   mapOpens,
+  placementId,
   type ContainerNode,
   type DisclosureRef,
   type DslConfig,
@@ -33,7 +34,6 @@ import {
   type SegmentNode,
   type VariableDecl,
 } from "./dsl-types.js";
-import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import type { ResolvedDomain } from "./option-domain.js";
 import { presetRootKey } from "./loader/persist-target.js";
@@ -138,45 +138,36 @@ interface ChromeArtifacts {
   readonly segments: Record<string, SegmentDecl>;
 }
 
-// [LAW:one-source-of-truth] The domain name a preset's `+` pickers range —
-// computed once per preset (declared segments minus the ones already present
-// in ITS current tree) and consumed two ways: here (by name, for every
-// insertSegmentFrom action this preset's splice synthesizes) and by
-// registerDslConfig/deriveConfigActionValidators (which call
-// `addableSegmentDomains` directly to populate `perConfigDomains` before
-// resolving `from`). Both read the SAME string shape so a synthesized
-// action's domain name always resolves.
-export function addableDomainName(presetName: string): string {
-  return `${EDIT_NS}addable.${presetName}`;
-}
+// [LAW:one-source-of-truth] The domain name every `+` picker ranges, consumed
+// two ways: here (by name, for every insertSegmentFrom action the splice
+// synthesizes) and by registerDslConfig/deriveConfigActionValidators (which
+// call `addableSegmentDomains` directly to populate `perConfigDomains` before
+// resolving `from`). Both read this one string, so a synthesized action's
+// domain name always resolves.
+export const ADDABLE_DOMAIN = `${EDIT_NS}addable`;
 
-// [LAW:one-source-of-truth] THE per-preset "what can `+` offer here" set:
-// every declared, non-exempt segment name minus the ones already present
-// anywhere in that preset's CURRENT (merged) tree. Exported
-// so render.ts's registerDslConfig and config-validators.ts's
-// deriveConfigActionValidators — the two sites that resolve `from` domains —
-// merge this into `perConfigDomainsFor`'s map without each re-deriving it
-// [LAW:locality-or-seam]; option-domain.ts itself stays untouched (its
-// `perConfigDomainsFor` deliberately never imports dsl-types.ts — see that
-// file's own header — so a third per-preset domain merges at the two call
-// sites instead of inside it).
+// [LAW:one-source-of-truth] THE "what can `+` offer" set: every declared,
+// non-exempt segment name. A segment already on the bar is offered too — a
+// placement is an instance (brandon-segment-settings-i4n), so a second one is
+// a second instance with its own id and its own settings, minted when the
+// click lands (`mintPlacement`, layout-ops.ts). Exported so render.ts's
+// registerDslConfig and config-validators.ts's deriveConfigActionValidators —
+// the two sites that resolve `from` domains — merge this into
+// `perConfigDomainsFor`'s map without each re-deriving it
+// [LAW:locality-or-seam].
 export function addableSegmentDomains(
   config: DslConfig,
 ): ReadonlyMap<string, ResolvedDomain> {
-  const declared = Object.keys(config.segments).filter(
-    (n) => !isChromeExempt(n),
-  );
-  const domains = new Map<string, ResolvedDomain>();
-  for (const name of presetNames(config.presets)) {
-    const { node } = presetRoot(config, name);
-    const present = collectSegmentNames(node);
-    // Segment names carry no colour, so this domain declares no `paletteOf` —
-    // a `+` picker's options keep their band placement.
-    domains.set(addableDomainName(name), {
-      members: declared.filter((n) => !present.has(n)),
-    });
-  }
-  return domains;
+  // Segment names carry no colour, so this domain declares no `paletteOf` —
+  // a `+` picker's options keep their band placement.
+  return new Map([
+    [
+      ADDABLE_DOMAIN,
+      {
+        members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
+      },
+    ],
+  ]);
 }
 
 // One edit-mode chrome cell: a segment visible exactly while edit mode is on.
@@ -189,19 +180,22 @@ function chromeCell(
   return { kind: "segment", name };
 }
 
-// The `-` affordance (drawn `🚫`) for one segment instance: a literal
+// The `-` affordance (drawn `🚫`) for one placement, addressed by its id: a literal
 // `removeSegment` action, and the `{{ action }}` that clicks it, carried as the
-// segment node's own `trail` so it is drawn inside that segment's cell.
+// segment node's own `trail` so it is drawn inside that segment's cell. The
+// action is named by its POSITION, as an insertion's is: an id is free text,
+// and `ident` would collapse `git-2` and `git_2` onto one action.
 function removeTerm(
   presetIdent: string,
   rootKey: string,
-  segName: string,
+  posIdent: string,
+  id: string,
   artifacts: ChromeArtifacts,
 ): string {
-  const actionName = `${EDIT_NS}${presetIdent}.remove.${ident(segName)}`;
+  const actionName = `${EDIT_NS}${presetIdent}.remove.${posIdent}`;
   artifacts.actions[actionName] = {
     persist: rootKey,
-    removeSegment: segName,
+    removeSegment: id,
   };
   // A trail is not a segment, so no segment `when` hides it: it carries edit
   // mode's gate itself.
@@ -218,17 +212,26 @@ const LABEL_NS = `${EDIT_NS}label:`;
 // every other edit-mode cell is an affordance over the arrangement, not part
 // of it; anything else is itself.
 export function arrangedSegment(name: string): string | undefined {
-  if (name.startsWith(LABEL_NS)) return name.slice(LABEL_NS.length);
+  if (name.startsWith(LABEL_NS)) {
+    const label = name.slice(LABEL_NS.length);
+    return label.slice(label.indexOf(":") + 1);
+  }
   return name.startsWith(EDIT_NS) ? undefined : name;
 }
 
-// The name a content segment wears in edit mode. Keyed by segment name alone —
-// the label says the same thing in every preset — so N presets placing one
-// segment mint one declaration.
-function labelChrome(segName: string, artifacts: ChromeArtifacts): SegmentNode {
-  const name = `${LABEL_NS}${segName}`;
+// The name a placement wears in edit mode: its id, which is what tells two
+// placements of one segment apart. Declared as `edit.label:<id>:<segment>` —
+// an id holds no `:` (the loader refuses one), so `arrangedSegment` splits the
+// segment back out exactly. The label says the same thing in every preset, so
+// N presets holding one placement mint one declaration.
+function labelChrome(
+  id: string,
+  segName: string,
+  artifacts: ChromeArtifacts,
+): SegmentNode {
+  const name = `${LABEL_NS}${id}:${segName}`;
   artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(segName)}" }}`,
+    template: `{{ "${escapeTemplateLiteral(id)}" }}`,
     when: LABEL_GATE,
   };
   return { kind: "segment", name };
@@ -349,24 +352,31 @@ function spliceContainer(
       children.push(spliced);
       continue;
     }
-    const insert = (relation: "before" | "after") =>
+    const id = placementId(child);
+    const insert = (relation: "before" | "after", posIdent: string) =>
       insertTerm(
         presetIdent,
         rootKey,
-        String(posCounter.n++),
+        posIdent,
         domainName,
-        child.name,
+        id,
         relation,
         artifacts,
       );
-    const leading = i === firstContent ? [insert("before")] : [];
-    const after = insert("after");
+    const leading =
+      i === firstContent ? [insert("before", String(posCounter.n++))] : [];
+    const afterPos = String(posCounter.n++);
+    const after = insert("after", afterPos);
     // The remove button is drawn inside the cell of the segment it removes,
     // in whichever of the two views shows it, so nothing sits between them.
-    const remove = removeTerm(presetIdent, rootKey, child.name, artifacts);
+    // Every content segment has exactly one `after` insertion, so its
+    // position names the removal too.
+    const remove = removeTerm(presetIdent, rootKey, afterPos, id, artifacts);
     const cells: LayoutNode[] = [
       ...leading.map((lead) => chromeCell(lead.host, lead.template, artifacts)),
-      { ...labelChrome(child.name, artifacts), trail: remove },
+      // Labelled by the placement's id: two placements of one segment are
+      // told apart by it, and a bare placement's id is its segment's name.
+      { ...labelChrome(id, child.name, artifacts), trail: remove },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
@@ -538,7 +548,7 @@ function spliceEditChromeForPreset(
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const rootKey = presetRootKey(presetName);
-  const domainName = addableDomainName(presetName);
+  const domainName = ADDABLE_DOMAIN;
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };
   const spliced = spliceContainer(
@@ -569,7 +579,7 @@ function spliceEditChromeForPreset(
 // now does). The synthesized variables/actions/segments merge additively —
 // nothing here can collide with user data, since every name it mints lives
 // under the `edit.`/`menus.` namespaces `synthesizeEditModeToggle` and
-// `synthesizeMenuDecls` already reserve unconditionally at parse time.
+// `checkMenuDecls` already reserve unconditionally at parse time.
 //
 // Unconditional: the settings menu, synthesized into every config just before
 // this pass, ensures `edit.toggle` and puts `✎ edit` in its body, so every bar

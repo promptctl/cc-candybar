@@ -41,6 +41,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { validateVariables, variablesMapJson } from "./variables.js";
+import { settingsDeclSpec } from "./settings.js";
 
 // [LAW:one-source-of-truth] The names a file may declare as a delta: the
 // base's segments a user could AUTHOR — its synthesized ones (a bundled
@@ -176,6 +177,7 @@ const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   when: optionalStringSpec(),
   palette: paletteSpec(),
   vars: varsSpec(),
+  settings: settingsDeclSpec(),
 };
 
 const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {

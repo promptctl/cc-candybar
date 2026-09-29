@@ -88,9 +88,15 @@ export interface SegmentSnapshot {
   // against the store's declared names. Exact runtime deps may be a subset
   // (branches not taken), but every name returned IS in the store.
   readonly referencedVars: readonly string[];
-  // The last rendered output for this segment, when the daemon has captured
-  // one. null today — the daemon does not yet render through the DSL spine
-  // (see bzh.2). Populated when the daemon flips to renderDsl.
+  // Every placement of this segment the layout holds, in layout order — an
+  // unplaced segment has none — each with its last rendered output, or null
+  // where the daemon has captured none (hidden by its `when`, or not in the
+  // preset that rendered).
+  readonly placements: readonly PlacementSnapshot[];
+}
+
+export interface PlacementSnapshot {
+  readonly id: string;
   readonly lastRender: string | null;
 }
 

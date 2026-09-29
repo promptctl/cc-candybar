@@ -40,8 +40,10 @@ import type {
   PresetDecl,
   Root,
   RootFragment,
+  ValidatedConfig,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
+import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
   hasSegmentRef,
@@ -57,7 +59,11 @@ import {
   setValue,
   type Node,
 } from "../config/json5-edit.js";
-import type { LayoutOp } from "../config/layout-ops.js";
+import {
+  mintPlacement,
+  type LayoutOp,
+  type NewPlacement,
+} from "../config/layout-ops.js";
 import {
   parsePersistTarget,
   persistPath,
@@ -396,13 +402,13 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
 function layoutPlacementOf(
   doc: Node | null,
   preset: string,
-  segment: string,
+  id: string,
 ): Placement {
   for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
-    if (hasSegmentRef(node, segment)) return placement;
+    if (hasSegmentRef(node, id)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no segment "${segment}" — the bar you clicked is stale; it reloads on the next render`,
+    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
   );
 }
 
@@ -467,16 +473,25 @@ function commit(
   before: string | null,
   after: string,
 ): void {
+  loadOrRefuse(file, after);
+  writeConfigText(file, after, store.logger);
+  store.record(file, before, after);
+}
+
+// The config `text` loads to as `file`, or the click's refusal naming why it
+// does not load.
+function loadOrRefuse(file: string, text: string): ValidatedConfig {
   try {
-    validateConfig(loadConfigSource(file, after, DEFAULT_DSL_CONFIG), file);
+    return validateConfig(
+      loadConfigSource(file, text, DEFAULT_DSL_CONFIG),
+      file,
+    );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
       `refused: the config file would not load after this click — ${e.message}`,
     );
   }
-  writeConfigText(file, after, store.logger);
-  store.record(file, before, after);
 }
 
 /** The scalar the file declares at a value target, or undefined. */
@@ -672,7 +687,7 @@ export function applyLayoutOp(
   file: string,
   key: string,
   op: LayoutOp,
-): void {
+): NewPlacement | null {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -685,20 +700,42 @@ export function applyLayoutOp(
     subject,
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const after =
-    op.op === "remove"
-      ? removeSegmentRef(authored, placement.path, op.target)
-      : insertSegmentRef(
-          authored,
-          placement.path,
-          op.segment,
-          op.anchor,
-          op.relation,
-        );
+  const { after, placed } = spliceOp(authored, placement.path, op, () => {
+    // [LAW:no-ambient-temporal-coupling] Minted over the text this click
+    // splices, never a cached render of it: a hand edit, or a click an
+    // instant earlier, is in the text before any watcher reloads it.
+    const config = loadOrRefuse(file, authored);
+    return presetNames(config.presets).map(
+      (preset) => presetRoot(config, preset).node,
+    );
+  });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${file} has no segment "${subject}" — the bar you clicked is stale; it reloads on the next render`,
+      `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
   commit(store, file, before, after);
+  return placed;
+}
+
+// [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
+// a removal places nothing; an insertion places the segment under the id
+// `mintPlacement` finds free in every tree it reaches.
+function spliceOp(
+  text: string,
+  path: ConfigPath,
+  op: LayoutOp,
+  rendered: () => readonly LayoutNode[],
+): { readonly after: string | null; readonly placed: NewPlacement | null } {
+  switch (op.op) {
+    case "remove":
+      return { after: removeSegmentRef(text, path, op.target), placed: null };
+    case "insert": {
+      const placed = mintPlacement(op.segment, op.anchor, rendered());
+      return {
+        after: insertSegmentRef(text, path, placed, op.anchor, op.relation),
+        placed,
+      };
+    }
+  }
 }

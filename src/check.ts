@@ -382,8 +382,8 @@ export function renderEffective(
     checkPayload(effective),
     renderOptionsOf(effective, width),
     {
-      onSegmentError: (segName: string, message: string) =>
-        failures.set(`segment "${segName}"`, message),
+      onSegmentError: (placementId: string, message: string) =>
+        failures.set(`segment "${placementId}"`, message),
       // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
       // installed theme is a real finding for a headless pass: the bar would
       // render, in the wrong theme, with nobody watching the strip. Reported

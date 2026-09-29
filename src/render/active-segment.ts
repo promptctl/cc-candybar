@@ -25,8 +25,13 @@ import type {
 import type { Disclosure } from "../themes/decor.js";
 
 export interface ActiveSegment {
-  /** The segment's declared name — `{{ menu }}` derives its identity from it. */
+  /** The segment's declared name, for messages that point at its fields. */
   readonly segName: string;
+  /**
+   * The placement's id — `{{ menu }}` derives its identity from it, so two
+   * placements of one segment open their menus independently.
+   */
+  readonly placementId: string;
   /**
    * The disclosure this segment would open: the vocabulary hue its address
    * was dealt, at its band depth. A `{{ menu }}`'s body colours its option
@@ -103,12 +108,14 @@ export function createActiveSegmentRef(
 export function openSegment(
   ref: ActiveSegmentRef,
   segName: string,
+  placementId: string,
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
 ): ActiveSegment {
   const active: ActiveSegment = {
     segName,
+    placementId,
     palette,
     disclosure,
     tint,

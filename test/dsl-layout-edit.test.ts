@@ -80,7 +80,7 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   addableSegmentDomains,
-  addableDomainName,
+  ADDABLE_DOMAIN,
 } from "../src/config/edit-chrome";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -260,7 +260,11 @@ describe("cross-ref: presets.<name>.root target", () => {
     ).toThrow(/names preset "bogus" which is not declared/);
   });
 
-  test("removeSegment naming an undeclared segment is a load error", () => {
+  // A target and an anchor are placement ids in a tree the op rewrites, so
+  // the load does not check them — an authored removal would refuse the
+  // config its own click wrote. The click refuses a missing id instead (the
+  // stale-target test below).
+  test("removeSegment naming a placement the tree no longer holds still loads", () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -269,19 +273,19 @@ describe("cross-ref: presets.<name>.root target", () => {
         ),
         ALLOWED,
       ),
-    ).toThrow(/removeSegment "nope" is not a declared segment/);
+    ).not.toThrow();
   });
 
-  test("insertSegment's anchor naming an undeclared segment is a load error", () => {
+  test("insertSegment naming an undeclared segment is a load error", () => {
     expect(() =>
       parseAndValidate(
         "<test>",
         base(
-          `{ ins: { persist: 'presets.compact.root', insertSegment: 'directory', anchor: 'nope', relation: 'after' } }`,
+          `{ ins: { persist: 'presets.compact.root', insertSegment: 'nope', anchor: 'directory', relation: 'after' } }`,
         ),
         ALLOWED,
       ),
-    ).toThrow(/anchor "nope" is not a declared segment/);
+    ).toThrow(/insertSegment "nope" is not a declared segment/);
   });
 
   test("a 'to' literal targeting a preset-root key is a load error — only removeSegment/insertSegment apply", () => {
@@ -510,6 +514,10 @@ let durable: DurableConfig;
 function buildLayoutRuntime(src: string, sessionId = "s1") {
   if (durable.text() === null) durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
+  // What the daemon's cache entry holds: the config, re-read from the file
+  // each time a click reloads it.
+  let current = config;
+  const log: string[] = [];
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
@@ -528,7 +536,22 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    // The daemon's own lookup and reload: an insertion mints its id against
+    // the config as the last click left it.
+    configFor: () => current,
+    // A file that no longer loads keeps the last config that did, as the
+    // render cache's reload does.
+    reloadConfig: () => {
+      try {
+        current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+      } catch (err) {
+        if (!(err instanceof ConfigError)) throw err;
+      }
+    },
+    dlog: (_level, message) => log.push(message),
+  };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -540,7 +563,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
     }
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, dispose };
+  return { config, store, render, click, log, dispose };
 }
 
 describe("apply-layout-op click → the config file", () => {
@@ -609,6 +632,42 @@ describe("apply-layout-op click → the config file", () => {
     dispose();
   });
 
+  // A placement is an instance, so inserting a segment already on the bar
+  // places a second one — under the next free id, minted against the tree the
+  // previous click left, and named on the click's log line.
+  test("inserting a segment already placed writes a second placement with a fresh id", () => {
+    const { render, click, log, dispose } = buildLayoutRuntime(
+      SRC.replace(
+        "removeGit: {",
+        "insertGitAgain: { persist: 'presets.default.root', insertSegment: 'git', anchor: 'git', relation: 'after' },\n      removeGit: {",
+      ).replace(
+        `{{ action "removeGit" "x" }}`,
+        `{{ action "removeGit" "x" }} {{ action "insertGitAgain" "g" }}`,
+      ),
+    );
+    const again = ownUrls(render())[3]!;
+    click(again);
+    click(again);
+    expect(durable.parsed().root).toEqual({
+      v: [
+        {
+          h: [
+            "directory",
+            "git",
+            { seg: "git", id: "git-3" },
+            { seg: "git", id: "git-2" },
+          ],
+        },
+        "bar",
+      ],
+    });
+    expect(log.filter((l) => l.startsWith("apply-layout-op:"))).toEqual([
+      expect.stringContaining(`placed={"seg":"git","id":"git-2"}`),
+      expect.stringContaining(`placed={"seg":"git","id":"git-3"}`),
+    ]);
+    dispose();
+  });
+
   // [LAW:no-silent-failure] The bar that emitted the click was rendered
   // before the tree changed. There is no op log to "replay past" a stale
   // entry any more — the store refuses the edit, names the missing segment,
@@ -620,13 +679,13 @@ describe("apply-layout-op click → the config file", () => {
     const afterFirst = durable.text()!;
 
     // The same `-` again: "directory" is already gone.
-    expect(() => click(urls[0]!)).toThrow(/holds no segment "directory".*stale/);
+    expect(() => click(urls[0]!)).toThrow(/holds no placement "directory".*stale/);
     expect(durable.text()).toBe(afterFirst);
     expect(durable.history().past).toHaveLength(1);
 
     // An insert whose anchor was removed since the render, likewise.
     click(urls[2]!); // remove git
-    expect(() => click(urls[1]!)).toThrow(/holds no segment "git".*stale/);
+    expect(() => click(urls[1]!)).toThrow(/holds no placement "git".*stale/);
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
     dispose();
@@ -949,8 +1008,12 @@ function originCtx(
   durable.seedOrigin(sessionState, sessionId);
   return {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
-    // The daemon's own wiring (server.ts): a click that must not act on the
-    // old config reloads this cache's entry from the file it just wrote.
+    // The daemon's own wiring (server.ts): the config a session renders with
+    // is its cache entry's, and a click that must not act on the old config
+    // reloads that entry from the file it just wrote.
+    configFor: (origin) =>
+      cache.getOrCreate(origin.projectDir, origin.cwd, origin.configFile ?? undefined)
+        .state.config,
     reloadConfig: (origin) =>
       cache.reload(origin.projectDir, origin.cwd, origin.configFile ?? undefined),
   };
@@ -1243,14 +1306,14 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
-  // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the
-  // first merged row holding the segment, bundled rows before the file's own
-  // new ones — and the splice must edit THAT row, not the first occurrence in
-  // file-text order. Here `directory` sits in the bundled identity row AND in
-  // the file's own `extra` row, and the file authors `extra` first.
-  test("a segment placed in an inherited row and a file row: the edit lands on the row the cascade resolved", () => {
+  // [LAW:one-source-of-truth] The cascade resolves a click to the ONE row
+  // holding the placement — a bundled row or the file's own — and the splice
+  // edits THAT row. Here the segment `directory` is placed in the bundled
+  // identity row AND, as `dir2`, in the file's own `extra` row, which the
+  // file authors first: each id's removal lands on its own row.
+  test("one segment placed in an inherited row and a file row: each removal lands on the row holding that id", () => {
     durable.write(
-      `{ globals: {}, segments: {}, root: { rows: { extra: { h: ['directory'] } } } }`,
+      `{ globals: {}, segments: {}, root: { rows: { extra: { h: [{ seg: 'directory', id: 'dir2' }] } } } }`,
     );
     const { cache, sessionState, cleanups } = makeCache();
     try {
@@ -1268,11 +1331,24 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         encodeLayoutOp({ op: "remove", target: "directory" }),
       );
       const parsed = durable.parsed() as {
-        root: { rows: Record<string, { h: string[] }> };
+        root: { rows: Record<string, { h: unknown[] }> };
       };
       expect(Object.keys(parsed.root.rows)).toEqual(["extra", "identity"]);
-      expect(parsed.root.rows.extra!.h).toEqual(["directory"]);
+      expect(parsed.root.rows.extra!.h).toEqual([
+        { seg: "directory", id: "dir2" },
+      ]);
       expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "dir2" }),
+      );
+      expect(
+        (durable.parsed() as { root: { rows: Record<string, { h: unknown[] }> } })
+          .root.rows.extra!.h,
+      ).toEqual([]);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1311,7 +1387,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.root.rows.identity!.h).not.toContain("directory");
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
-      expect(removeDirectory).toThrow(/^root holds no segment "directory"/);
+      expect(removeDirectory).toThrow(/^root holds no placement "directory"/);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1389,12 +1465,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         const remainingChrome = allNames.filter((n) => n.startsWith(EDIT_NS));
         expect(remainingChrome.length).toBeGreaterThan(0);
         // And "gitaculous" is now a legal target of an insertSegmentFrom pick —
-        // every `+` in this preset ranges the SAME addable domain, computed
+        // every `+` ranges the SAME addable domain,
         // fresh from the tree above, so any of them offers it back.
         expect(
-          addableSegmentDomains(afterRemove.state.config).get(
-            addableDomainName("default"),
-          )?.members,
+          addableSegmentDomains(afterRemove.state.config).get(ADDABLE_DOMAIN)
+            ?.members,
         ).toContain("gitaculous");
 
         // Click that `+` and pick "gitaculous": the exact token

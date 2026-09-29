@@ -2,9 +2,10 @@
 // single place both the loader (which SYNTHESIZES the state var + cycle action)
 // and the renderer (which READS openness + emits the toggle) agree on "which key
 // holds which open menu". A `{{ menu }}` helper is context-free about its NAME
-// (it cannot see the segment it sits in), so the loader and the render walk both
-// derive identity from the same two facts — the host segment name and the menu's
-// own apply-action name — and MUST produce identical strings or a click would
+// (it cannot see the placement it sits in), so the loader and the render walk
+// both derive identity from the same two facts — the host placement's id
+// (`placementId`) and the menu's own apply-action name — and MUST produce
+// identical strings or a click would
 // write a key the render never reads. Keeping the rule in one module makes that
 // agreement structural rather than a coincidence of two copies.
 //
@@ -13,7 +14,8 @@
 //               so two menus in ONE segment are distinct.
 //   • stateKey = the SessionState key whose value names the open member. By
 //               DEFAULT each menu owns a UNIQUE key (`menus.<seg>.<apply>`), so
-//               it toggles only itself — menus are INDEPENDENT. Passing an
+//               it toggles only itself — menus are INDEPENDENT, and two
+//               placements of one segment are two menus. Passing an
 //               explicit shared key makes sibling menus share one key
 //               (`menus.<key>`); one key holds one open member, so they become
 //               mutually exclusive (an accordion) — exactly group sugar's shared-
@@ -45,18 +47,18 @@ export function menuMember(applyName: string): string {
 }
 
 // [LAW:single-enforcer] THE state key for a menu. Independent (no shared key):
-// unique per (segment, apply) so the menu toggles only itself. Shared key: the
-// key all siblings passing the same string agree on, so one open member wins
-// (accordion). The shared form ignores the segment name on purpose — that is how
-// menus in DIFFERENT segments become mutually exclusive.
+// unique per (placement, apply) so the menu toggles only itself. Shared key:
+// the key all siblings passing the same string agree on, so one open member
+// wins (accordion). The shared form ignores the placement on purpose — that is
+// how menus in DIFFERENT placements become mutually exclusive.
 export function menuStateKey(
-  segName: string,
+  placementId: string,
   applyName: string,
   sharedKey: string | undefined,
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : MENU_NS + ident(segName) + "." + ident(applyName);
+    : MENU_NS + ident(placementId) + "." + ident(applyName);
 }
 
 // [LAW:decomposition] The shared arm of that derivation, named so the loader's

@@ -29,8 +29,10 @@ import {
   type RootFragment,
   type SegmentDecl,
   type SegmentNode,
+  type SettingValue,
   type VariableDecl,
 } from "../dsl-types.js";
+import { placementIdSpec, placementSettingsSpec } from "./settings.js";
 import { ROW_NAME_RE } from "../root.js";
 import type { ActionDecl } from "../action.js";
 import {
@@ -198,6 +200,8 @@ const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens" | "trail">> =
       kind: literalSpec("segment"),
       name: segmentNameSpec(),
       when: optionalStringSpec(),
+      id: placementIdSpec(),
+      settings: placementSettingsSpec(),
     },
   };
 
@@ -234,6 +238,8 @@ const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
 interface SegArmNode {
   readonly seg: string;
   readonly when?: string;
+  readonly id?: string;
+  readonly settings?: Readonly<Record<string, SettingValue>>;
 }
 
 function segArmSpec(): FieldSpec<string> {
@@ -255,7 +261,12 @@ function segArmSpec(): FieldSpec<string> {
 
 const SEG_ARM_SCHEMA: RecordSchema<SegArmNode> = {
   noun: "layout-node key",
-  fields: { seg: segArmSpec(), when: optionalStringSpec() },
+  fields: {
+    seg: segArmSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec(),
+  },
 };
 
 interface HArmNode {
@@ -385,6 +396,8 @@ export const validateRoot = (
       kind: "segment",
       name: arm.seg,
       ...(arm.when !== undefined && { when: arm.when }),
+      ...(arm.id !== undefined && { id: arm.id }),
+      ...(arm.settings !== undefined && { settings: arm.settings }),
     };
   }
   if (hasH) {
@@ -675,7 +688,7 @@ export function synthesizeGroupDecls(
   // before the no-groups early return, so the reservation is a stable contract
   // ("you never author groups.*"), not a rule that only switches on when a
   // group node happens to be declared this load — same placement as the menus
-  // pass (synthesizeMenuDecls).
+  // pass (checkMenuDecls).
   reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
 
   const groups = ctx.groups;

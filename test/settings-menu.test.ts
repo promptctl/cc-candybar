@@ -257,7 +257,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
-      effectsOf(u).some((e) => e.args[1]?.startsWith("menus.settings_")),
+      effectsOf(u).some((e) => e.args[1]?.startsWith("menus.candybar_")),
     );
     expect(pickerUrl).toBeDefined();
     click(pickerUrl!);
@@ -679,7 +679,7 @@ describe("the menu in a config that declares no variables", () => {
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
 
 // [LAW:behavior-not-structure] brandon-menus-du8. The settings menu's four config
-// pickers share the accordion key `settings.pickers`, and a shared key joining an
+// pickers share the accordion key `candybar.pickers`, and a shared key joining an
 // accordion is the mechanism BY DESIGN — so a user menu that derives the same key
 // joined that accordion, and opening the user's menu closed the settings picker
 // with no error naming the cause. The pin is the BEHAVIOUR, over every spelling
@@ -696,11 +696,11 @@ describe("a user menu cannot join a synthesized accordion", () => {
     root: { h: ['hello'] },
   }`;
 
-  // The three spellings `ident()` collapses to `settings_pickers` — the key the
+  // The three spellings `ident()` collapses to `candybar_pickers` — the key the
   // settings menu's picker accordion mints. Only the first starts with the
-  // authored prefix `"settings."`, which is why a check on the authored spelling
+  // authored prefix `"candybar."`, which is why a check on the authored spelling
   // closes one case of three and the collapse has to be compared instead.
-  for (const key of ["settings.pickers", "settings-pickers", "settings_pickers"]) {
+  for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
     test(`the key "${key}" is a load error naming the reserved namespace`, () => {
       try {
         parseAndValidate("<user>", withKey(key), ALLOWED);
@@ -711,7 +711,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
         expect(message).toContain(SETTINGS_NS);
         // It names the derived key, so the author sees WHY their spelling is the
         // reserved one — the collapse is the part they cannot see.
-        expect(message).toContain("menus.settings_pickers");
+        expect(message).toContain("menus.candybar_pickers");
         expect(message).toContain("hello");
       }
     });
@@ -747,7 +747,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
     // is the settings pickers' key. If someone ever "simplifies" ident() so this
     // stops holding, the gate above becomes theatre and this test says so.
     const settingsPickers = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-    for (const key of ["settings.pickers", "settings-pickers", "settings_pickers"]) {
+    for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
       expect(sharedMenuStateKey(key)).toBe(settingsPickers);
     }
   });
@@ -816,7 +816,7 @@ describe("the menu is chrome-exempt", () => {
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    // The addable domain is "declared, non-exempt segments not already present".
+    // The addable domain is "declared, non-exempt segments".
     // A settings segment in it would mean `+` could insert a second copy of the
     // one node that must exist exactly once.
     const compiled = registerDslConfig(
@@ -831,7 +831,7 @@ describe("the menu is chrome-exempt", () => {
     );
     expect(compiled).toBeDefined();
     // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that
-    // field holds the domain's NAME (`addableDomainName` → `edit.addable.<p>`),
+    // field holds the domain's NAME (`ADDABLE_DOMAIN`, `edit.addable`),
     // which is EDIT_NS-prefixed by construction, so checking it for a
     // SETTINGS_NS prefix passes however broken `isChromeExempt` gets.
     const domains = [...addableSegmentDomains(config).values()];
@@ -900,7 +900,7 @@ describe("every settings control has a setting projection", () => {
     DEFAULT_DSL_CONFIG,
   );
   const controls = Object.entries(config.actions).filter(([name]) =>
-    name.startsWith("settings.apply."),
+    name.startsWith("candybar.apply."),
   );
   const sessionKey = (a: ActionDecl): string =>
     "set" in a ? a.set : `(not a set: ${JSON.stringify(a)})`;

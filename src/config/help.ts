@@ -79,7 +79,7 @@ export interface HelpArtifacts {
 // `name` is the reserved-namespace base every artifact derives from — the
 // trigger segment, the state variable and the cycle action all take it
 // verbatim, the same one-name-four-artifacts convention `groups.<name>` and
-// `settings.menu` already use, so the toggle's click and the body's open state
+// `candybar.menu` already use, so the toggle's click and the body's open state
 // cannot address different keys [LAW:one-source-of-truth].
 //
 // `within` names the disclosures this help sits INSIDE without hanging on

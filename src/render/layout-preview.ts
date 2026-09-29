@@ -28,7 +28,7 @@ import { stateCell } from "./band-style.js";
 import { cellWidth, ledRowBudget } from "./picker.js";
 
 // What a block says: the segment's own name, less any namespace — the door is
-// `settings.menu`, and "menu" is what it is.
+// `candybar.menu`, and "menu" is what it is.
 export const blockLabel = (name: string): string =>
   name.slice(name.lastIndexOf(".") + 1);
 
