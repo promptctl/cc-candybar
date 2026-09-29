@@ -549,8 +549,12 @@ const save: VerbHandler = (value, ctx) => {
   const drafts = settingDrafts(ctx.configFor(origin), (key) =>
     ctx.sessionState.get(sid, key),
   );
+  // Nothing unsaved is the save's own postcondition already holding — a second
+  // click on a bar drawn before the first save's reload — so it is a recorded
+  // no-op, never a failure on the diagnostic strip.
   if (drafts.length === 0) {
-    throw new BadVerbArgs(`save: session ${sid} has no unsaved settings`);
+    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    return;
   }
   const pairs = drafts.map((d): readonly [string, string] => {
     const result = validateStateWrite(d.sessionKey, d.value);

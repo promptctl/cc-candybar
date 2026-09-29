@@ -228,14 +228,21 @@ function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
 // [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
 // field table with exactly one field swapped for its rejection — not a
 // hand-listed subset that a future globals field could be forgotten from.
+const PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset"),
+};
+
 const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("a preset"),
-    menuGlyph: nestedMenuGlyphSpec("a preset"),
-  },
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
 };
+
+// A field a preset's own globals fragment may author — every globals field but
+// the ones its schema rejects, read off the same rejection table.
+export function isPresetGlobalsField(key: string): key is keyof Globals {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
 
 // [LAW:one-type-per-behavior] Edit mode's staged globals are the same shape one
 // rung later in the precedence chain, so they reuse the same table rather than

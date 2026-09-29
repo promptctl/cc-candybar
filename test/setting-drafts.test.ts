@@ -97,6 +97,9 @@ describe("a preset's globals as a write target", () => {
       "padding",
     ]);
     expect(parsePersistTarget("presets.compact.globals.nope")).toBeNull();
+    // A fragment cannot author these, so neither can a write into one.
+    expect(parsePersistTarget("presets.compact.globals.preset")).toBeNull();
+    expect(parsePersistTarget("presets.compact.globals.menuGlyph")).toBeNull();
   });
 
   test("a file's fragment merges over the base preset's field by field", () => {

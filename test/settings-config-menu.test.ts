@@ -377,6 +377,26 @@ describe("the config menu, reached from a user config whose root is one row", ()
     ]);
   });
 
+  test("a second save with nothing unsaved is a recorded no-op", () => {
+    r.click(paddingUp());
+    const url = saveUrl()!;
+    r.click(url);
+    // The bar the second click came from was drawn before the reload.
+    const saved = durable.text();
+    const depth = durable.history(SID).past.length;
+    expect(
+      settingDrafts(reloaded(), (key) => r.sessionState.get(SID, key)),
+    ).toEqual([]);
+    // Re-point the rig's config at the reloaded file, as the reload would.
+    r.dispose();
+    r = rig(saved!, durable);
+    r.sessionState.set(SID, "padding", "2");
+    expect(() => r.click(url)).not.toThrow();
+    expect(durable.text()).toBe(saved);
+    expect(durable.history(SID).past).toHaveLength(depth);
+    expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
+  });
+
   test("a refused write keeps every draft and leaves the file as it was", () => {
     r.click(wrapUrl());
     r.click(paddingUp());
