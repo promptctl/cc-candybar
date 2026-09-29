@@ -1967,6 +1967,12 @@ describe("extractTemplateRefs", () => {
     ]);
   });
 
+  test("a `}}` inside a string literal does not close the block", () => {
+    expect([
+      ...extractTemplateRefs('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}'),
+    ]).toEqual(["y", "w"]);
+  });
+
   test("multiple refs across blocks", () => {
     const refs = extractTemplateRefs(
       "{{ .a }} static {{ .b | upper }} {{ if .c }}{{ .d }}{{ end }}",

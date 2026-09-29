@@ -248,6 +248,12 @@ export interface ActionRuntime {
   // renders are sequential and synchronous, so the per-render write never leaks
   // across renders. [LAW:no-ambient-temporal-coupling]
   chromeCols: number;
+  // [LAW:locality-or-seam] The width the current render's strip wraps to
+  // (`opts.width`, the value renderDsl also injects as `term.cols`), published
+  // beside chromeCols. The row-fitting functions read it here rather than from
+  // the store, so fitting a row to the width reads no variable a config must
+  // declare.
+  width: number;
   // [LAW:locality-or-seam] The current render's intra-cell padding (resolved
   // globals.padding), published per render by renderDsl exactly like
   // chromeCols. The picker reserves 2×padding at its pagination seam — the

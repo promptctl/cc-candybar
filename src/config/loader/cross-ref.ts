@@ -430,7 +430,7 @@ export function validateCrossReferences(
       // globals + namespaced segment vars) — the same existence-check shape as a
       // segment template, surfaced at load time.
       if (node.when !== undefined) {
-        checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
+        checkTemplateRefs(ctx, `${path}.when`, node.when, templateScope, {
           line: layoutLine,
         });
         checkWhenParses(ctx, `${path}.when`, node.when, layoutLine);
@@ -761,7 +761,8 @@ function checkDependsOn(
 }
 
 // [LAW:no-silent-failure] A malformed `when` in an authored tree is a load
-// error at the path the author wrote. The compile would catch it too, but it
+// error at its position in that tree, before any synthesis. The compile would
+// catch it too, but it
 // compiles the SYNTHESIZED trees — the settings menu and edit chrome rewrite
 // every preset root — so its path would name a position the author never
 // wrote (`presets.default.root.children[1]…`). Parse-only: a bare engine,

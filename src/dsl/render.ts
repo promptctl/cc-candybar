@@ -407,6 +407,9 @@ export function registerDslConfig(
       style: "powerline",
       charset: DEFAULT_CHARSET,
     }),
+    // Same contract as chromeCols; the floor is the bundled `term.cols`
+    // default, what a row was fitted to before a render published the width.
+    width: 80,
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // base palette each render; `globals.palette` is the registration-time
     // value, so a compile-only path (no render) still has a real palette.
@@ -958,6 +961,8 @@ export function renderDsl(
   // style: the picker reserves 2×padding at its pagination seam, the same seam
   // that reserves the joiner chrome — one resolved value, read where needed.
   compiled.menuRuntime.action.padding = opts.padding;
+  // The width the rows wrap to, the one value `term.cols` carries above.
+  compiled.menuRuntime.action.width = opts.width;
   // The seam one more cell costs, from the same options the rows serialize by.
   compiled.menuRuntime.action.seamCols = stripSeamCols(opts);
   const scope = buildScope(store);

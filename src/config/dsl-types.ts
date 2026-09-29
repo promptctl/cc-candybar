@@ -804,27 +804,3 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
   "left",
   "middle",
 ];
-
-// ─── Conventional render-time variable names ─────────────────────────────────
-//
-// [LAW:one-source-of-truth] These are not widget types (those live in
-// `./action.ts`); they are the conventional variable NAMES the renderer and the
-// picker agree on. Kept here, with the other render/config conventions.
-
-// [LAW:one-source-of-truth] The conventional variable a picker paginates against
-// — the usable terminal width renderDsl injects each render. One name shared by
-// the declaration (default config) and the picker's read, so they cannot drift.
-export const TERM_COLS_VAR = "term.cols";
-
-// The template functions that fit a row to the width — each reads
-// TERM_COLS_VAR from the store through rowBudget (render/picker.ts) — so a
-// template calling one reads term.cols though no `.term.cols` appears in it.
-// The settings menu ensures its inputs from its templates' reads, this one
-// included, so a new caller of rowBudget belongs in this list.
-export const ROW_BUDGET_FUNCS: readonly string[] = [
-  "picker",
-  "menu",
-  "carousel",
-  "layoutPreview",
-  "themePreview",
-];

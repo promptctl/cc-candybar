@@ -271,7 +271,7 @@ export type DualActionDecl =
 // reason every `"set" in a` consumer stays correct: a dual decl carries both
 // `set` and `persist`, so a consumer that must treat the two destinations
 // separately asks THIS first (or folds through actionDestinations below), and
-// a consumer that only asks "does this bind a session write" (actionBindsSet)
+// a consumer that only asks "does this write the session" (`"set" in a`)
 // keeps its existing answer with no change at all.
 export function actionIsDual(a: ActionDecl): a is DualActionDecl {
   return PERSIST_WHEN in a;
@@ -323,22 +323,4 @@ export function actionDestinations(a: ActionDecl): readonly ActionDecl[] {
 // than a wrong write.
 export function actionBindsTemplateValue(a: ActionDecl): boolean {
   return "from" in a || "int" in a || "insertSegmentFrom" in a;
-}
-
-// [LAW:single-enforcer] Does this action's click carry session.id on the wire?
-// `set` composes a set-state URL whose first segment is it; `persist`, `reset`,
-// `undo`/`redo` and both `doctor` verbs carry it too, so a click error (a
-// refused write, an empty history stack, nothing left to fix) surfaces on the
-// session that clicked rather than as a silent no-op. copy/open write nothing
-// and embed none; a `do` carries whatever its members carry, each of which is
-// a declared action asked this on its own.
-export function actionCarriesSession(a: ActionDecl): boolean {
-  return (
-    "set" in a ||
-    "persist" in a ||
-    "reset" in a ||
-    "undo" in a ||
-    "redo" in a ||
-    "doctor" in a
-  );
 }

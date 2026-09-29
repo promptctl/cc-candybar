@@ -11,6 +11,7 @@
 // cannot import the default without a cycle.
 
 import type { VariableDecl } from "./dsl-types.js";
+import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 
 export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   project_dir: {
@@ -18,7 +19,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "workspace.project_dir",
     default: "",
   },
-  "session.id": { kind: "input", path: "session_id", default: "" },
+  [SESSION_ID_VAR_NAME]: { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
   // root by buildRenderPayload). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.

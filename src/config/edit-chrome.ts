@@ -20,7 +20,7 @@
 // (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
 // are indistinguishable at render. Nothing here is a new render concept.
 
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
+import { synthesisInputs } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
 import {
   mapOpens,
@@ -134,11 +134,6 @@ const isChromeExempt = isReservedName;
 // so cross-preset names (disambiguated by `presetIdent`) can never collide.
 interface ChromeArtifacts {
   readonly variables: Record<string, VariableDecl>;
-  // [LAW:no-silent-failure] Declarations this synthesis DEPENDS on rather than
-  // OWNS: merged UNDER the config so a user's own declaration of the same name
-  // wins, unlike `variables` above, which lives in a reserved namespace no user
-  // may write and therefore merges over.
-  readonly ensured: Record<string, VariableDecl>;
   readonly actions: Record<string, ActionDeclType>;
   readonly segments: Record<string, SegmentDecl>;
 }
@@ -446,16 +441,6 @@ function wrapWithPresetRows(
   // edited down to zero non-exempt segments (no removeTerm/insertTerm
   // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootKey };
-  // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS
-  // pass is what requires that variable — not whichever config happens to
-  // declare it. The bundled default does, which is why the dependency stayed
-  // invisible until the global settings menu made edit mode reachable from
-  // configs that never declared it, and the missing field surfaced as a ⚠ on
-  // the bar. Ensured, never overridden: a user declaration of the same name
-  // wins (see the merge in synthesizeEditChrome), so this only supplies the
-  // floor the synthesis itself depends on.
-  artifacts.ensured[PRESET_CUSTOMIZED_VAR] =
-    PAYLOAD_INPUTS[PRESET_CUSTOMIZED_VAR]!;
   const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
@@ -593,7 +578,6 @@ function spliceEditChromeForPreset(
 export function synthesizeEditChrome(config: DslConfig): DslConfig {
   const artifacts: ChromeArtifacts = {
     variables: {},
-    ensured: {},
     actions: {},
     segments: {},
   };
@@ -650,10 +634,18 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
       root: splicedRoot,
     };
   }
+  // [LAW:no-silent-failure] What the chrome reads and the config does not
+  // declare (the banner's `.preset.customized`, the session.id every click
+  // carries), merged UNDER the config so a user's own declaration wins.
+  const ensured = synthesisInputs(
+    artifacts,
+    [lead, tail],
+    Object.keys(config.variables),
+  );
   return {
     ...config,
     variables: {
-      ...artifacts.ensured,
+      ...ensured,
       ...config.variables,
       ...artifacts.variables,
     },

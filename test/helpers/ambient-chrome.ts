@@ -25,11 +25,7 @@ import {
   SETTINGS_NS,
 } from "../../src/config/loader/reserved-namespace";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
-import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
-import {
-  menuInputs,
-  SETTINGS_WRITTEN_KEYS,
-} from "../../src/config/settings-menu";
+import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
 import {
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
@@ -38,6 +34,7 @@ import {
   VERB_STEP_STATE,
 } from "../../src/click/wire";
 import { effectsOf } from "./click";
+import { parseAndValidate } from "./parse-and-validate";
 
 // [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
 // for both consumers below. Every arm is under a namespace the loader reserves,
@@ -200,7 +197,14 @@ export function withoutSettingsLinks(urls: readonly string[]): string[] {
 // the synthesis ensured it or an author declared it. Closing that collision
 // would mean reserving or namespacing the names upstream, not filtering harder
 // here.
-const ENSURED = new Set([...menuInputs(), PRESET_CUSTOMIZED_VAR]);
+const ENSURED = new Set(
+  Object.keys(
+    parseAndValidate(
+      "<bare>",
+      `{ segments: { hello: { template: "hi" } }, root: { h: ["hello"] } }`,
+    ).variables,
+  ).filter((n) => !isReservedName(n)),
+);
 export function ownDeclNames(names: readonly string[]): string[] {
   return names.filter((n) => !ENSURED.has(n) && !isReservedName(n));
 }

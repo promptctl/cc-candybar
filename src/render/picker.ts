@@ -26,8 +26,6 @@
 import { RichText } from "@promptctl/rich-js";
 import type { Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { toNumber } from "../var-system/types.js";
-import { TERM_COLS_VAR } from "../config/dsl-types.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
   activeDestination,
@@ -79,15 +77,9 @@ export function cellWidth(text: string): number {
 // once overflowed and the terminal ate the trailing →. Reserved HERE, at the
 // row-fitting seam, rather than by shrinking the shared term.cols every
 // template reads; stripChromeCols measures the per-shape geometry. The picker and
-// the carousel both fit a row by this one budget, and every template function
-// that reaches it is listed in ROW_BUDGET_FUNCS (config/dsl-types.ts).
+// the carousel both fit a row by this one budget.
 export function rowBudget(runtime: ActionRuntime): number {
-  return Math.max(
-    1,
-    toNumber(runtime.store.read(TERM_COLS_VAR)) -
-      runtime.chromeCols -
-      2 * runtime.padding,
-  );
+  return Math.max(1, runtime.width - runtime.chromeCols - 2 * runtime.padding);
 }
 
 // [LAW:single-enforcer] The width a row may fill when it sits in an open

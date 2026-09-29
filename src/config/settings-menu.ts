@@ -30,14 +30,13 @@
 //     affordance and can never be edited out of the bar it is the entry point
 //     to. Running after would splice the menu into an already-chromed tree,
 //     landing it between a segment and the `-` that removes it.
-//   • It also GUARANTEES `edit.toggle` (see ensureEditToggle below), which is
-//     precisely what edit chrome's own demand gate reads — so the ordering is
-//     load-bearing in that direction too, not merely tidy.
+//   • It also GUARANTEES `edit.toggle` and the `edit.mode` state it cycles
+//     (see ensureEditToggle below), which edit chrome's gates read and its
+//     `✎ done` fires — so the ordering is load-bearing in that direction too,
+//     not merely tidy.
 
-import { actionCarriesSession, type ActionDecl } from "./action.js";
+import type { ActionDecl } from "./action.js";
 import {
-  ROW_BUDGET_FUNCS,
-  TERM_COLS_VAR,
   walkNodes,
   type DisclosureRef,
   type DslConfig,
@@ -76,14 +75,8 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
-import {
-  CONFIG_KEY_TO_EFFECTIVE_VAR,
-  SESSION_KEY_TO_EFFECTIVE_VAR,
-  SETTINGS,
-  type SettingProjection,
-} from "./setting-projections.js";
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
-import { callsAnyOf, extractTemplateRefs, refResolves } from "./loader/refs.js";
+import { SETTINGS, type SettingProjection } from "./setting-projections.js";
+import { synthesisInputs } from "./synthesis-inputs.js";
 import {
   BOOLEAN_FALSE,
   BOOLEAN_MEMBERS,
@@ -886,94 +879,6 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
   );
 }
 
-// [LAW:one-source-of-truth] Every variable the menu READS, derived from the
-// artifacts it mints and the subtree it splices — never a hand-kept list, so a
-// ref a later control adds is ensured without a second place to update. Three
-// kinds of read: the dotted refs of every template (segment fields, node
-// `when`s, template variables, copy/open actions), and term.cols wherever a
-// template calls a row-fitting function; session.id, the first
-// segment of every click that carries it on the wire; and the `.effective`
-// projection a `set` or `persist` on a setting reads its current value back
-// through (registerDslConfig's stateKeyToVar, CONFIG_KEY_TO_EFFECTIVE_VAR).
-function menuReads(artifacts: MenuArtifacts, menu: LayoutNode): Set<string> {
-  const reads = new Set<string>();
-  const add = (template: string | undefined): void => {
-    if (template === undefined) return;
-    for (const ref of extractTemplateRefs(template)) reads.add(ref);
-    if (callsAnyOf(template, ROW_BUDGET_FUNCS)) reads.add(TERM_COLS_VAR);
-  };
-  for (const seg of Object.values(artifacts.segments)) {
-    add(seg.template);
-    add(seg.bg);
-    add(seg.fg);
-    add(seg.when);
-  }
-  for (const node of walkNodes(menu)) add(node.when);
-  for (const v of Object.values(artifacts.variables)) {
-    if (v.kind === "template") add(v.template);
-  }
-  for (const a of Object.values(artifacts.actions)) {
-    if ("copy" in a) add(a.copy);
-    if ("open" in a) add(a.open);
-    if (actionCarriesSession(a)) reads.add(SESSION_ID_VAR);
-    const setBack =
-      "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : undefined;
-    const persistBack =
-      "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : undefined;
-    if (setBack !== undefined) reads.add(setBack);
-    if (persistBack !== undefined) reads.add(persistBack);
-  }
-  return reads;
-}
-
-// The name every click's first wire segment is read from.
-const SESSION_ID_VAR = "session.id";
-
-// [LAW:no-silent-failure] The declarations the menu depends on rather than
-// owns: every read its own artifacts do not declare, supplied from the one
-// PAYLOAD_INPUTS table. A read the table cannot supply is a defect in this
-// file — the menu would render a ⚠ in every config that lacks it — so it throws
-// at load, naming the ref, rather than minting a guess.
-function ensuredInputs(
-  artifacts: MenuArtifacts,
-  menu: LayoutNode,
-): Record<string, VariableDecl> {
-  const own = {
-    names: new Set(Object.keys(artifacts.variables)),
-    documents: new Set<string>(),
-  };
-  const ensured: Record<string, VariableDecl> = {};
-  for (const ref of menuReads(artifacts, menu)) {
-    if (refResolves(ref, own)) continue;
-    const decl = PAYLOAD_INPUTS[ref];
-    if (decl === undefined) {
-      throw new Error(
-        `the settings menu reads ".${ref}", which it does not declare and PAYLOAD_INPUTS does not supply`,
-      );
-    }
-    ensured[ref] = decl;
-  }
-  return ensured;
-}
-
-// The menu's artifacts and the subtree the anchor lowers to, for a door glyph.
-function menuSynthesis(doorGlyph: string): {
-  artifacts: MenuArtifacts;
-  help: SegmentNode;
-  ensured: Record<string, VariableDecl>;
-} {
-  const { artifacts, help } = settingsArtifacts(doorGlyph);
-  ensureEditToggle(artifacts);
-  const menu = expandAnchor({ kind: "segment", name: SETTINGS_ANCHOR }, help);
-  return { artifacts, help, ensured: ensuredInputs(artifacts, menu) };
-}
-
-// [LAW:verifiable-goals] The names the menu ensures, for the test that holds
-// them equal to what a config declaring nothing ends up with.
-export function menuInputs(): ReadonlySet<string> {
-  return new Set(Object.keys(menuSynthesis(DOOR_GLYPH).ensured));
-}
-
 // [LAW:single-enforcer] THE synthesis entry point, called once from
 // validateConfig after cross-ref/cycle checks pass and before edit chrome.
 // Every declared preset — the floor `default` included — gets an explicit
@@ -988,9 +893,10 @@ export function menuInputs(): ReadonlySet<string> {
 // own declaration of the same name wins, exactly as edit chrome's ensured
 // inputs do.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
-  const { artifacts, help, ensured } = menuSynthesis(
+  const { artifacts, help } = settingsArtifacts(
     config.globals.menuGlyph ?? DOOR_GLYPH,
   );
+  ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
@@ -999,6 +905,11 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
       root: expandAnchor(withAnchor(node), help),
     };
   }
+  const ensured = synthesisInputs(
+    artifacts,
+    [expandAnchor({ kind: "segment", name: SETTINGS_ANCHOR }, help)],
+    Object.keys(config.variables),
+  );
   return {
     ...config,
     variables: { ...ensured, ...config.variables, ...artifacts.variables },

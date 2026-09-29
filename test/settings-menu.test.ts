@@ -40,7 +40,6 @@ import {
 import {
   anchorUnderGate,
   countAnchors,
-  menuInputs,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
 import {
@@ -48,6 +47,7 @@ import {
   SETTINGS_NS,
 } from "../src/config/loader/reserved-namespace";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
@@ -640,14 +640,19 @@ describe("the menu in a config that declares no variables", () => {
     expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(placed.indexOf("hello"));
   });
 
-  test("the ensured inputs are exactly the refs the synthesis reads", () => {
+  test("a config declaring nothing is given the payload inputs the chrome reads", () => {
     const bare = parseAndValidate("<user>", BARE, ALLOWED);
     const ensured = Object.keys(bare.variables).filter(
       (name) => !isReservedName(name),
     );
-    // Edit chrome's banner ensures its own one input the same way.
-    expect(new Set(ensured)).toEqual(
-      new Set([...menuInputs(), PRESET_CUSTOMIZED_VAR]),
+    // Each one is THE bundled declaration, and the reads that cross no
+    // template text are among them: session.id (every click) and the
+    // banner's `.preset.customized`.
+    for (const name of ensured) {
+      expect(bare.variables[name]).toEqual(PAYLOAD_INPUTS[name]);
+    }
+    expect(ensured).toEqual(
+      expect.arrayContaining(["session.id", PRESET_CUSTOMIZED_VAR]),
     );
   });
 
@@ -848,6 +853,14 @@ describe("globals.menuGlyph", () => {
     const out = stripAnsi(render());
     expect(out).toContain("🍬");
     expect(out).not.toContain(DOOR_GLYPH);
+    dispose();
+  });
+
+  test("a glyph spelling template syntax is text", () => {
+    const { render, dispose } = buildRuntime(
+      `{ globals: { menuGlyph: "🍬 .x}}" }, root: ${TWO_SEGMENT_ROW} }`,
+    );
+    expect(stripAnsi(render())).toContain("🍬 .x}}");
     dispose();
   });
 
