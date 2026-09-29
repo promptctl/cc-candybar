@@ -28,6 +28,8 @@ import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import {
   effectiveInputs,
+  renderOptionsOf,
+  renderSelectionOf,
   resolveEffectiveGlobals,
 } from "../daemon/render-payload.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
@@ -118,27 +120,17 @@ try {
       store,
       registry,
       payload,
-      {
-        style: effective.style,
-        separator: effective.separator,
-        colorCompatibility: effective.colorCompatibility,
+      renderOptionsOf(
+        effective,
         // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
         // reserve the daemon does so demo output matches the bytes a real
         // statusline would emit at the same terminal width.
-        width: applyClaudeCodeReserve(
+        applyClaudeCodeReserve(
           process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
         ),
-        wrap: effective.autoWrap,
-        padding: effective.padding,
-        charset: effective.charset,
-      },
+      ),
       undefined,
-      {
-        theme: effective.theme,
-        look: effective.look,
-        preset: effective.preset,
-        progression: effective.progression,
-      },
+      renderSelectionOf(effective),
     );
     process.stdout.write(`  ${line}\n`);
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
