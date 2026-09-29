@@ -161,6 +161,32 @@ const TOOLS_REF: DisclosureRef = {
   key: TOOLS_SEG,
   member: SETTINGS_OPEN,
 };
+// [LAW:one-source-of-truth] Undo and redo step the session's one settings
+// history (src/daemon/settings-history.ts). Each button exists exactly while
+// its stack has a step to take, read from the depth the daemon publishes every
+// render (RenderPayload.history), so an undo on the bar always does something.
+const HISTORY_STEPS: ReadonlyArray<{
+  readonly seg: string;
+  readonly depth: "undo" | "redo";
+  readonly action: ActionDecl;
+  readonly display: string;
+}> = [
+  {
+    seg: `${SETTINGS_NS}undo`,
+    depth: "undo",
+    action: { undo: true },
+    display: "↶ undo",
+  },
+  {
+    seg: `${SETTINGS_NS}redo`,
+    depth: "redo",
+    action: { redo: true },
+    display: "↷ redo",
+  },
+];
+const historyDepthVar = (depth: string): string =>
+  `${SETTINGS_NS}history.${depth}`;
+
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
 const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
 const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
@@ -546,6 +572,9 @@ function expandAnchor(
                 "drop",
               ),
               { kind: "segment", name: EDIT_SEG },
+              ...HISTORY_STEPS.map(
+                (h): LayoutNode => ({ kind: "segment", name: h.seg }),
+              ),
             ],
           },
           "inline",
@@ -686,6 +715,7 @@ function settingsArtifacts(doorGlyph: string): {
   );
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
+  declareHistorySteps(artifacts);
   // [LAW:one-source-of-truth] The `(?)` is minted here, with the panel it
   // belongs to, and its NODE is returned so `expandAnchor` places it by the
   // value it is handed rather than by re-deriving names this pass already
@@ -698,6 +728,23 @@ function settingsArtifacts(doorGlyph: string): {
     artifacts,
   );
   return { artifacts, help };
+}
+
+function declareHistorySteps(artifacts: MenuArtifacts): void {
+  for (const h of HISTORY_STEPS) {
+    const depth = historyDepthVar(h.depth);
+    artifacts.variables[depth] = {
+      kind: "input",
+      path: `history.${h.depth}`,
+      type: "number",
+      default: 0,
+    };
+    artifacts.actions[h.seg] = h.action;
+    artifacts.segments[h.seg] = {
+      when: `{{ gt .${depth} 0 }}`,
+      template: `{{ action "${h.seg}" "${h.display}" }}`,
+    };
+  }
 }
 
 // [LAW:one-source-of-truth] One report row per check, minted from the CHECKS

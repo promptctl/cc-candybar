@@ -112,7 +112,7 @@ function rig(
       registerConfigValidator(key, spec),
     ),
   ];
-  const ctx: VerbContext = testVerbContext(sessionState);
+  const ctx: VerbContext = testVerbContext(sessionState, durable?.historyFor(sessionState));
   return {
     config,
     render: () =>

@@ -145,6 +145,9 @@ export function checkPayload(
     // globals, so a `.preset.effective`/`.style.effective` label is checked
     // against the value it will actually show, never its declared default.
     ...effectiveInputs(effective),
+    // One step each way, so the settings menu's undo/redo cells, gated on
+    // having something to step, render and get their templates checked.
+    history: { undo: 1, redo: 1 },
   };
 }
 

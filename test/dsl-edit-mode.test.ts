@@ -157,7 +157,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const configDisposers = deriveConfigActionValidators(config).map(
     ({ key, spec }) => registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

@@ -3,6 +3,7 @@
 // reads either the provider's record, the payload the daemon would send, or the
 // rendered cell — never the fold's internal state.
 
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   mkdtempSync,
   writeFileSync,
@@ -442,6 +443,7 @@ describe("the payload projection", () => {
       activityProvider: { getActivityInfo: async () => ok(info) },
       tmuxService: { getSessionId: async () => ABSENT },
       log: () => {},
+      history: () => EMPTY_HISTORY_DEPTH,
     } as unknown as RenderPayloadDeps;
     const built = await buildRenderPayload(
       hook(join(dir, "t.jsonl"), "p"),

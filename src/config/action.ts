@@ -47,12 +47,11 @@ export type { OptionDomain } from "./option-domain.js";
 //
 // [LAW:one-source-of-truth] `undo`/`redo` (brandon-layout-edit-2gc.2) are
 // `reset`'s FINE-GRAINED siblings: `reset` deletes one named key outright
-// (the coarse "forget this default" case); `undo`/`redo` step the history
-// of every durable edit made to the session's config file — whole-file
-// snapshots, every key, not just structural layout edits — back and forth.
-// Neither carries a key: a file's history is one stack (config-file-store.ts
-// owns one per file), so the action is a bare marker, like `int: true` is
-// for a set-int cursor.
+// (the coarse "forget this default" case); `undo`/`redo` step the session's
+// history of every settings change — session picks and config-file writes
+// alike — back and forth. Neither carries a key: the history is one stack per
+// session (src/daemon/settings-history.ts), so the action is a bare marker,
+// like `int: true` is for a set-int cursor.
 export const ACTION_KEYS = [
   "set",
   "persist",
@@ -95,14 +94,14 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         -> allow-list {members}
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
-//   undo                — step the config-edit history one
-//                         entry back (any persist/reset write, not just a
-//                         layout op) -> no gate, no key: there is nothing a
+//   undo                — step the session's settings history one
+//                         click back (a session pick or any persist/reset/
+//                         layout write) -> no gate, no key: there is nothing a
 //                         template could smuggle, since the value restored is
 //                         whatever the daemon's own history recorded, never
 //                         wire input
 //   redo                — the inverse of undo: re-apply the most recently
-//                         undone entry -> no gate, no key
+//                         undone step -> no gate, no key
 //   do                  — fire several declared actions in one click: the
 //                         first is the click's face (its display rule and
 //                         current-state mark are the region's), the rest ride
@@ -347,7 +346,7 @@ export function actionBindsReset(a: ActionDecl): boolean {
   return "reset" in a;
 }
 
-// [LAW:dataflow-not-control-flow] Does this action step the config-edit
+// [LAW:dataflow-not-control-flow] Does this action step the settings
 // history? `undo`/`redo` carry session.id on the wire too — same reason as
 // `reset`: an empty stack is a loud, session-scoped click.error, not a
 // silent no-op (the ticket's own done-gate).

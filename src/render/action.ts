@@ -190,10 +190,9 @@ export type CompiledActionDecl =
       // Segment names are not colour-valued, so this is `undefined` in practice.
       readonly paletteOf: OptionPalette | undefined;
     }
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
-  // the session's config file's edits — `reset`'s fine-grained sibling. No key:
-  // there is nothing to carry, since the history stack (not this action) is
-  // what decides which entry moves.
+  // [LAW:one-source-of-truth] A step of the session's settings history —
+  // `reset`'s fine-grained sibling. No key: there is nothing to carry, since
+  // the history (not this action) decides which step moves.
   | { readonly kind: "undo" }
   | { readonly kind: "redo" }
   // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):

@@ -12,6 +12,7 @@ import {
   leasePathFor,
   socketPath,
   sessionStatePath,
+  settingsHistoryPath,
 } from "./paths";
 import {
   arbitrateSocket,
@@ -61,6 +62,7 @@ import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
+import { SettingsHistory, fileHistoryStorage } from "./settings-history";
 import {
   VERBS,
   BadVerbArgs,
@@ -129,6 +131,8 @@ const usageStore = new SessionUsageStore();
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
 const sessionState = new SessionState();
+// [LAW:locality-or-seam] Same terms: ephemeral until runDaemon binds its file.
+const settingsHistory = new SettingsHistory(sessionState, dlog);
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -341,6 +345,7 @@ export function runDaemon(): void {
   sessionState.useStorage(
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
+  settingsHistory.useStorage(fileHistoryStorage(settingsHistoryPath(), dlog));
   // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
@@ -1257,6 +1262,7 @@ const verbCtx = {
   dlog,
   applyUpdate: () => updateWatch.act(),
   doctor: productionEdge(),
+  history: settingsHistory,
 };
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
@@ -1321,6 +1327,7 @@ const payloadDeps = {
   // [LAW:single-enforcer] The daemon's wall clock — the same instant source
   // the rate-limit ETA projection and the template's reset countdown read.
   clock: () => new Date(),
+  history: (sessionId: string) => settingsHistory.depth(sessionId),
 };
 
 function handleClick(verb: string, value: string): Response {

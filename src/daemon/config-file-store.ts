@@ -8,7 +8,7 @@
 // durable answer.
 //
 // [LAW:effects-at-boundaries] This module is the ONE edge that reads and
-// writes the config file and the edit history. Everything it computes over
+// writes the config file. Everything it computes over
 // the file's text is the pure editor in src/config/json5-edit.ts, so a
 // hand-authored file keeps its comments, key order, quoting, and trailing
 // commas: exactly one span changes per edit.
@@ -140,7 +140,7 @@ export function readConfigText(file: string): string | null {
 // absent file — undo of a first-ever write removes what that write created.
 // Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the click
 // fails loudly instead of claiming a success that didn't happen.
-function writeConfigText(
+export function writeConfigText(
   file: string,
   text: string | null,
   logger: DaemonLogger,
@@ -434,9 +434,25 @@ function requireValueTarget(key: string): ValueTarget {
 
 // ─── Tracked edits ───────────────────────────────────────────────────────────
 
+// [LAW:locality-or-seam] Where a tracked write reports what it changed: the
+// click's journal (src/daemon/settings-history.ts), which turns the click into
+// one undoable step. This module writes the file and never keeps history.
 export interface EditStore {
-  readonly historyPath: string;
+  readonly record: (file: string, before: string | null, after: string) => void;
   readonly logger: DaemonLogger;
+}
+
+// [LAW:one-source-of-truth] Every tracked write lands here — the file write
+// and its record in one place, so recording cannot drift from mutation. The
+// file is the truth, so it goes first.
+function commit(
+  store: EditStore,
+  file: string,
+  before: string | null,
+  after: string,
+): void {
+  writeConfigText(file, after, store.logger);
+  store.record(file, before, after);
 }
 
 /** The scalar the file declares at a value target, or undefined. */
@@ -465,7 +481,7 @@ export function writeValue(
     persistValueText(key, raw),
     JSON5_DIALECT,
   );
-  commit(store, file, { before, after });
+  commit(store, file, before, after);
 }
 
 /**
@@ -479,7 +495,7 @@ export function deleteValue(store: EditStore, file: string, key: string): void {
   if (before === null) return;
   const after = deleteAtPath(before, resetPathOf(docOf(before), target));
   if (after === before) return;
-  commit(store, file, { before, after });
+  commit(store, file, before, after);
 }
 
 /**
@@ -522,202 +538,5 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${file} has no segment "${subject}" — the bar you clicked is stale; it reloads on the next render`,
     );
   }
-  commit(store, file, { before, after });
-}
-
-// ─── History: whole-file snapshots, one stack per file ──────────────────────
-
-// [LAW:types-are-the-program] ONE snapshot shape covers every edit kind — a
-// globals value, a palette pin, a layout op, a reset — because at this layer
-// each is "the file went from `before` to `after`". `before: null` is the
-// absent file (a first-ever write created it), so undoing that write removes
-// the file rather than leaving an empty one the loader rejects.
-export interface Snapshot {
-  readonly before: string | null;
-  readonly after: string;
-}
-
-export interface FileHistory {
-  readonly past: readonly Snapshot[];
-  readonly future: readonly Snapshot[];
-}
-
-// [LAW:types-are-the-program] Keyed by config file: a snapshot sits in the
-// stack of the one file it belongs to, so a session whose render resolved
-// file A steps A's stack and cannot pop an edit made to file B.
-type HistoryState = Readonly<Record<string, FileHistory>>;
-
-const EMPTY_FILE_HISTORY: FileHistory = { past: [], future: [] };
-
-// [LAW:carrying-cost] Bounded per file so a long-running daemon's history
-// cannot grow without limit — a whole-file snapshot per entry is why the
-// bound is what makes this safe, not a nicety. Oldest entries fall off first.
-const MAX_HISTORY_DEPTH = 50;
-
-function isSnapshot(v: unknown): v is Snapshot {
-  if (v === null || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  return (
-    (o.before === null || typeof o.before === "string") &&
-    typeof o.after === "string"
-  );
-}
-
-function isFileHistory(v: unknown): v is FileHistory {
-  if (v === null || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  return (
-    Array.isArray(o.past) &&
-    o.past.every(isSnapshot) &&
-    Array.isArray(o.future) &&
-    o.future.every(isSnapshot)
-  );
-}
-
-// [LAW:no-silent-failure] Missing/corrupt/wrong-shape file → the empty
-// history is the DEFINED recovery (a first-ever boot), logged; a single
-// malformed entry drops the WHOLE history rather than guessing which entries
-// to salvage.
-function loadHistory(store: EditStore): HistoryState {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(store.historyPath, "utf8");
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      store.logger(
-        "warn",
-        `config-edit-history read failed (${code}); starting empty`,
-      );
-    }
-    return {};
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      Object.values(parsed).every(isFileHistory)
-    ) {
-      return parsed as HistoryState;
-    }
-  } catch {
-    // fall through to the warn below
-  }
-  store.logger(
-    "warn",
-    "config-edit-history load: unexpected shape, starting empty",
-  );
-  return {};
-}
-
-function writeHistory(store: EditStore, state: HistoryState): void {
-  try {
-    fs.mkdirSync(path.dirname(store.historyPath), { recursive: true });
-    writeAtomic(store.historyPath, JSON.stringify(state), 0o600);
-  } catch (e) {
-    const message = `config-edit-history write failed: ${(e as Error).message}`;
-    store.logger("error", message);
-    throw new Error(message);
-  }
-}
-
-function capPush<T>(arr: readonly T[], entry: T): readonly T[] {
-  const next = [...arr, entry];
-  return next.length > MAX_HISTORY_DEPTH
-    ? next.slice(-MAX_HISTORY_DEPTH)
-    : next;
-}
-
-// [LAW:one-source-of-truth] Every tracked write lands here — the file write
-// and the history record in one place, so recording cannot drift from
-// mutation. The file is the truth and the history derives from it, so the
-// file goes first; [LAW:no-silent-failure] a record that fails after the
-// file landed says so — the edit is real, it is just not undoable.
-function record(
-  store: EditStore,
-  file: string,
-  text: string | null,
-  state: HistoryState,
-  verb: string,
-): void {
-  writeConfigText(file, text, store.logger);
-  try {
-    writeHistory(store, state);
-  } catch (e) {
-    throw new Error(
-      `${verb} landed in ${file} but recording it failed — it is not undoable: ${(e as Error).message}`,
-    );
-  }
-}
-
-// A fresh edit TRUNCATES `future`: doing something new abandons whatever was
-// undone.
-function commit(store: EditStore, file: string, snapshot: Snapshot): void {
-  const state = loadHistory(store);
-  const { past } = state[file] ?? EMPTY_FILE_HISTORY;
-  record(
-    store,
-    file,
-    snapshot.after,
-    { ...state, [file]: { past: capPush(past, snapshot), future: [] } },
-    "edit",
-  );
-}
-
-// [LAW:no-silent-failure] Undo restores `before` only while the file still
-// reads as `after` — the state the entry promised to revert from. A file
-// edited by hand (or by another daemon) since then is not that state, and
-// silently overwriting it would destroy work the history never saw. The
-// refusal names the file so the user knows what to look at. Returns `null`
-// at the bottom of the stack; the verb turns that into a loud BadVerbArgs.
-export function undoEdit(store: EditStore, file: string): Snapshot | null {
-  const state = loadHistory(store);
-  const { past, future } = state[file] ?? EMPTY_FILE_HISTORY;
-  const entry = past[past.length - 1];
-  if (entry === undefined) return null;
-  requireFileState(file, entry.after, "undo");
-  record(
-    store,
-    file,
-    entry.before,
-    {
-      ...state,
-      [file]: { past: past.slice(0, -1), future: capPush(future, entry) },
-    },
-    "undo",
-  );
-  return entry;
-}
-
-export function redoEdit(store: EditStore, file: string): Snapshot | null {
-  const state = loadHistory(store);
-  const { past, future } = state[file] ?? EMPTY_FILE_HISTORY;
-  const entry = future[future.length - 1];
-  if (entry === undefined) return null;
-  requireFileState(file, entry.before, "redo");
-  record(
-    store,
-    file,
-    entry.after,
-    {
-      ...state,
-      [file]: { past: capPush(past, entry), future: future.slice(0, -1) },
-    },
-    "redo",
-  );
-  return entry;
-}
-
-function requireFileState(
-  file: string,
-  expected: string | null,
-  verb: "undo" | "redo",
-): void {
-  if (readConfigText(file) !== expected) {
-    throw new BadVerbArgs(
-      `${verb}: ${file} has changed since that edit — refusing to overwrite it`,
-    );
-  }
+  commit(store, file, before, after);
 }

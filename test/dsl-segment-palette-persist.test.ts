@@ -285,7 +285,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -356,7 +356,7 @@ describe("segment-palette persist action click → the config file", () => {
     expect(written).toContain(SIDEBAR_COMMENT);
     expect(written).toContain(SIDEBAR_DECL.slice(0, -2)); // up to the closing ` }`
     expect(durable.history().past).toEqual([
-      { before: original, after: written },
+      durable.fileStep(original, written),
     ]);
     dispose();
   });
@@ -438,7 +438,7 @@ describe("config-file-store: segment-palette placement", () => {
   });
 
   const store = (): EditStore => ({
-    historyPath: durable.historyPath,
+    record: () => {},
     logger: () => {},
   });
 
@@ -460,7 +460,6 @@ describe("config-file-store: segment-palette placement", () => {
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
     expect(durable.text()).toBe(text);
-    expect(existsSync(durable.historyPath)).toBe(false);
   });
 });
 
@@ -500,7 +499,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
   });
 
   const store = (): EditStore => ({
-    historyPath: durable.historyPath,
+    record: () => {},
     logger: () => {},
   });
 

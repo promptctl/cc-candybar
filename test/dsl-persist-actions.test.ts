@@ -155,7 +155,7 @@ describe("persistValueText", () => {
     const impossiblePath = join(blocker, "config.json5");
     expect(() =>
       writeValue(
-        { historyPath: durable.historyPath, logger: () => {} },
+        { record: () => {}, logger: () => {} },
         impossiblePath,
         "palette",
         "nord",
@@ -406,7 +406,7 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -458,7 +458,7 @@ describe("persist action click → the config file", () => {
     expect(written).toContain(GLOBALS_COMMENT);
     expect(written).toContain("applyTheme: { persist: 'palette'");
     expect(durable.history().past).toEqual([
-      { before: original, after: written },
+      durable.fileStep(original, written),
     ]);
     dispose();
   });
@@ -564,7 +564,7 @@ describe("persist action click → the config file", () => {
     const configDisposers = deriveConfigActionValidators(config).map(
       ({ key, spec }) => registerConfigValidator(key, spec),
     );
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     const click = (url: string): void => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
@@ -730,7 +730,7 @@ describe("persist action click → the config file", () => {
     );
     void config;
     const sessionState = new SessionState();
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     const setConfig = VERBS.get("set-config")!;
     expect(() =>
       setConfig(
@@ -769,7 +769,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.write(`{ globals: {}, segments: {} }`);
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     const enc = (v: string) => encodeURIComponent(v);
     try {
       expect(() =>
@@ -835,7 +835,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     const named = join(durable.projectDir, "named.json5");
     durable.seedOrigin(sessionState, "s1", named);
     durable.write(`{ globals: { palette: "textual-dark" } }`);
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     try {
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
       expect(
@@ -875,7 +875,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState);
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
     const click = (palette: string): void =>
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
     const paletteIn = (file: string): unknown =>
@@ -935,7 +935,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(entry.state.config.globals.palette).toBe("textual-dark");
 
       durable.seedOrigin(sessionState, "s1");
-      const ctx: VerbContext = testVerbContext(sessionState);
+      const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
       let clicked = false;
       await reloads.after(entry, () => {
         if (clicked) {

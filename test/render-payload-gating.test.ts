@@ -3,6 +3,7 @@
 // the contract by counting provider invocations against two configs that
 // differ only in `layout` — same declared variables, different layouts.
 
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildRenderPayload,
   buildNeededPrefixes,
@@ -95,6 +96,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
       },
     },
     log: () => {},
+    history: () => EMPTY_HISTORY_DEPTH,
   } as unknown as RenderPayloadDeps;
   return { deps, counts };
 }

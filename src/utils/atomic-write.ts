@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 // [LAW:single-enforcer] The one tmp+rename for every file a user may be
-// reading while we write it — the config file, its edit history, and Claude
+// reading while we write it — the config file, the settings history, and Claude
 // Code's settings.json (the doctor fix and `install`): a reader never sees a
 // torn file, and a rename that fails leaves no orphaned tmp behind. Without a
 // `mode` the existing file's mode survives (a hand-authored file keeps

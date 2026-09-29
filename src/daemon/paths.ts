@@ -156,13 +156,12 @@ export function sessionStatePath(): string {
   return path.join(stateDir(), "session-state.json");
 }
 
-// [LAW:one-source-of-truth] The undo/redo history over durable config edits
-// (candybar-config-dqe): whole-file snapshots of every write a click made to
-// a config file (src/daemon/config-file-store.ts). Daemon-owned runtime
-// state, so it sits beside session-state.json — the config files it
-// snapshots are the user's, wherever discovery resolved them.
-export function configEditHistoryPath(): string {
-  return path.join(stateDir(), "config-edit-history.json");
+// [LAW:one-source-of-truth] Each session's undo/redo history over every
+// settings change it made (src/daemon/settings-history.ts). Daemon-owned
+// runtime state, so it sits beside session-state.json — the config files its
+// steps snapshot are the user's, wherever discovery resolved them.
+export function settingsHistoryPath(): string {
+  return path.join(stateDir(), "settings-history.json");
 }
 
 // [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
