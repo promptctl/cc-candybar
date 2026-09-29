@@ -94,17 +94,6 @@ function collapseToCell(
   return merged;
 }
 
-/**
- * Lay out one segment visual line: collapse its cells into a single strip
- * item, then size that item to the requested width. Returns `[]` for an empty
- * line (a unit that rendered nothing contributes no strip item) or `[cell]`
- * for one — never more, so the caller's branchless spread handles both.
- *
- * [LAW:dataflow-not-control-flow] `width` is the value that selects the sizing
- * op: "auto" keeps the content-sized cell as-is; a fixed width truncates when
- * over and pad-aligns when under. Truncation/align are span-preserving, so the
- * collapsed link structure survives every cut.
- */
 // [LAW:single-enforcer] The ONE sizing op: over a width, truncate with the
 // authored mode and marker; under it, align with the authored justify. Called
 // for an authored integer width below, and again by the row's fill resolution
@@ -124,28 +113,38 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
   }
 }
 
-// [LAW:dataflow-not-control-flow] A fill demand is a VALUE riding the cell, not a
-// shape in the walk's return type, so composition needs no change at all — `composeBlocks` concatenates the
-// same cell objects, so the demand survives every container level for free, and
-// only the row about to be serialized resolves anything.
-const FILL_DEMAND = Symbol("cc-candybar.fillDemand");
-type FillCell = RichText & { [FILL_DEMAND]?: CellSizing };
-
-// The sizing intent travels with the demand, because the late pass is the one
-// that finally sizes the cell and it cannot ask the segment declaration again.
-export function markFill(cell: RichText, how: CellSizing): RichText {
-  (cell as FillCell)[FILL_DEMAND] = how;
-  return cell;
+// [LAW:types-are-the-program] What one segment line lays out to: the ONE strip
+// item it contributes, and — for a `width: "fill"` segment — its demand for the
+// row's leftover width, with the sizing intent the row needs to honour it (the row
+// finally sizes the cell and cannot ask the segment declaration again). The demand
+// is a declared field of the cell, so code that rebuilds the text of a laid cell
+// either carries the demand across or fails to typecheck. `resolveFill`
+// (src/render/fill.ts) is where a row's laid cells become the strip items it
+// serializes.
+// [LAW:dataflow-not-control-flow] The demand is a VALUE riding the cell, not a
+// shape in the walk: `composeBlocks` is generic over what a line's cells are, so
+// it carries the demand through every container level without knowing it exists.
+export interface LaidCell {
+  readonly text: RichText;
+  readonly fill?: CellSizing;
 }
 
-export function fillDemandOf(cell: RichText): CellSizing | undefined {
-  return (cell as FillCell)[FILL_DEMAND];
-}
-
+/**
+ * Lay out one segment visual line: collapse its cells into a single strip
+ * item, then size that item to the requested width. Returns `[]` for an empty
+ * line (a unit that rendered nothing contributes no strip item) or one laid
+ * cell for one — never more, so the caller's branchless spread handles both.
+ *
+ * [LAW:dataflow-not-control-flow] `width` is the value that selects the sizing
+ * op: "auto" keeps the content-sized cell as-is; a fixed width truncates when
+ * over and pad-aligns when under; "fill" keeps it content-sized and states the
+ * demand. Truncation/align are span-preserving, so the collapsed link
+ * structure survives every cut.
+ */
 export function applySegmentLayout(
   cells: readonly RichText[],
   options: SegmentLayoutOptions,
-): RichText[] {
+): LaidCell[] {
   const {
     width,
     justify,
@@ -163,11 +162,11 @@ export function applySegmentLayout(
   // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
   // the cell's wrapping style, so the segment bg is continuous.
   const cell = collapseToCell(cells, baseStyle).pad(padding);
-  if (width === "auto") return [cell];
+  if (width === "auto") return [{ text: cell }];
   const how: CellSizing = { justify, truncate, truncateMarker };
   // "fill" leaves the cell content-sized and states its demand; the row resolves
   // it, since the leftover depends on siblings this call cannot see.
-  if (width === "fill") return [markFill(cell, how)];
+  if (width === "fill") return [{ text: cell, fill: how }];
   sizeCell(cell, width, how);
-  return [cell];
+  return [{ text: cell }];
 }

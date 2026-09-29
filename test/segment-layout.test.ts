@@ -21,6 +21,13 @@ function cell(text: string, style?: Style | string): RichText {
   return new RichText(text, { style, end: "", noWrap: true });
 }
 
+// The strip items a layout lays out, for the tests that read only its text.
+function laidText(
+  ...args: Parameters<typeof applySegmentLayout>
+): RichText[] {
+  return applySegmentLayout(...args).map((c) => c.text);
+}
+
 function totalWidth(cells: readonly RichText[]): number {
   return cells.reduce((sum, c) => sum + cellLen(c.plain), 0);
 }
@@ -86,13 +93,34 @@ describe("evaluateWhen", () => {
 describe("auto width — collapse to one cell, no width constraint", () => {
   test("collapses the segment's cells into one strip item", () => {
     const cells = [cell("hello"), cell(" world")];
-    const result = applySegmentLayout(cells, autoOptions);
+    const result = laidText(cells, autoOptions);
     expect(result).toHaveLength(1);
     expect(texts(result)).toEqual(["hello world"]);
   });
 
   test("empty input returns empty (a unit that rendered nothing has no item)", () => {
-    expect(applySegmentLayout([], autoOptions)).toHaveLength(0);
+    expect(laidText([], autoOptions)).toHaveLength(0);
+  });
+});
+
+// A fill width is content-sized here and carries its demand to the row
+// (src/render/fill.ts) as a field of the laid cell; no other width does.
+describe("fill width — content-sized, carrying its demand", () => {
+  const sizing = { justify: "right", truncate: "middle", padding: 0 } as const;
+
+  test("fill states its demand with the sizing the row will honour", () => {
+    const [laid] = applySegmentLayout([cell("hi")], { ...sizing, width: "fill" });
+    expect(laid!.text.plain).toBe("hi");
+    expect(laid!.fill).toEqual({
+      justify: "right",
+      truncate: "middle",
+      truncateMarker: "…",
+    });
+  });
+
+  test.each(["auto", 5] as const)("width %p states no demand", (width) => {
+    const [laid] = applySegmentLayout([cell("hi")], { ...sizing, width });
+    expect(laid!.fill).toBeUndefined();
   });
 });
 
@@ -102,7 +130,7 @@ describe("auto width — collapse to one cell, no width constraint", () => {
 
 describe("padding — synthesized inside the collapsed cell, before sizing", () => {
   test("pads the collapsed cell on both sides", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       ...autoOptions,
       padding: 2,
     });
@@ -110,7 +138,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
   });
 
   test("padding sits INSIDE a fixed width (pad first, then size)", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       width: 8,
       justify: "left",
       truncate: "right",
@@ -122,7 +150,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
 
   test("empty input stays empty regardless of padding (no phantom pill)", () => {
     expect(
-      applySegmentLayout([], { ...autoOptions, padding: 2 }),
+      laidText([], { ...autoOptions, padding: 2 }),
     ).toHaveLength(0);
   });
 });
@@ -133,7 +161,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
 
 describe("fixed width — exact fit", () => {
   test("content already fills the width", () => {
-    const result = applySegmentLayout([cell("hello")], {
+    const result = laidText([cell("hello")], {
       width: 5,
       justify: "left",
       padding: 0,
@@ -150,7 +178,7 @@ describe("fixed width — exact fit", () => {
 
 describe("justify — left", () => {
   test("pads on the right to reach width", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       width: 5,
       justify: "left",
       padding: 0,
@@ -163,7 +191,7 @@ describe("justify — left", () => {
 
 describe("justify — right", () => {
   test("pads on the left to reach width", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       width: 5,
       justify: "right",
       padding: 0,
@@ -176,7 +204,7 @@ describe("justify — right", () => {
 
 describe("justify — center", () => {
   test("pads on both sides; smaller half on left when odd", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       width: 6,
       justify: "center",
       padding: 0,
@@ -187,7 +215,7 @@ describe("justify — center", () => {
   });
 
   test("center odd: left pad gets smaller half", () => {
-    const result = applySegmentLayout([cell("hi")], {
+    const result = laidText([cell("hi")], {
       width: 5,
       justify: "center",
       padding: 0,
@@ -204,7 +232,7 @@ describe("justify — center", () => {
 
 describe("truncate — right", () => {
   test("keeps left, marker on right", () => {
-    const result = applySegmentLayout([cell("hello world")], {
+    const result = laidText([cell("hello world")], {
       width: 6,
       justify: "left",
       padding: 0,
@@ -217,7 +245,7 @@ describe("truncate — right", () => {
 
 describe("truncate — left", () => {
   test("marker on left, keeps right", () => {
-    const result = applySegmentLayout([cell("hello world")], {
+    const result = laidText([cell("hello world")], {
       width: 6,
       justify: "left",
       padding: 0,
@@ -230,7 +258,7 @@ describe("truncate — left", () => {
 
 describe("truncate — middle", () => {
   test("keeps halves; marker in the middle", () => {
-    const result = applySegmentLayout([cell("hello world!")], {
+    const result = laidText([cell("hello world!")], {
       width: 6,
       justify: "left",
       padding: 0,
@@ -248,7 +276,7 @@ describe("truncate — middle", () => {
 describe("multi-cell truncation", () => {
   test("cells are concatenated before layout; result is one cell", () => {
     const cells = [cell("hello"), cell(" world"), cell("!!")];
-    const result = applySegmentLayout(cells, {
+    const result = laidText(cells, {
       width: 8,
       justify: "left",
       padding: 0,
@@ -266,7 +294,7 @@ describe("multi-cell truncation", () => {
 
 describe("custom truncate marker", () => {
   test("two-char marker on right", () => {
-    const result = applySegmentLayout([cell("hello world")], {
+    const result = laidText([cell("hello world")], {
       width: 7,
       justify: "left",
       padding: 0,
@@ -284,7 +312,7 @@ describe("custom truncate marker", () => {
 describe("baseStyle on the merged cell", () => {
   test("padding inherits the cell's wrapping style (segment bg+fg continuous)", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const result = applySegmentLayout([cell("hi", baseStyle)], {
+    const result = laidText([cell("hi", baseStyle)], {
       width: 5,
       justify: "left",
       padding: 0,
@@ -306,7 +334,7 @@ describe("baseStyle on the merged cell", () => {
 
   test("truncation marker rides on the cell's wrapping style", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const result = applySegmentLayout([cell("hello world", baseStyle)], {
+    const result = laidText([cell("hello world", baseStyle)], {
       width: 6,
       justify: "left",
       padding: 0,
@@ -339,7 +367,7 @@ describe("truncation preserves per-character styling through the cut", () => {
 
   test("right truncation keeps the spans that survive the cut", () => {
     const cell = heterogeneousCell();
-    const result = applySegmentLayout([cell], {
+    const result = laidText([cell], {
       width: 6,
       justify: "left",
       padding: 0,
@@ -356,7 +384,7 @@ describe("truncation preserves per-character styling through the cut", () => {
 
   test("left truncation keeps the right side spans", () => {
     const cell = heterogeneousCell();
-    const result = applySegmentLayout([cell], {
+    const result = laidText([cell], {
       width: 6,
       justify: "left",
       padding: 0,
