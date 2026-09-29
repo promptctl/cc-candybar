@@ -2,20 +2,26 @@
 // The settings menu and edit chrome mint segments, actions and variables into
 // every config (brandon-settings-menu-d6f), and those artifacts read payload
 // inputs the config may not declare. Each pass hands over its artifacts and the
-// subtrees it minted (never the author's tree it splices them into, whose reads
-// are cross-ref's to check) and gets back the declarations to merge UNDER the
-// config. They are derived from what the artifacts read, never a hand-kept
-// list, so a read a later control adds is ensured with no second place to
-// update.
+// trees it RETURNS — the author's nodes inside them included, whose reads
+// cross-ref has already resolved against the same scope, so reading the trees
+// the bar renders costs nothing and misses nothing the pass minted — and gets
+// back the declarations to merge UNDER the config. They are derived from what
+// the artifacts read, never a hand-kept list, so a read a later control adds
+// is ensured with no second place to update.
 
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
+  type DslConfig,
   type LayoutNode,
   type SegmentDecl,
   type VariableDecl,
 } from "./dsl-types.js";
-import { extractTemplateRefs, refResolves } from "./loader/refs.js";
+import {
+  extractTemplateRefs,
+  refResolves,
+  templateScopeOf,
+} from "./loader/refs.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
@@ -31,11 +37,11 @@ export interface SynthesisArtifacts {
 
 // Every variable the artifacts READ. Three kinds of read: the dotted refs of
 // every template (segment fields, node `when`s, template variables, copy/open
-// actions); session.id, which realizing any action reads for the click's
-// first wire segment (render/action.ts), so a pass that mints an action reads
-// it; and the `.effective` projection a `set` or `persist` on a setting reads
-// its current value back through (registerDslConfig's stateKeyToVar,
-// CONFIG_KEY_TO_EFFECTIVE_VAR).
+// actions); session.id, which realizing an action reads for the click's first
+// wire segment (render/action.ts) and a `state` variable reads to key its
+// session (SourceRegistry.declareState); and the `.effective` projection a
+// `set` or `persist` on a setting reads its current value back through
+// (registerDslConfig's stateKeyToVar, CONFIG_KEY_TO_EFFECTIVE_VAR).
 function synthesisReads(
   artifacts: SynthesisArtifacts,
   trees: readonly LayoutNode[],
@@ -55,10 +61,10 @@ function synthesisReads(
   }
   for (const v of Object.values(artifacts.variables)) {
     if (v.kind === "template") add(v.template);
+    if (v.kind === "state") reads.add(SESSION_ID_VAR_NAME);
   }
-  const actions = Object.values(artifacts.actions);
-  if (actions.length > 0) reads.add(SESSION_ID_VAR_NAME);
-  for (const a of actions) {
+  for (const a of Object.values(artifacts.actions)) {
+    reads.add(SESSION_ID_VAR_NAME);
     if ("copy" in a) add(a.copy);
     if ("open" in a) add(a.open);
     const setBack =
@@ -72,7 +78,7 @@ function synthesisReads(
 }
 
 // [LAW:no-silent-failure] The declarations for every read that neither the
-// artifacts nor `declared` (the names the config already holds) resolve,
+// artifacts nor `config` resolve (the scope cross-ref resolves against),
 // supplied from the one PAYLOAD_INPUTS table. A read the table cannot supply
 // is a defect in the synthesis — its chrome would render a ⚠ in every config
 // that lacks the name — so it throws at load, naming the ref, rather than
@@ -80,12 +86,13 @@ function synthesisReads(
 export function synthesisInputs(
   artifacts: SynthesisArtifacts,
   trees: readonly LayoutNode[],
-  declared: Iterable<string>,
+  config: DslConfig,
 ): Record<string, VariableDecl> {
-  const own = {
-    names: new Set([...declared, ...Object.keys(artifacts.variables)]),
-    documents: new Set<string>(),
-  };
+  const own = templateScopeOf({
+    ...config,
+    variables: { ...config.variables, ...artifacts.variables },
+    segments: { ...config.segments, ...artifacts.segments },
+  });
   const ensured: Record<string, VariableDecl> = {};
   for (const ref of synthesisReads(artifacts, trees)) {
     if (refResolves(ref, own)) continue;

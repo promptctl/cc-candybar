@@ -11,11 +11,12 @@
 // fragment IS the empty rows map, the merge's identity, so the two callers and
 // the floor preset all run the same expression [LAW:dataflow-not-control-flow].
 
-import type {
-  ContainerNode,
-  LayoutNode,
-  Root,
-  RootFragment,
+import {
+  walkNodePaths,
+  type ContainerNode,
+  type LayoutNode,
+  type Root,
+  type RootFragment,
 } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] A row name must be an identifier: it is spliced
@@ -85,9 +86,30 @@ export function rootNode(root: Root): ContainerNode {
 
 // The tree a fragment authors on its own — a whole tree as written, a rows
 // map as the rows it names — for the checks that inspect what an author
-// wrote rather than what renders (cross-ref's per-layout walk).
+// wrote rather than what renders.
 export function fragmentNode(fragment: RootFragment): LayoutNode {
   return isRowsFragment(fragment) ? rootNode(fragment) : fragment;
+}
+
+// [LAW:one-source-of-truth] Every node of an AUTHORED fragment beside the
+// path its author would look for it at — for the checks that report against
+// what a file wrote rather than what renders (cross-ref's per-layout walk). A
+// whole tree is walked as written; a rows map yields the root's own fields at
+// `key` and each row at `<key>.rows.<name>`. Only a file's own fragment has
+// these addresses: a merged root has lowered a whole tree to positional rows,
+// whose index is no longer where anything was written.
+export function* fragmentNodePaths(
+  fragment: RootFragment,
+  key: string,
+): IterableIterator<readonly [LayoutNode, string]> {
+  if (!isRowsFragment(fragment)) {
+    yield* walkNodePaths(fragment, key);
+    return;
+  }
+  yield [rootNode(fragment), key];
+  for (const [name, row] of Object.entries(fragment.rows)) {
+    yield* walkNodePaths(row, `${key}.rows.${name}`);
+  }
 }
 
 // [LAW:one-type-per-behavior] THE cascade for a root, the same shape as every

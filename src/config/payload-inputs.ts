@@ -13,6 +13,10 @@
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 
+// The width a compile-only caller (no render, so no width injected) fits and
+// reads: `term.cols`'s default below and ActionRuntime.width's floor.
+export const TERM_COLS_FLOOR = 80;
+
 export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   project_dir: {
     kind: "input",
@@ -113,16 +117,16 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
-  // it into the payload from its own `opts.width` (the single value that
-  // feeds both the wrap and this variable), so a width-paginated picker and
-  // the wrap algebra can never disagree. Never cached: a resize is just a
+  // it into the payload from its own `opts.width`, the value a row fits to
+  // (ActionRuntime.width) and the strip wraps to, so a template reading it
+  // and the wrap algebra can never disagree. Never cached: a resize is just a
   // new value on the same path, re-read every render. The default only
   // applies to compile-only callers that render without injecting a width.
   "term.cols": {
     kind: "input",
     path: "term.cols",
     type: "number",
-    default: 80,
+    default: TERM_COLS_FLOOR,
   },
 
   // The repo's browsable web page, transposed from its remote by the daemon.

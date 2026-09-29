@@ -1421,7 +1421,7 @@ describe("loadDslConfig — cross-references", () => {
       `{ segments: { cwd: { template: "t" } },
          root: { h: ["cwd", "missing"] } }`,
       {
-        path: "root",
+        path: "root.children[1]",
         message: 'root entry "missing" does not match any declared segment',
       },
     );

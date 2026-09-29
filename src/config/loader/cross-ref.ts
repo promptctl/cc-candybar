@@ -6,18 +6,16 @@
 // user surface can reference default-provided segments/actions. This file changes
 // when the visibility/scoping rules between config parts change.
 
-import JSON5 from "json5";
-import { createEngine } from "@promptctl/go-template-js";
 import {
   hasCacheField,
-  walkNodePaths,
   walkNodes,
   AXIS_OF,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
+  type RawDslConfig,
+  type RootFragment,
   type VariableDecl,
-  parseArm,
 } from "../dsl-types.js";
 import {
   actionBindsTemplateValue,
@@ -33,7 +31,7 @@ import { listGlobalsFieldNames } from "./globals.js";
 import { isExpression } from "../../themes/policy.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
-import { fragmentNode, rootNode } from "../root.js";
+import { fragmentNodePaths, rootNode } from "../root.js";
 import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   anchorUnderGate,
@@ -43,12 +41,14 @@ import {
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
-import { isPlainObject, type ValidateCtx } from "./validate-core.js";
+import { SYNTAX_ENGINE } from "./syntax-engine.js";
+import { type ValidateCtx } from "./validate-core.js";
 import {
   extractActionRefs,
   extractPickerMenuRefs,
   extractTemplateRefs,
   refResolves,
+  templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
 
@@ -113,6 +113,7 @@ function presetIdentCollisions(
 export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
+  authored: RawDslConfig,
 ): void {
   // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
   // block (a user's default may be a bundled look — same reason every cross-ref
@@ -316,20 +317,12 @@ export function validateCrossReferences(
   // name string, never of which segment declares or renders it.
   const templateScope = templateScopeOf(cfg);
 
-  // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
-  // every layout cross-ref: each cells node's segment names must resolve to a
-  // declared segment, and any node's `when` predicate (a template like any
-  // other) must reference only existing variables. Cross-ref runs on the MERGED
-  // config so a node can name default-provided segments without re-declaring
-  // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
-  // form is already collapsed and unrecoverable post-merge — so the path
-  // describes the tree and `line` points at whichever layout key the user wrote.
-  // [LAW:one-source-of-truth] Which top-level layout surface the user authored
-  // is read from the PARSED structure, not a text probe: a nested key named
-  // `root` (a variable, a segment) — or `layout` (a `time` var's `layout`
-  // field) — would fool a raw `findKeyLine` search and misclassify the config.
-  // Validation is cold-path, so reading the source's top-level keys is exact.
-  // The reported path/message then point at the surface the user wrote.
+  // [LAW:single-enforcer] ONE pre-order walk owns every layout cross-ref:
+  // each segment a layout names must resolve to a declared segment — in the
+  // MERGED config, so a file can place a bundled segment without re-declaring
+  // it — and any node's `when` predicate (a template like any other) must
+  // reference only existing variables. The walk covers the fragments the FILE
+  // wrote (checkLayoutTree), so its paths and lines are the author's own.
   //
   // [LAW:one-type-per-behavior] A PRESET's `root` is a root: it gets this exact
   // walk, not a reduced copy. The only thing that varies between the config's
@@ -417,23 +410,23 @@ export function validateCrossReferences(
       )
     );
   }
-  // Walks what the author WROTE at this key (a whole tree, or the rows a
-  // fragment names), so an unknown segment is reported against the layout
-  // that names it rather than against a row it inherited.
-  const checkLayoutTree = (
-    root: LayoutNode,
-    layoutKey: string,
-    layoutLine: number | undefined,
-  ): void => {
-    for (const [node, path] of walkNodePaths(root, layoutKey)) {
+  // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
+  // fragment at this key, never the merged root — so a node is reported at
+  // the path, and on the line, the author would look for it, and a row they
+  // inherited is not theirs to be told about. The tree that renders is checked
+  // below (placement counts); an inherited row names only bundled segments,
+  // which no file can remove.
+  const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
+    for (const [node, path] of fragmentNodePaths(root, layoutKey)) {
+      const line = findKeyLine(ctx.source, path.split("."));
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
       // segment template, surfaced at load time.
       if (node.when !== undefined) {
         checkTemplateRefs(ctx, `${path}.when`, node.when, templateScope, {
-          line: layoutLine,
+          line,
         });
-        checkWhenParses(ctx, `${path}.when`, node.when, layoutLine);
+        checkWhenParses(ctx, `${path}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       // [LAW:one-source-of-truth] The anchor is a position, not a declared
@@ -447,24 +440,18 @@ export function validateCrossReferences(
             ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
             : "";
         ctx.issues.push({
-          path: layoutKey,
+          path,
           message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
-          line: layoutLine,
+          line,
         });
       }
     }
   };
-  const layoutKey = authoredLayoutKey(ctx.source);
-  checkLayoutTree(
-    rootNode(cfg.root),
-    layoutKey,
-    findKeyLine(ctx.source, [layoutKey]),
-  );
-  for (const [name, preset] of Object.entries(cfg.presets)) {
-    if (preset.root === undefined) continue;
-    const presetKey = `presets.${name}.root`;
-    const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
-    checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
+  if (authored.root !== undefined) checkLayoutTree(authored.root, "root");
+  for (const [name, preset] of Object.entries(authored.presets ?? {})) {
+    if (preset.root !== undefined) {
+      checkLayoutTree(preset.root, `presets.${name}.root`);
+    }
   }
   // [LAW:one-source-of-truth] Placement counts run over the tree each preset
   // RENDERS, keyed by the path presetRoot reports it authored at — so a
@@ -678,32 +665,6 @@ function declaresStateKey(cfg: DslConfig, key: string): boolean {
   return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
 }
 
-// [LAW:one-source-of-truth] The one scope every reference surface resolves
-// against, built from the same declarations src/dsl/render.ts registers:
-// globals under their bare names, segment locals under segName.varName — and
-// which of those are documents (a json-parsed shell/file source).
-function templateScopeOf(cfg: DslConfig): TemplateScope {
-  const names = new Set<string>();
-  const documents = new Set<string>();
-  const declare = (name: string, v: VariableDecl): void => {
-    names.add(name);
-    if (isDocumentDecl(v)) documents.add(name);
-  };
-  for (const [name, v] of Object.entries(cfg.variables)) declare(name, v);
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    for (const [name, v] of Object.entries(seg.vars ?? {})) {
-      declare(`${segName}.${name}`, v);
-    }
-  }
-  return { names, documents };
-}
-
-function isDocumentDecl(v: VariableDecl): boolean {
-  return (
-    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
-  );
-}
-
 function checkVarRefs(
   ctx: ValidateCtx,
   declPath: string,
@@ -765,9 +726,7 @@ function checkDependsOn(
 // catch it too, but it
 // compiles the SYNTHESIZED trees — the settings menu and edit chrome rewrite
 // every preset root — so its path would name a position the author never
-// wrote (`presets.default.root.children[1]…`). Parse-only: a bare engine,
-// since no function is looked up before evaluation.
-const SYNTAX_ENGINE = createEngine<string>({ fromString: (s) => s });
+// wrote (`presets.default.root.children[1]…`).
 function checkWhenParses(
   ctx: ValidateCtx,
   path: string,
@@ -817,20 +776,4 @@ function checkTemplateRefs(
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
-}
-
-// [LAW:one-source-of-truth] The authored top-level layout surface, read from the
-// PARSED top-level keys (`root` wins; the loader already rejects authoring both).
-// A structural read — not a text search — so a nested key named `root`/`layout`
-// can never misclassify the config. Empty/unparseable source (the bundled
-// default, no file) has no surface; defaults to the historical `layout` label.
-function authoredLayoutKey(source: string): "root" | "layout" {
-  try {
-    const parsed = JSON5.parse(source);
-    if (isPlainObject(parsed) && "root" in parsed) return "root";
-  } catch {
-    // No source to read (default config) or unparseable — fall through. A real
-    // syntax error is already reported by parseDslConfig before cross-ref runs.
-  }
-  return "layout";
 }

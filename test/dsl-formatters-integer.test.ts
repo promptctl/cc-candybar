@@ -53,9 +53,8 @@ function render(n: number): string {
   }`;
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(
-    mergeWithDefault(raw, DEFAULT_DSL_CONFIG),
+    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: source },
     "<test>",
-    source,
   ) as ValidatedConfig;
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());

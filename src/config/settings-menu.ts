@@ -898,18 +898,14 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   );
   ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
+  const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
-    presets[name] = {
-      ...presetByName(config.presets, name),
-      root: expandAnchor(withAnchor(node), help),
-    };
+    const root = expandAnchor(withAnchor(node), help);
+    roots.push(root);
+    presets[name] = { ...presetByName(config.presets, name), root };
   }
-  const ensured = synthesisInputs(
-    artifacts,
-    [expandAnchor({ kind: "segment", name: SETTINGS_ANCHOR }, help)],
-    Object.keys(config.variables),
-  );
+  const ensured = synthesisInputs(artifacts, roots, config);
   return {
     ...config,
     variables: { ...ensured, ...config.variables, ...artifacts.variables },

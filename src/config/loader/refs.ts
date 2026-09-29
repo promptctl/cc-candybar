@@ -5,6 +5,8 @@
 // when the surface grammar of those refs changes; the cross-ref/cycle passes
 // consume the sets it returns without re-deriving them.
 
+import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
+
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 const DOTTED_REF_RE =
   /(?<![A-Za-z0-9_)])\.([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)/g;
@@ -144,4 +146,30 @@ export function refResolves(ref: string, scope: TemplateScope): boolean {
     if (ref.startsWith(`${doc}.`)) return true;
   }
   return false;
+}
+
+// [LAW:one-source-of-truth] The one scope every reference surface resolves
+// against, built from the same declarations src/dsl/render.ts registers:
+// globals under their bare names, segment locals under segName.varName — and
+// which of those are documents (a json-parsed shell/file source).
+export function templateScopeOf(cfg: DslConfig): TemplateScope {
+  const names = new Set<string>();
+  const documents = new Set<string>();
+  const declare = (name: string, v: VariableDecl): void => {
+    names.add(name);
+    if (isDocumentDecl(v)) documents.add(name);
+  };
+  for (const [name, v] of Object.entries(cfg.variables)) declare(name, v);
+  for (const [segName, seg] of Object.entries(cfg.segments)) {
+    for (const [name, v] of Object.entries(seg.vars ?? {})) {
+      declare(`${segName}.${name}`, v);
+    }
+  }
+  return { names, documents };
+}
+
+function isDocumentDecl(v: VariableDecl): boolean {
+  return (
+    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
+  );
 }

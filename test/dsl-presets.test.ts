@@ -229,6 +229,48 @@ describe("preset compile diagnostics name the authored path", () => {
     }`);
     expect(msg).toContain("presets.wide.root.children[0].when");
   });
+
+  test("a named row diagnoses under its name, not its index in the merged root", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      root: { rows: { extra: { h: ['hello'], when: '{{ oops ' } } },
+    }`);
+    expect(msg).toContain("root.rows.extra.when");
+    expect(msg).not.toContain("children[");
+  });
+
+  test("a preset's named row diagnoses under the preset's rows", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      presets: { wide: { root: { rows: { extra: { h: [{ seg: 'hello', when: '{{ oops ' }] } } } } },
+    }`);
+    expect(msg).toContain("presets.wide.root.rows.extra.children[0].when");
+  });
+
+  test("a single-row tree diagnoses where it was written, at root as at a preset", () => {
+    const seg = `segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } }`;
+    const tree = `{ h: ['hello', { seg: 'hello', when: '{{ oops ' }] }`;
+    expect(compileError(`{ ${seg}, root: ${tree} }`)).toContain(
+      "root.children[1].when",
+    );
+    expect(compileError(`{ ${seg}, root: ${tree} }`)).not.toContain(
+      "root.children[0].children",
+    );
+    expect(
+      compileError(`{ ${seg}, presets: { w: { root: ${tree} } } }`),
+    ).toContain("presets.w.root.children[1].when");
+  });
+
+  test("a named row's diagnostic names the row's own line", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      root: { rows: {
+        a: { h: ['hello'] },
+        extra: { h: ['hello'], when: '{{ oops ' },
+      } },
+    }`);
+    expect(msg).toContain("[line 5 • root.rows.extra.when]");
+  });
 });
 
 // ─── Selection: the render actually changes ───────────────────────────────────

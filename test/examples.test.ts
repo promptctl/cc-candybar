@@ -45,12 +45,11 @@ describe("shipped examples load and render through the real cascade", () => {
     // [LAW:single-enforcer] loadConfig is the production cascade: the file
     // merges ON TOP of the bundled default, with the default's own segment
     // names as the delta-able set.
-    const { config: merged, source } = loadConfig(
+    const config = validateConfig(
+      loadConfig(path, DEFAULT_DSL_CONFIG, ALLOWED),
       path,
-      DEFAULT_DSL_CONFIG,
       ALLOWED,
     );
-    const config = validateConfig(merged, path, source, ALLOWED);
 
     const sessionState = new SessionState();
     const store = new VariableStore();

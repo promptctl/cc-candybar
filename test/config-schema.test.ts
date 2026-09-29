@@ -246,7 +246,7 @@ function loaderAccepts(source: string): boolean {
       inheritableSegmentNames(DEFAULT_DSL_CONFIG),
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
-    validateConfig(merged, "<test>", source);
+    validateConfig({ config: merged, raw, source }, "<test>");
     return true;
   } catch (e) {
     if (e instanceof ConfigError) return false;

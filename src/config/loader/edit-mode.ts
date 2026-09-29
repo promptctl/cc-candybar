@@ -22,7 +22,7 @@
 // config (settings-menu.ts), ensures this same toggle, and puts `✎ edit` in its
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
-import { createEngine } from "@promptctl/go-template-js";
+import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type {
   DisclosureRef,
@@ -67,15 +67,13 @@ export const EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
 // template/bg/fg can reach — the SAME AST-based approach
 // menu-synth.ts's segmentReferencesMenu uses (robust against whitespace,
 // pipelines, and lookalike text a source-string scan would false-positive
-// or false-negative on), one function name over. A bare engine purely for
-// introspection: it never evaluates, so a malformed template simply yields
-// no match here (registerDslConfig re-parses and reports the real error;
-// [LAW:no-silent-failure] this pass just isn't the one that reports it).
+// or false-negative on), one function name over. It never evaluates, so a
+// malformed template simply yields no match here (registerDslConfig re-parses
+// and reports the real error; [LAW:no-silent-failure] this pass just isn't
+// the one that reports it).
 function referencesEditToggle(template: string): boolean {
-  const engine = createEngine<string>({ fromString: (s) => s });
   try {
-    return engine
-      .parse(template)
+    return SYNTAX_ENGINE.parse(template)
       .referencedCalls()
       .some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
   } catch {
