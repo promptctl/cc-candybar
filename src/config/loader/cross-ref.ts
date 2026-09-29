@@ -725,17 +725,34 @@ function checkTemplateRefs(
 ): void {
   for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
+    if (via !== null) {
+      checkHelperRef(ctx, via, ref);
+      continue;
+    }
     const namespaced =
       opts?.segCtx !== undefined ? `${opts.segCtx}.${ref}` : undefined;
     const hint =
       namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
         : "";
-    const through = via === null ? "" : ` (read in helpers.${via})`;
     ctx.issues.push({
       path: declPath,
-      message: `Template references unknown variable ".${ref}"${through}${hint}`,
+      message: `Template references unknown variable ".${ref}"${hint}`,
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
+}
+
+// A helper's unknown ref is the helper's error, reported at the helper — the
+// one place the author fixes it, in their file when they override a bundled
+// helper — and ONCE, however many templates reach it at that path.
+function checkHelperRef(ctx: ValidateCtx, helper: string, ref: string): void {
+  const path = `helpers.${helper}`;
+  const message = `Template references unknown variable ".${ref}"`;
+  if (ctx.issues.some((i) => i.path === path && i.message === message)) return;
+  ctx.issues.push({
+    path,
+    message,
+    line: findKeyLine(ctx.source, ["helpers", helper]),
+  });
 }

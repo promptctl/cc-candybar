@@ -1446,16 +1446,27 @@ describe("loadDslConfig — cross-references", () => {
     });
   });
 
-  test("an unknown variable a root-dot helper reads is reported, naming the helper", () => {
-    expectIssue(
-      `{ helpers: { stash: "{{ .stsh }}" },
-         segments: { cwd: { template: '{{ template "stash" . }}' } } }`,
-      {
-        path: "segments.cwd.template",
-        message:
-          'Template references unknown variable ".stsh" (read in helpers.stash)',
-      },
+  test("an unknown variable a root-dot helper reads is reported once, at the helper", () => {
+    const src = `{ helpers: { stash: "{{ .stsh }}" },
+         segments: { a: { template: '{{ template "stash" . }}' },
+                     b: { template: '{{ template "stash" . }}' } } }`;
+    expectIssue(src, {
+      path: "helpers.stash",
+      message: 'Template references unknown variable ".stsh"',
+    });
+    expect(
+      expectError(src).issues.filter((i) => i.path === "helpers.stash"),
+    ).toHaveLength(1);
+  });
+
+  test("a helper called inside `range` reads the element, not the root", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ variables: { items: { kind: "literal", value: "x" } },
+         helpers: { row: "{{ .title }}" },
+         segments: { s: { template: '{{ range .items }}{{ template "row" . }}{{ end }}' } } }`,
     );
+    expect(cfg.helpers.row).toBe("{{ .title }}");
   });
 
   test("template referencing declared variable passes", () => {
@@ -2068,6 +2079,41 @@ describe("templateReads", () => {
       expect(
         readsOf('{{ template "h" . }}', { h: '{{ .a }}{{ template "h" . }}' }),
       ).toEqual({ a: "h" });
+    });
+
+    test("`with` binds the dot, `range` unbinds it, `else` returns to the outer dot", () => {
+      expect(
+        readsOf(
+          '{{ with .git }}{{ .branch }}{{ template "h" . }}{{ else }}{{ .none }}{{ end }}' +
+            '{{ range .items }}{{ .title }}{{ $.root }}{{ template "h" . }}{{ end }}',
+          { h: "{{ .sha }}" },
+        ),
+      ).toEqual({
+        git: null,
+        "git.branch": null,
+        "git.sha": "h",
+        none: null,
+        items: null,
+        root: null,
+      });
+    });
+
+    test("`$` hands a helper the root; inside a helper, `$` is its argument", () => {
+      expect(
+        readsOf('{{ range .items }}{{ template "h" $ }}{{ end }}{{ template "g" .git }}', {
+          h: "{{ .a }}",
+          g: "{{ range .list }}{{ $.b }}{{ end }}",
+        }),
+      ).toEqual({ items: null, a: "h", git: null, "git.list": "g", "git.b": "g" });
+    });
+
+    test("a helper reached at one path through two callers is walked once", () => {
+      const helpers: Record<string, string> = { leaf: "{{ .x }}" };
+      for (let i = 0; i < 40; i++) {
+        const next = i === 0 ? "leaf" : `h${i - 1}`;
+        helpers[`h${i}`] = `{{ template "${next}" . }}{{ template "${next}" . }}`;
+      }
+      expect(readsOf('{{ template "h39" . }}', helpers)).toEqual({ x: "leaf" });
     });
 
     test("a `template` inside a string literal is text, not a call", () => {
