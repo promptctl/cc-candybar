@@ -315,7 +315,10 @@
             key: "controlPanel",       // shared accordion key
             bg: "surface",
             children: [
-              { kind: "segment", name: "stepperBody" },
+              // A second placement of stepperBody: every placement has its
+              // own id (a bare one takes the segment's name, which the
+              // standalone group above already holds).
+              { kind: "segment", name: "stepperBody", id: "panelStepper" },
             ],
           },
           {

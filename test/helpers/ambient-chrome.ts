@@ -34,6 +34,7 @@ import {
   VERB_STEP_STATE,
 } from "../../src/click/wire";
 import { effectsOf } from "./click";
+import { ident } from "../../src/config/ident";
 import { parseAndValidate } from "./parse-and-validate";
 
 // [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
@@ -44,8 +45,8 @@ function isReservedChromeKey(key: string): boolean {
   return (
     key.startsWith(SETTINGS_NS) ||
     key.startsWith(EDIT_NS) ||
-    // The settings menu's own pickers, hosted on `settings.<setting>`.
-    key.startsWith(`${MENU_NS}settings_`) ||
+    // The settings menu's own pickers, hosted on `candybar.<setting>`.
+    key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`) ||
     // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
     // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertTerm
     // calls menuStateKey directly), and `ident()` collapses the dots — so a
@@ -144,7 +145,9 @@ function keysWrittenBy(url: string): string[] {
 // test that opens the menu before collecting links would otherwise have counted
 // a picker's toggle as one of its fixture's own regions.
 function isSettingsMenuKey(key: string): boolean {
-  return key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}settings_`);
+  return (
+    key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`)
+  );
 }
 
 // The click URLs the ambient chrome emits, removed from a collected list so a

@@ -1,23 +1,25 @@
 // [LAW:one-type-per-behavior] The seam brandon-layout-edit-2gc.1 opens: a
 // bounded, statically-enumerable vocabulary for editing a layout tree —
-// remove the segment named X, insert a named segment before/after an
-// existing one. No third LayoutNode kind, no free-form tree editing: a
-// segment's own NAME is the stable position (dsl-types.ts already makes it
-// one — SegmentNode.name is a ref into `segments`, unaffected by a sibling
-// being added or removed elsewhere in the tree), so there is no sibling-index
-// to invalidate between the render that offered the click and the click.
+// remove the placement with id X, insert a segment before/after an existing
+// placement. No third LayoutNode kind, no free-form tree editing: a
+// placement's ID is the stable position (brandon-segment-settings-i4n —
+// `placementId`, unaffected by a sibling being added or removed elsewhere in
+// the tree), so there is no sibling-index to invalidate between the render
+// that offered the click and the click.
 //
 // [LAW:one-source-of-truth] An op is applied ONCE, to the authored tree in
 // the config file (candybar-config-dqe: src/daemon/config-file-store.ts over
 // src/config/json5-edit.ts's removeSegmentRef/insertSegmentRef) — the file
 // then IS the edited tree, and every reload reads it like any hand-written
-// root. This module owns only the op's shape and its wire codec.
+// root. This module owns only the op's shape, its wire codec, and the id an
+// insertion mints.
 
-import { walkNodes, type LayoutNode } from "./dsl-types.js";
+import { placementId, walkNodes, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
-// ships. Both address position by NAME, never by index. A future op (e.g.
-// "move") is a new arm here, not a new node kind or a new codec.
+// ships. Both address position by placement ID, never by index: `target` and
+// `anchor` are ids, `segment` is the segment an insertion places. A future op
+// (e.g. "move") is a new arm here, not a new node kind or a new codec.
 export type LayoutOp =
   | { readonly op: "remove"; readonly target: string }
   | {
@@ -66,19 +68,23 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
   return null;
 }
 
-// [LAW:single-enforcer] THE one collector of "which segment names does this
-// tree contain" — brandon-layout-edit-2gc.3's edit-chrome synthesis
-// (src/config/edit-chrome.ts) uses it to compute both halves of the +/-
-// affordances: which segments are PRESENT (get a `-`) and, by set difference
-// against every declared segment, which are ADDABLE (populate the `+`
-// picker's domain). A name appearing more than once collapses to one entry —
-// callers that care about occurrence COUNT (none currently do) need a
-// different walk. Reads `walkNodes`, THE traversal, so a segment inside a
-// disclosure body counts as present exactly as the render reaches it.
-export function collectSegmentNames(root: LayoutNode): ReadonlySet<string> {
-  const out = new Set<string>();
-  for (const node of walkNodes(root)) {
-    if (node.kind === "segment") out.add(node.name);
+// What an insertion writes into the layout: the bare segment name — whose id
+// is that name — while no placement in the tree already holds it, else the
+// segment under the first free `<name>-<n>`, n from 2. Ids are unique per
+// tree (cross-ref.ts), so the insertion must never mint one already taken.
+export type NewPlacement =
+  | { readonly seg: string }
+  | { readonly seg: string; readonly id: string };
+
+// [LAW:single-enforcer] THE id an insertion mints, over every id in the tree
+// the preset renders — the tree the uniqueness rule is checked over.
+export function mintPlacement(segment: string, tree: LayoutNode): NewPlacement {
+  const taken = new Set<string>();
+  for (const node of walkNodes(tree)) {
+    if (node.kind === "segment") taken.add(placementId(node));
   }
-  return out;
+  if (!taken.has(segment)) return { seg: segment };
+  let n = 2;
+  while (taken.has(`${segment}-${n}`)) n++;
+  return { seg: segment, id: `${segment}-${n}` };
 }

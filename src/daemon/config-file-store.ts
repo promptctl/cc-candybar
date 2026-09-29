@@ -57,7 +57,11 @@ import {
   setValue,
   type Node,
 } from "../config/json5-edit.js";
-import type { LayoutOp } from "../config/layout-ops.js";
+import {
+  mintPlacement,
+  type LayoutOp,
+  type NewPlacement,
+} from "../config/layout-ops.js";
 import {
   parsePersistTarget,
   persistPath,
@@ -396,13 +400,13 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
 function layoutPlacementOf(
   doc: Node | null,
   preset: string,
-  segment: string,
+  id: string,
 ): Placement {
   for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
-    if (hasSegmentRef(node, segment)) return placement;
+    if (hasSegmentRef(node, id)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no segment "${segment}" — the bar you clicked is stale; it reloads on the next render`,
+    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale; it reloads on the next render`,
   );
 }
 
@@ -672,7 +676,10 @@ export function applyLayoutOp(
   file: string,
   key: string,
   op: LayoutOp,
-): void {
+  // The layout a preset renders — where a new placement's id must be free
+  // (`mintPlacement`).
+  renderedOf: (preset: string) => LayoutNode,
+): NewPlacement | null {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -685,20 +692,36 @@ export function applyLayoutOp(
     subject,
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const after =
-    op.op === "remove"
-      ? removeSegmentRef(authored, placement.path, op.target)
-      : insertSegmentRef(
-          authored,
-          placement.path,
-          op.segment,
-          op.anchor,
-          op.relation,
-        );
+  const { after, placed } = spliceOp(authored, placement.path, op, () =>
+    renderedOf(target.preset),
+  );
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${file} has no segment "${subject}" — the bar you clicked is stale; it reloads on the next render`,
+      `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   commit(store, file, before, after);
+  return placed;
+}
+
+// [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
+// a removal places nothing; an insertion places the segment under the id
+// `mintPlacement` finds free in the tree the preset renders.
+function spliceOp(
+  text: string,
+  path: ConfigPath,
+  op: LayoutOp,
+  rendered: () => LayoutNode,
+): { readonly after: string | null; readonly placed: NewPlacement | null } {
+  switch (op.op) {
+    case "remove":
+      return { after: removeSegmentRef(text, path, op.target), placed: null };
+    case "insert": {
+      const placed = mintPlacement(op.segment, rendered());
+      return {
+        after: insertSegmentRef(text, path, placed, op.anchor, op.relation),
+        placed,
+      };
+    }
+  }
 }

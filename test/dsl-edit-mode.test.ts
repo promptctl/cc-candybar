@@ -54,6 +54,7 @@ import {
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
 import {
+  ADDABLE_DOMAIN,
   EDIT_LIVE_KEY,
   REMOVE_GLYPH,
   arrangedSegment,
@@ -156,7 +157,12 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const configDisposers = deriveConfigActionValidators(config).map(
     ({ key, spec }) => registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    // The config this bar rendered with, which an insertion mints its id
+    // against — the daemon's own lookup.
+    configFor: () => config,
+  };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -246,18 +252,6 @@ describe("insertSegmentFrom loader shape", () => {
         ALLOWED,
       ),
     ).toThrow(/declares exactly one value source/);
-  });
-
-  test("insertSegmentFrom's anchor naming an undeclared segment is a load error", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        base(
-          `{ ins: { persist: 'presets.default.root', insertSegmentFrom: 'themes', anchor: 'nope', relation: 'after' } }`,
-        ),
-        ALLOWED,
-      ),
-    ).toThrow(/anchor "nope" is not a declared segment/);
   });
 
   test("insertSegmentFrom has no `set` counterpart — persist only", () => {
@@ -374,7 +368,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     }
   });
 
-  test("gitPr (not yet in the tree) is offered by every `+`'s addable domain", () => {
+  test("every `+` ranges the one addable domain", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const inserts = Object.entries(config.actions).filter(
       (
@@ -389,7 +383,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     );
     expect(inserts.length).toBeGreaterThan(0);
     for (const [, a] of inserts) {
-      expect(a.insertSegmentFrom).toBe("edit.addable.default");
+      expect(a.insertSegmentFrom).toBe(ADDABLE_DOMAIN);
     }
   });
 

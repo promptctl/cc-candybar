@@ -94,9 +94,22 @@ export const AXIS_OF: Readonly<Record<Direction, Axis>> = {
 // segments is spelled `{ h: ["seg1", "seg2"] }` in the A-grammar.
 export interface SegmentNode {
   readonly kind: "segment";
-  // A name into the `segments` block. The segment's own template/palette/`when`
-  // live on its SegmentDecl, not here; this node is purely the tree position.
+  // A name into the `segments` block — the DEFINITION this placement is an
+  // instance of. Its template/palette/`when` live on its SegmentDecl.
   readonly name: string;
+  // The placement's identity (brandon-segment-settings-i4n): what a menu's
+  // open state, edit mode's `🚫`/`+`, and the config-file editor address. A
+  // name, never a position — positions shift when a sibling is added or
+  // removed. Absent ≡ the segment's name, so `"git"` and
+  // `{ seg: "git", id: "git" }` are one placement; read it through
+  // `placementId`, never `node.id` directly. Unique across the tree a preset
+  // renders (cross-ref.ts).
+  readonly id?: string;
+  // This placement's values for the settings its segment declares
+  // (SegmentDecl.settings) — only the ones that differ from the declared
+  // default. The segment's templates read the resolved set as `.settings`,
+  // so two placements of one segment never share a value.
+  readonly settings?: Readonly<Record<string, SettingValue>>;
   // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A node-level
   // predicate, ANDed with the segment-decl's own `when` at render.
   readonly when?: string;
@@ -117,6 +130,13 @@ export interface SegmentNode {
   // button, which has to sit against the segment it removes. Synthesis-only,
   // like `opens`.
   readonly trail?: string;
+}
+
+// [LAW:one-source-of-truth] THE identity of a placement: its authored `id`,
+// else its segment's name. Every reader of "which placement is this" asks
+// here, so a bare ref and its explicit spelling can never be two identities.
+export function placementId(node: SegmentNode): string {
+  return node.id ?? node.name;
 }
 
 export type Placement = "drop" | "inline";
@@ -779,6 +799,71 @@ export interface SegmentDecl {
   // segment including the owning one; the loader rejects bare refs at load
   // with a diagnostic naming the namespaced form. [LAW:one-source-of-truth]
   readonly vars?: Readonly<Record<string, VariableDecl>>;
+  // The settings each PLACEMENT of this segment may set
+  // (brandon-segment-settings-i4n): name → what the value may be and what it
+  // is when a placement says nothing. The segment's templates read the
+  // placement's resolved values as `.settings.<name>`.
+  readonly settings?: Readonly<Record<string, SettingDecl>>;
+}
+
+// [LAW:types-are-the-program] What a setting may hold. A template reads it,
+// so it is a template's own scalar vocabulary: a flag, a word, a number.
+export type SettingValue = boolean | string | number;
+
+// [LAW:types-are-the-program] One setting's declaration, discriminated by its
+// DOMAIN — a flag, a closed list of words, or a bounded integer — and each arm
+// carries a default of that arm's own type, so a default outside its kind is
+// unrepresentable. The authored JSON is this shape verbatim: `domain` is
+// `"bool"`, an array of words, or `{ min, max }`.
+export type SettingDecl =
+  | {
+      readonly label: string;
+      readonly domain: "bool";
+      readonly default: boolean;
+    }
+  | {
+      readonly label: string;
+      readonly domain: readonly string[];
+      readonly default: string;
+    }
+  | {
+      readonly label: string;
+      readonly domain: SettingRange;
+      readonly default: number;
+    };
+
+export interface SettingRange {
+  readonly min: number;
+  readonly max: number;
+}
+
+// [LAW:single-enforcer] THE membership test of a setting's domain — the
+// loader asks it of every default and every placement's value, so "a value
+// this setting may hold" has one answer.
+export function inSettingDomain(
+  decl: SettingDecl,
+  value: SettingValue,
+): boolean {
+  const { domain } = decl;
+  if (domain === "bool") return typeof value === "boolean";
+  if ("min" in domain) {
+    return (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      value >= domain.min &&
+      value <= domain.max
+    );
+  }
+  return typeof value === "string" && domain.includes(value);
+}
+
+// How a domain reads in a message: `true or false`, `one of "a", "b"`, or
+// `an integer from 0 to 9`.
+export function describeSettingDomain(decl: SettingDecl): string {
+  const { domain } = decl;
+  if (domain === "bool") return "true or false";
+  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
+  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
 }
 
 // [LAW:types-are-the-program] What a FILE may say about a segment: a complete

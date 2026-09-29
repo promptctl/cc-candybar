@@ -30,8 +30,15 @@ import type {
   Direction,
   Placement,
   SegmentDecl,
+  SegmentNode,
+  SettingValue,
 } from "../config/dsl-types.js";
-import { AXIS_OF, bodyPath, childPath } from "../config/dsl-types.js";
+import {
+  AXIS_OF,
+  bodyPath,
+  childPath,
+  placementId,
+} from "../config/dsl-types.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -46,6 +53,7 @@ import {
   fragmentsToCells,
   evaluateWhen,
   applySegmentLayout,
+  placementScope,
 } from "../template-engine/index.js";
 import type { LaidCell } from "../template-engine/layout.js";
 
@@ -59,6 +67,12 @@ export interface CompiledSegmentNode {
   readonly kind: "segment";
   readonly when?: Template<RichText>;
   readonly name: string;
+  // [LAW:parse-dont-validate] The placement's identity, resolved once
+  // (`placementId`), and its settings resolved against its segment's
+  // declaration — every declared setting present, the placement's value else
+  // the default — so the render reads a finished object, never a fallback.
+  readonly id: string;
+  readonly settings: PlacementSettings;
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
@@ -151,12 +165,21 @@ export interface NodeCompileCtx {
   // Compile a child node (the recursion, injected so this module needn't import
   // the driver). Generic so a container child compiles to a container.
   compileChild<N extends LayoutNode>(node: N, path: string): Compiled<N>;
+  // The resolved settings of a segment placement: the driver holds the
+  // declarations they resolve against.
+  settingsOf(node: SegmentNode): PlacementSettings;
 }
+
+// What a placement's templates read as `.settings`: a frozen, null-prototype
+// record, so no inherited name resolves as a setting.
+export type PlacementSettings = Readonly<Record<string, SettingValue>>;
 
 // [LAW:single-enforcer] The render-time context. `visible` is THIS node's
 // computed visibility (the driver ANDs node.when with the parent's).
 // renderChild continues the walk.
 export interface NodeRenderCtx {
+  // The render's scope. A placement's own templates evaluate in it with
+  // `.settings` bound (`placementScope`); everything else reads it as is.
   readonly scope: object;
   // [LAW:one-source-of-truth] The render's palette: the base theme (session
   // choice over config default) under the render's look, transposed ONCE by
@@ -200,7 +223,8 @@ export interface NodeRenderCtx {
   // call, so a template that throws cannot leave the record published for
   // whatever evaluates next outside any segment.
   evaluateSegment(
-    segName: string,
+    placement: CompiledSegmentNode,
+    scope: object,
     palette: Palette,
     region: Region,
     templates: {
@@ -430,6 +454,8 @@ const segmentType: NodeType<"segment"> = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
+      id: placementId(node),
+      settings: cctx.settingsOf(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...(node.opens !== undefined && {
@@ -456,6 +482,10 @@ const segmentType: NodeType<"segment"> = {
     }
     const { seg, compiled: segCompiled } = found;
     if (!ctx.visible) return [];
+    // [LAW:one-source-of-truth] Every template of THIS placement — its
+    // segment's `when`, `bg:`, `fg:`, body, and edit mode's trail — reads
+    // this placement's settings; nothing outside the placement does.
+    const scope = placementScope(ctx.scope, node.settings);
 
     // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
     // partial-load consequence (e.g. a variable that failed to declare, leaving a
@@ -466,7 +496,7 @@ const segmentType: NodeType<"segment"> = {
     // partial rendering: the new config stays active, working segments render, and
     // broken segments show an error cell.
     try {
-      if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
+      if (!evaluateWhen(segCompiled.when, scope)) return [];
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
       // palette: an explicit `palette:` pin, or the render's palette (the base
@@ -486,7 +516,8 @@ const segmentType: NodeType<"segment"> = {
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
       const { styles, fragments, trail, drops } = ctx.evaluateSegment(
-        node.name,
+        node,
+        scope,
         palette,
         ctx.region,
         {
@@ -596,7 +627,7 @@ const segmentType: NodeType<"segment"> = {
       // segments in it, each of which sinks its own.
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(
-          node.name,
+          node.id,
           [
             ...laidLines.flatMap((line) => line.cells),
             ...bodyTail.flatMap(leadOf),
@@ -634,7 +665,7 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
-              trail: errorTrail(node, ctx),
+              trail: errorTrail(node, scope, ctx),
             },
           ),
           band: "own",
@@ -650,11 +681,12 @@ const segmentType: NodeType<"segment"> = {
 // fails too is one more reported error beside the first, never a bar-wide throw.
 function errorTrail(
   node: CompiledSegmentNode,
+  scope: object,
   ctx: NodeRenderCtx,
 ): readonly RichText[] {
   if (node.trail === undefined) return [];
   try {
-    return ctx.evaluateSegment(node.name, ctx.palette, ctx.region, {
+    return ctx.evaluateSegment(node, scope, ctx.palette, ctx.region, {
       bg: undefined,
       fg: undefined,
       body: node.trail,

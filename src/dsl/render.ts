@@ -19,6 +19,8 @@ import type {
   CacheDecl,
   LayoutNode,
   ParseDecl,
+  SegmentNode,
+  SettingValue,
   SourceDefault,
 } from "../config/dsl-types.js";
 import { parseArm } from "../config/dsl-types.js";
@@ -65,7 +67,7 @@ import {
   type LookSelection,
   type ThemeSelection,
 } from "../themes/index.js";
-import { buildScope } from "../template-engine/scope.js";
+import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
   evaluateWhen,
@@ -112,6 +114,8 @@ import {
   type CompiledNode,
   type CompiledSegment,
   type CompiledSegments,
+  type CompiledSegmentNode,
+  type PlacementSettings,
   type RenderedLines,
   type NodeCompileCtx,
   type NodeRenderCtx,
@@ -658,6 +662,17 @@ export function registerDslConfig(
       );
     }
   };
+  // [LAW:parse-dont-validate] A placement's settings, resolved once against
+  // its segment's declaration: the loader proved every value it sets is
+  // declared and in its domain, so resolution is a fill of the defaults.
+  const resolvedSettings = (node: SegmentNode): PlacementSettings => {
+    const declared = config.segments[node.name]?.settings ?? {};
+    const out = Object.create(null) as Record<string, SettingValue>;
+    for (const [name, decl] of Object.entries(declared)) {
+      out[name] = node.settings?.[name] ?? decl.default;
+    }
+    return Object.freeze(out);
+  };
   const compileNode = <N extends LayoutNode>(
     node: N,
     path: string,
@@ -670,6 +685,7 @@ export function registerDslConfig(
           : parseNodeField(node.when, path, "when"),
       parse: (src, field) => parseNodeField(src, path, field),
       compileChild: compileNode,
+      settingsOf: resolvedSettings,
     };
     // [LAW:types-are-the-program] The registry pairs each kind with the
     // compile that returns that kind's own compiled arm (nodeType's documented
@@ -801,7 +817,8 @@ function provisionalName(
 export interface RenderObservers {
   // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
   // present, each rendered segment's RichText array (post-layout, pre-
-  // serialization) is written to this map under its segment name. Storing
+  // serialization) is written to this map under its placement id — its
+  // segment's name unless the placement names its own. Storing
   // cells (not pre-serialized strings) keeps the hot path's serializer
   // work proportional to the joined line only — debug consumers serialize
   // on demand. Hidden-by-when segments are absent from the map (presence
@@ -1049,7 +1066,8 @@ export function renderDsl(
   // so the cell, the band it drops, and the body hung under it cannot disagree
   // about their hue.
   const evaluateSegment = (
-    segName: string,
+    placement: CompiledSegmentNode,
+    segScope: object,
     palette: Palette,
     region: Region,
     templates: {
@@ -1064,7 +1082,8 @@ export function renderDsl(
       const { tint, disclosure } = decorationFor(palette, region, drawnAt);
       const active = openSegment(
         compiled.activeSegment,
-        segName,
+        placement.name,
+        placement.id,
         palette,
         disclosure,
         tint,
@@ -1074,12 +1093,12 @@ export function renderDsl(
         drawnAt,
         templates.bg,
         templates.fg,
-        scope,
+        segScope,
       );
-      const fragments = templates.body.evaluate(scope);
+      const fragments = templates.body.evaluate(segScope);
       // Evaluated while the segment is still entered, so its colours read the
       // cell it is drawn in.
-      const trail = templates.trail?.evaluate(scope) ?? [];
+      const trail = templates.trail?.evaluate(segScope) ?? [];
       // Read only where something hangs open under the segment: a band that
       // can never be drawn (a hue with no state) throws when it is opened,
       // never from a closed cell or a body cell that merely deals it.
@@ -1176,7 +1195,10 @@ export function renderDsl(
     if (node.kind === "container") return true;
     if (arrangedSegment(node.name) === undefined) return false;
     try {
-      return evaluateWhen(compiled.segments[node.name]!.when, scope);
+      return evaluateWhen(
+        compiled.segments[node.name]!.when,
+        placementScope(scope, node.settings),
+      );
     } catch {
       return true;
     }

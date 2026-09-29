@@ -645,23 +645,28 @@ export function deleteValue(
 // (src/config/loader/layout.ts): a bare string names a segment; `{ seg }` and
 // `{ kind: "segment", name }` name one with options; `h`/`v`/`children`
 // arrays hold the children of a container or group; a root's `rows` object
-// holds its named rows, each any layout node. Edits address a segment by
-// NAME, in the same pre-order the lowered-tree walk uses, so an op that
-// removes the first `weekly` removes the one the bar shows first.
+// holds its named rows, each any layout node. Edits address a placement by
+// its ID — the document spelling of `placementId`: an authored `id`, else the
+// segment's name — which is unique in the tree a preset renders.
 const CHILD_KEYS = ["h", "v", "children"] as const;
 
-function segmentNameOf(node: Node): string | undefined {
+function placementIdOf(node: Node): string | undefined {
   if (node.kind === "string") return node.value;
   if (node.kind !== "object") return undefined;
   const seg = entryOf(node, "seg")?.value;
-  if (seg?.kind === "string") return seg.value;
   const kind = entryOf(node, "kind")?.value;
   const name = entryOf(node, "name")?.value;
-  return kind?.kind === "string" &&
-    kind.value === "segment" &&
-    name?.kind === "string"
-    ? name.value
-    : undefined;
+  const segName =
+    seg?.kind === "string"
+      ? seg.value
+      : kind?.kind === "string" &&
+          kind.value === "segment" &&
+          name?.kind === "string"
+        ? name.value
+        : undefined;
+  if (segName === undefined) return undefined;
+  const id = entryOf(node, "id")?.value;
+  return id?.kind === "string" ? id.value : segName;
 }
 
 function childArraysOf(node: Node): readonly ArrayNode[] {
@@ -722,16 +727,16 @@ function* nodesIn(
   }
 }
 
-/** Whether the fragment holds a segment ref named `name`, anywhere. */
-export function hasSegmentRef(root: Node, name: string): boolean {
+/** Whether the fragment holds the placement `id`, anywhere. */
+export function hasSegmentRef(root: Node, id: string): boolean {
   for (const { node } of nodesIn(root, null)) {
-    if (segmentNameOf(node) === name) return true;
+    if (placementIdOf(node) === id) return true;
   }
   return false;
 }
 
-// [LAW:one-source-of-truth] The first segment ref named `name` under the
-// fragment at `rootPath`, as an array element — normalized once, here, so the
+// [LAW:one-source-of-truth] The placement `id` under the fragment at
+// `rootPath`, as an array element — normalized once, here, so the
 // splices below are total over every legal shape. A ref that is the whole
 // fragment (`root: "directory"`) or a whole row (`rows: { sys: "demo" }`)
 // is rewritten as the one-child container it abbreviates — the original text
@@ -742,12 +747,12 @@ export function hasSegmentRef(root: Node, name: string): boolean {
 function refAt(
   text: string,
   rootPath: readonly string[],
-  name: string,
+  id: string,
 ): { text: string; ref: Node } | null {
   const root = nodeAt(parseDocument(text), rootPath);
   if (root === undefined) return null;
   for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (segmentNameOf(node) !== name) continue;
+    if (placementIdOf(node) !== id) continue;
     if (bareAt === null) return { text, ref: node };
     const wrapped = setValue(
       text,
@@ -755,15 +760,15 @@ function refAt(
       `{ h: [${textOf(text, node)}] }`,
       JSON5_DIALECT,
     );
-    return refAt(wrapped, rootPath, name);
+    return refAt(wrapped, rootPath, id);
   }
   return null;
 }
 
 /**
- * Remove the first segment ref named `target` from the layout tree rooted at
+ * Remove the placement `target` (an id) from the layout tree rooted at
  * `rootPath`. Returns the edited text, or null when the tree holds no such
- * ref — the caller decides whether that is an error.
+ * placement — the caller decides whether that is an error.
  */
 export function removeSegmentRef(
   text: string,
@@ -775,22 +780,26 @@ export function removeSegmentRef(
 }
 
 /**
- * Insert a bare-string segment ref named `segment` immediately before or
- * after the first ref named `anchor`. A ref alone on its line gets its own
- * line at the same indentation; an inline ref gets an inline sibling.
- * Returns null when the anchor is absent.
+ * Insert `placement` immediately before or after the placement `anchor` (an
+ * id) — a bare-string ref when it keeps its segment's name as its id, else
+ * `{ seg, id }`. A ref alone on its line gets its own line at the same
+ * indentation; an inline ref gets an inline sibling. Returns null when the
+ * anchor is absent.
  */
 export function insertSegmentRef(
   text: string,
   rootPath: readonly string[],
-  segment: string,
+  placement: { readonly seg: string; readonly id?: string },
   anchor: string,
   relation: "before" | "after",
 ): string | null {
   const hit = refAt(text, rootPath, anchor);
   if (hit === null) return null;
   const { text: src, ref } = hit;
-  const newText = JSON.stringify(segment);
+  const newText =
+    placement.id === undefined
+      ? JSON.stringify(placement.seg)
+      : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
   const { commaEnd, line } = trailerAfter(src, ref.span.end);
   if (startsLine(src, ref.span.start) && line !== null) {
     const indent = src.slice(lineStartOf(src, ref.span.start), ref.span.start);

@@ -238,8 +238,8 @@ const GROUPS = `{
   },
   root: { v: [
     { h: ['a'] },
-    { kind: 'group', name: 'one', label: 'one', key: 'acc', children: ['b', { h: ['c', 'd'] }, 'a'] },
-    { kind: 'group', name: 'two', label: 'two', key: 'acc', children: ['d'] },
+    { kind: 'group', name: 'one', label: 'one', key: 'acc', children: ['b', { h: ['c', 'd'] }, { seg: 'a', id: 'a2' }] },
+    { kind: 'group', name: 'two', label: 'two', key: 'acc', children: [{ seg: 'd', id: 'd2' }] },
   ] },
 }`;
 
@@ -284,9 +284,9 @@ const DROPS = `{
     { h: ['a'] },
     { kind: 'group', name: 'wide', label: 'wide', children: [
       { h: ['m', 'c'] },
-      { h: [{ v: ['b', 'd'] }, 'a'] },
+      { h: [{ v: ['b', 'd'] }, { seg: 'a', id: 'a2' }] },
     ] },
-    { kind: 'group', name: 'bare', label: 'bare', children: [{ seg: 'b', when: 'false' }] },
+    { kind: 'group', name: 'bare', label: 'bare', children: [{ seg: 'b', id: 'b2', when: 'false' }] },
   ] },
 }`;
 

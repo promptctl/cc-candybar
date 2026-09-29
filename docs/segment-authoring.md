@@ -555,6 +555,51 @@ or re-spell it by overriding its piece:
  🍫  on main +2/-1 SU? ▸ 
 ```
 
+## One segment, many placements: settings
+
+A segment's declaration is its **definition**; each place `root` names it is
+a **placement** — an instance of that definition. When the same segment should
+show differently in two places, declare what may vary as `settings`, and let
+each placement set its own values. A template reads its placement's values
+as `.settings.<name>`:
+
+- `settings` on the segment maps a name (an identifier) to
+  `{ label, domain, default }`. A domain is `"bool"`, a list of words, or
+  `{ min, max }` (whole numbers); the default must be in it.
+- A placement is `{ seg: "<segment>", id: "<id>", settings: { … } }`. It sets
+  only what differs; every other setting reads its default. A bare
+  `"modelTag"` is the placement `{ seg: "modelTag", id: "modelTag" }` with every
+  default.
+- Every placement in a layout has its own `id` — a bare one takes its
+  segment's name, so a second placement of one segment names an id of its
+  own. The id is the placement's identity: its menus' open state and edit
+  mode's `🚫` address it.
+
+```json5 check:pass
+{
+  segments: {
+    modelTag: {
+      description: "The model's name, spelled the way each placement asks.",
+      template: '{{ if .settings.icon }}◆ {{ end }}{{ if eq .settings.length "short" }}{{ trunc .settings.chars .model.display_name }}{{ else }}{{ .model.display_name }}{{ end }}',
+      settings: {
+        icon: { label: "Icon", domain: "bool", default: false },
+        length: { label: "Length", domain: ["full", "short"], default: "full" },
+        chars: { label: "Characters", domain: { min: 1, max: 12 }, default: 4 },
+      },
+    },
+  },
+  root: { h: ["modelTag", { seg: "modelTag", id: "shortTag", settings: { length: "short", icon: true } }] },
+}
+```
+
+```render
+ 🍫  Opus 4.8  ◆ Opus 
+```
+
+The segment's `when`, `bg:` and `fg:` read the same `.settings` as its
+template. No variable may be named `settings` or `settings.<x>` — inside a
+segment that name is the placement's.
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The
@@ -1002,6 +1047,50 @@ In a layout node's `when` the call itself is refused, naming the reason:
 
 ```error
 {{ color }} / {{ ramp }} / {{ gauge }} is only available inside a segment's templates — there is no active segment here.
+```
+
+### A second placement without an id of its own
+
+```json5 check:fail
+{
+  segments: { modelTag: { template: "{{ .model.display_name }}" } },
+  root: { h: ["modelTag", "modelTag"] },
+}
+```
+
+```error
+root has 2 placements with the id "modelTag"
+```
+
+### A placement setting a value outside its domain
+
+```json5 check:fail
+{
+  segments: {
+    modelTag: {
+      template: "{{ .model.display_name }}",
+      settings: { length: { label: "Length", domain: ["full", "short"], default: "full" } },
+    },
+  },
+  root: { h: [{ seg: "modelTag", settings: { length: "tiny" } }] },
+}
+```
+
+```error
+placement "modelTag" of segment "modelTag" sets "length" to "tiny", but it must be one of "full", "short"
+```
+
+### A template reading a setting its segment does not declare
+
+```json5 check:fail
+{
+  segments: { modelTag: { template: '{{ if .settings.icon }}◆ {{ end }}{{ .model.display_name }}' } },
+  root: { h: ["modelTag"] },
+}
+```
+
+```error
+Template reads ".settings.icon", but segment "modelTag" declares no setting "icon" (it declares no settings)
 ```
 
 ## Before you report done

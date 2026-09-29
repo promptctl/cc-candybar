@@ -66,6 +66,20 @@ function makeProxy(
   });
 }
 
+// [LAW:one-source-of-truth] The scope ONE placement's templates evaluate in
+// (brandon-segment-settings-i4n): the render's scope, with `.settings` bound
+// to that placement's resolved settings. No variable may live under
+// `settings` (cross-ref.ts refuses one), so this adds a name and shadows none.
+// `settings` is the compiled placement's own frozen object — the same one on
+// every render — so nothing here allocates per read.
+export function placementScope(scope: object, settings: object): object {
+  return new Proxy(scope, {
+    has: (target, key) => key === "settings" || Reflect.has(target, key),
+    get: (target, key) =>
+      key === "settings" ? settings : Reflect.get(target, key),
+  });
+}
+
 // [LAW:no-silent-failure] THE place a document's non-value states become an
 // error: a read of a document that has not been scanned, or whose scan
 // failed, throws naming the variable and the reason. The segment reading it

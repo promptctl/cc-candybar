@@ -816,7 +816,7 @@ describe("the menu is chrome-exempt", () => {
       ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
-    // The addable domain is "declared, non-exempt segments not already present".
+    // The addable domain is "declared, non-exempt segments".
     // A settings segment in it would mean `+` could insert a second copy of the
     // one node that must exist exactly once.
     const compiled = registerDslConfig(
@@ -831,7 +831,7 @@ describe("the menu is chrome-exempt", () => {
     );
     expect(compiled).toBeDefined();
     // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that
-    // field holds the domain's NAME (`addableDomainName` → `edit.addable.<p>`),
+    // field holds the domain's NAME (`ADDABLE_DOMAIN`, `edit.addable`),
     // which is EDIT_NS-prefixed by construction, so checking it for a
     // SETTINGS_NS prefix passes however broken `isChromeExempt` gets.
     const domains = [...addableSegmentDomains(config).values()];

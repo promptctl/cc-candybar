@@ -85,7 +85,7 @@ function resolve(
   scope: object = {},
 ): Style {
   return resolveSegmentColors(
-    openSegment(h.ref, SEG, palette, DISCLOSURE, TINT),
+    openSegment(h.ref, SEG, SEG, palette, DISCLOSURE, TINT),
     ColorDepth.TRUECOLOR,
     bg,
     fg,
@@ -392,7 +392,7 @@ describe("segment color functions in the engine", () => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
     const engine = createCcCandybarEngine(segmentColorFuncs(ref));
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    openSegment(ref, SEG, makeTestPalette(), DISCLOSURE, TINT);
+    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT);
     const fragments = tpl.evaluate({});
     expect(definedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
     expect(fragments[0]?.plain).toBe("hello");

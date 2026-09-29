@@ -27,9 +27,9 @@
 // contain ANY NUMBER of menus (each appends its own body, in template order).
 //
 // [LAW:one-source-of-truth] A menu is CONTEXT-FREE about its NAME in the template
-// (it cannot see the segment it sits in), so the host segment name is published
-// into this runtime by the render walk before each segment's template evaluates.
-// The helper combines that segment name with its own apply-action arg (and an
+// (it cannot see the placement it sits in), so the host placement's id is
+// published into this runtime by the render walk before each segment's template
+// evaluates. The helper combines that id with its own apply-action arg (and an
 // optional shared key) to derive identity via menu-keys — the SAME derivation the
 // loader synthesis uses — so the rendered toggle and the loader-synthesized state
 // var + gate share one source.
@@ -58,11 +58,11 @@ import {
 } from "./active-segment.js";
 
 // [LAW:one-type-per-behavior] A `{{ menu }}` needs one structural fact it cannot
-// see about itself — the name of the segment it renders inside. That used to be
-// its own `MenuPlacement` type; it is now a field on the ONE active-segment
-// record the walk publishes (see render/active-segment.ts), because "which
-// segment is rendering" is a single fact and a per-feature copy of it is a
-// second clock. The menu reads `segName` and ignores the rest.
+// see about itself — the placement it renders inside. That used to be its own
+// `MenuPlacement` type; it is now a field on the ONE active-segment record the
+// walk publishes (see render/active-segment.ts), because "which placement is
+// rendering" is a single fact and a per-feature copy of it is a second clock.
+// The menu reads `placementId` and ignores the rest.
 
 // [LAW:locality-or-seam] The runtime the `menu` func closes over. It shares the
 // ACTION runtime (the menu's glyph and body resolve their actions/state from the
@@ -95,7 +95,7 @@ function renderMenu(
   // — comes from the SAME menu-keys derivation the loader synthesis used, so the
   // key this render reads/writes is the key whose state var + int gate the
   // loader emitted. No page-action argument to mis-wire.
-  const stateKey = menuStateKey(placement.segName, applyName, options.key);
+  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
   const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
 
