@@ -1,3 +1,10 @@
+# [1.89.0](https://github.com/promptctl/cc-candybar/compare/v1.88.0...v1.89.0) (2026-09-29)
+
+
+### Features
+
+* **segments:** each placement has an id and its own settings ([#263](https://github.com/promptctl/cc-candybar/issues/263)) ([c46eb9e](https://github.com/promptctl/cc-candybar/commit/c46eb9ec851c9b117f6b03dcb5f8527a2010176b))
+
 # [1.88.0](https://github.com/promptctl/cc-candybar/compare/v1.87.1...v1.88.0) (2026-09-29)
 
 
