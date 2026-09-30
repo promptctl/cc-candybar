@@ -675,6 +675,27 @@ describe("reset returns settings to the bundled default", () => {
     expect(durable.text()).toBe(before);
   });
 
+  test("an armed reset all stays in view when nothing is left to reset, so it never returns already armed", () => {
+    r.click(labelled("⟲")!);
+    r.click(labelled("⟲ reset all?")!);
+    expect(labelled("⟲")).toBeUndefined();
+
+    // A draft brings `⟲` back; arming it, then losing the draft (an undo),
+    // leaves nothing to reset — but the armed confirm and its ✕ stay.
+    r.sessionState.set(SID, "padding", "5");
+    r.click(labelled("⟲")!);
+    r.sessionState.clear(SID, "padding");
+    expect(labelled("⟲ reset all?")).toBeDefined();
+    const cancel = links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "✕" &&
+        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
+    )!.url;
+    r.click(cancel);
+    expect(labelled("⟲ reset all?")).toBeUndefined();
+    expect(labelled("⟲")).toBeUndefined();
+  });
+
   // brandon-menu-ia-q30.4oj: `⟲` shows whenever a reset would change
   // something — here the file's own values, with no draft to save.
   test("⟲ shows beside the preset with no drafts while the file holds a resettable value", () => {

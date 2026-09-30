@@ -398,7 +398,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly unsaved: number;
   // How many settings a reset all would change: those with a draft, or with
   // a value the config file holds at a layer a reset clears
-  // (resettableSettings, src/daemon/setting-drafts.ts), so the menu's `⟲`
+  // (settingCounts over fileHeldSettings, src/daemon/setting-drafts.ts), so the menu's `⟲`
   // exists exactly while it would do something.
   readonly resettable: number;
 

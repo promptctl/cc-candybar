@@ -295,40 +295,54 @@ const RESET_ALL = confirmStep(
 // the daemon publishes every render: save while there are drafts, undo and
 // redo while their stack has a step, `⟲` while a reset all would change
 // something (a draft, or a value the config file holds at a layer a reset
-// clears). So a click on any part always does something.
+// clears) or while it is armed, so its confirm is never hidden armed. So a
+// click on any part always does something.
 interface SavePart {
   readonly count: string;
   readonly path: string;
   readonly body: string;
+  readonly shown: string;
 }
+const counted = (count: string, path: string, body: string): SavePart => ({
+  count,
+  path,
+  body,
+  shown: `(gt .${count} 0)`,
+});
 const SAVE_PARTS: readonly SavePart[] = [
+  counted(
+    UNSAVED_VAR,
+    "unsaved",
+    `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
+  ),
+  counted(
+    `${SETTINGS_NS}history.undo`,
+    "history.undo",
+    `{{ action "${UNDO_ACTION}" "↶" }}`,
+  ),
+  counted(
+    `${SETTINGS_NS}history.redo`,
+    "history.redo",
+    `{{ action "${REDO_ACTION}" "↷" }}`,
+  ),
   {
-    count: UNSAVED_VAR,
-    path: "unsaved",
-    body: `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
+    count: RESETTABLE_VAR,
+    path: "resettable",
+    body: RESET_ALL.template,
+    shown: `(or (gt .${RESETTABLE_VAR} 0) ${RESET_ALL.armed})`,
   },
-  {
-    count: `${SETTINGS_NS}history.undo`,
-    path: "history.undo",
-    body: `{{ action "${UNDO_ACTION}" "↶" }}`,
-  },
-  {
-    count: `${SETTINGS_NS}history.redo`,
-    path: "history.redo",
-    body: `{{ action "${REDO_ACTION}" "↷" }}`,
-  },
-  { count: RESETTABLE_VAR, path: "resettable", body: RESET_ALL.template },
 ];
-const hasPart = (p: SavePart): string => `(gt .${p.count} 0)`;
 // The parts present, one space between each: `$sep` is empty until the first
 // part renders.
+// [LAW:dataflow-not-control-flow] The gate is a boolean `or` of booleans: a
+// `when` hides only on the literal "false", so an `or` over bare counts would
+// render "0" and show an empty cell.
 const SAVE_CELL: SegmentDecl = {
-  when: `{{ or ${SAVE_PARTS.map(hasPart).join(" ")} }}`,
+  when: `{{ or ${SAVE_PARTS.map((p) => p.shown).join(" ")} }}`,
   template:
     `{{ $sep := "" }}` +
     SAVE_PARTS.map(
-      (p) =>
-        `{{ if ${hasPart(p)} }}{{ $sep }}${p.body}{{ $sep = " " }}{{ end }}`,
+      (p) => `{{ if ${p.shown} }}{{ $sep }}${p.body}{{ $sep = " " }}{{ end }}`,
     ).join(""),
 };
 // [LAW:one-source-of-truth] Every two-click step the door can bring into view,
