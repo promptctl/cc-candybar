@@ -1,3 +1,10 @@
+## [1.98.1](https://github.com/promptctl/cc-candybar/compare/v1.98.0...v1.98.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **config:** a persist click under a preset that pins its field lands in that preset's globals ([#284](https://github.com/promptctl/cc-candybar/issues/284)) ([5e3367c](https://github.com/promptctl/cc-candybar/commit/5e3367c2f386dc4303f301b9d5feae24ddb46154))
+
 # [1.98.0](https://github.com/promptctl/cc-candybar/compare/v1.97.4...v1.98.0) (2026-09-30)
 
 
