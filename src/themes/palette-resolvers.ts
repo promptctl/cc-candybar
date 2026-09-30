@@ -153,14 +153,19 @@ function namedTheme(name: string): DecidedTheme | null {
 // in — the message belongs to this domain, the channel does not. The one return
 // type also means this and `decideLookName` are interchangeable as
 // `finishSelection`'s `decide`.
+//
+// `where` names the path(s) the rule was written at, since a rule may live in the
+// config's own globals or in a preset's — the report must send the reader to the
+// fragment that holds it (brandon-themes-owl).
 export function decideThemeName(
   name: string,
+  where: string,
   onUnresolvable: (message: string) => void,
 ): DecidedTheme {
   const named = namedTheme(name);
   if (named !== null) return named;
   onUnresolvable(
-    `globals.palette rendered "${THEME_FLOOR}": "${name}" names no installed theme${retiredThemeNote(name)}`,
+    `${where} rendered "${THEME_FLOOR}": "${name}" names no installed theme${retiredThemeNote(name)}`,
   );
   return themeFloor();
 }
@@ -199,14 +204,13 @@ function themeFloor(): DecidedTheme {
 // it collapses to the same floor a rule naming nothing does, and there is nothing
 // to report because no name failed [LAW:no-silent-failure].
 //
-// [LAW:dataflow-not-control-flow] `finishSelection` with an evaluator that yields
-// the floor name: one value, no arm on the discriminator.
+// [LAW:dataflow-not-control-flow] `finishSelection` with a settle that yields
+// the floor: one value, no arm on the discriminator.
 export function declaredBasePalette(
   globalsPalette: string | undefined,
 ): Palette {
   return finishSelection(
     resolveThemeSelection(undefined, null, globalsPalette),
-    () => THEME_FLOOR,
     themeFloor,
   ).value;
 }

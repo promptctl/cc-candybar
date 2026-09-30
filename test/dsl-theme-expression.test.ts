@@ -475,7 +475,7 @@ describe("resolveThemeSelection", () => {
 describe("decideThemeName", () => {
   test("an installed name decides and reports nothing", () => {
     const said: string[] = [];
-    expect(decideThemeName("nord", (m) => said.push(m))).toMatchObject({
+    expect(decideThemeName("nord", "globals.palette", (m) => said.push(m))).toMatchObject({
       kind: "decided",
       name: "nord",
     });
@@ -484,7 +484,7 @@ describe("decideThemeName", () => {
 
   test("an unresolvable name yields the floor and reports once, naming the slot, the value and the consequence", () => {
     const said: string[] = [];
-    const decided = decideThemeName("nope", (m) => said.push(m));
+    const decided = decideThemeName("nope", "globals.palette", (m) => said.push(m));
     expect(decided).toMatchObject({ kind: "decided", name: THEME_FLOOR });
     expect(said).toHaveLength(1);
     expect(said[0]).toContain("globals.palette");
@@ -494,7 +494,7 @@ describe("decideThemeName", () => {
 
   test("a rule rendering a retired name is told the theme that replaced it", () => {
     const said: string[] = [];
-    decideThemeName("light", (m) => said.push(m));
+    decideThemeName("light", "globals.palette", (m) => said.push(m));
     expect(said[0]).toMatch(/"light" was retired; write "textual-light"/);
   });
 });
@@ -588,6 +588,60 @@ describe("a rule inside a preset's globals", () => {
           registerDslConfig(config, registry, { cwd: process.cwd() }),
         ).toThrow(/presets\.ruled\.globals\.palette is not a valid template/);
       },
+    );
+  });
+
+  test("an omitting caller renders the ACTIVE preset's rule, not the config's top-level palette", () => {
+    withRegistry(presetSrc(RULE), (config, registry, store) => {
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const text = renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: SID, ctx: { pct: 90 } },
+        OPTS,
+        {},
+        { preset: "ruled" },
+      );
+      expect(text).toContain("T=dracula");
+    });
+  });
+
+  test("a rule naming no theme is reported at the preset path it was written at", () => {
+    withRegistry(
+      presetSrc("{{ if true }}no-such-theme{{ end }}"),
+      (config, registry, store) => {
+        const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+        const said: string[] = [];
+        renderDsl(
+          config,
+          compiled,
+          store,
+          registry,
+          { session_id: SID, ctx: { pct: 0 } },
+          OPTS,
+          { onRenderWarning: (m) => said.push(m) },
+          { preset: "ruled" },
+        );
+        expect(said).toEqual([
+          expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /),
+        ]);
+      },
+    );
+  });
+
+  test("a look NAME in a preset's globals or in editGlobals must be a declared look", () => {
+    expect(() =>
+      parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),
+    ).toThrow(/presets\.ruled\.globals\.look "vivd" does not match any declared look/);
+    const staged = `{
+      editGlobals: { look: 'dimm' },
+      segments: { plain: { template: 'x' } },
+      root: { v: ['plain'] },
+    }`;
+    expect(() => parseAndValidate("<look-staged>", staged, ALLOWED)).toThrow(
+      /editGlobals\.look "dimm" does not match any declared look/,
     );
   });
 

@@ -267,18 +267,16 @@ export function resolveSelection<T>(
 // tell "the fold finished here" from "it had already finished" without
 // re-testing the discriminator [LAW:dataflow-not-control-flow].
 //
-// `decide` is TOTAL, and each field supplies its own: a look whose expression
-// named nothing collapses to the identity adaptation in silence, a theme's
-// collapses to a floor that is a SPECIFIC theme and must therefore say so. That
-// difference is a value passed in here, never an arm of this function.
+// `settle` is TOTAL, and each field supplies its own: it evaluates the rule it
+// is handed and decides the name — a look whose rule named nothing collapses to
+// the identity adaptation in silence, a theme's collapses to a floor that is a
+// SPECIFIC theme and must therefore say so, naming where that rule was written.
+// That difference is a value passed in here, never an arm of this function.
 export function finishSelection<T>(
   selected: Selection<T>,
-  evaluate: (source: string) => string,
-  decide: (name: string) => Decided<T>,
+  settle: (source: string) => Decided<T>,
 ): Decided<T> {
-  return selected.kind === "decided"
-    ? selected
-    : decide(evaluate(selected.source));
+  return selected.kind === "decided" ? selected : settle(selected.source);
 }
 
 // --- Look (theme-adaptation) identifiers ---

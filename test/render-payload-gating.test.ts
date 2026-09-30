@@ -302,6 +302,39 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     expect(needed.has("tmux.session")).toBe(false);
   });
 
+  test("a globals rule's reads are reachable — the active preset's rule, not an inactive one's", () => {
+    // brandon-themes-owl: a theme/look chosen by data runs every render, so the
+    // inputs it reads must come online even when no rendered segment reads them;
+    // otherwise the rule evaluates against unfilled defaults and never switches.
+    const config: DslConfig = {
+      globals: {
+        palette: "{{ if gt (int .metrics.sessionDuration) 0 }}nord{{ else }}dracula{{ end }}",
+      },
+      variables: SHARED_VARIABLES,
+      segments: SHARED_SEGMENTS,
+      root: rootOf("directory"),
+      actions: {},
+      looks: {},
+      presets: {
+        ruled: {
+          globals: {
+            look: "{{ if .tmux.session }}none{{ else }}none{{ end }}",
+          },
+        },
+      },
+      helpers: {},
+      editGlobals: {},
+    };
+    const floor = buildNeededPrefixes(config, PRESET_FLOOR);
+    expect(floor.has("metrics.sessionDuration")).toBe(true);
+    expect(floor.has("tmux.session")).toBe(false);
+    const ruled = buildNeededPrefixes(config, "ruled");
+    expect(ruled.has("tmux.session")).toBe(true);
+    // The preset's globals merge OVER the config's, field by field: `ruled`
+    // names no palette, so the top-level palette rule is still in force there.
+    expect(ruled.has("metrics.sessionDuration")).toBe(true);
+  });
+
   test("a segment reachable only through the synthesized settings menu brings its inputs online", () => {
     const config = parseAndValidate(
       "<user>",

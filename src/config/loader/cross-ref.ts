@@ -129,15 +129,32 @@ export function validateCrossReferences(
   // eagerly by registerDslConfig, so a malformed one is still a load error.
   // `isExpression` is the ONE predicate every reader uses, so this exemption
   // cannot be wider or narrower than what the render will actually evaluate.
-  if (
-    cfg.globals.look !== undefined &&
-    !isExpression(cfg.globals.look) &&
-    !Object.prototype.hasOwnProperty.call(cfg.looks, cfg.globals.look)
-  ) {
+  //
+  // [LAW:one-type-per-behavior] Every globals fragment a look NAME can come from
+  // is checked the same way — the config's own, each preset's, and editGlobals —
+  // because each is a rung the resolution reads, and a name no rung can decide
+  // falls through to the next in silence (brandon-themes-owl).
+  const lookFragments: ReadonlyArray<
+    readonly [readonly string[], string | undefined]
+  > = [
+    [["globals"], cfg.globals.look],
+    [["editGlobals"], cfg.editGlobals.look],
+    ...Object.entries(cfg.presets).map(
+      ([name, preset]) =>
+        [["presets", name, "globals"], preset.globals?.look] as const,
+    ),
+  ];
+  for (const [at, look] of lookFragments) {
+    if (
+      look === undefined ||
+      isExpression(look) ||
+      Object.prototype.hasOwnProperty.call(cfg.looks, look)
+    )
+      continue;
     ctx.issues.push({
-      path: "globals.look",
-      message: `globals.look "${cfg.globals.look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
-      line: findKeyLine(ctx.source, ["globals", "look"]),
+      path: `${at.join(".")}.look`,
+      message: `${at.join(".")}.look "${look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
+      line: findKeyLine(ctx.source, [...at, "look"]),
     });
   }
   // [LAW:one-type-per-behavior] globals.preset is globals.look one dimension
