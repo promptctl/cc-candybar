@@ -1,3 +1,10 @@
+# [1.99.0](https://github.com/promptctl/cc-candybar/compare/v1.98.1...v1.99.0) (2026-09-30)
+
+
+### Features
+
+* **menu:** rename look → style, progression → variation, style → endcaps ([#285](https://github.com/promptctl/cc-candybar/issues/285)) ([8b10611](https://github.com/promptctl/cc-candybar/commit/8b1061186ad459bd4e73909f2c73a4cc540b6b7e))
+
 ## [1.98.1](https://github.com/promptctl/cc-candybar/compare/v1.98.0...v1.98.1) (2026-09-30)
 
 
