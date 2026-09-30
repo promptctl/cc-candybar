@@ -43,7 +43,7 @@ export interface ActiveSegment {
   /**
    * The palette this segment's colors resolve from: the placement's own
    * (`placementPalette` of its `theme` setting) — the base theme (session
-   * choice over config default) after the render's look, or the theme the
+   * choice over config default) after the render's style, or the theme the
    * placement is pinned to.
    *
    * Template bodies read colors through THIS, not through a palette captured

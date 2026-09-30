@@ -1,7 +1,7 @@
 {
   "globals": {
     "palette": "replace:THEME",
-    "style": "replace:STYLE",
+    "endcaps": "replace:ENDCAPS",
     "charset": "replace:CHARSET",
     "preset": "replace:PRESET"
   }

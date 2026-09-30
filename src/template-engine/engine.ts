@@ -26,7 +26,7 @@
 //    are segment-scoped, so they arrive through `extraFuncs` from the DSL
 //    render layer, which is the only place that knows which segment is rendering.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
-//    themes, styles, sparkline.
+//    themes, endcaps, sparkline.
 //  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
 //    formatInteger, round, formatModelName, shortenModelName. (The cost/token/
 //    budget AND duration/time-remaining formatters moved to DSL helper templates

@@ -16,7 +16,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -111,11 +111,11 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
-  style: "powerline",
-  progression: "secondary-accent",
+  endcaps: "powerline",
+  variation: "accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
@@ -182,7 +182,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git"),
   actions: {},
-  looks: {},
+  styles: {},
   presets: {},
   helpers: {},
   editGlobals: {},
@@ -194,7 +194,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git", "metrics", "tmux", "activity"),
   actions: {},
-  looks: {},
+  styles: {},
   presets: {},
   helpers: {},
   editGlobals: {},
@@ -262,7 +262,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       },
       root: rootOf("gitDump"),
       actions: {},
-      looks: {},
+      styles: {},
       presets: {},
       helpers: {},
       editGlobals: {},
@@ -288,7 +288,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         when: '{{ gt (int .metrics.sessionDuration) 0 }}',
       },
       actions: {},
-      looks: {},
+      styles: {},
       presets: {},
       helpers: {},
       editGlobals: {},
@@ -303,7 +303,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
   });
 
   test("a globals rule's reads are reachable — the active preset's rule, not an inactive one's", () => {
-    // brandon-themes-owl: a theme/look chosen by data runs every render, so the
+    // brandon-themes-owl: a theme/style chosen by data runs every render, so the
     // inputs it reads must come online even when no rendered segment reads them;
     // otherwise the rule evaluates against unfilled defaults and never switches.
     const config: DslConfig = {
@@ -314,11 +314,11 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       segments: SHARED_SEGMENTS,
       root: rootOf("directory"),
       actions: {},
-      looks: {},
+      styles: {},
       presets: {
         ruled: {
           globals: {
-            look: "{{ if .tmux.session }}none{{ else }}none{{ end }}",
+            style: "{{ if .tmux.session }}none{{ else }}none{{ end }}",
           },
         },
       },
@@ -389,7 +389,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       },
       root: rootOf("painted"),
       actions: {},
-      looks: {},
+      styles: {},
       presets: {},
       helpers: { echo: "{{ .git.branch }}" },
       editGlobals: {},

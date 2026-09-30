@@ -36,7 +36,7 @@ import {
 import { pickCycleDisplay } from "../config/disclosure.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
-import type { Progression } from "../themes/decor.js";
+import type { Variation } from "../themes/decor.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -257,25 +257,25 @@ export interface ActionRuntime {
   // fitted inside a body reserves that cell: its glyph, its padding, this seam.
   seamCols: number;
   // [LAW:locality-or-seam] The current render's BASE palette — the theme before
-  // the look — published per render by renderDsl exactly like chromeCols and
+  // the style — published per render by renderDsl exactly like chromeCols and
   // padding. A picker over a colour-valued domain paints each option in the
-  // palette picking it would put in force, and a look's answer is the base
-  // transposed by that look's key. It must be the base and not the segment's own
-  // (already-looked) palette: transposedPalette may never be chained, because its
+  // palette picking it would put in force, and a style's answer is the base
+  // transposed by that style's key. It must be the base and not the segment's own
+  // (already-styled) palette: transposedPalette may never be chained, because its
   // memo keys on the base palette's NAME, which transposition preserves.
-  // A picked theme or look recolours the WHOLE bar, so the render-wide base is
+  // A picked theme or style recolours the WHOLE bar, so the render-wide base is
   // also the honest input even inside a `palette:`-pinned segment.
   basePalette: Palette;
   // [LAW:one-source-of-truth] The palette the bar is DRAWN in this render — the
-  // base above transposed by the render's look, the one object every unpinned
+  // base above transposed by the render's style, the one object every unpinned
   // segment colours from — published at the same site. `{{ themePreview }}`
   // samples it, so a preview cannot show a palette the bar is not wearing.
   palette: Palette;
-  // [LAW:one-source-of-truth] The progression the closed bar's rows wear THIS
+  // [LAW:one-source-of-truth] The variation the closed bar's rows wear THIS
   // render, published at the same site: `{{ layoutPreview }}` colours its
   // blocks and `{{ themePreview }}` its bar swatches under it, so neither can
   // show a row in a role the bar is not wearing.
-  progression: Progression;
+  variation: Variation;
   // [LAW:one-source-of-truth] The rows the bar lays its closed segments out in
   // THIS render — `layoutRows` of the compiled tree the walk renders, under the
   // walk's own visibility — published by renderDsl at the same site, lazily,
@@ -308,9 +308,9 @@ export function compileActions(
   parse: (src: string) => Template<RichText>,
   actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
-  // This config's per-config option domains (currently just "looks" — the
-  // config's merged look names) — resolveOptionDomain checks these before
-  // falling back to the global registry (themes/styles).
+  // This config's per-config option domains (currently just "styles" — the
+  // config's merged style names) — resolveOptionDomain checks these before
+  // falling back to the global registry (themes/endcaps).
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();

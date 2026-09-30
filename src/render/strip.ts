@@ -12,11 +12,7 @@ import {
   type PowerlineJoinerOptions,
   type CapsuleJoinerOptions,
 } from "@promptctl/rich-js";
-import type {
-  Charset,
-  ColorCompatibility,
-  StripStyle,
-} from "../themes/policy.js";
+import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 
 export interface RenderedSegmentLike {
   type: string;
@@ -25,11 +21,11 @@ export interface RenderedSegmentLike {
   fgHex?: string;
 }
 
-// [LAW:one-source-of-truth] `StripStyle`/`Charset` and their value lists live
+// [LAW:one-source-of-truth] `Endcaps`/`Charset` and their value lists live
 // in themes/policy.ts (the render-identifier policy module, importable by the
 // option-source machinery without a render→template-engine cycle). Re-exported
 // here so render-layer consumers can keep importing them from the strip module.
-export type { Charset, ColorCompatibility, StripStyle };
+export type { Charset, ColorCompatibility, Endcaps };
 
 // [LAW:one-source-of-truth] Raw terminal cols we assume when the wire
 // didn't give us one (older client, env-stripped spawn). RAW — not
@@ -51,7 +47,7 @@ export {
 } from "../themes/policy.js";
 
 export interface BuildLineOptions {
-  style: StripStyle;
+  endcaps: Endcaps;
   // [LAW:types-are-the-program] Narrower than rich-js's colour-system names on
   // purpose: the four explicit depths only. "auto"/null never reach a render —
   // the daemon is detached, so env detection would read the wrong terminal;
@@ -85,7 +81,7 @@ export interface BuildLineOptions {
 }
 
 // [LAW:dataflow-not-control-flow] Charset variability lives in these VALUES,
-// not in branches: per style, each charset names the joiner-construction
+// not in branches: per endcaps shape, each charset names the joiner-construction
 // options. The unicode entries are rich-js's own — it owns the canonical
 // powerline glyphs (U+E0B0 / U+E0B1 / U+E0D7 / U+E0B6+U+E0B4), and restating them here
 // would be a second source that could drift [LAW:one-source-of-truth]. The
@@ -105,19 +101,19 @@ const CAPSULE_GLYPHS: Record<Charset, CapsuleJoinerOptions> = {
 };
 
 function pickJoiner(
-  style: StripStyle,
+  endcaps: Endcaps,
   charset: Charset,
   separator?: string,
 ): Joiner {
   // [LAW:dataflow-not-control-flow] joiner choice is data-driven; one arm per
-  // shape. Style picks the joiner CLASS, charset indexes the glyph options fed
-  // to it — the two dimensions stay orthogonal (any style renders under either
+  // shape. Endcaps pick the joiner CLASS, charset indexes the glyph options fed
+  // to it — the two dimensions stay orthogonal (any endcaps render under either
   // charset). Plain takes no charset lookup: its separator is already user
   // data (globals.default_separator) and its default (" | ") is ASCII-safe.
-  // [LAW:types-are-the-program] Total over StripStyle — the `never`
-  // default makes adding a STRIP_STYLES member a compile error here until it
+  // [LAW:types-are-the-program] Total over Endcaps — the `never`
+  // default makes adding an ENDCAPS_SHAPES member a compile error here until it
   // gets a joiner, so the picker's domain can never offer an unrenderable shape.
-  switch (style) {
+  switch (endcaps) {
     case "capsule":
       return new CapsuleJoiner(CAPSULE_GLYPHS[charset]);
     case "plain":
@@ -125,13 +121,13 @@ function pickJoiner(
     case "powerline":
       return new PowerlineJoiner(POWERLINE_GLYPHS[charset]);
     default: {
-      const _exhaustive: never = style;
+      const _exhaustive: never = endcaps;
       return _exhaustive;
     }
   }
 }
 
-type StripShape = Pick<BuildLineOptions, "style" | "charset" | "separator">;
+type StripShape = Pick<BuildLineOptions, "endcaps" | "charset" | "separator">;
 
 // [LAW:single-enforcer] Strip geometry has one owner — this module builds every
 // joiner (pickJoiner), so it alone measures what a styled row costs beyond its
@@ -142,13 +138,17 @@ type StripShape = Pick<BuildLineOptions, "style" | "charset" | "separator">;
 const geometryMemo = new Map<string, { chrome: number; seam: number }>();
 function stripGeometry(options: StripShape): { chrome: number; seam: number } {
   const key = JSON.stringify([
-    options.style,
+    options.endcaps,
     options.charset,
     options.separator ?? null,
   ]);
   const known = geometryMemo.get(key);
   if (known !== undefined) return known;
-  const joiner = pickJoiner(options.style, options.charset, options.separator);
+  const joiner = pickJoiner(
+    options.endcaps,
+    options.charset,
+    options.separator,
+  );
   const cell = (bgcolor: string): RichText =>
     new RichText("x", {
       end: "",
@@ -218,7 +218,11 @@ export function renderStripCells(
   options: BuildLineOptions,
 ): string {
   if (cells.length === 0) return "";
-  const joiner = pickJoiner(options.style, options.charset, options.separator);
+  const joiner = pickJoiner(
+    options.endcaps,
+    options.charset,
+    options.separator,
+  );
   const colorSystem = options.colorCompatibility;
   const out =
     options.wrap && Number.isFinite(options.width)

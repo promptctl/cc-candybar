@@ -7,7 +7,7 @@
 // `layoutRows` of the compiled tree the render is walking, under the walk's
 // own visibility (`ActionRuntime.layout`, published by renderDsl); each tint
 // is `decorationFor` of the segment's bar address under the render's
-// progression — the function the walk
+// variation — the function the walk
 // colours every closed cell with — on the palette that segment renders in.
 // An authored `bg:` is not what a block wears: it states a fact about live
 // data (a threshold, an alert), not about where the segment sits.
@@ -18,7 +18,7 @@
 import { RichText } from "@promptctl/rich-js";
 import type { ColorDepth } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { decorationFor, type Progression } from "../themes/decor.js";
+import { decorationFor, type Variation } from "../themes/decor.js";
 import type { ActionRuntime, PreviewRows } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 import { stateCell } from "./band-style.js";
@@ -60,7 +60,7 @@ export function labelBudget(rows: PreviewRows, available: number): number {
 
 export function renderLayoutPreview(
   rows: PreviewRows,
-  progression: Progression,
+  variation: Variation,
   drawnAt: ColorDepth,
   available: number,
 ): RichText {
@@ -72,7 +72,7 @@ export function renderLayoutPreview(
       const block = new RichText(` ${clippedLabel(name, most)} `, {
         style: stateCell(
           palette,
-          decorationFor(palette, { kind: "bar", progression, address }, drawnAt)
+          decorationFor(palette, { kind: "bar", variation, address }, drawnAt)
             .tint,
           drawnAt,
         ),
@@ -104,7 +104,7 @@ export function layoutPreviewFuncs(
       fn: () =>
         renderLayoutPreview(
           runtime.layout(),
-          runtime.progression,
+          runtime.variation,
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
         ),

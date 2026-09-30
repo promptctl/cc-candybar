@@ -191,8 +191,8 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const reset = (sid: string, k: string) => ({ verb: VERB_RESET_CONFIG, value: `${sid}/${k}` });
     const set = { verb: VERB_SET_STATE, value: "a/k/v" };
     expect(
-      batchAdjacentWrites([set, reset("a", "palette"), reset("a", "look"), reset("b", "style")]),
-    ).toEqual([set, { verb: VERB_RESET_CONFIG, value: "a/palette/look" }, reset("b", "style")]);
+      batchAdjacentWrites([set, reset("a", "palette"), reset("a", "style"), reset("b", "endcaps")]),
+    ).toEqual([set, { verb: VERB_RESET_CONFIG, value: "a/palette/style" }, reset("b", "endcaps")]);
   });
 
   test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {
@@ -208,11 +208,11 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
-      { verb: VERB_SET_STATE, args: [SID, "style", "capsule"] },
+      { verb: VERB_SET_STATE, args: [SID, "endcaps", "capsule"] },
     ]);
     clickUrl(url, ctx(sessionState));
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
-    expect(sessionState.get(SID, "style")).toBe("capsule");
+    expect(sessionState.get(SID, "endcaps")).toBe("capsule");
   });
 
   test("a nested dispatch effect is reported, never executed", () => {

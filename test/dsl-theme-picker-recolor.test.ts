@@ -40,7 +40,7 @@ const BASE_THEME = "textual-dark";
 const PICKED_THEME = "textual-light";
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,

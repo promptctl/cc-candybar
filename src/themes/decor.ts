@@ -3,7 +3,7 @@
 // rejected alternatives: design-docs/COLOUR-FROM-THEME-VOCABULARY.md.
 //
 // The rule, in Textual's colour roles: each row of the bar wears one step of
-// the PROGRESSION — an ordered list of the theme's decorative roles, chosen
+// the VARIATION — an ordered list of the theme's decorative roles, chosen
 // like any other display setting — and each cell of the row one TONE of that
 // hue: a depth between the theme's `surface` receded toward its `background`
 // and its `surface` pulled toward the hue, with the row and the tone chosen by
@@ -47,37 +47,37 @@ export type DecorHue = (typeof DECOR_HUES)[number];
 /**
  * The hues the closed bar wears, one per ROW, in order: row n wears step n
  * (the selection reads the row's placement, so under van der Corput a
- * two-step progression alternates and a one-step one is uniform). Each row
+ * two-step variation alternates and a one-step one is uniform). Each row
  * reads as a different part of the bar while the cells inside one row share
  * a hue and differ by tone — hue changing at every cell reads as team colours,
  * not as the theme (brandon-theme-picker-bgw.8fp); a row is the coarsest level
- * a bar has. A progression is a sequence of roles the way a chord progression
+ * a bar has. A variation is a sequence of roles the way a chord progression
  * is a sequence of degrees, and it is a VALUE the render carries, so every
  * one ships through the same selection.
  * [LAW:types-are-the-program] One or two steps, no more: the hue is read with
  * `inBin` off the row's van der Corput placement (0, ½, ¼, ¾, …), which steps
  * in order through one or two bins and not through three (rows 0–3 of a
- * three-step progression would land on steps 0, 1, 0, 2). A longer one needs
+ * three-step variation would land on steps 0, 1, 0, 2). A longer one needs
  * a different selection, so the type does not admit it.
  */
-export type Progression = readonly [DecorHue] | readonly [DecorHue, DecorHue];
+export type Variation = readonly [DecorHue] | readonly [DecorHue, DecorHue];
 
 /**
- * [LAW:one-type-per-behavior] Every progression a user can choose, named by
+ * [LAW:one-type-per-behavior] Every variation a user can choose, named by
  * the roles it steps through. A new one is one row here: the option domain,
  * the loader's enum, the settings carousel and every floor derive from this
  * table.
  */
-export const PROGRESSIONS = {
-  "secondary-accent": ["secondary", "accent"],
-  "primary-secondary": ["primary", "secondary"],
-  primary: ["primary"],
-} as const satisfies Record<string, Progression>;
-export type ProgressionName = keyof typeof PROGRESSIONS;
+export const VARIATIONS = {
+  accent: ["secondary", "accent"],
+  duo: ["primary", "secondary"],
+  mono: ["primary"],
+} as const satisfies Record<string, Variation>;
+export type VariationName = keyof typeof VARIATIONS;
 
 /**
  * The hue an open disclosure wears: Textual's `accent`, "used sparingly to
- * draw attention". Every bar trigger opens a band in it. A progression may put
+ * draw attention". Every bar trigger opens a band in it. A variation may put
  * it on a closed row too, which is why an open trigger is held apart from the
  * closed bar by contrast (`stateFor`), never by hue alone.
  */
@@ -158,18 +158,18 @@ export const vocabularyOf = (
   hues.flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })));
 
 /**
- * Every decoration the closed bar can wear under ANY progression: every hue
- * some progression steps through × every tone, all the theme's own. The
+ * Every decoration the closed bar can wear under ANY variation: every hue
+ * some variation steps through × every tone, all the theme's own. The
  * floors that hold an open trigger apart from the closed bar measure against
- * this whole set, so they hold whichever progression is chosen — a choice is
+ * this whole set, so they hold whichever variation is chosen — a choice is
  * a render-time value, and a floor that read it would pass under the default
  * and fail after one click.
- * [LAW:one-source-of-truth] Derived from PROGRESSIONS, so a new progression
+ * [LAW:one-source-of-truth] Derived from VARIATIONS, so a new variation
  * that reaches a new hue is measured the moment it is added.
  */
 export const DECOR_VOCABULARY: readonly DecorEntry[] = vocabularyOf(
   DECOR_HUES.filter((hue) =>
-    Object.values(PROGRESSIONS).some((steps) =>
+    Object.values(VARIATIONS).some((steps) =>
       (steps as readonly DecorHue[]).includes(hue),
     ),
   ),
@@ -360,7 +360,7 @@ export function vocabularySelect<T extends {}>(
 }
 
 /**
- * The decorative entry a bar node's address selects under `progression`. An
+ * The decorative entry a bar node's address selects under `variation`. An
  * address reads as the
  * rows it stacks through, then the cell of the innermost of them, then
  * whatever is nested inside that cell: the last of those rows chooses the hue,
@@ -380,13 +380,13 @@ export function vocabularySelect<T extends {}>(
  * bundled bar stacks no rows inside a row.
  */
 export function decorEntryFor(
-  progression: Progression,
+  variation: Variation,
   address: Address,
 ): DecorEntry {
   const cell = address.findIndex((step) => step.axis === "cell");
   const rows = cell === -1 ? address : address.slice(0, cell);
   return {
-    hue: vocabularySelect(progression, rows.at(-1), inBin),
+    hue: vocabularySelect(variation, rows.at(-1), inBin),
     tone: vocabularySelect(DECOR_TONES, address[rows.length], nearestPoint),
   };
 }
@@ -464,9 +464,9 @@ const DECOR_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
 /** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (
   palette: Palette,
-  progression: Progression,
+  variation: Variation,
   address: Address,
-): ColorRgba => decorEntryColour(palette, decorEntryFor(progression, address));
+): ColorRgba => decorEntryColour(palette, decorEntryFor(variation, address));
 
 // --- The state region ---------------------------------------------------------
 
@@ -492,8 +492,8 @@ const STATE_STEPS = 12;
  * pure form of the hue, pushed toward `foreground` in twelfths — and past it,
  * along its own lightness, when the pole itself falls short — until it clears
  * `STATE_FLOOR` against EVERY colour the closed bar can wear under any
- * progression, since an open trigger stands among closed cells of any row and
- * tone — its own hue's included, when a progression puts that hue on a row. A hue that already
+ * variation, since an open trigger stands among closed cells of any row and
+ * tone — its own hue's included, when a variation puts that hue on a row. A hue that already
  * clears at step zero is its pure form as drawn (composited over black, which
  * leaves an opaque colour byte-unchanged) — the enforcement is a floor, not a
  * transform.
@@ -568,7 +568,7 @@ function searchState(
   );
   const foreground = paletteRole(palette, "foreground");
   // Past the pole: `foreground` slid on in OKLCH lightness until it clears
-  // every tint. A look can pull the pole itself under the floor (atom-one-
+  // every tint. A style can pull the pole itself under the floor (atom-one-
   // dark's foreground under `dim` measured 2.19 against its primary tints),
   // and the palette holds no stronger role to reach for. The bar's tints run
   // from `background` toward `surface` and share its polarity, so each slide
@@ -929,18 +929,18 @@ export function bandItemFor(
 /**
  * Where a node stands in the colour model (design doc, "The region model"):
  * on the BAR, where its address selects a vocabulary entry under the bar's
- * progression, or on a BAND — the plane a disclosure hung under its trigger —
+ * variation, or on a BAND — the plane a disclosure hung under its trigger —
  * where its address is the steps since that band's root and places it along
  * the band's axis. The band's `Disclosure` is the hue and depth its TRIGGER
  * computed; nothing about the trigger's own position enters, which is what
  * lets a body hang on its trigger and still be coloured without walk order
- * [LAW:types-are-the-program]. The progression rides the bar arm alone: a
- * band's colours are its trigger's lineage, which no progression reaches.
+ * [LAW:types-are-the-program]. The variation rides the bar arm alone: a
+ * band's colours are its trigger's lineage, which no variation reaches.
  */
 export type Region =
   | {
       readonly kind: "bar";
-      readonly progression: Progression;
+      readonly variation: Variation;
       readonly address: Address;
     }
   | {
@@ -949,10 +949,10 @@ export type Region =
       readonly address: Address;
     };
 
-/** The bar's root under `progression`: the top of the layout tree, before any step. */
-export const barRoot = (progression: Progression): Region => ({
+/** The bar's root under `variation`: the top of the layout tree, before any step. */
+export const barRoot = (variation: Variation): Region => ({
   kind: "bar",
-  progression,
+  variation,
   address: [],
 });
 
@@ -982,7 +982,7 @@ export interface Decoration {
 
 /**
  * [LAW:one-source-of-truth] ONE read per segment, projected two ways. On the
- * bar, the entry its address selects under the bar's progression is the
+ * bar, the entry its address selects under the bar's variation is the
  * closed cell's tint, and
  * what it opens is the depth-0 band in `OPEN_HUE` — every bar trigger opens
  * the same accent, because an open disclosure is what the accent is for. On a
@@ -998,7 +998,7 @@ export function decorationFor(
   switch (region.kind) {
     case "bar": {
       return {
-        tint: decorFor(palette, region.progression, region.address),
+        tint: decorFor(palette, region.variation, region.address),
         disclosure: { hue: OPEN_HUE, depth: 0 },
       };
     }

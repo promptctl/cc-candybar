@@ -42,14 +42,14 @@ const ALLOWED = new Set([BASE_THEME]);
 // config carrying state vars needs it (cross-ref.ts).
 function src(extra = ""): string {
   return `{
-  globals: { palette: '${BASE_THEME}', style: 'powerline' },
+  globals: { palette: '${BASE_THEME}', endcaps: 'powerline' },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
   },
   actions: {
     padTo: { set: 'padding', min: 0, max: 8, by: 1 },
     wrapToggle: { set: 'autoWrap', cycle: ['true', 'false'] },
-    applyStyle: { set: 'style', from: 'styles' },
+    applyEndcaps: { set: 'endcaps', from: 'endcaps' },
   },
   segments: {
     // The edit.toggle reference is what DEMANDS edit mode (loader/edit-mode.ts),
@@ -96,7 +96,7 @@ function buildRuntime(source: string) {
       registry,
       { session_id: SID },
       {
-        style: effective.style,
+        endcaps: effective.endcaps,
         separator: effective.separator,
         colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,
@@ -138,7 +138,7 @@ const leaveEditMode = (s: SessionState) => setState(s, EDIT_MODE_KEY, "closed");
 describe("edit mode's look — a staged globals fragment", () => {
   test("entering restyles the bar and leaving restores the previous bytes exactly", () => {
     const { sessionState, render } = buildRuntime(
-      src(`editGlobals: { style: 'plain', default_separator: ' | ' },`),
+      src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
     const before = render();
@@ -157,22 +157,22 @@ describe("edit mode's look — a staged globals fragment", () => {
 
   test("the staged fragment outranks a session pick, which governs again on exit", () => {
     const { sessionState, render, effectiveNow } = buildRuntime(
-      src(`editGlobals: { style: 'plain', default_separator: ' | ' },`),
+      src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
-    setState(sessionState, "style", "capsule");
+    setState(sessionState, "endcaps", "capsule");
     const capsule = render();
-    expect(effectiveNow().style).toBe("capsule");
+    expect(effectiveNow().endcaps).toBe("capsule");
 
     enterEditMode(sessionState);
     // The rightmost rung wins: a session pick made BEFORE entering edit mode
     // cannot survive into a mode whose whole job is to stop segments reading as
     // one continuous strip.
-    expect(effectiveNow().style).toBe("plain");
+    expect(effectiveNow().endcaps).toBe("plain");
     expect(render()).not.toBe(capsule);
 
     leaveEditMode(sessionState);
-    expect(effectiveNow().style).toBe("capsule");
+    expect(effectiveNow().endcaps).toBe("capsule");
     expect(render()).toBe(capsule);
   });
 
@@ -181,10 +181,10 @@ describe("edit mode's look — a staged globals fragment", () => {
     // edit-mode look; a test demonstrates it with config data only and no
     // engine edit". Both runtimes below run the SAME engine.
     const bundled = buildRuntime(
-      src(`editGlobals: { style: 'plain', default_separator: ' | ' },`),
+      src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
     const retuned = buildRuntime(
-      src(`editGlobals: { style: 'plain', default_separator: ' ~~ ' },`),
+      src(`editGlobals: { endcaps: 'plain', default_separator: ' ~~ ' },`),
     );
 
     enterEditMode(bundled.sessionState);
@@ -226,11 +226,11 @@ describe("edit mode's look — a staged globals fragment", () => {
     // The fragment is a DELTA, not a replacement: staging `style` says nothing
     // about `padding`, exactly as a preset's globals delta does.
     const { sessionState, effectiveNow } = buildRuntime(
-      src(`editGlobals: { style: 'plain' },`),
+      src(`editGlobals: { endcaps: 'plain' },`),
     );
     setState(sessionState, "padding", "4");
     enterEditMode(sessionState);
-    expect(effectiveNow().style).toBe("plain");
+    expect(effectiveNow().endcaps).toBe("plain");
     expect(effectiveNow().padding).toBe(4);
   });
 });
@@ -277,7 +277,7 @@ describe("editGlobals — the loader's contract", () => {
       DEFAULT_DSL_CONFIG,
     );
     expect(config.editGlobals.default_separator).toBe(" ~ ");
-    expect(config.editGlobals.style).toBe(DEFAULT_DSL_CONFIG.editGlobals.style);
+    expect(config.editGlobals.endcaps).toBe(DEFAULT_DSL_CONFIG.editGlobals.endcaps);
   });
 });
 
@@ -285,7 +285,7 @@ describe("the bundled default's edit look", () => {
   test("ships plain joiners with a charset-safe separator", () => {
     // " | " rather than a box-drawing glyph: the fragment layers over globals
     // that may declare `charset: "ascii"`, and it must not assume otherwise.
-    expect(DEFAULT_DSL_CONFIG.editGlobals.style).toBe("plain");
+    expect(DEFAULT_DSL_CONFIG.editGlobals.endcaps).toBe("plain");
     expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toBe(" | ");
     expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toMatch(
       /^[\x20-\x7e]*$/,

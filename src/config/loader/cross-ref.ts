@@ -36,7 +36,12 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
-import { isExpression, retiredThemeNote } from "../../themes/policy.js";
+import {
+  isExpression,
+  isEndcaps,
+  retiredThemeNote,
+} from "../../themes/policy.js";
+import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
@@ -116,48 +121,51 @@ export function validateCrossReferences(
   cfg: DslConfig,
   authored: RawDslConfig,
 ): void {
-  // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
-  // block (a user's default may be a bundled look — same reason every cross-ref
+  // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
+  // block (a user's default may be a bundled style — same reason every cross-ref
   // runs post-merge). Same existence-check shape as layout→segments; an unknown
   // name is a load error, never a silent identity fallback.
   //
-  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no look,
+  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no style,
   // it names the RULE for choosing one per render, so there is nothing here to
   // check membership of. Its result gets the same forgiveness a stale session
-  // pick does (`decideLookName` collapses a non-member to the floor), and its
+  // pick does (`decideStyleName` collapses a non-member to the floor), and its
   // own well-formedness is checked where every other template's is — parsed
   // eagerly by registerDslConfig, so a malformed one is still a load error.
   // `isExpression` is the ONE predicate every reader uses, so this exemption
   // cannot be wider or narrower than what the render will actually evaluate.
   //
-  // [LAW:one-type-per-behavior] Every globals fragment a look NAME can come from
+  // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
   // is checked the same way — the config's own, each preset's, and editGlobals —
   // because each is a rung the resolution reads, and a name no rung can decide
   // falls through to the next in silence (brandon-themes-owl).
-  const lookFragments: ReadonlyArray<
+  const styleFragments: ReadonlyArray<
     readonly [readonly string[], string | undefined]
   > = [
-    [["globals"], cfg.globals.look],
-    [["editGlobals"], cfg.editGlobals.look],
+    [["globals"], cfg.globals.style],
+    [["editGlobals"], cfg.editGlobals.style],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [["presets", name, "globals"], preset.globals?.look] as const,
+        [["presets", name, "globals"], preset.globals?.style] as const,
     ),
   ];
-  for (const [at, look] of lookFragments) {
+  for (const [at, name] of styleFragments) {
     if (
-      look === undefined ||
-      isExpression(look) ||
-      Object.prototype.hasOwnProperty.call(cfg.looks, look)
+      name === undefined ||
+      isExpression(name) ||
+      Object.prototype.hasOwnProperty.call(cfg.styles, name)
     )
       continue;
+    const where = `${at.join(".")}.style`;
     ctx.issues.push({
-      path: `${at.join(".")}.look`,
-      message: `${at.join(".")}.look "${look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
-      line: findKeyLine(ctx.source, [...at, "look"]),
+      path: where,
+      message: isEndcaps(name)
+        ? endcapsNameMessage(where, name, `${at.join(".")}.endcaps`)
+        : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      line: findKeyLine(ctx.source, [...at, "style"]),
     });
   }
-  // [LAW:one-type-per-behavior] globals.preset is globals.look one dimension
+  // [LAW:one-type-per-behavior] globals.preset is globals.style one dimension
   // over — the same post-merge membership check against the same kind of
   // per-config block, for the same reason (a user's default may name a
   // bundled preset). A typo'd DEFAULT is a load error even though a stale
@@ -177,12 +185,12 @@ export function validateCrossReferences(
   }
   presetIdentCollisions(ctx, cfg.presets);
   // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
-  // against this config's per-config domains ("looks", the merged looks:
+  // against this config's per-config domains ("styles", the merged styles:
   // block) plus the global registry (themes/styles, and any future
   // registration), the SAME set resolveOptionDomain consults at render and
   // gate-derivation time. An inline array `from` is its own domain — nothing
-  // to resolve. Runs post-merge for the same reason globals.look does above:
-  // "looks" isn't fully known until the user's looks: block has merged onto
+  // to resolve. Runs post-merge for the same reason globals.style does above:
+  // "styles" isn't fully known until the user's styles: block has merged onto
   // the bundled stdlib.
   const optionDomains = perConfigDomainsFor(cfg);
   for (const [name, a] of Object.entries(cfg.actions)) {

@@ -35,30 +35,30 @@ import {
   DECOR_VOCABULARY,
   decorEntryColour,
   paletteRole,
-  PROGRESSIONS,
-  type ProgressionName,
+  VARIATIONS,
+  type VariationName,
 } from "../src/themes/decor";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 
 // The eye's resolution: two bars closer than ~.02 read as one theme. The
-// measured minimum over the registry, under the default progression and no
-// look, is .031, between rose-pine and rose-pine-moon — two variants of one
+// measured minimum over the registry, under the default variation and no
+// style, is .031, between rose-pine and rose-pine-moon — two variants of one
 // family sharing their accents — on the seven-cell bundled bar (.024 under
-// `primary-secondary`, the bar's rows before brandon-theme-picker-bgw.7g6).
+// `duo`, the bar's rows before brandon-theme-picker-bgw.7g6).
 // Before 8fp, dracula and rose-pine-moon sat at .018, under it.
 const THEME_FLOOR = 0.02;
 
-// Where the floor is NOT met, measured, by progression/look: the one-step
-// `primary` progression paints every row in one hue, so two themes that share
-// a primary converge once a look narrows what else differs — rose-pine and
+// Where the floor is NOT met, measured, by variation/style: the one-step
+// `mono` variation paints every row in one hue, so two themes that share
+// a primary converge once a style narrows what else differs — rose-pine and
 // rose-pine-moon at .019 under `dim`, dracula and rose-pine-moon at .015 under
-// `bright`. Every other combination of the 3 progressions × 6 looks clears it
-// (design-docs/COLOUR-FROM-THEME-VOCABULARY.md, "The progression"). Pinned
+// `bright`. Every other combination of the 3 variations × 6 styles clears it
+// (design-docs/COLOUR-FROM-THEME-VOCABULARY.md, "The variation"). Pinned
 // exactly, so a new convergence fails and a recovered one says to delete it.
 const CONVERGED: Readonly<Record<string, readonly string[]>> = {
-  "primary/dim": ["rose-pine~rose-pine-moon"],
-  "primary/bright": ["dracula~rose-pine-moon"],
+  "mono/dim": ["rose-pine~rose-pine-moon"],
+  "mono/bright": ["dracula~rose-pine-moon"],
 };
 
 const ARROW = "\u{e0b0}";
@@ -120,13 +120,13 @@ function seams(rendered: string): Seam[] {
 const THEMES = listThemePalettes();
 const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>");
 
-// Every progression × every bundled look (brandon-theme-picker-bgw.7g6): each
+// Every variation × every bundled style (brandon-theme-picker-bgw.7g6): each
 // is a runtime pick, so each fact below holds whichever one the user is in,
 // not only under the defaults.
-const PROGRESSION_NAMES = Object.keys(PROGRESSIONS) as ProgressionName[];
-const LOOKS = Object.keys(CONFIG.looks);
-const VARIANTS = PROGRESSION_NAMES.flatMap((progression) =>
-  LOOKS.map((look) => ({ progression, look })),
+const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
+const STYLES = Object.keys(CONFIG.styles);
+const VARIANTS = VARIATION_NAMES.flatMap((variation) =>
+  STYLES.map((look) => ({ variation, look })),
 );
 type Variant = (typeof VARIANTS)[number];
 
@@ -138,7 +138,7 @@ const CALM = {
   weekly: { percentage: 4 },
 };
 
-function render(theme: string, calm: boolean, { progression, look }: Variant): string {
+function render(theme: string, calm: boolean, { variation, look }: Variant): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
@@ -146,7 +146,7 @@ function render(theme: string, calm: boolean, { progression, look }: Variant): s
     const e = resolveEffectiveGlobals(
       CONFIG,
       (key) =>
-        key === "theme" ? theme : key === "progression" ? progression : key === "look" ? look : null,
+        key === "theme" ? theme : key === "variation" ? variation : key === "style" ? look : null,
       () => false,
     );
     const hot = checkPayload(e) as Record<string, Record<string, unknown>>;
@@ -165,7 +165,7 @@ function render(theme: string, calm: boolean, { progression, look }: Variant): s
       registry,
       payload,
       {
-        style: e.style,
+        endcaps: e.endcaps,
         separator: e.separator,
         width: 400,
         colorCompatibility: e.colorCompatibility,
@@ -174,7 +174,7 @@ function render(theme: string, calm: boolean, { progression, look }: Variant): s
         charset: e.charset,
       },
       undefined,
-      { theme: e.theme, look: e.look, preset: e.preset, progression: e.progression },
+      { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation },
     );
   } finally {
     registry.dispose();
@@ -186,7 +186,7 @@ function render(theme: string, calm: boolean, { progression, look }: Variant): s
 // the suite's collection.
 const SEAMS = new Map<string, Seam[]>();
 function seamsOf(theme: string, calm: boolean, variant: Variant): Seam[] {
-  const key = `${theme}|${calm}|${variant.progression}|${variant.look}`;
+  const key = `${theme}|${calm}|${variant.variation}|${variant.look}`;
   const hit = SEAMS.get(key);
   if (hit !== undefined) return hit;
   const measured = seams(render(theme, calm, variant));
@@ -195,10 +195,10 @@ function seamsOf(theme: string, calm: boolean, variant: Variant): Seam[] {
 }
 
 describe("a tint carries its theme's colour", () => {
-  test.each(THEMES)("%s: chroma is the share of its hue's, or all the gamut allows, under every look", (name) => {
+  test.each(THEMES)("%s: chroma is the share of its hue's, or all the gamut allows, under every style", (name) => {
     const wrong: string[] = [];
-    for (const look of LOOKS) {
-      const palette = transposePalette(getThemePalette(name)!, CONFIG.looks[look]!);
+    for (const look of STYLES) {
+      const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
       for (const entry of DECOR_VOCABULARY) {
       const tint = oklch(decorEntryColour(palette, entry));
       // Both ends of the tone axis keep `surface`'s chroma and move it the
@@ -226,7 +226,7 @@ describe("the bar under one theme reads as that theme", () => {
   const cells = (theme: string, variant: Variant) => seamsOf(theme, false, variant).map((s) => s.right);
   const pairs = THEMES.flatMap((a, i) => THEMES.slice(i + 1).map((b) => [a, b] as const));
 
-  test.each(VARIANTS.map((v) => [v.progression, v.look, v] as const))(
+  test.each(VARIANTS.map((v) => [v.variation, v.look, v] as const))(
     "under %s / %s every two themes differ cell by cell",
     (_p, _l, variant) => {
       const wrong: string[] = [];
@@ -239,7 +239,7 @@ describe("the bar under one theme reads as that theme", () => {
         const mean = A.reduce((sum, c, k) => sum + dE(c, B[k]!), 0) / A.length;
         if (mean < THEME_FLOOR) wrong.push(`${a}~${b}`);
       }
-      expect(wrong).toEqual(CONVERGED[`${variant.progression}/${variant.look}`] ?? []);
+      expect(wrong).toEqual(CONVERGED[`${variant.variation}/${variant.look}`] ?? []);
     },
   );
 });
@@ -250,7 +250,7 @@ describe("no two neighbouring cells blur", () => {
       THEMES.flatMap((theme) =>
         [false, true].flatMap((calm) =>
           seamsOf(theme, calm, variant).map((seam) => ({
-            theme: `${theme}/${variant.progression}/${variant.look}`,
+            theme: `${theme}/${variant.variation}/${variant.look}`,
             palette: theme,
             look: variant.look,
             calm,
@@ -260,7 +260,7 @@ describe("no two neighbouring cells blur", () => {
       ),
     );
 
-  test("every theme, hot and calm, under every progression and look, is measured", () => {
+  test("every theme, hot and calm, under every variation and style, is measured", () => {
     expect(all().length).toBeGreaterThan(VARIANTS.length * THEMES.length * 2 * 5);
   });
 
@@ -277,7 +277,7 @@ describe("no two neighbouring cells blur", () => {
   });
 
   // Two colours a row can put side by side meet when they sit closer than the
-  // eye resolves, and only the theme (under its look) can make them: two tones
+  // eye resolves, and only the theme (under its style) can make them: two tones
   // of one hue fold when the hue sits at its surface's lightness
   // (textual-ansi), since the tone axis runs from `surface` receded toward
   // `background` to `surface` pulled toward the hue; and a tint can meet an
@@ -291,7 +291,7 @@ describe("no two neighbouring cells blur", () => {
   const oneCell = (s: { left: ColorRgba; right: ColorRgba }): boolean =>
     s.left.hex === s.right.hex;
   const ownColoursMeet = (name: string, look: string): boolean => {
-    const palette = transposePalette(getThemePalette(name)!, CONFIG.looks[look]!);
+    const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
     const alerts = (["warning", "error"] as const).map((role) => paletteRole(palette, role));
     return DECOR_VOCABULARY.some((a) => {
       const tint = decorEntryColour(palette, a);

@@ -1,6 +1,6 @@
 // [LAW:one-type-per-behavior] An option domain is a NAME → domain lookup,
 // regardless of where the members come from. Before this module, "themes" /
-// "styles" / "looks" were three special-cased branches wearing a closed
+// "endcaps" / "styles" were three special-cased branches wearing a closed
 // TypeScript union (OptionSource) — a hardcoded list of legal domain NAMES
 // with extra steps. There is exactly one domain concept: a `from` value is
 // either an INLINE literal domain (an authored array — zero registration,
@@ -12,17 +12,17 @@
 // state with exactly one owner (this module) and one explicit API
 // (registerOptionDomain / resolveOptionDomain / knownOptionDomainNames). It
 // holds only domains whose members are legitimately PROCESS-lifetime static
-// (themes, styles — module-init snapshots, same reasoning as
-// template-engine/funcs.ts's THEMES_LIST/STYLES_LIST caches). A domain whose
-// members vary PER CONFIG (the merged `looks:` block — two daemon render-cache
-// entries can hold different looks blocks for different configs
+// (themes, endcaps — module-init snapshots, same reasoning as
+// template-engine/funcs.ts's THEMES_LIST/ENDCAPS_LIST caches). A domain whose
+// members vary PER CONFIG (the merged `styles:` block — two daemon render-cache
+// entries can hold different styles blocks for different configs
 // simultaneously) can never live here; it is threaded explicitly as
-// `perConfigDomains`, the same way `lookNames` already is.
+// `perConfigDomains`, the same way `styleNames` already is.
 //
 // [LAW:one-source-of-truth] This is the ONE place a domain name resolves to
 // the domain. render/action.ts (rendering options) and
 // daemon/verbs/state-validators.ts (deriving the click gate) both call
-// through here instead of each hand-rolling the themes/styles/looks branch —
+// through here instead of each hand-rolling the themes/endcaps/styles branch —
 // the rendered options and the derived gate cannot diverge because there is
 // no second resolver.
 
@@ -32,8 +32,8 @@ import {
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
   placementThemeNames,
-  PROGRESSION_NAMES,
-  STRIP_STYLES,
+  VARIATION_NAMES,
+  ENDCAPS_SHAPES,
 } from "../themes/policy.js";
 import {
   paletteForThemeName,
@@ -53,17 +53,17 @@ export type OptionDomainResolver = () => readonly string[];
 
 // [LAW:types-are-the-program] The one fact that makes a domain COLOUR-VALUED:
 // the palette that picking a member would put in force. `themes` answers with
-// the theme's own palette; `looks` answers with the render's base palette
-// transposed by that look's ThemeKey. Every other domain (styles, presets,
+// the theme's own palette; `styles` answers with the render's base palette
+// transposed by that style's ThemeKey. Every other domain (endcaps, presets,
 // charsets, an inline array, edit mode's addable segment names) has no answer,
 // which is exactly the absence below.
 //
 // `render` is the render's two palettes. `basePalette` is the one the render's
-// LOOK applies to — never a palette that has already been transposed.
+// STYLE applies to — never a palette that has already been transposed.
 // `transposedPalette` must not be chained: its memo keys on the base palette's
-// NAME, which transposition preserves, so transposing an already-looked
+// NAME, which transposition preserves, so transposing an already-styled
 // palette both double-pays OKLCH quantization and collides the shared memo
-// (gruvbox+vivid vs gruvbox+dim+vivid). `palette` is the base under the look —
+// (gruvbox+vivid vs gruvbox+dim+vivid). `palette` is the base under the style —
 // what the bar is drawn in, and so what an option that follows the bar paints
 // in. The render publishes both on ActionRuntime for exactly this reason.
 export interface RenderPalettes {
@@ -102,18 +102,18 @@ function registerBuiltinDomain(
   _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, paletteOf });
 }
 
-// [LAW:one-source-of-truth] "themes"/"styles" become ORDINARY registrations —
+// [LAW:one-source-of-truth] "themes"/"endcaps" become ORDINARY registrations —
 // the same registerOptionDomain any future caller uses — reading the same
-// canonical lists the set-state validator and the `themes()`/`styles()`
+// canonical lists the set-state validator and the `themes()`/`endcaps()`
 // template bindings already consult (listResolvablePaletteNames/
-// STRIP_STYLES). No special-cased branch remains anywhere downstream.
+// ENDCAPS_SHAPES). No special-cased branch remains anywhere downstream.
 //
 // A theme member paints itself through the ONE
 // name -> Palette enforcer (palette-resolvers.ts, already memoized per name),
 // the same one the render resolves its own base palette through — so an option
 // cell and the bar it would produce cannot come from two constructions. The
-// render's CURRENT look is deliberately not composed in: the cell shows the
-// theme being chosen, and the look control beside it shows the look.
+// render's CURRENT style is deliberately not composed in: the cell shows the
+// theme being chosen, and the style control beside it shows the style.
 registerBuiltinDomain(
   "themes",
   () => listResolvablePaletteNames(),
@@ -128,11 +128,11 @@ export const PLACEMENT_THEMES = "placementThemes";
 registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, (option, render) =>
   placementPalette(option, render.palette),
 );
-registerBuiltinDomain("styles", () => STRIP_STYLES);
-// Not colour-valued in the `paletteOf` sense: a progression chooses which of
+registerBuiltinDomain("endcaps", () => ENDCAPS_SHAPES);
+// Not colour-valued in the `paletteOf` sense: a variation chooses which of
 // the palette's roles each row wears, and puts no other palette in force.
-registerBuiltinDomain("progressions", () => PROGRESSION_NAMES);
-// [LAW:one-source-of-truth] Same shape as themes/styles: the exact consts
+registerBuiltinDomain("variations", () => VARIATION_NAMES);
+// [LAW:one-source-of-truth] Same shape as themes/endcaps: the exact consts
 // the loader's own field validation and the render layer's glyph/color-depth
 // dispatch already derive from (themes/policy.ts CHARSETS/COLOR_COMPATIBILITIES)
 // — a menu drawing from these can never enumerate a value the render layer
@@ -174,7 +174,7 @@ export function registerOptionDomain(
 
 // [LAW:one-source-of-truth] THE single construction of a config's per-config
 // domain overrides — the domains whose members are declared IN the config
-// rather than in the registry above: "looks" (the merged `looks:` block) and
+// rather than in the registry above: "styles" (the merged `styles:` block) and
 // "presets" (the merged `presets:` block). cross-ref.ts (checking a `from` name
 // resolves), state-validators.ts (deriving the click gate), and dsl/render.ts
 // (compiling render-time options) each need this map; before this function they
@@ -183,7 +183,7 @@ export function registerOptionDomain(
 //
 // [LAW:locality-or-seam] The parameter is the CONFIG, structurally typed to the
 // blocks read here — not one positional record per domain. Presets were the
-// second per-config domain, and adding them under the old `(looks)` signature
+// second per-config domain, and adding them under the old `(styles)` signature
 // would have rippled a new argument through all three call sites; under this
 // one, a third domain is a single line HERE and nothing else moves. Structural
 // (rather than importing DslConfig) so this leaf module still never imports
@@ -191,23 +191,23 @@ export function registerOptionDomain(
 // option-domain.ts (type-only, but still a cycle this module stays clear of,
 // per [LAW:one-way-deps]).
 export function perConfigDomainsFor(config: {
-  readonly looks: Readonly<Record<string, ThemeKey>>;
+  readonly styles: Readonly<Record<string, ThemeKey>>;
   readonly presets: Readonly<Record<string, unknown>>;
 }): ReadonlyMap<string, ResolvedDomain> {
   return new Map([
     [
-      "looks",
+      "styles",
       {
-        members: Object.keys(config.looks),
-        // [LAW:one-source-of-truth] A look IS a ThemeKey, and the one
+        members: Object.keys(config.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
         // construction of an adapted palette is transposedPalette — the same
-        // call renderDsl makes for the look actually in force. One
-        // transposition of the BASE, never a second over an already-looked
+        // call renderDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
         // palette (see OptionPalette).
         // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared look.
+        // so a member always names a declared style.
         paletteOf: (option: string, render: RenderPalettes) =>
-          transposedPalette(render.basePalette, config.looks[option]!),
+          transposedPalette(render.basePalette, config.styles[option]!),
       },
     ],
     // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
@@ -219,7 +219,7 @@ export function perConfigDomainsFor(config: {
 
 // [LAW:one-source-of-truth] The full set of names `from` may legally name for
 // THIS config: every globally-registered domain plus this config's per-config
-// overrides (currently just "looks"). Used both to resolve a name and to spell
+// overrides (currently just "styles"). Used both to resolve a name and to spell
 // out the legal set in an unknown-domain error.
 export function knownOptionDomainNames(
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,

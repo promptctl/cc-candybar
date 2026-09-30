@@ -21,7 +21,7 @@
 //   DEMO-ONLY (shown here to teach the mechanism; not the tool to reach for):
 //     • the manual picker disclosure: a {set,to} open/close action + a standalone
 //       {{ picker }} segment + a when-gated row — i.e. {{ menu }} written out by
-//       hand (Theme/Style picker sections below).
+//       hand (Theme/Endcaps picker sections below).
 //     • steppers ({set,min,max,by}) and cyclers ({set,cycle}) as bare {{ action }}.
 //
 // Render it with the demo (which takes the config path as its argument):
@@ -30,7 +30,7 @@
 // What to try:
 //   Click "▸ theme"  → open the theme picker; click any theme to apply.
 //   Click "◀"/"▶"   → step the detail level through 0..3.
-//   Click "▸ style"  → open the style picker.
+//   Click "▸ endcaps"  → open the endcaps picker.
 //   Click "⟳ mode"   → cycle through focus / review / debug.
 //   Click "📂"       → OSC-8 link, opens current dir in VSCode.
 //   Click "⎘"        → copies session ID to clipboard.
@@ -53,9 +53,9 @@
     // The `key` field names the SessionState slot.
     // The `default` is the value before any click has fired.
 
-    // No state var for the active theme or style: applyTheme/applyStyle write
-    // the session's `theme`/`style`, and the themeControl/styleControl labels
-    // read `theme.effective`/`style.effective` (bundled default) — the values
+    // No state var for the active theme or endcaps: applyTheme/applyEndcaps write
+    // the session's `theme`/`endcaps`, and the themeControl/endcapsControl labels
+    // read `theme.effective`/`endcaps.effective` (bundled default) — the values
     // the bar is drawn in, which the pickers' current-option marks read too.
 
     // Detail level (0..3). Written by detailUp/detailDown (bounded).
@@ -63,10 +63,10 @@
     // because the bounded stepper writes it; a literal is unwritable.
     "detail": { kind: "state", key: "detail", default: "1" },
 
-    // Picker page cursors. Written by themePage/stylePage (int).
+    // Picker page cursors. Written by themePage/endcapsPage (int).
     // -1 = closed; 0..N = open at page N.
     "themePageCursor": { kind: "state", key: "theme-page", default: "-1" },
-    "stylePageCursor": { kind: "state", key: "style-page", default: "-1" },
+    "endcapsPageCursor": { kind: "state", key: "endcaps-page", default: "-1" },
 
     // 3-state work mode. Written by cycleMode (cycle).
     "workMode": { kind: "state", key: "work-mode", default: "focus" },
@@ -83,8 +83,8 @@
     // Use for: opening menus to a known page, resetting state, jump-to-zero.
     openThemeMenu:  { set: "theme-page", to: "0" },
     closeThemeMenu: { set: "theme-page", to: "-1" },
-    openStyleMenu:  { set: "style-page", to: "0" },
-    closeStyleMenu: { set: "style-page", to: "-1" },
+    openEndcapsMenu:  { set: "endcaps-page", to: "0" },
+    closeEndcapsMenu: { set: "endcaps-page", to: "-1" },
 
     // ── 2. set + from: "themes" ───────────────────────────────────────────
     // Writes the option value the picker binds at render.
@@ -93,9 +93,9 @@
     // {{ action "applyTheme" . }} (the dot is the picker-bound option).
     applyTheme: { set: "theme", from: "themes" },
 
-    // ── 3. set + from: "styles" ───────────────────────────────────────────
-    // Same pattern but for the typography/style domain.
-    applyStyle: { set: "style", from: "styles" },
+    // ── 3. set + from: "endcaps" ───────────────────────────────────────────
+    // Same pattern but for the endcaps domain.
+    applyEndcaps: { set: "endcaps", from: "endcaps" },
 
     // ── 4. set + min/max/by (bounded stepper) ─────────────────────────────
     // Writes wrap(current ± by) clamped to [min, max].
@@ -110,7 +110,7 @@
     // Distinct from `bounded` because the page range is not known statically —
     // the picker itself clamps; the action only expresses "any integer."
     themePage: { set: "theme-page", int: true },
-    stylePage: { set: "style-page", int: true },
+    endcapsPage: { set: "endcaps-page", int: true },
 
     // ── 6. set + cycle ────────────────────────────────────────────────────
     // Writes the SUCCESSOR of the current value from a fixed member list,
@@ -148,9 +148,9 @@
       bg: "surface",
     },
 
-    // ── Style control ──────────────────────────────────────────────────────
-    styleControl: {
-      template: ' ✦ {{ .style.effective }} {{ action "openStyleMenu" "▸" }} ',
+    // ── Endcaps control ──────────────────────────────────────────────────────
+    endcapsControl: {
+      template: ' ✦ {{ .endcaps.effective }} {{ action "openEndcapsMenu" "▸" }} ',
       bg: "panel",
     },
 
@@ -162,7 +162,7 @@
     // spelled out here (the openThemeMenu {set,to} action on themeControl above,
     // the hand-declared themePage var+action pair, this standalone {{ picker }}
     // segment, and the when-gated row in root) are exactly what that one call
-    // replaces. See the bundled default's styleControl for the canonical
+    // replaces. See the bundled default's endcapsControl for the canonical
     // {{ menu }} in use. Kept here to show the mechanism, not as a form to copy.
     //
     // {{ picker "applyAction" "pageAction" closeOnPick paged }}
@@ -171,7 +171,7 @@
     //   pageAction   — a set+int action; drives ← → navigation
     //   closeOnPick  — DEFAULT false (stay-open): a pick recolors live and leaves
     //                  the menu open; the ✕ closes. true: a pick ALSO resets the
-    //                  cursor to -1 (auto-close — the opt-in, see stylePicker).
+    //                  cursor to -1 (auto-close — the opt-in, see endcapsPicker).
     //   paged        — DEFAULT false (one full-width page); true: width-paginated
     //                  with arrows. Both bools are optional trailing values.
     //
@@ -182,12 +182,12 @@
       bg: "surface",
     },
 
-    // ── Style picker ───────────────────────────────────────────────────────
-    // paged:false → all styles in one row (no page arrows). closeOnPick=true here
+    // ── Endcaps picker ───────────────────────────────────────────────────────
+    // paged:false → all endcaps shapes in one row (no page arrows). closeOnPick=true here
     // demonstrates the auto-close OPT-IN: picking a shape reshapes the bar and
     // closes the row in one atomic write.
-    stylePicker: {
-      template: '{{ picker "applyStyle" "stylePage" true false }}',
+    endcapsPicker: {
+      template: '{{ picker "applyEndcaps" "endcapsPage" true false }}',
       bg: "panel",
     },
 
@@ -258,7 +258,7 @@
         direction: "horizontal",
         children: [
           { kind: "segment", name: "themeControl" },
-          { kind: "segment", name: "styleControl" },
+          { kind: "segment", name: "endcapsControl" },
           { kind: "segment", name: "modeControl" },
           { kind: "segment", name: "toolbar" },
         ],
@@ -275,12 +275,12 @@
         children: [{ kind: "segment", name: "themePicker" }],
       },
 
-      // ── Row 3: style picker — predicate container ──────────────────────
+      // ── Row 3: endcaps picker — predicate container ──────────────────────
       {
         kind: "container",
         direction: "horizontal",
-        when: "{{ ge (int .stylePageCursor) 0 }}",
-        children: [{ kind: "segment", name: "stylePicker" }],
+        when: "{{ ge (int .endcapsPageCursor) 0 }}",
+        children: [{ kind: "segment", name: "endcapsPicker" }],
       },
 
       // ── Standalone group ───────────────────────────────────────────────

@@ -129,7 +129,7 @@ function rig(
       reloads.push({
         text: durable!.text()!,
         picks: Object.fromEntries(
-          ["theme", "look", "padding"].map((k) => [k, sessionState.get(SID, k)]),
+          ["theme", "style", "padding"].map((k) => [k, sessionState.get(SID, k)]),
         ),
       });
       const next = load(durable!.text()!);
@@ -315,7 +315,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     // One labelled control each, showing the value the bar actually rendered.
     expect(out).toContain("▦ default"); // preset
     expect(out).toContain("🎨 tokyo-night"); // theme
-    expect(out).toContain("◐ none"); // look
+    expect(out).toContain("◐ none"); // style
     expect(out).toContain("✦ powerline"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
@@ -455,12 +455,12 @@ describe("the config menu, reached from a user config whose root is one row", ()
 // joiner's default separator " | " sits between cells, which no capsule row
 // carries.
 const PINNING_PRESET = `{
-  presets: { narrow: { globals: { style: 'capsule' } } },
+  presets: { narrow: { globals: { endcaps: 'capsule' } } },
   root: { h: ['directory', 'model'] },
 }`;
 const PINNING_PRESET_NAMED = `{
   globals: { preset: 'narrow' },
-  presets: { narrow: { globals: { style: 'capsule' } } },
+  presets: { narrow: { globals: { endcaps: 'capsule' } } },
   root: { h: ['directory', 'model'] },
 }`;
 const PLAIN_SEAM = " | ";
@@ -478,21 +478,21 @@ describe("save under a preset that pins the setting", () => {
     r.click(writesTo(r.render(), "candybar.config")[0]!);
     r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
-        effectsOf(u).some((e) => e.args[2] === "candybar.apply.style"),
+        effectsOf(u).some((e) => e.args[2] === "candybar.apply.endcaps"),
       )!,
     );
     const capsule = plain(r.render());
     expect(capsule).toContain("✦ capsule");
     expect(capsule).not.toContain(PLAIN_SEAM);
-    const pickPlain = writesTo(r.render(), "style").find((u) =>
-      effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === "plain"),
+    const pickPlain = writesTo(r.render(), "endcaps").find((u) =>
+      effectsOf(u).some((e) => e.args[1] === "endcaps" && e.args[2] === "plain"),
     );
     r.click(pickPlain!);
     const save = links(r.render()).find((l) =>
       effectsOf(l.url).some((e) => e.verb === "save"),
     )!.url;
     r.click(save);
-    expect(r.sessionState.get(SID, "style")).toBeNull();
+    expect(r.sessionState.get(SID, "endcaps")).toBeNull();
     return plain(r.render());
   };
 
@@ -506,13 +506,13 @@ describe("save under a preset that pins the setting", () => {
         globals: Record<string, unknown>;
         presets: { narrow: { globals: Record<string, unknown> } };
       };
-      expect(parsed.presets.narrow.globals.style).toBe("plain");
-      expect(parsed.globals).not.toHaveProperty("style");
+      expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
+      expect(parsed.globals).not.toHaveProperty("endcaps");
       expect(after).toContain("✦ plain");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
       expect(r.logs).toContainEqual(
-        `save: presets.narrow.globals.style=plain → ${durable.configPath} (session=${SID})`,
+        `save: presets.narrow.globals.endcaps=plain → ${durable.configPath} (session=${SID})`,
       );
     } finally {
       r.dispose();
@@ -542,7 +542,7 @@ describe("save under a preset that pins the setting", () => {
         presets: { narrow: { globals: Record<string, unknown> } };
       };
       expect(parsed.globals).toEqual({ preset: "narrow" });
-      expect(parsed.presets.narrow.globals.style).toBe("plain");
+      expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(r.sessionState.get(SID, "preset")).toBeNull();
       expect(after).toContain("✦ plain");
       expect(after).toContain(PLAIN_SEAM);
@@ -561,11 +561,11 @@ describe("save under a preset that pins the setting", () => {
 // own whose pin is part of what they wrote.
 const CUSTOMIZED = `{
   // the user's own words
-  globals: { palette: 'nord', padding: 2, style: 'capsule' },
+  globals: { palette: 'nord', padding: 2, endcaps: 'capsule' },
   segments: { mine: { template: 'mine' } },
   presets: {
     compact: { globals: { padding: 3 } },
-    narrow: { globals: { style: 'plain' } },
+    narrow: { globals: { endcaps: 'plain' } },
   },
   root: { h: ['directory', 'mine'] },
 }`;
@@ -607,7 +607,7 @@ describe("reset returns settings to the bundled default", () => {
   const USER_CONTENT = {
     segments: { mine: { template: "mine" } },
     root: { h: ["directory", "mine"] },
-    narrow: { globals: { style: "plain" } },
+    narrow: { globals: { endcaps: "plain" } },
   };
 
   test("↺ clears the session's pick and the saved value, and the bar shows the default", () => {
@@ -615,7 +615,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(plain(r.render())).toContain("🎨 dracula");
     r.click(resetOf("palette"));
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: "dracula", look: null, padding: null } },
+      { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
     ]);
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
@@ -637,13 +637,13 @@ describe("reset returns settings to the bundled default", () => {
     expect(parsed.presets).not.toHaveProperty("compact");
     expect(userContent()).toEqual(USER_CONTENT);
 
-    r.click(resetOf("style"));
-    expect(durable.parsed().globals).not.toHaveProperty("style");
+    r.click(resetOf("endcaps"));
+    expect(durable.parsed().globals).not.toHaveProperty("endcaps");
     expect(userContent()).toEqual(USER_CONTENT);
     expect(r.logs).toContainEqual(
-      `reset-config: style ${Object.keys(DEFAULT_DSL_CONFIG.presets)
-        .map((name) => `presets.${name}.globals.style`)
-        .join(" ")} session:style ← ${durable.configPath} (session=${SID})`,
+      `reset-config: endcaps ${Object.keys(DEFAULT_DSL_CONFIG.presets)
+        .map((name) => `presets.${name}.globals.endcaps`)
+        .join(" ")} session:endcaps ← ${durable.configPath} (session=${SID})`,
     );
   });
 
@@ -708,7 +708,7 @@ describe("reset returns settings to the bundled default", () => {
   test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", () => {
     const before = durable.text();
     r.sessionState.set(SID, "padding", "5");
-    r.sessionState.set(SID, "look", "dim");
+    r.sessionState.set(SID, "style", "dim");
     const depth = durable.history(SID).past.length;
     r.click(labelled("⟲")!);
     r.click(labelled("⟲ reset all?")!);
@@ -716,7 +716,7 @@ describe("reset returns settings to the bundled default", () => {
     // Every setting's reset in one click is ONE write and ONE reload, made
     // while the session still held its picks — released only after.
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: null, look: "dim", padding: "5" } },
+      { text: durable.text(), picks: { theme: null, style: "dim", padding: "5" } },
     ]);
 
     const parsed = durable.parsed() as {
@@ -727,7 +727,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(parsed.presets).not.toHaveProperty("compact");
     expect(userContent()).toEqual(USER_CONTENT);
     expect(r.sessionState.get(SID, "padding")).toBeNull();
-    expect(r.sessionState.get(SID, "look")).toBeNull();
+    expect(r.sessionState.get(SID, "style")).toBeNull();
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
     const out = plain(r.render());
@@ -740,7 +740,7 @@ describe("reset returns settings to the bundled default", () => {
     r.click(labelled("↶")!);
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "padding")).toBe("5");
-    expect(r.sessionState.get(SID, "look")).toBe("dim");
+    expect(r.sessionState.get(SID, "style")).toBe("dim");
   });
 });
 
@@ -835,7 +835,7 @@ const SAVED_CUSTOM_1 = `{
       ] },
       globals: {
         palette: "dracula",
-        look: "dim",
+        style: "dim",
       },
     },
   },
@@ -876,16 +876,16 @@ describe("save as preset", () => {
   });
 
   test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim", padding: "2" });
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim", padding: "2" });
     r.click(link("⊕ save as preset")!);
 
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     // Reloaded once, while the session still held its picks.
     expect(r.reloads).toEqual([
-      { text: SAVED_CUSTOM_1, picks: { theme: "dracula", look: "dim", padding: "2" } },
+      { text: SAVED_CUSTOM_1, picks: { theme: "dracula", style: "dim", padding: "2" } },
     ]);
     // The preset renders what the picks did, so they are released.
-    for (const key of ["theme", "look", "padding"]) {
+    for (const key of ["theme", "style", "padding"]) {
       expect(r.sessionState.get(SID, key)).toBeNull();
     }
     expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
@@ -900,12 +900,12 @@ describe("save as preset", () => {
     expect(out).toContain("◀ custom-1 ▶");
     expect(out).toContain("💾 save 1");
     expect(r.logs).toContainEqual(
-      `save-preset: custom-1 from=narrow palette=dracula look=dim → ${durable.configPath} (session=${SID})`,
+      `save-preset: custom-1 from=narrow palette=dracula style=dim → ${durable.configPath} (session=${SID})`,
     );
   });
 
   test("switching away and back changes no byte, and the preset still renders what was saved", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     r.click(link("⊕ save as preset")!);
     r.click(link("default")!);
     expect(effective().preset).toBe("default");
@@ -913,11 +913,11 @@ describe("save as preset", () => {
     r.click(link("custom-1")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     expect(effective().theme).toMatchObject({ name: "dracula" });
-    expect(effective().look).toMatchObject({ name: "dim" });
+    expect(effective().style).toMatchObject({ name: "dim" });
   });
 
   test("a second save takes the next free name", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     r.click(link("⊕ save as preset")!);
     r.click(link("⊕ save as preset")!);
     const presets = durable.parsed().presets as Record<string, unknown>;
@@ -928,7 +928,7 @@ describe("save as preset", () => {
   });
 
   test("🗑 deletes the preset it names, returning the file byte for byte, and only a user preset offers it", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     expect(plain(r.render())).toContain("🗑 delete narrow");
     r.click(link("⊕ save as preset")!);
     r.click(link("🗑 delete custom-1")!);
@@ -944,7 +944,7 @@ describe("save as preset", () => {
   });
 
   test("save and delete are one undo step each, restoring the exact bytes and picks", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", look: "dim" });
+    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     r.click(link("⊕ save as preset")!);
     r.click(link("🗑 delete custom-1")!);
 
@@ -955,7 +955,7 @@ describe("save as preset", () => {
     r.click(link("↶")!);
     expect(durable.text()).toBe(USER_PRESETS);
     expect(
-      ["preset", "theme", "look"].map((k) => r.sessionState.get(SID, k)),
+      ["preset", "theme", "style"].map((k) => r.sessionState.get(SID, k)),
     ).toEqual(["narrow", "dracula", "dim"]);
   });
 
@@ -1035,11 +1035,11 @@ describe("save as preset", () => {
     const source = `{
   presets: { spaced: { globals: { palette: 'nord', default_separator: ' | ' } } },
 }`;
-    start(source, { preset: "spaced", look: "dim" });
+    start(source, { preset: "spaced", style: "dim" });
     r.click(link("⊕ save as preset")!);
     const presets = durable.parsed().presets as Record<string, unknown>;
     expect(presets["custom-1"]).toEqual({
-      globals: { palette: "nord", default_separator: " | ", look: "dim" },
+      globals: { palette: "nord", default_separator: " | ", style: "dim" },
     });
   });
 });

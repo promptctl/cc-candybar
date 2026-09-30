@@ -17,7 +17,7 @@ You are running an interactive setup wizard to configure the cc-candybar statusl
 ## Operating rules
 
 - One question per step. Wait for the user's answer before moving on. Do not skip or combine steps.
-- Track the user's choices as four variables: `charset`, `theme`, `style`, `preset`. Every later command and the final config are built from exactly those four.
+- Track the user's choices as four variables: `charset`, `theme`, `endcaps`, `preset`. Every later command and the final config are built from exactly those four.
 - Do NOT use the Agent tool or Explore subagents. Everything you need is in this document.
 - Do NOT read source code from the cc-candybar package. Run only the subcommands this document names (`install`, `check`) and the plugin's preview script against it.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs need a click to expand. Relay versions, option names, file paths, and command results in your text so the user sees them without expanding.
@@ -108,28 +108,28 @@ Then ask:
 
 If the user types a name in the free text field, accept it only if the preview labeled it; otherwise show the labeled names again and re-ask. Set `theme`.
 
-## Step 4: Style
+## Step 4: Endcaps
 
 > [!IMPORTANT]
 > You cannot render ANSI escape codes or nerd font glyphs in your text output.
 > You MUST run the preview command below and let the terminal display the result.
-> Do NOT describe what the styles look like. Let the user see them.
+> Do NOT describe what the endcaps look like. Let the user see them.
 > After running, tell the user to expand the bash output if they cannot see the previews.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-styles --theme=${theme} --charset=${charset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-endcaps --theme=${theme} --charset=${charset}
 ```
 
-Tell the user: "The three style previews are in the bash output above, each under its name. Expand it if needed."
+Tell the user: "The three endcaps previews are in the bash output above, each under its name. Expand it if needed."
 
 Then ask:
 
-- **Question**: "Which style?"
-- **Header**: "Style"
+- **Question**: "Which endcaps?"
+- **Header**: "Endcaps"
 - **Options**:
-  - "powerline" -> Set `style=powerline`
-  - "capsule" -> Set `style=capsule`
-  - "plain" -> Set `style=plain`
+  - "powerline" -> Set `endcaps=powerline`
+  - "capsule" -> Set `endcaps=capsule`
+  - "plain" -> Set `endcaps=plain`
 
 ## Step 5: Preset
 
@@ -142,7 +142,7 @@ The preset is the bar's arrangement: which segments, on how many rows.
 > After running, tell the user to expand the bash output if they cannot see the previews.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-presets --theme=${theme} --style=${style} --charset=${charset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-presets --theme=${theme} --endcaps=${endcaps} --charset=${charset}
 ```
 
 Tell the user the previews are in the bash output above, then display:
@@ -153,7 +153,7 @@ Tell the user the previews are in the bash output above, then display:
 1. **default** -- Two rows: an identity row (directory, git) over a status row (model, context window, cache timer, 5-hour block usage, weekly usage). Good default.
 2. **compact** -- One row (directory, git, context window) with no cell padding. For narrow terminals and split panes.
 3. **verbose** -- The default's two rows plus pull-request, burn-rate, token-speed and token-sparkline segments. Maximum information.
-4. **zen** -- One quiet row (directory, context window) in plain style under the dim look, so it replaces the style picked in Step 4. For heads-down work.
+4. **zen** -- One quiet row (directory, context window) with plain endcaps under the dim style, so it replaces the endcaps picked in Step 4. For heads-down work.
 5. **git** -- The open pull request beside the git state, over a status row cut to model, context window and activity. For branch-and-review work.
 6. **usage** -- Every cost and limit segment, one concern per row: context and cache, the rate-limit windows and burn rate, then session and today spend and token speed. For watching a budget.
 7. **dense** -- The default's segments plus session spend on one row with no cell padding, wrapped only where the terminal runs out. For wide terminals.
@@ -204,7 +204,7 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
    | Placeholder | Replace with |
    |-------------|--------------|
    | `replace:THEME` | `theme` (the name chosen in Step 3) |
-   | `replace:STYLE` | `style` (`powerline`, `capsule`, or `plain`) |
+   | `replace:ENDCAPS` | `endcaps` (`powerline`, `capsule`, or `plain`) |
    | `replace:CHARSET` | `charset` (`unicode` or `ascii`) |
    | `replace:PRESET` | `preset` (a name from Step 5's list) |
 
@@ -246,7 +246,7 @@ Exit 0 has two outcomes, told apart by the output:
 > After running, tell the user to expand the bash output if they cannot see the preview.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --style=${style} --charset=${charset} --preset=${preset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --endcaps=${endcaps} --charset=${charset} --preset=${preset}
 ```
 
 Tell the user: "Your statusline is in the bash output above. Expand it if needed."
@@ -264,7 +264,7 @@ Setup complete.
 
 **What now:**
 1. Restart Claude Code if the statusline does not appear.
-2. The bar has its own settings menu: click `🍫` on the bar to switch theme, look, style, wrap, padding and preset live. Tick `persist?` there to make a choice the durable default.
+2. The bar has its own settings menu: click `🍫` on the bar to switch preset, theme, style, variation, endcaps, wrap and padding live. Click `💾 save` there to make your picks the durable default.
 3. Hand edits to `~/.config/cc-candybar/config.json5` hot-reload; no restart needed.
 4. Run `/candybar` any time to rerun this wizard.
 

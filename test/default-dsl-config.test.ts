@@ -30,7 +30,7 @@ import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   resolveThemeSelection,
-  resolveLookSelection,
+  resolveStyleSelection,
   paletteForThemeName,
 } from "../src/themes";
 import {
@@ -199,7 +199,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         },
       };
       const line = renderDsl(parsed, compiled, store, registry, payload, {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "truecolor",
         wrap: true,
         padding: 1,
@@ -215,14 +215,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
-  // ships a clickable theme/look picker, not just documentation describing how
+  // ships a clickable theme/style picker, not just documentation describing how
   // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
-  // own applyTheme/applyLook actions (deriveActionValidators →
+  // own applyTheme/applyStyle actions (deriveActionValidators →
   // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
-  // then re-renders with theme.effective/look.effective recomputed exactly as
-  // server.ts does (resolveThemeSelection/resolveLookSelection over SessionState) —
+  // then re-renders with theme.effective/style.effective recomputed exactly as
+  // server.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
-  test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
+  test("clicking a theme/style option changes theme.effective/style.effective on the next render", () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
@@ -231,12 +231,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     // The daemon's cache installs the derived click gate at config load
     // (cache/render.ts); mirror it so the click below passes through the same
-    // validator applyTheme/applyLook would in production.
+    // validator applyTheme/applyStyle would in production.
     const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
       registerStateValidator(key, spec),
     );
     const opts = {
-      style: "powerline" as const,
+      endcaps: "powerline" as const,
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
@@ -249,11 +249,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
         sessionState.get(SID, "theme"),
         parsed.globals.palette,
       );
-      const look = resolveLookSelection(
+      const look = resolveStyleSelection(
         undefined,
-        sessionState.get(SID, "look"),
-        parsed.globals.look,
-        parsed.looks,
+        sessionState.get(SID, "style"),
+        parsed.globals.style,
+        parsed.styles,
       );
       return renderDsl(
         parsed,
@@ -276,11 +276,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
         // Both `.effective` fields are renderDsl's to publish, so the payload
         // carries neither and the SELECTIONS are what cross the seam — the same
         // two values src/daemon/server.ts hands in.
-        { theme, look },
+        { theme, style: look },
       );
     };
     try {
-      // The theme and look controls live in the synthesized settings menu's
+      // The theme and style controls live in the synthesized settings menu's
       // config row (candybar-settings-ui-aok.3), behind two nested
       // disclosures — open both with the same clicks a "🍫 ▸" then "⚙ config ▸"
       // tap would dispatch, so the controls this test exercises render.
@@ -315,22 +315,22 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(afterTheme).toContain(targetTheme);
       expect(afterTheme).not.toBe(before);
 
-      const targetLook = Object.keys(parsed.looks).find(
+      const targetStyle = Object.keys(parsed.styles).find(
         (name) => name !== "none",
       );
-      if (targetLook === undefined) {
+      if (targetStyle === undefined) {
         throw new Error(
           'the merged config\'s looks block held only the "none" identity floor ' +
             "— need at least one other declared look to exercise a look-switching click",
         );
       }
       clickUrl(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", targetLook] }]),
+        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", targetStyle] }]),
         testVerbContext(sessionState),
       );
-      const afterLook = render();
-      expect(afterLook).toContain(targetLook);
-      expect(afterLook).not.toBe(afterTheme);
+      const afterStyle = render();
+      expect(afterStyle).toContain(targetStyle);
+      expect(afterStyle).not.toBe(afterTheme);
     } finally {
       disposers.forEach((dispose) => dispose());
       registry.dispose();
@@ -362,7 +362,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
         return renderDsl(parsed, compiled, store, registry, payload, {
-          style: "powerline",
+          endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
           padding,
@@ -409,7 +409,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
     };
     const opts = {
-      style: "powerline" as const,
+      endcaps: "powerline" as const,
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
@@ -469,7 +469,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
     };
     const opts = {
-      style: "powerline" as const,
+      endcaps: "powerline" as const,
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
@@ -539,7 +539,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             git,
           },
           {
-            style: "powerline",
+            endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
@@ -615,7 +615,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           home: opts.home,
         };
         const line = renderDsl(dirOnly, compiled, store, registry, payload, {
-          style: "powerline",
+          endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 1,
@@ -815,7 +815,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           { ...GIT_PAYLOAD, git },
           {
-            style: "powerline",
+            endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
@@ -1163,7 +1163,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           {
-            style: "powerline",
+            endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
@@ -1253,7 +1253,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             },
           };
           return renderDsl(blockOnly, compiled, store, registry, payload, {
-            style: "powerline",
+            endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
@@ -1334,7 +1334,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             ...payload,
           },
           {
-            style: "powerline",
+            endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
@@ -1468,7 +1468,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         registry,
         withPayload(checkPayload(effective)),
         {
-          style: effective.style,
+          endcaps: effective.endcaps,
           separator: effective.separator,
           width,
           colorCompatibility: effective.colorCompatibility,
@@ -1481,9 +1481,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
             segmentErrors.push(`segment "${segName}": ${message}`),
         },
         {
-          look: effective.look,
+          style: effective.style,
           preset: effective.preset,
-          progression: effective.progression,
+          variation: effective.variation,
         },
       );
       return { rendered, segmentErrors };
@@ -1592,23 +1592,23 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // brandon-presets-a3i.rcx — each added preset pinned to the promise its
   // comment makes, not merely to rendering without error.
 
-  test("zen is one plain row under the dim look", () => {
+  test("zen is one plain row under the dim style", () => {
     const effective = resolveEffectiveGlobals(
       DEFAULT_DSL_CONFIG,
       (key) => (key === "preset" ? "zen" : null),
       () => false,
     );
-    expect(effective.style).toBe("plain");
-    expect(effective.look).toMatchObject({ kind: "decided", name: "dim" });
+    expect(effective.endcaps).toBe("plain");
+    expect(effective.style).toMatchObject({ kind: "decided", name: "dim" });
     const zen = renderPreset("zen", 200).rendered;
     expect(visibleLines(zen)).toHaveLength(1);
-    // The bytes, not only the resolution: no powerline arrow, and the look
+    // The bytes, not only the resolution: no powerline arrow, and the style
     // recolours the bar — a session that picks `none` over the preset's
-    // look draws the same row in other colours.
+    // style draws the same row in other colours.
     expect(renderPreset("default", 200).rendered).toContain(POWERLINE_ARROW);
     expect(zen).not.toContain(POWERLINE_ARROW);
     const undimmed = renderPreset("zen", 200, undefined, (key, preset) =>
-      key === "look" ? "none" : freshSession(key, preset),
+      key === "style" ? "none" : freshSession(key, preset),
     ).rendered;
     expect(visible(undimmed)).toBe(visible(zen));
     expect(undimmed).not.toBe(zen);

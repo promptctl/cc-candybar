@@ -234,7 +234,7 @@ export function composeWithDiagnostics(
 // render's own.
 function stripOptions(geometry: DiagnosticGeometry): BuildLineOptions {
   return {
-    style: "plain",
+    endcaps: "plain",
     separator: "",
     width: geometry.width,
     wrap: true,

@@ -25,7 +25,7 @@ a segment template that reads the document's fields by dotted path, and a
 `ramp` in the segment's `bg:` that turns one of those numbers into a theme
 colour. The script never chooses a colour and the template never branches on
 thresholds: the colour decision lives in the theme system, so it follows a
-theme click and a look exactly as the built-in segments do.
+theme click and a style pick exactly as the built-in segments do.
 
 Your eyes are `cc-candybar check` — its exit code and stderr for whether the
 config is sound, and `--render` for what it puts on screen:
@@ -319,7 +319,7 @@ the next step is how to state it from a number.
 position followed by a colour; a colour is a palette name (`panel`,
 `warning`, `error`, `success`, `foreground`, `button-color-foreground`, …)
 or a hex literal, resolved against the palette the segment is rendering with,
-so the colour follows a theme click and a look. The easing is one of two
+so the colour follows a theme click and a style pick. The easing is one of two
 words: `"step"` holds each stop's colour until the next position — a
 `≥ threshold → next colour` cascade written as data — and `"linear"` blends
 between neighbouring stops in OKLCH. Positions are required, must ascend, and
@@ -625,8 +625,8 @@ segment that name is the placement's.
 
 Every placement also has one setting its segment never declares: `theme`,
 the palette that placement renders in. It is `"bar"` (the bar's own theme,
-look included) or an installed theme name, which pins that placement to that
-theme whatever the bar's theme and look are. A segment's `palette:` is the
+style included) or an installed theme name, which pins that placement to that
+theme whatever the bar's theme and style are. A segment's `palette:` is the
 default for every placement of it; a placement's own `theme` overrides it for
 that placement alone, `"bar"` included. A template reads it as
 `.settings.theme` like any other setting.

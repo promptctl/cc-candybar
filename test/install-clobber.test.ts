@@ -212,7 +212,7 @@ describe("installSuccessMessage", () => {
   // that renders it rather than spelled again here.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     const msg = installSuccessMessage();
-    expect(msg).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
+    expect(msg).toMatch(/theme\/style\/variation\/endcaps\/wrap\/padding controls/i);
     expect(msg).toContain(DOOR_GLYPH);
   });
 });

@@ -83,7 +83,7 @@ export function validatePresets(
     // a preset picker writes it on the wire, which rejects empty values and
     // splits on "/". Rejecting the shape HERE surfaces the error on every
     // config load, not only once an action ranges the "presets" domain (the
-    // identical guard looks.ts applies to look names, for the identical
+    // identical guard styles.ts applies to style names, for the identical
     // reason).
     //
     // [LAW:one-source-of-truth] Newlines are ALSO rejected — the same reason

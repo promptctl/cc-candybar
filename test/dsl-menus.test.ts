@@ -45,7 +45,7 @@ import {
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { decideLookName } from "../src/themes/policy";
+import { decideStyleName } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -62,7 +62,7 @@ import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
   paletteRole,
-  PROGRESSIONS,
+  VARIATIONS,
   textOn,
   type Address,
 } from "../src/themes/decor";
@@ -117,7 +117,7 @@ function expectAppliedCell(style: Style, applied: Palette): void {
 
 function opts() {
   return {
-    style: "powerline" as const,
+    endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
@@ -162,14 +162,14 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(),
       { perSegmentSink: sink },
-      // The look is resolved by the CALLER (the daemon does it over staged/
-      // session/globals) and handed in; renderDsl reads no globals.look of its
+      // The style is resolved by the CALLER (the daemon does it over staged/
+      // session/globals) and handed in; renderDsl reads no globals.style of its
       // own, so a fixture declaring one renders at the floor unless it arrives
-      // here. [LAW:no-silent-failure] naming an undeclared look would collapse
-      // to the floor, so tests that depend on a look assert its effect.
+      // here. [LAW:no-silent-failure] naming an undeclared style would collapse
+      // to the floor, so tests that depend on a style assert its effect.
       look === undefined
         ? undefined
-        : { look: decideLookName(look, config.looks) },
+        : { style: decideStyleName(look, config.styles) },
     );
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
@@ -324,7 +324,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: {
         'a-b': { set: 'theme', from: 'themes' },
-        'a_b': { set: 'style', from: 'styles' },
+        'a_b': { set: 'endcaps', from: 'endcaps' },
       },
       segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -699,7 +699,7 @@ describe("toggle round trip + drop stacking", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", progression: PROGRESSIONS["secondary-accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
     const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
@@ -901,13 +901,13 @@ const INDEPENDENT_SRC = `{
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    applyStyle: { set: 'style', from: 'styles' },
+    applyEndcaps: { set: 'endcaps', from: 'endcaps' },
   },
   segments: {
     themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
+    endcapsMenu: { template: 'S {{ menu "applyEndcaps" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
   },
-  root: { h: ['themeMenu', 'styleMenu'] },
+  root: { h: ['themeMenu', 'endcapsMenu'] },
 }`;
 
 describe("independent default (no shared key)", () => {
@@ -917,16 +917,16 @@ describe("independent default (no shared key)", () => {
     // Distinct keys — neither click writes the other's key — and each key
     // brings its own synthesized page cursor.
     expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
-    expect(config.variables["menus.styleMenu.applyStyle"]).toBeDefined();
+    expect(config.variables["menus.endcapsMenu.applyEndcaps"]).toBeDefined();
     expect(config.variables["menus.themeMenu.applyTheme.page"]).toBeDefined();
-    expect(config.variables["menus.styleMenu.applyStyle.page"]).toBeDefined();
+    expect(config.variables["menus.endcapsMenu.applyEndcaps.page"]).toBeDefined();
 
     clickToggle(render(), "menus.themeMenu.applyTheme", "applyTheme");
     let out = stripAnsi(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸"); // style still closed — independence
     // Open style too: theme stays open (NOT mutually exclusive).
-    clickToggle(render(), "menus.styleMenu.applyStyle", "applyStyle");
+    clickToggle(render(), "menus.endcapsMenu.applyEndcaps", "applyEndcaps");
     out = stripAnsi(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▾"); // both open
@@ -944,13 +944,13 @@ const ACCORDION_SRC = `{
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    applyStyle: { set: 'style', from: 'styles' },
+    applyEndcaps: { set: 'endcaps', from: 'endcaps' },
   },
   segments: {
     themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
+    endcapsMenu: { template: 'S {{ menu "applyEndcaps" "▸" "▾" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
   },
-  root: { h: ['themeMenu', 'styleMenu'] },
+  root: { h: ['themeMenu', 'endcapsMenu'] },
 }`;
 
 describe("opt-in accordion (shared key, one open at a time)", () => {
@@ -961,16 +961,16 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
       set: "menus.pickers",
       cycle: ["closed", "applyTheme"],
     });
-    expect(config.actions["menus.pickers.applyStyle"]).toEqual({
+    expect(config.actions["menus.pickers.applyEndcaps"]).toEqual({
       set: "menus.pickers",
-      cycle: ["closed", "applyStyle"],
+      cycle: ["closed", "applyEndcaps"],
     });
     const gate = deriveActionValidators(config).find(
       (g) => g.key === "menus.pickers",
     );
     expect(gate?.spec).toEqual({
       kind: "allow-list",
-      allowed: ["closed", "applyTheme", "applyStyle"],
+      allowed: ["closed", "applyTheme", "applyEndcaps"],
     });
     // One page cursor per disclosure key: the accordion holds at most one open
     // body, so its one cursor is exact — and every toggle resets it to 0.
@@ -984,9 +984,9 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     let out = stripAnsi(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸");
-    // styleMenu renders closed (current "applyTheme" is outside its cycle), so
-    // its click writes "applyStyle" — opening it auto-closes the theme.
-    clickToggle(render(), "menus.pickers", "applyStyle");
+    // endcapsMenu renders closed (current "applyTheme" is outside its cycle), so
+    // its click writes "applyEndcaps" — opening it auto-closes the theme.
+    clickToggle(render(), "menus.pickers", "applyEndcaps");
     out = stripAnsi(render());
     expect(out).toContain("T ▸");
     expect(out).toContain("S ▾");
@@ -1023,11 +1023,11 @@ const TESTER_SRC = `{
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    applyStyle: { set: 'style', from: 'styles' },
+    applyEndcaps: { set: 'endcaps', from: 'endcaps' },
     applyTheme2: { set: 'theme', from: 'themes' },
   },
   segments: {
-    tester: { template: 'TEST {{ menu "applyTheme" "▸" "▾" }} | {{ menu "applyStyle" "▸" "▾" }} | {{ menu "applyTheme2" "▸" "▾" }} END', bg: 'surface', fg: 'foreground' },
+    tester: { template: 'TEST {{ menu "applyTheme" "▸" "▾" }} | {{ menu "applyEndcaps" "▸" "▾" }} | {{ menu "applyTheme2" "▸" "▾" }} END', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['tester'] },
 }`;
@@ -1036,7 +1036,7 @@ describe('the "theme tester" — N menus in one segment', () => {
   test("each menu is a DISTINCT addressable disclosure (no identity collision)", () => {
     const config = parseAndValidate("<test>", TESTER_SRC, ALLOWED);
     expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
-    expect(config.variables["menus.tester.applyStyle"]).toBeDefined();
+    expect(config.variables["menus.tester.applyEndcaps"]).toBeDefined();
     expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
     // Three distinct state keys + their three page cursors, all synthesized
     // from one segment — the old (rowKey,segName) identity would have
@@ -1075,7 +1075,7 @@ describe('the "theme tester" — N menus in one segment', () => {
   test("all three open independently: three bodies stack below one inline row", () => {
     const { render, clickToggle, dispose } = buildRuntime(TESTER_SRC);
     clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
-    clickToggle(render(), "menus.tester.applyStyle", "applyStyle");
+    clickToggle(render(), "menus.tester.applyEndcaps", "applyEndcaps");
     clickToggle(render(), "menus.tester.applyTheme2", "applyTheme2");
     const lines = stripAnsi(render()).split("\n");
     expect(lines[0]).toContain("TEST ▾ | ▾ | ▾ END"); // all three open, all inline
@@ -1146,7 +1146,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   // "sound-effects" is not a field any built-in segment, action, or domain
   // registry knows about — proving the claim requires a field the engine
   // has literally never seen, not one of the pre-registered "themes" /
-  // "styles" / "looks" domains.
+  // "endcaps" / "styles" domains.
   const SRC = `{
     globals: {},
     variables: {
@@ -1292,7 +1292,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
 // The domain here is an INLINE array, deliberately: brandon-picker-31z takes the
 // address out of the decision for a COLOUR-valued domain, so a placement
 // property can only be stated over a domain that is still placed — which is
-// every domain but themes/looks. `WORDS_SRC` is MENU_SRC with its `from`
+// every domain but themes/styles. `WORDS_SRC` is MENU_SRC with its `from`
 // swapped, so the fixture differs from the one above in exactly that.
 describe("a menu's `distribution` option places its band", () => {
   const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
@@ -1313,7 +1313,7 @@ describe("a menu's `distribution` option places its band", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", progression: PROGRESSIONS["secondary-accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
     const body = sink.get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
@@ -1359,7 +1359,7 @@ describe("a menu's `distribution` option places its band", () => {
 
 // brandon-picker-31z: choosing a theme means reading names, and every option cell
 // used to be painted by its address in the band — a fact about the GRID, not
-// about the choice. A colour-valued option domain (`themes`, `looks`) now paints
+// about the choice. A colour-valued option domain (`themes`, `styles`) now paints
 // each cell in the palette picking it would put in force. Driven through the real
 // spine, asserted against the same two constructions the render uses
 // (paletteForThemeName / transposedPalette), never a copy of the blend.
@@ -1394,14 +1394,14 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     domain: readonly string[],
   ) => optionCellsOf(sink.get(segName)![1]!, domain);
 
-  // A look picker beside the theme picker, so both colour-valued domains are
-  // exercised on one bar. `globals.look` names a real look deliberately — see
+  // A style picker beside the theme picker, so both colour-valued domains are
+  // exercised on one bar. `globals.style` names a real style deliberately — see
   // the chaining test below, which only has teeth while the bar wears one, and
   // `dim` is chosen because scaling lightness provably moves a background
   // (scaling chroma leaves a near-neutral one where it was).
   const BOTH_PICKERS_SRC = `{
-    globals: { look: 'dim' },
-    looks: {
+    globals: { style: 'dim' },
+    styles: {
       none: {},
       dim: { lightnessScale: 0.7 },
       vivid: { chromaScale: 1.6 },
@@ -1412,15 +1412,15 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     },
     actions: {
       applyTheme: { set: 'theme', from: 'themes' },
-      applyLook: { set: 'look', from: 'looks' },
+      applyStyle: { set: 'style', from: 'styles' },
     },
     segments: {
       themepicker: { template: '\u{1f3a8} {{ menu "applyTheme" "\u25b8" "\u25be" }}' },
-      lookpicker: { template: '\u25d0 {{ menu "applyLook" "\u25b8" "\u25be" }}' },
+      lookpicker: { template: '\u25d0 {{ menu "applyStyle" "\u25b8" "\u25be" }}' },
     },
     root: { h: ['themepicker', 'lookpicker'] },
   }`;
-  const LKEY = "menus.lookpicker.applyLook";
+  const LKEY = "menus.lookpicker.applyStyle";
 
   test("every theme option wears that theme's own ground, text chosen by measure", () => {
     const { render, sink, clickToggle, dispose } = buildRuntime(BOTH_PICKERS_SRC);
@@ -1461,13 +1461,13 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect([...monotonic.entries()]).toEqual([...uniform.entries()]);
   });
 
-  test("every look option wears the BASE palette under that look, not the bar's already-looked one", () => {
+  test("every style option wears the BASE palette under that style, not the bar's already-styled one", () => {
     const { render, sink, config, palette, clickToggle, dispose } =
       buildRuntime(BOTH_PICKERS_SRC, "s1", "dim");
     render();
-    clickToggle(render(), LKEY, "applyLook");
+    clickToggle(render(), LKEY, "applyStyle");
     render();
-    const names = Object.keys(config.looks);
+    const names = Object.keys(config.styles);
     const cells = optionCells(sink, "lookpicker", names);
     expect(cells.length).toBe(names.length);
     for (const cell of cells) {
@@ -1478,19 +1478,19 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       // the assertion the implementation's own answer. Asking rich-js fresh is
       // what makes the base observable. (It is also why the memo must never be
       // handed an already-transposed palette in the first place.)
-      expectApplied(cell, transposePalette(palette, config.looks[cell.name]!));
+      expectApplied(cell, transposePalette(palette, config.styles[cell.name]!));
     }
-    // Every look is told apart, ground or no ground: `vivid` scales CHROMA, so
+    // Every style is told apart, ground or no ground: `vivid` scales CHROMA, so
     // its near-neutral background does not move — the hue in the text is what
     // distinguishes it, which is why the cell carries one.
     expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBe(names.length);
     // THE PREMISE, asserted rather than assumed: this bar really is wearing a
-    // look, so "the already-looked palette" below is a palette that differs from
+    // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
-    // exactly how they first shipped, passing while the look never arrived.
+    // exactly how they first shipped, passing while the style never arrived.
     const floor = buildRuntime(BOTH_PICKERS_SRC);
     floor.render();
-    floor.clickToggle(floor.render(), LKEY, "applyLook");
+    floor.clickToggle(floor.render(), LKEY, "applyStyle");
     floor.render();
     const trigger = (cells: readonly RichText[]): string | undefined =>
       definedStyle(cells[0]!.style).bgcolor?.value?.hex;
@@ -1503,7 +1503,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // instead of the base would transpose an already-transposed palette — which
     // both double-pays OKLCH quantization and collides transposedPalette's memo
     // (it keys on the base palette's NAME, which transposition preserves). Under
-    // that bug the identity look `none` would come back wearing dim's ground.
+    // that bug the identity style `none` would come back wearing dim's ground.
     const none = cells.find((c) => c.name === "none")!;
     const dim = cells.find((c) => c.name === "dim")!;
     expect(none.bg).toBe(paletteRole(palette, "background").hex);
@@ -1559,7 +1559,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", progression: PROGRESSIONS["secondary-accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
     const cells = optionCells(sink, "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {

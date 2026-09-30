@@ -63,7 +63,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
-    style: "powerline" as const,
+    endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
@@ -250,7 +250,7 @@ describe("config-validators registry", () => {
   // SessionState keyspace's set-state wire the shared factory defaults to.
   test("a slash-bearing config allow-list member's rejection names the set-config wire", () => {
     expect(() =>
-      registerConfigValidator("look", {
+      registerConfigValidator("style", {
         kind: "allow-list",
         allowed: ["a/b"],
       }),
@@ -285,13 +285,13 @@ describe("persist/reset action loader shape", () => {
     const config = parseAndValidate(
       "<test>",
       base(`{
-        a: { persist: 'look', to: 'vivid' },
+        a: { persist: 'style', to: 'vivid' },
         b: { persist: 'padding', min: 0, max: 16, by: 1 },
         c: { persist: 'autoWrap', cycle: ['true', 'false'] },
       }`),
       ALLOWED,
     );
-    expect(config.actions.a).toEqual({ persist: "look", to: "vivid" });
+    expect(config.actions.a).toEqual({ persist: "style", to: "vivid" });
     expect(config.actions.b).toEqual({
       persist: "padding",
       min: 0,
@@ -614,11 +614,11 @@ describe("persist action click → the config file", () => {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
     },
     actions: {
-      applyLookForever: { persist: 'look', to: 'vivid' },
+      applyStyleForever: { persist: 'style', to: 'vivid' },
       cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256'] },
       bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 },
     },
-    segments: { bar: { template: '{{ action "applyLookForever" "vivid" }} {{ action "cycleColorDepth" "cd" }} {{ action "bumpPadding" "+" }}', bg: 'surface', fg: 'foreground' } },
+    segments: { bar: { template: '{{ action "applyStyleForever" "vivid" }} {{ action "cycleColorDepth" "cd" }} {{ action "bumpPadding" "+" }}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
   }`;
 
@@ -628,7 +628,7 @@ describe("persist action click → the config file", () => {
     const effect = effectsOf(urls[0]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[0]!);
-    expect(globalsInFile()).toEqual({ look: "vivid" });
+    expect(globalsInFile()).toEqual({ style: "vivid" });
     dispose();
   });
 

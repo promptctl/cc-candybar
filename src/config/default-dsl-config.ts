@@ -696,7 +696,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // wants it always-on overrides this one segment's `when` to `"true"`.
     //
     // `bg: "warning"` is load-bearing, not decoration: warning is one of the
-    // hue-ANCHORED palette roots, so it survives every theme and look still
+    // hue-ANCHORED palette roots, so it survives every theme and style still
     // reading as an alert. Any other slot could land camouflaged against its
     // neighbours — exactly what a "wrong machine" warning must never do.
     // No `fg:`: the text is chosen on whatever that resolves to, like every
@@ -724,7 +724,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // below, a template evaluating to a colour: `bgOf` is available there
     // because a segment's background is resolved before its foreground, so
     // structural text sits a fixed distance from THIS cell whatever theme or
-    // look is in effect, and the eye lands on the painted facts first.
+    // style is in effect, and the eye lands on the painted facts first.
     gitaculous: {
       description:
         "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact — repo, in-progress operation, sha, upstream ±, stash count, time since the last commit.",
@@ -1156,17 +1156,17 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     ),
   },
 
-  // ─── Looks ───────────────────────────────────────────────────────────────
+  // ─── Styles ───────────────────────────────────────────────────────────────
   // Named theme ADAPTATIONS — each is a full rich-js ThemeKey applied on top
   // of whatever base theme is active (a transform, not a palette), so every
-  // look composes with every theme: pick theme, then pick look. Selected per
-  // session via the `look` SessionState key (an action `{ set: "look", from:
-  // "looks" }` + a `{{ menu }}`), exactly the theme/style selection seam.
+  // style composes with every theme: pick theme, then pick style. Selected per
+  // session via the `style` SessionState key (an action `{ set: "style", from:
+  // "styles" }` + a `{{ menu }}`), exactly the theme/endcaps selection seam.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib — including the "none" identity floor effectiveLookName collapses
+  // stdlib — including the "none" identity floor effectiveStyleName collapses
   // to — is present in every merged config by construction.
-  looks: {
-    // [LAW:dataflow-not-control-flow] "none" is just the identity look — the
+  styles: {
+    // [LAW:dataflow-not-control-flow] "none" is just the identity style — the
     // resolution floor as a value, not a special case (rich-js's isIdentityKey
     // fast-path makes it free). Spelled literally (not rich-js IDENTITY /
     // INVERT_LIGHTNESS) so the bundled default remains inert JSON-shaped data
@@ -1213,14 +1213,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // ─── Presets ─────────────────────────────────────────────────────────────
   // Named config FRAGMENTS — each an alternative `root` + display `globals`,
   // i.e. a whole arrangement of the bar rather than one knob. A preset is to
-  // configuration what a look is to a theme, and rides the identical seam:
+  // configuration what a style is to a theme, and rides the identical seam:
   // selected per session via the `preset` SessionState key — or pinned as the
   // durable default via `globals.preset` — through the settings menu's preset
   // control and its save (src/config/settings-menu.ts), resolved as session
   // pick over globals.preset over this floor.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
   // stdlib is present in every merged config by construction, exactly as
-  // looks' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
+  // styles' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
   // "verbose" wins per name; the floor cannot be shadowed by anything but an
   // empty fragment, because that IS what it already is.
   //
@@ -1334,7 +1334,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
     // For heads-down work where the bar should stay out of the way: one row,
     // only where you are and how much context is left, powerline chrome traded
-    // for plain text and the whole bar receded under the `dim` look. It is the
+    // for plain text and the whole bar receded under the `dim` style. It is the
     // quiet end of the library the way `verbose` is the loud one — `compact`
     // saves width, this saves attention.
     zen: {
@@ -1346,7 +1346,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "context" },
         ],
       },
-      globals: { style: "plain", look: "dim" },
+      globals: { endcaps: "plain", style: "dim" },
     },
 
     // For branch-and-PR work — juggling reviews, rebases, several branches:
@@ -1482,7 +1482,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // (not "│") because it must survive `charset: "ascii"` — the fragment does
   // not, and should not, know the terminal's glyph coverage.
   editGlobals: {
-    style: "plain",
+    endcaps: "plain",
     default_separator: " | ",
   },
 

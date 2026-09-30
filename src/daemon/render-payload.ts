@@ -35,13 +35,13 @@ import {
 } from "../config/loader/edit-mode.js";
 import {
   effectiveAutoWrap,
-  resolveLookSelection,
-  type LookSelection,
+  resolveStyleSelection,
+  type StyleSelection,
   effectivePadding,
-  effectiveStripStyle,
+  effectiveEndcaps,
   effectiveCharset,
   effectiveColorCompatibility,
-  effectiveProgression,
+  effectiveVariation,
   effectiveUpdateNotice,
   EXPRESSION_SLOTS,
   isExpression,
@@ -78,12 +78,8 @@ import {
 } from "../segments/autocompact.js";
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import type { GitDataProvider } from "./cache/git.js";
-import type {
-  Charset,
-  ColorCompatibility,
-  StripStyle,
-} from "../themes/policy.js";
-import type { ProgressionName } from "../themes/decor.js";
+import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import type { VariationName } from "../themes/decor.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
 
@@ -91,7 +87,7 @@ import type { ProgressionName } from "../themes/decor.js";
 // per render (server.ts, before both the payload build and renderDsl's
 // BuildLineOptions), so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
-// theme/look already followed, generalized to every globals field a menu or
+// theme/style already followed, generalized to every globals field a menu or
 // stepper can persist. Every one of them composes SessionState over the config
 // default (a session pick can diverge from the persisted default for its own
 // session) — `charset` and `colorCompatibility` included, because a session
@@ -99,7 +95,7 @@ import type { ProgressionName } from "../themes/decor.js";
 // themes/policy.ts).
 export interface EffectiveGlobals {
   // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
-  // (brandon-themes-dzl) — `look`'s twin one dimension over, and for the same
+  // (brandon-themes-dzl) — `style`'s twin one dimension over, and for the same
   // reason: a session pick, a staged fragment and a plain `globals.palette` all
   // resolve to a `decided` arm carrying the name AND the base palette it denotes,
   // while a `globals.palette` holding a TEMPLATE resolves to an `expression` arm,
@@ -108,15 +104,15 @@ export interface EffectiveGlobals {
   // `theme.effective` is published — which is why the payload below carries no
   // `theme` field and the server hands renderDsl no separate base palette.
   readonly theme: ThemeSelection;
-  // [LAW:types-are-the-program] The look as far as it can be resolved HERE
+  // [LAW:types-are-the-program] The style as far as it can be resolved HERE
   // (brandon-looks-pe6). A session pick, a staged fragment and a plain
-  // `globals.look` all resolve to a `decided` arm exactly as they always did; a
-  // `globals.look` holding a TEMPLATE resolves to an `expression` arm, because
+  // `globals.style` all resolve to a `decided` arm exactly as they always did; a
+  // `globals.style` holding a TEMPLATE resolves to an `expression` arm, because
   // the store does not hold this render's values until renderDsl pushes them —
   // so renderDsl finishes that one rung, and is therefore also the one place
-  // `look.effective` is published. That is why this struct carries no look NAME
-  // and the payload below carries no `look` field.
-  readonly look: LookSelection;
+  // `style.effective` is published. That is why this struct carries no style NAME
+  // and the payload below carries no `style` field.
+  readonly style: StyleSelection;
   // The active PRESET name — effectivePresetName(sessionState.preset,
   // globals.preset, presets), collapsed to the floor if stale. Unlike every
   // other field here it is not itself a display value: it is the name of the
@@ -133,10 +129,10 @@ export interface EffectiveGlobals {
   // the wrong preset after a reload lands mid-render. Not itself a display
   // value either — see `preset`'s own comment.
   readonly presetCustomized: boolean;
-  readonly style: StripStyle;
+  readonly endcaps: Endcaps;
   // Which theme role each row of the closed bar wears — the render's
-  // selection carries it into the walk (RenderSelection.progression).
-  readonly progression: ProgressionName;
+  // selection carries it into the walk (RenderSelection.variation).
+  readonly variation: VariationName;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
   // segments (globals.default_separator). `string | undefined`, not a resolved
   // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
@@ -199,21 +195,21 @@ export function resolveEffectiveGlobals(
       sessionPick("theme"),
       globals.palette,
     ),
-    look: resolveLookSelection(
-      staged.look,
-      sessionPick("look"),
-      globals.look,
-      config.looks,
-    ),
-    style: effectiveStripStyle(
+    style: resolveStyleSelection(
       staged.style,
       sessionPick("style"),
       globals.style,
+      config.styles,
     ),
-    progression: effectiveProgression(
-      staged.progression,
-      sessionPick("progression"),
-      globals.progression,
+    endcaps: effectiveEndcaps(
+      staged.endcaps,
+      sessionPick("endcaps"),
+      globals.endcaps,
+    ),
+    variation: effectiveVariation(
+      staged.variation,
+      sessionPick("variation"),
+      globals.variation,
     ),
     // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
     // `staged ?? config ?? floor` — the same chain minus the rung they do not
@@ -248,8 +244,8 @@ export function resolveEffectiveGlobals(
 }
 
 // The resolved globals as the two arguments renderDsl draws with: the options
-// its joiner and cells read, and the selection it finishes (theme, look, preset,
-// progression). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
+// its joiner and cells read, and the selection it finishes (theme, style, preset,
+// variation). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
 // the demo all project THROUGH these, so a field added to EffectiveGlobals
 // reaches every renderer at once and no caller can leave one out — a hand copy
 // of this projection had already dropped `separator` (brandon-menu-ia-zyf).
@@ -258,7 +254,7 @@ export function renderOptionsOf(
   width: number,
 ): BuildLineOptions {
   return {
-    style: effective.style,
+    endcaps: effective.endcaps,
     separator: effective.separator,
     colorCompatibility: effective.colorCompatibility,
     wrap: effective.autoWrap,
@@ -273,23 +269,23 @@ export function renderSelectionOf(
 ): RenderSelection {
   return {
     theme: effective.theme,
-    look: effective.look,
+    style: effective.style,
     preset: effective.preset,
-    progression: effective.progression,
+    variation: effective.variation,
   };
 }
 
 // The `.effective` inputs a render reads back — the resolved globals, as the
 // payload fields a settings label or a carousel centre reads. No `theme` or
-// `look`: renderDsl injects both, because under a rule only it knows the answer.
+// `style`: renderDsl injects both, because under a rule only it knows the answer.
 // [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
 // and the demo's payload all spread THIS, so a caller cannot render a label
 // blank by forgetting a field the daemon's payload carries.
 export type EffectiveInputs = Pick<
   RenderPayload,
   | "preset"
-  | "style"
-  | "progression"
+  | "endcaps"
+  | "variation"
   | "charset"
   | "colorCompatibility"
   | "autoWrap"
@@ -304,8 +300,8 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
       customized: effective.presetCustomized,
       bundled: isBundledPreset(effective.preset),
     },
-    style: { effective: effective.style },
-    progression: { effective: effective.progression },
+    endcaps: { effective: effective.endcaps },
+    variation: { effective: effective.variation },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
@@ -333,23 +329,23 @@ export interface RenderPayload extends ClaudeHookData {
 
   readonly git?: GitPayload;
   readonly tmux?: { readonly session: string };
-  // [LAW:types-are-the-program] REQUIRED for the same reason theme/look are:
+  // [LAW:types-are-the-program] REQUIRED for the same reason theme/style are:
   // the daemon assembles it every render from sources that cannot be "not
   // requested" (two syscalls and one already-parsed wire hint). The fields
   // INSIDE it carry the real optionality — see HostPayload.
   readonly host: HostPayload;
-  // `theme.effective` and `look.effective` are deliberately NOT fields here.
+  // `theme.effective` and `style.effective` are deliberately NOT fields here.
   // They are the two selections whose config rung may hold an EXPRESSION
   // (brandon-looks-pe6, brandon-themes-dzl), so each fold finishes inside
   // renderDsl — which therefore injects `theme: { effective }` and
-  // `look: { effective }` into the payload it pushes, exactly as it injects
+  // `style: { effective }` into the payload it pushes, exactly as it injects
   // `term: { cols }`. ONE producer per field, so the name a label displays and
   // the palette the bar actually wears cannot disagree
   // [LAW:one-source-of-truth]. `EffectiveGlobals` above carries the SELECTIONS
   // that render resolves.
   // [LAW:one-type-per-behavior] The daemon-resolved effective PRESET name —
   // effectivePresetName(sessionState.preset, globals.preset, presets) — theme
-  // and look's twin one level up: the SAME name that selected the layout this
+  // and style's twin one level up: the SAME name that selected the layout this
   // render walked and the globals it rendered with, surfaced so a preset
   // trigger's label can never claim an arrangement the bar is not in.
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — `customized` rides
@@ -366,20 +362,20 @@ export interface RenderPayload extends ClaudeHookData {
     readonly customized: boolean;
     readonly bundled: boolean;
   };
-  // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
-  // padding are theme/look's twins over the remaining persistable globals
+  // [LAW:one-type-per-behavior] endcaps/charset/colorCompatibility/autoWrap/
+  // padding are theme/style's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
   // present for the same reason: the daemon already resolves the value for
   // BuildLineOptions every render, and this is that exact value, so a
   // trigger's "current selection" highlight and the render it describes
   // trace to one resolution. See EffectiveGlobals for how each is derived.
-  // [LAW:types-are-the-program] Unlike theme/look (open, registry-extensible
-  // names with no closed union to narrow to), style/charset/colorCompatibility
-  // DO have one (StripStyle/Charset/ColorCompatibility) — narrowed to it
+  // [LAW:types-are-the-program] Unlike theme/style (open, registry-extensible
+  // names with no closed union to narrow to), endcaps/charset/colorCompatibility
+  // DO have one (Endcaps/Charset/ColorCompatibility) — narrowed to it
   // rather than widened to `string`, so a downstream `switch` over these
   // fields gets real exhaustiveness checking.
-  readonly style: { readonly effective: StripStyle };
-  readonly progression: { readonly effective: ProgressionName };
+  readonly endcaps: { readonly effective: Endcaps };
+  readonly variation: { readonly effective: VariationName };
   readonly charset: { readonly effective: Charset };
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };
@@ -938,7 +934,7 @@ export function buildNeededPrefixes(
   const reads = (src: string): Iterable<string> =>
     templateReads(src, config.helpers).keys();
 
-  // A globals rule (a theme or look chosen by data) reads variables too, and it
+  // A globals rule (a theme or style chosen by data) reads variables too, and it
   // runs every render — seed its reads so a provider feeding only the rule is
   // not gated out and the rule never evaluates against unfilled defaults. The
   // rule in force is the active preset's config-default rung (`presetGlobals`,

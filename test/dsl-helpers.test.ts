@@ -22,7 +22,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 // [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
 // each render a single line so substring assertions are stable.
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
@@ -36,7 +36,7 @@ const EMPTY_DEFAULT: DslConfig = {
   segments: {},
   root: { rows: {} },
   actions: {},
-  looks: {},
+  styles: {},
   presets: {},
   helpers: {},
   editGlobals: {},

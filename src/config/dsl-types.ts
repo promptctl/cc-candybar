@@ -14,22 +14,14 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
-// [LAW:one-source-of-truth] A look IS a rich-js ThemeKey (four numeric axes:
+// [LAW:one-source-of-truth] A style IS a rich-js ThemeKey (four numeric axes:
 // hueShift / chromaScale / lightnessScale / lightnessShift) — the config type
 // references the vocabulary owner's type verbatim, so a rich-js axis rename is
 // a compile error here, never silent drift. Type-only: no runtime rich-js
 // dependency enters the config layer.
 import type { ThemeKey } from "@promptctl/rich-js";
-import type {
-  Charset,
-  ColorCompatibility,
-  StripStyle,
-} from "../themes/policy.js";
-import type {
-  Axis,
-  DistributionName,
-  ProgressionName,
-} from "../themes/decor.js";
+import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import type { Axis, DistributionName, VariationName } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import { FOLLOW_BAR, isPlacementThemeName } from "../themes/policy.js";
 
@@ -356,7 +348,7 @@ export function childrenOf(node: LayoutNode): readonly LayoutNode[] {
 // nothing and only the merge got harder [LAW:no-ambient-temporal-coupling].
 // `root` and `globals` have no such problem: the root is WALKED per render (so
 // every preset's tree is compiled up front and one is selected by name, exactly
-// how every look's ThemeKey is resolved up front and one is selected by name),
+// how every style's ThemeKey is resolved up front and one is selected by name),
 // and globals already resolve per render into EffectiveGlobals.
 //
 // Read as a rule an author can hold: a preset may carry what the bar RESOLVES
@@ -387,8 +379,8 @@ export interface RawDslConfig {
   readonly root?: RootFragment;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // Named config fragments ("presets"): each an alternative `root`/`globals`
-  // arrangement selected per session, the exact twin of `looks` one level up
-  // (a look adapts the THEME; a preset adapts the LAYOUT + display globals).
+  // arrangement selected per session, the exact twin of `styles` one level up
+  // (a style adapts the THEME; a preset adapts the LAYOUT + display globals).
   // Both fields are optional, so a file's preset is always a delta over a
   // bundled one of the same name — laid over it field by field, like a
   // segment's (loader/merge.ts).
@@ -396,11 +388,11 @@ export interface RawDslConfig {
   // The display globals edit mode stages while it is on — see DslConfig's own
   // `editGlobals` for the shape, the merge, and where it sits in the chain.
   readonly editGlobals?: Partial<Globals>;
-  // Named theme-adaptation bundles ("looks"): each is a full ThemeKey (the
+  // Named theme-adaptation bundles ("styles"): each is a full ThemeKey (the
   // loader normalizes absent axes to identity at parse). Applied ON TOP of the
   // active theme at render — a transform composing with every theme, selected
-  // per session exactly like theme/style (session key `look`).
-  readonly looks?: Readonly<Record<string, ThemeKey>>;
+  // per session exactly like theme/style (session key `style`).
+  readonly styles?: Readonly<Record<string, ThemeKey>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
   // body. Each compiles to one `{{ define "name" }}body{{ end }}` unit, and the
   // whole set into one shared define set every template this config parses
@@ -427,18 +419,18 @@ export interface DslConfig {
   // template cannot smuggle an un-gated write. Empty when no config declares
   // actions — an absent `actions` key merges to `{}`.
   readonly actions: Readonly<Record<string, ActionDecl>>;
-  // [LAW:one-source-of-truth] The effective look set: name → full ThemeKey.
+  // [LAW:one-source-of-truth] The effective style set: name → full ThemeKey.
   // Merges by name with the bundled default (user wins per name), like
-  // segments/actions/variables — so the default's `none` (the identity look and
-  // the resolution floor of effectiveLookName) is present in EVERY merged
-  // config by construction. An action `{ set: …, from: "looks" }` ranges these
+  // segments/actions/variables — so the default's `none` (the identity style and
+  // the resolution floor of effectiveStyleName) is present in EVERY merged
+  // config by construction. An action `{ set: …, from: "styles" }` ranges these
   // names; the derived click gate and the rendered options read this one map.
-  readonly looks: Readonly<Record<string, ThemeKey>>;
+  readonly styles: Readonly<Record<string, ThemeKey>>;
   // [LAW:one-source-of-truth] The effective preset set: name → config fragment.
   // Merges by name with the bundled default (user wins per name) like every
   // other section — so the default's `default` preset (the empty fragment, and
   // the resolution floor of effectivePresetName) is present in EVERY merged
-  // config by construction, exactly as `looks` guarantees `none`. An action
+  // config by construction, exactly as `styles` guarantees `none`. An action
   // `{ set: …, from: "presets" }` ranges these names; the derived click gate and
   // the rendered options read this one map.
   readonly presets: Readonly<Record<string, PresetDecl>>;
@@ -446,7 +438,7 @@ export interface DslConfig {
   // on — the `globals` half of the fragment whose `root` half edit chrome
   // already stages (src/config/edit-chrome.ts). Merges FIELD BY FIELD with the
   // bundled default's (like `globals` itself and `root`'s rows), so a
-  // user retuning the separator keeps the bundled `style: "plain"`.
+  // user retuning the separator keeps the bundled `endcaps: "plain"`.
   //
   // [LAW:types-are-the-program] `Partial<Globals>`, deliberately NOT
   // `PresetDecl`: a preset is root + globals, and edit mode needs only the
@@ -457,9 +449,9 @@ export interface DslConfig {
   //
   // Its rung in the precedence chain is the RIGHTMOST one (see
   // src/config/presets.ts): it outranks even a session pick, because entering
-  // edit mode is decided later than picking a style. Nothing writes it back to
+  // edit mode is decided later than picking endcaps. Nothing writes it back to
   // SessionState or the config file, which is why leaving edit mode
-  // restores the previous look with no save/restore path
+  // restores the previous style with no save/restore path
   // [LAW:dataflow-not-control-flow].
   readonly editGlobals: Partial<Globals>;
   // [LAW:single-enforcer] The effective helper set: a name → template-body map
@@ -492,19 +484,19 @@ export interface Globals {
   // `theme` setting other than `bar` ignores it.
   readonly palette?: string;
 
-  // [LAW:one-type-per-behavior] The config default for the LOOK (a named
-  // theme-adaptation from the `looks` block) — the exact twin of `palette` one
-  // dimension over: the daemon resolves the live look per render as
-  // `sessionState.look ?? globals.look ?? "none"` (effectiveLookName), so a
-  // look click recolors the bar live and a config can set a default adaptation
-  // without an edit-per-session. Membership in the merged `looks` map is
-  // validated post-merge (cross-ref) — a user's globals.look may name a
-  // default-provided look.
-  readonly look?: string;
+  // [LAW:one-type-per-behavior] The config default for the STYLE (a named
+  // theme-adaptation from the `styles` block) — the exact twin of `palette` one
+  // dimension over: the daemon resolves the live style per render as
+  // `sessionState.style ?? globals.style ?? "none"` (effectiveStyleName), so a
+  // style click recolors the bar live and a config can set a default adaptation
+  // without an edit-per-session. Membership in the merged `styles` map is
+  // validated post-merge (cross-ref) — a user's globals.style may name a
+  // default-provided style.
+  readonly style?: string;
 
   // [LAW:one-type-per-behavior] The config default for the PRESET (a named
   // config fragment from the `presets` block) — the same twin-of-`palette`
-  // shape as `look` one dimension over: the daemon resolves the live preset per
+  // shape as `style` one dimension over: the daemon resolves the live preset per
   // render as `sessionState.preset ?? globals.preset ?? "default"`
   // (effectivePresetName), so a preset click restages the bar live and a config
   // can pick a default arrangement without an edit-per-session. Membership in
@@ -518,11 +510,11 @@ export interface Globals {
 
   // [LAW:one-type-per-behavior] The config default for the powerline cap/
   // separator SHAPE — the exact twin of `palette` one dimension over: the
-  // daemon resolves the live strip style per render as
-  // `sessionState.style ?? globals.style ?? "powerline"` (effectiveStripStyle),
-  // so a style click reshapes the bar live and a config can set the default
+  // daemon resolves the live endcaps per render as
+  // `sessionState.endcaps ?? globals.endcaps ?? "powerline"` (effectiveEndcaps),
+  // so an endcaps click reshapes the bar live and a config can set the default
   // shape without an edit-per-session.
-  readonly style?: StripStyle;
+  readonly endcaps?: Endcaps;
 
   // The legacy display.autoWrap knob: whether FlexStrip soft-wraps a root
   // row that exceeds the usable width. Default true (current behavior);
@@ -543,16 +535,16 @@ export interface Globals {
   // render with. Default "unicode" (current behavior — rich-js's powerline
   // caps, U+E0Bx). "ascii" swaps the caps for single-column ASCII glyphs so
   // terminals/fonts without powerline glyphs render cleanly instead of tofu.
-  // Orthogonal to `style`: style picks the joiner shape, charset the glyphs.
+  // Orthogonal to `endcaps`: endcaps pick the joiner shape, charset the glyphs.
   // The config default under a session pick — `effectiveCharset` resolves
   // both into renderOpts.charset.
   readonly charset?: Charset;
 
   // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of PROGRESSIONS (src/themes/decor.ts). Default "secondary-accent".
-  // The config default under a session pick — `effectiveProgression` resolves
+  // entry of VARIATIONS (src/themes/decor.ts). Default "accent".
+  // The config default under a session pick — `effectiveVariation` resolves
   // both into the render's selection.
-  readonly progression?: ProgressionName;
+  readonly variation?: VariationName;
 
   readonly menuGlyph?: string;
 

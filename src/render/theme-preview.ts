@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] `{{ themePreview }}` — a small sample of the theme
 // the bar is wearing, drawn from the colours the bar itself is drawn from
 // (brandon-theme-picker-bgw.ef6): every decoration a closed cell can wear under
-// the render's progression (each of its roles at each tone), the
+// the render's variation (each of its roles at each tone), the
 // state/plane pair an open disclosure wears, and the two alerts. Nothing here
 // computes a colour. Each swatch is a call to the SAME function the render walk
 // calls for that kind of cell (`decorEntryColour`, `bandFor`, the role lookup),
@@ -12,7 +12,7 @@
 //
 // The palette sampled is the render's own, not the active segment's: a segment
 // pinned to another theme by `palette:` still previews the bar's theme, which
-// is what a theme or look control is choosing.
+// is what a theme or style control is choosing.
 //
 // [LAW:one-way-deps] Lives in render/, injected into the engine as data by
 // registerDslConfig; the generic engine never imports it.
@@ -26,7 +26,7 @@ import {
   OPEN_HUE,
   paletteRole,
   vocabularyOf,
-  type Progression,
+  type Variation,
 } from "../themes/decor.js";
 import type { ActionRuntime } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
@@ -49,12 +49,12 @@ export interface Swatch {
 // against the cell the bar renders, rather than re-reading them off bytes.
 export function previewSwatches(
   palette: Palette,
-  progression: Progression,
+  variation: Variation,
   drawnAt: ColorDepth,
 ): readonly Swatch[][] {
   const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 }, drawnAt);
   return [
-    vocabularyOf(progression).map((entry, i) => ({
+    vocabularyOf(variation).map((entry, i) => ({
       text: BAR_WORDS[i % BAR_WORDS.length]!,
       colour: decorEntryColour(palette, entry),
     })),
@@ -75,13 +75,13 @@ export function previewSwatches(
 // the terminal breaks away from its ✕.
 export function renderThemePreview(
   palette: Palette,
-  progression: Progression,
+  variation: Variation,
   drawnAt: ColorDepth,
   available: number,
 ): RichText {
   // Swatches in a group touch, like neighbouring bar cells; groups are set
   // apart by one space of whatever the preview sits on.
-  const cells = previewSwatches(palette, progression, drawnAt).flatMap(
+  const cells = previewSwatches(palette, variation, drawnAt).flatMap(
     (group, g) =>
       group.map(({ text, colour }, i) => ({
         gap: g > 0 && i === 0 ? " " : "",
@@ -113,7 +113,7 @@ export function themePreviewFuncs(
       fn: () =>
         renderThemePreview(
           runtime.palette,
-          runtime.progression,
+          runtime.variation,
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
         ),

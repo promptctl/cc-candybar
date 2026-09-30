@@ -53,7 +53,7 @@ const FIXTURE_SOURCE = readFileSync(
 // Infinity so the committed snapshot stays a single line — wrap behavior
 // is tested in test/strip-flex.test.ts (the renderStripCells wrap path).
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };

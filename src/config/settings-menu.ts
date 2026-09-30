@@ -178,13 +178,13 @@ const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
 const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
-// one key holds one open member, so opening a theme picker closes the look
+// one key holds one open member, so opening a theme picker closes the style
 // picker. The settings menu is a narrow panel — two open drop-downs would
 // overflow it — and this is the same shared-key mechanism group sugar uses,
 // selected by a value, not a mode.
 const PICKER_KEY = `${SETTINGS_NS}pickers`;
 
-// The theme and look carousels share one preview: both choose the palette the
+// The theme and style carousels share one preview: both choose the palette the
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
 const PALETTE_PREVIEW = ["{{ themePreview }}"];
 
@@ -205,11 +205,11 @@ const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
       `{{ end }}`,
   ],
   theme: PALETTE_PREVIEW,
-  look: PALETTE_PREVIEW,
-  // A progression says which role each ROW wears — `{{ layoutPreview }}`
-  // draws every row, each block in the tint the ring's current progression
+  style: PALETTE_PREVIEW,
+  // A variation says which role each ROW wears — `{{ layoutPreview }}`
+  // draws every row, each block in the tint the ring's current variation
   // deals it.
-  progression: ["{{ layoutPreview }}"],
+  variation: ["{{ layoutPreview }}"],
 };
 
 // [LAW:one-source-of-truth] A control's names, derived from its setting's

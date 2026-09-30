@@ -43,18 +43,18 @@ you read back rather than guess at (docs/segment-authoring.md shows one).
 `cc-candybar lint` is an alias; `cc-candybar schema` prints the JSON Schema.
 
 A user config **merges onto the bundled default** by name (globals per-field;
-variables/segments/actions/looks/helpers/`root.rows` per-name; a whole tree at
+variables/segments/actions/styles/helpers/`root.rows` per-name; a whole tree at
 `root` replaces every row).
 Declare only what differs. The bundled default already declares `session.id`,
-`theme.effective`, `look.effective`, `term.cols`, every built-in segment, and a
-looks stdlib (`none`, `vivid`, `muted`, `dim`, `bright`, `inverted`) — never
+`theme.effective`, `style.effective`, `term.cols`, every built-in segment, and a
+styles stdlib (`none`, `vivid`, `muted`, `dim`, `bright`, `inverted`) — never
 re-declare them.
 
 ## The decision rule
 
 One rule, applied once per interactive element:
 
-- **Pick a value from an option domain** (theme, style, look) → `{{ menu "applyAction" "▸" "▾" }}`
+- **Pick a value from an option domain** (theme, style, endcaps) → `{{ menu "applyAction" "▸" "▾" }}`
   in a segment template. One call = a clickable trigger whose text you write +
   drop-below picker + all backing state, synthesized. When trying the options
   one after another is the point, `{{ carousel "applyAction" }}` is the same
@@ -82,7 +82,7 @@ declares exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "styles" \| "looks" \| "progressions" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
+| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -108,15 +108,15 @@ default: "…" }`. (The one exception: never declare state for a `{{ menu }}` �
 its state is synthesized, see below.) A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
-`theme.effective`, and every other field → `<field>.effective` (`look`,
-`style`, `progression`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
+`theme.effective`, and every other field → `<field>.effective` (`style`,
+`endcaps`, `variation`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
 action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
 
 No example below authors `bg:` or `fg:`. A segment with no `bg:` wears a tint
 the theme derives from its position: row n wears step n of the
-`globals.progression` — an ordered list of the theme's decorative roles,
+`globals.variation` — an ordered list of the theme's decorative roles,
 `secondary` then `accent` by default — and each cell of the row one of three
 tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
 to read on whatever its background is. An authored `bg:` is reserved for
@@ -163,7 +163,7 @@ toolbar:
 
 ### Inline option domains — a picker with no registration
 
-`from` names a domain (`"themes"`, `"styles"`, `"looks"`) OR **is** the domain:
+`from` names a domain (`"themes"`, `"endcaps"`, `"styles"`) OR **is** the domain:
 an array of literal values needs no name and no registration. Use this for any
 picker whose options are just a fixed authored list — `{{ menu }}` works
 exactly the same over it:
@@ -231,7 +231,7 @@ once persisted a padding they liked, and what keeps their next click on padding
 winning over the preset.
 
 The same rule puts `edit mode` last: entering edit mode is decided later than
-any pick, so its `editGlobals` fragment (see "Edit mode's own look" below)
+any pick, so its `editGlobals` fragment (see "Edit mode's own display settings" below)
 outranks even a session pick — and only while the mode is on. Nothing is saved
 when it turns on or restored when it turns off; the pick underneath was never
 overwritten, only out-ranked.
@@ -263,13 +263,13 @@ click still carries the session id, for error-surfacing — every config has
 
 ### Drafts and `save`
 
-A setting the menu offers — theme, look, style, progression, charset, colour
+A setting the menu offers — theme, style, variation, endcaps, charset, colour
 depth, wrap, padding, preset — is a **draft** while the bar your session
 renders differs from the bar your config file renders on its own. Nothing
 records that: the daemon compares the two on every render and publishes how
 many differ as the payload input `unsaved`. Pick a value and then pick your
 saved one back, and there is nothing to save; a pick the bar ignores (a preset
-or look your config no longer declares) is never a draft.
+or style your config no longer declares) is never a draft.
 
 `{ save: true }` writes every draft to your config file as ONE edit. Each
 lands where the next reload reads it: a field the saved preset's own `globals`
@@ -361,31 +361,31 @@ carousel; this is the same pair on a bar of your own:
 
 `.preset.bundled` is `false` exactly for a preset you authored.
 
-### The bar's progression
+### The bar's variation
 
-`globals.progression` names which theme role each ROW of the closed bar wears,
-in order, the way a chord progression names degrees: `"secondary-accent"` (the
-default), `"primary-secondary"`, or `"primary"` (every row in one hue). Cells
-inside a row still differ by tone. It resolves like `style` — the session's pick
+`globals.variation` names which theme role each ROW of the closed bar wears,
+in order: `"accent"` (the default: secondary, then accent), `"duo"` (primary,
+then secondary), or `"mono"` (every row in primary). Cells
+inside a row still differ by tone. It resolves like `endcaps` — the session's pick
 over the config value over the default — and the settings menu's `⚙ config`
-row carries a `🎼` carousel over it. `progressions` is a registered domain and
-`{{ .progression.effective }}` its projection, so a control of your own is the
+row carries a `🎼` carousel over it. `variations` is a registered domain and
+`{{ .variation.effective }}` its projection, so a control of your own is the
 same two lines as any other picker:
 
 ```json5 check:pass
 {
-  globals: { progression: "primary-secondary" },
+  globals: { variation: "duo" },
   actions: {
-    applyProgression: { persist: "progression", from: "progressions" },
+    applyVariation: { persist: "variation", from: "variations" },
   },
   segments: {
-    progressionControl: {
-      template: '{{ .progression.effective }} {{ menu "applyProgression" "▸" "▾" }}',
+    variationControl: {
+      template: '{{ .variation.effective }} {{ menu "applyVariation" "▸" "▾" }}',
     },
   },
   root: { v: [
     { h: ["directory", "model"] },
-    { h: ["progressionControl"] },
+    { h: ["variationControl"] },
   ] },
 }
 ```
@@ -394,12 +394,12 @@ A name outside the table is a load error that lists the ones there are:
 
 ```json5 check:fail
 {
-  globals: { progression: "accent-primary" },
+  globals: { variation: "accent-primary" },
 }
 ```
 
 ```error
-globals.progression must be one of: secondary-accent, primary-secondary, primary; got "accent-primary"
+globals.variation must be one of: accent, duo, mono; got "accent-primary"
 ```
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
@@ -428,7 +428,7 @@ draw 256 while its neighbour draws truecolor), how much bar fits in it — and
 two sessions on one machine can sit in two different terminals. Both spellings
 are available for them: `persist:` writes the durable default every session
 sees, `set:` writes only the clicking session's. `charsets` and
-`colorCompatibilities` are registered domains exactly like `themes`/`styles`,
+`colorCompatibilities` are registered domains exactly like `themes`/`endcaps`,
 sourced from the same enums the loader validates `globals.charset` and
 `globals.colorCompatibility` against, so there is no second list to drift out of
 sync. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is a
@@ -533,8 +533,8 @@ different way of working:
 - `"verbose"` — the default's own rows plus a third, surfacing four segments
   the default declares but leaves out (`gitPr`, `burnrate`, `speed`,
   `tokenSparkline`).
-- `"zen"` — one quiet row (directory, context) in `plain` style under the `dim`
-  look, for heads-down work.
+- `"zen"` — one quiet row (directory, context) with `plain` endcaps under the `dim`
+  style, for heads-down work.
 - `"git"` — the open PR beside the git state, and a status row cut to model,
   context and activity, for branch-and-review work.
 - `"usage"` — every cost and limit segment, one concern per row, including
@@ -542,8 +542,8 @@ different way of working:
 - `"dense"` — the default's segments plus session spend on one row at
   `padding: 0`, which auto-wrap folds only where the terminal runs out.
 
-A preset's `globals` (style, look, padding) are part of the arrangement: picking
-`"zen"` changes the style and look too. Every preset carries the settings-menu
+A preset's `globals` (endcaps, style, padding) are part of the arrangement: picking
+`"zen"` changes the endcaps and style too. Every preset carries the settings-menu
 door, so switching to any of them never strands a session without a way back.
 Try them without writing a config at all — open the door and click `▦` — or pin
 one as your default with `globals: { preset: "compact" }`.
@@ -614,7 +614,7 @@ the same zero-engine-edits seam `segments.<name>.palette` rides above.
 ```
 
 The pin lands in the config file the session rendered, and `presets` is a
-per-config domain — the second one, after `looks` — so the name a pin writes
+per-config domain — the second one, after `styles` — so the name a pin writes
 is one that file's merged `presets` block already declares: the same domain
 the `{{ menu }}` picked it from. From then on it is an ordinary
 `globals.preset` line in your file. Delete or rename that preset by hand
@@ -758,7 +758,7 @@ each shown only while it has a step to take.
 A step is one click. A click that writes several things — a save and the
 session picks it releases — is one step, undone together. What counts as
 a settings change is a session pick of a setting the menu offers (theme,
-look, style, progression, charset, colour depth, wrap, padding, preset) and
+style, variation, endcaps, charset, colour depth, wrap, padding, preset) and
 every write to a config file; opening a menu or paging a picker is not, so
 undo never walks back through navigation. A click that changes nothing (a
 pick of the value already in place) records no step.
@@ -949,10 +949,10 @@ mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
 nodes every root lowers to — inside disclosure bodies too, so the cells of an
 open group keep their `+`/`-`. Toggling `edit.mode` changes which `when`
 predicates pass; it never changes what code runs. Padding, charset, and
-strip style apply to chrome exactly as they apply to any segment you'd write
+endcaps apply to chrome exactly as they apply to any segment you'd write
 by hand.
 
-### Edit mode's own look: `editGlobals`
+### Edit mode's own display settings: `editGlobals`
 
 Powerline joiners exist to make adjacent segments read as one continuous
 strip — the opposite of what you want while deciding where one segment ends
@@ -963,7 +963,7 @@ The bundled default stages plain joiners with a visible separator:
 
 ```json5 check:pass
 {
-  editGlobals: { style: 'plain', default_separator: ' | ' },
+  editGlobals: { endcaps: 'plain', default_separator: ' | ' },
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     directory: { template: '~/project' },
@@ -974,8 +974,8 @@ The bundled default stages plain joiners with a visible separator:
 ```
 
 It is an ordinary `globals` fragment, so any display field is fair game —
-`padding`, `palette`, `look`, `autoWrap` — and it merges field by field with
-the bundled one, so retuning the separator keeps `style: 'plain'`:
+`padding`, `palette`, `style`, `autoWrap` — and it merges field by field with
+the bundled one, so retuning the separator keeps `endcaps: 'plain'`:
 
 ```json5 check:pass
 { editGlobals: { default_separator: ' :: ' } }
@@ -1165,7 +1165,7 @@ turn drops below the line it sits on:
 ```
 ✕ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
 ✕ ⎘ id ↗ proj ↗ log ↗ repo   /compact /model /clear   ⚙ config ▾   🧰 tools ▸   ✎ edit
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 secondary-accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺
 ❌ host   directory   gitaculous          ← the bar, unchanged
 ```
 
@@ -1198,7 +1198,7 @@ decline it. The menu's own two lines lead with the door's `✕`.
   because switching arrangement and entering edit mode are what you most often
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
   menu in the same click, so you land on the bar you are about to edit.
-- **`⚙ config`** opens the display settings: theme, look, style, progression,
+- **`⚙ config`** opens the display settings: theme, style, variation, endcaps,
   charset (the joiner glyphs: `unicode` or `ascii`), colour depth
   (`truecolor`, `256`, `ansi`, `none`), wrap, padding and the update notice,
   each ONE control, each with a `↺` that forgets its durable default. The
@@ -1218,13 +1218,13 @@ decline it. The menu's own two lines lead with the door's `✕`.
   `cc-candybar doctor` runs the same checks from a shell, with the exit code as
   the verdict.
 
-Preset, theme, look and style each open a **carousel** under their row — `◀`
+Preset, theme, style, variation and endcaps each open a **carousel** under their row — `◀`
 and `▶` beside the current value, its neighbours either side as the width
 allows — and every click in it applies, so rotating through themes recolours the
-bar at each step. The theme and look carousels carry `{{ themePreview }}` in the
+bar at each step. The theme and style carousels carry `{{ themePreview }}` in the
 row beneath; the preset carousel carries `{{ layoutPreview }}`, the whole
 arrangement drawn small. Every one of these shares one accordion
-key, so opening the look carousel closes the theme carousel: the
+key, so opening the style carousel closes the theme carousel: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
 drop-down open, so you can try several in a row; the `✕` leading each of its
 rows closes it.
@@ -1302,12 +1302,12 @@ action's option domain, dropped onto the line below the enclosing row while
 open.
 
 An option cell is normally coloured by where it sits in the band the menu
-opens. Over a **colour-valued** domain — `themes` and `looks`, the two whose
+opens. Over a **colour-valued** domain — `themes` and `styles`, the two whose
 members ARE colours — each cell is instead painted in the palette that picking it
-would put in force: the theme's (or look's) own background, with its own
+would put in force: the theme's (or style's) own background, with its own
 `primary` as the label. Nothing is authored for this and nothing can turn it off;
 it follows from the domain, so `{{ menu "applyTheme" … }}` shows every theme in
-its own colours while `{{ menu "applyStyle" … }}` keeps the band's. A
+its own colours while `{{ menu "applyEndcaps" … }}` keeps the band's. A
 `distribution` option has no effect on a colour-valued picker, since the colour
 is a fact about the option rather than about its position.
 
@@ -1358,26 +1358,26 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 | `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`) is a load error |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
-Two menus in an accordion (one open at a time), the style pick closing its
+Two menus in an accordion (one open at a time), the endcaps pick closing its
 menu:
 
 ```json5 check:pass
 {
   actions: {
     applyTheme: { set: "theme", from: "themes" },
-    applyStyle: { set: "style", from: "styles" },
+    applyEndcaps: { set: "endcaps", from: "endcaps" },
   },
   segments: {
     themeControl: {
       template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" (dict "key" "pickers") }}',
     },
-    styleControl: {
-      template: '✦ style {{ menu "applyStyle" "▸" "▾" (dict "key" "pickers" "closeOnPick" true) }}',
+    endcapsControl: {
+      template: '✦ endcaps {{ menu "applyEndcaps" "▸" "▾" (dict "key" "pickers" "closeOnPick" true) }}',
     },
   },
   root: { v: [
     { h: ["directory", "model"] },
-    { h: ["themeControl", "styleControl"] },
+    { h: ["themeControl", "endcapsControl"] },
   ] },
 }
 ```
@@ -1436,7 +1436,7 @@ drawn in right now — each tint a closed cell can wear, the colour an open
 disclosure's trigger wears beside its plane, and the `warning`/`error` alerts —
 each drawn by the same function the bar draws that cell with, so it cannot show
 a colour the bar under that theme would not. Under a carousel whose every click
-applies, that is the theme (or look) at the centre of the ring.
+applies, that is the theme (or style) at the centre of the ring.
 
 `{{ layoutPreview }}` is the same idea for the arrangement: one line per row of
 the layout the bar is in, each segment a block labelled with its name (less any
@@ -1465,8 +1465,8 @@ segment sits.
 ```
 
 The apply action must hold a value to centre on: a `{ set, from }` action
-whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `look`,
-`preset`, `style`, `charset`, `colorCompatibility`, `autoWrap`, `padding` —
+whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `style`,
+`preset`, `endcaps`, `variation`, `charset`, `colorCompatibility`, `autoWrap`, `padding` —
 needs no `state` variable: it reads back through its `.effective` projection
 (`theme.effective`), which wins over a `state` variable on the same key, so the
 centre is the value the bar is rendering with even before the session picks
@@ -1479,12 +1479,12 @@ carousel over one is a render error naming the action. A current value outside
 the domain rotates from the domain's first option, and no option reads as
 current.
 
-## `looks`: named theme adaptations (the third option domain)
+## `styles`: named theme adaptations (the third option domain)
 
-A **look** is a named color *transform* applied on top of whatever base theme
-is active — not a palette. Because it is a transform, every look composes with
-every theme: pick theme, then pick look. Declare looks in the top-level
-`looks:` block; each axis mirrors a rich-js ThemeKey field verbatim, all
+A **style** is a named color *transform* applied on top of whatever base theme
+is active — not a palette. Because it is a transform, every style composes with
+every theme: pick theme, then pick style. Declare styles in the top-level
+`styles:` block; each axis mirrors a rich-js ThemeKey field verbatim, all
 optional, absent = identity:
 
 | axis | meaning |
@@ -1494,38 +1494,38 @@ optional, absent = identity:
 | `lightnessScale` | lightness multiplier — `1` identity, `-1` inverts |
 | `lightnessShift` | lightness additive, applied after the scale |
 
-Selection reuses the standard seam: one session key (`look`), one action with
-`from: "looks"`, one `{{ menu }}`. `globals.look` sets the config default
-(session pick wins); `.look.effective` is the resolved active name for
+Selection reuses the standard seam: one session key (`style`), one action with
+`from: "styles"`, one `{{ menu }}`. `globals.style` sets the config default
+(session pick wins); `.style.effective` is the resolved active name for
 trigger labels. The bundled stdlib (`none`, `vivid`, `muted`, `dim`, `bright`,
-`inverted`) merges under your names — `none` is the identity look and the
+`inverted`) merges under your names — `none` is the identity style and the
 resolution floor. A placement whose `theme` setting names a theme ignores the
-look, exactly as it ignores the session theme.
+style, exactly as it ignores the session theme.
 
 ```json5 check:pass
 {
-  looks: {
+  styles: {
     vapor: { hueShift: 40, chromaScale: 1.2 },   // stdlib inherited beside it
   },
   actions: {
-    applyLook: { set: "look", from: "looks" },
+    applyStyle: { set: "style", from: "styles" },
   },
   segments: {
-    lookControl: {
-      template: '◐ {{ .look.effective }} {{ menu "applyLook" "▸" "▾" }}',
+    styleControl: {
+      template: '◐ {{ .style.effective }} {{ menu "applyStyle" "▸" "▾" }}',
     },
   },
   root: { v: [
     { h: ["directory", "model"] },
-    "lookControl",
+    "styleControl",
   ] },
 }
 ```
 
-### A look chosen by data, not by a name
+### A style chosen by data, not by a name
 
-`globals.look` also accepts a **template**, evaluated every render like a `when`.
-Its result names a look. This is the one way to recolour the *whole bar*
+`globals.style` also accepts a **template**, evaluated every render like a `when`.
+Its result names a style. This is the one way to recolour the *whole bar*
 coherently from one fact — every segment moves through the theme's own
 vocabulary, so nothing needs a `bg:` override to say "things are hot now":
 
@@ -1534,7 +1534,7 @@ vocabulary, so nothing needs a `bg:` override to say "things are hot now":
   globals: {
     // Below 80 % of the rate-limit window the bar is untouched; past it the
     // whole thing goes muted, then dim. One expression, every segment.
-    look: '{{ cascade (round .block.nativeUtilization) "0:none" "80:muted" "95:dim" }}',
+    style: '{{ cascade (round .block.nativeUtilization) "0:none" "80:muted" "95:dim" }}',
   },
 }
 ```
@@ -1542,55 +1542,67 @@ vocabulary, so nothing needs a `bg:` override to say "things are hot now":
 Four things to know about that slot:
 
 - **A plain name still works.** The expression form is recognised by shape — a
-  `{{` in the value — and a look name can never contain braces, so there is
+  `{{` in the value — and a style name can never contain braces, so there is
   nothing to declare and nothing to switch on.
-- **A session pick still wins.** Clicking a look, or staging one in edit mode,
+- **A session pick still wins.** Clicking a style, or staging one in edit mode,
   outranks the expression; the expression is the *default*, one rung down. That
   includes picking `none` explicitly — a pick is a decision, so a hot bar does
   not override it.
-- **A result naming no declared look becomes `none`**, exactly as a stale
+- **A result naming no declared style becomes `none`**, exactly as a stale
   session pick does. A typo makes the bar plain, never broken.
-- **A malformed template is a load error**, reported against `globals.look` when
+- **A malformed template is a load error**, reported against `globals.style` when
   the config loads — not once per repaint:
 
 ```json5 check:fail
 {
-  globals: { look: '{{ if .model.display_name }}hot' },   // no {{ end }}
+  globals: { style: '{{ if .model.display_name }}hot' },   // no {{ end }}
 }
 ```
 
 ```error
-globals.look is not a valid template: expected `{{end}}`
+globals.style is not a valid template: expected `{{end}}`
 ```
 
-- **Saving a picked look replaces the expression** with the name you
-  picked, because `globals.look` is the one slot both live in. That is what
+- **Saving a picked style replaces the expression** with the name you
+  picked, because `globals.style` is the one slot both live in. That is what
   committing a default means here; keep the expression if you want the rule
   rather than the answer.
 
-`.look.effective` reads back whatever the expression chose, so a `◐ {{
-.look.effective }}` label always names the look you are actually looking at.
+`.style.effective` reads back whatever the expression chose, so a `◐ {{
+.style.effective }}` label always names the style you are actually looking at.
 
 The block validates loudly: axis names outside the four, non-finite numbers,
-and negative `chromaScale` are load errors, and `globals.look` must name a
-declared look (checked after the merge, so naming a stdlib look is fine):
+and negative `chromaScale` are load errors, and `globals.style` must name a
+declared style (checked after the merge, so naming a stdlib style is fine):
 
 ```json5 check:fail
 {
-  looks: {
+  styles: {
     neon: { saturation: 2, chromaScale: -1 },
   },
 }
 ```
 
 ```error
-Unknown look key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift
+Unknown style key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift
+```
+
+`powerline`, `capsule` and `plain` are **endcaps** — the joiner shape, set with
+`globals.endcaps` — never styles. A style may not take one of those names, and a
+`style` holding one is refused with the key to use:
+
+```json5 check:fail
+{ globals: { style: "capsule" } }
+```
+
+```error
+globals.style: "capsule" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write globals.endcaps: "capsule"
 ```
 
 ### A theme chosen by data, the same way
 
 `globals.palette` accepts a template too, and it is the same slot rule one
-dimension over: a look adapts whatever theme is in force, a theme *replaces* it.
+dimension over: a style adapts whatever theme is in force, a theme *replaces* it.
 Reach for this when the fact is about the environment rather than the
 temperature — which checkout you are in, which cluster you are pointed at:
 
@@ -1598,13 +1610,13 @@ temperature — which checkout you are in, which cluster you are pointed at:
 {
   globals: {
     // One expression picks the whole theme. A plain name still works here;
-    // the template form is recognised by the `{{`, exactly as for `look`.
+    // the template form is recognised by the `{{`, exactly as for `style`.
     palette: '{{ cascade (round .block.nativeUtilization) "0:tokyo-night" "80:gruvbox" }}',
   },
 }
 ```
 
-Everything the `look` slot promises holds here — a plain name still works, a
+Everything the `style` slot promises holds here — a plain name still works, a
 session pick or an edit-mode staging outranks the expression, and a malformed
 template is a load error against `globals.palette` rather than a per-repaint
 throw. `.theme.effective` reads back whatever the expression chose, so a
@@ -1616,7 +1628,7 @@ names only: edit mode's staging outranks every rule, so a rule there is a load
 error.
 
 One thing differs, and it is worth knowing before you write the expression. A
-look naming nothing goes quietly to `none`, because a bar wearing no look is a
+style naming nothing goes quietly to `none`, because a bar wearing no style is a
 perfectly sensible bar. A *theme* naming nothing cannot be quiet: there is no
 "no theme", so the bar falls back to the default theme **and says so above the
 bar**, and `cc-candybar check` fails on it:
@@ -1869,7 +1881,7 @@ parse error:
 
 ```json5 check:fail
 {
-  actions: { applyStyle: { set: "style", from: "styles" } },
+  actions: { applyStyle: { set: "endcaps", from: "endcaps" } },
   segments: { trigger: { template: '{{ menu "applyStyle" "▸" "▾" (dict "key" "pickers", "closeOnPick" true) }}' } },
   root: { v: ["trigger"] },
 }
@@ -2058,7 +2070,7 @@ Template references unknown variable ".curent_dir"
 ```
 
 ```error
-a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
+a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
 ```
 
 ### A `do` member that takes its value from the template, listed after the first

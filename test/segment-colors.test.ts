@@ -289,7 +289,7 @@ describe("phase ordering — palette, then bg, then fg", () => {
   test("the published palette is the one passed in, not one captured at parse", () => {
     // Two clocks closed: ONE parsed template, two palettes, two answers. A
     // palette captured when the config loaded would make these identical while
-    // the rest of the render moved on (a theme click, a look, a hue shift).
+    // the rest of the render moved on (a theme click, a style, a hue shift).
     const h = makeHarness();
     const bgTpl = h.parse('{{ color "primary" }}');
     const blue = resolve(
@@ -459,7 +459,7 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 describe("per-segment hue via palette transposition", () => {
   const base = makeTestPalette();
   // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
-  // look is active (the other three axes identity).
+  // style is active (the other three axes identity).
   const hueKey = (hueShift: number): ThemeKey => ({
     hueShift,
     chromaScale: 1,
@@ -523,7 +523,7 @@ describe("per-segment hue via palette transposition", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 9b. The other three ThemeKey axes — a look's chromaScale/lightnessScale/
+// 9b. The other three ThemeKey axes — a style's chromaScale/lightnessScale/
 // lightnessShift, transposed through the same transposedPalette as hueShift
 // (brandon-themes-07p). Asserted in OKLCH terms (Oklch.fromRgba) so "the
 // saturation moved" is a checked number, not an inference from a differing hex.

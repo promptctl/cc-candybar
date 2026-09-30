@@ -7,11 +7,11 @@
 //   2. the centre is the value the key holds, so after a click the ring is
 //      centred on what the click wrote;
 //   3. neighbours are shown only while the row has room for them;
-//   4. in the settings menu the theme, look and style controls open a carousel
-//      and no longer a grid picker; the theme and look carousels carry the
+//   4. in the settings menu the theme, style and style controls open a carousel
+//      and no longer a grid picker; the theme and style carousels carry the
 //      preview beneath them;
 //   5. every colour in the preview is a colour the bar draws under that theme
-//      (and under that look): the closed cells' tints, the open state and its
+//      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
 import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
@@ -23,8 +23,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  DEFAULT_PROGRESSION,
-  effectiveProgression,
+  DEFAULT_VARIATION,
+  effectiveVariation,
   effectiveCharset,
   effectiveColorCompatibility,
   listResolvablePaletteNames,
@@ -32,7 +32,7 @@ import {
 import type {
   Charset,
   ColorCompatibility,
-  StripStyle,
+  Endcaps,
 } from "../src/themes/policy";
 import {
   resolveThemeSelection,
@@ -54,7 +54,7 @@ import {
   neighbourLevels,
 } from "../src/render/carousel";
 import { previewSwatches } from "../src/render/theme-preview";
-import { PROGRESSIONS } from "../src/themes/decor";
+import { VARIATIONS } from "../src/themes/decor";
 import { renderStripCells } from "../src/render/strip";
 import {
   blockLabel,
@@ -75,22 +75,22 @@ const SID = "ef6";
 function opts(
   width: number,
   padding: number,
-  style: StripStyle,
+  endcaps: Endcaps,
   charset: Charset = "unicode",
   colorCompatibility: ColorCompatibility = "truecolor",
 ) {
-  return { style, colorCompatibility, wrap: true, padding, charset, width };
+  return { endcaps, colorCompatibility, wrap: true, padding, charset, width };
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
 // settings menu is synthesized), install the derived gates, render through
-// renderDsl with the session's theme and look resolved the way the daemon
+// renderDsl with the session's theme and style resolved the way the daemon
 // resolves them, and click through the real verb handlers.
 function rig(
   source: string,
   width = 200,
   padding = 0,
-  style: StripStyle = "powerline",
+  style: Endcaps = "powerline",
 ) {
   const config: ValidatedConfig = parseAndValidate(
     "<user>",
@@ -109,8 +109,8 @@ function rig(
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
   const render = (): string => {
-    const lookName = sessionState.get(SID, "look");
-    const lookKey = lookName == null ? undefined : config.looks[lookName];
+    const styleName = sessionState.get(SID, "style");
+    const styleKey = styleName == null ? undefined : config.styles[styleName];
     const preset = effectivePresetName(
       sessionState.get(SID, "preset"),
       config.globals.preset,
@@ -126,10 +126,10 @@ function rig(
       sessionState.get(SID, "colorCompatibility"),
       config.globals.colorCompatibility,
     );
-    const progression = effectiveProgression(
+    const variation = effectiveVariation(
       undefined,
-      sessionState.get(SID, "progression"),
-      config.globals.progression,
+      sessionState.get(SID, "variation"),
+      config.globals.variation,
     );
     last = renderDsl(
       config,
@@ -143,13 +143,13 @@ function rig(
         model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
         term: { cols: width },
-        style: { effective: sessionState.get(SID, "style") ?? style },
+        endcaps: { effective: sessionState.get(SID, "endcaps") ?? style },
         preset: { effective: preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
         charset: { effective: charset },
         colorCompatibility: { effective: depth },
-        progression: { effective: progression },
+        variation: { effective: variation },
       },
       opts(width, padding, style, charset, depth),
       { perSegmentSink: sink },
@@ -160,9 +160,9 @@ function rig(
           config.globals.palette,
         ),
         preset,
-        progression,
-        ...(lookKey !== undefined && {
-          look: { kind: "decided" as const, name: lookName!, value: lookKey },
+        variation,
+        ...(styleKey !== undefined && {
+          style: { kind: "decided" as const, name: styleName!, value: styleKey },
         }),
       },
     );
@@ -439,23 +439,23 @@ describe("the settings menu's theme, look and style controls are carousels", () 
 
 // brandon-theme-picker-bgw.7g6: which role each row wears is a setting in the
 // ⚙ config row, chosen like every display setting beside it.
-describe("the progression control", () => {
-  test("▶ applies the next progression in this session and the bar's closed cells recolour", () => {
+describe("the variation control", () => {
+  test("▶ applies the next variation in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openCarousel(rt, "progression");
+    openCarousel(rt, "variation");
     expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} secondary-accent ${CAROUSEL_NEXT}`),
+      new RegExp(`${CAROUSEL_PREV} accent ${CAROUSEL_NEXT}`),
     );
     // Row 1 (directory) and row 2 (model) under the default.
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
-    const trial = effectsOf(rt.linkOn("progression", CAROUSEL_NEXT).url);
+    const trial = effectsOf(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
-      ["set-state", "progression", "primary-secondary"],
+      ["set-state", "variation", "duo"],
     ]);
-    rt.click(rt.linkOn("progression", CAROUSEL_NEXT).url);
-    expect(rt.sessionState.get(SID, "progression")).toBe("primary-secondary");
+    rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
+    expect(rt.sessionState.get(SID, "variation")).toBe("duo");
     expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} primary-secondary ${CAROUSEL_NEXT}`),
+      new RegExp(`${CAROUSEL_PREV} duo ${CAROUSEL_NEXT}`),
     );
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
@@ -706,7 +706,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
     expect(labelBudget([row], 29)).toBe(10);
     expect(labelBudget([row], 28)).toBe(9);
     expect(labelBudget([row], 3)).toBe(1);
-    const text = renderLayoutPreview([row], PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR, 20).plain;
+    const text = renderLayoutPreview([row], VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR, 20).plain;
     expect(text).toBe(" menu  dire…  gita… ");
   });
 });
@@ -739,7 +739,7 @@ describe("the preview is the bar's own colours", () => {
       openCarousel(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
       const swatches = new Set(
-        previewSwatches(palette, PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
+        previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
       );
       // What the preview segment actually drew is the swatch set.
       const drawn = backgrounds(rt.sink.get("candybar.carousel.theme.0")!);
@@ -757,30 +757,30 @@ describe("the preview is the bar's own colours", () => {
     },
   );
 
-  test("under a look the preview is the looked palette the bar wears — the look carousel previews it", () => {
+  test("under a style the preview is the styled palette the bar wears — the style carousel previews it", () => {
     const rt = rig(`{ globals: { palette: 'gruvbox' } }`);
-    openCarousel(rt, "look");
-    rt.click(rt.linkOn("look", CAROUSEL_NEXT).url);
-    const look = rt.sessionState.get(SID, "look")!;
+    openCarousel(rt, "style");
+    rt.click(rt.linkOn("style", CAROUSEL_NEXT).url);
+    const look = rt.sessionState.get(SID, "style")!;
     expect(look).not.toBe("none");
     const palette = transposedPalette(
       getThemePalette("gruvbox")!,
-      rt.config.looks[look]!,
+      rt.config.styles[look]!,
     );
     const swatches = new Set(
-      previewSwatches(palette, PROGRESSIONS[DEFAULT_PROGRESSION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
+      previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
     );
-    const drawn = backgrounds(rt.sink.get("candybar.carousel.look.0")!);
+    const drawn = backgrounds(rt.sink.get("candybar.carousel.style.0")!);
     expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
     expect(swatches.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
     rt.dispose();
   });
 
-  test("the style carousel has no preview row: a strip shape is not a palette", () => {
+  test("the endcaps carousel has no preview row: an endcaps shape is not a palette", () => {
     const rt = rig(`{}`);
-    openCarousel(rt, "style");
-    expect(rt.sink.has("candybar.carousel.style")).toBe(true);
-    expect(rt.sink.has("candybar.carousel.style.0")).toBe(false);
+    openCarousel(rt, "endcaps");
+    expect(rt.sink.has("candybar.carousel.endcaps")).toBe(true);
+    expect(rt.sink.has("candybar.carousel.endcaps.0")).toBe(false);
     rt.dispose();
   });
 });

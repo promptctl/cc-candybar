@@ -68,7 +68,7 @@ export class ColorSpecError extends Error {
  * measured 1.05:1 on the dark themes under a light terminal and on the light
  * themes under a dark one (brandon-theme-picker-bgw.b2g).
  *
- * Looks are not this function's concern: they live upstream as WHICH palette
+ * Styles are not this function's concern: they live upstream as WHICH palette
  * it is handed, so bg, fg, and the body all resolve from one palette and their
  * theme-designed relationships are preserved.
  */

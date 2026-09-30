@@ -187,7 +187,7 @@ export interface NodeRenderCtx {
   // `.settings` bound (`placementScope`); everything else reads it as is.
   readonly scope: object;
   // [LAW:one-source-of-truth] The render's palette: the base theme (session
-  // choice over config default) under the render's look, transposed ONCE by
+  // choice over config default) under the render's style, transposed ONCE by
   // the driver — every unpinned segment colours from this one object.
   readonly palette: Palette;
   readonly visible: boolean;
@@ -520,8 +520,8 @@ const segmentType: NodeType<"segment"> = {
 
       // [LAW:dataflow-not-control-flow] The per-placement variability is
       // WHICH palette, and it is a value: this placement's `theme` setting,
-      // the render's palette (the base theme under the look) when it follows
-      // the bar, else the named theme, which ignores the look as it ignores
+      // the render's palette (the base theme under the style) when it follows
+      // the bar, else the named theme, which ignores the style as it ignores
       // the session theme.
       const palette = placementPalette(node.settings.theme, ctx.palette);
 
@@ -530,7 +530,7 @@ const segmentType: NodeType<"segment"> = {
       // object. That is the whole reason the segment is entered before its body
       // evaluates rather than after — a body coloured from a palette resolved
       // independently of the cell it sits in is two palettes in one segment,
-      // and they diverge the moment a theme or look moves.
+      // and they diverge the moment a theme or style moves.
       // [LAW:decomposition] The open menu bodies (`drops`) come back beside
       // the fragments, never inside them — invisible to the inline render, so
       // a menu can sit anywhere in the template, under any wrapper, and

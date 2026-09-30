@@ -68,7 +68,7 @@ const INT_RE = /^-?\d+$/;
 
 // [LAW:one-type-per-behavior] The "values come from list Y" pattern IS the
 // canonical widget-config use case (theme picker draws from themes(), style
-// picker draws from styles(), a custom enum picker draws from a
+// picker draws from endcaps(), a custom enum picker draws from a
 // user-declared list). One factory builds the validator from the list —
 // every callsite that registers an allow-list key passes through the same
 // shape, so error messages, empty-input rejection, and lookup semantics are

@@ -27,7 +27,7 @@ import type { BuildLineOptions } from "../src/render/strip";
 import {
   CHARSETS,
   listResolvablePaletteNames,
-  STRIP_STYLES,
+  ENDCAPS_SHAPES,
 } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -46,7 +46,7 @@ const SIZING: CellSizing = {
 
 function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {
   return {
-    style: "powerline",
+    endcaps: "powerline",
     charset: "unicode",
     width: 40,
     wrap: true,
@@ -73,7 +73,7 @@ function serialize(
 describe("a fill segment absorbs the row's leftover width", () => {
   // The product pin: whatever the chrome costs, the row lands on the width.
   test.each(
-    STRIP_STYLES.flatMap((style) =>
+    ENDCAPS_SHAPES.flatMap((style) =>
       CHARSETS.map((charset) => [style, charset] as const),
     ),
   )(
@@ -82,7 +82,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
       for (const width of [30, 40, 67]) {
         const lines = serialize(
           [fixed("left"), fill("mid"), fixed("right")],
-          opts({ style, charset, width }),
+          opts({ endcaps: style, charset, width }),
         );
         expect({
           style,

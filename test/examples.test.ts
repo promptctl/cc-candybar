@@ -66,7 +66,7 @@ describe("shipped examples load and render through the real cascade", () => {
       registry,
       PAYLOAD,
       {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
         width: 200,
       },

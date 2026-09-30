@@ -161,8 +161,8 @@ describe("setValue — adding an entry matches the container's own style", () =>
   test("an inline object grows inline", () => {
     expect(setValue(`{ a: 1 }`, ["b"], "2")).toBe(`{ a: 1, b: 2 }`);
     expect(setValue(`{ a: 1, }`, ["b"], "2")).toBe(`{ a: 1, b: 2, }`);
-    const after = setValue(CONFIG, ["globals", "look"], '"vivid"');
-    expect(after).toContain(`globals: { palette: 'catppuccin-mocha', padding: 2, look: "vivid", }, // trailing note`);
+    const after = setValue(CONFIG, ["globals", "style"], '"vivid"');
+    expect(after).toContain(`globals: { palette: 'catppuccin-mocha', padding: 2, style: "vivid", }, // trailing note`);
   });
 
   test("an empty object opens onto an indented line", () => {
@@ -231,7 +231,7 @@ describe("deleteValue", () => {
   });
 
   test("an absent path returns the text unchanged; an empty document stays empty", () => {
-    expect(deleteValue(CONFIG, ["globals", "look"])).toBe(CONFIG);
+    expect(deleteValue(CONFIG, ["globals", "style"])).toBe(CONFIG);
     expect(deleteValue(CONFIG, ["nope", "x"])).toBe(CONFIG);
     expect(deleteValue("", ["a"])).toBe("");
   });

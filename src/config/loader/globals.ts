@@ -9,8 +9,8 @@ import {
   COLOR_COMPATIBILITIES,
   DEFAULT_PADDING,
   PADDING_RANGE,
-  PROGRESSION_NAMES,
-  STRIP_STYLES,
+  VARIATION_NAMES,
+  ENDCAPS_SHAPES,
   isExpression,
   type ColorCompatibility,
 } from "../../themes/policy.js";
@@ -147,27 +147,27 @@ const GLOBALS: {
   default_empty_value: textGlobal(optionalStringSpec()),
   default_separator: textGlobal(optionalStringSpec()),
   palette: { spec: paletteOrRuleSpec, domain: { from: "themes" } },
-  // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
-  // registry-static palette set, the look domain is per-config (the merged
-  // `looks` block), so membership is a cross-ref check on the MERGED config —
-  // a user's globals.look may name a default-provided look. That check also
-  // EXEMPTS a template in this slot (brandon-looks-pe6: a look chosen by data
-  // names the rule, not a look), which is a second reason the shape rule here is
+  // [LAW:types-are-the-program] The config-default STYLE name. Unlike the
+  // registry-static palette set, the style domain is per-config (the merged
+  // `styles` block), so membership is a cross-ref check on the MERGED config —
+  // a user's globals.style may name a default-provided style. That check also
+  // EXEMPTS a template in this slot (brandon-looks-pe6: a style chosen by data
+  // names the rule, not a style), which is a second reason the shape rule here is
   // the right one: `string` already admits both, so neither the spec nor the
   // emitted schema needed a new arm. Shape-only here,
   // exactly the shape/meaning split paletteSpec's schema facet keeps.
-  look: { spec: optionalStringSpec(), domain: { from: "looks" } },
+  style: { spec: optionalStringSpec(), domain: { from: "styles" } },
   // [LAW:types-are-the-program] The config-default PRESET name — same
-  // per-config-domain shape as `look` (membership is a post-merge cross-ref
+  // per-config-domain shape as `style` (membership is a post-merge cross-ref
   // check, since a user's globals.preset may name a default-provided preset).
   preset: { spec: optionalStringSpec(), domain: { from: "presets" } },
-  // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
+  // [LAW:types-are-the-program] The endcaps shape is a CLOSED enum (the powerline
   // shapes the joiner can render), unlike the open-ended palette NAME — so it
   // validates by membership and emits a JSON-Schema `enum`.
-  style: enumGlobal(STRIP_STYLES),
-  // [LAW:types-are-the-program] Closed enum like `style`: the named bar
-  // progressions — which theme role each row of the closed bar wears.
-  progression: enumGlobal(PROGRESSION_NAMES),
+  endcaps: enumGlobal(ENDCAPS_SHAPES),
+  // [LAW:types-are-the-program] Closed enum like `endcaps`: the named bar
+  // variations — which theme role each row of the closed bar wears.
+  variation: enumGlobal(VARIATION_NAMES),
   autoWrap: boolGlobal(),
   // Intra-cell spaces per side. Bounded above so a config value can never
   // drive an unbounded `" ".repeat` allocation in the daemon
@@ -180,7 +180,7 @@ const GLOBALS: {
     spec: optionalIntSpec(PADDING_RANGE),
     domain: { ...PADDING_RANGE, step: 1 },
   },
-  // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
+  // [LAW:types-are-the-program] Closed enum like `endcaps`: the joiner glyph
   // vocabularies pickJoiner can render — validates by membership, emits a
   // JSON-Schema `enum` from the same CHARSETS literal.
   charset: enumGlobal(CHARSETS),
@@ -210,7 +210,7 @@ export function globalsControlDomain(
 // active has exactly one authority (session pick over globals.preset over the
 // floor), and a fragment re-selecting a preset would be a second one. For a
 // preset's own fragment that second authority is also cyclic; for edit mode's
-// it would let a look-only fragment restage the whole layout, which edit chrome
+// it would let a style-only fragment restage the whole layout, which edit chrome
 // already owns. Same species of bespoke, migration-pointing rejection as
 // colorCompatibility's "auto" above, and for the same reason: an author who
 // writes it deserves to be told WHY, not handed a bare unknown-key message.
@@ -309,6 +309,12 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
     "its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
   default_truncate_marker:
     'nothing reads it — a segment clipped to its `width:` always ends in "…". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" — write the same name as style: "<name>"',
+  progression:
+    'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {
@@ -349,7 +355,7 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
     preset: nestedPresetSpec("the editGlobals fragment"),
     menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
     palette: nameOnlySpec(GLOBALS_FIELDS.palette, "the editGlobals fragment"),
-    look: nameOnlySpec(GLOBALS_FIELDS.look, "the editGlobals fragment"),
+    style: nameOnlySpec(GLOBALS_FIELDS.style, "the editGlobals fragment"),
   },
 };
 

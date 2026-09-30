@@ -51,7 +51,7 @@ const THEME = "textual-dark";
 const SID = "s1";
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -65,8 +65,8 @@ const PAYLOAD = {
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
   theme: { effective: THEME },
-  look: { effective: "none" },
-  style: { effective: "powerline" },
+  style: { effective: "none" },
+  endcaps: { effective: "powerline" },
   preset: { effective: "default" },
   charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },

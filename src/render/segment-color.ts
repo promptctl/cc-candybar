@@ -22,7 +22,7 @@ import {
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
- * config default) adapted by the render's look, resolved per render. Binding
+ * config default) adapted by the render's style, resolved per render. Binding
  * `color` to a palette captured
  * when the config loaded put the *body* of a template on a different palette
  * than the `bg:`/`fg:` of the very same segment, so `{{ color "primary" }}`
@@ -30,7 +30,7 @@ import {
  * [LAW:one-source-of-truth]
  *
  * That divergence was not exotic. Any session theme click moved the segment's
- * background while leaving every in-body semantic color where it was; a look
+ * background while leaving every in-body semantic color where it was; a style
  * did the same. Reading the live palette makes the two agree by construction
  * rather than by coincidence.
  *

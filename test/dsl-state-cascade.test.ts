@@ -24,7 +24,7 @@ import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -292,21 +292,21 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
   });
 
-  test("set-state writes the style key when given a registered style", () => {
-    // The set-state verb covers every registered key; the style key was a
+  test("set-state writes the endcaps key when given a registered endcaps shape", () => {
+    // The set-state verb covers every registered key; the endcaps key was a
     // separate named verb before this epic.
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
-    VERBS.get("set-state")!(`${SESSION_ID}/style/capsule`, ctx);
-    expect(sessionState.get(SESSION_ID, "style")).toBe("capsule");
+    VERBS.get("set-state")!(`${SESSION_ID}/endcaps/capsule`, ctx);
+    expect(sessionState.get(SESSION_ID, "endcaps")).toBe("capsule");
   });
 
-  test("set-state rejects an unknown style value with the allowed-list", () => {
+  test("set-state rejects an unknown endcaps value with the allowed-list", () => {
     const { sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState);
     expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/style/not-a-style`, ctx),
-    ).toThrow(/unknown style "not-a-style" \(have: .*capsule.*\)/);
+      VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
+    ).toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
   });
 
   test("set-state normalizes boolean-ish toolbar-expanded values", () => {
@@ -550,7 +550,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 0,

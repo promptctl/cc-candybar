@@ -49,7 +49,7 @@ Configuration:
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
   quick actions, preset switching, edit mode, and a config menu of
-  clickable theme/look/style/progression/charset/colour-depth/wrap/padding
+  clickable theme/style/variation/endcaps/charset/colour-depth/wrap/padding
   controls. A change applies to this session at once; 💾 save appears while
   you have unsaved changes and writes them to your config file.
   Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a

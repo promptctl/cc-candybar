@@ -17,24 +17,24 @@
         "palette": {
           "type": "string"
         },
-        "look": {
+        "style": {
           "type": "string"
         },
         "preset": {
           "type": "string"
         },
-        "style": {
+        "endcaps": {
           "enum": [
             "powerline",
             "capsule",
             "plain"
           ]
         },
-        "progression": {
+        "variation": {
           "enum": [
-            "secondary-accent",
-            "primary-secondary",
-            "primary"
+            "accent",
+            "duo",
+            "mono"
           ]
         },
         "autoWrap": {
@@ -1226,7 +1226,7 @@
         ]
       }
     },
-    "looks": {
+    "styles": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
@@ -1268,25 +1268,25 @@
               "palette": {
                 "type": "string"
               },
-              "look": {
+              "style": {
                 "type": "string"
               },
               "preset": {
                 "not": {},
                 "description": "not allowed here — a preset cannot select a preset"
               },
-              "style": {
+              "endcaps": {
                 "enum": [
                   "powerline",
                   "capsule",
                   "plain"
                 ]
               },
-              "progression": {
+              "variation": {
                 "enum": [
-                  "secondary-accent",
-                  "primary-secondary",
-                  "primary"
+                  "accent",
+                  "duo",
+                  "mono"
                 ]
               },
               "autoWrap": {
@@ -1340,7 +1340,7 @@
             "pattern": "\\{\\{"
           }
         },
-        "look": {
+        "style": {
           "type": "string",
           "not": {
             "pattern": "\\{\\{"
@@ -1350,18 +1350,18 @@
           "not": {},
           "description": "not allowed here — the editGlobals fragment cannot select a preset"
         },
-        "style": {
+        "endcaps": {
           "enum": [
             "powerline",
             "capsule",
             "plain"
           ]
         },
-        "progression": {
+        "variation": {
           "enum": [
-            "secondary-accent",
-            "primary-secondary",
-            "primary"
+            "accent",
+            "duo",
+            "mono"
           ]
         },
         "autoWrap": {

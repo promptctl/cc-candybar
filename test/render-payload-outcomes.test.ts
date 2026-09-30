@@ -18,7 +18,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 
 type LogEntry = { level: string; msg: string };
 
@@ -52,11 +52,11 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
-  style: "powerline",
-  progression: "secondary-accent",
+  endcaps: "powerline",
+  variation: "accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
@@ -342,16 +342,16 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 // colorCompatibility/autoWrap/padding are style's twins — this pins
 // that buildRenderPayload projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
-// with no `wants` gate — unlike theme/look, which renderDsl produces).
+// with no `wants` gate — unlike theme/style, which renderDsl produces).
 describe("buildRenderPayload — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
     const effective: EffectiveGlobals = {
       theme: resolveThemeSelection(undefined, null, "nord"),
-      look: FLOOR_LOOK,
+      style: FLOOR_STYLE,
       preset: "default",
       presetCustomized: true,
-      style: "capsule",
-      progression: "primary",
+      endcaps: "capsule",
+      variation: "mono",
       charset: "ascii",
       colorCompatibility: "256",
       autoWrap: false,
@@ -369,20 +369,20 @@ describe("buildRenderPayload — effective globals projection", () => {
       NO_HINTS,
       { unsaved: 0, resettable: 0 },
     );
-    // `theme` and `look` are the two fields this projection does NOT carry:
+    // `theme` and `style` are the two fields this projection does NOT carry:
     // renderDsl injects both `.effective` values, because under a RULE in that
     // globals slot it is the only thing that knows the answer (brandon-looks-pe6
-    // for `look`, brandon-themes-dzl for `theme`). Asserted absent rather than
+    // for `style`, brandon-themes-dzl for `theme`). Asserted absent rather than
     // left unmentioned, so re-adding a second producer fails here.
     expect("theme" in payload).toBe(false);
-    expect("look" in payload).toBe(false);
+    expect("style" in payload).toBe(false);
     expect(payload.preset).toEqual({
       effective: "default",
       customized: true,
       bundled: true,
     });
-    expect(payload.style).toEqual({ effective: "capsule" });
-    expect(payload.progression).toEqual({ effective: "primary" });
+    expect(payload.endcaps).toEqual({ effective: "capsule" });
+    expect(payload.variation).toEqual({ effective: "mono" });
     expect(payload.charset).toEqual({ effective: "ascii" });
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });

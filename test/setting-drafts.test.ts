@@ -111,7 +111,7 @@ describe("a preset's globals as a write target", () => {
   test("a file's fragment merges over the base preset's field by field", () => {
     const base = {
       ...EMPTY_DEFAULT,
-      presets: { wide: { globals: { padding: 0, style: "plain" as const } } },
+      presets: { wide: { globals: { padding: 0, endcaps: "plain" as const } } },
     };
     const merged = mergeWithDefault(
       { presets: { wide: { globals: { padding: 2 } } } },
@@ -119,7 +119,7 @@ describe("a preset's globals as a write target", () => {
     );
     expect(presetGlobals(merged, "wide")).toMatchObject({
       padding: 2,
-      style: "plain",
+      endcaps: "plain",
     });
   });
 });
@@ -136,9 +136,9 @@ describe("a preset's globals as a write target", () => {
 type PinnedSetting = Exclude<keyof typeof SETTINGS, "preset">;
 const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   theme: { pin: "'nord'", pick: "gruvbox" },
-  look: { pin: "'dim'", pick: "vivid" },
-  style: { pin: "'capsule'", pick: "plain" },
-  progression: { pin: "'primary'", pick: "primary-secondary" },
+  style: { pin: "'dim'", pick: "vivid" },
+  endcaps: { pin: "'capsule'", pick: "plain" },
+  variation: { pin: "'mono'", pick: "duo" },
   charset: { pin: "'ascii'", pick: "unicode" },
   colorCompatibility: { pin: "'256'", pick: "ansi" },
   autoWrap: { pin: "false", pick: "true" },

@@ -128,7 +128,7 @@ function expectCanonicalEmpty(cfg: DslConfig): void {
   expect(cfg.globals).toEqual({});
   expect(cfg.editGlobals).toEqual({});
   expect(cfg.root).toEqual({ rows: {} });
-  expect(cfg.looks).toEqual({});
+  expect(cfg.styles).toEqual({});
   expect(cfg.helpers).toEqual({});
   expect(Object.keys(cfg.presets)).toEqual(["default"]);
   for (const field of ["variables", "segments", "actions"] as const) {

@@ -34,15 +34,15 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
-  style: "powerline",
-  progression: "secondary-accent",
+  endcaps: "powerline",
+  variation: "accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
@@ -156,7 +156,7 @@ describe("the bundled host segment", () => {
         registry,
         { ...(HOOK as object), host } as never,
         {
-          style: "powerline" as const,
+          endcaps: "powerline" as const,
           colorCompatibility: "none" as const,
           wrap: true,
           padding: 1,

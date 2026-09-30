@@ -104,7 +104,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
       registry,
       PAYLOAD,
       {
-        style: effective.style,
+        endcaps: effective.endcaps,
         separator: effective.separator,
         colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,

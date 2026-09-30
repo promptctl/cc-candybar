@@ -103,9 +103,9 @@ const OPTION_TEXT_RATIO = 4.5;
  * with its own `primary` as the text — hue preserved, OKLCH lightness slid by
  * rich-js until it clears AA on that ground.
  *
- * The ground alone would not be enough, and the look picker is what proves it:
+ * The ground alone would not be enough, and the style picker is what proves it:
  * `vivid` and `muted` scale CHROMA, which leaves a near-neutral background
- * exactly where it was, so three of the six bundled looks would have rendered
+ * exactly where it was, so three of the six bundled styles would have rendered
  * byte-identical cells while picking them genuinely changes the bar — the same
  * class of lie as colouring an option by its address. The hue carries what the
  * ground cannot, and it is also the more identifying half for a theme: a bar

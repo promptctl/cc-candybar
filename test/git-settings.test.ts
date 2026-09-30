@@ -70,7 +70,7 @@ function renderPair(
       registry,
       { session_id: SESSION, cwd: "/tmp", git: GIT },
       {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "truecolor",
         wrap: true,
         padding: 0,

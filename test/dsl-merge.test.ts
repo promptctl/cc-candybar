@@ -48,7 +48,7 @@ const DFLT: DslConfig = {
   },
   root: { rows: { main: hrow("a"), status: hrow("b") } },
   actions: {},
-  looks: {
+  styles: {
     none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
   },
   presets: {

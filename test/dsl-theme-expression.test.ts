@@ -1,6 +1,6 @@
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
-// (2) precedence comes out IDENTICAL to the look's — staged over session over the
+// (2) precedence comes out IDENTICAL to the style's — staged over session over the
 // expression — and an explicit session pick of the FLOOR name still holds; (3)
 // renderDsl is the one producer of `theme.effective`, so a label cannot disagree
 // with the palette the bar wears; (4) an expression result naming no installed
@@ -15,7 +15,7 @@
 //
 // [LAW:behavior-not-structure] Every colour assertion compares against the SAME
 // bar rendered under that theme BY NAME, so "it changed colour" is never mistaken
-// for "it changed to the right colour" — the discipline pe6's look-expression
+// for "it changed to the right colour" — the discipline pe6's style-expression
 // tests established one dimension over. And a cell's colour is read BY SEGMENT
 // NAME off the `perSegmentSink` the daemon itself renders with, never as "the
 // first background SGR on the row": every row leads with the synthesized `🍫`
@@ -33,7 +33,7 @@ import type { RichText } from "@promptctl/rich-js";
 import {
   declaredBasePalette,
   decideThemeName,
-  resolveLookSelection,
+  resolveStyleSelection,
   resolveThemeSelection,
   THEME_FLOOR,
 } from "../src/themes";
@@ -47,7 +47,7 @@ const NAMED = ["nord", "solarized-light", "dracula"] as const;
 const ALLOWED = new Set<string>([THEME_FLOOR, ...NAMED, "tokyo-night"]);
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -115,11 +115,11 @@ function buildRuntime(source = src(RULE)): Runtime {
           sessionState.get(SID, "theme"),
           config.globals.palette,
         ),
-        look: resolveLookSelection(
+        style: resolveStyleSelection(
           undefined,
-          sessionState.get(SID, "look"),
-          config.globals.look,
-          config.looks,
+          sessionState.get(SID, "style"),
+          config.globals.style,
+          config.styles,
         ),
       },
     );
@@ -218,9 +218,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     }
   });
 
-  test("the rule composes with a look: the look transposes the rule's own base, once", () => {
-    const LOOKS = "looks: { none: {}, washed: { chromaScale: 0.2 } },";
-    const { sessionState, render, dispose } = buildRuntime(src(RULE, LOOKS));
+  test("the rule composes with a style: the style transposes the rule's own base, once", () => {
+    const STYLES = "styles: { none: {}, washed: { chromaScale: 0.2 } },";
+    const { sessionState, render, dispose } = buildRuntime(src(RULE, STYLES));
     try {
       // [LAW:one-source-of-truth] The expectation is built with rich-js
       // `transposePalette` DIRECTLY, never `transposedPalette` — that memo keys on
@@ -235,11 +235,11 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         lightnessShift: 0,
       });
       const want = washed.get("surface")!.hex;
-      // Premise first: the unlooked bar must be the rule's own base, so "the look
-      // moved it" is a claim about the look and not about the theme.
+      // Premise first: the unstyled bar must be the rule's own base, so "the style
+      // moved it" is a claim about the style and not about the theme.
       const unlooked = render(90).bg("plain");
       expect(unlooked).toBe(byName("dracula"));
-      sessionState.set(SID, "look", "washed");
+      sessionState.set(SID, "style", "washed");
       const looked = render(90).bg("plain");
       expect(looked).not.toBe(unlooked);
       expect(looked).toBe(want);
@@ -505,21 +505,21 @@ describe("decideThemeName", () => {
 // through `resolveEffectiveGlobals`, the daemon's own chain, because the preset
 // rung is exactly what the file-level tests above never reach.
 describe("a rule inside a preset's globals", () => {
-  const LOOK_RULE =
+  const STYLE_RULE =
     "{{ if ge (int .ctx.pct) 80 }}hot{{ else }}none{{ end }}";
-  const presetSrc = (palette: string, look = LOOK_RULE): string => `{
+  const presetSrc = (palette: string, look = STYLE_RULE): string => `{
     globals: { palette: '${THEME_FLOOR}' },
-    looks: { none: {}, hot: { hueShift: 180 } },
-    presets: { ruled: { globals: { palette: '${palette}', look: '${look}' } } },
+    styles: { none: {}, hot: { hueShift: 180 } },
+    presets: { ruled: { globals: { palette: '${palette}', style: '${look}' } } },
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
       'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
-      'look.effective': { kind: 'input', path: 'look.effective', default: '' },
+      'style.effective': { kind: 'input', path: 'style.effective', default: '' },
     },
     segments: {
       plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
-      label: { template: 'T={{ .theme.effective }} L={{ .look.effective }}', bg: 'surface', fg: 'foreground' },
+      label: { template: 'T={{ .theme.effective }} L={{ .style.effective }}', bg: 'surface', fg: 'foreground' },
     },
     root: { v: ['plain', 'label'] },
   }`;
@@ -542,7 +542,7 @@ describe("a rule inside a preset's globals", () => {
     }
   };
 
-  test("the active preset's rule is evaluated per render, for both the theme and the look", () => {
+  test("the active preset's rule is evaluated per render, for both the theme and the style", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const effective = resolveEffectiveGlobals(
@@ -560,7 +560,7 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct } },
           OPTS,
           { perSegmentSink: sink },
-          { theme: effective.theme, look: effective.look },
+          { theme: effective.theme, style: effective.style },
         );
         const cells = sink.get("plain")!;
         return { text, bg: definedStyle(cells[0]!.style).bgcolor!.value!.hex };
@@ -652,17 +652,17 @@ describe("a rule inside a preset's globals", () => {
     });
   });
 
-  test("a look NAME in a preset's globals or in editGlobals must be a declared look", () => {
+  test("a style NAME in a preset's globals or in editGlobals must be a declared style", () => {
     expect(() =>
       parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),
-    ).toThrow(/presets\.ruled\.globals\.look "vivd" does not match any declared look/);
+    ).toThrow(/presets\.ruled\.globals\.style "vivd" does not match any declared style/);
     const staged = `{
-      editGlobals: { look: 'dimm' },
+      editGlobals: { style: 'dimm' },
       segments: { plain: { template: 'x' } },
       root: { v: ['plain'] },
     }`;
     expect(() => parseAndValidate("<look-staged>", staged, ALLOWED)).toThrow(
-      /editGlobals\.look "dimm" does not match any declared look/,
+      /editGlobals\.style "dimm" does not match any declared style/,
     );
   });
 
@@ -675,9 +675,9 @@ describe("a rule inside a preset's globals", () => {
     expect(() => parseAndValidate("<theme-expr-staged>", staged, ALLOWED)).toThrow(
       /editGlobals\.palette: a rule is not allowed here/,
     );
-    const stagedLook = staged.replace("palette:", "look:");
+    const stagedStyle = staged.replace("palette:", "style:");
     expect(() =>
-      parseAndValidate("<theme-expr-staged>", stagedLook, ALLOWED),
-    ).toThrow(/editGlobals\.look: a rule is not allowed here/);
+      parseAndValidate("<theme-expr-staged>", stagedStyle, ALLOWED),
+    ).toThrow(/editGlobals\.style: a rule is not allowed here/);
   });
 });

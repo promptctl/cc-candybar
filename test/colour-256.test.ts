@@ -253,7 +253,7 @@ function forEachStage(
   measure: (stage: string, render: (colorCompatibility: ColorCompatibility) => Chars) => void,
 ): void {
   const OPTS = {
-    style: "powerline" as const,
+    endcaps: "powerline" as const,
     wrap: true,
     padding: 1,
     charset: "unicode" as const,
