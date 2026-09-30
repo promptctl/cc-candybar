@@ -1,3 +1,10 @@
+# [1.98.0](https://github.com/promptctl/cc-candybar/compare/v1.97.4...v1.98.0) (2026-09-30)
+
+
+### Features
+
+* **menu:** the settings menu opens above the bar, as two door lines ([#283](https://github.com/promptctl/cc-candybar/issues/283)) ([21b2b79](https://github.com/promptctl/cc-candybar/commit/21b2b79dac511a289304b3764d485a11c9c93b7c))
+
 ## [1.97.4](https://github.com/promptctl/cc-candybar/compare/v1.97.3...v1.97.4) (2026-09-30)
 
 
