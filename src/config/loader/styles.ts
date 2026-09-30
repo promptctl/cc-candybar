@@ -29,8 +29,12 @@ import { isEndcaps } from "../../themes/policy.js";
 
 // The one spelling of "that is an endcaps name, not a style": a style may not
 // be named after one, and a `style` may not hold one.
-export function endcapsNameMessage(at: string, name: string): string {
-  return `${at}: "${name}" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write globals.endcaps: "${name}"`;
+export function endcapsNameMessage(
+  at: string,
+  name: string,
+  endcapsAt: string,
+): string {
+  return `${at}: "${name}" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
 }
 
 // [LAW:types-are-the-program] The AUTHORING shape: every axis optional, absent =
@@ -93,7 +97,7 @@ export function validateStyles(
     if (isEndcaps(name)) {
       ctx.issues.push({
         path: `styles.${name}`,
-        message: endcapsNameMessage(`styles.${name}`, name),
+        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
         line: findKeyLine(ctx.source, ["styles", name]),
       });
       continue;

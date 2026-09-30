@@ -40,8 +40,8 @@
     // alongside its open-state.
     // ── Endcaps picker (companion to the theme picker) ────────────────────────
     // The session powerline shape, written by applyEndcaps (from: "endcaps" ⇒ the
-    // STRIP_STYLES domain: powerline/capsule/plain). The daemon resolves it per
-    // render via effectiveStripStyle (session-over-globals.endcaps-over-floor,
+    // ENDCAPS_SHAPES domain: powerline/capsule/plain). The daemon resolves it per
+    // render via effectiveEndcaps (session-over-globals.endcaps-over-floor,
     // exactly like the theme), so an endcaps click reshapes the bar live. Like the
     // theme it needs no state var: the label reads `endcaps.effective` (bundled
     // default), the endcaps the bar is drawn in, which the menu's current-option

@@ -59,7 +59,7 @@ export class ColorSpecError extends Error {
  * floor every segment wears; an authored `bg:` states MEANING (a threshold's
  * `error`, a host's `warning`) and paints over it.
  * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
- * segment type is the discriminator: no segment is asked whether it "styles
+ * segment type is the discriminator: no segment is asked whether it "looks
  * decorative", the absence of an authored spec IS the decorated case. The
  * foreground has the same kind of floor: an unauthored `fg:` is the theme
  * pole that reads better on the background phase 1 resolved (tint, band

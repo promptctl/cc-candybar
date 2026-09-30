@@ -51,7 +51,7 @@ export type DecorHue = (typeof DECOR_HUES)[number];
  * reads as a different part of the bar while the cells inside one row share
  * a hue and differ by tone — hue changing at every cell reads as team colours,
  * not as the theme (brandon-theme-picker-bgw.8fp); a row is the coarsest level
- * a bar has. A variation is a sequence of roles the way a chord variation
+ * a bar has. A variation is a sequence of roles the way a chord progression
  * is a sequence of degrees, and it is a VALUE the render carries, so every
  * one ships through the same selection.
  * [LAW:types-are-the-program] One or two steps, no more: the hue is read with
@@ -609,7 +609,7 @@ function searchState(
 /**
  * The least contrast information-bearing text may have against its cell:
  * WCAG AA for normal text, 4.5:1 — a statusline is small monospace, and the
- * large-text 3:1 measured legible but styled washed out on the saturated
+ * large-text 3:1 measured legible but looked washed out on the saturated
  * threshold colours (catppuccin-latte's warning). The one floor for chosen
  * text (`textOn`) and for the semantic accents the bundled segments author,
  * so an accent reads as well as the text beside it. Deliberately quiet text

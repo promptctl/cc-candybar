@@ -176,7 +176,7 @@ describe("the renamed keys refuse their old spellings", () => {
     ["editGlobals", `{ editGlobals: { style: "capsule" } }`],
   ])("%s.style holding an endcaps shape names `endcaps`", (at, src) => {
     expect(issues(src)).toContain(
-      `${at}.style: "capsule" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write globals.endcaps: "capsule"`,
+      `${at}.style: "capsule" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write ${at}.endcaps: "capsule"`,
     );
   });
 

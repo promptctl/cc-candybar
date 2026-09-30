@@ -3,7 +3,7 @@
 // what its floor is, and the one function that turns a session pick, a config
 // default and that floor into the value a render actually uses.
 //
-// It sits in the themes module because theme/style/style were the first three
+// It sits in the themes module because theme/style/endcaps were the first three
 // fields to need it, and it is a LEAF: the config loader (validation, JSON
 // schema) and the render layer both import it, which is what keeps a
 // config↔render cycle from forming [LAW:one-way-deps].
@@ -59,7 +59,7 @@ export const THEME_FLOOR = "textual-dark";
 // pick shares: the session's own value, over the config default, over a floor.
 // Written once because the fields differ only in DATA — which floor, and how a
 // raw SessionState string becomes a value of that field's type. Theme, style,
-// preset, style, autoWrap and padding are all this function with different
+// preset, endcaps, autoWrap and padding are all this function with different
 // arguments, so the precedence order cannot land on one field and miss another.
 //
 // [LAW:dataflow-not-control-flow] The `??` chain IS the precedence; there is no
@@ -360,7 +360,7 @@ export function resolveStyleSelection(
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
 // of powerline cap/separator shapes a render can take. The `Endcaps` type is
 // DERIVED from this const, so the picker's option domain, the SessionState
-// validator, the `styles()` template binding, and `pickJoiner`'s dispatch all
+// validator, the `endcaps()` template binding, and `pickJoiner`'s dispatch all
 // trace to one literal — adding a shape here forces a new `pickJoiner` arm at
 // compile time (the joiner switch is total over `Endcaps`). This is where the
 // drift between "what you can pick" and "what actually renders" is closed.
@@ -412,7 +412,7 @@ export function effectiveEndcaps(
 // literal without a config↔render cycle [LAW:one-way-deps]. "ascii" swaps the
 // powerline-private-use cap glyphs (U+E0Bx and the U+E0D7 lead — tofu without
 // a Nerd Font) for plain-ASCII equivalents; it is orthogonal to Endcaps:
-// style picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
+// endcaps picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
 // It is ENDCAPS_SHAPES' twin in resolution too: a session pick over the config
 // default. Charset describes the TERMINAL (does its font carry the powerline
 // private-use glyphs), and a Claude Code session runs in ONE terminal — two

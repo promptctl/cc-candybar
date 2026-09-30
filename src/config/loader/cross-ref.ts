@@ -90,7 +90,7 @@ import {
 //
 // [LAW:no-silent-failure] Two preset names that collapse to the SAME
 // synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_
-// style") would silently steal each other's synthesized artifacts: the
+// look") would silently steal each other's synthesized artifacts: the
 // SECOND preset processed overwrites the first's entries, leaving the
 // first preset's already-built tree holding a segment ref to a name that
 // now points at the second preset's reset action. A user clicking "reset"
@@ -149,19 +149,19 @@ export function validateCrossReferences(
         [["presets", name, "globals"], preset.globals?.style] as const,
     ),
   ];
-  for (const [at, look] of styleFragments) {
+  for (const [at, name] of styleFragments) {
     if (
-      look === undefined ||
-      isExpression(look) ||
-      Object.prototype.hasOwnProperty.call(cfg.styles, look)
+      name === undefined ||
+      isExpression(name) ||
+      Object.prototype.hasOwnProperty.call(cfg.styles, name)
     )
       continue;
     const where = `${at.join(".")}.style`;
     ctx.issues.push({
       path: where,
-      message: isEndcaps(look)
-        ? endcapsNameMessage(where, look)
-        : `${where} "${look}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      message: isEndcaps(name)
+        ? endcapsNameMessage(where, name, `${at.join(".")}.endcaps`)
+        : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
       line: findKeyLine(ctx.source, [...at, "style"]),
     });
   }

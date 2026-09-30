@@ -460,7 +460,7 @@ export function registerDslConfig(
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
     // Same contract again: the compile-only floor is the registration-time
-    // style's seam under the default charset.
+    // endcaps shape's seam under the default charset.
     seamCols: stripSeamCols({ endcaps: "powerline", charset: DEFAULT_CHARSET }),
     // Same contract again: with no render there is no walk, and no rows.
     layout: () => [],
@@ -1077,7 +1077,7 @@ export function renderDsl(
       onRenderWarning?.(message),
     );
   });
-  const look = finishSelection(selectedStyle, (source) =>
+  const style = finishSelection(selectedStyle, (source) =>
     decideStyleName(
       evalRule(compiledRule(compiled, "style", source), scope),
       config.styles,
@@ -1089,8 +1089,8 @@ export function renderDsl(
   // result — one fact with two answers. All payload ingestion goes through
   // applyInput (see SourceRegistry's own contract), so this is that one path,
   // called again, not a second way to write an input box.
-  if (theme !== selectedTheme || look !== selectedStyle)
-    registry.applyInput(payloadWith(theme.name, look.name));
+  if (theme !== selectedTheme || style !== selectedStyle)
+    registry.applyInput(payloadWith(theme.name, style.name));
   // [LAW:one-source-of-truth] The render's BASE palette, published beside the
   // style and padding: a picker over a colour-valued domain paints each option in
   // the palette picking it would put in force, and a style's answer is this base
@@ -1105,7 +1105,7 @@ export function renderDsl(
   // session's style, transposed ONCE here — every unpinned segment colours from
   // this one object, so a style click recolours the whole bar from one
   // transposition, not one per segment.
-  const palette = transposedPalette(basePalette, look.value);
+  const palette = transposedPalette(basePalette, style.value);
   compiled.menuRuntime.action.palette = palette;
 
   perSegmentSink?.clear();
