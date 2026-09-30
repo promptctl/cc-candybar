@@ -780,10 +780,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "Type /compact, /model or /clear into this session; /clear asks for a second click.",
       template: COMMAND_TRAY.template,
     },
-    // Declared-but-opt-in: a theme stepper that lives ON the bar, so the whole
-    // bar stays visible in each theme while stepping through them — the
-    // settings menu's theme control opens inline over the door's row, hiding
-    // that row while a theme is being judged (brandon-theme-picker-bgw.exj).
+    // Declared-but-opt-in: a theme stepper that lives ON the bar — one click
+    // per theme, with no menu to open (brandon-theme-picker-bgw.exj).
     // Kept out of the bundled rows because every setting lives behind the
     // door by default; place it by naming it in a row.
     //

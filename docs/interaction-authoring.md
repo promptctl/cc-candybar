@@ -735,8 +735,8 @@ pin, a `removeSegment`/`insertSegment` structural edit, an edit-mode `+`/`-`,
 a `reset` — back and forth, one click at a time, regardless of which key or
 which config declared the action that made it. Neither carries a key: there is
 nothing to name, since the history itself decides which step moves. The
-bundled settings menu carries `↶ undo` and `↷ redo`, each shown only while it
-has a step to take.
+bundled settings menu carries `↶` (undo) and `↷` (redo) in its save cell,
+each shown only while it has a step to take.
 
 ```json5 check:pass
 {
@@ -872,7 +872,7 @@ your own project slash command included — is one `slash` action and one
   a new segment.
 - **A command that destroys work wants a confirm step.** Spell it as a
   `state` key the first click arms, and a `do` over a disarm and the `slash`
-  that the armed view shows (the bundled `/clear` and `⟲ reset all` are built
+  that the armed view shows (the bundled `/clear` and `⟲` (reset all) are built
   this way, `src/config/confirm-step.ts`).
 - **Outside tmux the click types nothing** and says why in the bar, like
   every refusal in the table above.
@@ -1158,14 +1158,15 @@ yourself to move it anywhere else.
 ```
 
 Opening it shows the always-available functionality. The menu opens
-**inline**: its first row takes the door's own row, replacing every other cell
-of that row — and anything open beneath them — while it is open, and the `❌`
-that leads it closes the menu. Everything it
-opens in turn drops below:
+**above** the bar: two lines stacked over the bar's rows, which stay exactly as
+they were, and the door — now `❌` — closes the menu. Everything it opens in
+turn drops below the line it sits on:
 
 ```
-❌ ⎘ id ↗ proj ↗ log ↗ repo   ▦ default ▸ ↺   💾 save 2   ⚙ config ▾   🧰 tools ▸   ✎ edit   ↶ undo
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 secondary-accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺   ⟲ reset all
+✕ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
+✕ ⎘ id ↗ proj ↗ log ↗ repo   /compact /model /clear   ⚙ config ▾   🧰 tools ▸   ✎ edit
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 secondary-accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺
+❌ host   directory   gitaculous          ← the bar, unchanged
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1174,8 +1175,7 @@ row's `✕` closes `⚙ config` and leaves the menu open. Nothing stacks — a r
 carries the `✕` of the innermost disclosure it belongs to, and a picker line
 keeps the picker's own. This is true of every disclosure on the bar (a group
 body, a `(?)` line), not only this menu; no author writes it and no author can
-decline it. The menu's own inline row needs none: the door beside it is its
-close.
+decline it. The menu's own two lines lead with the door's `✕`.
 
 - **`⎘ id ↗ proj ↗ log ↗ repo`** are the quick actions: copy the session id,
   open the project or the transcript in your editor, open the repo's web page.
@@ -1186,17 +1186,18 @@ close.
 - **Every setting in the menu changes this session only**, at once. While any
   of them differs from your config file, `💾 save N` sits beside the preset
   switcher, counting them; clicking it writes them all to the config file and
-  the cell disappears (see "Drafts and `save`" above). `↶ undo` and `↷ redo`
-  step every one of those changes, saves included, each shown only while it
-  has a step to take.
+  the part disappears (see "Drafts and `save`" above). Beside it, `↶` and `↷`
+  undo and redo every one of those changes, saves included, and `⟲` resets
+  every setting to the bundled default — a second click, `⟲ reset all?`,
+  confirms. Each part shows only while it has something to do: `⟲` whenever a
+  setting holds a draft or your config file holds a value for it.
 - **Under the preset carousel**, `⊕ save as preset` keeps the bar as a new
   preset and switches to it, and `🗑 delete <name>` removes the preset you are
   in when you made it (see "Save as preset" above).
 - **The preset switcher** and **`✎ edit`** are one click from the toggle,
   because switching arrangement and entering edit mode are what you most often
   open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
-  menu in the same click, so you land on the bar you are about to edit — the
-  open menu covers the door's own row, edit chrome included.
+  menu in the same click, so you land on the bar you are about to edit.
 - **`⚙ config`** opens the display settings: theme, look, style, progression,
   charset (the joiner glyphs: `unicode` or `ascii`), colour depth
   (`truecolor`, `256`, `ansi`, `none`), wrap, padding and the update notice,
@@ -1222,8 +1223,7 @@ and `▶` beside the current value, its neighbours either side as the width
 allows — and every click in it applies, so rotating through themes recolours the
 bar at each step. The theme and look carousels carry `{{ themePreview }}` in the
 row beneath; the preset carousel carries `{{ layoutPreview }}`, the whole
-arrangement drawn small, because the open menu takes over the door's row and
-the bar cannot show that row itself. Every one of these shares one accordion
+arrangement drawn small. Every one of these shares one accordion
 key, so opening the look carousel closes the theme carousel: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
 drop-down open, so you can try several in a row; the `✕` leading each of its

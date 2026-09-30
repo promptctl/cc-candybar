@@ -128,15 +128,12 @@ const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 // a `do` over the resets the controls already declare, so it cannot reset a
 // setting differently from that setting's own ↺, and one click is one step in
 // the undo history. It takes two clicks: the first arms it (a session key), the
-// second fires. Every click that can bring its row into view — the door and the
-// `⚙ config` toggle, the only two ways in — disarms it, so the confirming click
-// is always made in the view the arming click was made in, however that view
-// was later closed.
+// second fires. The door — the only way into the save cell — disarms it, so
+// the confirming click is always made in the view the arming click was made
+// in, however that view was later closed.
 const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-// The door's and the config panel's own open/close cycles, each fired beside
-// the disarm.
+// The door's own open/close cycle, fired beside the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-const CONFIG_TOGGLE = `${CONFIG_SEG}.toggle`;
 
 // [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
 // than as gate strings: every gate below — and every `(?)` nested inside them —
@@ -168,31 +165,12 @@ const TOOLS_REF: DisclosureRef = {
   key: TOOLS_SEG,
   member: SETTINGS_OPEN,
 };
-// [LAW:one-source-of-truth] Undo and redo step the session's one settings
-// history (src/daemon/settings-history.ts). Each button exists exactly while
-// its stack has a step to take, read from the depth the daemon publishes every
-// render (RenderPayload.history), so an undo on the bar always does something.
-const HISTORY_STEPS: ReadonlyArray<{
-  readonly seg: string;
-  readonly depth: "undo" | "redo";
-  readonly action: ActionDecl;
-  readonly display: string;
-}> = [
-  {
-    seg: `${SETTINGS_NS}undo`,
-    depth: "undo",
-    action: { undo: true },
-    display: "↶ undo",
-  },
-  {
-    seg: `${SETTINGS_NS}redo`,
-    depth: "redo",
-    action: { redo: true },
-    display: "↷ redo",
-  },
-];
-const historyDepthVar = (depth: string): string =>
-  `${SETTINGS_NS}history.${depth}`;
+// Undo and redo step the session's one settings history
+// (src/daemon/settings-history.ts).
+const UNDO_ACTION = `${SETTINGS_NS}undo`;
+const REDO_ACTION = `${SETTINGS_NS}redo`;
+// How many settings a reset all would change (RenderPayload.resettable).
+const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
 
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
 const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
@@ -214,9 +192,8 @@ const PALETTE_PREVIEW = ["{{ themePreview }}"];
 // the ring itself — each a template row. A ring shows neighbours of the
 // current value; these show what picking one does to the bar.
 const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
-  // A preset changes the arrangement, and the tray this menu opens takes over
-  // the door's row — so the bar cannot show its own first row while the ring
-  // is open. `{{ layoutPreview }}` draws every row of it. Under it, the
+  // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
+  // of it, one block per segment, named. Under it, the
   // presets the user makes (brandon-save-undo-bwi.o6u): keep the bar as a new
   // one, which the ring then shows current, and delete the one the ring is on
   // when the user made it.
@@ -229,9 +206,9 @@ const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
   ],
   theme: PALETTE_PREVIEW,
   look: PALETTE_PREVIEW,
-  // A progression says which role each ROW wears, and the tray this menu
-  // opens takes over the door's row — `{{ layoutPreview }}` draws every row,
-  // each block in the tint the ring's current progression deals it.
+  // A progression says which role each ROW wears — `{{ layoutPreview }}`
+  // draws every row, each block in the tint the ring's current progression
+  // deals it.
   progression: ["{{ layoutPreview }}"],
 };
 
@@ -307,9 +284,53 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
 
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
-  { arm: "⟲ reset all", confirm: "⟲ confirm reset all" },
+  { arm: "⟲", confirm: "⟲ reset all?" },
   CONTROLS.map((c) => controlReset(c.name)),
 );
+
+// ─── The save cell ──────────────────────────────────────────────────────────
+//
+// [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside the preset,
+// each part present exactly while it has something to do, read from a count
+// the daemon publishes every render: save while there are drafts, undo and
+// redo while their stack has a step, `⟲` while a reset all would change
+// something (a draft, or a value the config file holds at a layer a reset
+// clears). So a click on any part always does something.
+interface SavePart {
+  readonly count: string;
+  readonly path: string;
+  readonly body: string;
+}
+const SAVE_PARTS: readonly SavePart[] = [
+  {
+    count: UNSAVED_VAR,
+    path: "unsaved",
+    body: `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
+  },
+  {
+    count: `${SETTINGS_NS}history.undo`,
+    path: "history.undo",
+    body: `{{ action "${UNDO_ACTION}" "↶" }}`,
+  },
+  {
+    count: `${SETTINGS_NS}history.redo`,
+    path: "history.redo",
+    body: `{{ action "${REDO_ACTION}" "↷" }}`,
+  },
+  { count: RESETTABLE_VAR, path: "resettable", body: RESET_ALL.template },
+];
+const hasPart = (p: SavePart): string => `(gt .${p.count} 0)`;
+// The parts present, one space between each: `$sep` is empty until the first
+// part renders.
+const SAVE_CELL: SegmentDecl = {
+  when: `{{ or ${SAVE_PARTS.map(hasPart).join(" ")} }}`,
+  template:
+    `{{ $sep := "" }}` +
+    SAVE_PARTS.map(
+      (p) =>
+        `{{ if ${hasPart(p)} }}{{ $sep }}${p.body}{{ $sep = " " }}{{ end }}`,
+    ).join(""),
+};
 // [LAW:one-source-of-truth] Every two-click step the door can bring into view,
 // so the door disarms each of them without anyone remembering to list one.
 const CONFIRMS = [RESET_ALL, COMMANDS] as const;
@@ -390,8 +411,7 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 //
 // [LAW:no-silent-failure] A gated node is wrapped, never entered, so the door
 // never inherits the author's gate. A gated row is led from outside its gate,
-// on the same line. A gated stack gets the door on its own row above it,
-// because leading the stack would put every row under the door's inline claim.
+// on the same line. A gated stack gets the door on its own row above it.
 function prependAnchor(node: LayoutNode): LayoutNode {
   const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
   if (node.kind === "container" && node.direction === "vertical") {
@@ -452,7 +472,8 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 // (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
 // the menu's body hung on it, wherever it sits, so the author's chosen
 // position is the menu's position with nothing else moved. The door opens
-// INLINE: its body's first row takes the door's own row. The `⚙ config`
+// ABOVE: its body's rows stack over the whole bar, which renders as it does
+// with the menu closed (brandon-menu-ia-q30.4oj). The `⚙ config`
 // row is a disclosure INSIDE that body — nesting is structure, not a second
 // gate: a config row left open yesterday cannot render beside a closed menu
 // today because it hangs on a trigger the closed menu does not render. The
@@ -464,60 +485,67 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
       ? disclosureNode(
           node.name,
           SETTINGS_REF,
-          // What the menu is FOR — the quick-action tray, the preset
-          // switcher and, beside it while there is something to save, the
-          // save cell; the door into the config menu, the door into edit
-          // mode, and the history's undo/redo.
+          // Two lines stacked over the bar. The first holds what the menu
+          // is FOR — switching arrangement — and, beside it, the save cell
+          // whenever it has something to do. The second holds the rest: the
+          // quick-action tray, the commands, the config and tools menus, and
+          // the door into edit mode.
           {
             kind: "container",
-            direction: "horizontal",
+            direction: "vertical",
             children: [
-              { kind: "segment", name: TOOLBAR_SEG },
-              { kind: "segment", name: COMMANDS_SEG },
-              ...PRIMARY_CONTROLS.map(controlNode),
-              { kind: "segment", name: SAVE_SEG },
-              // The display settings, behind their own disclosure so the
-              // menu opens narrow.
-              disclosureNode(
-                CONFIG_SEG,
-                CONFIG_REF,
-                {
-                  kind: "container",
-                  direction: "horizontal",
-                  children: [
-                    ...CONFIG_CONTROLS.map(controlNode),
-                    { kind: "segment", name: RESET_ALL_SEG },
-                  ],
-                },
-                "drop",
-              ),
-              // The tools, behind their own disclosure: the doctor button,
-              // then one row per check once it has run.
-              disclosureNode(
-                TOOLS_SEG,
-                TOOLS_REF,
-                {
-                  kind: "container",
-                  direction: "vertical",
-                  children: [
-                    { kind: "segment", name: DOCTOR_SEG },
-                    ...CHECKS.map(
-                      (c): LayoutNode => ({
-                        kind: "segment",
-                        name: doctorRowSeg(c.name),
-                      }),
-                    ),
-                  ],
-                },
-                "drop",
-              ),
-              { kind: "segment", name: EDIT_SEG },
-              ...HISTORY_STEPS.map(
-                (h): LayoutNode => ({ kind: "segment", name: h.seg }),
-              ),
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  ...PRIMARY_CONTROLS.map(controlNode),
+                  { kind: "segment", name: SAVE_SEG },
+                ],
+              },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: TOOLBAR_SEG },
+                  { kind: "segment", name: COMMANDS_SEG },
+                  // The display settings, behind their own disclosure so the
+                  // menu opens narrow.
+                  disclosureNode(
+                    CONFIG_SEG,
+                    CONFIG_REF,
+                    {
+                      kind: "container",
+                      direction: "horizontal",
+                      children: CONFIG_CONTROLS.map(controlNode),
+                    },
+                    "drop",
+                  ),
+                  // The tools, behind their own disclosure: the doctor
+                  // button, then one row per check once it has run.
+                  disclosureNode(
+                    TOOLS_SEG,
+                    TOOLS_REF,
+                    {
+                      kind: "container",
+                      direction: "vertical",
+                      children: [
+                        { kind: "segment", name: DOCTOR_SEG },
+                        ...CHECKS.map(
+                          (c): LayoutNode => ({
+                            kind: "segment",
+                            name: doctorRowSeg(c.name),
+                          }),
+                        ),
+                      ],
+                    },
+                    "drop",
+                  ),
+                  { kind: "segment", name: EDIT_SEG },
+                ],
+              },
             ],
           },
-          "inline",
+          "above",
         )
       : node;
   }
@@ -558,13 +586,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [SETTINGS_ANCHOR]: {
         do: [DOOR_TOGGLE, ...CONFIRMS.map((c) => c.disarm)],
       },
-      [CONFIG_TOGGLE]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
-      [CONFIG_SEG]: { do: [CONFIG_TOGGLE, RESET_ALL.disarm] },
+      [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
       [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
-      // menu: the menu opens inline over the door's row, so edit mode's chrome
-      // for that row is hidden until the menu closes. The edit control is
+      // menu: edit mode works on the bar, with its own `✎ done` row above it,
+      // so the menu closes and leaves the bar to it. The edit control is
       // therefore the toggle and the close fired as one click, composed from
       // two ordinary actions — the close is a literal write to the key the
       // door's own cycle writes, so each carries the gate it always carried.
@@ -573,6 +600,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
+      [UNDO_ACTION]: { undo: true },
+      [REDO_ACTION]: { redo: true },
       [PRESET_SAVE]: { preset: "save" },
       [PRESET_DELETE]: {
         preset: "delete",
@@ -597,14 +626,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template },
-      // [LAW:dataflow-not-control-flow] The cell exists exactly while there is
-      // something to save — `gt` renders the literal "false" at zero, the only
-      // text a `when` hides on — and it says how much, so a click never
-      // commits more than the user can see is pending.
-      [SAVE_SEG]: {
-        when: `{{ gt .${UNSAVED_VAR} 0 }}`,
-        template: `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
-      },
+      [SAVE_SEG]: SAVE_CELL,
       [CONFIG_SEG]: {
         template: disclosureTrigger(
           CONFIG_SEG,
@@ -625,16 +647,17 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
       },
-      [RESET_ALL_SEG]: { template: RESET_ALL.template },
     },
   };
-  // The count the daemon publishes every render (RenderPayload.unsaved).
-  artifacts.variables[UNSAVED_VAR] = {
-    kind: "input",
-    path: "unsaved",
-    type: "number",
-    default: 0,
-  };
+  // The counts the daemon publishes every render, one per save-cell part.
+  for (const p of SAVE_PARTS) {
+    artifacts.variables[p.count] = {
+      kind: "input",
+      path: p.path,
+      type: "number",
+      default: 0,
+    };
+  }
   artifacts.variables[CONFIG_SEG] = disclosureStateVar(
     CONFIG_SEG,
     DISCLOSURE_CLOSED,
@@ -646,25 +669,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
-  declareHistorySteps(artifacts);
   return artifacts;
-}
-
-function declareHistorySteps(artifacts: MenuArtifacts): void {
-  for (const h of HISTORY_STEPS) {
-    const depth = historyDepthVar(h.depth);
-    artifacts.variables[depth] = {
-      kind: "input",
-      path: `history.${h.depth}`,
-      type: "number",
-      default: 0,
-    };
-    artifacts.actions[h.seg] = h.action;
-    artifacts.segments[h.seg] = {
-      when: `{{ gt .${depth} 0 }}`,
-      template: `{{ action "${h.seg}" "${h.display}" }}`,
-    };
-  }
 }
 
 // [LAW:one-source-of-truth] One report row per check, minted from the CHECKS

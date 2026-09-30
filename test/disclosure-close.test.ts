@@ -168,23 +168,28 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     // The bar row carries no row ✕: only the door itself, which is a trigger.
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
-    // The door opens INLINE: its tray takes the door's own row, led by the
-    // door's ❌ and by no row ✕.
+    // The door opens ABOVE: two menu lines stacked over the bar, each led by
+    // the door's ✕; the bar row keeps its cells, the door wearing ❌ and no
+    // row ✕.
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(1);
-    const [door] = links(lines[0]!);
+    expect(lines).toHaveLength(3);
+    for (const row of lines.slice(0, 2)) expectLedBy(row, SETTINGS_ANCHOR);
+    const bar = (): string => lines[lines.length - 1]!;
+    const [door] = links(bar());
     expect(door?.text).toBe(DOOR_CLOSE_GLYPH);
     expect(closes(door!, SETTINGS_ANCHOR)).toBe(true);
-    expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(links(bar()).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(stripAnsi(bar()).replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(closedBar);
 
-    // ⚙ config open: its row is led by ⚙'s ✕ — and 🍫's ✕ is not on it.
+    // ⚙ config open: its row drops below the menu's second line, led by ⚙'s
+    // ✕ — and 🍫's ✕ is not on it.
     const configKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}config`;
     rt.clickWriting(lines, configKey, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(2);
-    expectLedBy(lines[1]!, configKey);
-    expect(links(lines[1]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
+    expect(lines).toHaveLength(4);
+    expectLedBy(lines[2]!, configKey);
+    expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
     // A carousel opened inside ⚙'s body is its own disclosure's body
     // (brandon-theme-picker-bgw.ef6): each of its rows — the ring and the
@@ -192,8 +197,8 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
-    expect(lines).toHaveLength(4);
-    for (const row of lines.slice(2)) {
+    expect(lines).toHaveLength(6);
+    for (const row of lines.slice(3, 5)) {
       expectLedBy(row, pickers);
       expect(links(row).some((l) => closes(l, configKey))).toBe(false);
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
@@ -201,9 +206,9 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
 
     // Clicking ⚙'s row ✕ closes ⚙ (and the carousel hanging under it) while 🍫
     // stays open.
-    rt.click(links(lines[1]!)[0]!.url);
+    rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(3);
 
     // 🧰 tools opens a VERTICAL body whose rows are bare `candybar.` segments
     // — chrome-exempt, so no edit-mode row wraps them: the segment itself
@@ -212,14 +217,14 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     const toolsKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tools`;
     rt.clickWriting(lines, toolsKey, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(2);
-    expectLedBy(lines[1]!, toolsKey);
-    rt.click(links(lines[1]!)[0]!.url);
+    expect(lines).toHaveLength(4);
+    expectLedBy(lines[2]!, toolsKey);
+    rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(3);
 
     // And the door's ❌ closes the menu: back to the bar alone.
-    rt.click(links(lines[0]!)[0]!.url);
+    rt.click(links(bar())[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);
     expect(links(lines[0]!)[0]?.text).toBe(DOOR_GLYPH);

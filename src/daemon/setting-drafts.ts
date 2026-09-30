@@ -20,11 +20,17 @@ import {
   walkNodes,
   type DslConfig,
   type Globals,
+  type RawDslConfig,
   type SettingDecl,
   type SettingValue,
 } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
-import { presetGlobalsKey } from "../config/loader/persist-target.js";
+import {
+  parsePersistTarget,
+  persistPath,
+  presetGlobalsKey,
+  type ConfigPath,
+} from "../config/loader/persist-target.js";
 import { presetByName, presetNames, presetRoot } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
@@ -37,6 +43,7 @@ import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
+  type SettingCounts,
 } from "./render-payload.js";
 
 export interface SettingDraft extends SettingProjection {
@@ -331,4 +338,55 @@ export function resetLayers(key: string): ResetLayers {
         : []),
     ],
   };
+}
+
+// The config keys whose reset would change the config FILE: some layer
+// `resetLayers` names holds a value in the file as written. Read off the raw
+// parse, because the merged config cannot tell a file's value from the
+// bundled default's.
+export function fileHeldSettings(raw: RawDslConfig): ReadonlySet<string> {
+  return new Set(
+    SETTING_PROJECTIONS.map((p) => p.configKey).filter((key) =>
+      resetLayers(key).fileKeys.some((fileKey) =>
+        holds(raw, filePath(fileKey)),
+      ),
+    ),
+  );
+}
+
+// [LAW:one-source-of-truth] What the menu's save cell counts: every draft a
+// save writes, settings and placements alike, and every setting a reset all
+// would change — one the session holds a draft for or the file holds a value
+// for (`fileHeld`, from fileHeldSettings over the file's raw parse).
+export function settingCounts(
+  config: DslConfig,
+  fileHeld: ReadonlySet<string>,
+  sessionPick: (key: string) => string | null,
+): SettingCounts {
+  const drafts = settingDrafts(config, sessionPick);
+  return {
+    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    resettable: new Set([...drafts.map((d) => d.configKey), ...fileHeld]).size,
+  };
+}
+
+// A reset layer's key as the steps the file is navigated by — the same parse
+// a reset's delete goes through. `resetLayers` names only value paths, so a
+// key that parses to anything else is a programming error.
+function filePath(fileKey: string): ConfigPath {
+  const target = parsePersistTarget(fileKey);
+  if (target === null || target.scope === "preset-root") {
+    throw new Error(`reset layer "${fileKey}" is not a value path`);
+  }
+  return persistPath(target);
+}
+
+function holds(doc: unknown, path: ConfigPath): boolean {
+  const [step, ...rest] = path;
+  if (step === undefined) return doc !== undefined;
+  return (
+    typeof doc === "object" &&
+    doc !== null &&
+    holds((doc as Record<string, unknown>)[step], rest)
+  );
 }

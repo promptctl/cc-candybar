@@ -72,7 +72,7 @@ import {
   encodeRenderOrigin,
   type RenderOrigin,
 } from "./verbs";
-import { placementDrafts, settingDrafts } from "./setting-drafts";
+import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { setLaunchStats } from "../proc/launch";
@@ -1027,8 +1027,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         entry.state.neededInputPaths(effective.preset),
         effective,
         hints,
-        settingDrafts(entry.state.config, sessionPick).length +
-          placementDrafts(entry.state.config, sessionPick).length,
+        settingCounts(
+          entry.state.config,
+          entry.state.fileHeldSettings,
+          sessionPick,
+        ),
       );
       // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
       // and could not honour — today a `globals.palette` rule naming no installed

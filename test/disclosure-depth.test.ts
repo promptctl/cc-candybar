@@ -129,8 +129,8 @@ function regionOf(root: CompiledNode, palette: Palette, name: string): Region {
   return found;
 }
 
-/** The names of the segments directly inside the body `trigger` opens. */
-function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
+/** The body `trigger` opens. */
+function bodyOf(root: CompiledNode, trigger: string): CompiledContainerNode {
   const find = (node: CompiledNode): CompiledContainerNode | undefined => {
     if (node.kind === "segment") {
       if (node.name === trigger) return node.opens?.body;
@@ -144,7 +144,16 @@ function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
   };
   const body = find(root);
   if (body === undefined) throw new Error(`"${trigger}" opens no body`);
-  return body.children.flatMap((c) => (c.kind === "segment" ? [c.name] : []));
+  return body;
+}
+
+/** The names of the segments directly inside the body `trigger` opens. */
+function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
+  return cellsOf(bodyOf(root, trigger));
+}
+
+function cellsOf(node: CompiledContainerNode): string[] {
+  return node.children.flatMap((c) => (c.kind === "segment" ? [c.name] : []));
 }
 
 function build(src: string, withDefault = false) {
@@ -276,17 +285,27 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
     rt.render();
     const band0: Disclosure = { hue, depth: 0 };
     expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(bandFor(palette, band0, ColorDepth.TRUECOLOR).state.hex);
-    const row1 = bodyCellsOf(root, SETTINGS_ANCHOR);
-    expect(row1.length).toBeGreaterThan(2);
-    const config = row1.find((n) => n.endsWith(".config"));
+    // The door's body is two lines, each a row of cells.
+    const lines = bodyOf(root, SETTINGS_ANCHOR).children.map((line) => {
+      if (line.kind !== "container") throw new Error("a 🍫 body line is a row of cells");
+      return cellsOf(line);
+    });
+    expect(lines).toHaveLength(2);
+    const config = lines.flat().find((n) => n.endsWith(".config"));
     if (config === undefined) throw new Error("no ⚙ config cell in the 🍫 body");
-    for (const [index, name] of row1.entries()) {
-      // Band-relative: one step, the cell's index among the row's cells.
-      const address = regionAddress(rt, name);
-      expect(address).toMatchObject([{ index, count: row1.length }]);
-      const item = bandItemFor(palette, band0, address, ColorDepth.TRUECOLOR);
-      expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
-      expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
+    for (const [line, cells] of lines.entries()) {
+      for (const [index, name] of cells.entries()) {
+        // Band-relative: the line among the body's lines, then the cell's
+        // index among the line's cells.
+        const address = regionAddress(rt, name);
+        expect(address).toMatchObject([
+          { index: line, count: lines.length },
+          { index, count: cells.length },
+        ]);
+        const item = bandItemFor(palette, band0, address, ColorDepth.TRUECOLOR);
+        expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
+        expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
+      }
     }
 
     // ⚙ open: a trigger INSIDE the depth-0 band opens depth 1 — the hue's next

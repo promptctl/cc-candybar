@@ -177,7 +177,10 @@ export function freePlacementId(
   return `${segment}-${n}`;
 }
 
-export type Placement = "drop" | "inline";
+// Where an open body's rows go: `drop` hangs them below the trigger's row;
+// `above` lifts them over the whole bar, so opening the body moves no row of
+// the bar (brandon-menu-ia-q30.4oj — the settings door).
+export type Placement = "drop" | "above";
 
 export interface Opens {
   readonly ref: DisclosureRef;

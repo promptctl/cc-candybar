@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { RichText } from "@promptctl/rich-js";
 import { neededPrefixesByPreset } from "../render-payload.js";
+import { fileHeldSettings } from "../setting-drafts.js";
 import {
   loadConfig,
   validateConfig,
@@ -137,6 +138,9 @@ export interface DslRenderState {
   // two are indistinguishable by design. Computed from the SAME raw parse
   // that produced `config`, on the SAME reload, so the two never drift.
   readonly authoredRoots: ReadonlySet<string>;
+  // The config keys the FILE holds a value for at a layer a reset clears
+  // (fileHeldSettings) — from the same raw parse, for the same reason.
+  readonly fileHeldSettings: ReadonlySet<string>;
   // [LAW:single-enforcer] Disposers for the SessionState validators this config
   // installed (derived from its action table). Disposed on swap/eviction in the
   // same dispose-before-swap transaction as the SourceRegistry, so a reload
@@ -583,6 +587,7 @@ export class RenderCache {
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
       authoredRoots: authoredRoots(merged, raw),
+      fileHeldSettings: fileHeldSettings(raw),
     };
   }
 

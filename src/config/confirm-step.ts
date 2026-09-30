@@ -1,6 +1,6 @@
 // A control that takes two clicks: the first arms it, the second fires.
 //
-// [LAW:one-type-per-behavior] `⟲ reset all` and the command tray's `/clear`
+// [LAW:one-type-per-behavior] `⟲` (reset all) and the command tray's `/clear`
 // are two instances of this one step: a `state` key the arming click sets, a
 // confirm that disarms and fires the listed actions in one click, and a ✕ that
 // disarms without firing. What differs is data — the key, the two labels, the
