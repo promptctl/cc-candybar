@@ -273,10 +273,12 @@ export function resolveSelection<T>(
 // difference is a value passed in here, never an arm of this function.
 export function finishSelection<T>(
   selected: Selection<T>,
-  evaluate: () => string,
+  evaluate: (source: string) => string,
   decide: (name: string) => Decided<T>,
 ): Decided<T> {
-  return selected.kind === "decided" ? selected : decide(evaluate());
+  return selected.kind === "decided"
+    ? selected
+    : decide(evaluate(selected.source));
 }
 
 // --- Look (theme-adaptation) identifiers ---

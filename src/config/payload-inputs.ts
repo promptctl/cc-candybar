@@ -33,8 +33,8 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     default: "",
   },
   // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
-  // effectiveThemeName(sessionState.theme, globals.palette), the SAME name the
-  // rendered basePalette is built from. A theme-picker config's trigger reads
+  // the name renderDsl settles from resolveThemeSelection, the SAME name the
+  // rendered palette is built from. A theme-picker config's trigger reads
   // `{{ .theme.effective }}` to show the active theme, so the label and the
   // colors trace to one resolution and cannot drift — no per-config restating
   // of the initial theme (which JSON5, being inert data, cannot derive). The

@@ -573,7 +573,7 @@ export class RenderCache {
     // serves many sessions, but the effective theme is per-session SessionState;
     // freezing the palette per entry would let the rendered colors diverge from
     // the session's chosen theme. The server resolves basePalette per render
-    // from the effective theme (paletteForThemeName ∘ effectiveThemeName).
+    // from the effective theme (resolveThemeSelection, settled by renderDsl).
     return {
       config,
       store,

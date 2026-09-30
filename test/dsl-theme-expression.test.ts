@@ -38,6 +38,7 @@ import {
   THEME_FLOOR,
 } from "../src/themes";
 import { definedStyle } from "../src/template-engine/cells.js";
+import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 
 const SID = "s-theme-expr";
 // Four visibly different installed themes: the floor, plus three the expression
@@ -495,5 +496,113 @@ describe("decideThemeName", () => {
     const said: string[] = [];
     decideThemeName("light", (m) => said.push(m));
     expect(said[0]).toMatch(/"light" was retired; write "textual-light"/);
+  });
+});
+
+// brandon-themes-owl: the resolution reads the ACTIVE preset's globals over the
+// config's, so a rule authored in a preset's `globals` is the config default's
+// rule while that preset is active — and must be compiled like one. Resolved
+// through `resolveEffectiveGlobals`, the daemon's own chain, because the preset
+// rung is exactly what the file-level tests above never reach.
+describe("a rule inside a preset's globals", () => {
+  const LOOK_RULE =
+    "{{ if ge (int .ctx.pct) 80 }}hot{{ else }}none{{ end }}";
+  const presetSrc = (palette: string, look = LOOK_RULE): string => `{
+    globals: { palette: '${THEME_FLOOR}' },
+    looks: { none: {}, hot: { hueShift: 180 } },
+    presets: { ruled: { globals: { palette: '${palette}', look: '${look}' } } },
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
+      'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
+      'look.effective': { kind: 'input', path: 'look.effective', default: '' },
+    },
+    segments: {
+      plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
+      label: { template: 'T={{ .theme.effective }} L={{ .look.effective }}', bg: 'surface', fg: 'foreground' },
+    },
+    root: { v: ['plain', 'label'] },
+  }`;
+
+  const withRegistry = <R>(
+    source: string,
+    body: (
+      config: ReturnType<typeof parseAndValidate>,
+      registry: SourceRegistry,
+      store: VariableStore,
+    ) => R,
+  ): R => {
+    const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      return body(config, registry, store);
+    } finally {
+      registry.dispose();
+    }
+  };
+
+  test("the active preset's rule is evaluated per render, for both the theme and the look", () => {
+    withRegistry(presetSrc(RULE), (config, registry, store) => {
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const effective = resolveEffectiveGlobals(
+        config,
+        (key) => (key === "preset" ? "ruled" : null),
+        () => false,
+      );
+      const sink = new Map<string, readonly RichText[]>();
+      const render = (pct: number): { text: string; bg: string } => {
+        const text = renderDsl(
+          config,
+          compiled,
+          store,
+          registry,
+          { session_id: SID, ctx: { pct } },
+          OPTS,
+          { perSegmentSink: sink },
+          { theme: effective.theme, look: effective.look },
+        );
+        const cells = sink.get("plain")!;
+        return { text, bg: definedStyle(cells[0]!.style).bgcolor!.value!.hex };
+      };
+      const hot = render(90);
+      expect(hot.text).toContain("T=dracula L=hot");
+      expect(hot.bg).toBe(
+        transposePalette(getThemePalette("dracula"), {
+          hueShift: 180,
+          chromaScale: 1,
+          lightnessScale: 1,
+          lightnessShift: 0,
+        }).get("surface")!.hex,
+      );
+      expect(render(10).text).toContain("T=nord L=none");
+      expect(render(10).bg).toBe(byName("nord"));
+    });
+  });
+
+  test("a malformed rule in a preset fails at LOAD, naming the path it was written at", () => {
+    withRegistry(
+      presetSrc("{{ if ge (int .ctx.pct) 50 }}nord"),
+      (config, registry) => {
+        expect(() =>
+          registerDslConfig(config, registry, { cwd: process.cwd() }),
+        ).toThrow(/presets\.ruled\.globals\.palette is not a valid template/);
+      },
+    );
+  });
+
+  test("editGlobals refuses a rule — the staged rung decides by name only", () => {
+    const staged = `{
+      editGlobals: { palette: '${RULE}' },
+      segments: { plain: { template: 'x' } },
+      root: { v: ['plain'] },
+    }`;
+    expect(() => parseAndValidate("<theme-expr-staged>", staged, ALLOWED)).toThrow(
+      /editGlobals\.palette: a rule is not allowed here/,
+    );
+    const stagedLook = staged.replace("palette:", "look:");
+    expect(() =>
+      parseAndValidate("<theme-expr-staged>", stagedLook, ALLOWED),
+    ).toThrow(/editGlobals\.look: a rule is not allowed here/);
   });
 });
