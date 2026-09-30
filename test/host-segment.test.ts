@@ -74,7 +74,7 @@ const HOOK = {
 } as never;
 
 const payloadWith = (hints: ClientHints) =>
-  buildRenderPayload(HOOK, DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, 0);
+  buildRenderPayload(HOOK, DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, { unsaved: 0, resettable: 0 });
 
 describe("shortHostname", () => {
   test("takes everything before the first dot — zsh's %m, not %M", () => {

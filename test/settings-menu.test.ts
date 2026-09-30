@@ -173,54 +173,71 @@ describe("the global settings menu is reachable from a user config", () => {
     dispose();
   });
 
-  test("the menu opens inline: the tray replaces the door's row while open", () => {
+  // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
+  // bar's own rows as they were.
+  test("the menu opens above the bar: two lines stacked over rows that do not change", () => {
     const { render, clickWriting, dispose } = buildRuntime(
       userConfig(`{ v: [${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
-    const closed = stripAnsi(render()).split("\n");
-    expect(closed[0]).toContain("Opus");
-    expect(closed[0]).not.toContain("⎘ id");
+    const closed = render().split("\n");
+    expect(stripAnsi(closed[0]!)).toContain("Opus");
+    expect(stripAnsi(closed.join("\n"))).not.toContain("⎘ id");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render()).split("\n");
-    expect(opened).toHaveLength(closed.length);
-    const body = opened[0]!;
-    expect(body.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(body).not.toContain("Opus");
-    expect(opened[1]).toBe(closed[1]);
-    expect(body).toContain("↗ proj");
-    expect(body).toContain("↗ log");
-    expect(body.indexOf("⎘ id")).toBeGreaterThan(-1);
-    expect(body.indexOf("⎘ id")).toBeLessThan(body.indexOf("⚙ config"));
+    const opened = render().split("\n");
+    expect(opened).toHaveLength(closed.length + 2);
+    const [line1 = "", line2 = "", ...bar] = opened.map(stripAnsi);
+    // Line 1: the preset control. Line 2: the rest, the session tray first.
+    expect(line1).toContain("▦");
+    expect(line1).not.toContain("⎘ id");
+    expect(line2).toContain("↗ proj");
+    expect(line2.indexOf("⎘ id")).toBeLessThan(line2.indexOf("⚙ config"));
+    expect(line2).toContain("✎ edit");
+    // The bar: the door wears ❌, every other byte of every other row is
+    // what it was.
+    expect(bar[0]!.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(stripAnsi(closed[0]!));
+    expect(opened.slice(3)).toEqual(closed.slice(1));
     dispose();
   });
 
-  test("an open sibling's body leaves with its trigger while the menu is open", () => {
+  test("a door on a row of its own leaves every other row byte-identical", () => {
+    const { render, clickWriting, dispose } = buildRuntime(
+      userConfig(`{ v: ['${SETTINGS_ANCHOR}', ${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
+    );
+    const closed = render().split("\n");
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const opened = render().split("\n");
+    expect(opened).toHaveLength(closed.length + 2);
+    expect(stripAnsi(opened[2]!)).toContain(DOOR_CLOSE_GLYPH);
+    expect(opened.slice(3)).toEqual(closed.slice(1));
+    dispose();
+  });
+
+  test("an open sibling's body stays open under the open menu", () => {
     const { render, clickWriting, dispose } = buildRuntime(
       userConfig(
         `{ h: ['directory', { kind: 'group', name: 'g', label: 'more', children: ['model'] }] }`,
       ),
     );
     clickWriting(render(), "groups.g", "g");
-    expect(stripAnsi(render())).toContain("Opus");
+    const before = stripAnsi(render()).split("\n");
+    expect(before.join("\n")).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened).toHaveLength(1);
-    expect(opened[0]).not.toContain("Opus");
-    clickWriting(render(), SETTINGS_ANCHOR, "closed");
-    expect(stripAnsi(render())).toContain("Opus");
+    expect(opened.slice(2).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(before);
     dispose();
   });
 
-  test("the claim stops at the door's own row", () => {
+  test("a door placed deep in the tree lifts its menu over the whole bar", () => {
     const { render, clickWriting, dispose } = buildRuntime(
       userConfig(
-        `{ h: [{ v: ['${SETTINGS_ANCHOR}', { h: ['directory'] }] }, 'model'] }`,
+        `{ v: [{ h: ['context'] }, { h: [{ v: ['${SETTINGS_ANCHOR}', { h: ['directory'] }] }, 'model'] }] }`,
       ),
     );
+    const closed = stripAnsi(render()).split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render());
-    expect(opened).toContain("⎘ id");
-    expect(opened).toContain("Opus");
+    const opened = stripAnsi(render()).split("\n");
+    expect(opened[1]).toContain("⎘ id");
+    expect(opened.slice(2).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(closed);
     dispose();
   });
 
@@ -521,9 +538,9 @@ describe("the default placement never inherits an author's gate", () => {
     expect(closed[2]).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened).toHaveLength(3);
-    expect(opened[0]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(opened.slice(1)).toEqual(closed.slice(1));
+    expect(opened).toHaveLength(5);
+    expect(opened[2]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened.slice(3)).toEqual(closed.slice(1));
     dispose();
   });
 

@@ -452,7 +452,7 @@ describe("the payload projection", () => {
       new Set(["activity"]),
       EFFECTIVE_GLOBALS,
       {},
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     return built.activity;
   };

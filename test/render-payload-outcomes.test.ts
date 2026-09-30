@@ -96,7 +96,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.git).toBeUndefined();
@@ -119,7 +119,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.git).toBeUndefined();
@@ -147,7 +147,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -189,7 +189,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     chmodSync(transcript, 0o644);
 
@@ -220,7 +220,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.cache).toEqual({
@@ -259,7 +259,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.context).toBeUndefined();
@@ -302,7 +302,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -328,7 +328,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.tmux).toBeUndefined();
@@ -367,7 +367,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       new Set(), // no provider lane needed for this projection
       effective,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     // `theme` and `look` are the two fields this projection does NOT carry:
     // renderDsl injects both `.effective` values, because under a RULE in that
@@ -428,7 +428,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.git).toMatchObject({
@@ -459,7 +459,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -492,7 +492,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
 
     expect("prNumber" in payload.git!).toBe(false);
@@ -527,7 +527,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     return { payload, asked };
   };
@@ -567,7 +567,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     expect(payload.autocompact).toEqual({
       window: 800_000,

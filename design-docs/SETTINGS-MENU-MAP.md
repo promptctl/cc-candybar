@@ -4,7 +4,7 @@ The settings menu's structure, for brandon-menu-ia-q30.1ws. Quotes are Brandon's
 
 ## Structure
 
-The menu opens above the bar and leaves the bar as it was: "Opening the candy menu (the top level menu) should show the menus ABOVE the existing bar rather than replacing it." Today the menu takes over the door's row.
+The menu opens above the bar and leaves the bar as it was: "Opening the candy menu (the top level menu) should show the menus ABOVE the existing bar rather than replacing it."
 
 The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
@@ -15,7 +15,7 @@ The menu is two lines, then the body of the open tab. The first line holds the p
 ❌  host  directory  gitaculous          ← the bar, unchanged
 ```
 
-Every body placement today drops below its trigger or takes over its row (`placement: "drop" | "inline"`, `src/config/disclosure.ts`). Opening above is a third placement.
+A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
@@ -145,7 +145,7 @@ Added by me, at Brandon's request to fill out the list:
 
 Under epic brandon-menu-ia-q30 unless noted, in this order:
 
-1. **The menu opens above the bar.** A third disclosure placement beside `drop` and `inline`, and the door's two lines (preset and save cell, then tabs).
+1. **The menu opens above the bar.** A disclosure placement beside `drop`, replacing the row takeover (`inline`), and the door's two lines (preset and save cell, then tabs).
 2. **Five tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, each body holds what the Structure table lists, and each `SETTINGS` row names its tab.
 3. **Renames:** look → style, progression → variation, style → endcaps, and the variation values accent / duo / mono. Label, config key, session key and `.effective` variable, with the refusals Renames describes.
 4. **The look tab:** four `◀ name ▶` selectors. The name opens a plain menu whose choices show their effect in text colour on one shared background.

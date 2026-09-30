@@ -307,7 +307,7 @@ describe("buildRenderPayload — speed lane", () => {
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
@@ -332,7 +332,7 @@ describe("buildRenderPayload — speed lane", () => {
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -364,7 +364,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     expect(payload.speed?.history).toBe("100,0,300");
   });
@@ -393,7 +393,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
@@ -417,7 +417,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -430,7 +430,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["session.tokens"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      0,
+      { unsaved: 0, resettable: 0 },
     );
     expect(payload.speed).toBeUndefined();
   });

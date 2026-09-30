@@ -1,6 +1,6 @@
 // A control that takes two clicks: the first arms it, the second fires.
 //
-// [LAW:one-type-per-behavior] `⟲ reset all` and the command tray's `/clear`
+// [LAW:one-type-per-behavior] `⟲` (reset all) and the command tray's `/clear`
 // are two instances of this one step: a `state` key the arming click sets, a
 // confirm that disarms and fires the listed actions in one click, and a ✕ that
 // disarms without firing. What differs is data — the key, the two labels, the
@@ -14,6 +14,10 @@ const DISARMED = "disarmed";
 
 export interface ConfirmStep {
   readonly template: string;
+  // A template expression, true while the step is armed: whatever shows the
+  // step must keep showing it while this holds, or its confirm could be
+  // hidden armed and come back already one click from firing.
+  readonly armed: string;
   readonly actions: Readonly<Record<string, ActionDecl>>;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   // Fired by every click that can bring the step into view, so a confirm is
@@ -28,11 +32,12 @@ export function confirmStep(
 ): ConfirmStep {
   const arm = `${key}.arm`;
   const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
   return {
     // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
     // value, read back here.
     template:
-      `{{ if eq .${key} "${ARMED}" }}` +
+      `{{ if ${armed} }}` +
       `{{ action "${key}" "${labels.confirm}" }} {{ action "${disarm}" "✕" }}` +
       `{{ else }}{{ action "${arm}" "${labels.arm}" }}{{ end }}`,
     actions: {
@@ -40,6 +45,7 @@ export function confirmStep(
       [disarm]: { set: key, to: DISARMED },
       [key]: { do: [disarm, ...fires] },
     },
+    armed,
     variables: { [key]: { kind: "state", key, default: DISARMED } },
     disarm,
   };

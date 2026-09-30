@@ -396,6 +396,11 @@ export interface RenderPayload extends ClaudeHookData {
   // (src/daemon/setting-drafts.ts), derived every render so the menu's
   // `💾 save N` exists exactly while there is something to save.
   readonly unsaved: number;
+  // How many settings a reset all would change: those with a draft, or with
+  // a value the config file holds at a layer a reset clears
+  // (settingCounts over fileHeldSettings, src/daemon/setting-drafts.ts), so the menu's `⟲`
+  // exists exactly while it would do something.
+  readonly resettable: number;
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -1102,6 +1107,8 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  * the DSL declaration's `default` field, owned by the config, not buried
  * here.
  */
+export type SettingCounts = Pick<RenderPayload, "unsaved" | "resettable">;
+
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
   deps: RenderPayloadDeps,
@@ -1125,9 +1132,9 @@ export async function buildRenderPayload(
   // the client saw). Fusing them would put a config-precedence chain and a
   // trust boundary behind one name.
   hints: ClientHints,
-  // How many settings this session holds unsaved (src/daemon/setting-drafts.ts),
-  // derived by the caller from the config and session it rendered with.
-  unsaved: number,
+  // What the save cell counts (src/daemon/setting-drafts.ts), derived by the
+  // caller from the config and session it rendered with.
+  settingCounts: SettingCounts,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -1379,7 +1386,7 @@ export async function buildRenderPayload(
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
     history: deps.history(hookData.session_id),
-    unsaved,
+    ...settingCounts,
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

@@ -18,7 +18,7 @@
 
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { ConfigError } from "../src/config/dsl-loader";
+import { ConfigError, loadConfigSource } from "../src/config/dsl-loader";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -39,7 +39,10 @@ import {
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
-import { settingDrafts } from "../src/daemon/setting-drafts";
+import {
+  fileHeldSettings,
+  settingCounts,
+} from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
 import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf } from "./helpers/click";
@@ -109,7 +112,11 @@ function rig(
       ),
       () => registry.dispose(),
     ];
-    return { config, store, registry, compiled, disposers };
+    // What the render cache reads off the file's raw parse (render.ts).
+    const fileHeld = fileHeldSettings(
+      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, ALLOWED).raw,
+    );
+    return { config, store, registry, compiled, disposers, fileHeld };
   };
   let entry = load(source);
   const logs: string[] = [];
@@ -166,9 +173,9 @@ function rig(
             added_dirs: [],
           },
           ...effectiveInputs(effective),
-          // The daemon derives this per render (server.ts) through the same
-          // function the save verb writes from.
-          unsaved: settingDrafts(config, sessionPick).length,
+          // The daemon derives these per render (server.ts) through the same
+          // function.
+          ...settingCounts(config, entry.fileHeld, sessionPick),
           // What the daemon publishes from the session's settings history.
           history: {
             undo: durable?.history(SID).past.length ?? 0,
@@ -642,45 +649,60 @@ describe("reset returns settings to the bundled default", () => {
 
   test("reset all takes two clicks in one open menu, and the door disarms it", () => {
     const before = durable.text();
-    r.click(labelled("⟲ reset all")!);
+    r.click(labelled("⟲")!);
     expect(durable.text()).toBe(before);
-    expect(labelled("⟲ reset all")).toBeUndefined();
-    expect(labelled("⟲ confirm reset all")).toBeDefined();
+    expect(labelled("⟲")).toBeUndefined();
+    expect(labelled("⟲ reset all?")).toBeDefined();
     // Close and reopen the menu: the arm does not survive it.
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    expect(labelled("⟲ confirm reset all")).toBeUndefined();
-    expect(labelled("⟲ reset all")).toBeDefined();
+    expect(labelled("⟲ reset all?")).toBeUndefined();
+    expect(labelled("⟲")).toBeDefined();
     expect(durable.text()).toBe(before);
   });
 
   test("the armed reset all offers a ✕ that disarms it without resetting", () => {
     const before = durable.text();
-    r.click(labelled("⟲ reset all")!);
+    r.click(labelled("⟲")!);
     const cancel = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "✕" &&
         effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
     )!.url;
     r.click(cancel);
-    expect(labelled("⟲ confirm reset all")).toBeUndefined();
-    expect(labelled("⟲ reset all")).toBeDefined();
+    expect(labelled("⟲ reset all?")).toBeUndefined();
+    expect(labelled("⟲")).toBeDefined();
     expect(durable.text()).toBe(before);
   });
 
-  test("closing ⚙ config any way and reopening it disarms reset all", () => {
-    r.click(labelled("⟲ reset all")!);
-    // Close the panel through the ✕ that leads its row — not the door.
-    const close = links(r.render()).find(
+  test("an armed reset all stays in view when nothing is left to reset, so it never returns already armed", () => {
+    r.click(labelled("⟲")!);
+    r.click(labelled("⟲ reset all?")!);
+    expect(labelled("⟲")).toBeUndefined();
+
+    // A draft brings `⟲` back; arming it, then losing the draft (an undo),
+    // leaves nothing to reset — but the armed confirm and its ✕ stay.
+    r.sessionState.set(SID, "padding", "5");
+    r.click(labelled("⟲")!);
+    r.sessionState.clear(SID, "padding");
+    expect(labelled("⟲ reset all?")).toBeDefined();
+    const cancel = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("candybar.config")),
+        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
     )!.url;
-    r.click(close);
-    expect(labelled("⟲ confirm reset all")).toBeUndefined();
-    r.click(writesTo(r.render(), "candybar.config")[0]!);
-    expect(labelled("⟲ confirm reset all")).toBeUndefined();
-    expect(labelled("⟲ reset all")).toBeDefined();
+    r.click(cancel);
+    expect(labelled("⟲ reset all?")).toBeUndefined();
+    expect(labelled("⟲")).toBeUndefined();
+  });
+
+  // brandon-menu-ia-q30.4oj: `⟲` shows whenever a reset would change
+  // something — here the file's own values, with no draft to save.
+  test("⟲ shows beside the preset with no drafts while the file holds a resettable value", () => {
+    const [line1 = ""] = plain(r.render()).split("\n");
+    expect(line1).toContain("▦");
+    expect(line1).toContain("⟲");
+    expect(line1).not.toContain("💾");
   });
 
   test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", () => {
@@ -688,8 +710,8 @@ describe("reset returns settings to the bundled default", () => {
     r.sessionState.set(SID, "padding", "5");
     r.sessionState.set(SID, "look", "dim");
     const depth = durable.history(SID).past.length;
-    r.click(labelled("⟲ reset all")!);
-    r.click(labelled("⟲ confirm reset all")!);
+    r.click(labelled("⟲")!);
+    r.click(labelled("⟲ reset all?")!);
 
     // Every setting's reset in one click is ONE write and ONE reload, made
     // while the session still held its picks — released only after.
@@ -706,7 +728,8 @@ describe("reset returns settings to the bundled default", () => {
     expect(userContent()).toEqual(USER_CONTENT);
     expect(r.sessionState.get(SID, "padding")).toBeNull();
     expect(r.sessionState.get(SID, "look")).toBeNull();
-    expect(labelled("⟲ reset all")).toBeDefined();
+    // Nothing is left for a reset to change, so `⟲` is gone.
+    expect(labelled("⟲")).toBeUndefined();
     const out = plain(r.render());
     expect(out).toContain("padding 1");
     expect(out).toContain("◐ none");
@@ -714,7 +737,7 @@ describe("reset returns settings to the bundled default", () => {
 
     // One click, one step — undone by the ↶ on the bar.
     expect(durable.history(SID).past).toHaveLength(depth + 1);
-    r.click(labelled("↶ undo")!);
+    r.click(labelled("↶")!);
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "padding")).toBe("5");
     expect(r.sessionState.get(SID, "look")).toBe("dim");
@@ -925,11 +948,11 @@ describe("save as preset", () => {
     r.click(link("⊕ save as preset")!);
     r.click(link("🗑 delete custom-1")!);
 
-    r.click(link("↶ undo")!);
+    r.click(link("↶")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
 
-    r.click(link("↶ undo")!);
+    r.click(link("↶")!);
     expect(durable.text()).toBe(USER_PRESETS);
     expect(
       ["preset", "theme", "look"].map((k) => r.sessionState.get(SID, k)),
