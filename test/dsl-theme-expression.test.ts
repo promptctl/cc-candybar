@@ -631,6 +631,27 @@ describe("a rule inside a preset's globals", () => {
     );
   });
 
+  test("one text written in both slots is two rules — the theme report names only the palette", () => {
+    const shared = "{{ if true }}none{{ end }}";
+    withRegistry(presetSrc(shared, shared), (config, registry, store) => {
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const said: string[] = [];
+      renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: SID, ctx: { pct: 0 } },
+        OPTS,
+        { onRenderWarning: (m) => said.push(m) },
+        { preset: "ruled" },
+      );
+      expect(said).toEqual([
+        expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /),
+      ]);
+    });
+  });
+
   test("a look NAME in a preset's globals or in editGlobals must be a declared look", () => {
     expect(() =>
       parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),

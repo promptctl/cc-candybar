@@ -63,6 +63,7 @@ import {
   decideLookName,
   decideThemeName,
   EXPRESSION_SLOTS,
+  type ExpressionSlot,
   finishSelection,
   declaredBasePalette,
   drawnDepth,
@@ -181,7 +182,10 @@ export interface CompiledConfig {
   // are: the per-render cost is an evaluation and not a parse, and a malformed
   // template is a LOAD error — the place an author expects to be told — rather
   // than a render error they would hear about once per repaint.
-  readonly globalExpressions: ReadonlyMap<string, CompiledRule>;
+  readonly globalExpressions: ReadonlyMap<
+    ExpressionSlot,
+    ReadonlyMap<string, CompiledRule>
+  >;
   // [LAW:one-source-of-truth] The single "which segment is rendering" record
   // every segment-scoped template function reads — the menu's identity, the
   // `color` func's palette, the `bgOf` func's background. Surfaced here so the
@@ -757,7 +761,11 @@ export function registerDslConfig(
   // renderDsl an `expression` arm carrying that source — one predicate, every
   // reader. [LAW:dataflow-not-control-flow] One fold over every fragment × every
   // slot: adding a slot or a preset never adds a branch here.
-  const globalExpressions = new Map<string, CompiledRule>();
+  // Keyed by slot, then source: one text written in both slots is two rules, and
+  // a report about the palette's must not send the reader to the look.
+  const globalExpressions = new Map(
+    EXPRESSION_SLOTS.map((slot) => [slot, new Map<string, CompiledRule>()]),
+  );
   const fragments: ReadonlyArray<readonly [string, Partial<Globals>]> = [
     ["globals", config.globals],
     ...Object.entries(config.presets).map(
@@ -770,8 +778,9 @@ export function registerDslConfig(
       const authored = globals[slot];
       if (!isExpression(authored)) continue;
       const where = `${path}.${slot}`;
-      const seen = globalExpressions.get(authored);
-      globalExpressions.set(
+      const rules = globalExpressions.get(slot)!;
+      const seen = rules.get(authored);
+      rules.set(
         authored,
         seen === undefined
           ? { where, template: parseExpressionSlot(parse, where, authored) }
@@ -814,11 +823,15 @@ function parseExpressionSlot(
 // same fragments, so a missing template here is drift between two readers of
 // that one predicate — a loud caller bug, never a case to absorb into a field's
 // floor.
-function compiledRule(compiled: CompiledConfig, source: string): CompiledRule {
-  const rule = compiled.globalExpressions.get(source);
+function compiledRule(
+  compiled: CompiledConfig,
+  slot: ExpressionSlot,
+  source: string,
+): CompiledRule {
+  const rule = compiled.globalExpressions.get(slot)!.get(source);
   if (rule === undefined) {
     throw new Error(
-      `the rule ${JSON.stringify(source)} reached the render but no compiled ` +
+      `the ${slot} rule ${JSON.stringify(source)} reached the render but no compiled ` +
         `template exists — registerDslConfig and the resolution disagree about isExpression`,
     );
   }
@@ -1056,7 +1069,7 @@ export function renderDsl(
   // is the two values each hands it — which template to evaluate, and how a name
   // becomes that field's value.
   const theme = finishSelection(selectedTheme, (source) => {
-    const rule = compiledRule(compiled, source);
+    const rule = compiledRule(compiled, "palette", source);
     // [LAW:effects-at-boundaries] The message belongs to the theme domain, the
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
@@ -1066,7 +1079,7 @@ export function renderDsl(
   });
   const look = finishSelection(selectedLook, (source) =>
     decideLookName(
-      evalRule(compiledRule(compiled, source), scope),
+      evalRule(compiledRule(compiled, "look", source), scope),
       config.looks,
     ),
   );
