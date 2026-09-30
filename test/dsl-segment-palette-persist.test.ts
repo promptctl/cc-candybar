@@ -285,7 +285,11 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+  const ctx: VerbContext = testVerbContext(
+    sessionState,
+    durable.historyFor(sessionState),
+    config,
+  );
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

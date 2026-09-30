@@ -86,7 +86,7 @@ declares exactly one value source:
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
-| `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes `globals.<field>` into your **config file** (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
+| `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the field into your **config file** (every session, survives daemon restart) instead of one session: `globals.<field>`, or `presets.<name>.globals.<field>` when the preset your session renders names that field, since a top-level value is shadowed there — see below. No `int` arm: a page cursor is never persisted. |
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
@@ -203,8 +203,8 @@ it or a human found it and hand-edited it, and this one is no different.
 
 `reset` returns a setting to the bundled default. It removes the path
 `persist` writes (`globals.<field>`) and the same field in the fragment of any
-bundled preset (`presets.compact.globals.padding`, where a save lands while
-that preset is active). A preset you declared yourself keeps its own pins,
+bundled preset (`presets.compact.globals.padding`, where a save or a `persist`
+lands while that preset is active). A preset you declared yourself keeps its own pins,
 since they are part of what you wrote. The reset also clears the session's
 own pick of that setting, so the bar moves. A path your file never authored is
 left alone, and a reset that changes nothing enters no undo history.

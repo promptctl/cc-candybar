@@ -17,7 +17,7 @@ import {
   type ResolvedDomain,
 } from "../../config/option-domain";
 import { addableSegmentDomains } from "../../config/edit-chrome";
-import type { DslConfig } from "../../config/dsl-types";
+import type { DslConfig, Globals } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { encodeLayoutOp } from "../../config/layout-ops";
 import {
@@ -152,10 +152,10 @@ function actionKeySpecs(
 }
 
 // [LAW:one-source-of-truth] What a stepped config key holds before the file
-// declares it: the config's own globals field, or the field's floor
-// (numericGlobalsSeeds). null for a key that is no numeric globals field.
-export function configKeySeed(config: DslConfig, key: string): string | null {
-  const seed = numericGlobalsSeeds(config.globals).get(key);
+// declares it: the field in the globals the bar renders under its preset, or
+// the field's floor (numericGlobalsSeeds). null for a key that is no numeric globals field.
+export function configKeySeed(globals: Globals, key: string): string | null {
+  const seed = numericGlobalsSeeds(globals).get(key);
   return seed === undefined ? null : String(seed);
 }
 
