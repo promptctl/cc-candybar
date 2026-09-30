@@ -59,6 +59,7 @@ import {
 } from "../../config/dsl-types";
 import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
 import {
+  durableLanding,
   placementDrafts,
   placementPickProblems,
   presetSnapshot,
@@ -563,10 +564,6 @@ function originConfigFile(origin: RenderOrigin): string {
   );
 }
 
-function sessionConfigFile(ctx: VerbContext, sid: string): string {
-  return originConfigFile(sessionOrigin(ctx, sid));
-}
-
 function editStore(ctx: ClickContext, sid: string): EditStore {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
@@ -594,18 +591,24 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const file = sessionConfigFile(ctx, sid);
-  writeValues(editStore(ctx, sid), file, [[key, result.value]]);
+  const origin = sessionOrigin(ctx, sid);
+  const file = originConfigFile(origin);
+  const landing = durableLanding(
+    ctx.configFor(origin),
+    (k) => ctx.sessionState.get(sid, k),
+    key,
+  );
+  writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
   ctx.dlog(
     "info",
-    `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
+    `set-config: ${landing.key}=${result.value} → ${file} (session=${sid})`,
   );
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
-// against the value the file declares (or, when it declares none, the session
-// config's own top-level field — configKeySeed), wrapped and re-validated
-// through the SAME range gate, then written durably.
+// against the value the file declares at the layer the click lands in (or,
+// when it declares none, what the bar renders there — configKeySeed), wrapped
+// and re-validated through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
     decodeSegments(rawValue),
@@ -631,7 +634,12 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
-  const stored = readValue(file, key);
+  const landing = durableLanding(
+    ctx.configFor(origin),
+    (k) => ctx.sessionState.get(sid, k),
+    key,
+  );
+  const stored = readValue(file, landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -639,15 +647,15 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
           "step-config",
           key,
           params,
-          configKeySeed(ctx.configFor(origin), key),
+          configKeySeed(landing.globals, key),
         );
   const next = stepWithin(current, by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), file, [[key, result.value]]);
+  writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
   ctx.dlog(
     "info",
-    `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
   );
 };
 

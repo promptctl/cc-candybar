@@ -25,7 +25,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import JSON5 from "json5";
 import { getThemePalette } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import type { DslConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -367,9 +368,13 @@ describe("persist/reset action loader shape", () => {
 // [LAW:one-source-of-truth] The runtime parses `src` for the render AND
 // writes the same text as the session's config file, so the value a click
 // edits sits in the file the bar rendered from — the daemon's own situation.
-function buildPersistRuntime(src: string, sessionId = "s1") {
+function buildPersistRuntime(
+  src: string,
+  sessionId = "s1",
+  dflt: DslConfig = EMPTY_DEFAULT,
+) {
   durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
@@ -404,7 +409,7 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
     }
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, dispose };
+  return { config, store, render, click, dispose, sessionState };
 }
 
 describe("persist action click → the config file", () => {
@@ -550,7 +555,11 @@ describe("persist action click → the config file", () => {
     const configDisposers = deriveConfigActionValidators(config).map(
       ({ key, spec }) => registerConfigValidator(key, spec),
     );
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+    );
     const click = (url: string): void => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
@@ -652,6 +661,78 @@ describe("persist action click → the config file", () => {
     dispose();
   });
 
+  // brandon-settings-2ov: a preset whose fragment names a field wins over
+  // top-level globals, so a durable click there lands in that preset's own
+  // globals — where a save lands — or the bar never changes.
+  const SRC_UNDER_PRESET = `{
+    globals: { padding: 2, autoWrap: true },
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+    },
+    actions: {
+      bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 },
+      toggleWrap: { persist: 'autoWrap', cycle: ['true', 'false'] },
+    },
+    segments: { bar: { template: '{{ action "bumpPadding" "+" }} {{ action "toggleWrap" "w" }}', bg: 'surface', fg: 'foreground' } },
+    root: 'bar',
+    presets: { roomy: { globals: { padding: 4, autoWrap: true } } },
+  }`;
+  const barUnder = (preset: string, dflt: DslConfig = EMPTY_DEFAULT) =>
+    presetGlobals(
+      parseAndValidate("<test>", durable.text()!, ALLOWED, dflt),
+      preset,
+    );
+
+  test("a persist stepper under a preset that pins its field steps and writes that preset's globals", () => {
+    const { render, click, dispose, sessionState } =
+      buildPersistRuntime(SRC_UNDER_PRESET);
+    sessionState.set("s1", "preset", "roomy");
+    const urls = ownUrls(render());
+    click(urls[0]!); // seeds from roomy's 4, not the shadowed top-level 2
+    expect(barUnder("roomy").padding).toBe(5);
+    expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
+    dispose();
+  });
+
+  test("a persist cycle under a preset that pins its field writes that preset's globals", () => {
+    const { render, click, dispose, sessionState } =
+      buildPersistRuntime(SRC_UNDER_PRESET);
+    sessionState.set("s1", "preset", "roomy");
+    click(ownUrls(render())[1]!);
+    expect(barUnder("roomy").autoWrap).toBe(false);
+    expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
+    dispose();
+  });
+
+  // The ticket's repro: the pinning preset lives in the default the file
+  // merges over (bundled `compact` pins padding 0), and the file names no
+  // preset at all.
+  test("a persist stepper under a default-declared preset the file never names writes that preset's globals", () => {
+    const withCompact: DslConfig = {
+      ...EMPTY_DEFAULT,
+      presets: { compact: { globals: { padding: 0 } } },
+    };
+    const { render, click, dispose, sessionState } = buildPersistRuntime(
+      SRC2,
+      "s1",
+      withCompact,
+    );
+    sessionState.set("s1", "preset", "compact");
+    click(ownUrls(render())[2]!);
+    expect(barUnder("compact", withCompact).padding).toBe(1);
+    expect(globalsInFile()).toEqual({});
+    dispose();
+  });
+
+  test("a persist stepper under a preset silent on its field still writes top-level globals", () => {
+    const { render, click, dispose, sessionState } =
+      buildPersistRuntime(SRC_UNDER_PRESET.replace("padding: 4, ", ""));
+    sessionState.set("s1", "preset", "roomy");
+    click(ownUrls(render())[0]!);
+    expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
+    dispose();
+  });
+
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: proves the NEW
   // CONFIG_KEY_TO_EFFECTIVE_VAR entries (charset → charset.effective, …)
   // actually drive the "current selection" bold marking — not just that the
@@ -715,7 +796,11 @@ describe("persist action click → the config file", () => {
     );
     void config;
     const sessionState = new SessionState();
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+    );
     const setConfig = VERBS.get("set-config")!;
     expect(() =>
       setConfig(
@@ -775,7 +860,11 @@ describe("a durable click lands in the file the next reload reads", () => {
     const named = join(durable.projectDir, "named.json5");
     durable.seedOrigin(sessionState, "s1", named);
     durable.write(`{ globals: { palette: "textual-dark" } }`);
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+    );
     try {
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
       expect(
@@ -815,7 +904,11 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+    );
     const click = (palette: string): void =>
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
     const paletteIn = (file: string): unknown =>
@@ -875,7 +968,11 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(entry.state.config.globals.palette).toBe("textual-dark");
 
       durable.seedOrigin(sessionState, "s1");
-      const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+      const ctx: VerbContext = testVerbContext(
+        sessionState,
+        durable.historyFor(sessionState),
+        entry.state.config,
+      );
       let clicked = false;
       await reloads.after(entry, () => {
         if (clicked) {

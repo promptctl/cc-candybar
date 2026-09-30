@@ -31,7 +31,12 @@ import {
   presetGlobalsKey,
   type ConfigPath,
 } from "../config/loader/persist-target.js";
-import { presetByName, presetNames, presetRoot } from "../config/presets.js";
+import {
+  presetByName,
+  presetGlobals,
+  presetNames,
+  presetRoot,
+} from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -148,16 +153,52 @@ export function settingDrafts(
     (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
     NOT_CUSTOMIZED,
   );
-  const fragment = presetByName(config.presets, session.preset).globals ?? {};
   return differing(
     SETTING_ROWS,
     session,
     (name) => (name === "preset" ? file : landed),
-    (row) =>
-      row.configKey in fragment
-        ? presetGlobalsKey(session.preset, row.configKey)
-        : row.configKey,
+    (row) => landingKey(config, session.preset, row.configKey),
   );
+}
+
+// [LAW:one-source-of-truth] THE layer a written globals field lands at under
+// `preset`: that preset's own globals when its fragment names the field — a
+// top-level value there is shadowed, so the click would land and the bar never
+// change — else top-level globals.
+function landingKey(
+  config: DslConfig,
+  preset: string,
+  field: keyof Globals,
+): string {
+  return field in (presetByName(config.presets, preset).globals ?? {})
+    ? presetGlobalsKey(preset, field)
+    : field;
+}
+
+// Where a durable click on `key` lands for this session, and the globals the
+// file renders there — what a stepper steps from while the landing key is
+// unset. A globals field lands in the layer that wins under the preset the
+// session renders, as a save's does; every other persist key names its own
+// place.
+export interface DurableLanding {
+  readonly key: string;
+  readonly globals: Globals;
+}
+
+export function durableLanding(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  key: string,
+): DurableLanding {
+  const { preset } = sessionGlobals(config, sessionPick);
+  const target = parsePersistTarget(key);
+  return {
+    key:
+      target?.scope === "globals"
+        ? landingKey(config, preset, target.field)
+        : key,
+    globals: presetGlobals(config, preset),
+  };
 }
 
 // ─── A placement's settings (brandon-segment-settings-i4n.g64) ─────────────
