@@ -282,12 +282,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
     try {
       // The theme and style controls live in the synthesized settings menu's
       // config row (candybar-settings-ui-aok.3), behind two nested
-      // disclosures — open both with the same clicks a "🍫 ▸" then "⚙ config ▸"
+      // disclosures — open both with the same clicks a "🍫 ▸" then "🎨 look"
       // tap would dispatch, so the controls this test exercises render.
       clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [SID, "candybar.config", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
         ]),
         testVerbContext(sessionState),
       );

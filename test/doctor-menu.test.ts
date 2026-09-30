@@ -1,4 +1,4 @@
-// [LAW:verifiable-goals] brandon-doctor-b6a: the `🍫 ▸ 🧰 tools ▸ 🩺 doctor`
+// [LAW:verifiable-goals] brandon-doctor-b6a: the `🍫 › 🧰 tools › 🩺 doctor`
 // route, driven through the real loader, the real spine (registerDslConfig +
 // renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
 // probe answers `RGB`, and a settings.json in a temp Claude Code directory the
@@ -43,7 +43,7 @@ import type { TmuxHint } from "../src/tmux-hint";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const TOOLS_KEY = `${SETTINGS_NS}tools`;
+const TAB_KEY = `${SETTINGS_NS}tab`;
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -135,7 +135,7 @@ function buildRuntime(tmux: TmuxHint | null) {
   };
   const openTools = (): void => {
     clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    clickWriting(TOOLS_KEY, SETTINGS_OPEN);
+    clickWriting(TAB_KEY, "tools");
   };
   const dispose = (): void => disposers.forEach((d) => d());
   return {
@@ -151,13 +151,13 @@ function buildRuntime(tmux: TmuxHint | null) {
   };
 }
 
-describe("🍫 ▸ 🧰 tools ▸ 🩺 doctor", () => {
-  test("the tools disclosure holds the doctor button and no report until it runs", () => {
+describe("🍫 › 🧰 tools › 🩺 doctor", () => {
+  test("the tools tab holds the doctor button and no report until it runs", () => {
     const rt = buildRuntime(HINT);
     expect(rt.render()).not.toContain("🩺 doctor");
     rt.openTools();
     const out = rt.render();
-    expect(out).toContain("🧰 tools ▾");
+    expect(out).toContain("🧰 tools");
     expect(out).toContain("🩺 doctor");
     expect(out).not.toMatch(/[✓✗] tmux truecolor/);
     expect(rt.urlOfVerb(VERB_DOCTOR_RUN)).toBeDefined();
@@ -170,7 +170,7 @@ describe("🍫 ▸ 🧰 tools ▸ 🩺 doctor", () => {
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     const lines = rt.render().split("\n");
-    const toolsRow = lines.findIndex((l) => l.includes("🧰 tools ▾"));
+    const toolsRow = lines.findIndex((l) => l.includes("🧰 tools"));
     expect(toolsRow).toBeGreaterThanOrEqual(0);
     // A vertical body: the button on one row, the report on the next — a long
     // reason never widens the settings band it hangs from.

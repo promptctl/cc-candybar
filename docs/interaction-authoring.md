@@ -341,8 +341,9 @@ drops the picks it now holds, so the only draft left is the switch itself.
 Each click is one undo step. Neither click writes a file that would not load:
 copying a preset that holds a `kind: "group"` (group names are config-wide),
 or deleting one an action still targets, is refused with the loader's own
-message and changes nothing. The settings menu puts both under the preset
-carousel; this is the same pair on a bar of your own:
+message and changes nothing. The settings menu puts save in its `📐 layout`
+tab as `+ preset` and delete under the preset carousel; this is the same pair
+on a bar of your own:
 
 ```json5 check:pass
 {
@@ -367,8 +368,8 @@ carousel; this is the same pair on a bar of your own:
 in order: `"accent"` (the default: secondary, then accent), `"duo"` (primary,
 then secondary), or `"mono"` (every row in primary). Cells
 inside a row still differ by tone. It resolves like `endcaps` — the session's pick
-over the config value over the default — and the settings menu's `⚙ config`
-row carries a `🎼` carousel over it. `variations` is a registered domain and
+over the config value over the default — and the settings menu's `🎨 look`
+tab carries a `🎼` carousel over it. `variations` is a registered domain and
 `{{ .variation.effective }}` its projection, so a control of your own is the
 same two lines as any other picker:
 
@@ -792,7 +793,7 @@ truncates rather than staying reachable past a new edit).
 
 `do` names actions you already declared and fires them all from one click, in
 order. Reach for it when one intent needs two writes — "enter edit mode AND
-close the menu I entered it from" is exactly how the settings menu's `✎ edit`
+close the menu I entered it from" is exactly how the settings menu's `✎ arrange`
 is built. It has no gate of its own: each member keeps the gate it already
 derives, so nothing a `do` fires could not be clicked alone.
 
@@ -938,7 +939,7 @@ synthesizes:
   out, without reopening the menu edit mode was entered from.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
-its `✎ edit` entry fires `edit.toggle` (through a `do` that also closes the
+its `✎ arrange` entry fires `edit.toggle` (through a `do` that also closes the
 menu), so edit mode is live in any config you write, for every row in every
 preset. You never declare the toggle yourself; reference it from your own
 template if you want a second way in.
@@ -1002,7 +1003,7 @@ itself) are excluded from both halves — removing a group's own toggle or a
 menu's own host segment would strand its synthesized siblings, so edit mode
 only ever touches ordinary content.
 
-**Every bar ships this on**: the global settings menu's `✎ edit` fires
+**Every bar ships this on**: the global settings menu's `✎ arrange` fires
 `edit.toggle`, so any config that hosts the menu has edit mode. The chrome
 this synthesizes is real, always-compiled tree structure — a test asserting a
 preset's exact segment list needs to filter out `edit.`-namespaced names, the
@@ -1159,30 +1160,33 @@ yourself to move it anywhere else.
 
 Opening it shows the always-available functionality. The menu opens
 **above** the bar: two lines stacked over the bar's rows, which stay exactly as
-they were, and the door — now `❌` — closes the menu. Everything it opens in
-turn drops below the line it sits on:
+they were, then the open tab's body, and the door — now `❌` — closes the menu.
+The second line is five tabs, one open at a time; the open one wears its state
+colour, and its body drops below the strip. The tab stays open when the menu
+closes, so reopening the menu returns to it:
 
 ```
 ✕ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
-✕ ⎘ id ↗ proj ↗ log ↗ repo   /compact /model /clear   ⚙ config ▾   🧰 tools ▸   ✎ edit
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺   🔣 unicode ▸ ↺   🌈 truecolor ▸ ↺   ☑ wrap ↺   ◀ padding 1 ▶ ↺   ☑ update notice ↺
+✕ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺
 ❌ host   directory   gitaculous          ← the bar, unchanged
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
-disclosure, in the same state colour its trigger wears while open: the config
-row's `✕` closes `⚙ config` and leaves the menu open. Nothing stacks — a row
+disclosure, in the same state colour its trigger wears while open: the look
+tab's `✕` closes the tab and leaves the menu open. Nothing stacks — a row
 carries the `✕` of the innermost disclosure it belongs to, and a picker line
 keeps the picker's own. This is true of every disclosure on the bar (a group
 body, a `(?)` line), not only this menu; no author writes it and no author can
 decline it. The menu's own two lines lead with the door's `✕`.
 
-- **`⎘ id ↗ proj ↗ log ↗ repo`** are the quick actions: copy the session id,
+- **`⚡ session`** holds, on one row, **`⎘ id ↗ proj ↗ log ↗ repo`**, the quick actions: copy the session id,
   open the project or the transcript in your editor, open the repo's web page.
   The same tray is the bundled `toolbar` segment, which any row can place,
   bound to the bundled `copySession`/`openProject`/`openTranscript` actions,
   which any template can bind. The menu's tray binds its own reserved copies,
-  so overriding one of those actions changes `toolbar`, not the menu.
+  so overriding one of those actions changes `toolbar`, not the menu. Its
+  second row is `/compact /model /clear`, typed into this session's prompt.
 - **Every setting in the menu changes this session only**, at once. While any
   of them differs from your config file, `💾 save N` sits beside the preset
   switcher, counting them; clicking it writes them all to the config file and
@@ -1191,23 +1195,24 @@ decline it. The menu's own two lines lead with the door's `✕`.
   every setting to the bundled default — a second click, `⟲ reset all?`,
   confirms. Each part shows only while it has something to do: `⟲` whenever a
   setting holds a draft or your config file holds a value for it.
-- **Under the preset carousel**, `⊕ save as preset` keeps the bar as a new
-  preset and switches to it, and `🗑 delete <name>` removes the preset you are
-  in when you made it (see "Save as preset" above).
-- **The preset switcher** and **`✎ edit`** are one click from the toggle,
-  because switching arrangement and entering edit mode are what you most often
-  open this menu to do. `✎ edit` (and `✎ done`, to leave) also closes the
-  menu in the same click, so you land on the bar you are about to edit.
-- **`⚙ config`** opens the display settings: theme, style, variation, endcaps,
-  charset (the joiner glyphs: `unicode` or `ascii`), colour depth
-  (`truecolor`, `256`, `ansi`, `none`), wrap, padding and the update notice,
-  each ONE control, each with a `↺` that forgets its durable default. The
+- **The preset switcher** sits on the first line, one click from the door,
+  because switching arrangement is what you most often open this menu to do.
+  Under its carousel, `🗑 delete <name>` removes the preset you are in when you
+  made it (see "Save as preset" above).
+- **`🎨 look`** holds theme, style, variation and endcaps; **`📐 layout`**
+  holds `+ preset`, which keeps the bar as a new preset and switches to it,
+  `✎ arrange`, wrap and padding; **`⚙ config`** holds the rest: charset (the
+  joiner glyphs: `unicode` or `ascii`), colour depth (`truecolor`, `256`,
+  `ansi`, `none`) and the update notice. Every setting is ONE control, in
+  exactly one tab, each with a `↺` that forgets its durable default. The
   controls are generated from the `globals` declarations: a field with a list
   of values gets a carousel, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
   `menuGlyph` are free text and are set in the config file only.
-- **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
+- **`✎ arrange`** enters edit mode (and `✎ done` leaves it). It also closes
+  the menu in the same click, so you land on the bar you are about to edit.
+- **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look
   broken; `[fix]` repairs it in place (the first check writes

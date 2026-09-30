@@ -21,6 +21,7 @@
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -64,9 +65,16 @@ import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import type { ActionDecl } from "../src/config/action";
-import { SETTING_PROJECTIONS } from "../src/config/setting-projections";
+import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
+import { walkNodes } from "../src/config/dsl-types";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
+
+// The lines an open menu stacks over the bar: its two door lines, then the
+// body of the tab a fresh session opens it on (⚡ session: the quick actions,
+// then the commands).
+const MENU_LINES = 4;
+const TAB_KEY = "candybar.tab";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -96,8 +104,14 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
+  // Each segment's cells from the last render, by name.
+  const sink = new Map<string, readonly RichText[]>();
+  const render = (): string => {
+    sink.clear();
+    return renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
+      perSegmentSink: sink,
+    });
+  };
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
@@ -121,7 +135,7 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
     click(url);
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, render, click, clickWriting, dispose };
+  return { config, sessionState, sink, render, click, clickWriting, dispose };
 }
 
 const PAYLOAD = {
@@ -154,22 +168,24 @@ describe("the global settings menu is reachable from a user config", () => {
     dispose();
   });
 
-  test("the toggle opens a body carrying preset switching and edit mode", () => {
+  test("the toggle opens a body carrying preset switching and the tabs", () => {
     const { render, clickWriting, dispose } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     const closed = stripAnsi(render());
-    expect(closed).not.toContain("✎ edit");
+    expect(closed).not.toContain("⚡ session");
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
     // One symbol per state: the open door is the ❌, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
-    // The two things the ticket's acceptance names: enter edit mode, and switch
-    // presets (the picker's own disclosure glyph, hosted by the preset entry).
-    expect(opened).toContain("✎ edit");
+    // Switch presets (the picker's own disclosure glyph, hosted by the preset
+    // entry), and edit mode one tab away.
     expect(opened).toContain("▦");
+    expect(opened).toContain("📐 layout");
+    clickWriting(render(), TAB_KEY, "layout");
+    expect(stripAnsi(render())).toContain("✎ arrange");
     dispose();
   });
 
@@ -184,18 +200,18 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(stripAnsi(closed.join("\n"))).not.toContain("⎘ id");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length + 2);
-    const [line1 = "", line2 = "", ...bar] = opened.map(stripAnsi);
-    // Line 1: the preset control. Line 2: the rest, the session tray first.
+    expect(opened).toHaveLength(closed.length + MENU_LINES);
+    const [line1 = "", line2 = "", line3 = ""] = opened.map(stripAnsi);
+    const bar = opened.slice(MENU_LINES).map(stripAnsi);
+    // Line 1: the preset control. Line 2: the tabs. Then the open tab's body.
     expect(line1).toContain("▦");
     expect(line1).not.toContain("⎘ id");
-    expect(line2).toContain("↗ proj");
-    expect(line2.indexOf("⎘ id")).toBeLessThan(line2.indexOf("⚙ config"));
-    expect(line2).toContain("✎ edit");
+    expect(line2.indexOf("⚡ session")).toBeLessThan(line2.indexOf("🧰 tools"));
+    expect(line3).toContain("↗ proj");
     // The bar: the door wears ❌, every other byte of every other row is
     // what it was.
     expect(bar[0]!.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(stripAnsi(closed[0]!));
-    expect(opened.slice(3)).toEqual(closed.slice(1));
+    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });
 
@@ -206,9 +222,9 @@ describe("the global settings menu is reachable from a user config", () => {
     const closed = render().split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length + 2);
-    expect(stripAnsi(opened[2]!)).toContain(DOOR_CLOSE_GLYPH);
-    expect(opened.slice(3)).toEqual(closed.slice(1));
+    expect(opened).toHaveLength(closed.length + MENU_LINES);
+    expect(stripAnsi(opened[MENU_LINES]!)).toContain(DOOR_CLOSE_GLYPH);
+    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });
 
@@ -223,7 +239,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(before.join("\n")).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened.slice(2).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(before);
+    expect(opened.slice(MENU_LINES).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(before);
     dispose();
   });
 
@@ -236,8 +252,8 @@ describe("the global settings menu is reachable from a user config", () => {
     const closed = stripAnsi(render()).split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened[1]).toContain("⎘ id");
-    expect(opened.slice(2).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(closed);
+    expect(opened[2]).toContain("⎘ id");
+    expect(opened.slice(MENU_LINES).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(closed);
     dispose();
   });
 
@@ -246,6 +262,7 @@ describe("the global settings menu is reachable from a user config", () => {
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
+    clickWriting(render(), TAB_KEY, "layout");
     clickWriting(render(), EDIT_MODE_KEY, "arrange");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
     // The same click closed the menu, so the door's row is back — with its
@@ -427,6 +444,91 @@ describe("the anchor may be placed at most once", () => {
 // (a git row shown only inside a repo) deleted the undeletable door by accident
 // under exactly that condition. Asserted on the resolved tree rather than on a
 // render, because it must hold for every value the predicate could take.
+// ─── The tab strip (brandon-menu-tabs-wnu.qqz) ───────────────────────────────
+
+describe("the menu's second line is five tabs, one open at a time", () => {
+  const TABS = ["session", "look", "layout", "config", "tools"] as const;
+  const tabSeg = (tab: string) => `${TAB_KEY}.${tab}`;
+  const bgOf = (cells: readonly RichText[] | undefined): string | undefined => {
+    const style = cells?.[0]?.style;
+    return typeof style === "object" ? style.bgcolor?.value?.hex : undefined;
+  };
+  // The segments a node renders, a disclosure's body included.
+  const deepNames = (node: LayoutNode): string[] =>
+    [...walkNodes(node)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+
+  test("opening a tab closes the others, and the open one alone wears its state colour", () => {
+    const { render, clickWriting, sink, dispose } = buildRuntime(
+      userConfig(TWO_SEGMENT_ROW),
+    );
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    // What each tab's click writes: the open one's closes it, every other
+    // one's opens that tab.
+    const writes = (rendered: string) =>
+      linkUrls(rendered).flatMap((u) =>
+        effectsOf(u).flatMap((e) => (e.args[1] === TAB_KEY ? [e.args[2]] : [])),
+      );
+    for (const open of TABS) {
+      // A fresh session opens on ⚡ session, so only the others take a click.
+      if (open !== "session") clickWriting(render(), TAB_KEY, open);
+      const raw = render();
+      const out = stripAnsi(raw);
+      expect(writes(raw)).not.toContain(open);
+      expect(writes(raw)).toContain(DISCLOSURE_CLOSED);
+      // Every tab stays on the strip; one body hangs below it.
+      for (const tab of TABS) expect(sink.has(tabSeg(tab))).toBe(true);
+      const openBg = bgOf(sink.get(tabSeg(open)));
+      const closedBgs = TABS.filter((t) => t !== open).map((t) => bgOf(sink.get(tabSeg(t))));
+      expect(openBg).toBeDefined();
+      expect(closedBgs).not.toContain(openBg);
+      // The body is the open tab's: its first control, and no other tab's.
+      const marker = { session: "⎘ id", look: "◐ ", layout: "✎ arrange", config: "🔣 ", tools: "🩺 doctor" };
+      for (const tab of TABS) {
+        expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
+      }
+    }
+    dispose();
+  });
+
+  test("closing the menu and reopening it returns to the last tab", () => {
+    const { render, clickWriting, sessionState, dispose } = buildRuntime(
+      userConfig(TWO_SEGMENT_ROW),
+    );
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    // A fresh session opens on ⚡ session.
+    expect(stripAnsi(render())).toContain("⎘ id");
+    clickWriting(render(), TAB_KEY, "tools");
+    clickWriting(render(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+    expect(stripAnsi(render())).not.toContain("🩺 doctor");
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    expect(sessionState.get("s1", TAB_KEY)).toBe("tools");
+    expect(stripAnsi(render())).toContain("🩺 doctor");
+    dispose();
+  });
+
+  test("every setting's control is in exactly one place: the door's first line or one tab", () => {
+    const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), ALLOWED, DEFAULT_DSL_CONFIG);
+    const door = [...walkNodes(resolvedRoot(config))].find(
+      (n) => n.kind === "segment" && n.name === SETTINGS_ANCHOR,
+    );
+    if (door?.kind !== "segment" || door.opens === undefined) throw new Error("no door");
+    const [line1, line2] = door.opens.body.children;
+    if (line1 === undefined || line2?.kind !== "container") throw new Error("no door lines");
+    // Where each name renders: the first line, or the tab whose body holds it.
+    const places = new Map<string, string[]>();
+    const note = (name: string, place: string) => places.set(name, [...(places.get(name) ?? []), place]);
+    for (const name of deepNames(line1)) note(name, "door");
+    expect(line2.children.map((n: LayoutNode) => (n.kind === "segment" ? n.name : "?"))).toEqual(TABS.map(tabSeg));
+    for (const tab of line2.children) {
+      if (tab.kind !== "segment" || tab.opens === undefined) throw new Error("a tab opens a body");
+      for (const name of deepNames(tab.opens.body)) note(name, tab.name);
+    }
+    for (const name of Object.keys(SETTINGS)) {
+      expect([name, places.get(`${SETTINGS_NS}${name}`)?.length]).toEqual([name, 1]);
+    }
+  });
+});
+
 describe("the default placement never inherits an author's gate", () => {
   // Every `when` on the path from the resolved root down to the anchor.
   function gatesOverAnchor(node: LayoutNode): string[] {
@@ -538,9 +640,9 @@ describe("the default placement never inherits an author's gate", () => {
     expect(closed[2]).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened).toHaveLength(5);
-    expect(opened[2]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(opened.slice(3)).toEqual(closed.slice(1));
+    expect(opened).toHaveLength(closed.length + MENU_LINES);
+    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });
 
@@ -599,12 +701,12 @@ describe("the menu in a config that declares no variables", () => {
     root: { h: ['hello'] },
   }`;
 
-  // Every key the config holds in a disclosure state: a `state` var whose
-  // default is the closed sentinel.
+  // Every key the config holds in a disclosure state: a key some action
+  // cycles out of the closed sentinel.
   const disclosureKeys = (config: DslConfig): Set<string> =>
     new Set(
-      Object.values(config.variables).flatMap((v) =>
-        v.kind === "state" && v.default === DISCLOSURE_CLOSED ? [v.key] : [],
+      Object.values(config.actions).flatMap((a) =>
+        "set" in a && "cycle" in a && a.cycle[0] === DISCLOSURE_CLOSED ? [a.set] : [],
       ),
     );
 

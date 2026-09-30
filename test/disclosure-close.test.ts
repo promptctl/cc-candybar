@@ -158,7 +158,7 @@ function build(src: string, withDefault: boolean) {
 
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain", () => {
+describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain", () => {
   test("each body row leads with its own disclosure's ✕ and nothing stacks", () => {
     const rt = build(BUNDLED, true);
     let lines = rt.render();
@@ -169,12 +169,18 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     // The door opens ABOVE: two menu lines stacked over the bar, each led by
-    // the door's ✕; the bar row keeps its cells, the door wearing ❌ and no
-    // row ✕.
+    // the door's ✕, then the open tab's two rows (⚡ session, where a fresh
+    // session opens), each led by the tab's ✕ alone; the bar row keeps its
+    // cells, the door wearing ❌ and no row ✕.
+    const tabKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tab`;
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(5);
     for (const row of lines.slice(0, 2)) expectLedBy(row, SETTINGS_ANCHOR);
+    for (const row of lines.slice(2, 4)) {
+      expectLedBy(row, tabKey);
+      expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
+    }
     const bar = (): string => lines[lines.length - 1]!;
     const [door] = links(bar());
     expect(door?.text).toBe(DOOR_CLOSE_GLYPH);
@@ -182,30 +188,30 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     expect(links(bar()).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     expect(stripAnsi(bar()).replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(closedBar);
 
-    // ⚙ config open: its row drops below the menu's second line, led by ⚙'s
-    // ✕ — and 🍫's ✕ is not on it.
-    const configKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}config`;
-    rt.clickWriting(lines, configKey, "open");
+    // 🎨 look open: its one row replaces the session tab's two below the
+    // menu's second line, led by the tab's ✕ — and 🍫's ✕ is not on it.
+    rt.clickWriting(lines, tabKey, "look");
     lines = rt.render();
     expect(lines).toHaveLength(4);
-    expectLedBy(lines[2]!, configKey);
+    expectLedBy(lines[2]!, tabKey);
     expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
-    // A carousel opened inside ⚙'s body is its own disclosure's body
+    // A carousel opened inside the tab's body is its own disclosure's body
     // (brandon-theme-picker-bgw.ef6): each of its rows — the ring and the
-    // preview under it — is led by that disclosure's ✕ alone, never ⚙'s or 🍫's.
+    // preview under it — is led by that disclosure's ✕ alone, never the
+    // tab's or 🍫's.
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
     expect(lines).toHaveLength(6);
     for (const row of lines.slice(3, 5)) {
       expectLedBy(row, pickers);
-      expect(links(row).some((l) => closes(l, configKey))).toBe(false);
+      expect(links(row).some((l) => closes(l, tabKey))).toBe(false);
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }
 
-    // Clicking ⚙'s row ✕ closes ⚙ (and the carousel hanging under it) while 🍫
-    // stays open.
+    // Clicking the tab's row ✕ closes the tab (and the carousel hanging under
+    // it) while 🍫 stays open.
     rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
@@ -214,11 +220,10 @@ describe("brandon-disclosure-43z — the bundled 🍫 → ⚙ → picker chain",
     // — chrome-exempt, so no edit-mode row wraps them: the segment itself
     // leads its row (a user group's rows reach the lead through the row edit
     // chrome wraps them in, which is why this case is pinned here as well).
-    const toolsKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tools`;
-    rt.clickWriting(lines, toolsKey, "open");
+    rt.clickWriting(lines, tabKey, "tools");
     lines = rt.render();
     expect(lines).toHaveLength(4);
-    expectLedBy(lines[2]!, toolsKey);
+    expectLedBy(lines[2]!, tabKey);
     rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);

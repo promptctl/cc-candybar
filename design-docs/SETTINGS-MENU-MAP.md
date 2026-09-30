@@ -26,7 +26,7 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 | `⚡ session` | `⎘ id`, `⎘ resume` (new), `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (new, shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
 | `🎨 look` | Four selectors: theme, style, variation, endcaps (below) |
 | `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
-| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds. Each `SETTINGS` row names its tab, so a control lands in exactly one |
+| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds. `PLACE` in `settings-menu.ts` names each setting's tab, keyed by every `SETTINGS` row, so a control lands in exactly one |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.
@@ -128,7 +128,7 @@ Added by me, at Brandon's request to fill out the list:
 | Row | Cells |
 |---|---|
 | Door line 1: preset / with save cell / with reset confirm | 19 / 37 / 48 |
-| Door line 2: tabs / two tabs marked `•` | 62 / 66 |
+| Door line 2: tabs (the open one led by `▾`) / two tabs marked `•` | 64 / 68 |
 | `⚡ session` links / commands | 50 / 52 |
 | `🎨 look` / long names / all four drifted | 63 / 73 / 77 |
 | `📐 layout` | 55 |
@@ -146,7 +146,7 @@ Added by me, at Brandon's request to fill out the list:
 Under epic brandon-menu-ia-q30 unless noted, in this order:
 
 1. **The menu opens above the bar.** A disclosure placement beside `drop`, replacing the row takeover (`inline`), and the door's two lines (preset and save cell, then tabs).
-2. **Five tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, each body holds what the Structure table lists, and each `SETTINGS` row names its tab.
+2. **Five tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, each body holds what the Structure table lists, and `PLACE` names each setting's tab.
 3. **Renames:** look → style, progression → variation, style → endcaps, and the variation values accent / duo / mono. Label, config key, session key and `.effective` variable, with the refusals Renames describes.
 4. **The look tab:** four `◀ name ▶` selectors. The name opens a plain menu whose choices show their effect in text colour on one shared background.
 5. **Charset and colour depth leave the menu** and lose their session halves; their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`.

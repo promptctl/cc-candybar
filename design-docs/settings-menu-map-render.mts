@@ -26,7 +26,10 @@ import { stripAnsi } from "../test/helpers/ansi";
 const SID = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 const door = { [SETTINGS_ANCHOR]: SETTINGS_OPEN };
-const config = { ...door, [`${SETTINGS_NS}config`]: SETTINGS_OPEN };
+const TAB = `${SETTINGS_NS}tab`;
+const tab = (name: string) => ({ ...door, [TAB]: name });
+const look = tab("look");
+const config = tab("config");
 const ring = (name: string, base: Record<string, string>) => ({
   ...base,
   [PICKERS]: `${SETTINGS_NS}apply.${name}`,
@@ -34,13 +37,15 @@ const ring = (name: string, base: Record<string, string>) => ({
 const STATES: Record<string, Record<string, string>> = {
   closed: {},
   door,
+  look,
+  layout: tab("layout"),
   config,
-  tools: { ...door, [`${SETTINGS_NS}tools`]: SETTINGS_OPEN },
+  tools: tab("tools"),
   presetRing: ring("preset", door),
-  themeRing: ring("theme", config),
-  lookRing: ring("look", config),
-  styleRing: ring("style", config),
-  progressionRing: ring("progression", config),
+  themeRing: ring("theme", look),
+  styleRing: ring("style", look),
+  endcapsRing: ring("endcaps", look),
+  variationRing: ring("variation", look),
   charsetRing: ring("charset", config),
   depthRing: ring("colorCompatibility", config),
   edit: { [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE },
@@ -63,7 +68,7 @@ function renderToday(preset: string, width: number, state: Record<string, string
   );
 }
 
-const widest = new Map<string, number>();
+const rendered = new Map<string, string[]>();
 console.log("# Part 1 — today, rendered");
 for (const preset of ["default", "compact"]) {
   for (const width of [80, 200]) {
@@ -71,7 +76,7 @@ for (const preset of ["default", "compact"]) {
       console.log(`--- ${preset} ${name} @${width}`);
       const lines = stripAnsi(renderToday(preset, width, state)).split("\n");
       for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
-      widest.set(`${preset} ${name} @${width}`, Math.max(...lines.map((l) => cellLen(l))));
+      rendered.set(`${preset} ${name} @${width}`, lines);
     }
   }
 }
@@ -79,13 +84,13 @@ for (const preset of ["default", "compact"]) {
 const model = (cells: readonly string[]): number =>
   cells.reduce((w, c) => w + cellLen(c) + 3, 1);
 const PROPOSED: Record<string, readonly string[]> = {
-  "today door row (validates model)": ["❌", "⎘ id ↗ proj ↗ log ↗ repo", "/compact /model /clear", "▦ default ▸ ↺", "💾 save 1", "⚙ config ▸", "🧰 tools ▸", "✎ edit", "↶ undo", "↷ redo"],
-  "today config row (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 secondary-accent ▸ ↺", "🔣 unicode ▸ ↺", "🌈 truecolor ▸ ↺", "☑ wrap ↺", "◀ padding 1 ▶ ↺", "☑ update notice ↺", "⟲ reset all"],
+  "today look tab (validates model)": ["✕", "🎨 tokyo-night ▸ ↺", "◐ none ▸ ↺", "✦ powerline ▸ ↺", "🎼 accent ▸ ↺"],
+  "today layout tab (validates model)": ["✕", "+ preset", "✎ arrange", "☑ wrap ↺", "◀ padding 1 ▶ ↺"],
   "door line 1": ["✕", "▦ default ▸"],
   "door line 1 + save cell": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲"],
   "door line 1 + reset confirm": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
-  "door line 2: tabs": ["✕", "⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
-  "door line 2: tabs, two marked": ["✕", "⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools"],
+  "door line 2: tabs": ["✕", "▾ ⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
+  "door line 2: tabs, two marked": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools"],
   "session links": ["✕", "⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config"],
   "session commands": ["✕", "/compact", "/clear", "/model", "⏲ autocompact ▸"],
   "look": ["✕", "◀ tokyo-night ▶", "◀ none ▶", "◀ accent ▶", "◀ powerline ▶"],
@@ -101,14 +106,19 @@ for (const [name, cells] of Object.entries(PROPOSED)) {
 }
 
 // The model is only as good as its fit to today's render: each validating row
-// must equal the widest line Part 1 rendered for that state, or the script fails.
-const VALIDATES: Record<string, string> = {
-  "today door row (validates model)": "default door @200",
-  "today config row (validates model)": "default config @200",
+// must equal the line Part 1 rendered for that state that holds its marker, or
+// the script fails.
+const VALIDATES: Record<string, [state: string, marker: string]> = {
+  "door line 2: tabs": ["default door @200", "⚡ session"],
+  "tools": ["default tools @200", "🩺 doctor"],
+  "today look tab (validates model)": ["default look @200", "◐ none"],
+  "today layout tab (validates model)": ["default layout @200", "✎ arrange"],
 };
-for (const [row, rendered] of Object.entries(VALIDATES)) {
+for (const [row, [state, marker]] of Object.entries(VALIDATES)) {
   const modelled = model(PROPOSED[row]);
-  if (modelled !== widest.get(rendered)) {
-    throw new Error(`model drift: ${row} = ${modelled}, ${rendered} rendered ${widest.get(rendered)}`);
+  const line = rendered.get(state)?.find((l) => l.includes(marker));
+  const width = line === undefined ? undefined : cellLen(line);
+  if (modelled !== width) {
+    throw new Error(`model drift: ${row} = ${modelled}, ${state} rendered ${width}`);
   }
 }

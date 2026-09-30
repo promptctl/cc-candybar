@@ -27,7 +27,7 @@ import {
 } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
-import { linkUrls } from "./helpers/ansi";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SGR = /\x1b\[[0-9;]*m/g;
 const DEPTH_KEY = SETTINGS.colorCompatibility.sessionKey;
@@ -113,7 +113,7 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
     // Open the 🍫 door, ⚙ config, then the 🌈 colour depth ring — the clicks a user makes.
     const opened = (v: string) => v !== DISCLOSURE_CLOSED;
     click(render(), SETTINGS_ANCHOR, opened);
-    click(render(), "candybar.config", opened);
+    click(render(), "candybar.tab", (v) => v === "config");
     click(render(), "menus.candybar_pickers", (v) =>
       v.endsWith("colorCompatibility"),
     );
@@ -122,6 +122,9 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
     expect(effectiveDepth()).toBe("none");
     const none = render();
     expect(none.match(SGR)).toBeNull();
+    // With no colour, the open tab is still marked: it alone leads with ▾.
+    expect(stripAnsi(none)).toContain("▾ ⚙ config");
+    expect(stripAnsi(none).match(/▾ (⚡ session|🎨 look|📐 layout|🧰 tools)/)).toBeNull();
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 

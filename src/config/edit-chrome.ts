@@ -710,7 +710,7 @@ function spliceEditChromeForPreset(
 // `checkMenuDecls` already reserve unconditionally at parse time.
 //
 // Unconditional: the settings menu, synthesized into every config just before
-// this pass, ensures `edit.toggle` and puts `✎ edit` in its body, so every bar
+// this pass, ensures `edit.toggle` and puts `✎ arrange` in its body, so every bar
 // can reach edit mode (brandon-settings-menu-d6f).
 export function synthesizeEditChrome(config: DslConfig): DslConfig {
   const artifacts: ChromeArtifacts = {
@@ -751,7 +751,7 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
   };
   // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
-  // `✎ edit` fires, so the two cannot disagree about what "edit mode" is.
+  // `✎ arrange` fires, so the two cannot disagree about what "edit mode" is.
   artifacts.segments[EDIT_DONE_SEG] = {
     template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ done" }}`,
     when: EDIT_MODE_GATE,

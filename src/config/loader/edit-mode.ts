@@ -19,7 +19,7 @@
 // references it, so an authored `{{ action "edit.toggle" … }}` (or a `do`
 // firing it) cross-ref-checks before the merged config exists. It is not what
 // makes edit mode reachable: the settings menu is synthesized into every
-// config (settings-menu.ts), ensures this same toggle, and puts `✎ edit` in its
+// config (settings-menu.ts), ensures this same toggle, and puts `✎ arrange` in its
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
 import { SYNTAX_ENGINE } from "./syntax-engine.js";

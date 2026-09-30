@@ -48,11 +48,12 @@ Configuration:
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
-  quick actions, preset switching, edit mode, and a config menu of
-  clickable theme/style/variation/endcaps/charset/colour-depth/wrap/padding
-  controls. A change applies to this session at once; 💾 save appears while
+  preset switching and five tabs: ⚡ session (quick actions and commands),
+  🎨 look (theme/style/variation/endcaps), 📐 layout (new preset, edit mode,
+  wrap, padding), ⚙ config (charset, colour depth, update notice) and
+  🧰 tools. A change applies to this session at once; 💾 save appears while
   you have unsaved changes and writes them to your config file.
-  Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a
+  The 🧰 tools tab holds 🩺 doctor: click it to check your setup, and click a
   failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
 
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions

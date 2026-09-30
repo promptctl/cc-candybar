@@ -370,13 +370,17 @@ describe("the carousel rotates by applying", () => {
 // "◀ padding 0 ▶" carries two.
 const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
 
-// The door, then ⚙ config, then one control's carousel.
+// The door, then the control's tab, then its carousel.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
+const TAB_OF: Record<string, string> = {
+  charset: "⚙ config",
+  colorCompatibility: "⚙ config",
+};
 function openCarousel(rt: ReturnType<typeof rig>, control: string): void {
   rt.render();
   rt.clickText("🍫");
-  // The preset control sits on the tray itself; the rest behind ⚙ config.
-  if (control !== "preset") rt.clickText("⚙ config ▸");
+  // The preset control sits on the door's first line; the rest in a tab.
+  if (control !== "preset") rt.clickText(TAB_OF[control] ?? "🎨 look");
   rt.clickWriting(PICKERS, `candybar.apply.${control}`);
 }
 
@@ -465,11 +469,11 @@ describe("the variation control", () => {
 });
 
 describe("glyphs and colour depth sit in the settings menu, not on the bar", () => {
-  test("the bar carries no terminal drawer; ⚙ config holds both controls", () => {
+  test("the bar carries no terminal drawer; the ⚙ config tab holds both controls", () => {
     const rt = rig(`{}`);
     expect(stripAnsi(rt.render())).not.toContain("terminal");
     rt.clickText("🍫");
-    rt.clickText("⚙ config ▸");
+    rt.clickText("⚙ config");
     const text = stripAnsi(rt.render());
     expect(text).toContain("🔣 unicode");
     expect(text).toContain("🌈 truecolor");
@@ -489,7 +493,7 @@ describe("glyphs and colour depth sit in the settings menu, not on the bar", () 
       const rt = rig(`{}`);
       rt.render();
       rt.clickText("🍫");
-      rt.clickText("⚙ config ▸");
+      rt.clickText("⚙ config");
       rt.clickWriting(PICKERS, `candybar.apply.${key}`);
       expect(stripAnsi(rt.render())).toMatch(
         new RegExp(`${CAROUSEL_PREV} ${current} ${CAROUSEL_NEXT}`),
@@ -512,7 +516,7 @@ describe("glyphs and colour depth sit in the settings menu, not on the bar", () 
       const rt = rig(`{}`);
       rt.render();
       rt.clickText("🍫");
-      rt.clickText("⚙ config ▸");
+      rt.clickText("⚙ config");
       const reset = links(rt.render()).filter((l) =>
         effectsOf(l.url).some(
           (e) => e.verb === "reset-config" && e.args[1] === key,
@@ -532,8 +536,9 @@ function previewLabels(rendered: string): string[][] {
   const rows: string[][] = [];
   for (const line of lines.slice(ring + 1)) {
     // The preview's rows end where the ring's body goes on to the preset
-    // actions (brandon-save-undo-bwi.o6u), or where the body ends.
-    if (!/^\W*✕/u.test(line) || line.includes("⊕ save as preset")) break;
+    // actions (brandon-save-undo-bwi.o6u), or where the body ends: the
+    // menu's tab strip is the next line.
+    if (!/^\W*✕/u.test(line) || line.includes("🗑 delete") || line.includes("⚡ session")) break;
     rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
   }
   return rows;

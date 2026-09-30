@@ -270,7 +270,7 @@ function build(src: string, withDefault = false) {
 // The bundled default with a two-cell first row: 🍫 leads it.
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, depth by depth", () => {
+describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker chain, depth by depth", () => {
   test("each trigger wears the state of the band at its depth, and its cells are that band's items", () => {
     const rt = build(BUNDLED, true);
     const { palette, root } = rt;
@@ -291,10 +291,15 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
       return cellsOf(line);
     });
     expect(lines).toHaveLength(2);
-    const config = lines.flat().find((n) => n.endsWith(".config"));
-    if (config === undefined) throw new Error("no ⚙ config cell in the 🍫 body");
+    const look = lines.flat().find((n) => n === "candybar.tab.look");
+    if (look === undefined) throw new Error("no 🎨 look tab in the 🍫 body");
+    // A fresh session opens the menu on its session tab, a trigger inside
+    // the depth-0 band: it wears the depth-1 state, not a depth-0 item.
+    const firstTab = "candybar.tab.session";
+    expect(rt.bgOf(firstTab)).toBe(bandFor(palette, { hue, depth: 1 }, ColorDepth.TRUECOLOR).state.hex);
     for (const [line, cells] of lines.entries()) {
       for (const [index, name] of cells.entries()) {
+        if (name === firstTab) continue;
         // Band-relative: the line among the body's lines, then the cell's
         // index among the line's cells.
         const address = regionAddress(rt, name);
@@ -308,13 +313,14 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → ⚙ → picker chain, d
       }
     }
 
-    // ⚙ open: a trigger INSIDE the depth-0 band opens depth 1 — the hue's next
-    // form, recessed one step further — and its row's cells are depth-1 items.
-    rt.clickWriting(config, config, "open");
+    // 🎨 look open: a trigger INSIDE the depth-0 band opens depth 1 — the
+    // hue's next form, recessed one step further — and its row's cells are
+    // depth-1 items.
+    rt.clickWriting(look, "candybar.tab", "look");
     rt.render();
     const band1: Disclosure = { hue, depth: 1 };
-    expect(rt.bgOf(config)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
-    const row2 = bodyCellsOf(root, config);
+    expect(rt.bgOf(look)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
+    const row2 = bodyCellsOf(root, look);
     expect(row2.length).toBeGreaterThan(2);
     for (const name of row2) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
