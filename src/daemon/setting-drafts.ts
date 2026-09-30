@@ -32,6 +32,7 @@ import {
   type ConfigPath,
 } from "../config/loader/persist-target.js";
 import {
+  effectivePresetName,
   presetByName,
   presetGlobals,
   presetNames,
@@ -190,7 +191,11 @@ export function durableLanding(
   sessionPick: (key: string) => string | null,
   key: string,
 ): DurableLanding {
-  const { preset } = sessionGlobals(config, sessionPick);
+  const preset = effectivePresetName(
+    sessionPick(SETTINGS.preset.sessionKey),
+    config.globals.preset,
+    config.presets,
+  );
   const target = parsePersistTarget(key);
   return {
     key:
