@@ -1,3 +1,10 @@
+## [1.97.4](https://github.com/promptctl/cc-candybar/compare/v1.97.3...v1.97.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **themes:** a rule inside a preset's globals is compiled, not a render throw ([#282](https://github.com/promptctl/cc-candybar/issues/282)) ([4f0598c](https://github.com/promptctl/cc-candybar/commit/4f0598c5b61753cf7e334a59476d21526add107a))
+
 ## [1.97.3](https://github.com/promptctl/cc-candybar/compare/v1.97.2...v1.97.3) (2026-09-30)
 
 
