@@ -1,3 +1,10 @@
+## [1.97.3](https://github.com/promptctl/cc-candybar/compare/v1.97.2...v1.97.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **config:** action, picker and carousel refs inside a helper are checked at load ([#280](https://github.com/promptctl/cc-candybar/issues/280)) ([2998479](https://github.com/promptctl/cc-candybar/commit/2998479b69d4f1ac56be4cd1dd9973debb7f919f))
+
 ## [1.97.2](https://github.com/promptctl/cc-candybar/compare/v1.97.1...v1.97.2) (2026-09-29)
 
 
