@@ -43,6 +43,8 @@ import {
   effectiveColorCompatibility,
   effectiveProgression,
   effectiveUpdateNotice,
+  EXPRESSION_SLOTS,
+  isExpression,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -930,6 +932,18 @@ export function buildNeededPrefixes(
   const visited = new Set<string>();
   const reads = (src: string): Iterable<string> =>
     templateReads(src, config.helpers).keys();
+
+  // A globals rule (a theme or look chosen by data) reads variables too, and it
+  // runs every render — seed its reads so a provider feeding only the rule is
+  // not gated out and the rule never evaluates against unfilled defaults. The
+  // rule in force is the active preset's config-default rung (`presetGlobals`,
+  // the merge `resolveEffectiveGlobals` reads); editGlobals holds names only.
+  const declared = presetGlobals(config, preset);
+  for (const slot of EXPRESSION_SLOTS) {
+    const authored = declared[slot];
+    if (isExpression(authored))
+      for (const ref of reads(authored)) frontier.push(ref);
+  }
 
   for (const node of walkNodes(presetRoot(config, preset).node)) {
     // A node's `when` references variables too — seed them so a provider feeding

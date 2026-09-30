@@ -260,6 +260,37 @@ function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
   );
 }
 
+// [LAW:types-are-the-program] The staged rung decides by NAME only: a rule can
+// occupy only the config-default rung (`resolveSelection`, themes/policy.ts), so
+// the staged rung reads what it is handed as a name, and a rule there would name
+// nothing and fall through in silence (brandon-themes-owl). The same field spec
+// with the rule shape refused, so the loader accepts no shape the render
+// declines to settle — `isExpression` is the one predicate on both sides.
+function nameOnlySpec(
+  spec: FieldSpec<string>,
+  subject: string,
+): FieldSpec<string> {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message:
+            `${path}.${field}: a rule is not allowed here — ${subject} is decided ` +
+            `later than any rule could be settled, so it names a value. Write the rule ` +
+            `in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path.split("."), field]),
+        });
+        return undefined;
+      }
+      return spec.parse(ctx, path, field, raw);
+    },
+  };
+}
+
 // [LAW:no-silent-failure] Keys a globals block may no longer set, each with the
 // pointer the record engine refuses it with — shared by every globals schema
 // (top level, preset, editGlobals), so a removed key is refused wherever globals
@@ -317,6 +348,8 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
     ...GLOBALS_FIELDS,
     preset: nestedPresetSpec("the editGlobals fragment"),
     menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(GLOBALS_FIELDS.palette, "the editGlobals fragment"),
+    look: nameOnlySpec(GLOBALS_FIELDS.look, "the editGlobals fragment"),
   },
 };
 

@@ -17,6 +17,7 @@ import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
+  Globals,
   LayoutNode,
   ParseDecl,
   SegmentNode,
@@ -30,7 +31,12 @@ import {
 } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
-import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
+import {
+  PRESET_FLOOR,
+  presetGlobals,
+  presetNames,
+  presetRoot,
+} from "../config/presets.js";
 import {
   addableSegmentDomains,
   arrangedSegment,
@@ -57,6 +63,7 @@ import {
   decideLookName,
   decideThemeName,
   EXPRESSION_SLOTS,
+  type ExpressionSlot,
   finishSelection,
   declaredBasePalette,
   drawnDepth,
@@ -67,7 +74,6 @@ import {
   resolveThemeSelection,
   THEME_FLOOR,
   transposedPalette,
-  type ExpressionSlot,
   type LookSelection,
   type ThemeSelection,
 } from "../themes/index.js";
@@ -135,6 +141,14 @@ import {
 // daemon cache holding one value, not two that could fall out of sync. The
 // compiled node + segment shapes live in node-registry (the render layer that
 // owns node behavior); this driver only assembles + walks them.
+// A globals rule compiled once, with every path it was written at — the config's
+// own `globals.<slot>` and/or `presets.<name>.globals.<slot>`, since one source
+// may be authored in several fragments (save-as-preset copies globals verbatim).
+export interface CompiledRule {
+  readonly where: string;
+  readonly template: Template<RichText>;
+}
+
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   // [LAW:dataflow-not-control-flow] EVERY preset's layout, compiled up front and
@@ -150,21 +164,28 @@ export interface CompiledConfig {
   readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
-  // [LAW:one-source-of-truth] The compiled template for each globals slot whose
-  // author wrote a RULE instead of a name — `look` (brandon-looks-pe6) and
-  // `palette` (brandon-themes-dzl). Keyed by slot rather than one field per slot,
-  // so the eager parse, the drift check and the evaluation are each written once
-  // and a third such slot is one entry in `EXPRESSION_SLOTS`
-  // [LAW:one-type-per-behavior]. A slot is present here exactly when
-  // `isExpression` says its value is a rule, which is the same predicate the
-  // loader exempted from membership and the resolution reads — so the map's keys
-  // and the `expression` arms a render meets are the same set by construction.
+  // [LAW:one-source-of-truth] The compiled template for every RULE the config
+  // authored where a name could go — `look` (brandon-looks-pe6) and `palette`
+  // (brandon-themes-dzl) — in every globals fragment the config-default rung
+  // reads: the config's own `globals` and each preset's (brandon-themes-owl: the
+  // resolution reads the ACTIVE preset's globals over the config's, so a rule
+  // there is the default's rule while that preset is active). Keyed by the rule's
+  // SOURCE, because that is what the `expression` arm a render meets carries: the
+  // selection names the template it needs, so no reader re-derives which
+  // fragment won [LAW:dataflow-not-control-flow]. A source is present here
+  // exactly when `isExpression` said some fragment's slot holds it — the same
+  // predicate the loader exempted from membership and the resolution reads. Each
+  // entry carries every path that source was written at, so a report about the
+  // rule sends the reader to the fragment(s) holding it.
   //
   // Parsed HERE, with every other pre-parsed template, for the two reasons those
   // are: the per-render cost is an evaluation and not a parse, and a malformed
   // template is a LOAD error — the place an author expects to be told — rather
   // than a render error they would hear about once per repaint.
-  readonly globalExpressions: ReadonlyMap<ExpressionSlot, Template<RichText>>;
+  readonly globalExpressions: ReadonlyMap<
+    ExpressionSlot,
+    ReadonlyMap<string, CompiledRule>
+  >;
   // [LAW:one-source-of-truth] The single "which segment is rendering" record
   // every segment-scoped template function reads — the menu's identity, the
   // `color` func's palette, the `bgOf` func's background. Surfaced here so the
@@ -734,17 +755,38 @@ export function registerDslConfig(
   }
 
   // [LAW:no-silent-failure] Parsed eagerly so a malformed rule is a load error
-  // naming its own slot, not a per-render throw. Membership is decided by SHAPE
-  // (`isExpression`), the same way a template is told from a literal everywhere
-  // else here, so an entry exists iff the resolution will hand renderDsl an
-  // `expression` arm for that slot — one predicate, every reader.
-  // [LAW:dataflow-not-control-flow] One fold over the slot table: adding a slot
-  // never adds a branch here.
-  const globalExpressions = new Map<ExpressionSlot, Template<RichText>>();
-  for (const slot of EXPRESSION_SLOTS) {
-    const authored = config.globals[slot];
-    if (isExpression(authored))
-      globalExpressions.set(slot, parseExpressionSlot(parse, slot, authored));
+  // naming the path it was written at, not a per-render throw. Membership is
+  // decided by SHAPE (`isExpression`), the same way a template is told from a
+  // literal everywhere else here, so an entry exists iff the resolution can hand
+  // renderDsl an `expression` arm carrying that source — one predicate, every
+  // reader. [LAW:dataflow-not-control-flow] One fold over every fragment × every
+  // slot: adding a slot or a preset never adds a branch here.
+  // Keyed by slot, then source: one text written in both slots is two rules, and
+  // a report about the palette's must not send the reader to the look.
+  const globalExpressions = new Map(
+    EXPRESSION_SLOTS.map((slot) => [slot, new Map<string, CompiledRule>()]),
+  );
+  const fragments: ReadonlyArray<readonly [string, Partial<Globals>]> = [
+    ["globals", config.globals],
+    ...Object.entries(config.presets).map(
+      ([name, preset]) =>
+        [`presets.${name}.globals`, preset.globals ?? {}] as const,
+    ),
+  ];
+  for (const [path, globals] of fragments) {
+    for (const slot of EXPRESSION_SLOTS) {
+      const authored = globals[slot];
+      if (!isExpression(authored)) continue;
+      const where = `${path}.${slot}`;
+      const rules = globalExpressions.get(slot)!;
+      const seen = rules.get(authored);
+      rules.set(
+        authored,
+        seen === undefined
+          ? { where, template: parseExpressionSlot(parse, where, authored) }
+          : { where: `${seen.where}, ${where}`, template: seen.template },
+      );
+    }
   }
 
   return {
@@ -764,35 +806,40 @@ export function registerDslConfig(
 // The same reasoning (and the same shape) as a `bg:`/`fg:` parse failure.
 function parseExpressionSlot(
   parse: (src: string) => Template<RichText>,
-  slot: ExpressionSlot,
+  path: string,
   source: string,
 ): Template<RichText> {
   try {
     return parse(source);
   } catch (e) {
     throw new Error(
-      `globals.${slot} is not a valid template: ${e instanceof Error ? e.message : String(e)}`,
+      `${path} is not a valid template: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 }
 
 // [LAW:no-defensive-null-guards] `isExpression` gates BOTH the compile in
-// registerDslConfig and the `expression` arm the resolution produces, so a
-// missing template here is drift between two readers of that one predicate — a
-// loud caller bug, never a case to absorb into a field's floor.
-function evalExpressionSlot(
+// registerDslConfig and the `expression` arm the resolution produces, over the
+// same fragments, so a missing template here is drift between two readers of
+// that one predicate — a loud caller bug, never a case to absorb into a field's
+// floor.
+function compiledRule(
   compiled: CompiledConfig,
   slot: ExpressionSlot,
-  scope: object,
-): string {
-  const template = compiled.globalExpressions.get(slot);
-  if (template === undefined) {
+  source: string,
+): CompiledRule {
+  const rule = compiled.globalExpressions.get(slot)!.get(source);
+  if (rule === undefined) {
     throw new Error(
-      `globals.${slot} is an expression but no compiled template exists — ` +
-        `registerDslConfig and the resolution disagree about isExpression`,
+      `the ${slot} rule ${JSON.stringify(source)} reached the render but no compiled ` +
+        `template exists — registerDslConfig and the resolution disagree about isExpression`,
     );
   }
-  return template
+  return rule;
+}
+
+function evalRule(rule: CompiledRule, scope: object): string {
+  return rule.template
     .evaluate(scope)
     .map((f) => f.plain)
     .join("");
@@ -934,10 +981,18 @@ export function renderDsl(
   // below — and every variable template's `readableOn` — is floored on it.
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   const { preset = PRESET_FLOOR } = selection ?? {};
+  // [LAW:one-source-of-truth] What an omitting caller falls back to is the
+  // config default as the daemon reads it: the ACTIVE preset's globals over the
+  // config's (`presetGlobals`, the one merge `resolveEffectiveGlobals` uses), so
+  // the bar's colours and its layout come from the same preset.
+  const declared = presetGlobals(config, preset);
   // [LAW:one-source-of-truth] An omitting caller renders the progression the
   // CONFIG declares — the same true default the theme below honours.
   const progression =
-    PROGRESSIONS[selection?.progression ?? configProgression(config)];
+    PROGRESSIONS[
+      selection?.progression ??
+        effectiveProgression(undefined, null, declared.progression)
+    ];
   compiled.menuRuntime.action.progression = progression;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
@@ -953,7 +1008,7 @@ export function renderDsl(
   // floor here would silently repaint every such render.
   const selectedTheme =
     selection?.theme ??
-    resolveThemeSelection(undefined, null, config.globals.palette);
+    resolveThemeSelection(undefined, null, declared.palette);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
   // ActionRuntime.width), so a template reads the exact wrap width — never a
@@ -1013,18 +1068,20 @@ export function renderDsl(
   // [LAW:one-type-per-behavior] One `finishSelection` for both slots; what differs
   // is the two values each hands it — which template to evaluate, and how a name
   // becomes that field's value.
-  const theme = finishSelection(
-    selectedTheme,
-    () => evalExpressionSlot(compiled, "palette", scope),
+  const theme = finishSelection(selectedTheme, (source) => {
+    const rule = compiledRule(compiled, "palette", source);
     // [LAW:effects-at-boundaries] The message belongs to the theme domain, the
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
-    (name) => decideThemeName(name, (message) => onRenderWarning?.(message)),
-  );
-  const look = finishSelection(
-    selectedLook,
-    () => evalExpressionSlot(compiled, "look", scope),
-    (name) => decideLookName(name, config.looks),
+    return decideThemeName(evalRule(rule, scope), rule.where, (message) =>
+      onRenderWarning?.(message),
+    );
+  });
+  const look = finishSelection(selectedLook, (source) =>
+    decideLookName(
+      evalRule(compiledRule(compiled, "look", source), scope),
+      config.looks,
+    ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
   // carry, so push it: without this the settings menu's `🎨 theme` / `◐ look`

@@ -1610,6 +1610,11 @@ template is a load error against `globals.palette` rather than a per-repaint
 throw. `.theme.effective` reads back whatever the expression chose, so a
 `🎨 {{ .theme.effective }}` label always names the theme you are looking at.
 
+Both rules may also live in a preset's own `globals` (`presets.<name>.globals.palette`),
+where they are the default while that preset is active. `editGlobals` takes
+names only: edit mode's staging outranks every rule, so a rule there is a load
+error.
+
 One thing differs, and it is worth knowing before you write the expression. A
 look naming nothing goes quietly to `none`, because a bar wearing no look is a
 perfectly sensible bar. A *theme* naming nothing cannot be quiet: there is no

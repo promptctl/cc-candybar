@@ -453,11 +453,29 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain("no-such-theme");
-    // Under the SLOT's own label — a globals slot is not a segment, and a report
-    // calling it one misdirects the reader (and would collide with a segment that
-    // happened to be named `globals.palette`).
-    expect(message).toContain("globals.palette: ");
-    expect(message).not.toContain('segment "globals.palette"');
+    // Under the rule's own label, naming where it was written — a globals slot
+    // is not a segment, and a report calling it one misdirects the reader.
+    expect(message).toContain("theme rule: globals.palette rendered");
+    expect(message).not.toContain('segment "');
+  });
+
+  it("a rule in the active preset's globals is reported at the preset's path", async () => {
+    // brandon-themes-owl: the rule lives in `presets.ruled.globals.palette`, and
+    // the top-level `globals.palette` holds a valid name — a report naming the
+    // top level sends the reader to a field with nothing wrong in it.
+    const p = write(
+      "theme-rule-preset-bad.json5",
+      `{
+        globals: { palette: 'nord', preset: 'ruled' },
+        presets: { ruled: { globals: { palette: '{{ if true }}no-such-theme{{ else }}nord{{ end }}' } } },
+        segments: { a: { template: 'a' } },
+        root: { h: ['a'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain(
+      "theme rule: presets.ruled.globals.palette rendered",
+    );
   });
 
   it("a globals.palette rule that resolves is clean — the slot accepts a rule at all", async () => {

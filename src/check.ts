@@ -388,13 +388,13 @@ export function renderEffective(
     {
       onSegmentError: (placementId: string, message: string) =>
         failures.set(`segment "${placementId}"`, message),
-      // [LAW:no-silent-failure] A `globals.palette` rule whose result names no
-      // installed theme is a real finding for a headless pass: the bar would
-      // render, in the wrong theme, with nobody watching the strip. Reported
-      // under the slot as its "segment" name so it dedupes and prints through
-      // the one channel every other finding does.
-      onRenderWarning: (message: string) =>
-        failures.set("globals.palette", message),
+      // [LAW:no-silent-failure] A palette rule whose result names no installed
+      // theme is a real finding for a headless pass: the bar would render, in
+      // the wrong theme, with nobody watching the strip. Keyed "theme rule" so it
+      // dedupes and prints through the one channel every other finding does;
+      // the message itself names the path(s) the rule was written at, which may
+      // be a preset's globals rather than the config's own.
+      onRenderWarning: (message: string) => failures.set("theme rule", message),
     },
     renderSelectionOf(effective),
   );

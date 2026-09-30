@@ -1335,10 +1335,16 @@
           "type": "string"
         },
         "palette": {
-          "type": "string"
+          "type": "string",
+          "not": {
+            "pattern": "\\{\\{"
+          }
         },
         "look": {
-          "type": "string"
+          "type": "string",
+          "not": {
+            "pattern": "\\{\\{"
+          }
         },
         "preset": {
           "not": {},
