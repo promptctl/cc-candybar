@@ -57,7 +57,7 @@ export function mergeWithDefault(
     // [LAW:one-source-of-truth] looks merge by name, same cascade — a user
     // overrides one adaptation by re-declaring its name; the bundled stdlib
     // (incl. the "none" identity floor) survives every merge by construction.
-    looks: { ...dflt.looks, ...(raw.looks ?? {}) },
+    styles: { ...dflt.styles, ...(raw.styles ?? {}) },
     // [LAW:one-source-of-truth] presets merge by name then by field, the
     // segments overlay — a user retunes one arrangement's root without
     // restating its globals; the bundled stdlib (incl. the "default"

@@ -395,7 +395,17 @@ function validateTopLevel(
     out.root = validateRootFragment(ctx, "root", raw.root);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
-  if (raw.looks !== undefined) out.looks = validateLooks(ctx, raw.looks);
+  // [LAW:no-silent-failure] `looks:` was renamed `styles:` (brandon-menu-ia-
+  // q30.xuz). Refused by name, like `layout:` above, so the author is told the
+  // new key rather than handed a bare unknown-key message.
+  if (raw.looks !== undefined) {
+    ctx.issues.push({
+      path: "looks",
+      message: `"looks" was renamed "styles" — move the block under styles: { … } (and globals.look to globals.style)`,
+      line: findKeyLine(ctx.source, ["looks"]),
+    });
+  }
+  if (raw.styles !== undefined) out.styles = validateLooks(ctx, raw.styles);
   // [LAW:one-source-of-truth] Parsed BEFORE the synthesis passes below, because
   // a preset's `root` runs through the same validateRootFragment and therefore collects
   // its group sugar into the same `ctx.groups` the top-level root does — the
@@ -443,16 +453,17 @@ function validateTopLevel(
   return out;
 }
 
-// [LAW:no-silent-failure] `layout` is intentionally absent — a config that
-// writes it gets an explicit migration error, not an "unknown key" message.
+// [LAW:no-silent-failure] `layout` and `looks` are listed so a config that
+// writes one gets its migration error, not an "unknown key" message.
 const TOP_LEVEL_KEYS = new Set([
   "globals",
   "variables",
   "segments",
   "layout",
+  "looks",
   "root",
   "actions",
-  "looks",
+  "styles",
   "presets",
   "editGlobals",
   "helpers",

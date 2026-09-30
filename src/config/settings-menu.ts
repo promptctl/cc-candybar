@@ -205,11 +205,11 @@ const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
       `{{ end }}`,
   ],
   theme: PALETTE_PREVIEW,
-  look: PALETTE_PREVIEW,
-  // A progression says which role each ROW wears — `{{ layoutPreview }}`
-  // draws every row, each block in the tint the ring's current progression
+  style: PALETTE_PREVIEW,
+  // A variation says which role each ROW wears — `{{ layoutPreview }}`
+  // draws every row, each block in the tint the ring's current variation
   // deals it.
-  progression: ["{{ layoutPreview }}"],
+  variation: ["{{ layoutPreview }}"],
 };
 
 // [LAW:one-source-of-truth] A control's names, derived from its setting's

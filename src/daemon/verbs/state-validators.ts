@@ -59,7 +59,7 @@ export {
 // and break the next render.
 const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
-const RESOLVABLE_STYLES: ReadonlySet<string> = new Set(STRIP_STYLES);
+const RESOLVABLE_ENDCAPS: ReadonlySet<string> = new Set(STRIP_STYLES);
 
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
@@ -72,12 +72,12 @@ const validateTheme: KeyValidator = (raw) => {
   return { ok: true, value: raw };
 };
 
-const validateStyle: KeyValidator = (raw) => {
-  if (!raw) return { ok: false, reason: "style name is required" };
-  if (!RESOLVABLE_STYLES.has(raw)) {
+const validateEndcaps: KeyValidator = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
     return {
       ok: false,
-      reason: `unknown style "${raw}" (have: ${STRIP_STYLES.join(", ")})`,
+      reason: `unknown endcaps "${raw}" (have: ${STRIP_STYLES.join(", ")})`,
     };
   }
   return { ok: true, value: raw };
@@ -99,11 +99,11 @@ const validateBoolean: KeyValidator = (raw) => {
 };
 
 // [LAW:one-source-of-truth] THE SessionState instance of the shared registry.
-// Baseline keys (style/theme/toolbar-expanded) are legacy widget-era targets
+// Baseline keys (endcaps/theme/toolbar-expanded) are legacy widget-era targets
 // that predate the action-table-driven world and stay permanent; every other
 // SessionState key is fully derived from a config's action table.
 const registry = createValidatorRegistry({
-  style: validateStyle,
+  endcaps: validateEndcaps,
   theme: validateTheme,
   "toolbar-expanded": validateBoolean,
 });

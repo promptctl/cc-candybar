@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] brandon-themes-07p done-gates: (1) a `looks` block
-// loads/validates loudly; (2) an action `{ set: "look", from: "looks" }` ranges
+// loads/validates loudly; (2) an action `{ set: "style", from: "styles" }` ranges
 // the config's look names in BOTH the rendered options and the derived wire
 // gate (one source, no drift); (3) clicking a look recolors the whole bar live,
 // COMPOSING with the active theme (session look over config default over the
@@ -67,54 +67,54 @@ describe("looks block — loader validation", () => {
   };
 
   test("unknown axis is rejected with the four-axis vocabulary", () => {
-    expect(parseIssues(`{ looks: { neon: { saturation: 2 } } }`)).toContain(
-      'Unknown look key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift',
+    expect(parseIssues(`{ styles: { neon: { saturation: 2 } } }`)).toContain(
+      'Unknown style key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift',
     );
   });
 
   test("negative chromaScale is rejected (chroma is a >= 0 multiplier)", () => {
-    expect(parseIssues(`{ looks: { neon: { chromaScale: -1 } } }`)).toContain(
+    expect(parseIssues(`{ styles: { neon: { chromaScale: -1 } } }`)).toContain(
       "chromaScale must be a finite number >= 0, got -1",
     );
   });
 
   test("non-finite axis is rejected (JSON5 admits NaN/Infinity literals)", () => {
     expect(
-      parseIssues(`{ looks: { neon: { hueShift: Infinity } } }`),
+      parseIssues(`{ styles: { neon: { hueShift: Infinity } } }`),
     ).toContain("hueShift must be a finite number, got Infinity");
   });
 
   test("non-numeric axis is rejected", () => {
     expect(
-      parseIssues(`{ looks: { neon: { lightnessShift: "up" } } }`),
+      parseIssues(`{ styles: { neon: { lightnessShift: "up" } } }`),
     ).toContain('lightnessShift must be a finite number, got "up"');
   });
 
   test("a slash-bearing look name is rejected with the wire-shape reason", () => {
-    expect(parseIssues(`{ looks: { "a/b": {} } }`)).toContain(
-      'look name "a/b" must be non-empty and slash-free',
+    expect(parseIssues(`{ styles: { "a/b": {} } }`)).toContain(
+      'style name "a/b" must be non-empty and slash-free',
     );
   });
 
   test("a non-object look value is rejected", () => {
-    expect(parseIssues(`{ looks: { neon: 3 } }`)).toContain(
-      "looks.neon must be an object, got number",
+    expect(parseIssues(`{ styles: { neon: 3 } }`)).toContain(
+      "styles.neon must be an object, got number",
     );
   });
 
-  test("globals.look must name a declared look on the MERGED config", () => {
+  test("globals.style must name a declared look on the MERGED config", () => {
     const merged = mergeWithDefault(
-      parseDslConfig("<looks>", `{ globals: { look: "vapor" } }`, ALLOWED),
+      parseDslConfig("<looks>", `{ globals: { style: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
     expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).toThrow(
-      /globals\.look "vapor" does not match any declared look \(have: none, vivid, muted, dim, bright, inverted\)/,
+      /globals\.style "vapor" does not match any declared style \(have: none, vivid, muted, dim, bright, inverted\)/,
     );
   });
 
-  test("globals.look naming a BUNDLED look passes (cross-ref runs post-merge)", () => {
+  test("globals.style naming a BUNDLED look passes (cross-ref runs post-merge)", () => {
     const merged = mergeWithDefault(
-      parseDslConfig("<looks>", `{ globals: { look: "vivid" } }`, ALLOWED),
+      parseDslConfig("<looks>", `{ globals: { style: "vivid" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
     expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).not.toThrow();
@@ -127,10 +127,10 @@ describe("looks block — normalization and merge", () => {
   test("absent axes normalize to identity at parse (a full ThemeKey downstream)", () => {
     const raw = parseDslConfig(
       "<looks>",
-      `{ looks: { vapor: { hueShift: 30 } } }`,
+      `{ styles: { vapor: { hueShift: 30 } } }`,
       ALLOWED,
     );
-    expect(raw.looks).toEqual({
+    expect(raw.styles).toEqual({
       vapor: {
         hueShift: 30,
         chromaScale: 1,
@@ -143,22 +143,22 @@ describe("looks block — normalization and merge", () => {
   test("the bundled stdlib survives every merge; user wins per name", () => {
     const raw = parseDslConfig(
       "<looks>",
-      `{ looks: { vivid: { chromaScale: 2 }, mine: { hueShift: 10 } } }`,
+      `{ styles: { vivid: { chromaScale: 2 }, mine: { hueShift: 10 } } }`,
       ALLOWED,
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     // The identity floor is always present — effectiveLookName's collapse
     // target cannot be merged away.
-    expect(merged.looks.none).toEqual({
+    expect(merged.styles.none).toEqual({
       hueShift: 0,
       chromaScale: 1,
       lightnessScale: 1,
       lightnessShift: 0,
     });
     // User override wins per name; user addition lands beside the stdlib.
-    expect(merged.looks.vivid?.chromaScale).toBe(2);
-    expect(merged.looks.mine?.hueShift).toBe(10);
-    expect(Object.keys(merged.looks)).toEqual(
+    expect(merged.styles.vivid?.chromaScale).toBe(2);
+    expect(merged.styles.mine?.hueShift).toBe(10);
+    expect(Object.keys(merged.styles)).toEqual(
       expect.arrayContaining([
         "none",
         "vivid",
@@ -174,16 +174,16 @@ describe("looks block — normalization and merge", () => {
 
 // ─── Options + derived gate: one source ───────────────────────────────────────
 
-describe('from: "looks" — rendered options and the derived gate share the config', () => {
+describe('from: "styles" — rendered options and the derived gate share the config', () => {
   const SRC = `{
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      look: { kind: 'state', key: 'look', default: 'none' },
+      look: { kind: 'state', key: 'style', default: 'none' },
     },
-    actions: { applyLook: { set: 'look', from: 'looks' } },
-    looks: { none: {}, vapor: { hueShift: 40 }, washed: { chromaScale: 0.3 } },
+    actions: { applyLook: { set: 'style', from: 'styles' } },
+    styles: { none: {}, vapor: { hueShift: 40 }, washed: { chromaScale: 0.3 } },
     segments: {
-      picker: { template: '{{ range looks }}{{ action "applyLook" . }} {{ end }}', bg: 'surface', fg: 'foreground' },
+      picker: { template: '{{ range styles }}{{ action "applyLook" . }} {{ end }}', bg: 'surface', fg: 'foreground' },
     },
     root: { v: ['picker'] },
   }`;
@@ -192,7 +192,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
-        key: "look",
+        key: "style",
         spec: {
           kind: "allow-list",
           allowed: ["none", "vapor", "washed"],
@@ -241,14 +241,14 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     globals: { palette: '${THEME}' },
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      look: { kind: 'state', key: 'look', default: 'none' },
+      look: { kind: 'state', key: 'style', default: 'none' },
     },
-    actions: { applyLook: { set: 'look', from: 'looks' } },
-    looks: { none: {}, inverted: { lightnessScale: -1, lightnessShift: 1 } },
+    actions: { applyLook: { set: 'style', from: 'styles' } },
+    styles: { none: {}, inverted: { lightnessScale: -1, lightnessShift: 1 } },
     segments: {
       plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
       pinned: { template: ' ▣ pinned ', bg: 'surface', fg: 'foreground', palette: '${THEME}' },
-      picker: { template: '{{ range looks }}{{ action "applyLook" . }} {{ end }}', bg: 'surface', fg: 'foreground' },
+      picker: { template: '{{ range styles }}{{ action "applyLook" . }} {{ end }}', bg: 'surface', fg: 'foreground' },
     },
     root: { v: ['plain', 'pinned', 'picker'] },
   }`;
@@ -272,9 +272,9 @@ describe("look click — live whole-bar recolor over the active theme", () => {
       );
       const look = resolveLookSelection(
         undefined,
-        sessionState.get(SID, "look"),
-        config.globals.look,
-        config.looks,
+        sessionState.get(SID, "style"),
+        config.globals.style,
+        config.styles,
       );
       return renderDsl(
         config,
@@ -296,7 +296,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
 
   const clickLook = (sessionState: SessionState, look: string): void => {
     clickUrl(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", look] }]),
+      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]),
       testVerbContext(sessionState),
     );
   };
@@ -350,7 +350,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
       // A prior config's vocabulary admitted "vapor"; this config doesn't
       // declare it. Write it directly into SessionState (the gate would reject
       // it today — this models the leftover value, not a fresh click).
-      sessionState.set(SID, "look", "vapor");
+      sessionState.set(SID, "style", "vapor");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
       dispose();
@@ -361,7 +361,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
 // ─── A look chosen by data (brandon-looks-pe6) ────────────────────────────────
 
 // [LAW:behavior-not-structure] The claim is that the WHOLE BAR is transposed by
-// what an expression in `globals.look` evaluates to, per render, and that the
+// what an expression in `globals.style` evaluates to, per render, and that the
 // precedence the three name rungs already had is unchanged — a session pick
 // still outranks it. Every assertion measures a serialized background SGR (the
 // colour the terminal receives) or the load-time refusal, never which function
@@ -370,14 +370,14 @@ describe("look click — live whole-bar recolor over the active theme", () => {
 // The rig mirrors the daemon verbatim: `resolveLookSelection` over the three
 // rungs, threaded into renderDsl as `RenderSelection.look`, exactly as
 // buildRenderPayload → server.ts does.
-describe("globals.look as an expression — a look chosen by data", () => {
+describe("globals.style as an expression — a look chosen by data", () => {
   // The expression reads a payload field, which is the point: `.context.pct` is
   // stand-in for the rate-limit/idle facts the ticket names. Two declared looks
   // that are visibly different, plus the identity floor.
   const SRC = `{
     globals: {
       palette: '${THEME}',
-      look: '{{ if ge (int .ctx.pct) 80 }}inverted{{ else if ge (int .ctx.pct) 40 }}washed{{ else }}none{{ end }}',
+      style: '{{ if ge (int .ctx.pct) 80 }}inverted{{ else if ge (int .ctx.pct) 40 }}washed{{ else }}none{{ end }}',
     },
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
@@ -386,16 +386,16 @@ describe("globals.look as an expression — a look chosen by data", () => {
       // owns its dotted prefix. The bundled config avoids it by namespacing the
       // synthesized picks under \`candybar.\`.
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
-      'look.effective': { kind: 'input', path: 'look.effective', default: '' },
+      'style.effective': { kind: 'input', path: 'style.effective', default: '' },
     },
-    looks: {
+    styles: {
       none: {},
       washed: { chromaScale: 0.2 },
       inverted: { lightnessScale: -1, lightnessShift: 1 },
     },
     segments: {
       plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
-      label: { template: 'L={{ .look.effective }}', bg: 'surface', fg: 'foreground' },
+      label: { template: 'L={{ .style.effective }}', bg: 'surface', fg: 'foreground' },
     },
     root: { v: ['plain', 'label'] },
   }`;
@@ -412,15 +412,15 @@ describe("globals.look as an expression — a look chosen by data", () => {
         compiled,
         store,
         registry,
-        { session_id: SID, ctx: { pct }, look: { effective: "none" } },
+        { session_id: SID, ctx: { pct }, style: { effective: "none" } },
         OPTS,
         undefined,
         {
           look: resolveLookSelection(
             staged,
-            sessionState.get(SID, "look"),
-            config.globals.look,
-            config.looks,
+            sessionState.get(SID, "style"),
+            config.globals.style,
+            config.styles,
           ),
         },
       );
@@ -441,7 +441,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
   // mistaken for "it changed to the right colour".
   const byName = (name: string): string => {
     const { render, dispose } = buildRuntime(
-      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '${name}',`),
+      SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '${name}',`),
     );
     try {
       return bgOf(render(0), "◆ here");
@@ -465,7 +465,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
     }
   });
 
-  test("look.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
+  test("style.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
     const { render, dispose } = buildRuntime();
     try {
       expect(render(90)).toContain("L=inverted");
@@ -483,12 +483,12 @@ describe("globals.look as an expression — a look chosen by data", () => {
   test("a session pick outranks the expression", () => {
     const { sessionState, render, dispose } = buildRuntime();
     try {
-      sessionState.set(SID, "look", "washed");
+      sessionState.set(SID, "style", "washed");
       expect(bgOf(render(90), "◆ here")).toBe(byName("washed"));
       expect(render(90)).toContain("L=washed");
       // The case a floor-equality test would get wrong: picking "none" is a
       // DECISION, not the absence of one, so a hot payload must not recolour.
-      sessionState.set(SID, "look", "none");
+      sessionState.set(SID, "style", "none");
       expect(bgOf(render(90), "◆ here")).toBe(byName("none"));
     } finally {
       dispose();
@@ -509,7 +509,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
   // the same way — the bar keeps rendering.
   test("a result naming no declared look collapses to the none floor, and the bar renders", () => {
     const { render, dispose } = buildRuntime(
-      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ "vapor" }}',`),
+      SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ "vapor" }}',`),
     );
     try {
       const out = render(90);
@@ -533,18 +533,18 @@ describe("globals.look as an expression — a look chosen by data", () => {
     // An expression naming no declared look collapses to the floor — and the
     // floor here is a real transformation, so the bar must actually wear it.
     const { render, dispose } = buildRuntime(
-      OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ "vapor" }}',`),
+      OWN_FLOOR.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ "vapor" }}',`),
     );
     // The same bar with `none` named outright: the floor's own colour.
     const ref = buildRuntime(
-      OWN_FLOOR.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`),
+      OWN_FLOOR.replace(/style: '\{\{[^']*\}\}',/, `style: 'none',`),
     );
     try {
       expect(bgOf(render(90), "◆ here")).toBe(bgOf(ref.render(0), "◆ here"));
       // And it is NOT the identity — which is what makes the assertion above
       // discriminate between reading the config and assuming the identity.
       const identity = buildRuntime(
-        SRC.replace(/look: '\{\{[^']*\}\}',/, `look: 'none',`),
+        SRC.replace(/style: '\{\{[^']*\}\}',/, `style: 'none',`),
       );
       try {
         expect(bgOf(render(90), "◆ here")).not.toBe(
@@ -560,16 +560,16 @@ describe("globals.look as an expression — a look chosen by data", () => {
   });
 
   // Also found by a non-biting mutation: nothing observed the value pushed for
-  // `look.effective` BEFORE the expression runs, because the republish overwrites
+  // `style.effective` BEFORE the expression runs, because the republish overwrites
   // it before any segment renders. The one thing that can observe it is the
   // expression itself, so the documented answer for a self-reference — the floor,
   // i.e. what naming nothing would give you — is pinned here rather than asserted
   // in a comment.
-  test("a look expression reading .look.effective sees the floor, not a stale name", () => {
+  test("a look expression reading .style.effective sees the floor, not a stale name", () => {
     const { sessionState, render, dispose } = buildRuntime(
       SRC.replace(
-        /look: '\{\{[^']*\}\}',/,
-        `look: '{{ if eq .look.effective "none" }}inverted{{ else }}washed{{ end }}',`,
+        /style: '\{\{[^']*\}\}',/,
+        `style: '{{ if eq .style.effective "none" }}inverted{{ else }}washed{{ end }}',`,
       ),
     );
     try {
@@ -579,7 +579,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
       // the provisional is a constant, not a carried-over value.
       expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
       // And a session pick still wins, so the expression is not even consulted.
-      sessionState.set(SID, "look", "washed");
+      sessionState.set(SID, "style", "washed");
       expect(bgOf(render(0), "◆ here")).toBe(byName("washed"));
     } finally {
       dispose();
@@ -594,7 +594,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
     const withExpr = mergeWithDefault(
       parseDslConfig(
         "<looks-expr>",
-        `{ globals: { look: '{{ .x }}' } }`,
+        `{ globals: { style: '{{ .x }}' } }`,
         ALLOWED,
       ),
       DEFAULT_DSL_CONFIG,
@@ -603,18 +603,18 @@ describe("globals.look as an expression — a look chosen by data", () => {
       validateConfig(unauthored(withExpr), "<looks-expr>", ALLOWED),
     ).not.toThrow();
     const withName = mergeWithDefault(
-      parseDslConfig("<looks-expr>", `{ globals: { look: "vapor" } }`, ALLOWED),
+      parseDslConfig("<looks-expr>", `{ globals: { style: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
     expect(() => validateConfig(unauthored(withName), "<looks-expr>", ALLOWED)).toThrow(
-      /globals\.look "vapor" does not match any declared look/,
+      /globals\.style "vapor" does not match any declared style/,
     );
   });
 
   test("a malformed look expression fails at LOAD, not at render", () => {
     const config = parseAndValidate(
       "<looks-expr>",
-      SRC.replace(/look: '\{\{[^']*\}\}',/, `look: '{{ if .ctx.pct }}hot',`),
+      SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ if .ctx.pct }}hot',`),
       ALLOWED,
     );
     const store = new VariableStore();
@@ -626,7 +626,7 @@ describe("globals.look as an expression — a look chosen by data", () => {
     );
     try {
       expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
-        /globals\.look/,
+        /globals\.style/,
       );
     } finally {
       registry.dispose();

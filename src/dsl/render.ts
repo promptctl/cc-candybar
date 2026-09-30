@@ -67,7 +67,7 @@ import {
   finishSelection,
   declaredBasePalette,
   drawnDepth,
-  effectiveProgression,
+  effectiveVariation,
   isExpression,
   LOOK_FLOOR,
   placementPalette,
@@ -108,9 +108,9 @@ import {
   bandRoot,
   decorationFor,
   descend,
-  PROGRESSIONS,
+  VARIATIONS,
   type AddressStep,
-  type ProgressionName,
+  type VariationName,
   type Region,
 } from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
@@ -403,12 +403,12 @@ function compileHelpers(
  * ref's meaning depend on which segment is rendering instead of on the ref
  * string alone.
  */
-// [LAW:one-source-of-truth] The progression the CONFIG declares — what a caller
+// [LAW:one-source-of-truth] The variation the CONFIG declares — what a caller
 // that resolved no session renders: the same fold, minus the rungs only a
 // session could supply. Registration's floor and renderDsl's omitted selection
 // both read it here.
-const configProgression = (config: ValidatedConfig): ProgressionName =>
-  effectiveProgression(undefined, null, config.globals.progression);
+const configVariation = (config: ValidatedConfig): VariationName =>
+  effectiveVariation(undefined, null, config.globals.variation);
 
 export function registerDslConfig(
   config: ValidatedConfig,
@@ -454,8 +454,8 @@ export function registerDslConfig(
     basePalette: floorPalette,
     // The compile-only floor for the drawn palette: the base under no look.
     palette: floorPalette,
-    // Same contract: the compile-only floor is the config's own progression.
-    progression: PROGRESSIONS[configProgression(config)],
+    // Same contract: the compile-only floor is the config's own variation.
+    variation: VARIATIONS[configVariation(config)],
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -492,7 +492,7 @@ export function registerDslConfig(
   // rendered options, a hand-authored `range looks`, and the derived click
   // gate (which reads the same config in deriveActionValidators) trace to
   // one source.
-  const lookNames = Object.keys(config.looks);
+  const lookNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
   // [LAW:one-source-of-truth] The "addable segment" per-preset domains merge
   // in here — the SAME map config-validators.ts's deriveConfigActionValidators
@@ -524,9 +524,9 @@ export function registerDslConfig(
       ...segmentColorFuncs(activeSegment),
       // [LAW:one-type-per-behavior] The per-config sibling of the static
       // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
-      // projection of the "looks" option domain. Injected here — not in the
+      // projection of the "styles" option domain. Injected here — not in the
       // static FuncMap — because the domain is this config's looks block.
-      looks: { fn: () => lookNames, argTypes: [], arity: { kind: "exact" } },
+      styles: { fn: () => lookNames, argTypes: [], arity: { kind: "exact" } },
       // The presets domain's twin of the binding above — same per-config
       // reason, same shape. A hand-authored `range presets` and a
       // `{{ menu "applyPreset" }}` therefore enumerate the same names the
@@ -958,11 +958,11 @@ export interface RenderSelection {
   // fragment's two halves land in two different places — the root here, the
   // globals in `opts`/the payload — and one name keeps them from disagreeing.
   readonly preset?: string;
-  // The resolved PROGRESSION name: effectiveProgression over staged/session/
+  // The resolved VARIATION name: effectiveVariation over staged/session/
   // globals (brandon-theme-picker-bgw.7g6). Which theme role each row of the
   // closed bar wears; the walk roots the bar region at it, so every closed
   // cell's tint is read under this one value.
-  readonly progression?: ProgressionName;
+  readonly variation?: VariationName;
 }
 
 export function renderDsl(
@@ -986,19 +986,19 @@ export function renderDsl(
   // config's (`presetGlobals`, the one merge `resolveEffectiveGlobals` uses), so
   // the bar's colours and its layout come from the same preset.
   const declared = presetGlobals(config, preset);
-  // [LAW:one-source-of-truth] An omitting caller renders the progression the
+  // [LAW:one-source-of-truth] An omitting caller renders the variation the
   // CONFIG declares — the same true default the theme below honours.
-  const progression =
-    PROGRESSIONS[
-      selection?.progression ??
-        effectiveProgression(undefined, null, declared.progression)
+  const variation =
+    VARIATIONS[
+      selection?.variation ??
+        effectiveVariation(undefined, null, declared.variation)
     ];
-  compiled.menuRuntime.action.progression = progression;
+  compiled.menuRuntime.action.variation = variation;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
   const selectedLook =
-    selection?.look ?? decideLookName(LOOK_FLOOR, config.looks);
+    selection?.look ?? decideLookName(LOOK_FLOOR, config.styles);
   // [LAW:one-source-of-truth] The theme's twin, resolved the same way one rung up
   // (brandon-themes-dzl). An omitting caller gets the same fold minus the two
   // rungs only it could know — so it renders what the CONFIG declares, which is a
@@ -1032,7 +1032,7 @@ export function renderDsl(
     ...(payload as object),
     term: { cols: opts.width },
     theme: { effective: themeName },
-    look: { effective: lookName },
+    style: { effective: lookName },
   });
   // An expression arm's provisional value is its FLOOR: it is what that slot
   // collapses to when its result names nothing, so a rule reading its own
@@ -1079,8 +1079,8 @@ export function renderDsl(
   });
   const look = finishSelection(selectedLook, (source) =>
     decideLookName(
-      evalRule(compiledRule(compiled, "look", source), scope),
-      config.looks,
+      evalRule(compiledRule(compiled, "style", source), scope),
+      config.styles,
     ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
@@ -1298,7 +1298,7 @@ export function renderDsl(
       }),
     );
   return (
-    renderNode(root, true, barRoot(progression))
+    renderNode(root, true, barRoot(variation))
       // A row's fill demands resolve here and nowhere else: this is the one place a
       // composed row and the width it must fit are both in hand (brandon-layout-0c2).
       .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))

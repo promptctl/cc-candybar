@@ -219,10 +219,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
   // own applyTheme/applyLook actions (deriveActionValidators →
   // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
-  // then re-renders with theme.effective/look.effective recomputed exactly as
+  // then re-renders with theme.effective/style.effective recomputed exactly as
   // server.ts does (resolveThemeSelection/resolveLookSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
-  test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
+  test("clicking a theme/look option changes theme.effective/style.effective on the next render", () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
@@ -251,9 +251,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       const look = resolveLookSelection(
         undefined,
-        sessionState.get(SID, "look"),
-        parsed.globals.look,
-        parsed.looks,
+        sessionState.get(SID, "style"),
+        parsed.globals.style,
+        parsed.styles,
       );
       return renderDsl(
         parsed,
@@ -315,7 +315,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(afterTheme).toContain(targetTheme);
       expect(afterTheme).not.toBe(before);
 
-      const targetLook = Object.keys(parsed.looks).find(
+      const targetLook = Object.keys(parsed.styles).find(
         (name) => name !== "none",
       );
       if (targetLook === undefined) {
@@ -325,7 +325,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
       }
       clickUrl(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", targetLook] }]),
+        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", targetLook] }]),
         testVerbContext(sessionState),
       );
       const afterLook = render();
@@ -1468,7 +1468,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         registry,
         withPayload(checkPayload(effective)),
         {
-          style: effective.style,
+          style: effective.endcaps,
           separator: effective.separator,
           width,
           colorCompatibility: effective.colorCompatibility,
@@ -1483,7 +1483,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         {
           look: effective.look,
           preset: effective.preset,
-          progression: effective.progression,
+          variation: effective.variation,
         },
       );
       return { rendered, segmentErrors };
@@ -1598,7 +1598,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       (key) => (key === "preset" ? "zen" : null),
       () => false,
     );
-    expect(effective.style).toBe("plain");
+    expect(effective.endcaps).toBe("plain");
     expect(effective.look).toMatchObject({ kind: "decided", name: "dim" });
     const zen = renderPreset("zen", 200).rendered;
     expect(visibleLines(zen)).toHaveLength(1);
@@ -1608,7 +1608,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(renderPreset("default", 200).rendered).toContain(POWERLINE_ARROW);
     expect(zen).not.toContain(POWERLINE_ARROW);
     const undimmed = renderPreset("zen", 200, undefined, (key, preset) =>
-      key === "look" ? "none" : freshSession(key, preset),
+      key === "style" ? "none" : freshSession(key, preset),
     ).rendered;
     expect(visible(undimmed)).toBe(visible(zen));
     expect(undimmed).not.toBe(zen);

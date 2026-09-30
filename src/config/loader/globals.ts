@@ -9,7 +9,7 @@ import {
   COLOR_COMPATIBILITIES,
   DEFAULT_PADDING,
   PADDING_RANGE,
-  PROGRESSION_NAMES,
+  VARIATION_NAMES,
   STRIP_STYLES,
   isExpression,
   type ColorCompatibility,
@@ -150,13 +150,13 @@ const GLOBALS: {
   // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
   // registry-static palette set, the look domain is per-config (the merged
   // `looks` block), so membership is a cross-ref check on the MERGED config —
-  // a user's globals.look may name a default-provided look. That check also
+  // a user's globals.style may name a default-provided look. That check also
   // EXEMPTS a template in this slot (brandon-looks-pe6: a look chosen by data
   // names the rule, not a look), which is a second reason the shape rule here is
   // the right one: `string` already admits both, so neither the spec nor the
   // emitted schema needed a new arm. Shape-only here,
   // exactly the shape/meaning split paletteSpec's schema facet keeps.
-  look: { spec: optionalStringSpec(), domain: { from: "looks" } },
+  style: { spec: optionalStringSpec(), domain: { from: "styles" } },
   // [LAW:types-are-the-program] The config-default PRESET name — same
   // per-config-domain shape as `look` (membership is a post-merge cross-ref
   // check, since a user's globals.preset may name a default-provided preset).
@@ -164,10 +164,10 @@ const GLOBALS: {
   // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
   // shapes the joiner can render), unlike the open-ended palette NAME — so it
   // validates by membership and emits a JSON-Schema `enum`.
-  style: enumGlobal(STRIP_STYLES),
+  endcaps: enumGlobal(STRIP_STYLES),
   // [LAW:types-are-the-program] Closed enum like `style`: the named bar
-  // progressions — which theme role each row of the closed bar wears.
-  progression: enumGlobal(PROGRESSION_NAMES),
+  // variations — which theme role each row of the closed bar wears.
+  variation: enumGlobal(VARIATION_NAMES),
   autoWrap: boolGlobal(),
   // Intra-cell spaces per side. Bounded above so a config value can never
   // drive an unbounded `" ".repeat` allocation in the daemon
@@ -309,6 +309,12 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
     "its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
   default_truncate_marker:
     'nothing reads it — a segment clipped to its `width:` always ends in "…". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `look` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" — write the same name as style: "<name>"',
+  progression:
+    'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {
@@ -349,7 +355,7 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
     preset: nestedPresetSpec("the editGlobals fragment"),
     menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
     palette: nameOnlySpec(GLOBALS_FIELDS.palette, "the editGlobals fragment"),
-    look: nameOnlySpec(GLOBALS_FIELDS.look, "the editGlobals fragment"),
+    style: nameOnlySpec(GLOBALS_FIELDS.style, "the editGlobals fragment"),
   },
 };
 

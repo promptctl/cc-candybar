@@ -41,7 +41,7 @@ import {
   effectiveStripStyle,
   effectiveCharset,
   effectiveColorCompatibility,
-  effectiveProgression,
+  effectiveVariation,
   effectiveUpdateNotice,
   EXPRESSION_SLOTS,
   isExpression,
@@ -83,7 +83,7 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
-import type { ProgressionName } from "../themes/decor.js";
+import type { VariationName } from "../themes/decor.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
 
@@ -110,8 +110,8 @@ export interface EffectiveGlobals {
   readonly theme: ThemeSelection;
   // [LAW:types-are-the-program] The look as far as it can be resolved HERE
   // (brandon-looks-pe6). A session pick, a staged fragment and a plain
-  // `globals.look` all resolve to a `decided` arm exactly as they always did; a
-  // `globals.look` holding a TEMPLATE resolves to an `expression` arm, because
+  // `globals.style` all resolve to a `decided` arm exactly as they always did; a
+  // `globals.style` holding a TEMPLATE resolves to an `expression` arm, because
   // the store does not hold this render's values until renderDsl pushes them —
   // so renderDsl finishes that one rung, and is therefore also the one place
   // `look.effective` is published. That is why this struct carries no look NAME
@@ -133,10 +133,10 @@ export interface EffectiveGlobals {
   // the wrong preset after a reload lands mid-render. Not itself a display
   // value either — see `preset`'s own comment.
   readonly presetCustomized: boolean;
-  readonly style: StripStyle;
+  readonly endcaps: StripStyle;
   // Which theme role each row of the closed bar wears — the render's
-  // selection carries it into the walk (RenderSelection.progression).
-  readonly progression: ProgressionName;
+  // selection carries it into the walk (RenderSelection.variation).
+  readonly variation: VariationName;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
   // segments (globals.default_separator). `string | undefined`, not a resolved
   // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
@@ -200,20 +200,20 @@ export function resolveEffectiveGlobals(
       globals.palette,
     ),
     look: resolveLookSelection(
-      staged.look,
-      sessionPick("look"),
-      globals.look,
-      config.looks,
-    ),
-    style: effectiveStripStyle(
       staged.style,
       sessionPick("style"),
       globals.style,
+      config.styles,
     ),
-    progression: effectiveProgression(
-      staged.progression,
-      sessionPick("progression"),
-      globals.progression,
+    endcaps: effectiveStripStyle(
+      staged.endcaps,
+      sessionPick("endcaps"),
+      globals.endcaps,
+    ),
+    variation: effectiveVariation(
+      staged.variation,
+      sessionPick("variation"),
+      globals.variation,
     ),
     // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
     // `staged ?? config ?? floor` — the same chain minus the rung they do not
@@ -249,7 +249,7 @@ export function resolveEffectiveGlobals(
 
 // The resolved globals as the two arguments renderDsl draws with: the options
 // its joiner and cells read, and the selection it finishes (theme, look, preset,
-// progression). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
+// variation). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
 // the demo all project THROUGH these, so a field added to EffectiveGlobals
 // reaches every renderer at once and no caller can leave one out — a hand copy
 // of this projection had already dropped `separator` (brandon-menu-ia-zyf).
@@ -258,7 +258,7 @@ export function renderOptionsOf(
   width: number,
 ): BuildLineOptions {
   return {
-    style: effective.style,
+    style: effective.endcaps,
     separator: effective.separator,
     colorCompatibility: effective.colorCompatibility,
     wrap: effective.autoWrap,
@@ -275,7 +275,7 @@ export function renderSelectionOf(
     theme: effective.theme,
     look: effective.look,
     preset: effective.preset,
-    progression: effective.progression,
+    variation: effective.variation,
   };
 }
 
@@ -288,8 +288,8 @@ export function renderSelectionOf(
 export type EffectiveInputs = Pick<
   RenderPayload,
   | "preset"
-  | "style"
-  | "progression"
+  | "endcaps"
+  | "variation"
   | "charset"
   | "colorCompatibility"
   | "autoWrap"
@@ -304,8 +304,8 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
       customized: effective.presetCustomized,
       bundled: isBundledPreset(effective.preset),
     },
-    style: { effective: effective.style },
-    progression: { effective: effective.progression },
+    endcaps: { effective: effective.endcaps },
+    variation: { effective: effective.variation },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
@@ -374,12 +374,12 @@ export interface RenderPayload extends ClaudeHookData {
   // trigger's "current selection" highlight and the render it describes
   // trace to one resolution. See EffectiveGlobals for how each is derived.
   // [LAW:types-are-the-program] Unlike theme/look (open, registry-extensible
-  // names with no closed union to narrow to), style/charset/colorCompatibility
+  // names with no closed union to narrow to), endcaps/charset/colorCompatibility
   // DO have one (StripStyle/Charset/ColorCompatibility) — narrowed to it
   // rather than widened to `string`, so a downstream `switch` over these
   // fields gets real exhaustiveness checking.
-  readonly style: { readonly effective: StripStyle };
-  readonly progression: { readonly effective: ProgressionName };
+  readonly endcaps: { readonly effective: StripStyle };
+  readonly variation: { readonly effective: VariationName };
   readonly charset: { readonly effective: Charset };
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };

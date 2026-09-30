@@ -13,10 +13,10 @@
 //
 // What's on the bar:
 //   Row 1 (always)  — directory · git · model · context · cache warmth · 5h & 7d quota
-//   Row 2 (always)  — 🎨 theme ▸ · ✦ style ▸ · 🎯 work-mode chip · ⎘/↗ quick actions
-//   Disclosures     — the theme/style ▸ glyphs toggle ▸↔▾; an open menu drops its
+//   Row 2 (always)  — 🎨 theme ▸ · ✦ endcaps ▸ · 🎯 work-mode chip · ⎘/↗ quick actions
+//   Disclosures     — the theme/endcaps ▸ glyphs toggle ▸↔▾; an open menu drops its
 //                     picker body directly below row 2. Each {{ menu }} is
-//                     INDEPENDENT (no shared key), so theme and style can be open
+//                     INDEPENDENT (no shared key), so theme and endcaps can be open
 //                     at once — pass a shared key to make a set mutually exclusive.
 //   Accordion       — "session details" / "links" panels (open one, the other closes)
 //
@@ -38,13 +38,13 @@
     // No page-cursor var either: each {{ menu }} synthesizes its own page
     // cursor (state var + int action) under the reserved menus.* namespace,
     // alongside its open-state.
-    // ── Style picker (companion to the theme picker) ────────────────────────
-    // The session powerline shape, written by applyStyle (from: "styles" ⇒ the
+    // ── Endcaps picker (companion to the theme picker) ────────────────────────
+    // The session powerline shape, written by applyEndcaps (from: "endcaps" ⇒ the
     // STRIP_STYLES domain: powerline/capsule/plain). The daemon resolves it per
-    // render via effectiveStripStyle (session-over-globals.style-over-floor,
-    // exactly like the theme), so a style click reshapes the bar live. Like the
-    // theme it needs no state var: the label reads `style.effective` (bundled
-    // default), the style the bar is drawn in, which the menu's current-option
+    // render via effectiveStripStyle (session-over-globals.endcaps-over-floor,
+    // exactly like the theme), so an endcaps click reshapes the bar live. Like the
+    // theme it needs no state var: the label reads `endcaps.effective` (bundled
+    // default), the endcaps the bar is drawn in, which the menu's current-option
     // mark reads too.
 
     // ── Work-mode chip (the cycle-action showcase) ──────────────────────────
@@ -68,8 +68,8 @@
     // {{ menu }} it feeds synthesizes its own page cursor; no page action here.
     applyTheme: { set: "theme", from: "themes" },
 
-    // ── Style picker (mirror of the theme apply over the 'styles' domain) ───
-    applyStyle: { set: "style", from: "styles" },
+    // ── Endcaps picker (mirror of the theme apply over the 'endcaps' domain) ───
+    applyEndcaps: { set: "endcaps", from: "endcaps" },
 
     // ── Work-mode cycler ────────────────────────────────────────────────────
     // Writes the successor of the current value, wrapping; members are ordered
@@ -104,15 +104,15 @@
       bg: "surface",
     },
 
-    // The style control — the theme control's twin over the 'styles' domain, also
-    // a self-contained {{ menu }}. The small style domain paginates to one page,
+    // The endcaps control — the theme control's twin over the 'endcaps' domain, also
+    // a self-contained {{ menu }}. The small endcaps domain paginates to one page,
     // so no arrows render under the paged default. No shared key, so this menu
     // is INDEPENDENT of the theme menu — both can be open at once. (Rare knobs
     // are named options in ONE trailing dict — to make a set of menus mutually
-    // exclusive, give each the same key: {{ menu "applyStyle" "▸" "▾" (dict "key"
+    // exclusive, give each the same key: {{ menu "applyEndcaps" "▸" "▾" (dict "key"
     // "pickers") }}; to wrap instead of paginate: (dict "paged" false).)
-    styleControl: {
-      template: '✦ {{ .style.effective }} {{ menu "applyStyle" "▸" "▾" }}',
+    endcapsControl: {
+      template: '✦ {{ .endcaps.effective }} {{ menu "applyEndcaps" "▸" "▾" }}',
       bg: "surface",
     },
 
@@ -147,7 +147,7 @@
 
   // root REPLACES the default wholesale (Option A shape grammar). Clean by
   // default, depth on click: two always-on rows (the second carrying the theme/
-  // style {{ menu }} disclosures, whose bodies drop in below it on open) and a
+  // endcaps {{ menu }} disclosures, whose bodies drop in below it on open) and a
   // two-panel accordion drawer.
   //   gitaculous = custom git line (operation, sha, working-tree, upstream,
   //     stash, time-since-commit); cacheTimer = prompt-cache warmth (◴ Nm/cold);
@@ -155,12 +155,12 @@
   root: { v: [
     // Dense info row (always on).
     { h: ["directory", "gitaculous", "model", "context", "cacheTimer", "block", "weekly"] },
-    // Control bar (always on): theme control, style control,
-    // work-mode chip, quick-action toolbar. The theme/style {{ menu }} disclosures
+    // Control bar (always on): theme control, endcaps control,
+    // work-mode chip, quick-action toolbar. The theme/endcaps {{ menu }} disclosures
     // live here; when one opens, its picker body drops onto the line directly
     // below this row (no separate when-gated reveal row — openness is the value of
     // the derived menus.* key, not a gated reveal [LAW:dataflow-not-control-flow]).
-    { h: ["trigger", "styleControl", "modeControl", "toolbar"] },
+    { h: ["trigger", "endcapsControl", "modeControl", "toolbar"] },
     // Accordion drawer: two sibling groups sharing the "drawer" key, so opening
     // one auto-closes the other — one key holds one open name, no accordion
     // "mode" [LAW:dataflow-not-control-flow]. The group sugar synthesizes each

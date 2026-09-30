@@ -46,22 +46,22 @@ export const SETTINGS = {
     effectiveVar: "preset.effective",
     label: "▦",
   },
-  look: {
-    configKey: "look",
-    sessionKey: "look",
-    effectiveVar: "look.effective",
-    label: "◐",
-  },
   style: {
     configKey: "style",
     sessionKey: "style",
     effectiveVar: "style.effective",
+    label: "◐",
+  },
+  endcaps: {
+    configKey: "endcaps",
+    sessionKey: "endcaps",
+    effectiveVar: "endcaps.effective",
     label: "✦",
   },
-  progression: {
-    configKey: "progression",
-    sessionKey: "progression",
-    effectiveVar: "progression.effective",
+  variation: {
+    configKey: "variation",
+    sessionKey: "variation",
+    effectiveVar: "variation.effective",
     label: "🎼",
   },
   charset: {

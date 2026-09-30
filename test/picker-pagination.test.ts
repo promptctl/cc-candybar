@@ -246,7 +246,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   // (menuPageKey) — the hand-declared page var+action pair whose omission used
   // to silently freeze the picker on page 0 no longer exists to forget. The
   // theme menu draws the large `themes` domain (the interesting pagination);
-  // the style menu draws the small `styles` domain. Opening a menu = writing
+  // the style menu draws the small `endcaps` domain. Opening a menu = writing
   // its derived state key to its member (menus.<seg>.<apply> = <apply>).
   function menuRowConfig(): string {
     return `{
@@ -257,7 +257,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       },
       actions: {
         applyTheme: { set: 'theme', from: 'themes' },
-        applyStyle: { set: 'style', from: 'styles' },
+        applyStyle: { set: 'endcaps', from: 'endcaps' },
       },
       segments: {
         label: { template: 'L', bg: 'surface', fg: 'foreground' },

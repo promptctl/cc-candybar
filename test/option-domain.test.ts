@@ -31,7 +31,7 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("themes", new Map()).members).toEqual(
       listResolvablePaletteNames(),
     );
-    expect(resolveOptionDomain("styles", new Map()).members).toEqual(STRIP_STYLES);
+    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(STRIP_STYLES);
   });
 
   // [LAW:one-source-of-truth] candybar-config-engine-71o.3: charsets/
@@ -63,8 +63,8 @@ describe("option-domain registry", () => {
   });
 
   test("a per-config domain (e.g. looks) resolves from the caller's map, not the global registry", () => {
-    const perConfig = new Map([["looks", { members: ["vapor", "none"] }]]);
-    expect(resolveOptionDomain("looks", perConfig).members).toEqual([
+    const perConfig = new Map([["styles", { members: ["vapor", "none"] }]]);
+    expect(resolveOptionDomain("styles", perConfig).members).toEqual([
       "vapor",
       "none",
     ]);
@@ -96,7 +96,7 @@ describe("option-domain registry", () => {
 
   test("an unknown domain name throws naming the known set", () => {
     expect(() => resolveOptionDomain("bogus", new Map())).toThrow(
-      /unknown option domain "bogus" \(have: .*themes.*styles.*\)/,
+      /unknown option domain "bogus" \(have: .*themes.*endcaps.*\)/,
     );
   });
 
@@ -104,7 +104,7 @@ describe("option-domain registry", () => {
     expect(() => registerOptionDomain("themes", () => ["x"])).toThrow(
       /already registered.*built-in/,
     );
-    expect(() => registerOptionDomain("styles", () => ["x"])).toThrow(
+    expect(() => registerOptionDomain("endcaps", () => ["x"])).toThrow(
       /already registered.*built-in/,
     );
   });
@@ -136,10 +136,10 @@ describe("option-domain registry", () => {
   });
 
   test("knownOptionDomainNames unions the global registry with per-config overrides", () => {
-    const perConfig = new Map([["looks", { members: ["none"] }]]);
+    const perConfig = new Map([["styles", { members: ["none"] }]]);
     const names = knownOptionDomainNames(perConfig);
     expect(names).toEqual(
-      expect.arrayContaining(["themes", "styles", "looks"]),
+      expect.arrayContaining(["themes", "endcaps", "styles"]),
     );
   });
 });
@@ -189,8 +189,8 @@ describe("a colour-valued domain resolves its own painter", () => {
         lightnessShift: 0,
       },
     };
-    const domains = perConfigDomainsFor({ looks, presets: {} });
-    const { members, paletteOf } = resolveOptionDomain("looks", domains);
+    const domains = perConfigDomainsFor({ styles: looks, presets: {} });
+    const { members, paletteOf } = resolveOptionDomain("styles", domains);
     expect(members).toEqual(["none", "dim"]);
     expect(paletteOf!("dim", RENDER)).toBe(transposedPalette(BASE, looks.dim));
     // The identity key is byte-exact through transposePalette's fast path, so
@@ -212,10 +212,10 @@ describe("a colour-valued domain resolves its own painter", () => {
 
   test("every domain whose members are not colours has no painter", () => {
     const domains = perConfigDomainsFor({
-      looks: {},
+      styles: {},
       presets: { compact: {} },
     });
-    for (const name of ["styles", "charsets", "colorCompatibilities"]) {
+    for (const name of ["endcaps", "charsets", "colorCompatibilities"]) {
       expect(resolveOptionDomain(name, new Map()).paletteOf).toBeUndefined();
     }
     expect(resolveOptionDomain("presets", domains).paletteOf).toBeUndefined();

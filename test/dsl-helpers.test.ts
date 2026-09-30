@@ -36,7 +36,7 @@ const EMPTY_DEFAULT: DslConfig = {
   segments: {},
   root: { rows: {} },
   actions: {},
-  looks: {},
+  styles: {},
   presets: {},
   helpers: {},
   editGlobals: {},

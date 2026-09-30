@@ -57,7 +57,7 @@ export function emitConfigSchema(
       segments: segmentsJson(inheritedSegments),
       root: { $ref: ROOT_FRAGMENT_REF },
       actions: actionsJson(),
-      looks: looksJson(),
+      styles: looksJson(),
       presets: presetsJson(),
       editGlobals: editGlobalsJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },

@@ -70,9 +70,9 @@ const SPELLING: {
 } = {
   theme: (e) => (e.theme.kind === "decided" ? e.theme.name : null),
   preset: (e) => e.preset,
-  look: (e) => (e.look.kind === "decided" ? e.look.name : null),
-  style: (e) => e.style,
-  progression: (e) => e.progression,
+  style: (e) => (e.look.kind === "decided" ? e.look.name : null),
+  endcaps: (e) => e.endcaps,
+  variation: (e) => e.variation,
   charset: (e) => e.charset,
   colorCompatibility: (e) => e.colorCompatibility,
   autoWrap: (e) => (e.autoWrap ? BOOLEAN_TRUE : BOOLEAN_FALSE),

@@ -28,7 +28,7 @@ import type {
 import type {
   Axis,
   DistributionName,
-  ProgressionName,
+  VariationName,
 } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import { FOLLOW_BAR, isPlacementThemeName } from "../themes/policy.js";
@@ -396,11 +396,11 @@ export interface RawDslConfig {
   // The display globals edit mode stages while it is on — see DslConfig's own
   // `editGlobals` for the shape, the merge, and where it sits in the chain.
   readonly editGlobals?: Partial<Globals>;
-  // Named theme-adaptation bundles ("looks"): each is a full ThemeKey (the
+  // Named theme-adaptation bundles ("styles"): each is a full ThemeKey (the
   // loader normalizes absent axes to identity at parse). Applied ON TOP of the
   // active theme at render — a transform composing with every theme, selected
   // per session exactly like theme/style (session key `look`).
-  readonly looks?: Readonly<Record<string, ThemeKey>>;
+  readonly styles?: Readonly<Record<string, ThemeKey>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
   // body. Each compiles to one `{{ define "name" }}body{{ end }}` unit, and the
   // whole set into one shared define set every template this config parses
@@ -431,9 +431,9 @@ export interface DslConfig {
   // Merges by name with the bundled default (user wins per name), like
   // segments/actions/variables — so the default's `none` (the identity look and
   // the resolution floor of effectiveLookName) is present in EVERY merged
-  // config by construction. An action `{ set: …, from: "looks" }` ranges these
+  // config by construction. An action `{ set: …, from: "styles" }` ranges these
   // names; the derived click gate and the rendered options read this one map.
-  readonly looks: Readonly<Record<string, ThemeKey>>;
+  readonly styles: Readonly<Record<string, ThemeKey>>;
   // [LAW:one-source-of-truth] The effective preset set: name → config fragment.
   // Merges by name with the bundled default (user wins per name) like every
   // other section — so the default's `default` preset (the empty fragment, and
@@ -495,12 +495,12 @@ export interface Globals {
   // [LAW:one-type-per-behavior] The config default for the LOOK (a named
   // theme-adaptation from the `looks` block) — the exact twin of `palette` one
   // dimension over: the daemon resolves the live look per render as
-  // `sessionState.look ?? globals.look ?? "none"` (effectiveLookName), so a
+  // `sessionState.look ?? globals.style ?? "none"` (effectiveLookName), so a
   // look click recolors the bar live and a config can set a default adaptation
   // without an edit-per-session. Membership in the merged `looks` map is
-  // validated post-merge (cross-ref) — a user's globals.look may name a
+  // validated post-merge (cross-ref) — a user's globals.style may name a
   // default-provided look.
-  readonly look?: string;
+  readonly style?: string;
 
   // [LAW:one-type-per-behavior] The config default for the PRESET (a named
   // config fragment from the `presets` block) — the same twin-of-`palette`
@@ -522,7 +522,7 @@ export interface Globals {
   // `sessionState.style ?? globals.style ?? "powerline"` (effectiveStripStyle),
   // so a style click reshapes the bar live and a config can set the default
   // shape without an edit-per-session.
-  readonly style?: StripStyle;
+  readonly endcaps?: StripStyle;
 
   // The legacy display.autoWrap knob: whether FlexStrip soft-wraps a root
   // row that exceeds the usable width. Default true (current behavior);
@@ -549,10 +549,10 @@ export interface Globals {
   readonly charset?: Charset;
 
   // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of PROGRESSIONS (src/themes/decor.ts). Default "secondary-accent".
-  // The config default under a session pick — `effectiveProgression` resolves
+  // entry of VARIATIONS (src/themes/decor.ts). Default "accent".
+  // The config default under a session pick — `effectiveVariation` resolves
   // both into the render's selection.
-  readonly progression?: ProgressionName;
+  readonly variation?: VariationName;
 
   readonly menuGlyph?: string;
 

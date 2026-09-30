@@ -31,7 +31,7 @@ import {
   effectiveStripStyle,
   effectiveCharset,
   effectiveColorCompatibility,
-  effectiveProgression,
+  effectiveVariation,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
 import type { PresetDecl } from "../src/config/dsl-types";
@@ -329,11 +329,11 @@ describe("a stale session pick falls to the config default, not the floor", () =
     );
   });
 
-  it("progression: the session pick over the configured one, a stale pick falling through", () => {
-    expect(effectiveProgression(undefined, "primary", "primary-secondary")).toBe("primary");
-    expect(effectiveProgression(undefined, "accent-primary", "primary-secondary")).toBe("primary-secondary");
-    expect(effectiveProgression(undefined, "accent-primary", undefined)).toBe("secondary-accent");
-    expect(effectiveProgression("primary", "primary-secondary", undefined)).toBe("primary");
+  it("variation: the session pick over the configured one, a stale pick falling through", () => {
+    expect(effectiveVariation(undefined, "mono", "duo")).toBe("mono");
+    expect(effectiveVariation(undefined, "accent-primary", "duo")).toBe("duo");
+    expect(effectiveVariation(undefined, "accent-primary", undefined)).toBe("accent");
+    expect(effectiveVariation("mono", "duo", undefined)).toBe("mono");
   });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {

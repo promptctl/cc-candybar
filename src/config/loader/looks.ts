@@ -25,6 +25,13 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
+import { isStripStyle } from "../../themes/policy.js";
+
+// The one spelling of "that is an endcaps name, not a style": a style may not
+// be named after one, and a `style` may not hold one.
+export function endcapsNameMessage(at: string, name: string): string {
+  return `${at}: "${name}" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write globals.endcaps: "${name}"`;
+}
 
 // [LAW:types-are-the-program] The AUTHORING shape: every axis optional, absent =
 // identity. Distinct from ThemeKey (all fields required) so the record engine's
@@ -41,7 +48,7 @@ interface LookSpec {
 // engine interprets for both validation and schema emit. chromaScale is a
 // multiplier on saturation — negative chroma is not a color, so the one bound.
 const LOOK_SCHEMA: RecordSchema<LookSpec> = {
-  noun: "look key",
+  noun: "style key",
   fields: {
     hueShift: optionalNumberSpec(),
     chromaScale: optionalNumberSpec({ min: 0 }),
@@ -59,9 +66,9 @@ export function validateLooks(
 ): Readonly<Record<string, ThemeKey>> {
   if (!isPlainObject(raw)) {
     ctx.issues.push({
-      path: "looks",
-      message: `looks must be an object mapping look names to adaptation objects, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["looks"]),
+      path: "styles",
+      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["styles"]),
     });
     return {};
   }
@@ -70,17 +77,28 @@ export function validateLooks(
     // [LAW:no-silent-fallbacks] A look name is a deliverable set-state value —
     // a look picker writes it on the wire, which rejects empty values and
     // splits on "/". Rejecting the shape HERE surfaces the error on every
-    // config load, not only once an action ranges the "looks" domain (the same
+    // config load, not only once an action ranges the "styles" domain (the same
     // wire shape cycle members and `to` literals enforce in actions.ts).
     if (name === "" || name.includes("/")) {
       ctx.issues.push({
-        path: `looks.${name}`,
-        message: `look name ${JSON.stringify(name)} must be non-empty and slash-free — a look picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
-        line: findKeyLine(ctx.source, ["looks", name]),
+        path: `styles.${name}`,
+        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free — a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        line: findKeyLine(ctx.source, ["styles", name]),
       });
       continue;
     }
-    const parsed = record(ctx, LOOK_SCHEMA, `looks.${name}`, value);
+    // [LAW:no-silent-failure] `style` named the endcaps until brandon-menu-ia-
+    // q30.xuz, so an endcaps name here is the old meaning of the word: refused,
+    // pointing at the key that holds it now.
+    if (isStripStyle(name)) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: endcapsNameMessage(`styles.${name}`, name),
+        line: findKeyLine(ctx.source, ["styles", name]),
+      });
+      continue;
+    }
+    const parsed = record(ctx, LOOK_SCHEMA, `styles.${name}`, value);
     // [LAW:one-source-of-truth] Normalization onto IDENTITY is the single
     // "absent axis = identity" site — downstream consumers receive a total
     // ThemeKey and never re-default a missing axis.

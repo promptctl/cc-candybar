@@ -44,7 +44,7 @@ const wizardDoc = fs.readFileSync(
 // Placeholder name → every value the wizard may put there.
 const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   THEME: listResolvablePaletteNames(),
-  STYLE: STRIP_STYLES,
+  ENDCAPS: STRIP_STYLES,
   CHARSET: CHARSETS,
   PRESET: presetNames(DEFAULT_DSL_CONFIG.presets),
 };
@@ -141,7 +141,7 @@ describe("plugin/bin/preview.sh renders the same template it offers", () => {
   });
 
   test.each([
-    ["STYLES", "STYLE"],
+    ["ENDCAPS_SHAPES", "ENDCAPS"],
     ["CHARSETS", "CHARSET"],
     ["PRESETS", "PRESET"],
   ])("%s is exactly the daemon's %s domain", (array, domain) => {

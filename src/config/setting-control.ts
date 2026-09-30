@@ -19,7 +19,7 @@ import { BOOLEAN_MEMBERS } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] What a control can range: a flag, a bounded
 // integer, or the members of an option domain — a registered name ("themes",
-// "looks", …) or an inline list of words. Every declaration a setting source
+// "styles", …) or an inline list of words. Every declaration a setting source
 // can write projects onto one of these three, and the shape of the control
 // follows from the arm alone.
 export type ControlDomain =

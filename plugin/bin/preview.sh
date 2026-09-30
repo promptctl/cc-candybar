@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render the wizard's template config against a fixture session so the user can
-# see a real bar before committing to a theme, style, charset, or preset.
+# see a real bar before committing to a theme, endcaps shape, charset, or preset.
 #
 # The config rendered here IS the template the wizard writes — templates/config.json
 # with its four placeholders filled by the same substitution the wizard performs —
@@ -17,12 +17,12 @@ readonly TEMPLATE="${PLUGIN_ROOT}/templates/config.json"
 # The options the wizard offers, one list per template placeholder. Each name
 # must be one the daemon accepts; the test pins that against the real domains.
 readonly THEMES=(textual-dark textual-light nord tokyo-night rose-pine gruvbox catppuccin-mocha dracula solarized-dark monokai)
-readonly STYLES=(powerline capsule plain)
+readonly ENDCAPS_SHAPES=(powerline capsule plain)
 readonly CHARSETS=(unicode ascii)
 readonly PRESETS=(default compact verbose zen git usage dense)
 
 THEME="${THEMES[0]}"
-STYLE="${STYLES[0]}"
+ENDCAPS="${ENDCAPS_SHAPES[0]}"
 CHARSET="${CHARSETS[0]}"
 PRESET="${PRESETS[0]}"
 COMPARE=""
@@ -109,10 +109,10 @@ ensure_daemon() {
 # The wizard's substitution, exactly: the template with its four placeholders
 # filled. Prints the written path.
 fill_template() {
-    local theme="$1" style="$2" charset="$3" preset="$4"
-    local out="${WORK}/config-${theme}-${style}-${charset}-${preset}.json"
+    local theme="$1" endcaps="$2" charset="$3" preset="$4"
+    local out="${WORK}/config-${theme}-${endcaps}-${charset}-${preset}.json"
     sed -e "s/replace:THEME/${theme}/" \
-        -e "s/replace:STYLE/${style}/" \
+        -e "s/replace:ENDCAPS/${endcaps}/" \
         -e "s/replace:CHARSET/${charset}/" \
         -e "s/replace:PRESET/${preset}/" \
         "${TEMPLATE}" >"${out}"
@@ -128,16 +128,16 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --theme=*) THEME="${1#*=}" ;;
-            --style=*) STYLE="${1#*=}" ;;
+            --endcaps=*) ENDCAPS="${1#*=}" ;;
             --charset=*) CHARSET="${1#*=}" ;;
             --preset=*) PRESET="${1#*=}" ;;
             --compare-themes) COMPARE="themes" ;;
-            --compare-styles) COMPARE="styles" ;;
+            --compare-endcaps) COMPARE="endcaps" ;;
             --compare-charsets) COMPARE="charsets" ;;
             --compare-presets) COMPARE="presets" ;;
             *)
                 printf 'Unknown option: %s\n' "$1" >&2
-                printf 'Usage: preview.sh [--theme=NAME] [--style=NAME] [--charset=NAME] [--preset=NAME] [--compare-themes|--compare-styles|--compare-charsets|--compare-presets]\n' >&2
+                printf 'Usage: preview.sh [--theme=NAME] [--endcaps=NAME] [--charset=NAME] [--preset=NAME] [--compare-themes|--compare-endcaps|--compare-charsets|--compare-presets]\n' >&2
                 exit 2
                 ;;
         esac
@@ -153,15 +153,15 @@ main() {
     # The flag values are checked once, as the wizard's user would see them
     # (exit 1 names the error). A compare varies one axis over its array, whose
     # members test/plugin-templates.test.ts pins to the loader's own domain.
-    "${CLIENT[@]}" check "$(fill_template "${THEME}" "${STYLE}" "${CHARSET}" "${PRESET}")" >/dev/null
+    "${CLIENT[@]}" check "$(fill_template "${THEME}" "${ENDCAPS}" "${CHARSET}" "${PRESET}")" >/dev/null
 
     local name
     case "${COMPARE}" in
-        "") render "${THEME}" "${STYLE}" "${CHARSET}" "${PRESET}" ;;
-        themes) for name in "${THEMES[@]}"; do printf '%s:\n' "${name}"; render "${name}" "${STYLE}" "${CHARSET}" "${PRESET}"; printf '\n'; done ;;
-        styles) for name in "${STYLES[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${name}" "${CHARSET}" "${PRESET}"; printf '\n'; done ;;
-        charsets) for name in "${CHARSETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${STYLE}" "${name}" "${PRESET}"; printf '\n'; done ;;
-        presets) for name in "${PRESETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${STYLE}" "${CHARSET}" "${name}"; printf '\n'; done ;;
+        "") render "${THEME}" "${ENDCAPS}" "${CHARSET}" "${PRESET}" ;;
+        themes) for name in "${THEMES[@]}"; do printf '%s:\n' "${name}"; render "${name}" "${ENDCAPS}" "${CHARSET}" "${PRESET}"; printf '\n'; done ;;
+        endcaps) for name in "${ENDCAPS_SHAPES[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${name}" "${CHARSET}" "${PRESET}"; printf '\n'; done ;;
+        charsets) for name in "${CHARSETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${ENDCAPS}" "${name}" "${PRESET}"; printf '\n'; done ;;
+        presets) for name in "${PRESETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${ENDCAPS}" "${CHARSET}" "${name}"; printf '\n'; done ;;
     esac
 }
 

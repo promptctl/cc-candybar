@@ -36,7 +36,12 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
-import { isExpression, retiredThemeNote } from "../../themes/policy.js";
+import {
+  isExpression,
+  isStripStyle,
+  retiredThemeNote,
+} from "../../themes/policy.js";
+import { endcapsNameMessage } from "./looks.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
@@ -116,7 +121,7 @@ export function validateCrossReferences(
   cfg: DslConfig,
   authored: RawDslConfig,
 ): void {
-  // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
+  // [LAW:locality-or-seam] globals.style names a member of the MERGED looks
   // block (a user's default may be a bundled look — same reason every cross-ref
   // runs post-merge). Same existence-check shape as layout→segments; an unknown
   // name is a load error, never a silent identity fallback.
@@ -137,27 +142,30 @@ export function validateCrossReferences(
   const lookFragments: ReadonlyArray<
     readonly [readonly string[], string | undefined]
   > = [
-    [["globals"], cfg.globals.look],
-    [["editGlobals"], cfg.editGlobals.look],
+    [["globals"], cfg.globals.style],
+    [["editGlobals"], cfg.editGlobals.style],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [["presets", name, "globals"], preset.globals?.look] as const,
+        [["presets", name, "globals"], preset.globals?.style] as const,
     ),
   ];
   for (const [at, look] of lookFragments) {
     if (
       look === undefined ||
       isExpression(look) ||
-      Object.prototype.hasOwnProperty.call(cfg.looks, look)
+      Object.prototype.hasOwnProperty.call(cfg.styles, look)
     )
       continue;
+    const where = `${at.join(".")}.style`;
     ctx.issues.push({
-      path: `${at.join(".")}.look`,
-      message: `${at.join(".")}.look "${look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
-      line: findKeyLine(ctx.source, [...at, "look"]),
+      path: where,
+      message: isStripStyle(look)
+        ? endcapsNameMessage(where, look)
+        : `${where} "${look}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      line: findKeyLine(ctx.source, [...at, "style"]),
     });
   }
-  // [LAW:one-type-per-behavior] globals.preset is globals.look one dimension
+  // [LAW:one-type-per-behavior] globals.preset is globals.style one dimension
   // over — the same post-merge membership check against the same kind of
   // per-config block, for the same reason (a user's default may name a
   // bundled preset). A typo'd DEFAULT is a load error even though a stale
@@ -177,12 +185,12 @@ export function validateCrossReferences(
   }
   presetIdentCollisions(ctx, cfg.presets);
   // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
-  // against this config's per-config domains ("looks", the merged looks:
+  // against this config's per-config domains ("styles", the merged styles:
   // block) plus the global registry (themes/styles, and any future
   // registration), the SAME set resolveOptionDomain consults at render and
   // gate-derivation time. An inline array `from` is its own domain — nothing
-  // to resolve. Runs post-merge for the same reason globals.look does above:
-  // "looks" isn't fully known until the user's looks: block has merged onto
+  // to resolve. Runs post-merge for the same reason globals.style does above:
+  // "styles" isn't fully known until the user's styles: block has merged onto
   // the bundled stdlib.
   const optionDomains = perConfigDomainsFor(cfg);
   for (const [name, a] of Object.entries(cfg.actions)) {

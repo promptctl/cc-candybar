@@ -46,17 +46,17 @@ const OPTS = {
 // the number lands on. The two cells must agree in every state.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
-  looks: { none: {}, ${PICKED_LOOK}: { chromaScale: 1.6, lightnessShift: 0.08 } },
+  styles: { none: {}, ${PICKED_LOOK}: { chromaScale: 1.6, lightnessShift: 0.08 } },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
-    look: { kind: 'state', key: 'look', default: 'none' },
+    look: { kind: 'state', key: 'style', default: 'none' },
     pct: { kind: 'input', path: 'pct', type: 'number', default: 0 },
     stop: { kind: 'input', path: 'stop', default: 'panel' },
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    applyLook: { set: 'look', from: 'looks' },
+    applyLook: { set: 'style', from: 'styles' },
   },
   segments: {
     viaRamp: { template: ' R ', bg: '{{ ramp .pct "step" 0 "panel" 50 "warning" 80 "error" }}', fg: 'foreground' },
@@ -96,9 +96,9 @@ function buildRuntime() {
     );
     const look = resolveLookSelection(
       undefined,
-      sessionState.get(SID, "look"),
-      config.globals.look,
-      config.looks,
+      sessionState.get(SID, "style"),
+      config.globals.style,
+      config.styles,
     );
     return renderDsl(
       config,
@@ -111,7 +111,7 @@ function buildRuntime() {
       { theme, look },
     );
   };
-  const click = (key: "theme" | "look", value: string): void =>
+  const click = (key: "theme" | "style", value: string): void =>
     clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
       testVerbContext(sessionState),
@@ -145,7 +145,7 @@ describe("ramp over palette-name stops follows the live theme", () => {
       const base = agree();
       click("theme", PICKED_THEME);
       const themed = agree();
-      click("look", PICKED_LOOK);
+      click("style", PICKED_LOOK);
       const looked = agree();
 
       // Three states, three colours: the ramp did not freeze at first render.

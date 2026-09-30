@@ -136,9 +136,9 @@ describe("a preset's globals as a write target", () => {
 type PinnedSetting = Exclude<keyof typeof SETTINGS, "preset">;
 const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   theme: { pin: "'nord'", pick: "gruvbox" },
-  look: { pin: "'dim'", pick: "vivid" },
-  style: { pin: "'capsule'", pick: "plain" },
-  progression: { pin: "'primary'", pick: "primary-secondary" },
+  style: { pin: "'dim'", pick: "vivid" },
+  endcaps: { pin: "'capsule'", pick: "plain" },
+  variation: { pin: "'mono'", pick: "duo" },
   charset: { pin: "'ascii'", pick: "unicode" },
   colorCompatibility: { pin: "'256'", pick: "ansi" },
   autoWrap: { pin: "false", pick: "true" },

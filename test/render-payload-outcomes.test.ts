@@ -55,8 +55,8 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   look: FLOOR_LOOK,
   preset: "default",
   presetCustomized: false,
-  style: "powerline",
-  progression: "secondary-accent",
+  endcaps: "powerline",
+  variation: "accent",
   charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
@@ -350,8 +350,8 @@ describe("buildRenderPayload — effective globals projection", () => {
       look: FLOOR_LOOK,
       preset: "default",
       presetCustomized: true,
-      style: "capsule",
-      progression: "primary",
+      endcaps: "capsule",
+      variation: "mono",
       charset: "ascii",
       colorCompatibility: "256",
       autoWrap: false,
@@ -369,20 +369,20 @@ describe("buildRenderPayload — effective globals projection", () => {
       NO_HINTS,
       { unsaved: 0, resettable: 0 },
     );
-    // `theme` and `look` are the two fields this projection does NOT carry:
+    // `theme` and `style` are the two fields this projection does NOT carry:
     // renderDsl injects both `.effective` values, because under a RULE in that
     // globals slot it is the only thing that knows the answer (brandon-looks-pe6
-    // for `look`, brandon-themes-dzl for `theme`). Asserted absent rather than
+    // for `style`, brandon-themes-dzl for `theme`). Asserted absent rather than
     // left unmentioned, so re-adding a second producer fails here.
     expect("theme" in payload).toBe(false);
-    expect("look" in payload).toBe(false);
+    expect("style" in payload).toBe(false);
     expect(payload.preset).toEqual({
       effective: "default",
       customized: true,
       bundled: true,
     });
-    expect(payload.style).toEqual({ effective: "capsule" });
-    expect(payload.progression).toEqual({ effective: "primary" });
+    expect(payload.endcaps).toEqual({ effective: "capsule" });
+    expect(payload.variation).toEqual({ effective: "mono" });
     expect(payload.charset).toEqual({ effective: "ascii" });
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });

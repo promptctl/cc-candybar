@@ -33,10 +33,10 @@ const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    activeStyle: { kind: 'state', key: 'style', default: '' },
+    activeStyle: { kind: 'state', key: 'endcaps', default: '' },
   },
   actions: {
-    applyStyle: { set: 'style', from: 'styles' },
+    applyStyle: { set: 'endcaps', from: 'endcaps' },
   },
   segments: {
     a: { template: ' A ', bg: 'surface', fg: 'foreground' },
@@ -59,12 +59,12 @@ function buildRuntime() {
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
   // reshapes. (server.ts: renderOpts.style = effectiveStripStyle(undefined, 
-  // sessionState.get(sid,'style'), globals.style)).
+  // sessionState.get(sid,'endcaps'), globals.style)).
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, {
       style: effectiveStripStyle(undefined, 
-        sessionState.get(SID, "style"),
-        config.globals.style,
+        sessionState.get(SID, "endcaps"),
+        config.globals.endcaps,
       ),
       colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
@@ -75,7 +75,7 @@ function buildRuntime() {
 
 function clickStyle(sessionState: SessionState, style: string): void {
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
-  const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", style] }]);
+  const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]);
   clickUrl(url, testVerbContext(sessionState));
 }
 

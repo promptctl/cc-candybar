@@ -819,7 +819,7 @@ const PERSIST_ARMS: readonly ValueSourceArm[] = [
 function valueSourceClauses(discriminator: Discriminator): string[] {
   const clauses = [
     `"to" (a literal value)`,
-    `"from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values)`,
+    `"from" (an option domain — a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
     `"min"/"max"/"by" (a bounded step)`,
   ];
   if (discriminator === "set")
@@ -922,7 +922,7 @@ function setLiteralSpec(discriminator: Discriminator): FieldSpec<string> {
 // uniqueness `cycleSpec` requires: a duplicate has no successor-ambiguity
 // concern here, but it would render the same picker cell twice for no
 // benefit). This arm proves only the SHAPE; whether a named domain actually
-// resolves needs the merged config's per-config domains (e.g. "looks"), so
+// resolves needs the merged config's per-config domains (e.g. "styles"), so
 // that check is a cross-reference concern (validateCrossReferences) —
 // symmetric to how a layout node's segment ref or a `{{ action }}` ref
 // resolves post-merge. Built once per discriminator, same reason as

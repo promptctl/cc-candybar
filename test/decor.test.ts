@@ -22,7 +22,7 @@ import {
   BAND_FLOORS,
   BAND_RECESSION,
   BAND_WINDOW,
-  PROGRESSIONS,
+  VARIATIONS,
   DECOR_HUES,
   DECOR_TONES,
   DECOR_VOCABULARY,
@@ -55,8 +55,8 @@ import {
   type DecorHue,
   type Distribution,
   type DistributionName,
-  type Progression,
-  type ProgressionName,
+  type Variation,
+  type VariationName,
 } from "../src/themes/decor";
 import {
   allNodes,
@@ -72,11 +72,11 @@ import {
 } from "./helpers/seeded-trees";
 
 const DRACULA = getThemePalette("dracula");
-// The progression the address properties are stated under: two steps, so a
+// The variation the address properties are stated under: two steps, so a
 // row alternation is visible. Every property below is about placement, which
-// no progression changes; the per-progression facts have their own describe.
-const TWO_STEP: Progression = PROGRESSIONS["primary-secondary"];
-const PROGRESSION_NAMES = Object.keys(PROGRESSIONS) as ProgressionName[];
+// no variation changes; the per-variation facts have their own describe.
+const TWO_STEP: Variation = VARIATIONS["duo"];
+const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
 const BOUNDS = { maxDepth: 4, maxWidth: 6 };
 const SHAPES = drawShapes(0xa17, 60, BOUNDS);
 const ALL_NAMES = Object.keys(DISTRIBUTIONS) as DistributionName[];
@@ -104,10 +104,10 @@ const cell = (index: number, count: number): AddressStep => ({ index, count, dis
 const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0, 0, 0));
 
 describe("the vocabulary", () => {
-  test("is every hue any progression steps through × tones, every entry the theme's own", () => {
-    const reached = new Set(Object.values(PROGRESSIONS).flat());
+  test("is every hue any variation steps through × tones, every entry the theme's own", () => {
+    const reached = new Set(Object.values(VARIATIONS).flat());
     expect(DECOR_VOCABULARY).toHaveLength(reached.size * DECOR_TONES.length);
-    for (const steps of Object.values(PROGRESSIONS)) {
+    for (const steps of Object.values(VARIATIONS)) {
       for (const hue of steps) {
         for (const tone of DECOR_TONES) expect(DECOR_VOCABULARY).toContainEqual({ hue, tone });
       }
@@ -124,14 +124,14 @@ describe("the vocabulary", () => {
     }
   });
 
-  test("every progression steps only through decorative hues, and the default reaches the open hue", () => {
-    for (const steps of Object.values(PROGRESSIONS)) {
+  test("every variation steps only through decorative hues, and the default reaches the open hue", () => {
+    for (const steps of Object.values(VARIATIONS)) {
       expect(steps.length).toBeGreaterThan(0);
       for (const hue of steps) expect(DECOR_HUES).toContain(hue);
     }
     // The bundled default (brandon-theme-picker-bgw.7g6) wears the accent on
     // its second row, so every floor against the closed bar must count it.
-    expect(PROGRESSIONS["secondary-accent"]).toContain(OPEN_HUE);
+    expect(VARIATIONS["accent"]).toContain(OPEN_HUE);
   });
 
   test("every shipped theme carries every role the vocabulary names", () => {
@@ -215,15 +215,15 @@ describe("the colour is a tone of the row's hue", () => {
     expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => TWO_STEP[i % 2]));
   });
 
-  test("row n wears step n of every progression, and a one-step progression is uniform", () => {
-    for (const name of PROGRESSION_NAMES) {
-      const steps = PROGRESSIONS[name];
+  test("row n wears step n of every variation, and a one-step variation is uniform", () => {
+    for (const name of VARIATION_NAMES) {
+      const steps = VARIATIONS[name];
       const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(steps, [row(i, 8), cell(0, 3)]).hue);
       expect([name, hues]).toEqual([name, Array.from({ length: 8 }, (_, i) => steps[i % steps.length])]);
     }
-    // The tone is the progression's business nowhere: the cell alone picks it.
-    for (const name of PROGRESSION_NAMES) {
-      expect(decorEntryFor(PROGRESSIONS[name], [row(1, 2), cell(3, 6)]).tone).toBe(1);
+    // The tone is the variation's business nowhere: the cell alone picks it.
+    for (const name of VARIATION_NAMES) {
+      expect(decorEntryFor(VARIATIONS[name], [row(1, 2), cell(3, 6)]).tone).toBe(1);
     }
   });
 
@@ -234,17 +234,17 @@ describe("the colour is a tone of the row's hue", () => {
     expect(decorEntryFor(TWO_STEP, [row(0, 2), row(1, 2)]).hue).toBe(decorEntryFor(TWO_STEP, [row(1, 2)]).hue);
   });
 
-  test("the root selects the progression's first step at the first tone", () => {
+  test("the root selects the variation's first step at the first tone", () => {
     // The empty address has no step to place, so no distribution can reach it.
-    for (const name of PROGRESSION_NAMES) {
-      expect(decorEntryFor(PROGRESSIONS[name], [])).toEqual({ hue: PROGRESSIONS[name][0], tone: DECOR_TONES[0] });
+    for (const name of VARIATION_NAMES) {
+      expect(decorEntryFor(VARIATIONS[name], [])).toEqual({ hue: VARIATIONS[name][0], tone: DECOR_TONES[0] });
     }
   });
 
-  test("an open bar trigger opens the accent, whatever its row and the progression", () => {
-    for (const name of PROGRESSION_NAMES) {
+  test("an open bar trigger opens the accent, whatever its row and the variation", () => {
+    for (const name of VARIATION_NAMES) {
       for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
-        const region = { kind: "bar", progression: PROGRESSIONS[name], address } as const;
+        const region = { kind: "bar", variation: VARIATIONS[name], address } as const;
         expect([name, decorationFor(DRACULA, region, ColorDepth.TRUECOLOR).disclosure]).toEqual([
           name,
           { hue: OPEN_HUE, depth: 0 },
@@ -397,8 +397,8 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 // proves nothing.
 
 /**
- * Every colour the closed bar can wear under ANY progression: what an open
- * trigger must stand off. Checked here against the progressions themselves, so
+ * Every colour the closed bar can wear under ANY variation: what an open
+ * trigger must stand off. Checked here against the variations themselves, so
  * a floor measured over this set covers every one the user can pick.
  */
 function barTints(palette: Palette) {
@@ -440,7 +440,7 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
     (drawnAt) => {
       const shown = (c: ColorRgba): ColorRgba => drawnColour(c, drawnAt);
       const wrong: string[] = [];
-      for (const [look, key] of Object.entries(DEFAULT_DSL_CONFIG.looks)) {
+      for (const [look, key] of Object.entries(DEFAULT_DSL_CONFIG.styles)) {
         for (const base of REGISTRY) {
           const palette = transposePalette(base, key);
           for (const hue of DECOR_HUES) {

@@ -79,7 +79,7 @@ const effective = resolveEffectiveGlobals(
 // config (cwd, model, session) read their values out of this object, and the
 // resolved globals ride on it exactly as they do on the daemon's payload.
 // [LAW:one-source-of-truth] `effectiveInputs` is the daemon's own projection,
-// so a `.style.effective` label shows the style the demo renders in.
+// so a `.endcaps.effective` label shows the style the demo renders in.
 const payload = {
   hook_event_name: "Status",
   session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",

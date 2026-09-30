@@ -34,7 +34,7 @@ describe("state-validators registry contract", () => {
     // surfaces the change in the diff, so downstream surfaces (DSL
     // bindings, docs, panel migration) get the signal.
     expect([...listStateKeys()].sort()).toEqual(
-      ["style", "theme", "toolbar-expanded"].sort(),
+      ["endcaps", "theme", "toolbar-expanded"].sort(),
     );
   });
 
@@ -53,7 +53,7 @@ describe("state-validators registry contract", () => {
 
   test("style validator accepts every STRIP_STYLES entry", () => {
     for (const styleName of STRIP_STYLES) {
-      const result = validateStateWrite("style", styleName);
+      const result = validateStateWrite("endcaps", styleName);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(styleName);
     }

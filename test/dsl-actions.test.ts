@@ -364,7 +364,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 // touch to action.ts / loader/actions.ts / render/action.ts /
 // daemon/verbs/state-validators.ts — this test proves it by registering a
 // brand-new domain and driving it through the exact same `from:` seam
-// "themes"/"styles" use, with zero special-casing anywhere in that path.
+// "themes"/"endcaps" use, with zero special-casing anywhere in that path.
 
 describe("71o.1 — a newly-registered domain needs no engine edits", () => {
   test("a config's `from` resolves a domain registered purely through the public registry API", () => {
@@ -685,7 +685,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
       actions: {
         lit: { set: 'k', to: 'v' },
-        opt: { set: 'k', from: 'styles' },
+        opt: { set: 'k', from: 'endcaps' },
         bnd: { set: 'k2', min: 0, max: 9, by: 1 },
         cp: { copy: 'x' },
         op: { open: 'y' },

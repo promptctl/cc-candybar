@@ -1161,11 +1161,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // of whatever base theme is active (a transform, not a palette), so every
   // look composes with every theme: pick theme, then pick look. Selected per
   // session via the `look` SessionState key (an action `{ set: "look", from:
-  // "looks" }` + a `{{ menu }}`), exactly the theme/style selection seam.
+  // "styles" }` + a `{{ menu }}`), exactly the theme/style selection seam.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
   // stdlib — including the "none" identity floor effectiveLookName collapses
   // to — is present in every merged config by construction.
-  looks: {
+  styles: {
     // [LAW:dataflow-not-control-flow] "none" is just the identity look — the
     // resolution floor as a value, not a special case (rich-js's isIdentityKey
     // fast-path makes it free). Spelled literally (not rich-js IDENTITY /
@@ -1346,7 +1346,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "context" },
         ],
       },
-      globals: { style: "plain", look: "dim" },
+      globals: { endcaps: "plain", style: "dim" },
     },
 
     // For branch-and-PR work — juggling reviews, rebases, several branches:
@@ -1482,7 +1482,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // (not "│") because it must survive `charset: "ascii"` — the fragment does
   // not, and should not, know the terminal's glyph coverage.
   editGlobals: {
-    style: "plain",
+    endcaps: "plain",
     default_separator: " | ",
   },
 

@@ -31,11 +31,11 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import {
   decorFor,
   DISTRIBUTIONS,
-  PROGRESSIONS,
+  VARIATIONS,
   type Address,
-  type ProgressionName,
+  type VariationName,
 } from "../src/themes/decor";
-import { DEFAULT_PROGRESSION } from "../src/themes/policy";
+import { DEFAULT_VARIATION } from "../src/themes/policy";
 
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -84,7 +84,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}, progression?: ProgressionName): string =>
+  const render = (payload: object = {}, variation?: VariationName): string =>
     renderDsl(
       config,
       compiled,
@@ -95,7 +95,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       { perSegmentSink: sink },
       {
         ...(look === undefined ? {} : { look: { kind: "decided" as const, name: "test", value: look } }),
-        ...(progression === undefined ? {} : { progression }),
+        ...(variation === undefined ? {} : { variation }),
       },
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
@@ -106,10 +106,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   };
   const fgOf = (name: string): string =>
     definedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
-  const expectedTint = (name: string, progression: ProgressionName = DEFAULT_PROGRESSION): string =>
+  const expectedTint = (name: string, variation: VariationName = DEFAULT_VARIATION): string =>
     decorFor(
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
-      PROGRESSIONS[progression],
+      VARIATIONS[variation],
       addressOf(root, name),
     ).hex;
   return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
@@ -203,30 +203,30 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
 
   // brandon-theme-picker-bgw.7g6: which role each row wears is the render's
   // selection, not a constant of the colour model.
-  test("the progression reaches every closed cell: row n wears step n of the one selected", () => {
+  test("the variation reaches every closed cell: row n wears step n of the one selected", () => {
     const rt = build(SRC);
     const names = ["a", "b", "c", "echo"];
     const seen = new Set<string>();
-    for (const progression of Object.keys(PROGRESSIONS) as ProgressionName[]) {
-      rt.render({}, progression);
+    for (const variation of Object.keys(VARIATIONS) as VariationName[]) {
+      rt.render({}, variation);
       for (const name of names) {
-        expect([progression, name, rt.bgOf(name)]).toEqual([progression, name, rt.expectedTint(name, progression)]);
+        expect([variation, name, rt.bgOf(name)]).toEqual([variation, name, rt.expectedTint(name, variation)]);
       }
       seen.add(names.map((n) => rt.bgOf(n)).join());
     }
-    // Every shipped progression paints this two-row bar differently.
-    expect(seen.size).toBe(Object.keys(PROGRESSIONS).length);
+    // Every shipped variation paints this two-row bar differently.
+    expect(seen.size).toBe(Object.keys(VARIATIONS).length);
     // An omitting caller renders the default: secondary on row 1, accent on row 2.
     rt.render();
-    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "secondary-accent"));
+    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "accent"));
     rt.dispose();
   });
 
-  test("globals.progression is the config's default under an omitting caller", () => {
-    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', progression: 'primary' }`));
+  test("globals.variation is the config's default under an omitting caller", () => {
+    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', variation: 'mono' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {
-      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, "primary")]);
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, "mono")]);
     }
     rt.dispose();
   });
@@ -408,7 +408,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       const rePlaced: Address = address.map((step, i) =>
         i === own ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, PROGRESSIONS[DEFAULT_PROGRESSION], rePlaced).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, VARIATIONS[DEFAULT_VARIATION], rePlaced).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
@@ -445,7 +445,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
         name,
         [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row" }],
       ]);
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, PROGRESSIONS[DEFAULT_PROGRESSION], authored).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, VARIATIONS[DEFAULT_VARIATION], authored).hex]);
     }
     expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
       CELLS.map((n) => plain.bgOf(n)),

@@ -26,7 +26,7 @@
 
 // [LAW:one-source-of-truth] The domain a picker draws options from. Resolved
 // through option-domain.ts's registry — themes/styles are registry-backed
-// static lists, "looks" is the one PER-CONFIG domain (the merged `looks`
+// static lists, "styles" is the one PER-CONFIG domain (the merged `looks`
 // block's names, threaded as data rather than consulted from a module
 // constant), and an inline array is its own domain, needing no registration
 // at all. Re-exported here so ActionDecl stays self-contained to read.

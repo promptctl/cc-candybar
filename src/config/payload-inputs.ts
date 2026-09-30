@@ -46,12 +46,12 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   },
   // [LAW:one-type-per-behavior] The effective LOOK name, the exact twin of
   // theme.effective one dimension over — effectiveLookName(sessionState.look,
-  // globals.look, looks), the SAME name whose ThemeKey adapts the rendered
+  // globals.style, looks), the SAME name whose ThemeKey adapts the rendered
   // palette. A look-picker trigger reads `{{ .look.effective }}` for its
   // label; the label and the colors trace to one resolution.
-  "look.effective": {
+  "style.effective": {
     kind: "input",
-    path: "look.effective",
+    path: "style.effective",
     default: "",
   },
   // [LAW:one-type-per-behavior] The effective PRESET name, theme/look's twin
@@ -85,20 +85,20 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: true,
   },
-  // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
+  // [LAW:one-type-per-behavior] endcaps/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
   // renders with, each read back through this projection so a `persist`
   // action over the field shows a "current selection" highlight and a
   // trigger label can display the active value without restating it.
-  "style.effective": {
+  "endcaps.effective": {
     kind: "input",
-    path: "style.effective",
+    path: "endcaps.effective",
     default: "",
   },
-  "progression.effective": {
+  "variation.effective": {
     kind: "input",
-    path: "progression.effective",
+    path: "variation.effective",
     default: "",
   },
   "charset.effective": {

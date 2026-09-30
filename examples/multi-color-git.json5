@@ -14,7 +14,7 @@
 // ── The two ideas worth taking from this file ──────────────────────────────
 //
 // 1. COLOR BY NAME, never by hardcoded value. `{{ color "primary" }}` resolves
-//    against whichever theme, look and hue shift are active for this segment,
+//    against whichever theme, style and hue shift are active for this segment,
 //    so the same template stays legible across every theme a user picks. A
 //    literal `#ff0000` would not.
 //

@@ -29,7 +29,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
 import { SessionState } from "../src/daemon/session-state";
-import { DEFAULT_PROGRESSION, listResolvablePaletteNames } from "../src/themes/policy";
+import { DEFAULT_VARIATION, listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -37,7 +37,7 @@ import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
-  PROGRESSIONS,
+  VARIATIONS,
   bandFor,
   bandItemFor,
   bandRoot,
@@ -49,8 +49,8 @@ import {
   type Region,
 } from "../src/themes/decor";
 
-// The progression the bundled config renders under.
-const BAR = PROGRESSIONS[DEFAULT_PROGRESSION];
+// The variation the bundled config renders under.
+const BAR = VARIATIONS[DEFAULT_VARIATION];
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -87,8 +87,8 @@ const PAYLOAD = {
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
   theme: { effective: THEME },
-  look: { effective: "none" },
-  style: { effective: "powerline" },
+  style: { effective: "none" },
+  endcaps: { effective: "powerline" },
   preset: { effective: "default" },
   charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },

@@ -117,9 +117,9 @@ function buildRuntime(source = src(RULE)): Runtime {
         ),
         look: resolveLookSelection(
           undefined,
-          sessionState.get(SID, "look"),
-          config.globals.look,
-          config.looks,
+          sessionState.get(SID, "style"),
+          config.globals.style,
+          config.styles,
         ),
       },
     );
@@ -219,7 +219,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("the rule composes with a look: the look transposes the rule's own base, once", () => {
-    const LOOKS = "looks: { none: {}, washed: { chromaScale: 0.2 } },";
+    const LOOKS = "styles: { none: {}, washed: { chromaScale: 0.2 } },";
     const { sessionState, render, dispose } = buildRuntime(src(RULE, LOOKS));
     try {
       // [LAW:one-source-of-truth] The expectation is built with rich-js
@@ -239,7 +239,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       // moved it" is a claim about the look and not about the theme.
       const unlooked = render(90).bg("plain");
       expect(unlooked).toBe(byName("dracula"));
-      sessionState.set(SID, "look", "washed");
+      sessionState.set(SID, "style", "washed");
       const looked = render(90).bg("plain");
       expect(looked).not.toBe(unlooked);
       expect(looked).toBe(want);
@@ -509,17 +509,17 @@ describe("a rule inside a preset's globals", () => {
     "{{ if ge (int .ctx.pct) 80 }}hot{{ else }}none{{ end }}";
   const presetSrc = (palette: string, look = LOOK_RULE): string => `{
     globals: { palette: '${THEME_FLOOR}' },
-    looks: { none: {}, hot: { hueShift: 180 } },
-    presets: { ruled: { globals: { palette: '${palette}', look: '${look}' } } },
+    styles: { none: {}, hot: { hueShift: 180 } },
+    presets: { ruled: { globals: { palette: '${palette}', style: '${look}' } } },
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
       'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
-      'look.effective': { kind: 'input', path: 'look.effective', default: '' },
+      'style.effective': { kind: 'input', path: 'style.effective', default: '' },
     },
     segments: {
       plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
-      label: { template: 'T={{ .theme.effective }} L={{ .look.effective }}', bg: 'surface', fg: 'foreground' },
+      label: { template: 'T={{ .theme.effective }} L={{ .style.effective }}', bg: 'surface', fg: 'foreground' },
     },
     root: { v: ['plain', 'label'] },
   }`;
@@ -655,14 +655,14 @@ describe("a rule inside a preset's globals", () => {
   test("a look NAME in a preset's globals or in editGlobals must be a declared look", () => {
     expect(() =>
       parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),
-    ).toThrow(/presets\.ruled\.globals\.look "vivd" does not match any declared look/);
+    ).toThrow(/presets\.ruled\.globals\.style "vivd" does not match any declared style/);
     const staged = `{
-      editGlobals: { look: 'dimm' },
+      editGlobals: { style: 'dimm' },
       segments: { plain: { template: 'x' } },
       root: { v: ['plain'] },
     }`;
     expect(() => parseAndValidate("<look-staged>", staged, ALLOWED)).toThrow(
-      /editGlobals\.look "dimm" does not match any declared look/,
+      /editGlobals\.style "dimm" does not match any declared style/,
     );
   });
 
@@ -675,9 +675,9 @@ describe("a rule inside a preset's globals", () => {
     expect(() => parseAndValidate("<theme-expr-staged>", staged, ALLOWED)).toThrow(
       /editGlobals\.palette: a rule is not allowed here/,
     );
-    const stagedLook = staged.replace("palette:", "look:");
+    const stagedLook = staged.replace("palette:", "style:");
     expect(() =>
       parseAndValidate("<theme-expr-staged>", stagedLook, ALLOWED),
-    ).toThrow(/editGlobals\.look: a rule is not allowed here/);
+    ).toThrow(/editGlobals\.style: a rule is not allowed here/);
   });
 });

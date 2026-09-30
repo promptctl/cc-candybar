@@ -148,7 +148,7 @@ export function checkPayload(
     // so the when-gated `autocompact` control renders all of its cells.
     autocompact: autoCompactControls(400_000, 1_000_000),
     // [LAW:one-source-of-truth] The daemon's own projection of the resolved
-    // globals, so a `.preset.effective`/`.style.effective` label is checked
+    // globals, so a `.preset.effective`/`.endcaps.effective` label is checked
     // against the value it will actually show, never its declared default.
     ...effectiveInputs(effective),
     // One step each way, one unsaved setting and one resettable one, so every

@@ -20,7 +20,7 @@ import {
   listThemePalettes,
   type ThemeKey,
 } from "@promptctl/rich-js";
-import { PROGRESSIONS, type ProgressionName } from "./decor.js";
+import { VARIATIONS, type VariationName } from "./decor.js";
 
 // [LAW:one-source-of-truth] Theme names the registry no longer installs: old
 // name → the theme that replaced it. `dark`/`light` were second names for the
@@ -209,7 +209,7 @@ export type Decided<T> = Extract<Selection<T>, { kind: "decided" }>;
 // domain (a closed enum, a bool, a bounded int), which is a second variability
 // this shape does not carry. A look and a theme each name a member of their own
 // domain, which is why one shape serves both.
-export const EXPRESSION_SLOTS = ["look", "palette"] as const;
+export const EXPRESSION_SLOTS = ["style", "palette"] as const;
 export type ExpressionSlot = (typeof EXPRESSION_SLOTS)[number];
 
 // Shape-detection, the same way a template is told from a literal everywhere
@@ -509,38 +509,38 @@ export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
   return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
 }
 
-// --- Bar progression identifiers ---
+// --- Bar variation identifiers ---
 
-// [LAW:one-source-of-truth] The names a `globals.progression` may hold — the
-// keys of decor.ts's PROGRESSIONS table, so the loader's enum, the option
+// [LAW:one-source-of-truth] The names a `globals.variation` may hold — the
+// keys of decor.ts's VARIATIONS table, so the loader's enum, the option
 // domain and the session parse cannot admit a name the render has no
-// progression for. Like `style`, it is a taste that may differ between two
+// variation for. Like `style`, it is a taste that may differ between two
 // sessions, so a session pick sits over the config default.
-export const PROGRESSION_NAMES = Object.keys(
-  PROGRESSIONS,
-) as readonly ProgressionName[];
+export const VARIATION_NAMES = Object.keys(
+  VARIATIONS,
+) as readonly VariationName[];
 
-// [LAW:one-source-of-truth] The one statement of the globals.progression
+// [LAW:one-source-of-truth] The one statement of the globals.variation
 // default: rows in `secondary`, then `accent` (brandon-theme-picker-bgw.7g6).
-export const DEFAULT_PROGRESSION: ProgressionName = "secondary-accent";
+export const DEFAULT_VARIATION: VariationName = "accent";
 
-export function isProgressionName(value: string): value is ProgressionName {
-  return (PROGRESSION_NAMES as readonly string[]).includes(value);
+export function isVariationName(value: string): value is VariationName {
+  return (VARIATION_NAMES as readonly string[]).includes(value);
 }
 
 // [LAW:one-type-per-behavior] effectiveStripStyle's twin: the narrowing guard
 // IS the parse, and a stale session entry falls through to the config default.
-export function effectiveProgression(
-  stagedProgression: ProgressionName | undefined,
-  sessionProgression: string | null,
-  globalsProgression: ProgressionName | undefined,
-): ProgressionName {
+export function effectiveVariation(
+  stagedVariation: VariationName | undefined,
+  sessionVariation: string | null,
+  globalsVariation: VariationName | undefined,
+): VariationName {
   return effectiveGlobal(
-    stagedProgression,
-    sessionProgression,
-    globalsProgression,
-    DEFAULT_PROGRESSION,
-    (raw) => (isProgressionName(raw) ? raw : null),
+    stagedVariation,
+    sessionVariation,
+    globalsVariation,
+    DEFAULT_VARIATION,
+    (raw) => (isVariationName(raw) ? raw : null),
   );
 }
 

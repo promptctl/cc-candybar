@@ -22,7 +22,7 @@ import { cascadeAt, parseCascadeStops } from "./cascade.js";
 import { renderSparkline, parseSeries } from "./sparkline.js";
 import { refuseSurplus } from "./optional-tail.js";
 
-// [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
+// [LAW:one-source-of-truth] The DSL `themes()` and `endcaps()` bindings
 // project the SAME canonical sources the set-state validator consults
 // (listResolvablePaletteNames / STRIP_STYLES). A picker (or a config that
 // `range`s over themes() to emit OSC-8 cells) iterates the allow-list the
@@ -35,7 +35,7 @@ import { refuseSurplus } from "./optional-tail.js";
 // ticket is satisfied vacuously — the lists never change during a
 // daemon lifetime, so a cached snapshot IS the current truth.
 const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
-const STYLES_LIST: readonly string[] = [...STRIP_STYLES];
+const ENDCAPS_LIST: readonly string[] = [...STRIP_STYLES];
 
 // [LAW:single-enforcer] Numeric validation lives at ONE boundary — the engine's
 // `int`/`float` argType gate (@promptctl/go-template-js), which proves membership
@@ -130,8 +130,8 @@ export function ccCandybarFuncs(): FuncMap {
       argTypes: [],
       arity: { kind: "exact" },
     },
-    styles: {
-      fn: () => STYLES_LIST,
+    endcaps: {
+      fn: () => ENDCAPS_LIST,
       argTypes: [],
       arity: { kind: "exact" },
     },
