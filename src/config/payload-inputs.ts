@@ -44,17 +44,17 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "theme.effective",
     default: "",
   },
-  // [LAW:one-type-per-behavior] The effective LOOK name, the exact twin of
-  // theme.effective one dimension over — effectiveLookName(sessionState.look,
-  // globals.style, looks), the SAME name whose ThemeKey adapts the rendered
-  // palette. A look-picker trigger reads `{{ .look.effective }}` for its
+  // [LAW:one-type-per-behavior] The effective STYLE name, the exact twin of
+  // theme.effective one dimension over — effectiveStyleName(sessionState.style,
+  // globals.style, styles), the SAME name whose ThemeKey adapts the rendered
+  // palette. A style-picker trigger reads `{{ .style.effective }}` for its
   // label; the label and the colors trace to one resolution.
   "style.effective": {
     kind: "input",
     path: "style.effective",
     default: "",
   },
-  // [LAW:one-type-per-behavior] The effective PRESET name, theme/look's twin
+  // [LAW:one-type-per-behavior] The effective PRESET name, theme/style's twin
   // one level up — effectivePresetName(sessionState.preset, globals.preset,
   // presets), the SAME name that selected the layout this render walked and
   // the globals it rendered with. A preset-picker trigger reads
@@ -86,7 +86,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     default: true,
   },
   // [LAW:one-type-per-behavior] endcaps/charset/colorCompatibility/autoWrap/
-  // padding are theme/look's twins over the remaining persistable globals
+  // padding are theme/style's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
   // renders with, each read back through this projection so a `persist`
   // action over the field shows a "current selection" highlight and a

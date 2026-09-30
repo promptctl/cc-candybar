@@ -21,7 +21,7 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
 import { clearParseCache, type ClaudeHookData } from "../src/utils/claude";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -83,7 +83,7 @@ const todoWrite = (
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",
@@ -568,7 +568,7 @@ describe("the bundled activity segment renders the payload", () => {
             // powerline joiner's end-cap glyphs are not whitespace, so they
             // would ride into every expectation as chrome this gate never
             // meant to pin (test/decor-wiring.test.ts owns the chrome).
-            style: "plain" as const,
+            endcaps: "plain" as const,
             colorCompatibility: "truecolor" as const,
             wrap: true,
             padding: 1,

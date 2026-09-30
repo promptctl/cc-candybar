@@ -12,7 +12,7 @@
 //
 // The palette sampled is the render's own, not the active segment's: a segment
 // pinned to another theme by `palette:` still previews the bar's theme, which
-// is what a theme or look control is choosing.
+// is what a theme or style control is choosing.
 //
 // [LAW:one-way-deps] Lives in render/, injected into the engine as data by
 // registerDslConfig; the generic engine never imports it.

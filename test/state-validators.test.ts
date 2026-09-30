@@ -22,7 +22,7 @@ import {
   validateStateWrite,
   type ValidateResult,
 } from "../src/daemon/verbs/state-validators";
-import { listResolvablePaletteNames, STRIP_STYLES } from "../src/themes/policy";
+import { listResolvablePaletteNames, ENDCAPS_SHAPES } from "../src/themes/policy";
 
 describe("state-validators registry contract", () => {
   test("listStateKeys() exactly enumerates the baseline writable schema", () => {
@@ -51,11 +51,11 @@ describe("state-validators registry contract", () => {
     }
   });
 
-  test("style validator accepts every STRIP_STYLES entry", () => {
-    for (const styleName of STRIP_STYLES) {
-      const result = validateStateWrite("endcaps", styleName);
+  test("style validator accepts every ENDCAPS_SHAPES entry", () => {
+    for (const shape of ENDCAPS_SHAPES) {
+      const result = validateStateWrite("endcaps", shape);
       expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value).toBe(styleName);
+      if (result.ok) expect(result.value).toBe(shape);
     }
   });
 

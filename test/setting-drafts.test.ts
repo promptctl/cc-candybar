@@ -111,7 +111,7 @@ describe("a preset's globals as a write target", () => {
   test("a file's fragment merges over the base preset's field by field", () => {
     const base = {
       ...EMPTY_DEFAULT,
-      presets: { wide: { globals: { padding: 0, style: "plain" as const } } },
+      presets: { wide: { globals: { padding: 0, endcaps: "plain" as const } } },
     };
     const merged = mergeWithDefault(
       { presets: { wide: { globals: { padding: 2 } } } },
@@ -119,7 +119,7 @@ describe("a preset's globals as a write target", () => {
     );
     expect(presetGlobals(merged, "wide")).toMatchObject({
       padding: 2,
-      style: "plain",
+      endcaps: "plain",
     });
   });
 });

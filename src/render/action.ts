@@ -257,17 +257,17 @@ export interface ActionRuntime {
   // fitted inside a body reserves that cell: its glyph, its padding, this seam.
   seamCols: number;
   // [LAW:locality-or-seam] The current render's BASE palette — the theme before
-  // the look — published per render by renderDsl exactly like chromeCols and
+  // the style — published per render by renderDsl exactly like chromeCols and
   // padding. A picker over a colour-valued domain paints each option in the
-  // palette picking it would put in force, and a look's answer is the base
-  // transposed by that look's key. It must be the base and not the segment's own
-  // (already-looked) palette: transposedPalette may never be chained, because its
+  // palette picking it would put in force, and a style's answer is the base
+  // transposed by that style's key. It must be the base and not the segment's own
+  // (already-styled) palette: transposedPalette may never be chained, because its
   // memo keys on the base palette's NAME, which transposition preserves.
-  // A picked theme or look recolours the WHOLE bar, so the render-wide base is
+  // A picked theme or style recolours the WHOLE bar, so the render-wide base is
   // also the honest input even inside a `palette:`-pinned segment.
   basePalette: Palette;
   // [LAW:one-source-of-truth] The palette the bar is DRAWN in this render — the
-  // base above transposed by the render's look, the one object every unpinned
+  // base above transposed by the render's style, the one object every unpinned
   // segment colours from — published at the same site. `{{ themePreview }}`
   // samples it, so a preview cannot show a palette the bar is not wearing.
   palette: Palette;
@@ -309,8 +309,8 @@ export function compileActions(
   actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
   // This config's per-config option domains (currently just "styles" — the
-  // config's merged look names) — resolveOptionDomain checks these before
-  // falling back to the global registry (themes/styles).
+  // config's merged style names) — resolveOptionDomain checks these before
+  // falling back to the global registry (themes/endcaps).
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();

@@ -65,7 +65,7 @@ import {
   SETTINGS_NS,
 } from "./loader/reserved-namespace.js";
 import { validateActions } from "./loader/actions.js";
-import { validateLooks } from "./loader/looks.js";
+import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
@@ -405,7 +405,7 @@ function validateTopLevel(
       line: findKeyLine(ctx.source, ["looks"]),
     });
   }
-  if (raw.styles !== undefined) out.styles = validateLooks(ctx, raw.styles);
+  if (raw.styles !== undefined) out.styles = validateStyles(ctx, raw.styles);
   // [LAW:one-source-of-truth] Parsed BEFORE the synthesis passes below, because
   // a preset's `root` runs through the same validateRootFragment and therefore collects
   // its group sugar into the same `ctx.groups` the top-level root does — the

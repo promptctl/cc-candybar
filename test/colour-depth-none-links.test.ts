@@ -78,7 +78,7 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
           ...effectiveInputs(effective()),
         },
         {
-          style: "powerline",
+          endcaps: "powerline",
           wrap: true,
           padding: 1,
           charset: "unicode",

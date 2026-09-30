@@ -16,7 +16,7 @@ import { editGlobalsJson, globalsJson } from "./globals.js";
 import { variablesMapJson } from "./variables.js";
 import { segmentDefinitions, segmentsJson } from "./segments.js";
 import { actionsJson } from "./actions.js";
-import { looksJson } from "./looks.js";
+import { stylesJson } from "./styles.js";
 import { presetsJson } from "./presets.js";
 import {
   layoutNodeJson,
@@ -57,7 +57,7 @@ export function emitConfigSchema(
       segments: segmentsJson(inheritedSegments),
       root: { $ref: ROOT_FRAGMENT_REF },
       actions: actionsJson(),
-      styles: looksJson(),
+      styles: stylesJson(),
       presets: presetsJson(),
       editGlobals: editGlobalsJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },

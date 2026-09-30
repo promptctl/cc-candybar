@@ -45,7 +45,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -274,7 +274,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",
@@ -457,7 +457,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
     return renderDsl(cfg, compiled, store, registry, payload, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });

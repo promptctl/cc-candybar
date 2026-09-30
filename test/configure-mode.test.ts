@@ -123,7 +123,7 @@ function buildRuntime(
       registry,
       { session_id: SID, project_dir: "/tmp/proj" },
       {
-        style: "powerline" as const,
+        endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,
         wrap: true,
         padding: 0,

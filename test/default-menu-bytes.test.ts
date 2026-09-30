@@ -17,7 +17,7 @@
 // because adding one fails the coverage snapshot until it is acknowledged.
 //
 // The bundled default hosts none today: every settings-menu control — preset,
-// theme, look, style, charset, colour depth — opens a carousel
+// theme, style, endcaps, charset, colour depth — opens a carousel
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
@@ -60,7 +60,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,

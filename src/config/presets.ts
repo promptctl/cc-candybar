@@ -2,9 +2,9 @@
 // render asks about presets — which one is active, what layout does it stage,
 // what display globals does it carry — answered in one place, from one map.
 //
-// A preset is to configuration what a look is to a theme, and that is the
+// A preset is to configuration what a style is to a theme, and that is the
 // implementation instruction, not an analogy: the selection rides the SAME
-// per-config-member seam looks rides (effectiveMemberName in themes/policy.ts),
+// per-config-member seam styles rides (effectiveMemberName in themes/policy.ts),
 // the domain is threaded as DATA through the same perConfigDomainsFor the click
 // gate and the rendered options both read, and an unknown name collapses to the
 // same kind of always-present floor. Nothing here is parallel machinery
@@ -30,12 +30,12 @@
 //
 // The same rule places the last rung (candybar-settings-ui-aok.5): edit mode's
 // `editGlobals` fragment is decided later than ANY session pick — a user picks
-// a style, and only afterwards enters edit mode — so it is the new rightmost
+// endcaps, and only afterwards enters edit mode — so it is the new rightmost
 // layer, and a session pick of "capsule" cannot survive into a mode whose whole
 // job is to stop segments reading as one continuous strip. It differs from
 // every rung to its left in LIFETIME rather than in kind: nothing writes it to
 // SessionState or the config file, so leaving edit mode restores the
-// previous look with no save/restore path — the session's own pick was never
+// previous style with no save/restore path — the session's own pick was never
 // overwritten, only out-ranked [LAW:dataflow-not-control-flow]. The rung itself
 // is the `staged` parameter of effectiveGlobal (themes/policy.ts); this comment
 // is the ONE place the order is written down.
@@ -52,7 +52,7 @@ import type {
 import { EMPTY_ROWS, mergeRoot, restages, rootNode } from "./root.js";
 import { effectiveMemberName } from "../themes/policy.js";
 
-// [LAW:one-source-of-truth] The floor preset's name, spelled once. `looks` has
+// [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
 // fragment — the empty PresetDecl, i.e. the config's own root and globals
 // unchanged). The bundled default declares it and merge-by-name cannot remove
@@ -79,7 +79,7 @@ const FLOOR_FRAGMENT: PresetDecl = {};
 // set by construction — a click returning to the floor cannot be rejected by a
 // gate that forgot the floor was selectable.
 //
-// This is deliberately STRONGER than the looks seam it otherwise mirrors, where
+// This is deliberately STRONGER than the styles seam it otherwise mirrors, where
 // "none" is in the domain only because the bundled stdlib ships it. The floor's
 // membership is a fact about the resolution, not about any config, so it is
 // stated here once rather than depending on a merge going right.
@@ -90,7 +90,7 @@ export function presetNames(
 }
 
 // [LAW:one-type-per-behavior] The preset domain's instance of the shared
-// per-config-member resolver — the same call shape effectiveLookName makes, one
+// per-config-member resolver — the same call shape effectiveStyleName makes, one
 // dimension over. A stale or deleted name collapses to PRESET_FLOOR rather than
 // throwing, and the caller publishes this RESOLVED name as `preset.effective`
 // so the bar's label and the bar's layout can never disagree
@@ -124,7 +124,7 @@ export function effectivePresetName(
 // invariant (a caller that skipped the resolution and passed a raw session
 // string), never a silent empty-fragment fallback that would render one
 // arrangement while the bar's label named another — the exact contract
-// lookKeyByName holds for looks.
+// styleKeyByName holds for styles.
 export function presetByName(
   presets: Readonly<Record<string, PresetDecl>>,
   name: string,

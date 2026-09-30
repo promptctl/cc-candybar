@@ -2,14 +2,14 @@
 // NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
 // memos live here: a theme name -> base palette, and a (base, ThemeKey) ->
 // transposed palette. They compose — the per-render base palette feeds the
-// per-render look transposition.
+// per-render style transposition.
 //
 // [LAW:no-shared-mutable-globals] Single owner: this module. Both Maps are pure
 // memos of pure rich-js functions, keyed by immutable inputs (resolved theme
 // name; palette name + the four ThemeKey axes). rich-js palettes are immutable
 // registry singletons, so a cached palette never goes stale. Key spaces are
-// bounded by #themes and #themes × #declared looks (look axes bounded by the
-// loaded configs' looks blocks) — both small. Shared on purpose: a theme's
+// bounded by #themes and #themes × #declared styles (style axes bounded by the
+// loaded configs' styles blocks) — both small. Shared on purpose: a theme's
 // base palette and its gruvbox-under-`vivid` transposition are each computed
 // once per process, not once per RenderCache entry or per render.
 // Read/written only through the two functions below.
@@ -52,9 +52,9 @@ export function paletteForThemeName(name: string): Palette {
 }
 
 // [LAW:one-source-of-truth] THE palette a placement renders in, from its
-// `theme` setting: the bar's own palette (the render's theme under its look)
+// `theme` setting: the bar's own palette (the render's theme under its style)
 // when it follows the bar, else the named theme — a pin, which ignores the
-// bar's theme and look alike. The render's walk and the placement-theme
+// bar's theme and style alike. The render's walk and the placement-theme
 // picker's option cells both read it, so an option paints what picking it
 // would draw.
 export function placementPalette(theme: string, bar: Palette): Palette {
@@ -82,10 +82,10 @@ function basePaletteFor(name: string): Palette | null {
 /**
  * `base` transposed by a full ThemeKey — the adapted-palette constructor:
  * (base palette, key) → palette. The caller composes whatever axes it carries
- * (a look's four axes) into ONE key and this makes ONE transposePalette call — never chain
+ * (a style's four axes) into ONE key and this makes ONE transposePalette call — never chain
  * two transpositions: chaining double-pays OKLCH quantization AND collides this
  * memo (a transposed palette keeps the base palette's name, so a re-transposed
- * gruvbox-with-look and plain gruvbox would share cache keys).
+ * gruvbox-with-style and plain gruvbox would share cache keys).
  *
  * [LAW:dataflow-not-control-flow] The key is data; the identity key flows
  * through transposePalette's isIdentityKey fast-path (byte-exact, no
@@ -94,7 +94,7 @@ function basePaletteFor(name: string): Palette | null {
  * no local exemption list to drift.
  *
  * [LAW:single-enforcer] The sole place a transposed palette is built — a
- * future look `roles` remap is additive at this one seam. The memo miss
+ * future style `roles` remap is additive at this one seam. The memo miss
  * (undefined) is genuine optionality — not-yet-computed — not a defended
  * invariant. [LAW:one-source-of-truth] The cache key carries every axis of the
  * ThemeKey: two keys differing on any axis are distinct palettes.
@@ -141,8 +141,8 @@ function namedTheme(name: string): DecidedTheme | null {
 // An installed theme decides; anything else is the floor, and SAYS SO.
 //
 // The report is what makes this the theme's version rather than a copy of
-// `decideLookName`: that floor is the identity adaptation, so collapsing to it in
-// silence leaves a bar that simply wears no look. This floor is a specific
+// `decideStyleName`: that floor is the identity adaptation, so collapsing to it in
+// silence leaves a bar that simply wears no style. This floor is a specific
 // palette, so a silent collapse would leave the bar in a theme nobody asked for
 // with nothing to point at [LAW:no-silent-failure]. It is reported rather than
 // thrown because the value is DATA-driven: an expression can be correct for a
@@ -151,7 +151,7 @@ function namedTheme(name: string): DecidedTheme | null {
 //
 // [LAW:effects-at-boundaries] `onUnresolvable` is a capability the caller hands
 // in — the message belongs to this domain, the channel does not. The one return
-// type also means this and `decideLookName` are interchangeable as
+// type also means this and `decideStyleName` are interchangeable as
 // `finishSelection`'s `decide`.
 //
 // `where` names the path(s) the rule was written at, since a rule may live in the

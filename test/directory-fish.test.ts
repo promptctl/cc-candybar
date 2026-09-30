@@ -89,7 +89,7 @@ function renderDir(paths: {
       },
     };
     return renderDsl(parsed, compiled, store, registry, payload, {
-      style: "plain",
+      endcaps: "plain",
       colorCompatibility: "none",
       wrap: true,
       padding: 0,
@@ -212,7 +212,7 @@ describe("configurability seam: user template override restores full path", () =
           },
         },
         {
-          style: "plain",
+          endcaps: "plain",
           colorCompatibility: "none",
           wrap: true,
           padding: 0,

@@ -38,7 +38,7 @@ const PALETTES = ["textual-dark", "textual-light"] as const;
 const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 1,

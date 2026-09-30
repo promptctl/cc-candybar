@@ -456,7 +456,7 @@ function installSuccessMessage(): string {
     `  Restart Claude Code to pick up the new statusline.\n` +
     `  Tip: every bar carries a settings menu — click it (${DOOR_GLYPH} by\n` +
     `  default) for quick actions, preset switching, edit mode, and clickable\n` +
-    `  theme/look/style/wrap/padding controls.\n`
+    `  theme/style/variation/endcaps/wrap/padding controls.\n`
   );
 }
 

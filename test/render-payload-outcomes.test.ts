@@ -18,7 +18,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { FLOOR_LOOK } from "./helpers/floor-look";
+import { FLOOR_STYLE } from "./helpers/floor-style";
 
 type LogEntry = { level: string; msg: string };
 
@@ -52,7 +52,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  look: FLOOR_LOOK,
+  style: FLOOR_STYLE,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",
@@ -342,12 +342,12 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 // colorCompatibility/autoWrap/padding are style's twins — this pins
 // that buildRenderPayload projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
-// with no `wants` gate — unlike theme/look, which renderDsl produces).
+// with no `wants` gate — unlike theme/style, which renderDsl produces).
 describe("buildRenderPayload — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
     const effective: EffectiveGlobals = {
       theme: resolveThemeSelection(undefined, null, "nord"),
-      look: FLOOR_LOOK,
+      style: FLOOR_STYLE,
       preset: "default",
       presetCustomized: true,
       endcaps: "capsule",

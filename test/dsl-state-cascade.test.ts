@@ -24,7 +24,7 @@ import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -550,7 +550,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 0,

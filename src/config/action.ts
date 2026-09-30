@@ -25,8 +25,8 @@
 // discriminator the loader and the validator-derivation match on.
 
 // [LAW:one-source-of-truth] The domain a picker draws options from. Resolved
-// through option-domain.ts's registry — themes/styles are registry-backed
-// static lists, "styles" is the one PER-CONFIG domain (the merged `looks`
+// through option-domain.ts's registry — themes/endcaps are registry-backed
+// static lists, "styles" is the one PER-CONFIG domain (the merged `styles`
 // block's names, threaded as data rather than consulted from a module
 // constant), and an inline array is its own domain, needing no registration
 // at all. Re-exported here so ActionDecl stays self-contained to read.

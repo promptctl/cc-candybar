@@ -23,7 +23,7 @@ import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
-  STRIP_STYLES,
+  ENDCAPS_SHAPES,
 } from "../src/themes/policy";
 
 describe("option-domain registry", () => {
@@ -31,7 +31,7 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("themes", new Map()).members).toEqual(
       listResolvablePaletteNames(),
     );
-    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(STRIP_STYLES);
+    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(ENDCAPS_SHAPES);
   });
 
   // [LAW:one-source-of-truth] candybar-config-engine-71o.3: charsets/
@@ -62,7 +62,7 @@ describe("option-domain registry", () => {
     ]);
   });
 
-  test("a per-config domain (e.g. looks) resolves from the caller's map, not the global registry", () => {
+  test("a per-config domain (e.g. styles) resolves from the caller's map, not the global registry", () => {
     const perConfig = new Map([["styles", { members: ["vapor", "none"] }]]);
     expect(resolveOptionDomain("styles", perConfig).members).toEqual([
       "vapor",
@@ -174,7 +174,7 @@ describe("a colour-valued domain resolves its own painter", () => {
     );
   });
 
-  test("`looks` answers with the BASE transposed by that look's ThemeKey", () => {
+  test("`styles` answers with the BASE transposed by that style's ThemeKey", () => {
     const looks = {
       none: {
         hueShift: 0,
@@ -205,7 +205,7 @@ describe("a colour-valued domain resolves its own painter", () => {
       new Map(),
     );
     expect(members[0]).toBe("bar");
-    // A placement that follows the bar renders in the base under the look.
+    // A placement that follows the bar renders in the base under the style.
     expect(paletteOf!("bar", RENDER)).toBe(RENDER.palette);
     expect(paletteOf!("gruvbox", RENDER)).toBe(paletteForThemeName("gruvbox"));
   });

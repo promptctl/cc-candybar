@@ -11,7 +11,7 @@
 //   - `{{ bgOf }}` reads the effective background, tint included;
 //   - colour derives from WHERE a segment sits, not from how many leaves
 //     precede it in the walk (the hue cursor's defining flaw);
-//   - the render's look reaches the tint, because the tint is read from the
+//   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
 import { ColorRgba, getThemePalette, Palette } from "@promptctl/rich-js";
@@ -42,7 +42,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -94,7 +94,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       OPTS,
       { perSegmentSink: sink },
       {
-        ...(look === undefined ? {} : { look: { kind: "decided" as const, name: "test", value: look } }),
+        ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
       },
     );

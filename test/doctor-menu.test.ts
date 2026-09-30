@@ -46,7 +46,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 const TOOLS_KEY = `${SETTINGS_NS}tools`;
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,

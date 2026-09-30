@@ -17,25 +17,28 @@ import {
   formatModelName,
   shortenModelName,
 } from "../utils/formatters.js";
-import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
+import {
+  listResolvablePaletteNames,
+  ENDCAPS_SHAPES,
+} from "../themes/policy.js";
 import { cascadeAt, parseCascadeStops } from "./cascade.js";
 import { renderSparkline, parseSeries } from "./sparkline.js";
 import { refuseSurplus } from "./optional-tail.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `endcaps()` bindings
 // project the SAME canonical sources the set-state validator consults
-// (listResolvablePaletteNames / STRIP_STYLES). A picker (or a config that
+// (listResolvablePaletteNames / ENDCAPS_SHAPES). A picker (or a config that
 // `range`s over themes() to emit OSC-8 cells) iterates the allow-list the
 // validator will enforce on the resulting click — the list and the gate cannot
 // diverge because there is no second list.
 //
 // Module-init caching is correct by construction: rich-js THEMES is a
 // static import (no dynamic palette registration at runtime) and
-// STRIP_STYLES is a const array. The "reactivity" requirement from the
+// ENDCAPS_SHAPES is a const array. The "reactivity" requirement from the
 // ticket is satisfied vacuously — the lists never change during a
 // daemon lifetime, so a cached snapshot IS the current truth.
 const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
-const ENDCAPS_LIST: readonly string[] = [...STRIP_STYLES];
+const ENDCAPS_LIST: readonly string[] = [...ENDCAPS_SHAPES];
 
 // [LAW:single-enforcer] Numeric validation lives at ONE boundary — the engine's
 // `int`/`float` argType gate (@promptctl/go-template-js), which proves membership

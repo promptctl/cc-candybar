@@ -63,7 +63,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
-    style: "powerline" as const,
+    endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
@@ -614,11 +614,11 @@ describe("persist action click → the config file", () => {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
     },
     actions: {
-      applyLookForever: { persist: 'style', to: 'vivid' },
+      applyStyleForever: { persist: 'style', to: 'vivid' },
       cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256'] },
       bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 },
     },
-    segments: { bar: { template: '{{ action "applyLookForever" "vivid" }} {{ action "cycleColorDepth" "cd" }} {{ action "bumpPadding" "+" }}', bg: 'surface', fg: 'foreground' } },
+    segments: { bar: { template: '{{ action "applyStyleForever" "vivid" }} {{ action "cycleColorDepth" "cd" }} {{ action "bumpPadding" "+" }}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
   }`;
 

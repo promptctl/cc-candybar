@@ -69,7 +69,7 @@ import { SETTING_PROJECTIONS } from "../src/config/setting-projections";
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,

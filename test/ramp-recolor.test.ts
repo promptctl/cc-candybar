@@ -1,15 +1,15 @@
 // A ramp over palette-NAME stops is a colour decision that stays inside the
 // theme system (brandon-custom-segments-g5z.2): its stops resolve through the
 // same live palette an authored `bg: "panel"` does, so a theme click and a
-// look change recolour it with no config change. The contract is stated as
+// style change recolour it with no config change. The contract is stated as
 // EQUALITY with a sibling cell that names the stop directly — one
 // resolution, not a parallel one — under every state, and as the three
 // states painting three different colours.
 //
 // Same rig as test/dsl-theme-picker-recolor.test.ts: renderDsl with the
 // base palette resolved per render the way the daemon does
-// (resolveThemeSelection, whose decided arm carries the palette), the look the same way
-// (resolveLookSelection), the clicks driven through the real
+// (resolveThemeSelection, whose decided arm carries the palette), the style the same way
+// (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -23,7 +23,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import { resolveLookSelection, resolveThemeSelection } from "../src/themes";
+import { resolveStyleSelection, resolveThemeSelection } from "../src/themes";
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
@@ -31,10 +31,10 @@ const BASE_THEME = "textual-dark";
 // textual-light shares warning and error with it byte-for-byte, so a click
 // between those two could not show the hot stops recolouring.
 const PICKED_THEME = "catppuccin-latte";
-const PICKED_LOOK = "vivid";
+const PICKED_STYLE = "vivid";
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
@@ -46,7 +46,7 @@ const OPTS = {
 // the number lands on. The two cells must agree in every state.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
-  styles: { none: {}, ${PICKED_LOOK}: { chromaScale: 1.6, lightnessShift: 0.08 } },
+  styles: { none: {}, ${PICKED_STYLE}: { chromaScale: 1.6, lightnessShift: 0.08 } },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
@@ -56,7 +56,7 @@ const SRC = `{
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    applyLook: { set: 'style', from: 'styles' },
+    applyStyle: { set: 'style', from: 'styles' },
   },
   segments: {
     viaRamp: { template: ' R ', bg: '{{ ramp .pct "step" 0 "panel" 50 "warning" 80 "error" }}', fg: 'foreground' },
@@ -68,7 +68,7 @@ const SRC = `{
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
 // The derived click gate — the sole authority on what a set-state may write
-// — registered per test so the look click travels the road a real click
+// — registered per test so the style click travels the road a real click
 // travels, and released after so the daemon-global registry stays clean.
 const disposers: Array<() => void> = [];
 afterEach(() => {
@@ -94,7 +94,7 @@ function buildRuntime() {
       sessionState.get(SID, "theme"),
       config.globals.palette,
     );
-    const look = resolveLookSelection(
+    const look = resolveStyleSelection(
       undefined,
       sessionState.get(SID, "style"),
       config.globals.style,
@@ -108,7 +108,7 @@ function buildRuntime() {
       { session_id: SID, ...payload },
       OPTS,
       undefined,
-      { theme, look },
+      { theme, style: look },
     );
   };
   const click = (key: "theme" | "style", value: string): void =>
@@ -145,7 +145,7 @@ describe("ramp over palette-name stops follows the live theme", () => {
       const base = agree();
       click("theme", PICKED_THEME);
       const themed = agree();
-      click("style", PICKED_LOOK);
+      click("style", PICKED_STYLE);
       const looked = agree();
 
       // Three states, three colours: the ramp did not freeze at first render.

@@ -7,11 +7,11 @@
 //   2. the centre is the value the key holds, so after a click the ring is
 //      centred on what the click wrote;
 //   3. neighbours are shown only while the row has room for them;
-//   4. in the settings menu the theme, look and style controls open a carousel
-//      and no longer a grid picker; the theme and look carousels carry the
+//   4. in the settings menu the theme, style and style controls open a carousel
+//      and no longer a grid picker; the theme and style carousels carry the
 //      preview beneath them;
 //   5. every colour in the preview is a colour the bar draws under that theme
-//      (and under that look): the closed cells' tints, the open state and its
+//      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
 import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
@@ -32,7 +32,7 @@ import {
 import type {
   Charset,
   ColorCompatibility,
-  StripStyle,
+  Endcaps,
 } from "../src/themes/policy";
 import {
   resolveThemeSelection,
@@ -75,22 +75,22 @@ const SID = "ef6";
 function opts(
   width: number,
   padding: number,
-  style: StripStyle,
+  endcaps: Endcaps,
   charset: Charset = "unicode",
   colorCompatibility: ColorCompatibility = "truecolor",
 ) {
-  return { style, colorCompatibility, wrap: true, padding, charset, width };
+  return { endcaps, colorCompatibility, wrap: true, padding, charset, width };
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
 // settings menu is synthesized), install the derived gates, render through
-// renderDsl with the session's theme and look resolved the way the daemon
+// renderDsl with the session's theme and style resolved the way the daemon
 // resolves them, and click through the real verb handlers.
 function rig(
   source: string,
   width = 200,
   padding = 0,
-  style: StripStyle = "powerline",
+  style: Endcaps = "powerline",
 ) {
   const config: ValidatedConfig = parseAndValidate(
     "<user>",
@@ -109,8 +109,8 @@ function rig(
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
   const render = (): string => {
-    const lookName = sessionState.get(SID, "style");
-    const lookKey = lookName == null ? undefined : config.styles[lookName];
+    const styleName = sessionState.get(SID, "style");
+    const styleKey = styleName == null ? undefined : config.styles[styleName];
     const preset = effectivePresetName(
       sessionState.get(SID, "preset"),
       config.globals.preset,
@@ -161,8 +161,8 @@ function rig(
         ),
         preset,
         variation,
-        ...(lookKey !== undefined && {
-          look: { kind: "decided" as const, name: lookName!, value: lookKey },
+        ...(styleKey !== undefined && {
+          style: { kind: "decided" as const, name: styleName!, value: styleKey },
         }),
       },
     );

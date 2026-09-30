@@ -31,7 +31,7 @@ const DIVIDER = "\uE0B1";
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };

@@ -5,14 +5,14 @@
 // arithmetic of its own.
 export {
   THEME_FLOOR,
-  LOOK_FLOOR,
+  STYLE_FLOOR,
   EXPRESSION_SLOTS,
   isExpression,
   resolveSelection,
   finishSelection,
-  decideLookName,
-  resolveLookSelection,
-  effectiveStripStyle,
+  decideStyleName,
+  resolveStyleSelection,
+  effectiveEndcaps,
   effectiveAutoWrap,
   effectivePadding,
   effectiveCharset,
@@ -21,11 +21,11 @@ export {
   isVariationName,
   VARIATION_NAMES,
   DEFAULT_VARIATION,
-  isStripStyle,
+  isEndcaps,
   isCharset,
   isColorCompatibility,
   listResolvablePaletteNames,
-  STRIP_STYLES,
+  ENDCAPS_SHAPES,
   CHARSETS,
   COLOR_COMPATIBILITIES,
   DEFAULT_CHARSET,
@@ -33,14 +33,14 @@ export {
   drawnDepth,
 } from "./policy.js";
 export type {
-  StripStyle,
+  Endcaps,
   Charset,
   ColorCompatibility,
   Selection,
   Decided,
   ExpressionSlot,
-  LookSelection,
-  DecidedLook,
+  StyleSelection,
+  DecidedStyle,
 } from "./policy.js";
 
 export {

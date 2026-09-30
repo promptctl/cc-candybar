@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.2's done-gate: `autoWrap` and
-// `padding` gain the SessionState half `theme`/`look`/`style` already had, so a
+// `padding` gain the SessionState half `theme`/`style`/`style` already had, so a
 // click changes the clicking session's bar and nobody else's.
 //
 // The resolution lives in the daemon's per-render globals pass
 // (effectiveAutoWrap/effectivePadding -> BuildLineOptions), OUTSIDE renderDsl —
-// the exact twin of how a style click reshapes (see dsl-style-picker-reshape).
+// the exact twin of how an endcaps click reshapes (see dsl-endcaps-picker-reshape).
 // This test replicates that resolution as src/daemon/server.ts performs it and
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
@@ -26,9 +26,9 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import {
   effectiveAutoWrap,
-  resolveLookSelection,
+  resolveStyleSelection,
   effectivePadding,
-  effectiveStripStyle,
+  effectiveEndcaps,
   effectiveCharset,
   effectiveColorCompatibility,
   effectiveVariation,
@@ -96,7 +96,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       registry,
       { session_id: sid },
       {
-        style: "powerline" as const,
+        endcaps: "powerline" as const,
         colorCompatibility: effectiveColorCompatibility(
           undefined,
           sessionState.get(sid, "colorCompatibility"),
@@ -300,7 +300,7 @@ describe("a session value outside the domain is not a session value", () => {
 //
 // This is a deliberate change. The old per-field spellings collapsed a stale
 // pick straight to the floor, skipping the user's own declared default — so a
-// config saying `style: "capsule"` rendered powerline the moment a session
+// config saying `endcaps: "capsule"` rendered powerline the moment a session
 // entry went stale. Every existing regression test passed `undefined` as the
 // config default, where both rules agree, which is exactly why the change could
 // land unnoticed; these cases are the ones that can tell them apart.
@@ -313,7 +313,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
     lightnessScale: 1,
     lightnessShift: 0,
   };
-  const LOOKS: Record<string, ThemeKey> = {
+  const STYLES: Record<string, ThemeKey> = {
     none: IDENTITY,
     vivid: IDENTITY,
     muted: IDENTITY,
@@ -337,16 +337,16 @@ describe("a stale session pick falls to the config default, not the floor", () =
   });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {
-    expect(effectiveStripStyle(undefined, "no-such-style", "capsule")).toBe("capsule");
-    expect(effectiveStripStyle(undefined, "no-such-style", undefined)).toBe("powerline");
+    expect(effectiveEndcaps(undefined, "no-such-style", "capsule")).toBe("capsule");
+    expect(effectiveEndcaps(undefined, "no-such-style", undefined)).toBe("powerline");
   });
 
-  it("look: an orphaned name yields the configured look", () => {
+  it("style: an orphaned name yields the configured style", () => {
     expect(
-      resolveLookSelection(undefined, "deleted-look", "vivid", LOOKS),
+      resolveStyleSelection(undefined, "deleted-look", "vivid", STYLES),
     ).toMatchObject({ kind: "decided", name: "vivid" });
     expect(
-      resolveLookSelection(undefined, "deleted-look", undefined, LOOKS),
+      resolveStyleSelection(undefined, "deleted-look", undefined, STYLES),
     ).toMatchObject({ kind: "decided", name: "none" });
   });
 
@@ -363,7 +363,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
     // The per-config domains are the only ones where the loader cannot catch a
     // stale default, so both rungs have to be parsed, not just the session's.
     expect(
-      resolveLookSelection(undefined, "deleted-look", "also-deleted", LOOKS),
+      resolveStyleSelection(undefined, "deleted-look", "also-deleted", STYLES),
     ).toMatchObject({ kind: "decided", name: "none" });
     expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");
   });

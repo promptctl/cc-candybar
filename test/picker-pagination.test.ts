@@ -17,7 +17,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { renderStripCells, stripChromeCols } from "../src/render/strip";
-import type { Charset, StripStyle } from "../src/themes/policy";
+import type { Charset, Endcaps } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { CHARSETS, listResolvablePaletteNames } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
@@ -30,12 +30,12 @@ const cw = (s: string): number => new RichText(s).cellLength;
 // strip them ONLY for token membership, never for width (they count toward it).
 const stripCaps = (s: string): string => s.replace(/[\u{E0B0}-\u{E0D7}]/gu, "");
 
-const STYLES: StripStyle[] = ["powerline", "capsule", "plain"];
+const SHAPES: Endcaps[] = ["powerline", "capsule", "plain"];
 // brandon-display-dam.3: the ascii glyphs are chosen single-column so the
 // chrome (and therefore the picker's reserve) is charset-invariant — the
 // style × charset product below is the machine check on that invariant.
-const STYLE_CHARSET: Array<[StripStyle, Charset]> = STYLES.flatMap((s) =>
-  CHARSETS.map((c): [StripStyle, Charset] => [s, c]),
+const SHAPE_CHARSET: Array<[Endcaps, Charset]> = SHAPES.flatMap((s) =>
+  CHARSETS.map((c): [Endcaps, Charset] => [s, c]),
 );
 
 // The pagination floor: a single option cannot be split, so a width below the
@@ -74,7 +74,7 @@ function pickerConfig(): string {
 }
 
 function buildRuntime(
-  style: StripStyle,
+  style: Endcaps,
   padding = 0,
   charset: Charset = "unicode",
 ) {
@@ -93,7 +93,7 @@ function buildRuntime(
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
       {
-        style,
+        endcaps: style,
         colorCompatibility: "truecolor" as const,
         wrap,
         width,
@@ -109,7 +109,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // stripChromeCols measures a bare Strip; the rows the picker fits are
   // serialized through FlexStrip. The reserve is only right if the two agree, so
   // pin it over every style × charset on a real wrapped-path row.
-  test.each(STYLE_CHARSET)(
+  test.each(SHAPE_CHARSET)(
     "stripChromeCols(%s) matches the chrome a FlexStrip row paints (charset %s)",
     (style, charset) => {
       const content = "ABCDEFGHIJ";
@@ -120,7 +120,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
       });
       const out = stripAnsi(
         renderStripCells([cell], {
-          style,
+          endcaps: style,
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 0,
@@ -128,7 +128,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
           width: 60,
         }),
       );
-      expect(cw(out) - cw(content)).toBe(stripChromeCols({ style, charset }));
+      expect(cw(out) - cw(content)).toBe(stripChromeCols({ endcaps: style, charset }));
     },
   );
 
@@ -136,7 +136,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // counts; assert each rendered line fits, and the nav arrows that a page should
   // show are present. The trailing → on every non-last page is the affordance the
   // bug ate.
-  test.each(STYLE_CHARSET)(
+  test.each(SHAPE_CHARSET)(
     "every page fits and keeps its nav arrows (%s, charset %s)",
     (style, charset) => {
       const { renderPage } = buildRuntime(style, 0, charset);
@@ -165,7 +165,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   );
 
   // Every theme is reachable across the pages (none silently dropped by overflow).
-  test.each(STYLES)("all options are reachable across pages (%s)", (style) => {
+  test.each(SHAPES)("all options are reachable across pages (%s)", (style) => {
     const { renderPage } = buildRuntime(style);
     const width = 34;
     const shown = new Set<string>();
@@ -189,7 +189,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // (term.cols), so every page renders byte-identically with wrap off —
   // proof that no-wrap is not implemented as width=Infinity, which would
   // collapse pagination to one infinite page.
-  test.each(STYLES)("pagination is unaffected by wrap:false (%s)", (style) => {
+  test.each(SHAPES)("pagination is unaffected by wrap:false (%s)", (style) => {
     const { renderPage } = buildRuntime(style);
     for (const width of [FLOOR, 34, 60]) {
       for (let p = 0; p < 40; p++) {
@@ -206,7 +206,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // picker's included) by globals.padding, and the picker reserves 2×padding
   // at its pagination seam beside the joiner chrome — so a maximally-packed
   // page still fits term.cols at any padding, not just the default.
-  test.each(STYLES)("every page fits at padding 2 (%s)", (style) => {
+  test.each(SHAPES)("every page fits at padding 2 (%s)", (style) => {
     const PAD = 2;
     const { renderPage } = buildRuntime(style, PAD);
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
@@ -257,30 +257,30 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       },
       actions: {
         applyTheme: { set: 'theme', from: 'themes' },
-        applyStyle: { set: 'endcaps', from: 'endcaps' },
+        applyEndcaps: { set: 'endcaps', from: 'endcaps' },
       },
       segments: {
         label: { template: 'L', bg: 'surface', fg: 'foreground' },
         themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
-        styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
+        endcapsMenu: { template: 'S {{ menu "applyEndcaps" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
       },
       // The global settings menu rides every bar. Isolated onto its own row
       // (as pickerConfig does) so row 0 stays exactly the inline trigger row
       // these tests measure — an unaccounted ambient cell in the measured row
       // would make the width budget below lie.
-      root: { v: [{ h: ['label', 'themeMenu', 'styleMenu'] }, 'candybar.menu'] },
+      root: { v: [{ h: ['label', 'themeMenu', 'endcapsMenu'] }, 'candybar.menu'] },
     }`;
   }
 
   const THEME_OPEN = "menus.themeMenu.applyTheme";
-  const STYLE_OPEN = "menus.styleMenu.applyStyle";
+  const ENDCAPS_OPEN = "menus.endcapsMenu.applyEndcaps";
   // The synthesized page cursors: derived from identity (menuPageKey), one per
   // disclosure state key.
   const THEME_PAGE = `${THEME_OPEN}.page`;
-  const STYLE_PAGE = `${STYLE_OPEN}.page`;
+  const STYLE_PAGE = `${ENDCAPS_OPEN}.page`;
 
   function buildMenuRuntime(
-    style: StripStyle,
+    style: Endcaps,
     charset: Charset = "unicode",
     padding = 0,
   ) {
@@ -300,7 +300,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       sessionState.set("s1", THEME_OPEN, "applyTheme");
       sessionState.set("s1", THEME_PAGE, String(themePage));
       if (openStyle) {
-        sessionState.set("s1", STYLE_OPEN, "applyStyle");
+        sessionState.set("s1", ENDCAPS_OPEN, "applyEndcaps");
         sessionState.set("s1", STYLE_PAGE, "0");
       }
       return renderDsl(
@@ -310,7 +310,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
         {
-          style,
+          endcaps: style,
           colorCompatibility: "truecolor" as const,
           wrap: true,
           width,
@@ -326,7 +326,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   // assert each rendered line (the inline trigger row AND the dropped body) fits,
   // and the dropped body keeps the nav arrows a page should show. The dropped body
   // is the line carrying the picker's ✕ affordance.
-  test.each(STYLE_CHARSET)(
+  test.each(SHAPE_CHARSET)(
     "every dropped page fits and keeps its nav arrows (%s, charset %s)",
     (style, charset) => {
       const { render } = buildMenuRuntime(style, charset);
@@ -365,7 +365,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   // full-width line (composeBlocks stacks drops, never zips them side by side), so
   // EACH must fit term.cols independently. A regression that zipped two bodies onto
   // one line, or dropped the per-body reserve, would overflow here.
-  test.each(STYLE_CHARSET)(
+  test.each(SHAPE_CHARSET)(
     "two open menus in one row each drop full-width and fit (%s, charset %s)",
     (style, charset) => {
       const { render } = buildMenuRuntime(style, charset);
@@ -385,7 +385,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
 
   // The reserve must also absorb padding on the DROP path (the abg/#135 pad half
   // of the reserve), exactly as it does for a standalone picker segment.
-  test.each(STYLES)("dropped pages fit at padding 2 (%s)", (style) => {
+  test.each(SHAPES)("dropped pages fit at padding 2 (%s)", (style) => {
     const PAD = 2;
     const { render } = buildMenuRuntime(style, "unicode", PAD);
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {

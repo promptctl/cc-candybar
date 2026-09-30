@@ -49,7 +49,7 @@ function src(extra = ""): string {
   actions: {
     padTo: { set: 'padding', min: 0, max: 8, by: 1 },
     wrapToggle: { set: 'autoWrap', cycle: ['true', 'false'] },
-    applyStyle: { set: 'endcaps', from: 'endcaps' },
+    applyEndcaps: { set: 'endcaps', from: 'endcaps' },
   },
   segments: {
     // The edit.toggle reference is what DEMANDS edit mode (loader/edit-mode.ts),
@@ -96,7 +96,7 @@ function buildRuntime(source: string) {
       registry,
       { session_id: SID },
       {
-        style: effective.endcaps,
+        endcaps: effective.endcaps,
         separator: effective.separator,
         colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,

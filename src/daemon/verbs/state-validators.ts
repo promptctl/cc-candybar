@@ -15,7 +15,10 @@
 // validator-registry.ts, shared verbatim with config-validators.ts (the
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
-import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
+import {
+  listResolvablePaletteNames,
+  ENDCAPS_SHAPES,
+} from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
@@ -59,7 +62,7 @@ export {
 // and break the next render.
 const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
-const RESOLVABLE_ENDCAPS: ReadonlySet<string> = new Set(STRIP_STYLES);
+const RESOLVABLE_ENDCAPS: ReadonlySet<string> = new Set(ENDCAPS_SHAPES);
 
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
@@ -77,7 +80,7 @@ const validateEndcaps: KeyValidator = (raw) => {
   if (!RESOLVABLE_ENDCAPS.has(raw)) {
     return {
       ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${STRIP_STYLES.join(", ")})`,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`,
     };
   }
   return { ok: true, value: raw };

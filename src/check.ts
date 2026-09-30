@@ -417,7 +417,7 @@ async function loadRegisterRender(
     // validator registry, which a one-shot check has no wire to serve.
     deriveActionValidators(config);
 
-    // Fresh session (no clicked theme/style/look), so the session half of
+    // Fresh session (no clicked theme/endcaps/style), so the session half of
     // each resolution is null — the config default over the floor, exactly
     // what the daemon renders for a session that has never clicked.
     // [LAW:one-source-of-truth] The preset resolves first and its fragment's
@@ -426,7 +426,7 @@ async function loadRegisterRender(
     // opens in, not the config's un-presetted root.
     const effective: EffectiveGlobals = resolveEffectiveGlobals(
       config,
-      // A fresh session: no clicked theme/style/look, and edit mode off. The
+      // A fresh session: no clicked theme/endcaps/style, and edit mode off. The
       // resolution is THE daemon's (resolveEffectiveGlobals), not a copy that
       // agrees with it today — which is the whole reason check renders what the
       // daemon would render rather than something adjacent.

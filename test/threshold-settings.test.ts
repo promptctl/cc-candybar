@@ -73,7 +73,7 @@ function buildRuntime(src: string, utilization: number) {
         block: { nativeUtilization: utilization, resetsAt: RESETS_AT },
       },
       {
-        style: "powerline" as const,
+        endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,
         wrap: true,
         padding: 0,

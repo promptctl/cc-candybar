@@ -14,7 +14,7 @@
 // "the wizard's config passes check" and "the bar renders it" are one fact.
 //
 // [LAW:one-source-of-truth] The value domains come from the SOURCE the loader
-// validates against (palette registry, STRIP_STYLES, CHARSETS, the bundled
+// validates against (palette registry, ENDCAPS_SHAPES, CHARSETS, the bundled
 // presets), never from a list restated here. The template directory is
 // globbed, so a template added later is covered on arrival.
 
@@ -25,7 +25,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import {
   CHARSETS,
-  STRIP_STYLES,
+  ENDCAPS_SHAPES,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { checkText } from "./helpers/check-config";
@@ -44,7 +44,7 @@ const wizardDoc = fs.readFileSync(
 // Placeholder name → every value the wizard may put there.
 const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   THEME: listResolvablePaletteNames(),
-  ENDCAPS: STRIP_STYLES,
+  ENDCAPS: ENDCAPS_SHAPES,
   CHARSET: CHARSETS,
   PRESET: presetNames(DEFAULT_DSL_CONFIG.presets),
 };

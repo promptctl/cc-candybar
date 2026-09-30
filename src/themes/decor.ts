@@ -568,7 +568,7 @@ function searchState(
   );
   const foreground = paletteRole(palette, "foreground");
   // Past the pole: `foreground` slid on in OKLCH lightness until it clears
-  // every tint. A look can pull the pole itself under the floor (atom-one-
+  // every tint. A style can pull the pole itself under the floor (atom-one-
   // dark's foreground under `dim` measured 2.19 against its primary tints),
   // and the palette holds no stronger role to reach for. The bar's tints run
   // from `background` toward `surface` and share its polarity, so each slide
@@ -609,7 +609,7 @@ function searchState(
 /**
  * The least contrast information-bearing text may have against its cell:
  * WCAG AA for normal text, 4.5:1 — a statusline is small monospace, and the
- * large-text 3:1 measured legible but looked washed out on the saturated
+ * large-text 3:1 measured legible but styled washed out on the saturated
  * threshold colours (catppuccin-latte's warning). The one floor for chosen
  * text (`textOn`) and for the semantic accents the bundled segments author,
  * so an accent reads as well as the text beside it. Deliberately quiet text

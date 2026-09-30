@@ -4,7 +4,7 @@
 // file renders on its own. That is derived here, never stored: there is no
 // dirty flag to fall out of step with the file, so a save — or a hand edit —
 // that makes the file agree with the session clears the draft the same instant
-// it clears the difference, and a pick the render ignores (a preset or look
+// it clears the difference, and a pick the render ignores (a preset or style
 // the config no longer declares) is never one.
 //
 // One function, two readers: the render publishes the count (the `💾 save`
@@ -62,7 +62,7 @@ export interface SettingDraft extends SettingProjection {
 
 // [LAW:types-are-the-program] Each setting's resolved value in the spelling its
 // SessionState key uses, total over SETTINGS so a new setting is a compile
-// error here until it says how it compares. A theme or look chosen by RULE has
+// error here until it says how it compares. A theme or style chosen by RULE has
 // no name until a render evaluates it, so it is `null`: it equals only the
 // same rule, and saving a picked name replaces the rule with it.
 const SPELLING: {
@@ -70,7 +70,7 @@ const SPELLING: {
 } = {
   theme: (e) => (e.theme.kind === "decided" ? e.theme.name : null),
   preset: (e) => e.preset,
-  style: (e) => (e.look.kind === "decided" ? e.look.name : null),
+  style: (e) => (e.style.kind === "decided" ? e.style.name : null),
   endcaps: (e) => e.endcaps,
   variation: (e) => e.variation,
   charset: (e) => e.charset,
@@ -107,7 +107,7 @@ function sessionGlobals(
 
 // [LAW:one-source-of-truth] THE comparison a draft and a saved preset are both
 // made of: each of `rows` whose value the session renders differs from the
-// value `baseOf` it resolves to, and names a value at all (a theme or look
+// value `baseOf` it resolves to, and names a value at all (a theme or style
 // chosen by rule has none to write). `targetOf` says where each would land.
 function differing(
   rows: ReadonlyArray<[SettingName, SettingProjection]>,

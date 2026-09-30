@@ -315,7 +315,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     // One labelled control each, showing the value the bar actually rendered.
     expect(out).toContain("▦ default"); // preset
     expect(out).toContain("🎨 tokyo-night"); // theme
-    expect(out).toContain("◐ none"); // look
+    expect(out).toContain("◐ none"); // style
     expect(out).toContain("✦ powerline"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
@@ -913,7 +913,7 @@ describe("save as preset", () => {
     r.click(link("custom-1")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     expect(effective().theme).toMatchObject({ name: "dracula" });
-    expect(effective().look).toMatchObject({ name: "dim" });
+    expect(effective().style).toMatchObject({ name: "dim" });
   });
 
   test("a second save takes the next free name", () => {

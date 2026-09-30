@@ -1294,7 +1294,7 @@ const verbCtx = {
 // per-segment opts with width: Number.POSITIVE_INFINITY since each segment
 // is rendered standalone (wrap doesn't apply to a one-segment projection).
 const RENDER_OPTS_BASE = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
   wrap: DEFAULT_WRAP,
   padding: DEFAULT_PADDING,
@@ -1313,7 +1313,7 @@ const EMPTY_RENDER_MAP = new Map<string, string>();
 // [LAW:one-source-of-truth] The joiner glyph vocabulary and the color depth
 // are serialization-time choices. A debug request carries no session, so the
 // sampled entry's CONFIG values are the ones it can state — a session's own
-// pick, like its style, is not visible here. The caller threads the
+// pick, like its endcaps, is not visible here. The caller threads the
 // entry-resolved values; this serializer never re-defaults them.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,

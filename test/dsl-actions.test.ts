@@ -50,7 +50,7 @@ const THEMES = listResolvablePaletteNames();
 
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
-    style: "powerline" as const,
+    endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,

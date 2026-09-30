@@ -7,7 +7,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
   describe("plain style", () => {
     it("very wide width keeps everything on one row", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 200,
@@ -22,7 +22,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const oneLine = " alpha  |  beta  |  gamma ";
       expect(oneLine.length).toBe(26);
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: oneLine.length,
@@ -34,7 +34,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     it("narrow width forces multi-row wrapping", () => {
       // 16 cells fits two segments + sep + leading/trailing pad but not all three.
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 16,
@@ -50,7 +50,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     // globals.padding on BuildLineOptions — 0 renders flush, N widens N per side.
     it("padding: 0 renders cells flush (no synthesized spaces)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true,
         padding: 0,
@@ -62,7 +62,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("padding: 2 widens each cell by two spaces per side", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true,
         padding: 2,
@@ -76,7 +76,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // Same narrow width that forces wrapping above; disabling wrap must
       // render one line with overflow allowed, NOT clip or break.
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: false, padding: 1, charset: "unicode" as const,
         width: 16,
@@ -90,7 +90,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // width=Infinity path produced — wrap:false must not clip to width.
       const segments = [seg("alpha"), seg("beta"), seg("gamma")];
       const base = {
-        style: "plain" as const,
+        endcaps: "plain" as const,
         colorCompatibility: "none" as const,
       };
       const noWrap = buildLineStrip(segments, {
@@ -108,7 +108,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("infinite width is byte-equivalent to a finite width that fits", () => {
       const base = {
-        style: "plain" as const,
+        endcaps: "plain" as const,
         colorCompatibility: "none" as const,
         wrap: true, padding: 1, charset: "unicode" as const,
       };
@@ -123,7 +123,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("empty segment list yields empty string", () => {
       const out = buildLineStrip([], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 80,
@@ -133,13 +133,13 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("never emits a trailing newline", () => {
       const wide = buildLineStrip([seg("a")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 80,
       });
       const wrapped = buildLineStrip([seg("alpha"), seg("beta")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 8,
@@ -156,7 +156,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // segment has no colour to paint and correctly gets no arrow.
       const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
       const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "none",
         wrap: true, padding: 1, charset: "unicode" as const,
         width: 8,
@@ -182,7 +182,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("powerline + ascii joins with '>' (or '|' between a shared background), caps with '<' and '>', and emits no private-use glyphs", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb")], {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "none",
         wrap: true,
         padding: 1,
@@ -197,7 +197,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("capsule + ascii brackets each row with '(' and ')' and emits no private-use glyphs", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb")], {
-        style: "capsule",
+        endcaps: "capsule",
         colorCompatibility: "none",
         wrap: true,
         padding: 1,
@@ -211,7 +211,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("plain is charset-invariant (its separator is already user data)", () => {
       const base = {
-        style: "plain" as const,
+        endcaps: "plain" as const,
         colorCompatibility: "none" as const,
         wrap: true,
         padding: 1,
@@ -230,7 +230,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("charset composes with the configured plain separator", () => {
       const out = buildLineStrip([seg("aaa"), seg("bbb")], {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility: "none",
         separator: " :: ",
         wrap: true,
@@ -249,7 +249,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     const colored = [{ type: "x", text: "aaa", bgHex: "#445566" }];
     const at = (colorCompatibility: "truecolor" | "256" | "ansi" | "none") =>
       buildLineStrip(colored, {
-        style: "plain",
+        endcaps: "plain",
         colorCompatibility,
         wrap: true,
         padding: 1,

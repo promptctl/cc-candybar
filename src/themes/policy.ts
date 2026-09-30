@@ -3,7 +3,7 @@
 // what its floor is, and the one function that turns a session pick, a config
 // default and that floor into the value a render actually uses.
 //
-// It sits in the themes module because theme/look/style were the first three
+// It sits in the themes module because theme/style/style were the first three
 // fields to need it, and it is a LEAF: the config loader (validation, JSON
 // schema) and the render layer both import it, which is what keeps a
 // config↔render cycle from forming [LAW:one-way-deps].
@@ -49,7 +49,7 @@ export function retiredThemeNote(name: unknown): string {
 // when nothing above it decided. Spelled once because three things reach it — a
 // config declaring no `palette`, a session pick naming nothing installed, and an
 // EXPRESSION whose result names nothing (brandon-themes-dzl) — and, unlike the
-// look's floor, it is a SPECIFIC theme rather than an identity, which is why the
+// style's floor, it is a SPECIFIC theme rather than an identity, which is why the
 // third of those reports itself (see `decideThemeName`).
 export const THEME_FLOOR = "textual-dark";
 
@@ -58,7 +58,7 @@ export const THEME_FLOOR = "textual-dark";
 // [LAW:one-type-per-behavior] THE resolution every globals field a click can
 // pick shares: the session's own value, over the config default, over a floor.
 // Written once because the fields differ only in DATA — which floor, and how a
-// raw SessionState string becomes a value of that field's type. Theme, look,
+// raw SessionState string becomes a value of that field's type. Theme, style,
 // preset, style, autoWrap and padding are all this function with different
 // arguments, so the precedence order cannot land on one field and miss another.
 //
@@ -135,12 +135,12 @@ export function isPlacementThemeName(name: string): boolean {
 // --- Per-config member selection ---
 
 // The `effectiveGlobal` instance for every selection whose domain is PER-CONFIG
-// (declared in the config, not a registry-static list). `looks` and `presets`
+// (declared in the config, not a registry-static list). `styles` and `presets`
 // are both exactly this — what differs between them is only the floor name and
 // which map holds the members, i.e. DATA.
 //
 // The config default runs through the SAME membership parse the session pick
-// does, one layer down: a `look:`/`preset:` naming a member the config no longer
+// does, one layer down: a `style:`/`preset:` naming a member the config no longer
 // declares is no default at all, and collapses to the floor exactly as a stale
 // session pick does. The loader cannot catch that for a per-config domain, so
 // this resolution is where it is caught.
@@ -173,7 +173,7 @@ export function effectiveMemberName(
 
 // [LAW:types-are-the-program] What a render was told about one globals field
 // whose author may write either a name or a template, and the whole of it
-// (brandon-looks-pe6 for `look`, brandon-themes-dzl for `palette`). Either the
+// (brandon-looks-pe6 for `style`, brandon-themes-dzl for `palette`). Either the
 // fold FINISHED before the render — a session pick, a staged fragment, or a
 // plain NAME in that slot — and carries both the name a label displays and the
 // VALUE that name denotes, or it did not, and carries the expression the render
@@ -186,7 +186,7 @@ export function effectiveMemberName(
 // which a "did it come out as the floor?" test would get wrong.
 //
 // [LAW:one-type-per-behavior] ONE type for both fields, because what differs
-// between them is only DATA: what a settled name denotes (`T` — a look's
+// between them is only DATA: what a settled name denotes (`T` — a style's
 // ThemeKey, a theme's Palette) and the lookup that turns the name into it. The
 // name and the value travel TOGETHER in the decided arm, out of ONE lookup, so a
 // label and the thing it labels cannot disagree [LAW:one-source-of-truth].
@@ -204,10 +204,10 @@ export type Decided<T> = Extract<Selection<T>, { kind: "decided" }>;
 // eagerly, so this list IS the set whose expression a render can evaluate — a
 // slot cannot be one the loader accepts and the render then cannot settle.
 //
-// `style`/`autoWrap`/`padding` are deliberately absent, and the reason is a type
+// `endcaps`/`autoWrap`/`padding` are deliberately absent, and the reason is a type
 // rather than a preference: their result would need a parse into a non-name
 // domain (a closed enum, a bool, a bounded int), which is a second variability
-// this shape does not carry. A look and a theme each name a member of their own
+// this shape does not carry. A style and a theme each name a member of their own
 // domain, which is why one shape serves both.
 export const EXPRESSION_SLOTS = ["style", "palette"] as const;
 export type ExpressionSlot = (typeof EXPRESSION_SLOTS)[number];
@@ -268,7 +268,7 @@ export function resolveSelection<T>(
 // re-testing the discriminator [LAW:dataflow-not-control-flow].
 //
 // `settle` is TOTAL, and each field supplies its own: it evaluates the rule it
-// is handed and decides the name — a look whose rule named nothing collapses to
+// is handed and decides the name — a style whose rule named nothing collapses to
 // the identity adaptation in silence, a theme's collapses to a floor that is a
 // SPECIFIC theme and must therefore say so, naming where that rule was written.
 // That difference is a value passed in here, never an arm of this function.
@@ -279,126 +279,126 @@ export function finishSelection<T>(
   return selected.kind === "decided" ? selected : settle(selected.source);
 }
 
-// --- Look (theme-adaptation) identifiers ---
+// --- Style (theme-adaptation) identifiers ---
 
-// [LAW:one-source-of-truth] The look domain's floor: the name of the identity
+// [LAW:one-source-of-truth] The style domain's floor: the name of the identity
 // adaptation every merged config carries. Spelled once because three different
 // things collapse to it — a stale session pick, a config default naming no
-// declared look, and an EXPRESSION whose result names none (brandon-looks-pe6)
+// declared style, and an EXPRESSION whose result names none (brandon-looks-pe6)
 // — and they must all land on the same name.
-export const LOOK_FLOOR = "none";
+export const STYLE_FLOOR = "none";
 
-// The look instances of the two types above. A look's `value` is the ThemeKey
+// The style instances of the two types above. A style's `value` is the ThemeKey
 // the render transposes the base palette by.
-export type LookSelection = Selection<ThemeKey>;
-export type DecidedLook = Decided<ThemeKey>;
+export type StyleSelection = Selection<ThemeKey>;
+export type DecidedStyle = Decided<ThemeKey>;
 
-// One rung's contribution: the look this name selects, or null when it names no
-// declared look — which is not a pick at all, so the fold moves on.
+// One rung's contribution: the style this name selects, or null when it names no
+// declared style — which is not a pick at all, so the fold moves on.
 // [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
 // `hasOwnProperty` first and then looking the key up would be the same question
 // twice, and the second answer could only ever restate the first.
-function namedLook(
+function namedStyle(
   name: string,
-  declaredLooks: Readonly<Record<string, ThemeKey>>,
-): DecidedLook | null {
-  const value = declaredLooks[name];
+  declaredStyles: Readonly<Record<string, ThemeKey>>,
+): DecidedStyle | null {
+  const value = declaredStyles[name];
   return value === undefined ? null : { kind: "decided", name, value };
 }
 
-// [LAW:single-enforcer] The membership policy for a look NAME, wherever the name
+// [LAW:single-enforcer] The membership policy for a style NAME, wherever the name
 // came from — a config default, a session pick, or an expression's RESULT. A
-// declared look decides; anything else is the floor. This is the one place the
+// declared style decides; anything else is the floor. This is the one place the
 // forgiveness for an expression's result lives, and it is the same forgiveness a
 // stale session pick has always had.
 //
 // Silent, unlike the theme's counterpart, and the asymmetry is the floor itself:
 // this floor is the IDENTITY adaptation, so collapsing to it means the bar wears
-// no look — a benign answer an author reading the bar can see. A theme's floor is
+// no style — a benign answer an author reading the bar can see. A theme's floor is
 // a specific palette nobody asked for, which is why `decideThemeName` reports.
 //
-// The floor is looked up too, because `looks` merges BY NAME and a user may
+// The floor is looked up too, because `styles` merges BY NAME and a user may
 // declare their own `none` — the floor is whatever this config says it is. Only
 // a config declaring no `none` at all (no merge with the bundled stdlib: a
 // compile-only caller) falls back to the identity key, which is what the stdlib
-// would have declared anyway; the NAME reported is `LOOK_FLOOR` either way, so
+// would have declared anyway; the NAME reported is `STYLE_FLOOR` either way, so
 // nothing downstream can tell the two apart or needs to.
-export function decideLookName(
+export function decideStyleName(
   name: string,
-  declaredLooks: Readonly<Record<string, ThemeKey>>,
-): DecidedLook {
+  declaredStyles: Readonly<Record<string, ThemeKey>>,
+): DecidedStyle {
   return (
-    namedLook(name, declaredLooks) ??
-    namedLook(LOOK_FLOOR, declaredLooks) ?? {
+    namedStyle(name, declaredStyles) ??
+    namedStyle(STYLE_FLOOR, declaredStyles) ?? {
       kind: "decided",
-      name: LOOK_FLOOR,
+      name: STYLE_FLOOR,
       value: IDENTITY,
     }
   );
 }
 
-// The look a render should use, as far as it can be known before the render runs
-// [LAW:one-type-per-behavior] — `resolveSelection` with the look's own two
+// The style a render should use, as far as it can be known before the render runs
+// [LAW:one-type-per-behavior] — `resolveSelection` with the style's own two
 // values.
-export function resolveLookSelection(
-  stagedLook: string | undefined,
-  sessionLook: string | null,
-  globalsLook: string | undefined,
-  declaredLooks: Readonly<Record<string, ThemeKey>>,
-): LookSelection {
+export function resolveStyleSelection(
+  stagedStyle: string | undefined,
+  sessionStyle: string | null,
+  globalsStyle: string | undefined,
+  declaredStyles: Readonly<Record<string, ThemeKey>>,
+): StyleSelection {
   return resolveSelection(
-    stagedLook,
-    sessionLook,
-    globalsLook,
-    decideLookName(LOOK_FLOOR, declaredLooks),
-    (raw) => namedLook(raw, declaredLooks),
+    stagedStyle,
+    sessionStyle,
+    globalsStyle,
+    decideStyleName(STYLE_FLOOR, declaredStyles),
+    (raw) => namedStyle(raw, declaredStyles),
   );
 }
 
 // --- Powerline strip-style identifiers ---
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
-// of powerline cap/separator shapes a render can take. The `StripStyle` type is
+// of powerline cap/separator shapes a render can take. The `Endcaps` type is
 // DERIVED from this const, so the picker's option domain, the SessionState
 // validator, the `styles()` template binding, and `pickJoiner`'s dispatch all
 // trace to one literal — adding a shape here forces a new `pickJoiner` arm at
-// compile time (the joiner switch is total over `StripStyle`). This is where the
+// compile time (the joiner switch is total over `Endcaps`). This is where the
 // drift between "what you can pick" and "what actually renders" is closed.
-export const STRIP_STYLES = ["powerline", "capsule", "plain"] as const;
-export type StripStyle = (typeof STRIP_STYLES)[number];
+export const ENDCAPS_SHAPES = ["powerline", "capsule", "plain"] as const;
+export type Endcaps = (typeof ENDCAPS_SHAPES)[number];
 
 // [LAW:types-are-the-program] The trust-boundary narrowing from a raw
-// SessionState string (or a config default) to the closed `StripStyle` union.
-export function isStripStyle(value: string): value is StripStyle {
-  return (STRIP_STYLES as readonly string[]).includes(value);
+// SessionState string (or a config default) to the closed `Endcaps` union.
+export function isEndcaps(value: string): value is Endcaps {
+  return (ENDCAPS_SHAPES as readonly string[]).includes(value);
 }
 
-// The strip style a render should use, as data.
+// The endcaps a render should use, as data.
 // [LAW:one-type-per-behavior] `effectiveGlobal` over a closed registry-static
 // vocabulary: the narrowing guard IS the parse. `pickJoiner` would render an
-// unknown style as powerline anyway; parsing here keeps the returned TYPE
+// unknown shape as powerline anyway; parsing here keeps the returned TYPE
 // honest rather than silently widening it.
 //
 // A stale SessionState entry (a member of a prior option vocabulary) is an
 // ABSENT session pick, not a pick of the floor: it falls through to the config
-// default, and only reaches "powerline" when the config declares no style
+// default, and only reaches "powerline" when the config declares no endcaps
 // either. That is a deliberate change from the pre-`effectiveGlobal` spelling,
 // which collapsed straight to the floor and skipped the user's own declared
-// default — a config saying `style: "capsule"` deserves capsule when a session
+// default — a config saying `endcaps: "capsule"` deserves capsule when a session
 // entry goes stale, not powerline. Every field here now shares that one rule
 // [LAW:one-source-of-truth]; test/session-globals.test.ts pins it with a stale
 // pick over a valid non-floor default, the case the old tests never exercised.
-export function effectiveStripStyle(
-  stagedStyle: StripStyle | undefined,
-  sessionStyle: string | null,
-  globalsStyle: StripStyle | undefined,
-): StripStyle {
+export function effectiveEndcaps(
+  stagedEndcaps: Endcaps | undefined,
+  sessionEndcaps: string | null,
+  globalsEndcaps: Endcaps | undefined,
+): Endcaps {
   return effectiveGlobal(
-    stagedStyle,
-    sessionStyle,
-    globalsStyle,
+    stagedEndcaps,
+    sessionEndcaps,
+    globalsEndcaps,
     "powerline",
-    (raw) => (isStripStyle(raw) ? raw : null),
+    (raw) => (isEndcaps(raw) ? raw : null),
   );
 }
 
@@ -406,14 +406,14 @@ export function effectiveStripStyle(
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
 // of glyph vocabularies the strip joiners can render with (the legacy
-// display.charset). Same species as STRIP_STYLES — a closed render-vocabulary
+// display.charset). Same species as ENDCAPS_SHAPES — a closed render-vocabulary
 // enum hosted in this leaf policy module so the config loader (validation +
 // JSON-schema emit) and the render layer (glyph dispatch) both derive from one
 // literal without a config↔render cycle [LAW:one-way-deps]. "ascii" swaps the
 // powerline-private-use cap glyphs (U+E0Bx and the U+E0D7 lead — tofu without
-// a Nerd Font) for plain-ASCII equivalents; it is orthogonal to StripStyle:
+// a Nerd Font) for plain-ASCII equivalents; it is orthogonal to Endcaps:
 // style picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
-// It is STRIP_STYLES' twin in resolution too: a session pick over the config
+// It is ENDCAPS_SHAPES' twin in resolution too: a session pick over the config
 // default. Charset describes the TERMINAL (does its font carry the powerline
 // private-use glyphs), and a Claude Code session runs in ONE terminal — two
 // sessions on one machine can sit in two terminals with two fonts, so the
@@ -431,7 +431,7 @@ export function isCharset(value: string): value is Charset {
   return (CHARSETS as readonly string[]).includes(value);
 }
 
-// [LAW:one-type-per-behavior] effectiveStripStyle's twin: the narrowing guard
+// [LAW:one-type-per-behavior] effectiveEndcaps's twin: the narrowing guard
 // IS the parse, and a stale session entry falls through to the config default.
 export function effectiveCharset(
   stagedCharset: Charset | undefined,
@@ -514,7 +514,7 @@ export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
 // [LAW:one-source-of-truth] The names a `globals.variation` may hold — the
 // keys of decor.ts's VARIATIONS table, so the loader's enum, the option
 // domain and the session parse cannot admit a name the render has no
-// variation for. Like `style`, it is a taste that may differ between two
+// variation for. Like `endcaps`, it is a taste that may differ between two
 // sessions, so a session pick sits over the config default.
 export const VARIATION_NAMES = Object.keys(
   VARIATIONS,
@@ -528,7 +528,7 @@ export function isVariationName(value: string): value is VariationName {
   return (VARIATION_NAMES as readonly string[]).includes(value);
 }
 
-// [LAW:one-type-per-behavior] effectiveStripStyle's twin: the narrowing guard
+// [LAW:one-type-per-behavior] effectiveEndcaps's twin: the narrowing guard
 // IS the parse, and a stale session entry falls through to the config default.
 export function effectiveVariation(
   stagedVariation: VariationName | undefined,

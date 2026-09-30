@@ -15,7 +15,7 @@ const EDGE_OPTS = { maxWidth: 80 };
 // (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
 function renderCells(cells: readonly RichText[]): string {
   return renderStripCells(cells, {
-    style: "plain",
+    endcaps: "plain",
     colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
     width: Number.POSITIVE_INFINITY,
   });
@@ -325,7 +325,7 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     // SGR open sequences (one for the baseline-fg run, one for green, one for
     // red — plus possibly more for transitions back to baseline).
     const rendered = renderStripCells(cells, {
-      style: "plain",
+      endcaps: "plain",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });

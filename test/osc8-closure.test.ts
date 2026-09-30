@@ -92,7 +92,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
   for (const width of [Number.POSITIVE_INFINITY, 80, 40, 20, 12]) {
     test(`every link is closed and output never ends mid-link (width=${width})`, () => {
       const out = render(TOOLBAR, {
-        style: "powerline",
+        endcaps: "powerline",
         colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
         width,
       });
@@ -127,7 +127,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     }`;
     // The bar's own row; the settings door (a link of its own) sits above it.
     const out = render(src, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     }).split("\n")[1]!;
@@ -151,7 +151,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       root: 'bar',
     }`;
     const out = render(src, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });

@@ -48,7 +48,7 @@ const THEME = "textual-dark";
 const ALLOWED = new Set([THEME]);
 
 const OPTS = {
-  style: "powerline" as const,
+  endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,

@@ -60,7 +60,7 @@ import {
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
 import {
-  decideLookName,
+  decideStyleName,
   decideThemeName,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
@@ -69,12 +69,12 @@ import {
   drawnDepth,
   effectiveVariation,
   isExpression,
-  LOOK_FLOOR,
+  STYLE_FLOOR,
   placementPalette,
   resolveThemeSelection,
   THEME_FLOOR,
   transposedPalette,
-  type LookSelection,
+  type StyleSelection,
   type ThemeSelection,
 } from "../themes/index.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
@@ -153,8 +153,8 @@ export interface CompiledConfig {
   readonly segments: CompiledSegments;
   // [LAW:dataflow-not-control-flow] EVERY preset's layout, compiled up front and
   // keyed by preset name — the render selects one by name rather than compiling
-  // per session. This is the same move `looks` makes one level down (every
-  // look's ThemeKey is resolved at load; the render picks one), and it is what
+  // per session. This is the same move `styles` makes one level down (every
+  // style's ThemeKey is resolved at load; the render picks one), and it is what
   // lets a per-SESSION preset pick ride a per-ENTRY compilation: one RenderCache
   // entry serves many sessions, so nothing session-shaped may be compiled here.
   // Total over `presetNames` — every selectable name, floor included — so the
@@ -165,7 +165,7 @@ export interface CompiledConfig {
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
   // [LAW:one-source-of-truth] The compiled template for every RULE the config
-  // authored where a name could go — `look` (brandon-looks-pe6) and `palette`
+  // authored where a name could go — `style` (brandon-looks-pe6) and `palette`
   // (brandon-themes-dzl) — in every globals fragment the config-default rung
   // reads: the config's own `globals` and each preset's (brandon-themes-owl: the
   // resolution reads the ACTIVE preset's globals over the config's, so a rule
@@ -438,7 +438,7 @@ export function registerDslConfig(
     // chrome each render; the default shape's is the registration-time value so a
     // compile-only path (no render) still has a valid one.
     chromeCols: stripChromeCols({
-      style: "powerline",
+      endcaps: "powerline",
       charset: DEFAULT_CHARSET,
     }),
     // Same contract as chromeCols; the floor is `term.cols`'s own default.
@@ -452,7 +452,7 @@ export function registerDslConfig(
     // slot may hold a RULE (brandon-themes-dzl) and `paletteForThemeName` of a
     // template would throw at LOAD for a config that renders perfectly well.
     basePalette: floorPalette,
-    // The compile-only floor for the drawn palette: the base under no look.
+    // The compile-only floor for the drawn palette: the base under no style.
     palette: floorPalette,
     // Same contract: the compile-only floor is the config's own variation.
     variation: VARIATIONS[configVariation(config)],
@@ -461,7 +461,7 @@ export function registerDslConfig(
     padding: DEFAULT_PADDING,
     // Same contract again: the compile-only floor is the registration-time
     // style's seam under the default charset.
-    seamCols: stripSeamCols({ style: "powerline", charset: DEFAULT_CHARSET }),
+    seamCols: stripSeamCols({ endcaps: "powerline", charset: DEFAULT_CHARSET }),
     // Same contract again: with no render there is no walk, and no rows.
     layout: () => [],
   };
@@ -485,14 +485,14 @@ export function registerDslConfig(
     action: actionRuntime,
     activeSegment,
   };
-  // [LAW:one-source-of-truth] The config's look names — the one PER-CONFIG
-  // option domain. Fed to every consumer (the `looks()` binding below, and —
+  // [LAW:one-source-of-truth] The config's style names — the one PER-CONFIG
+  // option domain. Fed to every consumer (the `styles()` binding below, and —
   // via perConfigDomainsFor, the SAME construction cross-ref.ts and
   // state-validators.ts use — the compiled set-option domains), so the
-  // rendered options, a hand-authored `range looks`, and the derived click
+  // rendered options, a hand-authored `range styles`, and the derived click
   // gate (which reads the same config in deriveActionValidators) trace to
   // one source.
-  const lookNames = Object.keys(config.styles);
+  const styleNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
   // [LAW:one-source-of-truth] The "addable segment" per-preset domains merge
   // in here — the SAME map config-validators.ts's deriveConfigActionValidators
@@ -516,7 +516,7 @@ export function registerDslConfig(
       // from, published by the walk. Binding it to a palette captured HERE
       // (registration runs once per config load, renders happen per tick) was
       // the two-clocks bug this seam exists to close: a session theme click or
-      // a look moved a segment's background while every in-body color stayed
+      // a style moved a segment's background while every in-body color stayed
       // where it was, so one segment painted from two palettes at once. Reading
       // live costs nothing structurally — FuncMap bodies run at evaluate time,
       // so parse-once/evaluate-many is untouched.
@@ -525,8 +525,8 @@ export function registerDslConfig(
       // [LAW:one-type-per-behavior] The per-config sibling of the static
       // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
       // projection of the "styles" option domain. Injected here — not in the
-      // static FuncMap — because the domain is this config's looks block.
-      styles: { fn: () => lookNames, argTypes: [], arity: { kind: "exact" } },
+      // static FuncMap — because the domain is this config's styles block.
+      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
       // The presets domain's twin of the binding above — same per-config
       // reason, same shape. A hand-authored `range presets` and a
       // `{{ menu "applyPreset" }}` therefore enumerate the same names the
@@ -569,7 +569,7 @@ export function registerDslConfig(
   // config named the variable after the key. For an ordinary key that is the
   // `state` variable over it.
   //
-  // A settings key the daemon resolves per render (theme, look, preset, …)
+  // A settings key the daemon resolves per render (theme, style, preset, …)
   // reads back through its `.effective` projection FIRST, ahead of any `state`
   // variable over the same key: the current value of a setting is the one the
   // bar is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
@@ -762,7 +762,7 @@ export function registerDslConfig(
   // reader. [LAW:dataflow-not-control-flow] One fold over every fragment × every
   // slot: adding a slot or a preset never adds a branch here.
   // Keyed by slot, then source: one text written in both slots is two rules, and
-  // a report about the palette's must not send the reader to the look.
+  // a report about the palette's must not send the reader to the style.
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, new Map<string, CompiledRule>()]),
   );
@@ -850,7 +850,7 @@ function evalRule(rule: CompiledRule, scope: object): string {
 // [LAW:dataflow-not-control-flow] One total projection of the union to one value,
 // shared by both slots, rather than a per-slot branch at the push site.
 function provisionalName(
-  selected: LookSelection | ThemeSelection,
+  selected: StyleSelection | ThemeSelection,
   floorName: string,
 ): string {
   return selected.kind === "decided" ? selected.name : floorName;
@@ -929,7 +929,7 @@ export interface RenderObservers {
 // down — the values that are neither config (compiled once) nor payload (input
 // data), but the session's live choices resolved against the config: which
 // theme-adaptation, which preset. Bundled as ONE named bag for exactly the
-// reason RenderObservers is: `look` arrived as a positional tail, `preset` would
+// reason RenderObservers is: `style` arrived as a positional tail, `preset` would
 // have been a second one, and the next resolution a third — each a signature
 // every caller re-counts. A new per-render choice is now one field here.
 //
@@ -937,13 +937,13 @@ export interface RenderObservers {
 // caller (a compile-only test, the demo) renders the unadapted config — a true
 // default, not a fallback [LAW:no-silent-failure].
 export interface RenderSelection {
-  // The look, resolved by the caller as far as it CAN be: `resolveLookSelection`
+  // The style, resolved by the caller as far as it CAN be: `resolveStyleSelection`
   // over staged/session/globals, exactly how basePalette is resolved upstream.
   // A `decided` arm is the whole answer; an `expression` arm is the one rung only
   // a render can settle, because it reads this render's values — the fold
   // deliberately splits here and nowhere else (brandon-looks-pe6). The base
   // palette is transposed by the result ONCE per render.
-  readonly look?: LookSelection;
+  readonly style?: StyleSelection;
   // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
   // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
   // base PALETTE beside the name, which is why renderDsl takes no `basePalette`
@@ -995,10 +995,10 @@ export function renderDsl(
     ];
   compiled.menuRuntime.action.variation = variation;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
-  // `none` — `looks` merges BY NAME, so the identity adaptation is whatever this
+  // `none` — `styles` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
-  const selectedLook =
-    selection?.look ?? decideLookName(LOOK_FLOOR, config.styles);
+  const selectedStyle =
+    selection?.style ?? decideStyleName(STYLE_FLOOR, config.styles);
   // [LAW:one-source-of-truth] The theme's twin, resolved the same way one rung up
   // (brandon-themes-dzl). An omitting caller gets the same fold minus the two
   // rungs only it could know — so it renders what the CONFIG declares, which is a
@@ -1020,19 +1020,19 @@ export function renderDsl(
   // the fitting seam in rowBudget. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
-  // [LAW:one-source-of-truth] `theme.effective` and `look.effective` are each
+  // [LAW:one-source-of-truth] `theme.effective` and `style.effective` are each
   // published by whatever FINISHED that field's fold, and nothing else CAN publish
   // them: under a rule nobody upstream knows the answer, and under a decided name
   // the selection already carries it. So the payload never carries either field —
   // renderDsl injects both, exactly as it injects `term.cols`, which is why a
-  // `{{ .theme.effective }}` / `{{ .look.effective }}` label and the palette the
+  // `{{ .theme.effective }}` / `{{ .style.effective }}` label and the palette the
   // bar is actually painted from cannot disagree (brandon-looks-pe6,
   // brandon-themes-dzl).
-  const payloadWith = (themeName: string, lookName: string): object => ({
+  const payloadWith = (themeName: string, styleName: string): object => ({
     ...(payload as object),
     term: { cols: opts.width },
     theme: { effective: themeName },
-    style: { effective: lookName },
+    style: { effective: styleName },
   });
   // An expression arm's provisional value is its FLOOR: it is what that slot
   // collapses to when its result names nothing, so a rule reading its own
@@ -1043,7 +1043,7 @@ export function renderDsl(
   registry.applyInput(
     payloadWith(
       provisionalName(selectedTheme, THEME_FLOOR),
-      provisionalName(selectedLook, LOOK_FLOOR),
+      provisionalName(selectedStyle, STYLE_FLOOR),
     ),
   );
   // [LAW:single-enforcer] Publish the columns the render's strip spends on a
@@ -1077,33 +1077,33 @@ export function renderDsl(
       onRenderWarning?.(message),
     );
   });
-  const look = finishSelection(selectedLook, (source) =>
-    decideLookName(
+  const look = finishSelection(selectedStyle, (source) =>
+    decideStyleName(
       evalRule(compiledRule(compiled, "style", source), scope),
       config.styles,
     ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
-  // carry, so push it: without this the settings menu's `🎨 theme` / `◐ look`
+  // carry, so push it: without this the settings menu's `🎨 theme` / `◐ style`
   // controls would label themselves from the floor while the bar wore the rule's
   // result — one fact with two answers. All payload ingestion goes through
   // applyInput (see SourceRegistry's own contract), so this is that one path,
   // called again, not a second way to write an input box.
-  if (theme !== selectedTheme || look !== selectedLook)
+  if (theme !== selectedTheme || look !== selectedStyle)
     registry.applyInput(payloadWith(theme.name, look.name));
   // [LAW:one-source-of-truth] The render's BASE palette, published beside the
   // style and padding: a picker over a colour-valued domain paints each option in
-  // the palette picking it would put in force, and a look's answer is this base
-  // transposed by that look's key. The base, never the looked palette below —
+  // the palette picking it would put in force, and a style's answer is this base
+  // transposed by that style's key. The base, never the styled palette below —
   // transposedPalette must not be chained (its memo keys on the base palette's
-  // name, which transposition preserves), and a look applies to the base by
+  // name, which transposition preserves), and a style applies to the base by
   // definition. Published after the fold finishes, because under a rule this is
   // the first line at which the base palette is known.
   const basePalette = theme.value;
   compiled.menuRuntime.action.basePalette = basePalette;
   // [LAW:one-source-of-truth] The render's palette: the base theme under the
-  // session's look, transposed ONCE here — every unpinned segment colours from
-  // this one object, so a look click recolours the whole bar from one
+  // session's style, transposed ONCE here — every unpinned segment colours from
+  // this one object, so a style click recolours the whole bar from one
   // transposition, not one per segment.
   const palette = transposedPalette(basePalette, look.value);
   compiled.menuRuntime.action.palette = palette;

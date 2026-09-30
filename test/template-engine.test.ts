@@ -453,7 +453,7 @@ describe("ccCandybarFuncs registry", () => {
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `endcaps()` bindings
 // project the SAME canonical sources as the set-state validators
-// (listResolvablePaletteNames / STRIP_STYLES). A widget config that
+// (listResolvablePaletteNames / ENDCAPS_SHAPES). A widget config that
 // `range`s over themes() to emit OSC-8 picker cells is iterating the
 // allow-list the validator will enforce on the resulting click — the
 // list and the gate cannot diverge. These tests pin the projection
@@ -472,9 +472,9 @@ describe("themes / endcaps domain-list bindings", () => {
     expect(result).toBe(expected.join("|") + "|");
   });
 
-  test("endcaps() returns the canonical STRIP_STYLES list", async () => {
-    const { STRIP_STYLES } = await import("../src/themes/policy");
-    const expected = [...STRIP_STYLES];
+  test("endcaps() returns the canonical ENDCAPS_SHAPES list", async () => {
+    const { ENDCAPS_SHAPES } = await import("../src/themes/policy");
+    const expected = [...ENDCAPS_SHAPES];
     const result = evalText(
       "{{ range endcaps }}{{ . }}|{{ end }}",
       {},

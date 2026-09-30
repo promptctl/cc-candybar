@@ -430,7 +430,7 @@ describe("done-when: contrast(state, every bar tint) >= 2.2 for every theme × h
     }
   });
 
-  // A look is a palette the user can pick at runtime, and bandFor runs for every
+  // A style is a palette the user can pick at runtime, and bandFor runs for every
   // segment, so a throw here is a ⚠ in every cell. dim pulls some themes'
   // foreground itself under the floor (atom-one-dark primary: 2.19). At 256
   // colours the trigger and every tint are each rounded to the xterm cube,

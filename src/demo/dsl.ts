@@ -67,8 +67,8 @@ const config = validateConfig(
 // [LAW:one-source-of-truth] THE daemon's resolver, not a mirror of it — a
 // fresh-session pick reader (null for every key) and no overrides log to be
 // customized by. The demo previously restated this chain field by field and had
-// already drifted: it hardcoded `style: "powerline"` below and so ignored a
-// config's own `globals.style`.
+// already drifted: it hardcoded `endcaps: "powerline"` below and so ignored a
+// config's own `globals.endcaps`.
 const effective = resolveEffectiveGlobals(
   config,
   () => null,
@@ -79,7 +79,7 @@ const effective = resolveEffectiveGlobals(
 // config (cwd, model, session) read their values out of this object, and the
 // resolved globals ride on it exactly as they do on the daemon's payload.
 // [LAW:one-source-of-truth] `effectiveInputs` is the daemon's own projection,
-// so a `.endcaps.effective` label shows the style the demo renders in.
+// so a `.endcaps.effective` label shows the endcaps the demo renders in.
 const payload = {
   hook_event_name: "Status",
   session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -100,7 +100,7 @@ const payload = {
 // otherwise those handles keep the process alive. try/finally guarantees it.
 const store = new VariableStore();
 // [LAW:no-silent-failure] An EMPTY SessionState — `kind: "state"` variables
-// (the default config's style picker, any interactive config) require one at
+// (the default config's pickers, any interactive config) require one at
 // registration; without it declareState fails and the segment renders an error
 // cell. The demo never clicks, so an empty store is correct: every state var
 // resolves to its declared default (closed pickers, "(default)" labels).

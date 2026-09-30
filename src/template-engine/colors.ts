@@ -59,7 +59,7 @@ export class ColorSpecError extends Error {
  * floor every segment wears; an authored `bg:` states MEANING (a threshold's
  * `error`, a host's `warning`) and paints over it.
  * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
- * segment type is the discriminator: no segment is asked whether it "looks
+ * segment type is the discriminator: no segment is asked whether it "styles
  * decorative", the absence of an authored spec IS the decorated case. The
  * foreground has the same kind of floor: an unauthored `fg:` is the theme
  * pole that reads better on the background phase 1 resolved (tint, band
@@ -68,7 +68,7 @@ export class ColorSpecError extends Error {
  * measured 1.05:1 on the dark themes under a light terminal and on the light
  * themes under a dark one (brandon-theme-picker-bgw.b2g).
  *
- * Looks are not this function's concern: they live upstream as WHICH palette
+ * Styles are not this function's concern: they live upstream as WHICH palette
  * it is handed, so bg, fg, and the body all resolve from one palette and their
  * theme-designed relationships are preserved.
  */

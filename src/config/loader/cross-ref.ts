@@ -38,10 +38,10 @@ import {
 import { listGlobalsFieldNames } from "./globals.js";
 import {
   isExpression,
-  isStripStyle,
+  isEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
-import { endcapsNameMessage } from "./looks.js";
+import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
@@ -90,7 +90,7 @@ import {
 //
 // [LAW:no-silent-failure] Two preset names that collapse to the SAME
 // synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_
-// look") would silently steal each other's synthesized artifacts: the
+// style") would silently steal each other's synthesized artifacts: the
 // SECOND preset processed overwrites the first's entries, leaving the
 // first preset's already-built tree holding a segment ref to a name that
 // now points at the second preset's reset action. A user clicking "reset"
@@ -121,25 +121,25 @@ export function validateCrossReferences(
   cfg: DslConfig,
   authored: RawDslConfig,
 ): void {
-  // [LAW:locality-or-seam] globals.style names a member of the MERGED looks
-  // block (a user's default may be a bundled look — same reason every cross-ref
+  // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
+  // block (a user's default may be a bundled style — same reason every cross-ref
   // runs post-merge). Same existence-check shape as layout→segments; an unknown
   // name is a load error, never a silent identity fallback.
   //
-  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no look,
+  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no style,
   // it names the RULE for choosing one per render, so there is nothing here to
   // check membership of. Its result gets the same forgiveness a stale session
-  // pick does (`decideLookName` collapses a non-member to the floor), and its
+  // pick does (`decideStyleName` collapses a non-member to the floor), and its
   // own well-formedness is checked where every other template's is — parsed
   // eagerly by registerDslConfig, so a malformed one is still a load error.
   // `isExpression` is the ONE predicate every reader uses, so this exemption
   // cannot be wider or narrower than what the render will actually evaluate.
   //
-  // [LAW:one-type-per-behavior] Every globals fragment a look NAME can come from
+  // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
   // is checked the same way — the config's own, each preset's, and editGlobals —
   // because each is a rung the resolution reads, and a name no rung can decide
   // falls through to the next in silence (brandon-themes-owl).
-  const lookFragments: ReadonlyArray<
+  const styleFragments: ReadonlyArray<
     readonly [readonly string[], string | undefined]
   > = [
     [["globals"], cfg.globals.style],
@@ -149,7 +149,7 @@ export function validateCrossReferences(
         [["presets", name, "globals"], preset.globals?.style] as const,
     ),
   ];
-  for (const [at, look] of lookFragments) {
+  for (const [at, look] of styleFragments) {
     if (
       look === undefined ||
       isExpression(look) ||
@@ -159,7 +159,7 @@ export function validateCrossReferences(
     const where = `${at.join(".")}.style`;
     ctx.issues.push({
       path: where,
-      message: isStripStyle(look)
+      message: isEndcaps(look)
         ? endcapsNameMessage(where, look)
         : `${where} "${look}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
       line: findKeyLine(ctx.source, [...at, "style"]),

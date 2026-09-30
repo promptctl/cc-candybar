@@ -43,17 +43,17 @@ import { VariableStore } from "../src/var-system/store";
 
 // The eye's resolution: two bars closer than ~.02 read as one theme. The
 // measured minimum over the registry, under the default variation and no
-// look, is .031, between rose-pine and rose-pine-moon — two variants of one
+// style, is .031, between rose-pine and rose-pine-moon — two variants of one
 // family sharing their accents — on the seven-cell bundled bar (.024 under
 // `duo`, the bar's rows before brandon-theme-picker-bgw.7g6).
 // Before 8fp, dracula and rose-pine-moon sat at .018, under it.
 const THEME_FLOOR = 0.02;
 
-// Where the floor is NOT met, measured, by variation/look: the one-step
+// Where the floor is NOT met, measured, by variation/style: the one-step
 // `mono` variation paints every row in one hue, so two themes that share
-// a primary converge once a look narrows what else differs — rose-pine and
+// a primary converge once a style narrows what else differs — rose-pine and
 // rose-pine-moon at .019 under `dim`, dracula and rose-pine-moon at .015 under
-// `bright`. Every other combination of the 3 variations × 6 looks clears it
+// `bright`. Every other combination of the 3 variations × 6 styles clears it
 // (design-docs/COLOUR-FROM-THEME-VOCABULARY.md, "The variation"). Pinned
 // exactly, so a new convergence fails and a recovered one says to delete it.
 const CONVERGED: Readonly<Record<string, readonly string[]>> = {
@@ -120,13 +120,13 @@ function seams(rendered: string): Seam[] {
 const THEMES = listThemePalettes();
 const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>");
 
-// Every variation × every bundled look (brandon-theme-picker-bgw.7g6): each
+// Every variation × every bundled style (brandon-theme-picker-bgw.7g6): each
 // is a runtime pick, so each fact below holds whichever one the user is in,
 // not only under the defaults.
 const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
-const LOOKS = Object.keys(CONFIG.styles);
+const STYLES = Object.keys(CONFIG.styles);
 const VARIANTS = VARIATION_NAMES.flatMap((variation) =>
-  LOOKS.map((look) => ({ variation, look })),
+  STYLES.map((look) => ({ variation, look })),
 );
 type Variant = (typeof VARIANTS)[number];
 
@@ -165,7 +165,7 @@ function render(theme: string, calm: boolean, { variation, look }: Variant): str
       registry,
       payload,
       {
-        style: e.endcaps,
+        endcaps: e.endcaps,
         separator: e.separator,
         width: 400,
         colorCompatibility: e.colorCompatibility,
@@ -174,7 +174,7 @@ function render(theme: string, calm: boolean, { variation, look }: Variant): str
         charset: e.charset,
       },
       undefined,
-      { theme: e.theme, look: e.look, preset: e.preset, variation: e.variation },
+      { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation },
     );
   } finally {
     registry.dispose();
@@ -195,9 +195,9 @@ function seamsOf(theme: string, calm: boolean, variant: Variant): Seam[] {
 }
 
 describe("a tint carries its theme's colour", () => {
-  test.each(THEMES)("%s: chroma is the share of its hue's, or all the gamut allows, under every look", (name) => {
+  test.each(THEMES)("%s: chroma is the share of its hue's, or all the gamut allows, under every style", (name) => {
     const wrong: string[] = [];
-    for (const look of LOOKS) {
+    for (const look of STYLES) {
       const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
       for (const entry of DECOR_VOCABULARY) {
       const tint = oklch(decorEntryColour(palette, entry));
@@ -260,7 +260,7 @@ describe("no two neighbouring cells blur", () => {
       ),
     );
 
-  test("every theme, hot and calm, under every variation and look, is measured", () => {
+  test("every theme, hot and calm, under every variation and style, is measured", () => {
     expect(all().length).toBeGreaterThan(VARIANTS.length * THEMES.length * 2 * 5);
   });
 
@@ -277,7 +277,7 @@ describe("no two neighbouring cells blur", () => {
   });
 
   // Two colours a row can put side by side meet when they sit closer than the
-  // eye resolves, and only the theme (under its look) can make them: two tones
+  // eye resolves, and only the theme (under its style) can make them: two tones
   // of one hue fold when the hue sits at its surface's lightness
   // (textual-ansi), since the tone axis runs from `surface` receded toward
   // `background` to `surface` pulled toward the hue; and a tint can meet an

@@ -119,7 +119,7 @@ function render(): string {
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, {
-      style: "powerline",
+      endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });
