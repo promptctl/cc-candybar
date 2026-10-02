@@ -38,6 +38,7 @@
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
+  type ContainerNode,
   type DisclosureRef,
   type DslConfig,
   type LayoutNode,
@@ -92,18 +93,46 @@ import { settingControl, type Affordance } from "./setting-control.js";
 export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
 
 // The open member of every binary disclosure this menu mints — each holds the
-// CLOSED sentinel or this.
+// CLOSED sentinel or this. The tab key is the accordion exception: it holds
+// the open tab's name.
 export const SETTINGS_OPEN = "open";
 
-// The body's content segments. `.1` scoped the body to what its acceptance
-// names — switch presets, enter edit mode; `.3` adds the config menu below
-// them.
+// The body's content segments.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
 const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
 const COMMANDS_SEG = `${SETTINGS_NS}commands`;
 const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
+
+// ─── The tabs (brandon-menu-tabs-wnu.qqz) ───────────────────────────────────
+//
+// [LAW:one-type-per-behavior] The door's second line is five tabs, one open at
+// a time, its body dropped below the strip. A tab strip is an accordion: every
+// tab is a disclosure trigger on ONE key, which holds the open tab's name, so
+// opening one closes the rest and the open one wears its state colour like any
+// open trigger. The key is session state the door never writes, so closing the
+// menu and reopening it returns to the tab that was open.
+const TAB_KEY = `${SETTINGS_NS}tab`;
+const TABS = [
+  { member: "session", label: "⚡ session" },
+  { member: "look", label: "🎨 look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "📐 layout" },
+  { member: "config", label: "⚙ config" },
+  { member: "tools", label: "🧰 tools" },
+] as const;
+type TabName = (typeof TABS)[number]["member"];
+// The tab a fresh session opens the menu on.
+const FIRST_TAB: TabName = "session";
+const tabSeg = (tab: TabName): string => `${TAB_KEY}.${tab}`;
+// A tab's own open/close cycle, fired by the tab's click beside the disarms.
+const tabToggle = (tab: TabName): string => `${tabSeg(tab)}.toggle`;
+const tabRef = (tab: TabName): DisclosureRef => ({
+  variable: TAB_KEY,
+  key: TAB_KEY,
+  member: tab,
+});
 
 // ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
 //
@@ -114,7 +143,6 @@ const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 // exactly while there are N of them, writing all of them to the file in one
 // click. There is no destination selector to consult: where a click lands is
 // the same place every time, and saving is its own, visible act.
-const CONFIG_SEG = `${SETTINGS_NS}config`;
 const SAVE_SEG = `${SETTINGS_NS}save`;
 const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
@@ -135,36 +163,16 @@ const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 // The door's own open/close cycle, fired beside the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
 
-// [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
-// than as gate strings: every gate below — and every `(?)` nested inside them —
-// derives from these, so the toggle that writes a key and the `when` that reads
-// it cannot name different variables.
+// [LAW:one-source-of-truth] The door's disclosure as a ref rather than a gate
+// string (each tab's is `tabRef`): every gate below — and every `(?)` nested
+// inside them — derives from a ref, so the toggle that writes a key and the
+// `when` that reads it cannot name different variables.
 const SETTINGS_REF: DisclosureRef = {
   variable: SETTINGS_ANCHOR,
   key: SETTINGS_ANCHOR,
   member: SETTINGS_OPEN,
 };
-const CONFIG_REF: DisclosureRef = {
-  variable: CONFIG_SEG,
-  key: CONFIG_SEG,
-  member: SETTINGS_OPEN,
-};
 
-// ─── The tools menu and the doctor (brandon-doctor-b6a) ─────────────────────
-//
-// `🧰 tools` is `⚙ config`'s sibling: a disclosure inside the settings body
-// holding the `🩺 doctor` button and, once it has run, one row per check. The
-// report is SessionState (src/doctor/report.ts) read by `state` variables
-// minted here from the same CHECKS list the fold runs over, so a second check
-// is one more row in that list and no edit here [LAW:one-type-per-behavior].
-// Its body is VERTICAL — one row per check, dropped under the tools row — so a
-// long reason never widens the settings band it hangs from.
-const TOOLS_SEG = `${SETTINGS_NS}tools`;
-const TOOLS_REF: DisclosureRef = {
-  variable: TOOLS_SEG,
-  key: TOOLS_SEG,
-  member: SETTINGS_OPEN,
-};
 // Undo and redo step the session's one settings history
 // (src/daemon/settings-history.ts).
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
@@ -172,6 +180,14 @@ const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
 
+// ─── The doctor (brandon-doctor-b6a) ────────────────────────────────────────
+//
+// The `🧰 tools` tab holds the `🩺 doctor` button and, once it has run, one row
+// per check. The report is SessionState (src/doctor/report.ts) read by `state`
+// variables minted here from the same CHECKS list the fold runs over, so a
+// second check is one more row in that list and no edit here
+// [LAW:one-type-per-behavior]. The body is VERTICAL — one row per check — so a
+// long reason never widens the band it hangs from.
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
 const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
 const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
@@ -186,30 +202,32 @@ const PICKER_KEY = `${SETTINGS_NS}pickers`;
 
 // The theme and style carousels share one preview: both choose the palette the
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
-const PALETTE_PREVIEW = ["{{ themePreview }}"];
+const PALETTE_PREVIEW: readonly SegmentDecl[] = [
+  { template: "{{ themePreview }}" },
+];
+const LAYOUT_PREVIEW: SegmentDecl = { template: "{{ layoutPreview }}" };
 
 // [LAW:types-are-the-program] What hangs under a control's carousel, beyond
-// the ring itself — each a template row. A ring shows neighbours of the
-// current value; these show what picking one does to the bar.
-const BENEATH: Partial<Record<SettingName, readonly string[]>> = {
+// the ring itself — each a row. A ring shows neighbours of the current value;
+// these show what picking one does to the bar.
+const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
-  // of it, one block per segment, named. Under it, the
-  // presets the user makes (brandon-save-undo-bwi.o6u): keep the bar as a new
-  // one, which the ring then shows current, and delete the one the ring is on
-  // when the user made it.
+  // of it, one block per segment, named. Under it, while the ring is on a
+  // preset the user made (brandon-save-undo-bwi.o6u), the click that deletes
+  // it; `+ preset` in the 📐 layout tab makes one.
   preset: [
-    "{{ layoutPreview }}",
-    `{{ action "${PRESET_SAVE}" "⊕ save as preset" }}` +
-      `{{ if not .preset.bundled }} ` +
-      `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}` +
-      `{{ end }}`,
+    LAYOUT_PREVIEW,
+    {
+      when: "{{ not .preset.bundled }}",
+      template: `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
+    },
   ],
   theme: PALETTE_PREVIEW,
   style: PALETTE_PREVIEW,
   // A variation says which role each ROW wears — `{{ layoutPreview }}`
   // draws every row, each block in the tint the ring's current variation
   // deals it.
-  variation: ["{{ layoutPreview }}"],
+  variation: [LAYOUT_PREVIEW],
 };
 
 // [LAW:one-source-of-truth] A control's names, derived from its setting's
@@ -229,7 +247,7 @@ const controlBeneath = (name: string, row: number): string =>
 interface MenuControl extends SettingProjection {
   readonly name: SettingName;
   readonly control: Affordance;
-  readonly beneath: readonly string[];
+  readonly beneath: readonly SegmentDecl[];
 }
 
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
@@ -260,14 +278,25 @@ const CONTROLS: readonly MenuControl[] = (
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
-// [LAW:dataflow-not-control-flow] Where a control renders is a fact about its
-// setting, not something the layout recovers by comparing names at the splice.
-// Switching arrangement is what people open this menu for, so the preset
-// control sits one click from the door; the display settings sit one
-// disclosure deeper, which is what keeps the menu narrow when opened.
-const PRIMARY_SETTINGS: ReadonlySet<SettingName> = new Set(["preset"]);
-const PRIMARY_CONTROLS = CONTROLS.filter((c) => PRIMARY_SETTINGS.has(c.name));
-const CONFIG_CONTROLS = CONTROLS.filter((c) => !PRIMARY_SETTINGS.has(c.name));
+// [LAW:types-are-the-program] Where each setting's control renders — the
+// door's first line, or exactly one tab — as a record keyed by every setting,
+// so a new setting is a compile error until it is given a place. Switching
+// arrangement is what people open this menu for, so the preset control sits on
+// the door's first line, one click from the door.
+const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
+  preset: "door",
+  theme: "look",
+  style: "look",
+  variation: "look",
+  endcaps: "look",
+  autoWrap: "layout",
+  padding: "layout",
+  charset: "config",
+  colorCompatibility: "config",
+  updateNotice: "config",
+};
+const controlsAt = (place: "door" | TabName): LayoutNode[] =>
+  CONTROLS.filter((c) => PLACE[c.name] === place).map(controlNode);
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -345,9 +374,23 @@ const SAVE_CELL: SegmentDecl = {
       (p) => `{{ if ${p.shown} }}{{ $sep }}${p.body}{{ $sep = " " }}{{ end }}`,
     ).join(""),
 };
-// [LAW:one-source-of-truth] Every two-click step the door can bring into view,
-// so the door disarms each of them without anyone remembering to list one.
-const CONFIRMS = [RESET_ALL, COMMANDS] as const;
+// [LAW:one-source-of-truth] Every two-click step the menu holds, with the view
+// it sits in. Every click that can bring a confirm into view disarms it — the
+// door every one, a tab click every one that sits in a tab — so a confirm is
+// only ever made in the view its arming click was made in, however it left
+// view (a body's ✕ only closes), and one that never leaves view (`⟲` on the
+// door's first line) stays armed across tab clicks.
+const CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS, place: "session" },
+] as const satisfies ReadonlyArray<{
+  readonly step: { readonly disarm: string };
+  readonly place: "door" | TabName;
+}>;
+const disarms = (out: ReadonlyArray<(typeof CONFIRMS)[number]>): string[] =>
+  out.map((c) => c.step.disarm);
+const DOOR_DISARMS = disarms(CONFIRMS);
+const TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 
 // [LAW:one-source-of-truth] The one accordion every control's carousel joins,
 // as a disclosure ref per member, so two carousels are mutually exclusive
@@ -482,28 +525,56 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
   return node.children.some((child) => anchorUnderGate(child, here));
 }
 
+// [LAW:one-source-of-truth] What each tab holds (design-docs/SETTINGS-MENU-MAP.md,
+// "Structure"), keyed by every tab so none can be left without a body: its own
+// segments, then the controls `PLACE` puts in it. Every body takes the
+// controls, so `PLACE` naming any tab is a placement the bar renders.
+interface TabBody {
+  readonly direction: ContainerNode["direction"];
+  readonly segments: readonly string[];
+}
+const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
+  session: { direction: "vertical", segments: [TOOLBAR_SEG, COMMANDS_SEG] },
+  look: { direction: "horizontal", segments: [] },
+  layout: { direction: "horizontal", segments: [PRESET_SAVE, EDIT_SEG] },
+  config: { direction: "horizontal", segments: [] },
+  tools: {
+    direction: "vertical",
+    segments: [DOCTOR_SEG, ...CHECKS.map((c) => doctorRowSeg(c.name))],
+  },
+};
+const tabBody = (tab: TabName): ContainerNode => ({
+  kind: "container",
+  direction: TAB_CONTENT[tab].direction,
+  children: [
+    ...TAB_CONTENT[tab].segments.map(
+      (name): LayoutNode => ({ kind: "segment", name }),
+    ),
+    ...controlsAt(tab),
+  ],
+});
+
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
 // (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
 // the menu's body hung on it, wherever it sits, so the author's chosen
 // position is the menu's position with nothing else moved. The door opens
 // ABOVE: its body's rows stack over the whole bar, which renders as it does
-// with the menu closed (brandon-menu-ia-q30.4oj). The `⚙ config`
-// row is a disclosure INSIDE that body — nesting is structure, not a second
-// gate: a config row left open yesterday cannot render beside a closed menu
-// today because it hangs on a trigger the closed menu does not render. The
-// walk colours the body on the door's band and the config row on the
-// band ⚙ opens one depth further (candybar-render-ai7.9).
+// with the menu closed (brandon-menu-ia-q30.4oj). Each tab is a disclosure
+// INSIDE that body — nesting is structure, not a second gate: a tab left open
+// yesterday cannot render beside a closed menu today because it hangs on a
+// trigger the closed menu does not render. The walk colours the body on the
+// door's band and a tab's body on the band the tab opens, one depth
+// further (candybar-render-ai7.9).
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
       ? disclosureNode(
           node.name,
           SETTINGS_REF,
-          // Two lines stacked over the bar. The first holds what the menu
-          // is FOR — switching arrangement — and, beside it, the save cell
-          // whenever it has something to do. The second holds the rest: the
-          // quick-action tray, the commands, the config and tools menus, and
-          // the door into edit mode.
+          // Two lines stacked over the bar, then the open tab's body. The
+          // first line holds what the menu is FOR — switching arrangement —
+          // and, beside it, the save cell whenever it has something to do.
+          // The second is the tab strip.
           {
             kind: "container",
             direction: "vertical",
@@ -512,50 +583,21 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
                 kind: "container",
                 direction: "horizontal",
                 children: [
-                  ...PRIMARY_CONTROLS.map(controlNode),
+                  ...controlsAt("door"),
                   { kind: "segment", name: SAVE_SEG },
                 ],
               },
               {
                 kind: "container",
                 direction: "horizontal",
-                children: [
-                  { kind: "segment", name: TOOLBAR_SEG },
-                  { kind: "segment", name: COMMANDS_SEG },
-                  // The display settings, behind their own disclosure so the
-                  // menu opens narrow.
+                children: TABS.map(({ member }) =>
                   disclosureNode(
-                    CONFIG_SEG,
-                    CONFIG_REF,
-                    {
-                      kind: "container",
-                      direction: "horizontal",
-                      children: CONFIG_CONTROLS.map(controlNode),
-                    },
+                    tabSeg(member),
+                    tabRef(member),
+                    tabBody(member),
                     "drop",
                   ),
-                  // The tools, behind their own disclosure: the doctor
-                  // button, then one row per check once it has run.
-                  disclosureNode(
-                    TOOLS_SEG,
-                    TOOLS_REF,
-                    {
-                      kind: "container",
-                      direction: "vertical",
-                      children: [
-                        { kind: "segment", name: DOCTOR_SEG },
-                        ...CHECKS.map(
-                          (c): LayoutNode => ({
-                            kind: "segment",
-                            name: doctorRowSeg(c.name),
-                          }),
-                        ),
-                      ],
-                    },
-                    "drop",
-                  ),
-                  { kind: "segment", name: EDIT_SEG },
-                ],
+                ),
               },
             ],
           },
@@ -598,10 +640,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [SETTINGS_ANCHOR]: {
-        do: [DOOR_TOGGLE, ...CONFIRMS.map((c) => c.disarm)],
+        do: [DOOR_TOGGLE, ...DOOR_DISARMS],
       },
-      [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
-      [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
       // menu: edit mode works on the bar, with its own `✎ done` row above it,
@@ -641,25 +681,14 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template },
       [SAVE_SEG]: SAVE_CELL,
-      [CONFIG_SEG]: {
-        template: disclosureTrigger(
-          CONFIG_SEG,
-          `⚙ config ${DISCLOSURE_GLYPH_CLOSED}`,
-          `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
-        ),
-      },
-      [TOOLS_SEG]: {
-        template: disclosureTrigger(
-          TOOLS_SEG,
-          `🧰 tools ${DISCLOSURE_GLYPH_CLOSED}`,
-          `🧰 tools ${DISCLOSURE_GLYPH_OPEN}`,
-        ),
+      [PRESET_SAVE]: {
+        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,
       },
       [DOCTOR_SEG]: {
         template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
       [EDIT_SEG]: {
-        template: `{{ action "${EDIT_SEG}" "✎ edit" "✎ done" }}`,
+        template: `{{ action "${EDIT_SEG}" "✎ arrange" "✎ done" }}`,
       },
     },
   };
@@ -672,14 +701,28 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       default: 0,
     };
   }
-  artifacts.variables[CONFIG_SEG] = disclosureStateVar(
-    CONFIG_SEG,
-    DISCLOSURE_CLOSED,
-  );
-  artifacts.variables[TOOLS_SEG] = disclosureStateVar(
-    TOOLS_SEG,
-    DISCLOSURE_CLOSED,
-  );
+  // The open tab wears its state colour AND leads with the open-disclosure
+  // glyph, so the strip still says which tab is open at colour depth `none`.
+  // [LAW:composability] A tab click is its cycle and the disarm of every
+  // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
+  // face, and switching tabs drops a half-made confirm it took out of view.
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
+  for (const { member, label } of TABS) {
+    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
+      TAB_KEY,
+      member,
+    );
+    artifacts.actions[tabSeg(member)] = {
+      do: [tabToggle(member), ...TAB_DISARMS],
+    };
+    artifacts.segments[tabSeg(member)] = {
+      template: disclosureTrigger(
+        tabSeg(member),
+        label,
+        `${DISCLOSURE_GLYPH_OPEN} ${label}`,
+      ),
+    };
+  }
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
@@ -756,8 +799,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     artifacts.segments[controlCarousel(c.name)] = {
       template: c.control.template,
     };
-    c.beneath.forEach((template, i) => {
-      artifacts.segments[controlBeneath(c.name, i)] = { template };
+    c.beneath.forEach((row, i) => {
+      artifacts.segments[controlBeneath(c.name, i)] = row;
     });
   }
   Object.assign(artifacts.actions, RESET_ALL.actions);

@@ -244,10 +244,19 @@ async function closedBars(): Promise<{
 }
 
 // The open states, reached by the clicks a user makes: the 🍫 door (its tray
-// and the preset picker's band items), ⚙ config (its controls), and the theme
-// picker, whose options wear the palette each would apply. Each stage is
-// handed a render of the bar in that state at any depth.
-const STAGE_NAMES = ["closed", "door", "preset picker", "config", "theme picker"] as const;
+// and the preset picker's band items), each tab that holds controls (the 🎨 look
+// tab, then 📐 layout and ⚙ config), and the theme picker, whose options wear
+// the palette each would apply. Each stage is handed a render of the bar in
+// that state at any depth.
+const STAGE_NAMES = [
+  "closed",
+  "door",
+  "preset picker",
+  "look tab",
+  "theme picker",
+  "layout tab",
+  "config tab",
+] as const;
 function forEachStage(
   theme: string,
   measure: (stage: string, render: (colorCompatibility: ColorCompatibility) => Chars) => void,
@@ -284,8 +293,10 @@ function forEachStage(
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
     "preset picker": (r) => opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
-    config: (r) => opener(r, "candybar.config", () => true),
+    "look tab": (r) => opener(r, "candybar.tab", (v) => v === "look"),
     "theme picker": (r) => opener(r, "menus.candybar_pickers", (v) => v.endsWith("theme")),
+    "layout tab": (r) => opener(r, "candybar.tab", (v) => v === "layout"),
+    "config tab": (r) => opener(r, "candybar.tab", (v) => v === "config"),
   };
   const config = parseAndValidate(
     "<test>",

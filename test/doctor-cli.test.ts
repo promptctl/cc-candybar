@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { doctorPlan } from "../src/doctor/cli";
-import { DISCLOSURE_GLYPH_CLOSED, DOOR_GLYPH } from "../src/config/disclosure";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 
@@ -62,7 +62,7 @@ describe("doctorPlan", () => {
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
       "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
-        ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)\n`,
+        ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n`,
     );
   });
 

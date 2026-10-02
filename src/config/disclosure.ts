@@ -125,7 +125,7 @@ export function escapeTemplateLiteral(s: string): string {
 // [LAW:one-source-of-truth] THE lowering of a disclosure to the tree: ONE
 // segment node — the trigger — with the body it opens hung on it
 // (`SegmentNode.opens`, candybar-render-ai7.9). Group sugar, the global
-// settings menu and its `⚙ config` sub-disclosure, and every `(?)` all lower
+// settings menu and its tabs, and every `(?)` all lower
 // through this call, so there is one shape for "a trigger and its body" and
 // the render walk learns it once. The body carries no `when`: its openness is
 // `ref`, read by the walk through `disclosureGate` at compile — a gate spelled

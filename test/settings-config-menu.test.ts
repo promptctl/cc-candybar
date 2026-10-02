@@ -216,6 +216,22 @@ function writesTo(rendered: string, key: string): string[] {
   });
 }
 
+// The menu's tabs are one accordion key; a control is reachable only while its
+// tab is open. Opens `tab` — found in the rendered bytes, never constructed —
+// unless it already is.
+const TAB_KEY = "candybar.tab";
+function showTab(
+  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
+  tab: string,
+): void {
+  if (r.sessionState.get(SID, TAB_KEY) === tab) return;
+  const url = urlsOf(r.render()).find((u) =>
+    effectsOf(u).some((e) => e.args[1] === TAB_KEY && e.args[2] === tab),
+  );
+  if (url === undefined) throw new Error(`no tab writes ${TAB_KEY}=${tab}`);
+  r.click(url);
+}
+
 // What a reader SEES: the styling and the OSC-8 link envelopes removed, so an
 // assertion about the panel's text cannot pass on bytes hidden inside a URL.
 function plain(rendered: string): string {
@@ -282,36 +298,43 @@ describe("the config menu, reached from a user config whose root is one row", ()
   beforeEach(() => {
     durable = durableConfig("cc-candybar-settings-menu-");
     r = rig(TWO_SEGMENT_ROOT, durable);
-    // Open the menu and its config row — the two clicks a "🍫 ▸" then
-    // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
-    // bytes, never constructed, so this also proves they are REACHABLE.
+    // Open the menu and its look tab — the two clicks a "🍫" then "🎨 look"
+    // tap dispatches. Both affordances are found in the rendered bytes, never
+    // constructed, so this also proves they are REACHABLE.
     const menuToggle = writesTo(r.render(), "candybar.menu")[0];
     expect(menuToggle).toBeDefined();
     r.click(menuToggle!);
-    const configToggle = writesTo(r.render(), "candybar.config")[0];
-    expect(configToggle).toBeDefined();
-    r.click(configToggle!);
+    showTab(r, "look");
   });
   afterEach(() => {
     r.dispose();
     durable.dispose();
   });
 
-  const wrapUrl = (): string =>
-    writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
-  const paddingUp = (): string =>
-    links(r.render()).find(
+  const wrapUrl = (): string => {
+    showTab(r, "layout");
+    return writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
+  };
+  const paddingUp = (): string => {
+    showTab(r, "layout");
+    return links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "▶" &&
         effectsOf(l.url).some((e) => e.args[1] === "padding"),
     )!.url;
+  };
   const saveUrl = (): string | undefined =>
     links(r.render()).find((l) =>
       effectsOf(l.url).some((e) => e.verb === "save"),
     )?.url;
 
   test("every setting the menu owns is one control, reachable from that root", () => {
-    const out = plain(r.render());
+    const out = ["look", "layout", "config"]
+      .map((tab) => {
+        showTab(r, tab);
+        return plain(r.render());
+      })
+      .join("\n");
     // One labelled control each, showing the value the bar actually rendered.
     expect(out).toContain("▦ default"); // preset
     expect(out).toContain("🎨 tokyo-night"); // theme
@@ -356,6 +379,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   // the stepper starts from the 0 the bar shows, never top-level globals' 1.
   test("an unpicked padding steps from the value the session's preset shows", () => {
     r.sessionState.set(SID, "preset", "compact");
+    showTab(r, "layout");
     expect(plain(r.render())).toContain("padding 0");
     r.click(paddingUp());
     expect(r.sessionState.get(SID, "padding")).toBe("1");
@@ -475,7 +499,7 @@ describe("save under a preset that pins the setting", () => {
   // Pick `plain` from the style carousel, save, and return the bar after the
   // save released the pick — what the file alone renders.
   const pickPlainAndSave = (r: ReturnType<typeof rig>): string => {
-    r.click(writesTo(r.render(), "candybar.config")[0]!);
+    showTab(r, "look");
     r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.endcaps"),
@@ -578,22 +602,26 @@ describe("reset returns settings to the bundled default", () => {
     durable = durableConfig("cc-candybar-settings-reset-");
     r = rig(CUSTOMIZED, durable);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    r.click(writesTo(r.render(), "candybar.config")[0]!);
+    showTab(r, "look");
   });
   afterEach(() => {
     r.dispose();
     durable.dispose();
   });
 
-  // The ↺ beside one setting: the link whose only reset names `configKey`.
-  const resetOf = (configKey: string): string =>
-    links(r.render()).find(
+  // The ↺ beside one setting: the link whose only reset names `configKey`,
+  // in whichever tab holds that setting's control.
+  const TAB_OF: Record<string, string> = { padding: "layout" };
+  const resetOf = (configKey: string): string => {
+    showTab(r, TAB_OF[configKey] ?? "look");
+    return links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "↺" &&
         effectsOf(l.url).some(
           (e) => e.verb === "reset-config" && e.args[1] === configKey,
         ),
     )!.url;
+  };
   const labelled = (text: string): string | undefined =>
     links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
   const userContent = () => {
@@ -730,10 +758,10 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "style")).toBeNull();
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
-    const out = plain(r.render());
-    expect(out).toContain("padding 1");
-    expect(out).toContain("◐ none");
-    expect(out).not.toContain("💾");
+    expect(plain(r.render())).toContain("◐ none");
+    expect(plain(r.render())).not.toContain("💾");
+    showTab(r, "layout");
+    expect(plain(r.render())).toContain("padding 1");
 
     // One click, one step — undone by the ↶ on the bar.
     expect(durable.history(SID).past).toHaveLength(depth + 1);
@@ -755,7 +783,7 @@ describe("a pick leaves the picker open", () => {
   beforeEach(() => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    r.click(writesTo(r.render(), "candybar.config")[0]!);
+    showTab(r, "look");
     r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
@@ -781,7 +809,7 @@ describe("a pick leaves the picker open", () => {
     const first = r.render();
     r.click(arrow(first, "▶"));
     const second = r.render();
-    const theme = (rendered: string) => /🎨 (\S+)/.exec(plain(rendered))![1]!;
+    const theme = (rendered: string) => /🎨 (\S+) [▸▾]/.exec(plain(rendered))![1]!;
     expect(theme(first)).not.toBe(theme(opened));
     expect(theme(second)).not.toBe(theme(first));
     // Still open after each pick, centred on what was picked.
@@ -848,6 +876,11 @@ describe("save as preset", () => {
 
   const link = (text: string): string | undefined =>
     links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
+  // `+ preset`, in the 📐 layout tab.
+  const savePreset = (): string => {
+    showTab(r, "layout");
+    return link("+ preset")!;
+  };
   const effective = () =>
     resolveEffectiveGlobals(
       r.config,
@@ -877,7 +910,7 @@ describe("save as preset", () => {
 
   test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim", padding: "2" });
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
 
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     // Reloaded once, while the session still held its picks.
@@ -906,7 +939,7 @@ describe("save as preset", () => {
 
   test("switching away and back changes no byte, and the preset still renders what was saved", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
     r.click(link("default")!);
     expect(effective().preset).toBe("default");
     expect(effective().theme).toMatchObject({ name: "nord" });
@@ -918,8 +951,8 @@ describe("save as preset", () => {
 
   test("a second save takes the next free name", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(link("⊕ save as preset")!);
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
+    r.click(savePreset());
     const presets = durable.parsed().presets as Record<string, unknown>;
     expect(Object.keys(presets)).toEqual(["narrow", "custom-1", "custom-2"]);
     // Saved from custom-1 with nothing picked: its arrangement and its pins.
@@ -930,7 +963,7 @@ describe("save as preset", () => {
   test("🗑 deletes the preset it names, returning the file byte for byte, and only a user preset offers it", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     expect(plain(r.render())).toContain("🗑 delete narrow");
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
     r.click(link("🗑 delete custom-1")!);
 
     expect(durable.text()).toBe(USER_PRESETS);
@@ -945,7 +978,7 @@ describe("save as preset", () => {
 
   test("save and delete are one undo step each, restoring the exact bytes and picks", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
     r.click(link("🗑 delete custom-1")!);
 
     r.click(link("↶")!);
@@ -995,7 +1028,7 @@ describe("save as preset", () => {
   },
 }`;
     start(source, { preset: "grouped", theme: "dracula" });
-    expect(() => r.click(link("⊕ save as preset")!)).toThrow(
+    expect(() => r.click(savePreset())).toThrow(
       /would not load after this click[\s\S]*extra/,
     );
     expect(durable.text()).toBe(source);
@@ -1023,7 +1056,7 @@ describe("save as preset", () => {
   presets: { custom_1: {} },
 }`;
     start(source, { preset: "custom_1", theme: "dracula" });
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
     expect(Object.keys(durable.parsed().presets as object)).toEqual([
       "custom_1",
       "custom-2",
@@ -1036,7 +1069,7 @@ describe("save as preset", () => {
   presets: { spaced: { globals: { palette: 'nord', default_separator: ' | ' } } },
 }`;
     start(source, { preset: "spaced", style: "dim" });
-    r.click(link("⊕ save as preset")!);
+    r.click(savePreset());
     const presets = durable.parsed().presets as Record<string, unknown>;
     expect(presets["custom-1"]).toEqual({
       globals: { palette: "nord", default_separator: " | ", style: "dim" },

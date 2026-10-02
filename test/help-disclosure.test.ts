@@ -180,13 +180,14 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
   rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "open");
 }
 
-// The real route into edit mode from a minimal user config: the `✎ edit` control
-// lives in the settings menu's body, which is the whole point of
+// The real route into edit mode from a minimal user config: the `✎ arrange`
+// control lives in the settings menu's 📐 layout tab, which is the whole point of
 // candybar-settings-ui-aok.1 — a user root deletes every other trigger. The same
 // click closes the menu, so what is measured is the edit-mode bar itself, not
 // the bar with a panel hanging open over it.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
+  rt.clickWriting(rt.render(200), "candybar.tab", "layout");
   rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 }
 

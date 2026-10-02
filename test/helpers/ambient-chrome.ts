@@ -175,7 +175,7 @@ export function ownLinks(urls: readonly string[]): string[] {
 }
 
 // The narrower filter, for a test whose OWN subject is edit mode: only the
-// settings menu is ambient there, and its `✎ edit` entry is `when`-gated behind
+// settings menu is ambient there, and its `✎ arrange` entry is `when`-gated behind
 // a closed disclosure, so it emits nothing to confuse it.
 export function withoutSettingsLinks(urls: readonly string[]): string[] {
   return urls.filter((u) => !keysWrittenBy(u).some(isSettingsMenuKey));
