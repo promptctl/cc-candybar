@@ -375,10 +375,11 @@ const SAVE_CELL: SegmentDecl = {
     ).join(""),
 };
 // [LAW:one-source-of-truth] Every two-click step the menu holds, with the view
-// it sits in. A click that takes a confirm out of view disarms it — the door
-// takes every one, a tab click every one that sits in a tab — so a confirm is
-// only ever made in the view its arming click was made in, and one that stays
-// in view (`⟲` on the door's first line) stays armed.
+// it sits in. Every click that can bring a confirm into view disarms it — the
+// door every one, a tab click every one that sits in a tab — so a confirm is
+// only ever made in the view its arming click was made in, however it left
+// view (a body's ✕ only closes), and one that never leaves view (`⟲` on the
+// door's first line) stays armed across tab clicks.
 const CONFIRMS = [
   { step: RESET_ALL, place: "door" },
   { step: COMMANDS, place: "session" },
