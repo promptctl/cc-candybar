@@ -1167,7 +1167,7 @@ closes, so reopening the menu returns to it:
 
 ```
 ✕ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
-✕ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
+✕ ⚡ session   ▾ 🎨 look   📐 layout   ⚙ config   🧰 tools
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺
 ❌ host   directory   gitaculous          ← the bar, unchanged
 ```

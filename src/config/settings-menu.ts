@@ -173,6 +173,13 @@ const SETTINGS_REF: DisclosureRef = {
   member: SETTINGS_OPEN,
 };
 
+// Undo and redo step the session's one settings history
+// (src/daemon/settings-history.ts).
+const UNDO_ACTION = `${SETTINGS_NS}undo`;
+const REDO_ACTION = `${SETTINGS_NS}redo`;
+// How many settings a reset all would change (RenderPayload.resettable).
+const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
+
 // ─── The doctor (brandon-doctor-b6a) ────────────────────────────────────────
 //
 // The `🧰 tools` tab holds the `🩺 doctor` button and, once it has run, one row
@@ -181,13 +188,6 @@ const SETTINGS_REF: DisclosureRef = {
 // second check is one more row in that list and no edit here
 // [LAW:one-type-per-behavior]. The body is VERTICAL — one row per check — so a
 // long reason never widens the band it hangs from.
-// Undo and redo step the session's one settings history
-// (src/daemon/settings-history.ts).
-const UNDO_ACTION = `${SETTINGS_NS}undo`;
-const REDO_ACTION = `${SETTINGS_NS}redo`;
-// How many settings a reset all would change (RenderPayload.resettable).
-const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
-
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
 const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
 const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
@@ -374,11 +374,22 @@ const SAVE_CELL: SegmentDecl = {
       (p) => `{{ if ${p.shown} }}{{ $sep }}${p.body}{{ $sep = " " }}{{ end }}`,
     ).join(""),
 };
-// [LAW:one-source-of-truth] Every two-click step the menu holds. Each click that
-// changes which of them is in view — the door, and every tab — disarms all of
-// them, so a confirm is only ever made in the view its arming click was made
-// in, and no one has to remember which view holds which.
-const CONFIRMS = [RESET_ALL, COMMANDS] as const;
+// [LAW:one-source-of-truth] Every two-click step the menu holds, with the view
+// it sits in. A click that takes a confirm out of view disarms it — the door
+// takes every one, a tab click every one that sits in a tab — so a confirm is
+// only ever made in the view its arming click was made in, and one that stays
+// in view (`⟲` on the door's first line) stays armed.
+const CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS, place: "session" },
+] as const satisfies ReadonlyArray<{
+  readonly step: { readonly disarm: string };
+  readonly place: "door" | TabName;
+}>;
+const disarms = (out: ReadonlyArray<(typeof CONFIRMS)[number]>): string[] =>
+  out.map((c) => c.step.disarm);
+const DOOR_DISARMS = disarms(CONFIRMS);
+const TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 
 // [LAW:one-source-of-truth] The one accordion every control's carousel joins,
 // as a disclosure ref per member, so two carousels are mutually exclusive
@@ -514,29 +525,33 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 }
 
 // [LAW:one-source-of-truth] What each tab holds (design-docs/SETTINGS-MENU-MAP.md,
-// "Structure"), keyed by every tab so none can be left without a body.
-const hRow = (children: LayoutNode[]): ContainerNode => ({
-  kind: "container",
-  direction: "horizontal",
-  children,
-});
-const segs = (...names: string[]): LayoutNode[] =>
-  names.map((name) => ({ kind: "segment", name }));
-const TAB_BODIES: Readonly<Record<TabName, ContainerNode>> = {
-  session: {
-    kind: "container",
-    direction: "vertical",
-    children: segs(TOOLBAR_SEG, COMMANDS_SEG),
-  },
-  look: hRow(controlsAt("look")),
-  layout: hRow([...segs(PRESET_SAVE, EDIT_SEG), ...controlsAt("layout")]),
-  config: hRow(controlsAt("config")),
+// "Structure"), keyed by every tab so none can be left without a body: its own
+// segments, then the controls `PLACE` puts in it. Every body takes the
+// controls, so `PLACE` naming any tab is a placement the bar renders.
+interface TabBody {
+  readonly direction: ContainerNode["direction"];
+  readonly segments: readonly string[];
+}
+const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
+  session: { direction: "vertical", segments: [TOOLBAR_SEG, COMMANDS_SEG] },
+  look: { direction: "horizontal", segments: [] },
+  layout: { direction: "horizontal", segments: [PRESET_SAVE, EDIT_SEG] },
+  config: { direction: "horizontal", segments: [] },
   tools: {
-    kind: "container",
     direction: "vertical",
-    children: segs(DOCTOR_SEG, ...CHECKS.map((c) => doctorRowSeg(c.name))),
+    segments: [DOCTOR_SEG, ...CHECKS.map((c) => doctorRowSeg(c.name))],
   },
 };
+const tabBody = (tab: TabName): ContainerNode => ({
+  kind: "container",
+  direction: TAB_CONTENT[tab].direction,
+  children: [
+    ...TAB_CONTENT[tab].segments.map(
+      (name): LayoutNode => ({ kind: "segment", name }),
+    ),
+    ...controlsAt(tab),
+  ],
+});
 
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
 // (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
@@ -578,7 +593,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
                   disclosureNode(
                     tabSeg(member),
                     tabRef(member),
-                    TAB_BODIES[member],
+                    tabBody(member),
                     "drop",
                   ),
                 ),
@@ -624,7 +639,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [SETTINGS_ANCHOR]: {
-        do: [DOOR_TOGGLE, ...CONFIRMS.map((c) => c.disarm)],
+        do: [DOOR_TOGGLE, ...DOOR_DISARMS],
       },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
@@ -687,9 +702,9 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   }
   // The open tab wears its state colour AND leads with the open-disclosure
   // glyph, so the strip still says which tab is open at colour depth `none`.
-  // [LAW:composability] A tab click is its cycle and every confirm's disarm as
-  // one `do` (the door's shape): the tab is the click's face, and switching
-  // views drops a half-made confirm.
+  // [LAW:composability] A tab click is its cycle and the disarm of every
+  // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
+  // face, and switching tabs drops a half-made confirm it took out of view.
   artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
   for (const { member, label } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
@@ -697,7 +712,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       member,
     );
     artifacts.actions[tabSeg(member)] = {
-      do: [tabToggle(member), ...CONFIRMS.map((c) => c.disarm)],
+      do: [tabToggle(member), ...TAB_DISARMS],
     };
     artifacts.segments[tabSeg(member)] = {
       template: disclosureTrigger(

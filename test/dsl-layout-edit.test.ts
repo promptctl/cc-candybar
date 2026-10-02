@@ -960,7 +960,7 @@ function makeCache(reloads?: ReloadSignal): {
   return { cache, sessionState, cleanups };
 }
 
-// [LAW:locality-or-seam] The settings menu's `✎ edit` references
+// [LAW:locality-or-seam] The settings menu's `✎ arrange` references
 // `edit.toggle`, and every config `RenderCache` resolves hosts the menu — so `edit.mode`/`edit.toggle`
 // (and, once validateConfig runs, per-preset `-`/`+` chrome) are now present
 // in EVERY resolved preset root this suite builds, `when`-gated shut but

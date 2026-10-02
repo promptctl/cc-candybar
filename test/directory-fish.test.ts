@@ -49,7 +49,7 @@ const dirOnlyRoot = {
 const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
   Object.fromEntries(
     Object.entries(rec).filter(
-      // `edit.toggle` stays: the settings menu's `✎ edit` fires it (a `do`),
+      // `edit.toggle` stays: the settings menu's `✎ arrange` fires it (a `do`),
       // and it is a plain cycle that compiles with nothing else of edit mode.
       ([name]) => !name.startsWith(EDIT_NS) || name === EDIT_TOGGLE_ACTION,
     ),

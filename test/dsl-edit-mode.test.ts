@@ -7,7 +7,7 @@
 //      and it is a legal arm over a "presets.<name>.root" target alongside
 //      removeSegment/insertSegment.
 //   2. Every config carries edit mode: the settings menu, synthesized into
-//      every config, ensures the toggle and fires it from `✎ edit`, so even a
+//      every config, ensures the toggle and fires it from `✎ arrange`, so even a
 //      config that never references `{{ action "edit.toggle" … }}` gets the
 //      toggle and its chrome (brandon-settings-menu-d6f).
 //   3. A config that DOES reference the toggle gets `edit.mode`/`edit.toggle`

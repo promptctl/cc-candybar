@@ -157,7 +157,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.render()).not.toContain("🩺 doctor");
     rt.openTools();
     const out = rt.render();
-    expect(out).toContain("🧰 tools");
+    expect(out).toContain("▾ 🧰 tools");
     expect(out).toContain("🩺 doctor");
     expect(out).not.toMatch(/[✓✗] tmux truecolor/);
     expect(rt.urlOfVerb(VERB_DOCTOR_RUN)).toBeDefined();
@@ -170,7 +170,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     const lines = rt.render().split("\n");
-    const toolsRow = lines.findIndex((l) => l.includes("🧰 tools"));
+    const toolsRow = lines.findIndex((l) => l.includes("▾ 🧰 tools"));
     expect(toolsRow).toBeGreaterThanOrEqual(0);
     // A vertical body: the button on one row, the report on the next — a long
     // reason never widens the settings band it hangs from.
