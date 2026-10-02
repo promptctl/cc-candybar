@@ -1,3 +1,10 @@
+# [1.100.0](https://github.com/promptctl/cc-candybar/compare/v1.99.0...v1.100.0) (2026-10-02)
+
+
+### Features
+
+* **menu:** the settings menu's second line is five tabs, one open at a time ([#286](https://github.com/promptctl/cc-candybar/issues/286)) ([f3e54db](https://github.com/promptctl/cc-candybar/commit/f3e54db074623b9346344eba8f168e862da1c088))
+
 # [1.99.0](https://github.com/promptctl/cc-candybar/compare/v1.98.1...v1.99.0) (2026-09-30)
 
 
