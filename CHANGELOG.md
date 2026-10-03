@@ -1,3 +1,10 @@
+# [1.104.0](https://github.com/promptctl/cc-candybar/compare/v1.103.0...v1.104.0) (2026-10-03)
+
+
+### Features
+
+* **edit:** the add menu is a segment library ([#293](https://github.com/promptctl/cc-candybar/issues/293)) ([02889d5](https://github.com/promptctl/cc-candybar/commit/02889d52036f9887e135290fc7053cb8f74df7c5))
+
 # [1.103.0](https://github.com/promptctl/cc-candybar/compare/v1.102.0...v1.103.0) (2026-10-03)
 
 
