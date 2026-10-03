@@ -444,6 +444,7 @@ describe("the payload projection", () => {
       tmuxService: { getSessionId: async () => ABSENT },
       log: () => {},
       history: () => EMPTY_HISTORY_DEPTH,
+      navigation: () => 0,
     } as unknown as RenderPayloadDeps;
     const built = await buildRenderPayload(
       hook(join(dir, "t.jsonl"), "p"),

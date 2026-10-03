@@ -99,6 +99,7 @@ function depsWith(
     tmuxService: { getSessionId: async () => ABSENT },
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
+    navigation: () => 0,
     clock: () => new Date(NOW_MS),
     ...overrides,
   } as unknown as RenderPayloadDeps;

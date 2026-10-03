@@ -175,11 +175,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // A vertical body: the button on one row, the report on the next — a long
     // reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
-    // Each row of the tools body leads with the body's ✕ (brandon-disclosure-
-    // 43z) as a cell of its own, right after the row's lead cap; the report
-    // row's text follows the seam.
+    // The tools body leads with one ✕ (brandon-disclosure-43z), on its first
+    // row; the report row leads with the blank of its width, a cell of its own
+    // right after the row's lead cap, and its text follows the seam.
+    expect(lines[toolsRow + 1]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
     const report = lines[toolsRow + 2]!;
-    expect(report.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
+    expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
     expect(report).toContain("✗ tmux truecolor");
     rt.dispose();
   });

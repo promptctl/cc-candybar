@@ -35,6 +35,7 @@
 //     `✎ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
+import { ident } from "./ident.js";
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
@@ -579,46 +580,66 @@ const tabBody = (tab: TabName): ContainerNode => ({
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? withBack(
-          disclosureNode(
-            node.name,
-            SETTINGS_REF,
-            // Two lines stacked over the bar, then the open tab's body. The
-            // first line holds what the menu is FOR — switching arrangement —
-            // and, beside it, the save cell whenever it has something to do.
-            // The second is the tab strip.
-            {
-              kind: "container",
-              direction: "vertical",
-              children: [
-                {
-                  kind: "container",
-                  direction: "horizontal",
-                  children: [
-                    ...controlsAt("door"),
-                    { kind: "segment", name: SAVE_SEG },
-                  ],
-                },
-                {
-                  kind: "container",
-                  direction: "horizontal",
-                  children: TABS.map(({ member }) =>
-                    disclosureNode(
-                      tabSeg(member),
-                      tabRef(member),
-                      tabBody(member),
-                      "drop",
-                    ),
-                  ),
-                },
-              ],
-            },
-            "above",
-          ),
-        )
+      ? withBack(disclosureNode(node.name, SETTINGS_REF, doorBody(), "above"))
       : node;
   }
   return expandContainer(node);
+}
+
+// Two lines stacked over the bar, then the open tab's body. The first line
+// holds what the menu is FOR — switching arrangement — and, beside it, the save
+// cell whenever it has something to do. The second is the tab strip.
+function doorBody(): ContainerNode {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [...controlsAt("door"), { kind: "segment", name: SAVE_SEG }],
+      },
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: TABS.map(({ member }) =>
+          disclosureNode(
+            tabSeg(member),
+            tabRef(member),
+            tabBody(member),
+            "drop",
+          ),
+        ),
+      },
+    ],
+  };
+}
+
+// [LAW:one-source-of-truth] The door's click returns everything its body holds
+// to how a fresh session finds it — each disclosure inside it, at any depth,
+// written back to its state variable's default (the first tab, every picker
+// closed) — so the menu never reopens onto panels left open from an earlier
+// visit. The keys are read off the body itself, so a disclosure added to the
+// menu later is folded with no list to keep. One action per key, fired beside
+// the door's toggle in the same click.
+function doorFolds(artifacts: MenuArtifacts): string[] {
+  const keys = new Map<string, string>();
+  for (const node of walkNodes(doorBody())) {
+    if (node.kind === "segment" && node.opens !== undefined) {
+      keys.set(node.opens.ref.key, node.opens.ref.variable);
+    }
+  }
+  return [...keys].map(([key, variable]) => {
+    const decl = artifacts.variables[variable];
+    if (decl?.kind !== "state" || decl.default === undefined) {
+      throw new Error(
+        `settings menu: the door folds "${key}", but "${variable}" is not a state variable the menu declares with a default`,
+      );
+    }
+    const name = `${SETTINGS_ANCHOR}.fold.${ident(key)}`;
+    artifacts.actions[name] = { set: key, to: decl.default };
+    return name;
+  });
 }
 
 // The door wears `◁` as its cell's lead, so it is inside the door's cell and
@@ -658,9 +679,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [SETTINGS_ANCHOR]: {
-        do: [DOOR_TOGGLE, ...DOOR_DISARMS],
-      },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
       // menu: edit mode works on the bar, with its own `✎ done` row above it,
@@ -752,6 +770,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
+  // Last, so every disclosure the body holds has declared its state.
+  artifacts.actions[SETTINGS_ANCHOR] = {
+    do: [DOOR_TOGGLE, ...DOOR_DISARMS, ...doorFolds(artifacts)],
+  };
   return artifacts;
 }
 

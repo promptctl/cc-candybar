@@ -440,9 +440,12 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
 
   test("the settings door and every tab disarm the menu's /clear, so a confirm is never clicked in a view it was not armed in", () => {
     const rt = tray(HINT);
-    expect(rt.config.actions["candybar.menu"]).toEqual({
-      do: ["candybar.menu.toggle", "candybar.resetAll.disarm", "candybar.commands.clear.disarm"],
-    });
+    const door = rt.config.actions["candybar.menu"];
+    expect(door !== undefined && "do" in door ? door.do.slice(0, 3) : door).toEqual([
+      "candybar.menu.toggle",
+      "candybar.resetAll.disarm",
+      "candybar.commands.clear.disarm",
+    ]);
     // A tab click hides or shows the tray: arming /clear on ⚡ session, then
     // leaving it, must not come back to an armed confirm. `⟲` sits on the
     // door's first line, in view whichever tab is open, so a tab leaves it armed.

@@ -326,10 +326,9 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs");
-    // One control per row — detail, form, depth, theme — and every row of an
-    // open body leads with its ✕.
-    // A body ✕ writes the configure key alone; `✎ done` closes it too, as
-    // part of leaving edit mode.
+    // One control per row — detail, form, depth, theme — and the body leads
+    // with one ✕. It writes the configure key alone; `✎ done` closes it too,
+    // as part of leaving edit mode.
     const closes = linkUrls(rt.render()).filter((u) => {
       const effects = effectsOf(u);
       return (
@@ -338,7 +337,7 @@ describe("configure mode: one placement's settings at a time", () => {
         effects[0]!.args[2] === DISCLOSURE_CLOSED
       );
     });
-    expect(closes).toHaveLength(4);
+    expect(closes).toHaveLength(1);
     rt.click(closes[0]!);
     expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBe(
       DISCLOSURE_CLOSED,
