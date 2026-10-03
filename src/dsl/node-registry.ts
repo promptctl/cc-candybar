@@ -236,6 +236,9 @@ export interface NodeRenderCtx {
       readonly lead: Template<RichText> | undefined;
       readonly trail: Template<RichText> | undefined;
     },
+    // Whether the disclosure body this segment hangs is open: with the menu
+    // bodies its own template drops, it decides the ground the segment wears.
+    bodyOpen: boolean,
   ): EvaluatedSegment;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
@@ -289,6 +292,9 @@ export interface EvaluatedSegment {
   readonly lead: readonly RichText[];
   readonly trail: readonly RichText[];
   readonly drops: readonly RichText[];
+  // Whether anything hangs open under the segment — a dropped menu body or
+  // its open disclosure body — so it wears its band's state colour.
+  readonly open: boolean;
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -538,32 +544,33 @@ const segmentType: NodeType<"segment"> = {
       // a menu can sit anywhere in the template, under any wrapper, and
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
-      const { styles, fragments, lead, trail, drops } = ctx.evaluateSegment(
-        node,
-        scope,
-        palette,
-        ctx.region,
-        {
-          bg: segCompiled.bg,
-          fg: segCompiled.fg,
-          body: segCompiled.template,
-          lead: node.lead,
-          trail: node.trail,
-        },
-      );
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
       // each entering the seam in turn — on the band this trigger computed.
       // Walked open or closed, like every child: visibility is a value.
       const bodyOpen =
         node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
-      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of something
+      // [LAW:dataflow-not-control-flow] `open` is the PRESENCE of something
       // under the segment: a dropped menu body, or an open disclosure body.
       // Either way the segment is the TRIGGER of the band below it and wears
       // that band's state colour — drawn from what it opens, not from where
-      // it sits. No state re-read beyond the body's own gate; the drop list
-      // IS the open-menu signal, and every Style was resolved at entry.
-      const open = drops.length > 0 || bodyOpen;
+      // it sits. The seam decides it (the drop list is only known once the
+      // body has evaluated) and evaluates the lead and trail on that ground.
+      const { styles, fragments, lead, trail, drops, open } =
+        ctx.evaluateSegment(
+          node,
+          scope,
+          palette,
+          ctx.region,
+          {
+            bg: segCompiled.bg,
+            fg: segCompiled.fg,
+            body: segCompiled.template,
+            lead: node.lead,
+            trail: node.trail,
+          },
+          bodyOpen,
+        );
       const baseStyle = open ? styles.trigger : styles.closed;
       const layout = {
         width: seg.width ?? "auto",
@@ -710,13 +717,20 @@ function errorAffix(
 ): readonly RichText[] {
   if (affix === undefined) return [];
   try {
-    return ctx.evaluateSegment(node, scope, ctx.palette, ctx.region, {
-      bg: undefined,
-      fg: undefined,
-      body: affix,
-      lead: undefined,
-      trail: undefined,
-    }).fragments;
+    return ctx.evaluateSegment(
+      node,
+      scope,
+      ctx.palette,
+      ctx.region,
+      {
+        bg: undefined,
+        fg: undefined,
+        body: affix,
+        lead: undefined,
+        trail: undefined,
+      },
+      false,
+    ).fragments;
   } catch (err) {
     ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
     return [];

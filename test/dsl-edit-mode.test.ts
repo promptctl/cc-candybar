@@ -64,7 +64,45 @@ import {
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
+import { contrastRatio, parseRgbHex } from "@promptctl/rich-js";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { menuMember, menuStateKey } from "../src/config/menu-keys";
+
+// The truecolor fg and bg in force where `text` first appears in `rendered`
+// (links removed): every SGR before it, folded in order.
+function colorsAt(rendered: string, text: string): { fg: string; bg: string } {
+  const at = stripAnsi(rendered).indexOf(text);
+  expect(at).toBeGreaterThanOrEqual(0);
+  let fg: string | undefined;
+  let bg: string | undefined;
+  let visible = 0;
+  for (const m of rendered.matchAll(/\x1b\[([\d;]*)m|[^\x1b]/gu)) {
+    if (m[1] === undefined) {
+      if (visible >= at) break;
+      visible += m[0].length;
+      continue;
+    }
+    const params = m[1].split(";").map(Number);
+    for (let i = 0; i < params.length; i++) {
+      if (params[i] === 0) [fg, bg] = [undefined, undefined];
+      if (params[i] === 39) fg = undefined;
+      if (params[i] === 49) bg = undefined;
+      if ((params[i] === 38 || params[i] === 48) && params[i + 1] === 2) {
+        const hex = params
+          .slice(i + 2, i + 5)
+          .map((n) => n.toString(16).padStart(2, "0"))
+          .join("");
+        if (params[i] === 38) fg = hex;
+        else bg = hex;
+        i += 4;
+      }
+    }
+  }
+  expect(fg).toBeDefined();
+  expect(bg).toBeDefined();
+  return { fg: fg!, bg: bg! };
+}
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -447,6 +485,36 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       new RegExp(`${REMOVE_GLYPH}⚠ git: [^\n]*${CONFIGURE_GLYPH}`),
     );
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
+    dispose();
+  });
+
+  // The red `✖` is floored against the ground it is DRAWN on. A segment
+  // with something open under it wears its band's state colour, not its
+  // closed background, so the floor is measured against that.
+  test("an open segment's `✖` stays legible on the state colour it wears", () => {
+    const src = BASE.replace(
+      "segments: {",
+      `actions: { pick: { set: 'pick', from: ['a', 'b'] } },
+  segments: {
+    picky: { template: '{{ menu "pick" "m" }}' },`,
+    )
+      .replace("{ h: ['directory', 'git'] }", "{ h: ['directory', 'picky', 'git'] }")
+      .replace(
+        "variables: {",
+        "variables: {\n    pick: { kind: 'state', key: 'pick', default: 'a' },",
+      );
+    const { render, click, dispose } = buildEditRuntime(src);
+    const open = (key: string, member: string) =>
+      ownUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
+      )!;
+    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    click(open(EDIT_LIVE_KEY, "open"));
+    click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
+    const { fg, bg } = colorsAt(withoutLinks(render()), `${REMOVE_GLYPH}m`);
+    expect(
+      contrastRatio(parseRgbHex(fg), parseRgbHex(bg)),
+    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
     dispose();
   });
 
