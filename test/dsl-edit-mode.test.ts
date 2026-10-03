@@ -428,7 +428,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
     expect(row).toMatch(
-      new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH} `),
+      new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH}`),
     );
     dispose();
   });

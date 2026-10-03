@@ -499,11 +499,8 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
     // The buttons are drawn inside the cell of the placement they act on, in
     // whichever of the two views shows it, so nothing sits between them.
-    // The space after the gear is the gear's own: terminals advance one
-    // column for `⚙️` (a narrow base character under an emoji selector)
-    // and paint it two wide, over the column after it.
     const lead = inArrangeMode(remove);
-    const trail = inArrangeMode(`${configure.term} `);
+    const trail = inArrangeMode(configure.term);
     const cells: LayoutNode[] = [
       ...leading.map((lead) =>
         chromeCell(lead.host, lead.template, ctx.artifacts),
