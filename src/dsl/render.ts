@@ -1199,11 +1199,7 @@ export function renderDsl(
       const styles: SegmentStyles = {
         closed,
         get trigger() {
-          return stateCell(
-            palette,
-            bandFor(palette, disclosure, drawnAt).state,
-            drawnAt,
-          );
+          return stateCell(palette, state(), drawnAt);
         },
         get band() {
           return stateCell(
@@ -1213,11 +1209,7 @@ export function renderDsl(
           );
         },
         get close() {
-          return closeCell(
-            palette,
-            bandFor(palette, disclosure, drawnAt).state,
-            drawnAt,
-          );
+          return closeCell(palette, state(), drawnAt);
         },
         disclosure,
       };
