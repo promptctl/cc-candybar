@@ -960,17 +960,20 @@ const back: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
-// [LAW:single-enforcer] Cancel for edit mode. The history owns where the
-// savepoint is and which steps lie above it (SettingsHistory.rewind); this
-// handler is plumbing between the wire and it, and says what it discarded.
-// [LAW:no-silent-failure] A session with no savepoint, and a step whose target
-// changed since, are loud BAD_REQUESTs surfaced as a transient click.error.
+// [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
+// since edit mode opened and how to put it back (SettingsHistory.rewind); this
+// handler is plumbing between the wire and it, and says what it put back.
+// [LAW:no-silent-failure] A session with no savepoint, and a target changed
+// since, are loud BAD_REQUESTs surfaced as a transient click.error, with
+// nothing written.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const undone = ctx.history.rewind(sid);
+  // The click's own earlier changes are a step of their own first, as undo's.
+  ctx.journal.commit();
+  const restored = ctx.history.rewind(sid);
   ctx.dlog(
     "info",
-    `rewind: discarded ${undone.length} step(s) since edit mode opened: ${undone.map(describeStep).join(" | ") || "none"} (session=${sid})`,
+    `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
   );
 };
 

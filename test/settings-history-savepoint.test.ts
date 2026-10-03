@@ -1,9 +1,9 @@
 // [LAW:verifiable-goals] The savepoint edit mode takes in the session's
-// settings history (brandon-menu-ia-q30.3y8): how many steps lay behind when edit
-// mode opened, so `✓ save N` can count what was done since and `↩ cancel` can
-// step back to it. Every invariant here is one a transition could break: the
-// opening click's own step, the cap, an undo below it, a restart, and a step
-// whose target changed under it.
+// settings history (brandon-menu-ia-q30.3y8): what every target held when edit
+// mode opened, so `↩ cancel` can put it all back whatever the stack did
+// meanwhile. Every case here is one a transition could break: the opening
+// click's own step, the cap, an undo below where edit mode opened, a fresh step
+// after one, a target changed under it, and a restart.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -42,6 +42,12 @@ function rig(storage?: ConstructorParameters<typeof SettingsHistory>[2]) {
     journal.file(SID, file, before, `v${n}`);
     journal.commit();
   };
+  // One click that picks a theme for the session.
+  const pick = (theme: string): void => {
+    const journal = history.begin();
+    journal.sessionState.set(SID, "theme", theme);
+    journal.commit();
+  };
   // One click that moves edit mode's key.
   const toggle = (to: string | null): void => {
     const journal = history.begin();
@@ -49,21 +55,33 @@ function rig(storage?: ConstructorParameters<typeof SettingsHistory>[2]) {
     else journal.sessionState.set(SID, EDIT_MODE_KEY, to);
     journal.commit();
   };
-  return { history, sessionState, edit, toggle };
+  const theme = () => sessionState.get(SID, "theme");
+  return { history, sessionState, edit, pick, toggle, theme };
 }
 
 describe("the savepoint is taken when edit mode opens and released when it closes", () => {
-  test("changes made since it opened are counted, and closing releases them", () => {
-    const { history, edit, toggle } = rig();
-    edit();
+  test("it counts each target changed since it opened, and closing releases it", () => {
+    const { history, edit, pick, toggle } = rig();
     edit();
     toggle("arrange");
-    expect(history.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
+    expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     edit();
-    expect(history.depth(SID)).toEqual({ undo: 3, redo: 0, sinceEdit: 1 });
+    edit();
+    pick("nord");
+    expect(history.depth(SID)).toEqual({ undo: 4, redo: 0, sinceEdit: 2 });
     toggle("closed");
-    expect(history.depth(SID)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
+    expect(history.depth(SID)).toEqual({ undo: 4, redo: 0, sinceEdit: 0 });
     expect(history.history(SID).savepoint).toBeUndefined();
+  });
+
+  test("a target changed and changed back differs from nothing", () => {
+    const { history, pick, toggle } = rig();
+    pick("nord");
+    toggle("arrange");
+    pick("gruvbox");
+    expect(history.depth(SID).sinceEdit).toBe(1);
+    pick("nord");
+    expect(history.depth(SID).sinceEdit).toBe(0);
   });
 
   test("a click that opens edit mode and changes a setting counts that change as before it", () => {
@@ -74,6 +92,7 @@ describe("the savepoint is taken when edit mode opens and released when it close
     journal.commit();
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    expect(history.history(SID).savepoint).toEqual({ at: 1, net: [] });
   });
 
   test("clearing the key closes edit mode too", () => {
@@ -81,103 +100,84 @@ describe("the savepoint is taken when edit mode opens and released when it close
     toggle("arrange");
     edit();
     toggle(null);
-    expect(history.depth(SID).sinceEdit).toBe(0);
     expect(history.history(SID).savepoint).toBeUndefined();
   });
 
-  test("moving the key between two open values neither takes nor releases one", () => {
-    const { history, edit, toggle } = rig();
+  test("a value the edit-mode gate does not read as open takes no savepoint", () => {
+    const { history, toggle } = rig();
+    toggle("bogus");
+    expect(history.history(SID).savepoint).toBeUndefined();
     toggle("arrange");
-    edit();
+    expect(history.history(SID).savepoint).toBeDefined();
     toggle("arrange");
-    expect(history.depth(SID).sinceEdit).toBe(1);
+    expect(history.history(SID).savepoint).toBeDefined();
   });
 });
 
-describe("the savepoint stays honest as the stack moves", () => {
-  test("the cap drops the oldest steps and the savepoint moves down with them", () => {
-    const { history, edit, toggle } = rig();
-    for (let i = 0; i < 20; i++) edit();
-    toggle("arrange"); // savepoint 20
-    for (let i = 0; i < 40; i++) edit(); // 60 steps, 10 dropped from the front
-    expect(history.depth(SID)).toEqual({ undo: 50, redo: 0, sinceEdit: 40 });
-  });
-
-  test("more edits than the stack holds count what it still holds, never more", () => {
-    const { history, edit, toggle } = rig();
-    toggle("arrange");
-    for (let i = 0; i < 55; i++) edit();
-    expect(history.depth(SID)).toEqual({ undo: 50, redo: 0, sinceEdit: 50 });
-  });
-
-  test("an undo below the savepoint leaves it, so stepping forward does not count older steps as edits", () => {
-    const { history, edit, toggle } = rig();
-    edit();
-    edit();
-    toggle("arrange");
-    edit();
-    history.undo(SID);
-    expect(history.depth(SID).sinceEdit).toBe(0);
-    history.undo(SID); // below the savepoint now
-    expect(history.depth(SID)).toEqual({ undo: 1, redo: 2, sinceEdit: 0 });
-    history.redo(SID);
-    expect(history.depth(SID)).toEqual({ undo: 2, redo: 1, sinceEdit: 0 });
-    history.redo(SID);
-    expect(history.depth(SID)).toEqual({ undo: 3, redo: 0, sinceEdit: 1 });
-  });
-
-  test("a fresh edit after an undo below the savepoint is an edit made in edit mode", () => {
-    const { history, edit, toggle } = rig();
-    edit();
-    edit();
-    toggle("arrange");
-    history.undo(SID);
-    history.undo(SID);
-    edit();
-    expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 1 });
-  });
-
-  test("a redo within edit mode's own steps counts them again", () => {
-    const { history, edit, toggle } = rig();
-    toggle("arrange");
-    edit();
-    edit();
-    history.undo(SID);
-    expect(history.depth(SID).sinceEdit).toBe(1);
-    history.redo(SID);
-    expect(history.depth(SID).sinceEdit).toBe(2);
-  });
-});
-
-describe("rewind steps back to the savepoint", () => {
+describe("cancel puts back what edit mode found, whatever the stack did", () => {
   test("restores the file, leaves no redo, and releases the savepoint", () => {
     const { history, edit, toggle } = rig();
     edit(); // v1: before edit mode
     toggle("arrange");
     edit(); // v2
     edit(); // v3
-    const undone = history.rewind(SID);
-    expect(undone).toHaveLength(2);
+    history.rewind(SID);
     expect(readConfigText(file)).toBe("v1");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     expect(history.history(SID).savepoint).toBeUndefined();
   });
 
-  test("returns the stack to where edit mode found it, forward through steps ↶ took back below it", () => {
+  test("an undo after cancel steps the change made before edit mode, never a discarded one", () => {
+    const { history, edit, toggle } = rig();
+    edit(); // v1
+    toggle("arrange");
+    edit(); // v2
+    history.rewind(SID);
+    history.undo(SID);
+    expect(readConfigText(file)).toBe("v0");
+    history.redo(SID);
+    expect(readConfigText(file)).toBe("v1");
+    expect(() => history.redo(SID)).toThrow(/nothing to redo/);
+  });
+
+  test("more edits than the stack holds are all put back", () => {
+    const { history, edit, toggle } = rig();
+    toggle("arrange");
+    for (let i = 0; i < 55; i++) edit();
+    expect(history.depth(SID).undo).toBe(50);
+    history.rewind(SID);
+    expect(readConfigText(file)).toBe("v0");
+    expect(history.depth(SID)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+  });
+
+  test("a step ↶ took back below the savepoint is a change cancel puts back, and is past again", () => {
     const { history, edit, toggle } = rig();
     edit(); // v1
     edit(); // v2
     toggle("arrange");
-    history.undo(SID); // v1: below the savepoint
-    edit(); // v3 — a fresh edit made in edit mode, abandoning the redo of v2
-    history.undo(SID); // v1 again
-    history.undo(SID); // v0: below the savepoint
-    expect(history.rewind(SID)).toEqual([]);
+    history.undo(SID); // v1
+    history.undo(SID); // v0
+    expect(history.depth(SID)).toEqual({ undo: 0, redo: 2, sinceEdit: 1 });
+    history.rewind(SID);
+    expect(readConfigText(file)).toBe("v2");
+    expect(history.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
+    history.undo(SID);
     expect(readConfigText(file)).toBe("v1");
-    expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
   });
 
-  test("with nothing done since, undoes nothing", () => {
+  test("a fresh step after an undo below the savepoint does not cost cancel the undone change", () => {
+    const { history, pick, edit, toggle, theme } = rig();
+    pick("nord");
+    toggle("arrange");
+    history.undo(SID); // theme back to unset: below the savepoint
+    edit(); // a layout edit, abandoning the redo of the theme pick
+    expect(theme()).toBeNull();
+    history.rewind(SID);
+    expect(theme()).toBe("nord");
+    expect(readConfigText(file)).toBe("v0");
+  });
+
+  test("with nothing done since, puts back nothing", () => {
     const { history, edit, toggle } = rig();
     edit();
     toggle("arrange");
@@ -193,20 +193,24 @@ describe("rewind steps back to the savepoint", () => {
     expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a file edited by hand since refuses loudly, keeps the hand edit, and releases the savepoint", () => {
-    const { history, edit, toggle } = rig();
+  test("a file edited by hand since refuses before writing anything, and keeps the rest cancellable", () => {
+    const { history, edit, pick, toggle, theme } = rig();
     toggle("arrange");
+    pick("nord");
     edit(); // v1
     fs.writeFileSync(file, "hand edit");
     expect(() => history.rewind(SID)).toThrow(/changed since that edit/);
     expect(readConfigText(file)).toBe("hand edit");
-    expect(history.history(SID).savepoint).toBeUndefined();
-    expect(history.depth(SID).sinceEdit).toBe(0);
+    expect(theme()).toBe("nord");
+    expect(history.depth(SID).sinceEdit).toBe(1);
+    history.rewind(SID);
+    expect(theme()).toBeNull();
+    expect(readConfigText(file)).toBe("hand edit");
   });
 });
 
 describe("the savepoint survives a restart", () => {
-  test("it is saved with the history and read back with it", () => {
+  test("it is saved with the history and read back with it, and cancels there", () => {
     const historyFile = path.join(dir, "history.json");
     const first = rig(fileHistoryStorage(historyFile, () => {}));
     first.edit();
@@ -218,9 +222,11 @@ describe("the savepoint survives a restart", () => {
       fileHistoryStorage(historyFile, () => {}),
     );
     expect(second.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 1 });
+    second.rewind(SID);
+    expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a savepoint past the end of the stack is a wrong-shaped file, dropped whole", () => {
+  test("a savepoint of the wrong shape is a wrong-shaped file, dropped whole", () => {
     const historyFile = path.join(dir, "history.json");
     fs.writeFileSync(
       historyFile,

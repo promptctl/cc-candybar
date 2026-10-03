@@ -22,8 +22,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
-import { DISCLOSURE_CLOSED } from "../config/disclosure";
-import { EDIT_MODE_KEY, PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_REF,
+  PLACEMENT_DRAFT_NS,
+} from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
 import type { DaemonLogger } from "./log";
 import { recordingView, type SessionStateRW } from "./session-state";
@@ -53,24 +56,31 @@ export type Step = readonly Change[];
 export interface SessionHistory {
   readonly past: readonly Step[];
   readonly future: readonly Step[];
-  // [LAW:one-source-of-truth] The savepoint edit mode opens at: how many steps
-  // of `past` were there before it opened, so the changes made since are the
-  // steps above it and cancelling is stepping back to it. Present exactly
-  // while edit mode is open. It is a position in the ORDER of steps, so it
-  // moves only when steps leave the FRONT (`withoutOldestStep`, the cap in
-  // `afterAppend`/`redo`) or when a fresh step abandons the redo stack it may
-  // point into (`afterAppend`). An undo below it leaves it where it is, so
-  // stepping forward again does not turn a step from before edit mode into one
-  // made in it.
-  readonly savepoint?: number;
+  // The savepoint edit mode opened at. Present exactly while edit mode is
+  // open.
+  readonly savepoint?: Savepoint;
+}
+
+// [LAW:types-are-the-program] What cancelling edit mode needs, as one value.
+// `net` is the change since edit mode opened, one Change per target: from the
+// value it held when edit mode opened to the value this history last wrote
+// there — whichever clicks, undos and redos got it there. Cancel is applying
+// `net` backwards, through the same all-or-nothing `apply` a `↶` takes, so it
+// does not depend on how the stack moved meanwhile: the cap trimming steps
+// made in edit mode, a `↶` below where it opened, a fresh step abandoning the
+// redo stack. `at` is where the stack stood (the length of `past`), and is
+// used only to give the stack back its shape after a cancel.
+export interface Savepoint {
+  readonly at: number;
+  readonly net: Step;
 }
 
 // What the settings menu shows: how many steps undo and redo can take.
 export interface HistoryDepth {
   readonly undo: number;
   readonly redo: number;
-  // Steps taken since edit mode opened — what `✓ save N` counts and `↩ cancel`
-  // would discard; 0 when edit mode is closed or nothing has changed in it.
+  // How many targets differ from when edit mode opened — what `↩ cancel`
+  // would put back; 0 when edit mode is closed or nothing differs.
   readonly sinceEdit: number;
 }
 
@@ -159,8 +169,7 @@ export class SettingsHistory {
     return {
       undo: past.length,
       redo: future.length,
-      sinceEdit:
-        savepoint === undefined ? 0 : Math.max(0, past.length - savepoint),
+      sinceEdit: savepoint?.net.length ?? 0,
     };
   }
 
@@ -247,33 +256,27 @@ export class SettingsHistory {
     return step;
   }
 
-  // [LAW:no-silent-failure] Cancel for edit mode: return the stack to where
-  // edit mode found it — step back through everything done since it opened,
-  // and forward again through anything `↶` stepped back below that point — then
-  // forget the savepoint. The discarded steps are NOT left on the redo stack:
-  // a cancel discards, and a `↷` that brought the discarded edits back would
-  // be the undo of a cancel nobody asked for. A step whose target
-  // changed since (another session's click, a hand edit) refuses by name
-  // through `apply`, exactly as `↶` does, and that refusal takes the savepoint
-  // with it: the edits that cannot be stepped back cannot be cancelled either.
-  // Returns the steps it undid, newest first, so the caller can say what it
-  // discarded.
-  rewind(sessionId: string): readonly Step[] {
-    const { savepoint } = this.history(sessionId);
+  // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
+  // changed back to what it held when edit mode opened — one step, landing
+  // whole or not at all (`apply`) — then give the stack back the shape it had:
+  // the steps made since are dropped, steps `↶` took back below the savepoint
+  // are past again, and nothing is left to redo, so neither `↶` nor `↷` can
+  // bring back what was discarded. A target changed since by anything else
+  // refuses by name before anything is written, exactly as `↶` does, and
+  // leaves edit mode's net change. Returns what it put back.
+  rewind(sessionId: string): Step {
+    const history = this.history(sessionId);
+    const { savepoint } = history;
     if (savepoint === undefined) {
       throw new BadVerbArgs(
         "rewind: edit mode has no savepoint — nothing to cancel",
       );
     }
-    const undone: Step[] = [];
-    while (this.history(sessionId).past.length > savepoint) {
-      undone.push(this.undo(sessionId));
-    }
-    while (this.history(sessionId).past.length < savepoint) {
-      this.redo(sessionId);
-    }
-    this.put(sessionId, { past: this.history(sessionId).past, future: [] });
-    return undone;
+    this.apply(sessionId, savepoint.net, "before", "rewind", {
+      past: pastAt(history, savepoint.at),
+      future: [],
+    });
+    return savepoint.net;
   }
 
   redo(sessionId: string): Step {
@@ -282,15 +285,13 @@ export class SettingsHistory {
     if (step === undefined) {
       throw new BadVerbArgs("redo: nothing to redo");
     }
+    const history = this.history(sessionId);
     const all = [...past, step];
     const kept = capped(all);
     this.apply(sessionId, step, "after", "redo", {
       past: kept,
       future: future.slice(0, -1),
-      ...savepointDroppedBy(
-        this.history(sessionId).savepoint,
-        all.length - kept.length,
-      ),
+      ...savepointAfter(history.savepoint, all.length - kept.length, step),
     });
     return step;
   }
@@ -305,18 +306,25 @@ export class SettingsHistory {
     sessionId: string,
     step: Step,
     to: "before" | "after",
-    verb: "undo" | "redo",
+    verb: "undo" | "redo" | "rewind",
     then: SessionHistory,
   ): void {
     const from = to === "before" ? "after" : "before";
     const stale = step.filter((c) => this.read(sessionId, c) !== c[from]);
     if (stale.length > 0) {
       const gone = new Set(stale.map(identity));
-      // The savepoint is released with the steps it counted: which of them
-      // survive is no longer a fact it can state.
+      const { past, future, savepoint } = this.history(sessionId);
+      // Edit mode's net change forgets those targets too: putting them back
+      // would overwrite whatever changed them.
       this.put(sessionId, {
-        past: without(this.history(sessionId).past, gone),
-        future: without(this.history(sessionId).future, gone),
+        past: without(past, gone),
+        future: without(future, gone),
+        ...(savepoint !== undefined && {
+          savepoint: {
+            at: savepoint.at,
+            net: savepoint.net.filter((c) => !gone.has(identity(c))),
+          },
+        }),
       });
       throw new BadVerbArgs(
         `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
@@ -384,8 +392,8 @@ export class SettingsHistory {
 
 function weight(state: ReadonlyMap<string, SessionHistory>): number {
   let bytes = 0;
-  for (const { past, future } of state.values()) {
-    for (const step of [...past, ...future]) {
+  for (const { past, future, savepoint } of state.values()) {
+    for (const step of [...past, ...future, savepoint?.net ?? []]) {
       for (const c of step) {
         bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
       }
@@ -400,8 +408,8 @@ function withoutOldestStep({
   savepoint,
 }: SessionHistory): SessionHistory {
   return past.length > 0
-    ? { past: past.slice(1), future, ...savepointDroppedBy(savepoint, 1) }
-    : { past, future: future.slice(1), ...savepointDroppedBy(savepoint, 0) };
+    ? { past: past.slice(1), future, ...savepointAfter(savepoint, 1, []) }
+    : { past, future: future.slice(1), ...savepointAfter(savepoint, 0, []) };
 }
 
 function capped(steps: readonly Step[]): readonly Step[] {
@@ -416,35 +424,64 @@ interface EditToggle {
   readonly after: string | null;
 }
 
-// [LAW:types-are-the-program] Open is "anything but closed or absent", the
-// same reading every disclosure gate gives its key.
+// [LAW:one-source-of-truth] Open is the member edit mode's own disclosure ref
+// names — the reading every edit-mode gate gives the key.
 const isOpen = (value: string | null): boolean =>
-  value !== null && value !== DISCLOSURE_CLOSED;
+  value === EDIT_MODE_REF.member;
 
-// `dropped` steps left the front of `past`, so a savepoint counted from the
-// front moves down with them, never below the front itself.
-function savepointDroppedBy(
-  savepoint: number | undefined,
+// The savepoint after a step landed and `dropped` steps left the front of
+// `past`: its position moves down with them (never below the front), and the
+// step joins its net change.
+function savepointAfter(
+  savepoint: Savepoint | undefined,
   dropped: number,
-): { readonly savepoint?: number } {
+  step: Step,
+): { readonly savepoint?: Savepoint } {
   return savepoint === undefined
     ? {}
-    : { savepoint: Math.max(0, savepoint - dropped) };
+    : {
+        savepoint: {
+          at: Math.max(0, savepoint.at - dropped),
+          net: withNet(savepoint.net, step),
+        },
+      };
 }
 
+// [LAW:dataflow-not-control-flow] A target's net change keeps the value it
+// held when edit mode opened and takes each later value; one that is back
+// where it started differs from nothing, so it leaves.
+function withNet(net: Step, step: Step): Step {
+  const byTarget = new Map(net.map((c) => [identity(c), c] as const));
+  for (const c of step) {
+    const first = byTarget.get(identity(c));
+    byTarget.set(
+      identity(c),
+      first === undefined ? c : { ...first, after: c.after },
+    );
+  }
+  return [...byTarget.values()].filter((c) => c.before !== c.after);
+}
+
+// A step applied backwards is the change from its `after` to its `before`.
+const reversed = (step: Step): Step =>
+  step.map((c) => ({ ...c, before: c.after, after: c.before }));
+
 // A fresh step abandons whatever was undone, so a savepoint that pointed into
-// the undone steps now points at the top of what is left: the step is above it.
+// the undone steps now points at the top of what is left.
 function afterAppend(history: SessionHistory, step: Step): SessionHistory {
   const all = [...history.past, step];
   const past = capped(all);
-  const reachable =
-    history.savepoint === undefined
-      ? undefined
-      : Math.min(history.savepoint, history.past.length);
   return {
     past,
     future: [],
-    ...savepointDroppedBy(reachable, all.length - past.length),
+    ...savepointAfter(
+      history.savepoint && {
+        at: Math.min(history.savepoint.at, history.past.length),
+        net: history.savepoint.net,
+      },
+      all.length - past.length,
+      step,
+    ),
   };
 }
 
@@ -452,8 +489,17 @@ function afterUndo(history: SessionHistory, step: Step): SessionHistory {
   return {
     past: history.past.slice(0, -1),
     future: capped([...history.future, step]),
-    ...(history.savepoint !== undefined && { savepoint: history.savepoint }),
+    ...savepointAfter(history.savepoint, 0, reversed(step)),
   };
+}
+
+// The stack as it stood at `at`: the steps made since leave, and steps `↶`
+// took back below it return to `past` — as many as the redo stack still holds.
+function pastAt(history: SessionHistory, at: number): readonly Step[] {
+  const { past, future } = history;
+  if (past.length >= at) return past.slice(0, at);
+  const back = Math.min(at - past.length, future.length);
+  return [...past, ...future.slice(future.length - back).reverse()];
 }
 
 // Opening takes the savepoint at the stack as it stands; closing releases it.
@@ -462,13 +508,9 @@ function withToggle(
   toggle: EditToggle,
 ): SessionHistory {
   if (isOpen(toggle.after) && !isOpen(toggle.before)) {
-    return { ...history, savepoint: history.past.length };
+    return { ...history, savepoint: { at: history.past.length, net: [] } };
   }
-  if (
-    !isOpen(toggle.after) &&
-    isOpen(toggle.before) &&
-    history.savepoint !== undefined
-  ) {
+  if (!isOpen(toggle.after) && isOpen(toggle.before)) {
     const { past, future } = history;
     return { past, future };
   }
@@ -512,16 +554,24 @@ function isSteps(v: unknown): v is Step[] {
   );
 }
 
+function isSavepoint(v: unknown): v is Savepoint {
+  if (v === null || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    Number.isInteger(o.at) &&
+    (o.at as number) >= 0 &&
+    Array.isArray(o.net) &&
+    o.net.every(isChange)
+  );
+}
+
 function isSessionHistory(v: unknown): v is SessionHistory {
   if (v === null || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   return (
     isSteps(o.past) &&
     isSteps(o.future) &&
-    (o.savepoint === undefined ||
-      (Number.isInteger(o.savepoint) &&
-        (o.savepoint as number) >= 0 &&
-        (o.savepoint as number) <= o.past.length + o.future.length))
+    (o.savepoint === undefined || isSavepoint(o.savepoint))
   );
 }
 

@@ -908,14 +908,14 @@ describe("edit mode's save and cancel", () => {
   const topRow = (rt: ReturnType<typeof buildEditRuntime>): string =>
     stripAnsi(rt.render()).split("\n")[0]!;
 
-  test("the row reads ✓ done with nothing changed, and ✓ save N ↩ cancel after a change", () => {
+  test("the row reads ✓ done with nothing changed, and ✓ save ↩ cancel after a change", () => {
     const rt = buildEditRuntime(BASE);
     open(rt);
     expect(topRow(rt)).toContain("✓ done");
     expect(topRow(rt)).not.toContain("cancel");
     expect(topRow(rt)).toContain("☐ live");
     removeGit(rt);
-    expect(topRow(rt)).toContain("✓ save 1");
+    expect(topRow(rt)).toContain("✓ save");
     expect(topRow(rt)).toContain("↩ cancel");
     // The live toggle left the bar's last row for the edit row, so the `(?)`
     // is alone after the content.
@@ -991,7 +991,7 @@ describe("edit mode's save and cancel", () => {
     rt.dispose();
   });
 
-  test("rewind says what it discarded, and a session with no savepoint is refused loudly", () => {
+  test("rewind says what it put back, and a session with no savepoint is refused loudly", () => {
     const rt = buildEditRuntime(BASE);
     expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
     open(rt);
@@ -1002,7 +1002,7 @@ describe("edit mode's save and cancel", () => {
       dlog: (_level, message) => logs.push(message),
     });
     expect(logs.join("\n")).toMatch(
-      /rewind: discarded 1 step\(s\) since edit mode opened: .*\(session=s1\)/,
+      /rewind: put back .* as edit mode found it \(session=s1\)/,
     );
     rt.dispose();
   });

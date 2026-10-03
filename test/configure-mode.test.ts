@@ -350,6 +350,28 @@ describe("configure mode: one placement's settings at a time", () => {
     rt.dispose();
   });
 
+  test("edit mode's ✓ save writes the configured placement's picks, then leaves", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    configurePlacement(rt.sessionState, SID, "default", "vcs");
+    rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1"));
+    const save = linkUrls(rt.render()).find((u) => {
+      const effects = effectsOf(u);
+      return (
+        effects.some((e) => e.verb === VERB_SAVE) &&
+        effects.some(
+          (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+        )
+      );
+    });
+    expect(save).toBeDefined();
+    rt.click(save!);
+    expect(durable.text()).toContain(`{ seg: "vcs", settings: { depth: 3 } }`);
+    expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
+    expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    rt.dispose();
+  });
+
   test("✎ done leaves edit mode and closes the settings left open", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);

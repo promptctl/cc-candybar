@@ -90,7 +90,7 @@ declares exactly one value source:
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
-| `{ rewind: true }` | step this session's settings history back to where edit mode opened, undoing everything done since and leaving nothing to redo — edit mode's `↩ cancel`; refused when edit mode is not open, or when a file it changed was edited since |
+| `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`; refused, with nothing written, when edit mode is not open or a file it changed was edited since |
 | `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
@@ -944,15 +944,15 @@ synthesizes:
   hidden, or rendering nothing — then has no `⊖` either, so find it in the
   names view (a failing segment keeps its `⊖` and `⚙️` on its `⚠` cell).
 - A row above the bar, led by the ways out, so they are found without reopening
-  the menu edit mode was entered from: `✓ save N` (`✓ done` while nothing has
-  changed) keeps what was done and leaves, `↩ cancel` (shown only while something
-  has changed) discards it and leaves, `↺ reset layout` (only while the config
-  file authors this preset's layout) restores the bundled layout, and `☐ live`
-  is the view toggle. Every layout click is written to the config file as it is
-  made and is one step of the session's undo history; opening edit mode marks
-  where that history stood, `N` counts the steps since, and cancel steps back to
-  the mark. Changes made to a placement's settings in configure mode are steps
-  too, so cancel discards them; `💾 save` still writes them.
+  the menu edit mode was entered from: `✓ save` (`✓ done` while there is
+  nothing to keep) writes this session's unsaved settings — a placement's
+  configure-mode values among them — and leaves, `↩ cancel` (shown only while
+  something differs from when edit mode opened) puts everything back and
+  leaves, `↺ reset layout` (only while the config file authors this preset's
+  layout) restores the bundled layout, and `☐ live` is the view toggle. Every
+  layout click is written to the config file as it is made and is one step of
+  the session's undo history; opening edit mode records what each thing it
+  goes on to change held then, and cancel puts those values back in one step.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
 its `✎ arrange` entry fires the same switch (through a `do` that also closes the

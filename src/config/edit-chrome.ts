@@ -85,19 +85,23 @@ import {
 export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
-// Leaving edit mode, kept: `✓ save N` while changes were made in it, `✓ done`
-// while none were. The two read one action — the changes are written as they
-// are made, so keeping them is only leaving.
+// Leaving edit mode, kept: `✓ save` while there is something to keep, `✓ done`
+// while there is not. The two are one action: write the session's unsaved
+// settings (a placement's configure-mode picks among them — the layout edits
+// were written as they were made), then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
-// `↩ cancel`: step the session's history back to where edit mode opened, then
-// leave (src/daemon/settings-history.ts `rewind`).
+const EDIT_SAVE_ACTION = `${EDIT_NS}save`;
+// `↩ cancel`: put back everything changed since edit mode opened, then leave
+// (src/daemon/settings-history.ts `rewind`).
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
 const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
-// How many changes have been made since edit mode opened: the daemon's own
-// count (HistoryDepth.sinceEdit), read by the save cell's label and by the
-// cancel cell's gate. A ref, never a second counter.
+// How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
+// and how many settings are unsaved: the daemon's own counts, read by the
+// cells' labels and gates. Refs, never second counters.
 const EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+const EDIT_UNSAVED_VAR = `${EDIT_NS}unsaved`;
 const CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+const TO_KEEP = `(or ${CHANGED} (gt .${EDIT_UNSAVED_VAR} 0))`;
 export const REMOVE_GLYPH = "⊖";
 export const ADD_GLYPH = "⊕";
 export const CONFIGURE_GLYPH = "⚙️";
@@ -615,7 +619,6 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
 // the trigger rides, so this function places ONE cell; see withTrailingCell.
 function wrapWithPresetRows(
   splicedRoot: LayoutNode,
-  presetName: string,
   presetIdent: string,
   rootKey: string,
   artifacts: ChromeArtifacts,
@@ -747,7 +750,6 @@ function spliceEditChromeForPreset(
   );
   return wrapWithPresetRows(
     spliced,
-    presetName,
     ctx.presetIdent,
     ctx.rootKey,
     artifacts,
@@ -817,12 +819,21 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     type: "number",
     default: 0,
   };
+  artifacts.variables[EDIT_UNSAVED_VAR] = {
+    kind: "input",
+    path: "unsaved",
+    type: "number",
+    default: 0,
+  };
+  // [LAW:one-type-per-behavior] Saving is the one `save` the settings menu's
+  // `💾 save` fires, so the two cannot disagree about what saving writes.
+  artifacts.actions[EDIT_SAVE_ACTION] = { save: true };
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [...EDIT_SWITCH],
+    do: [EDIT_SAVE_ACTION, ...EDIT_SWITCH],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:
-      `{{ if ${CHANGED} }}{{ action "${EDIT_DONE_SEG}" (printf "✓ save %d" .${EDIT_CHANGES_VAR}) }}` +
+      `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}` +
       `{{ else }}{{ action "${EDIT_DONE_SEG}" "✓ done" }}{{ end }}`,
     when: EDIT_MODE_GATE,
   };
