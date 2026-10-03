@@ -576,11 +576,11 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
 // session renders from reloads it before the click answers, as save does; one
 // that wrote no such file rebuilds nothing (a reload restarts every source).
 // Another session's file reaches its render through the fs watcher.
-function reloadIfWritten(
-  ctx: VerbContext,
-  origin: RenderOrigin,
-  step: Step,
-): void {
+function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
+  // A session with no recorded render has no cache entry to draw stale.
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  if (raw === null) return;
+  const origin = parseRenderOrigin(raw);
   const file = originConfigFile(origin);
   if (step.some((c) => c.kind === "file" && c.file === file)) {
     ctx.reloadConfig(origin);
@@ -962,12 +962,11 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
 const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const origin = sessionOrigin(ctx, sid);
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
-  reloadIfWritten(ctx, origin, step);
+  reloadIfWritten(ctx, sid, step);
   ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -988,11 +987,10 @@ const back: VerbHandler = (value, ctx) => {
 // other target was put back, naming the target it kept.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const origin = sessionOrigin(ctx, sid);
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
-  reloadIfWritten(ctx, origin, restored);
+  reloadIfWritten(ctx, sid, restored);
   ctx.dlog(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -1003,10 +1001,9 @@ const rewind: VerbHandler = (value, ctx) => {
 const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const origin = sessionOrigin(ctx, sid);
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
-  reloadIfWritten(ctx, origin, step);
+  reloadIfWritten(ctx, sid, step);
   ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
