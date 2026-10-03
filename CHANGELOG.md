@@ -1,3 +1,10 @@
+## [1.100.1](https://github.com/promptctl/cc-candybar/compare/v1.100.0...v1.100.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **edit:** lead each placement with a red ✖ and trail it with ⚙️ ([#288](https://github.com/promptctl/cc-candybar/issues/288)) ([aefb0ae](https://github.com/promptctl/cc-candybar/commit/aefb0aef061d20ff01e55981772cb550db19eb55))
+
 # [1.100.0](https://github.com/promptctl/cc-candybar/compare/v1.99.0...v1.100.0) (2026-10-02)
 
 
