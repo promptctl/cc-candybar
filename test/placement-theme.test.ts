@@ -11,6 +11,7 @@
 //     palette picking them would put on the placement, and save writes the
 //     pick into the placement.
 
+import { configurePlacement } from "./helpers/configure";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -250,7 +251,7 @@ describe("configure mode picks a placement's theme", () => {
   test("a carousel pick recolours that placement alone, its options paint in what they apply, and save writes it", () => {
     durable.write(TWO);
     const rt = buildRuntime(TWO);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "tag"));
+    configurePlacement(rt.sessionState, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
     const out = rt.render(BAR_A);
     // Every cell of the carousel applies the option it names, gated by the
@@ -312,7 +313,7 @@ describe("configure mode over a placement several presets share", () => {
       root: { v: [{ h: ['tag'] }] },
       presets: { zzz: { root: { v: [{ h: ['tag'] }] } } },
     }`);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "tag"));
+    configurePlacement(rt.sessionState, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
     const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
       effectsOf(u).some((e) => e.args[1] === key),

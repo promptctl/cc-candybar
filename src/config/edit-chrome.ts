@@ -48,7 +48,7 @@ import { ident } from "./ident.js";
 import {
   configureMember,
   EDIT_MODE_GATE,
-  EDIT_MODE_KEY,
+  EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
   EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
@@ -85,6 +85,7 @@ export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
+const EDIT_UNCONFIGURE = `${EDIT_NS}unconfigure`;
 export const REMOVE_GLYPH = "✖";
 export const ADD_GLYPH = "✚";
 export const CONFIGURE_GLYPH = "⚙️";
@@ -93,7 +94,10 @@ const EDIT_LIVE_REF: DisclosureRef = {
   key: EDIT_LIVE_KEY,
   member: "open",
 };
-const NAMES_VIEW = `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)})`;
+// Configuring a placement shows the live output too: its settings change what
+// it draws, and a name cannot show that.
+const NOTHING_CONFIGURED = `(eq .${EDIT_CONFIGURE_KEY} "${DISCLOSURE_CLOSED}")`;
+const NAMES_VIEW = `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) ${NOTHING_CONFIGURED}`;
 const LABEL_GATE = `{{ ${NAMES_VIEW} }}`;
 
 // [LAW:dataflow-not-control-flow] The names view decides a gate outright;
@@ -223,22 +227,24 @@ function inArrangeMode(term: string): string {
 // container holding it. A placement hidden right now — by the data, by an
 // enclosing row's gate, or by the very setting just toggled — would otherwise
 // take the controls that could change that with it. The label also names
-// which placement they configure. A fold over the configure refs a node
-// holds: none leaves `when` exactly as it was.
+// which placement they configure. Configuring is a level inside arranging,
+// so it holds only while arranging does: a placement left configured when edit
+// mode closed shows nothing. A fold over the configure refs a node holds: none
+// leaves `when` exactly as it was.
 function shownWhile(refs: readonly DisclosureRef[], when: string): string {
   return refs.reduce(
     (inner, ref) =>
-      `{{ if ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+      `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
     when,
   );
 }
 
 // The configure refs a spliced subtree holds: every label's disclosure over
-// edit mode's key.
+// the configure key.
 function configureRefsIn(nodes: readonly LayoutNode[]): DisclosureRef[] {
   return nodes.flatMap((node) =>
     [...walkNodes(node)].flatMap((n) =>
-      n.kind === "segment" && n.opens?.ref.key === EDIT_MODE_KEY
+      n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY
         ? [n.opens.ref]
         : [],
     ),
@@ -282,7 +288,7 @@ function configureParts(
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.presetIdent, id);
   const enter = `${prefix}.configure.${posIdent}`;
-  ctx.artifacts.actions[enter] = { set: EDIT_MODE_KEY, to: member };
+  ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
@@ -312,7 +318,7 @@ function configureParts(
   });
   return {
     term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    ref: { variable: EDIT_MODE_KEY, key: EDIT_MODE_KEY, member },
+    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
     // One control per row: the theme carousel fills its row with the
     // neighbours that fit, as the settings menu's own carousels do.
     body: { kind: "container", direction: "vertical", children: controls },
@@ -755,10 +761,26 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     direction: "horizontal",
     children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
   };
+  // Which placement's settings hang open inside arranging — none to begin with.
+  // Its ✕ writes it closed through the disclosure's own close, so the closed
+  // value is gated by the action that leaving edit mode fires as well.
+  artifacts.variables[EDIT_CONFIGURE_KEY] = disclosureStateVar(
+    EDIT_CONFIGURE_KEY,
+    DISCLOSURE_CLOSED,
+  );
+  artifacts.actions[EDIT_UNCONFIGURE] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: DISCLOSURE_CLOSED,
+  };
   // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
-  // `✎ arrange` fires, so the two cannot disagree about what "edit mode" is.
+  // `✎ arrange` fires, so the two cannot disagree about what "edit mode" is,
+  // and the settings left open close with it, so arranging next time starts
+  // with none.
+  artifacts.actions[EDIT_DONE_SEG] = {
+    do: [EDIT_TOGGLE_ACTION, EDIT_UNCONFIGURE],
+  };
   artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ done" }}`,
+    template: `{{ action "${EDIT_DONE_SEG}" "✎ done" }}`,
     when: EDIT_MODE_GATE,
   };
   const lead: LayoutNode = { kind: "segment", name: EDIT_DONE_SEG };

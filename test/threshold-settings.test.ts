@@ -10,6 +10,7 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
+import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -121,7 +122,7 @@ const bgSgr = (role: string): string => {
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", () => {
     const rt = buildRuntime(BLOCK_ONLY, 45);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "block"));
+    configurePlacement(rt.sessionState, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
     expect(rt.render()).not.toContain(bgSgr("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
@@ -133,7 +134,7 @@ describe("block's thresholds are settings configure mode steps", () => {
 
   test("a step that would drop errorAt below warnAt is refused, naming both", () => {
     const rt = buildRuntime(BLOCK_ONLY, 10);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "block"));
+    configurePlacement(rt.sessionState, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
     for (let i = 0; i < 6; i++) rt.click(rt.stepper("block", "errorAt", -5));
     expect(rt.pick("block", "errorAt")).toBe("50");
@@ -175,7 +176,7 @@ describe("block's thresholds are settings configure mode steps", () => {
 describe("a stride wider than 1 reaches both ends", () => {
   test("a step past a bound stops on it; only a step from the bound wraps", () => {
     const rt = buildRuntime(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, configureMember("default", "session"));
+    configurePlacement(rt.sessionState, SID, "default", "session");
     const budget = placementDraftKey("default", "session", "budget");
     rt.sessionState.set(SID, budget, "9998");
     rt.click(rt.stepper("session", "budget", 5));

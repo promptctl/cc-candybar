@@ -43,12 +43,14 @@ import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 // affordance's `when` gate) and a hand-authored trigger segment read/write
 // these same names — one declaration, no drift.
 //
-// [LAW:types-are-the-program] ONE key holds which edit mode is on
-// (brandon-segment-settings-i4n.g64): `closed`, `arrange` (the +/- chrome), or
-// `configure:<id>` (one placement's settings). Configuring two placements at
-// once, or configuring while arranging, is a second value this key would have
-// to hold at the same time — unrepresentable, with nothing to check.
+// [LAW:types-are-the-program] ONE key holds whether edit mode is on: `closed`
+// or `arrange` (the +/- chrome). Configuring a placement is a level INSIDE
+// arranging, so it is a second key, `edit.configure`, holding `closed` or the
+// one placement whose settings hang open — configuring two at once is a second
+// value that key would have to hold, unrepresentable, and closing the settings
+// leaves arranging exactly as it was.
 export const EDIT_MODE_KEY = "edit.mode";
+export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 export const EDIT_MODE_ARRANGE = "arrange";
 
@@ -65,7 +67,7 @@ export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 // `[A-Za-z0-9_]`, and the loader refuses one in an id), so the member names
 // exactly one placement.
 export function configureMember(presetIdent: string, id: string): string {
-  return `configure:${presetIdent}:${id}`;
+  return `${presetIdent}:${id}`;
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
