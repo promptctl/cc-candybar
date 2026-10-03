@@ -505,7 +505,7 @@ const segmentType: NodeType<"segment"> = {
     const { seg, compiled: segCompiled } = found;
     if (!ctx.visible) return [];
     // [LAW:one-source-of-truth] Every template of THIS placement — its
-    // segment's `when`, `bg:`, `fg:`, body, and edit mode's trail — reads
+    // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
     // this placement's settings; nothing outside the placement does.
     const scope = placementScope(ctx.scope, node.settings);
 

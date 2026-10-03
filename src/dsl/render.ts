@@ -552,7 +552,7 @@ export function registerDslConfig(
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
   // A node's templates recur across many nodes — edit mode gates every chrome
   // cell and every placed segment in every preset by a handful of predicates,
-  // and draws one segment's configure lead and remove trail on both its label and its content —
+  // and draws one segment's remove lead and configure trail on both its label and its content —
   // so each distinct source is parsed once and its template shared. A parsed
   // template holds no evaluation state, so sharing one is sharing its AST.
   const nodeTemplates = new Map<string, Template<RichText>>();

@@ -258,7 +258,7 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
-// What configure mode adds to one placement: the `⚙` that
+// What configure mode adds to one placement: the `⚙️` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
 // through. The body is a disclosure over edit mode's one key at this
@@ -454,7 +454,7 @@ interface SpliceCtx {
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
 // segment child carries its `-` as its lead and `⚙️` as its trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
-// `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
+// `+` (so N consecutive segments read `+ [-seg1⚙️] + [-seg2⚙️] + [-seg3⚙️] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
 // untouched — but the disclosure BODY a segment hangs (a group's children,

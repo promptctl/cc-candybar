@@ -917,13 +917,13 @@ synthesizes:
   `{{ menu }}`, ranging every declared segment — one already on the bar is
   added as a second placement with an id of its own) that inserts after it,
   plus one `✚` leading each run — so N segments
-  in a row read `✚ [✖ seg1 ⚙️] ✚ [✖ seg2 ⚙️] ✚ … [✖ segN ⚙️] ✚`. Every affordance is gated on edit
+  in a row read `✚ [✖ seg1⚙️] ✚ [✖ seg2⚙️] ✚ … [✖ segN⚙️] ✚`. Every affordance is gated on edit
   mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - Every placement also carries a `⚙️` closing its cell — every placement has
   at least the `theme` setting. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
-  hides every `✚`/`🚫` and hangs one control per setting below that
+  hides every `✚`/`✖` and hangs one control per setting below that
   placement's name — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
@@ -933,7 +933,7 @@ synthesizes:
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
   `(?)`) puts the live output back; a segment with no cell right now —
-  hidden, rendering nothing, or failing — then has no `🚫` either, so find
+  hidden, rendering nothing, or failing — then has no `✖` either, so find
   it in the names view.
 - A row above the bar, led by `✎ done`, which fires `edit.toggle` — the way
   out, without reopening the menu edit mode was entered from.
