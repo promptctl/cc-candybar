@@ -23,8 +23,7 @@
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
 // as data). The generic engine never imports this module.
 
-import { RichText } from "@promptctl/rich-js";
-import type { Style } from "@promptctl/rich-js";
+import { RichText, Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -37,6 +36,8 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
+import { sanitizeText } from "./diagnostic-text.js";
+import { fitCells, libraryLayout, type LibraryPageLayout } from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   requireActiveSegment,
@@ -133,6 +134,25 @@ export function paginate(
   }
   if (cur.length > 0) pages.push(cur);
   return pages;
+}
+
+// ✕ is always present; ←/→ appear only on a multi-page grid. Reserve arrow
+// space only after a first pass proves it overflows — reserving it
+// unconditionally is self-fulfilling (a run that fits with just ✕ could be
+// forced to split, making arrows appear unnecessarily). At an infinite width
+// (the wrap case) paginate yields one page, so neither pass splits.
+function gridPages(
+  widths: readonly number[],
+  available: number,
+): readonly LibraryPageLayout[] {
+  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
+  const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
+  const firstPass = paginate(widths, available, closeReserve);
+  return (
+    firstPass.length > 1
+      ? paginate(widths, available, closeReserve + arrowReserve)
+      : firstPass
+  ).map((cells) => [{ label: "", indices: cells }]);
 }
 
 // [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
@@ -253,7 +273,7 @@ export function renderPicker(
   paged: boolean,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
-): RichText {
+): readonly RichText[] {
   const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the presented action above (its
   // options, its current-mark); the CLICK is realized from the declaration
@@ -271,22 +291,24 @@ export function renderPicker(
   // false below, structurally rather than by accident.
   const current =
     "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
-  const widths = apply.options.map(cellWidth);
 
-  // ✕ is always present; ←/→ appear only on a multi-page menu. Reserve arrow
-  // space only after a first pass proves it overflows — reserving it
-  // unconditionally is self-fulfilling (a run that fits with just ✕ could be
-  // forced to split, making arrows appear unnecessarily).
-  // In wrap mode (available = Infinity) paginate yields one page, so neither
-  // pass splits.
+  // In wrap mode (available = Infinity) everything stands on one page.
   const available = paged ? rowBudget(runtime) : Infinity;
-  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
-  const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
-  const firstPass = paginate(widths, available, closeReserve);
-  const pages =
-    firstPass.length > 1
-      ? paginate(widths, available, closeReserve + arrowReserve)
-      : firstPass;
+
+  // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
+  // domain's one section is the run of cells `paginate` fits to the width, and
+  // a catalogue domain's (`library`, src/config/option-domain.ts) are its
+  // groups. The cursor, the ←/→/✕ affordances and the click are the same code
+  // either way — only what a page is made of differs, and that is data. The
+  // catalogue's entries are taken once, here, and read by layout and rows.
+  const catalogue = apply.library && {
+    groups: apply.library.groups,
+    entries: apply.options.map(apply.library.entry),
+  };
+  const pages: readonly LibraryPageLayout[] =
+    catalogue !== undefined
+      ? libraryLayout(catalogue.entries, catalogue.groups, paged)
+      : gridPages(apply.options.map(cellWidth), available);
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
   // (the key was never written) — parse it at this trust boundary; an out-of-range
@@ -296,7 +318,7 @@ export function renderPicker(
   const pageIdx = Number.isInteger(rawPage)
     ? Math.max(0, Math.min(rawPage, pages.length - 1))
     : 0;
-  const pageCells = pages[pageIdx] ?? [];
+  const pageSections = pages[pageIdx] ?? [];
 
   const pageUrl = (value: number): string =>
     effectsUrl([
@@ -326,30 +348,77 @@ export function renderPicker(
       ...closeEffects,
     ]);
 
-  const frags: RichText[] = [
-    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
-  ];
-  if (pageIdx > 0) {
-    frags.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
-  }
   // [LAW:dataflow-not-control-flow] An item is placed by its index in the
   // WHOLE option domain, not on its page: paging changes which cells show,
   // never what colour an option is.
-  for (const i of pageCells) {
+  const optionCell = (i: number, text: string): RichText => {
     const option = apply.options[i]!;
-    frags.push(
-      linkFragment(
-        option,
-        optionUrl(option),
-        option === current,
-        itemStyle({ index: i, count: apply.options.length }, option),
-      ),
+    return linkFragment(
+      text,
+      optionUrl(option),
+      option === current,
+      itemStyle({ index: i, count: apply.options.length }, option),
     );
+  };
+  const nav: RichText[] = [
+    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
+  ];
+  if (pageIdx > 0) {
+    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
-  if (pageIdx < pages.length - 1) {
-    frags.push(linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false));
+  const next =
+    pageIdx < pages.length - 1
+      ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)]
+      : [];
+
+  if (catalogue === undefined) {
+    const indices = pageSections.flatMap((section) => section.indices);
+    return [
+      assemble(
+        [
+          ...nav,
+          ...indices.map((i) => optionCell(i, apply.options[i]!)),
+          ...next,
+        ],
+        paged,
+      ),
+    ];
   }
-  return assemble(frags, paged);
+
+  // A library page: the nav row names where the reader is — the page's group
+  // whenever it holds one, and its place when there are several pages — then
+  // one row per member, name and description, each row the member's whole
+  // click target.
+  const bold = new Style({ bold: true });
+  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
+  const where =
+    pageSections.length === 1
+      ? [new RichText(`${pageSections[0]!.label}${position}`, { style: bold })]
+      : [];
+  const lines: RichText[] = [assemble([...nav, ...where, ...next], paged)];
+  for (const section of pageSections) {
+    if (pageSections.length > 1) {
+      lines.push(
+        assemble([new RichText(section.label, { style: bold })], paged),
+      );
+    }
+    const nameWidth = Math.max(
+      ...section.indices.map((i) => cellWidth(apply.options[i]!)),
+    );
+    for (const i of section.indices) {
+      const option = apply.options[i]!;
+      // An authored description is free text and a row is one cell: control
+      // characters and line breaks fold to single spaces, as a diagnostic's do.
+      const authored = catalogue.entries[i]!.description;
+      const description =
+        authored === undefined ? undefined : sanitizeText(authored);
+      const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
+      const row =
+        description === undefined ? option : `${option}${gap}${description}`;
+      lines.push(assemble([optionCell(i, fitCells(row, available))], paged));
+    }
+  }
+  return lines;
 }
 
 // [LAW:dataflow-not-control-flow] One func; the two action NAMES select which
@@ -394,7 +463,17 @@ export function pickerFuncs(
           "set-int",
           "an int action ({ set, int: true })",
         );
-        return renderPicker(
+        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
+        // one value, so it cannot carry a library's several rows; a menu body
+        // is where a catalogue domain lays out. Refused by what the domain
+        // declares, before anything renders.
+        const apply = requireOptionKind(runtime, applyName, "picker");
+        if (apply.library !== undefined) {
+          throw new Error(
+            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`,
+          );
+        }
+        const [line] = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
           [[page.key, "-1"]],
@@ -408,10 +487,11 @@ export function pickerFuncs(
             requireActiveSegment(activeSegment, "{{ picker }}"),
             placedBy(undefined),
             runtime,
-            requireOptionKind(runtime, applyName, "picker").paletteOf,
+            apply.paletteOf,
             activeSegment.drawnAt(),
           ),
         );
+        return line!;
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },

@@ -661,26 +661,31 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // IN ADDITION to the structural padding.
   segments: {
     directory: {
+      group: "location",
       description:
         "The current directory, shortened fish-style — `~` under home, project-relative inside the project.",
       template: DIR_TEMPLATE,
     },
     model: {
+      group: "model-context",
       description: "The active model's display name.",
       template: "✱ {{ formatModelName .model.display_name }}",
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
+      group: "session-tools",
       description: "The session id, truncated to 8 characters.",
       template: "⌗{{ trunc 8 .session.id }}",
       when: '{{ ne .session.id "" }}',
     },
     version: {
+      group: "model-context",
       description: "The Claude Code version reported in the hook payload.",
       template: "◈ v{{ .version }}",
       when: '{{ ne .version "" }}',
     },
     tmux: {
+      group: "location",
       description: "The tmux session name; hidden when not inside tmux.",
       template: 'tmux:{{ .tmux.session | default "none" }}',
       when: '{{ ne .tmux.session "" }}',
@@ -706,6 +711,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
     // rather than a blank that reads as a rendering bug ([LAW:no-silent-failure]).
     host: {
+      group: "location",
       description: "user@host on a warning background, shown only over SSH.",
       template:
         '⇄ {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
@@ -726,6 +732,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // structural text sits a fixed distance from THIS cell whatever theme or
     // style is in effect, and the eye lands on the painted facts first.
     gitaculous: {
+      group: "git",
       description:
         "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact — repo, in-progress operation, sha, upstream ±, stash count, time since the last commit.",
       template:
@@ -759,6 +766,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // renders a distinct ⚠ marker so an outage is not mistaken for "no PR";
     // no PR (both empty) leaves the `when` gate false and the segment absent.
     gitPr: {
+      group: "git",
       description:
         "The pull request open for this branch, as a link; `⚠ PR` when the forge lookup failed.",
       // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
@@ -770,12 +778,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
     toolbar: {
+      group: "session-tools",
       description:
         "Quick actions: copy the session id, and open the project, transcript or repo.",
       template: quickActions("").template,
     },
     // OPT-IN, like `toolbar`: the settings menu carries its own instance.
     commands: {
+      group: "session-tools",
       description:
         "Type /compact, /model or /clear into this session; /clear asks for a second click.",
       template: COMMAND_TRAY.template,
@@ -792,11 +802,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // theme the bar wears), so the two can never disagree about the current
     // theme. Nothing here a user config could not author itself.
     themeSwitcher: {
+      group: "session-tools",
       description:
         "`◀ <theme> ▶`: the theme the bar is wearing; ◀ and ▶ switch this session to the previous or next theme, wrapping at the ends.",
       template: '{{ carousel "stepTheme" 0 }}',
     },
     session: {
+      group: "cost-limits",
       description:
         "This session's cost and token total, with a budget warning once a budget is configured.",
       template:
@@ -808,6 +820,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       settings: budgetSettings(0),
     },
     today: {
+      group: "cost-limits",
       description:
         "Today's cost and tokens across every session, with a budget warning once a budget is configured.",
       template:
@@ -816,6 +829,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       settings: budgetSettings(50),
     },
     block: {
+      group: "cost-limits",
       description:
         "The 5-hour rate-limit block: percent used and time to reset, heating to warning then error.",
       template:
@@ -831,6 +845,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ gt .block.resetsAt 0 }}",
     },
     weekly: {
+      group: "cost-limits",
       description:
         "The weekly rate-limit quota: percent used and time to reset, heating to warning then error.",
       template:
@@ -848,6 +863,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // "cannot project" sentinel sits calm at the first stop. Shown when either
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
+      group: "cost-limits",
       description:
         "Spend per hour, with the projected time to the 5-hour and weekly limits.",
       template:
@@ -880,6 +896,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // no layout flicker); `output` is the live generation rate, `input` spikes at
     // turn start, `total` is their sum.
     speed: {
+      group: "activity",
       description:
         "Token throughput for the latest exchange: output, input, and total.",
       template:
@@ -898,6 +915,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // two samples before its first bar). [LAW:effects-at-boundaries] — all the
     // history lives in the daemon ring, the template only draws.
     tokenSparkline: {
+      group: "activity",
       description: "A sparkline of recent token throughput.",
       template: "⚡ {{ sparkline .speed.history 24 }}",
       when: '{{ ne .speed.history "" }}',
@@ -911,6 +929,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // legacy inline-colored text (warm = normal, ≤20m = warning, ≤8m/cold =
     // error).
     cacheTimer: {
+      group: "activity",
       description:
         "Minutes until the prompt cache expires, or `cold` once it has.",
       template:
@@ -930,6 +949,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: "{{ gt .cache.expiresAt 0 }}",
     },
     context: {
+      group: "model-context",
       description:
         "Context used, in tokens and percent remaining, heating as it fills.",
       template:
@@ -947,6 +967,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // layer memento cannot read restores its gate). Absent when memento is
     // not installed, or Claude Code has it disabled.
     ceiling: {
+      group: "model-context",
       description:
         "The memento plugin's context ceiling for this session: − and + move it by 100K, ∞ lifts it, ↺ drops this session's own setting.",
       template:
@@ -965,6 +986,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // daemon names the window − and + land on (autoCompactControls), and ↺
     // hands the window back to `auto`.
     autocompact: {
+      group: "model-context",
       description:
         "Claude Code's auto-compact window: − and + move it by 100K, ↺ returns it to auto. Clicks type /autocompact into this session.",
       template:
@@ -977,6 +999,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
     },
     metrics: {
+      group: "activity",
       description:
         "Response times, session duration, message count, and lines added/removed.",
       // [LAW:dataflow-not-control-flow] Each part guards on its own value
@@ -1023,6 +1046,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // from an all-pending one — `☑ 7/7` and `☑ 0/7` are both true statements.
     // `abbrev` bounds the task text, since an `activeForm` is a sentence.
     activity: {
+      group: "activity",
       description:
         "What Claude is doing: the slash command that opened the turn, the in-progress todo, and the tools in flight.",
       template:

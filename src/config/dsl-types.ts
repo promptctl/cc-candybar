@@ -23,6 +23,7 @@ import type { ThemeKey } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { Axis, DistributionName, VariationName } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { SegmentGroup } from "./segment-groups.js";
 import { FOLLOW_BAR, isPlacementThemeName } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -809,6 +810,12 @@ export interface SegmentDecl {
   // doing exactly what it does for every other field, not a special case worth
   // one; a delta that changes what a segment MEANS should say so here too.
   readonly description?: string;
+  // What this segment is ABOUT, for the add menu's library to group it by
+  // (`SEGMENT_GROUPS`). Absent, the library files it under `other`. The
+  // bundled standard library declares one for every name it carries (pinned in
+  // test/default-dsl-config.test.ts); like `description`, a file's delta under a
+  // bundled name sets it per field.
+  readonly group?: SegmentGroup;
   // "auto" → content-sized; a positive integer → that many columns; "fill" →
   // whatever is left of the row once every other cell has taken its natural
   // width, split evenly when a row declares more than one

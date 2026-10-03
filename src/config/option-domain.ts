@@ -84,6 +84,27 @@ export type OptionPalette = (option: string, render: RenderPalettes) => Palette;
 export interface ResolvedDomain {
   readonly members: readonly string[];
   readonly paletteOf?: OptionPalette;
+  readonly library?: DomainLibrary;
+}
+
+// [LAW:types-are-the-program] The other thing a domain may know about itself:
+// that its members are a CATALOGUE — each with a group it belongs to and a line
+// saying what it is — so a picker can lay it out as a library (grouped pages,
+// one described row per member) instead of a grid of bare names. `library`'s
+// PRESENCE is the discriminator, exactly as `paletteOf`'s is: no flag beside a
+// field that already says it. The groups are the domain's own, in the order
+// they page; an entry names the one it stands under.
+export interface LibraryGroup {
+  readonly id: string;
+  readonly label: string;
+}
+export interface LibraryEntry {
+  readonly group: string;
+  readonly description?: string;
+}
+export interface DomainLibrary {
+  readonly groups: readonly LibraryGroup[];
+  readonly entry: (option: string) => LibraryEntry;
 }
 
 interface DomainEntry {

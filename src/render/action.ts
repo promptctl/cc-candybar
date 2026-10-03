@@ -30,6 +30,7 @@ import { buildScope } from "../template-engine/scope.js";
 import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
+  type DomainLibrary,
   type OptionPalette,
   type ResolvedDomain,
 } from "../config/option-domain.js";
@@ -91,6 +92,9 @@ export type CompiledActionDecl =
       // key, `undefined` for every domain that is not, so a reader discriminates
       // on the kind it already has rather than on whether a field was spread in.
       readonly paletteOf: OptionPalette | undefined;
+      // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
+      // same registry entry as `paletteOf`; `undefined` unless the domain is one.
+      readonly library: DomainLibrary | undefined;
     }
   | {
       // [LAW:types-are-the-program] A stepper affordance. It carries ONLY the
@@ -148,6 +152,9 @@ export type CompiledActionDecl =
       readonly options: readonly string[];
       // set-option's durability twin, so it carries the same domain facts.
       readonly paletteOf: OptionPalette | undefined;
+      // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
+      // same registry entry as `paletteOf`; `undefined` unless the domain is one.
+      readonly library: DomainLibrary | undefined;
     }
   | {
       readonly kind: "persist-bounded";
@@ -190,6 +197,9 @@ export type CompiledActionDecl =
       // uniform over every option kind, not a list of kinds that qualify.
       // Segment names are not colour-valued, so this is `undefined` in practice.
       readonly paletteOf: OptionPalette | undefined;
+      // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
+      // same registry entry as `paletteOf`; `undefined` unless the domain is one.
+      readonly library: DomainLibrary | undefined;
     }
   // [LAW:one-source-of-truth] A step of the session's settings history —
   // `reset`'s fine-grained sibling. No key: there is nothing to carry, since
@@ -365,6 +375,7 @@ function compileAction(
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        library: domain.library,
       };
     }
     if ("int" in action) {
@@ -403,6 +414,7 @@ function compileAction(
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        library: domain.library,
       };
     }
     if ("cycle" in action) {
@@ -444,6 +456,7 @@ function compileAction(
         relation: action.relation,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        library: domain.library,
       };
     }
     return {

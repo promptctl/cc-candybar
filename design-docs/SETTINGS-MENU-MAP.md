@@ -60,6 +60,16 @@ The positions are what Brandon asked for. The glyphs and colours are not: "use s
 - The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
 - The row keeps today's cells, at today's widths.
 
+### The add menu is a library
+
+The `⊕` opens a library of the declared segments (brandon-menu-ia-q30.kpl), not a grid of bare names: one page per group (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for any segment that declares none), turned with `←`/`→`, and one row per segment, its name and its description cut to the row. The group is the segment's own `group:`, so a segment from any config appears with no wiring. A rendered sample of each segment was decided against: it would evaluate every segment's templates outside any placement.
+
+```
+✕ ← git 2/6 →
+gitaculous  The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at…
+gitPr       The pull request open for this branch, as a link; `⚠ PR` when the forge lookup fai…
+```
+
 ## The look tab
 
 ```

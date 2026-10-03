@@ -1437,6 +1437,16 @@
         "description": {
           "type": "string"
         },
+        "group": {
+          "enum": [
+            "location",
+            "git",
+            "model-context",
+            "cost-limits",
+            "activity",
+            "session-tools"
+          ]
+        },
         "width": {
           "anyOf": [
             {
@@ -2160,6 +2170,16 @@
         },
         "description": {
           "type": "string"
+        },
+        "group": {
+          "enum": [
+            "location",
+            "git",
+            "model-context",
+            "cost-limits",
+            "activity",
+            "session-tools"
+          ]
         },
         "width": {
           "anyOf": [

@@ -95,6 +95,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     expect(undescribed).toEqual([]);
   });
 
+  // brandon-menu-ia-q30.kpl. Edit mode's add menu is a library grouped by each
+  // segment's authored `group`. A bundled segment that declared none would be
+  // filed under `other` without anyone having decided that, so the standard
+  // library is held to a declared group for every segment an author can choose;
+  // `other` is where a USER's ungrouped segment stands.
+  test("every bundled segment an author can choose declares its library group", () => {
+    const ungrouped = Object.entries(DEFAULT_DSL_CONFIG.segments)
+      .filter(([name]) => !isReservedName(name))
+      .filter(([, seg]) => seg.group === undefined)
+      .map(([name]) => name);
+    expect(ungrouped).toEqual([]);
+  });
+
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind !== "segment") continue;

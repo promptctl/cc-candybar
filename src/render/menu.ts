@@ -154,32 +154,30 @@ function renderMenu(
   // coupled pair the toggle glyph above writes. What the ▾ promised, ✕ delivers.
   placement.drops.push(
     ...(open
-      ? [
-          renderPicker(
-            applyName,
-            { key: pageKey, stateVar: pageKey },
-            [
-              [stateKey, DISCLOSURE_CLOSED],
-              [pageKey, "0"],
-            ],
-            options.closeOnPick,
-            options.paged,
+      ? renderPicker(
+          applyName,
+          { key: pageKey, stateVar: pageKey },
+          [
+            [stateKey, DISCLOSURE_CLOSED],
+            [pageKey, "0"],
+          ],
+          options.closeOnPick,
+          options.paged,
+          action,
+          // [LAW:one-source-of-truth] The body's items are the band THIS
+          // segment opens — the same record the walk draws the trigger from —
+          // placed by THIS menu's distribution: the picker knows positions,
+          // the instance knows how it places them. Unless the menu's domain is
+          // colour-valued, in which case the OPTION colours its own cell; one
+          // call decides, the same one the standalone `{{ picker }}` makes.
+          optionItemStyle(
+            placement,
+            options.distribution,
             action,
-            // [LAW:one-source-of-truth] The body's items are the band THIS
-            // segment opens — the same record the walk draws the trigger from —
-            // placed by THIS menu's distribution: the picker knows positions,
-            // the instance knows how it places them. Unless the menu's domain is
-            // colour-valued, in which case the OPTION colours its own cell; one
-            // call decides, the same one the standalone `{{ picker }}` makes.
-            optionItemStyle(
-              placement,
-              options.distribution,
-              action,
-              requireOptionKind(action, applyName, "menu").paletteOf,
-              runtime.activeSegment.drawnAt(),
-            ),
+            requireOptionKind(action, applyName, "menu").paletteOf,
+            runtime.activeSegment.drawnAt(),
           ),
-        ]
+        )
       : []),
   );
   return glyph;
