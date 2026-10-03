@@ -61,8 +61,8 @@ export class ColorSpecError extends Error {
  * There is no "is this a name or a color" branch anywhere — one total
  * function over both. [LAW:dataflow-not-control-flow]
  *
- * A segment has a background unless its `bg:` is `NO_FILL`. `tint` is the decorative one its region
- * dealt it — a vocabulary entry on the bar, a band item under a trigger — the
+ * A segment has a background unless its `bg:` is `NO_FILL`. `tint` is the
+ * decorative one its region dealt it — a vocabulary entry on the bar, a band item under a trigger — the
  * floor every segment wears; an authored `bg:` states MEANING (a threshold's
  * `error`, a host's `warning`) and paints over it.
  * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
@@ -70,10 +70,15 @@ export class ColorSpecError extends Error {
  * decorative", the absence of an authored spec IS the decorated case. The
  * foreground has the same kind of floor: an unauthored `fg:` is the theme
  * pole that reads better on the background phase 1 resolved (tint, band
- * item, or an authored threshold colour alike), floored at TEXT_MIN_CONTRAST. The cell paints its own
- * background, so the terminal's own text cannot be assumed to read on it: it
- * measured 1.05:1 on the dark themes under a light terminal and on the light
- * themes under a dark one (brandon-theme-picker-bgw.b2g).
+ * item, or an authored threshold colour alike), floored at TEXT_MIN_CONTRAST.
+ * A filled cell paints its own background, so the terminal's own text cannot
+ * be assumed to read on it: it measured 1.05:1 on the dark themes under a
+ * light terminal and on the light themes under a dark one
+ * (brandon-theme-picker-bgw.b2g). A `NO_FILL` cell is the converse: its text
+ * lands on the terminal's ground, which the detached daemon cannot see, so an
+ * unauthored `fg:` there is no colour at all — the terminal's own text on its
+ * own ground is the one pair known to read. `bgOf` still answers with the
+ * theme's `background`, the stand-in an authored `fg:` floors against.
  *
  * Styles are not this function's concern: they live upstream as WHICH palette
  * it is handed, so bg, fg, and the body all resolve from one palette and their
@@ -94,10 +99,9 @@ export function resolveSegmentColors(
   // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const filled = bgSpec !== NO_FILL;
-  // [LAW:dataflow-not-control-flow] A fill-less cell still has a GROUND: the
-  // theme's own background stands in for the terminal's, so `bgOf` and every
-  // contrast floor measure against the colour the text is drawn on. Only the
-  // Style differs — it carries no `bgcolor`.
+  // [LAW:dataflow-not-control-flow] A fill-less cell still has a GROUND for
+  // `bgOf`: the theme's own background, the stand-in for the terminal's that
+  // an authored `fg:` floors against. The Style carries no `bgcolor`.
   const bgColor = !filled
     ? resolveRef(palette, "background", "bg")
     : bgSpec !== undefined
@@ -107,14 +111,18 @@ export function resolveSegmentColors(
   // Phase 2 — publish it, then foreground, which may now ask about it.
   active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
-  const fgColor =
+  // An unauthored fg is chosen for the ground the cell paints; on no fill the
+  // ground is the terminal's, and its own text is what reads there.
+  const fgColor: ColorRgba | undefined =
     fgSpec !== undefined
       ? resolveRef(palette, fgSpec, "fg")
-      : textOn(palette, bgColor, drawnAt);
+      : filled
+        ? textOn(palette, bgColor, drawnAt)
+        : undefined;
 
   return new Style({
     ...(filled && { bgcolor: ColorSpec.fromRgba(bgColor) }),
-    color: ColorSpec.fromRgba(fgColor),
+    ...(fgColor !== undefined && { color: ColorSpec.fromRgba(fgColor) }),
   });
 }
 

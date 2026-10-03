@@ -5,7 +5,8 @@
 //     wears its tint;
 //   - `{{ bgOf }}` still answers — with the theme's background, the ground the
 //     text lands on — so a contrast floor measures against something real;
-//   - nothing else about the cell changes: its text still reads on that ground.
+//   - with no `fg:` the cell carries no text colour either: the terminal's own
+//     text on its own ground, the one pair known to read there.
 
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
@@ -77,7 +78,8 @@ describe(`bg: "${NO_FILL}"`, () => {
     expect(r.style("echo").color?.value?.hex).toBe(ground);
   });
 
-  test("the text still reads: a fill-less cell with no fg gets a colour", () => {
-    expect(r.style("bare").color?.value?.hex).toMatch(/^#[0-9a-f]{6}$/i);
+  test("a fill-less cell with no fg leaves the text colour to the terminal", () => {
+    expect(r.style("bare").color).toBeUndefined();
+    expect(r.style("filled").color?.value?.hex).toMatch(/^#[0-9a-f]{6}$/i);
   });
 });
