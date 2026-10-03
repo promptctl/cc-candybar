@@ -56,7 +56,7 @@ import {
   applySegmentLayout,
   placementScope,
 } from "../template-engine/index.js";
-import type { LaidCell } from "../template-engine/layout.js";
+import { cellParts, type LaidCell } from "../template-engine/layout.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -78,6 +78,7 @@ export interface CompiledSegmentNode {
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
   readonly opens?: CompiledOpens;
+  readonly lead?: Template<RichText>;
   readonly trail?: Template<RichText>;
 }
 export interface CompiledOpens {
@@ -144,10 +145,6 @@ export interface Line<C> {
 }
 export type RenderedLine = Line<LaidCell>;
 
-// A laid cell's parts, as the objects the row's fill sizing will still grow in
-// place: a copy joined now would record a fill cell at its natural width.
-const cellParts = ({ text, trail }: LaidCell): readonly RichText[] =>
-  trail === undefined ? [text] : [text, trail];
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -236,6 +233,7 @@ export interface NodeRenderCtx {
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly lead: Template<RichText> | undefined;
       readonly trail: Template<RichText> | undefined;
     },
   ): EvaluatedSegment;
@@ -288,6 +286,7 @@ export interface SegmentStyles {
 export interface EvaluatedSegment {
   readonly styles: SegmentStyles;
   readonly fragments: readonly RichText[];
+  readonly lead: readonly RichText[];
   readonly trail: readonly RichText[];
   readonly drops: readonly RichText[];
 }
@@ -486,6 +485,9 @@ const segmentType: NodeType<"segment"> = {
           placement: node.opens.placement,
         },
       }),
+      ...(node.lead !== undefined && {
+        lead: cctx.parse(node.lead, "lead"),
+      }),
       ...(node.trail !== undefined && {
         trail: cctx.parse(node.trail, "trail"),
       }),
@@ -536,7 +538,7 @@ const segmentType: NodeType<"segment"> = {
       // a menu can sit anywhere in the template, under any wrapper, and
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
-      const { styles, fragments, trail, drops } = ctx.evaluateSegment(
+      const { styles, fragments, lead, trail, drops } = ctx.evaluateSegment(
         node,
         scope,
         palette,
@@ -545,6 +547,7 @@ const segmentType: NodeType<"segment"> = {
           bg: segCompiled.bg,
           fg: segCompiled.fg,
           body: segCompiled.template,
+          lead: node.lead,
           trail: node.trail,
         },
       );
@@ -627,6 +630,7 @@ const segmentType: NodeType<"segment"> = {
       ).map((line, i) => ({
         cells: applySegmentLayout(line, {
           ...layout,
+          lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
           trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
         }),
         band: "own",
@@ -682,7 +686,8 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
-              trail: errorTrail(node, scope, ctx),
+              lead: errorAffix(node.lead, node, scope, ctx),
+              trail: errorAffix(node.trail, node, scope, ctx),
             },
           ),
           band: "own",
@@ -693,20 +698,23 @@ const segmentType: NodeType<"segment"> = {
   },
 };
 
-// A broken segment stays removable: edit mode's `-` rides its ⚠ cell as it
-// rides any cell. The trail is entered as a body of its own, so a trail that
-// fails too is one more reported error beside the first, never a bar-wide throw.
-function errorTrail(
+// A broken segment stays configurable and removable: edit mode's buttons ride
+// its ⚠ cell as they ride any cell. Each is entered as a body of its own, so
+// one that fails too is one more reported error beside the first, never a
+// bar-wide throw.
+function errorAffix(
+  affix: Template<RichText> | undefined,
   node: CompiledSegmentNode,
   scope: object,
   ctx: NodeRenderCtx,
 ): readonly RichText[] {
-  if (node.trail === undefined) return [];
+  if (affix === undefined) return [];
   try {
     return ctx.evaluateSegment(node, scope, ctx.palette, ctx.region, {
       bg: undefined,
       fg: undefined,
-      body: node.trail,
+      body: affix,
+      lead: undefined,
       trail: undefined,
     }).fragments;
   } catch (err) {

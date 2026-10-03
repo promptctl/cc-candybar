@@ -552,7 +552,7 @@ export function registerDslConfig(
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
   // A node's templates recur across many nodes — edit mode gates every chrome
   // cell and every placed segment in every preset by a handful of predicates,
-  // and draws one segment's remove trail on both its label and its content —
+  // and draws one segment's configure lead and remove trail on both its label and its content —
   // so each distinct source is parsed once and its template shared. A parsed
   // template holds no evaluation state, so sharing one is sharing its AST.
   const nodeTemplates = new Map<string, Template<RichText>>();
@@ -1153,6 +1153,7 @@ export function renderDsl(
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly lead: Template<RichText> | undefined;
       readonly trail: Template<RichText> | undefined;
     },
   ): EvaluatedSegment => {
@@ -1177,6 +1178,7 @@ export function renderDsl(
       const fragments = templates.body.evaluate(segScope);
       // Evaluated while the segment is still entered, so its colours read the
       // cell it is drawn in.
+      const lead = templates.lead?.evaluate(segScope) ?? [];
       const trail = templates.trail?.evaluate(segScope) ?? [];
       // Read only where something hangs open under the segment: a band that
       // can never be drawn (a hue with no state) throws when it is opened,
@@ -1199,7 +1201,7 @@ export function renderDsl(
         },
         disclosure,
       };
-      return { styles, fragments, trail, drops: active.drops };
+      return { styles, fragments, lead, trail, drops: active.drops };
     } finally {
       compiled.activeSegment.current = null;
     }
