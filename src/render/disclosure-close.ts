@@ -1,9 +1,10 @@
-// [LAW:one-source-of-truth] THE close affordance every row of an open
-// disclosure body leads with (brandon-disclosure-43z): one ✕ whose click
+// [LAW:one-source-of-truth] THE close affordance an open disclosure body
+// leads its first row with (brandon-disclosure-43z; every later row leads with
+// a blank of its width, node-registry.ts): one ✕ whose click
 // writes the disclosure's state key back to the closed sentinel — the same
 // (key, closed) pair the trigger's own open-state glyph writes and the same
 // value its synthesized `cycle` action gates (`deriveActionValidators`), so the
-// row's ✕ needs no verb, no action name and no gate of its own. It is the
+// ✕ needs no verb, no action name and no gate of its own. It is the
 // `opens`-body twin of the ✕ a `{{ menu }}`'s picker leads with (render/
 // picker.ts): that one also resets the page cursor because a picker pages; a
 // body does not, so this write is the pair alone.

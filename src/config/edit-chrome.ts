@@ -290,7 +290,7 @@ export function placementDraftKey(
 // through. The body is a disclosure over `edit.configure` at this placement's
 // `<preset>:<id>` member, so its `✕` writes that key closed, configuring
 // another placement closes it by overwriting the value it is open on, and
-// every switch into or out of edit mode closes it (EDIT_SWITCH).
+// the bundled controls that switch edit mode close it (EDIT_SWITCH).
 interface ConfigureParts {
   readonly term: string;
   readonly ref: DisclosureRef;

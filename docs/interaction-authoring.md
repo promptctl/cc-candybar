@@ -910,7 +910,8 @@ synthesizes:
   `<preset>:<id>` (the one placement whose settings hang open, a level inside
   arranging) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
-  above verbatim.
+  above verbatim; to close a configured placement as you leave, as the
+  bundled controls do, fire `edit.unconfigure` beside it in a `do`.
 - For **every** preset (the `"default"` floor included) and every ordinary
   segment in its resolved root: a red `✖` (a synthesized `removeSegment` action
   behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
@@ -941,7 +942,7 @@ synthesizes:
   any configured placement — the way out, without reopening the menu edit mode was entered from.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
-its `✎ arrange` entry fires `edit.toggle` (through a `do` that also closes the
+its `✎ arrange` entry fires the same switch (through a `do` that also closes the
 menu), so edit mode is live in any config you write, for every row in every
 preset. You never declare the toggle yourself; reference it from your own
 template if you want a second way in.

@@ -66,14 +66,7 @@ import {
   VERDICT_OK,
   VERDICT_UNRUN,
 } from "../doctor/report.js";
-import {
-  EDIT_MODE_ARRANGE,
-  EDIT_MODE_KEY,
-  EDIT_CONFIGURE_KEY,
-  EDIT_SWITCH,
-  EDIT_TOGGLE_ACTION,
-  EDIT_UNCONFIGURE_ACTION,
-} from "./loader/edit-mode.js";
+import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
 import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
@@ -867,32 +860,16 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
   Object.assign(artifacts.actions, RESET_ALL.actions);
 }
 
-// [LAW:one-source-of-truth] Edit mode's toggle, ensured rather than duplicated:
-// both this pass and synthesizeEditModeToggle produce it by calling the same two
-// disclosure functions on the same two exported constants, so the two mints are
-// the same value by construction and whichever lands first is the only one.
-// Ensuring it here is not an optional courtesy — the EDIT_SEG action above
-// fires `edit.toggle`, and that pass is demand-driven off a scan of the
-// segments a FILE declared, which cannot see a segment this pass mints later.
+// [LAW:one-source-of-truth] Edit mode's state and switch, ensured rather than
+// duplicated: this pass and synthesizeEditModeToggle both mint
+// editModeArtifacts(), so whichever lands first is the only one. Ensuring it
+// here is not an optional courtesy — the EDIT_SEG action above fires
+// EDIT_SWITCH, and that pass is demand-driven off a scan of the segments a
+// FILE declared, which cannot see a segment this pass mints later.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
-  artifacts.variables[EDIT_MODE_KEY] = disclosureStateVar(
-    EDIT_MODE_KEY,
-    DISCLOSURE_CLOSED,
-  );
-  artifacts.actions[EDIT_TOGGLE_ACTION] = disclosureCycleAction(
-    EDIT_MODE_KEY,
-    EDIT_MODE_ARRANGE,
-  );
-  // The other half of EDIT_SWITCH: which placement's settings hang open inside
-  // arranging — none to begin with — and the close every switch fires.
-  artifacts.variables[EDIT_CONFIGURE_KEY] = disclosureStateVar(
-    EDIT_CONFIGURE_KEY,
-    DISCLOSURE_CLOSED,
-  );
-  artifacts.actions[EDIT_UNCONFIGURE_ACTION] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: DISCLOSURE_CLOSED,
-  };
+  const { variables, actions } = editModeArtifacts();
+  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.actions, actions);
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from

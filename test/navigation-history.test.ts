@@ -74,6 +74,36 @@ describe("back", () => {
     dispose();
   });
 
+  test("a step buried under the newest is counted only if going back would still restore it", () => {
+    const { sessionState, ctx, set, back, dispose } = setup();
+    set(MENU, "open");
+    sessionState.clear("s1", MENU);
+    set(TAB, "b");
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(1);
+    back();
+    expect(sessionState.get("s1", TAB)).toBeNull();
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
+    dispose();
+  });
+
+  test("a value the key's gate no longer admits is never restored", () => {
+    const { sessionState, ctx, set, back, dispose } = setup();
+    set(TAB, "a");
+    set(TAB, "b");
+    // The config reloaded and `a` is gone from the key's domain.
+    dispose();
+    const narrowed = registerStateValidator(TAB, {
+      kind: "allow-list",
+      allowed: ["b"],
+    });
+    // The newest step would write `a` back, so it is discarded — and the one
+    // under it opened `a`, which the key no longer holds.
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
+    expect(back).toThrow(BadVerbArgs);
+    expect(sessionState.get("s1", TAB)).toBe("b");
+    narrowed();
+  });
+
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
     const store = new SessionState();
     const history = new NavigationHistory();

@@ -40,6 +40,49 @@ export interface SessionStateRW extends SessionStateReader {
   clear(sessionId: string, key: string): void;
 }
 
+// [LAW:one-source-of-truth] A view of `store` that reports, once a write has
+// landed, each key it touched that `records` admits — its value before the
+// write and what the store then reads — so a write that throws reports
+// nothing. Both click histories (settings and navigation) journal through it,
+// differing only in the keys they keep and what they fold a change into.
+export function recordingView(
+  store: SessionStateRW,
+  records: (key: string) => boolean,
+  onChange: (
+    sessionId: string,
+    key: string,
+    before: string | null,
+    after: string | null,
+  ) => void,
+): SessionStateRW {
+  const recorded = (
+    sessionId: string,
+    keys: readonly string[],
+    write: () => void,
+  ): void => {
+    const before = keys
+      .filter(records)
+      .map((key) => ({ key, before: store.get(sessionId, key) }));
+    write();
+    for (const { key, before: b } of before) {
+      onChange(sessionId, key, b, store.get(sessionId, key));
+    }
+  };
+  return {
+    get: (sessionId, key) => store.get(sessionId, key),
+    set: (sessionId, key, value) =>
+      recorded(sessionId, [key], () => store.set(sessionId, key, value)),
+    setBatch: (sessionId, pairs) =>
+      recorded(
+        sessionId,
+        pairs.map((p) => p.key),
+        () => store.setBatch(sessionId, pairs),
+      ),
+    clear: (sessionId, key) =>
+      recorded(sessionId, [key], () => store.clear(sessionId, key)),
+  };
+}
+
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
 // on-disk representation and the load/save currency between store and storage.
 export type SessionSnapshot = Record<string, Record<string, string>>;

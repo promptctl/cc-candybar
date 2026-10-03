@@ -339,6 +339,10 @@ describe("edit mode is in every config", () => {
       set: EDIT_MODE_KEY,
       cycle: ["closed", EDIT_MODE_ARRANGE],
     });
+    expect(config.actions["edit.unconfigure"]).toEqual({
+      set: "edit.configure",
+      to: "closed",
+    });
     expect(config.variables[EDIT_MODE_KEY]).toEqual({
       kind: "state",
       key: EDIT_MODE_KEY,

@@ -15,7 +15,9 @@
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "./settings-history";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
-import type { SessionStateRW } from "./session-state";
+import { runInAction } from "mobx";
+import { recordingView, type SessionStateRW } from "./session-state";
+import { validateStateWrite } from "./verbs/state-validators";
 import { BadVerbArgs } from "./verb-error";
 
 export interface NavigationChange {
@@ -47,27 +49,38 @@ export interface NavigationJournal {
 export class NavigationHistory {
   private past: Map<string, readonly NavigationStep[]> = new Map();
 
-  // [LAW:one-source-of-truth] How many steps going back can restore — the
-  // stack `back` itself would walk, so `◁` shows exactly while a click on it
-  // restores something.
+  // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
+  // walk `back` itself makes, so the count cannot promise a step it discards.
   depth(sessionId: string, store: SessionStateRW): number {
-    return this.current(sessionId, store).length;
+    return this.restorable(sessionId, store).length;
   }
 
-  // The session's steps, less those on top whose keys something else has
-  // since rewritten (a layout edit releasing the placement it configured):
-  // restoring one would write over a view that is gone.
-  private current(
+  // The steps going back would restore, oldest first: walking down from the
+  // newest over the state as each restore would leave it, a step is restored
+  // while every key it changed still holds what it left there and every value
+  // it would write back passes that key's gate now. Any other step is over a
+  // view that is gone — rewritten since (a layout edit releasing the placement
+  // it configured), or no longer one the config admits (that placement
+  // removed, a group renamed) — and is discarded rather than replayed.
+  private restorable(
     sessionId: string,
     store: SessionStateRW,
   ): readonly NavigationStep[] {
-    const holds = (step: NavigationStep): boolean =>
-      step.every((c) => store.get(sessionId, c.key) === c.after);
-    let steps = this.past.get(sessionId) ?? [];
-    while (steps.length > 0 && !holds(steps.at(-1)!)) {
-      steps = steps.slice(0, -1);
+    const state = new Map<string, string | null>();
+    const read = (key: string): string | null =>
+      state.has(key) ? state.get(key)! : store.get(sessionId, key);
+    const kept: NavigationStep[] = [];
+    for (const step of [...(this.past.get(sessionId) ?? [])].reverse()) {
+      const holds = step.every(
+        (c) =>
+          read(c.key) === c.after &&
+          (c.before === null || validateStateWrite(c.key, c.before).ok),
+      );
+      if (!holds) continue;
+      kept.unshift(step);
+      for (const c of step) state.set(c.key, c.before);
     }
-    return steps;
+    return kept;
   }
 
   // `store` is the click's own view of session state — the settings journal's,
@@ -77,40 +90,18 @@ export class NavigationHistory {
     // Keyed by session, then key: a click that writes one key twice records
     // one change from its first `before` to its last `after`.
     const pending = new Map<string, Map<string, NavigationChange>>();
-    const recorded = (
-      sessionId: string,
-      keys: readonly string[],
-      write: () => void,
-    ): void => {
-      const before = keys
-        .filter(isNavigationKey)
-        .map((key) => ({ key, before: store.get(sessionId, key) }));
-      write();
-      const changes = pending.get(sessionId) ?? new Map();
-      for (const { key, before: b } of before) {
-        changes.set(key, {
-          key,
-          // The key's first `before` in this click, null included.
-          before: changes.has(key) ? changes.get(key)!.before : b,
-          after: store.get(sessionId, key),
-        });
-      }
-      pending.set(sessionId, changes);
-    };
-    return {
-      sessionState: {
-        get: (sessionId, key) => store.get(sessionId, key),
-        set: (sessionId, key, value) =>
-          recorded(sessionId, [key], () => store.set(sessionId, key, value)),
-        setBatch: (sessionId, pairs) =>
-          recorded(
-            sessionId,
-            pairs.map((p) => p.key),
-            () => store.setBatch(sessionId, pairs),
-          ),
-        clear: (sessionId, key) =>
-          recorded(sessionId, [key], () => store.clear(sessionId, key)),
+    const sessionState = recordingView(
+      store,
+      isNavigationKey,
+      (sessionId, key, before, after) => {
+        const changes = pending.get(sessionId) ?? new Map();
+        const first: NavigationChange | undefined = changes.get(key);
+        changes.set(key, { key, before: first ? first.before : before, after });
+        pending.set(sessionId, changes);
       },
+    );
+    return {
+      sessionState,
       commit: () => {
         for (const [sessionId, changes] of pending) {
           // A click that changed nothing on screen is no step: going back
@@ -125,27 +116,35 @@ export class NavigationHistory {
     };
   }
 
-  // Restores the last current step into `store` and returns it, with how many
-  // stale steps it discarded first. Written through the bare store, never a
-  // navigation journal, so going back is not itself a step.
+  // Restores the newest restorable step into `store` as one transaction and
+  // returns it, with how many steps it discarded (restorable). Written through
+  // the bare store, never a navigation journal, so going back is not itself a
+  // step.
   back(
     sessionId: string,
     store: SessionStateRW,
   ): { readonly step: NavigationStep; readonly discarded: number } {
     const all = this.past.get(sessionId) ?? [];
-    const steps = this.current(sessionId, store);
-    const discarded = all.length - steps.length;
+    const steps = this.restorable(sessionId, store);
     const step = steps.at(-1);
+    const discarded = all.length - steps.length;
     if (step === undefined) {
       this.put(sessionId, steps);
       throw new BadVerbArgs(
-        `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over state since rewritten, discarded)` : ""}`,
+        `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`,
       );
     }
-    for (const { key, before } of step) {
-      if (before === null) store.clear(sessionId, key);
-      else store.set(sessionId, key, before);
-    }
+    // [LAW:no-ambient-temporal-coupling] One reactive transaction: no
+    // observer sees the door reopened with its tab still folded.
+    runInAction(() => {
+      const restored = step.flatMap(({ key, before }) =>
+        before === null ? [] : [{ key, value: before }],
+      );
+      if (restored.length > 0) store.setBatch(sessionId, restored);
+      for (const { key, before } of step) {
+        if (before === null) store.clear(sessionId, key);
+      }
+    });
     this.put(sessionId, steps.slice(0, -1));
     return { step, discarded };
   }

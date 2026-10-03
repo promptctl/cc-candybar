@@ -11,6 +11,7 @@ import {
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_KEY,
   EDIT_SWITCH,
+  EDIT_TOGGLE_ACTION,
 } from "../../src/config/loader/edit-mode";
 import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
 
@@ -63,6 +64,7 @@ export const oneSegmentRoot = (
 const MENU_EDIT_NAMES: ReadonlySet<string> = new Set([
   EDIT_MODE_KEY,
   EDIT_CONFIGURE_KEY,
+  EDIT_TOGGLE_ACTION,
   ...EDIT_SWITCH,
 ]);
 const EDIT_CHROME_NAME = (name: string) =>

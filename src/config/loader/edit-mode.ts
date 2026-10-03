@@ -54,10 +54,10 @@ export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 // Closes whichever placement's settings hang open.
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-// [LAW:one-source-of-truth] What every click that enters or leaves edit mode
-// fires: the toggle, and the close of the settings left open, so arranging
-// always starts with none configured whichever control switched it — the
-// menu's `✎ arrange` and edit mode's own `✎ done` spread this one list.
+// [LAW:one-source-of-truth] What the bundled controls that enter or leave edit
+// mode fire: the toggle, and the close of the settings left open, so arranging
+// from them starts with none configured. `edit.toggle` stays the bare cycle,
+// because an author's own `do` may fire it and a `do` cannot fire a `do`.
 export const EDIT_SWITCH = [
   EDIT_TOGGLE_ACTION,
   EDIT_UNCONFIGURE_ACTION,
@@ -141,15 +141,35 @@ export function synthesizeEditModeToggle(
 ): void {
   reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
   if (!fileWantsEditMode(out)) return;
-  const variables: Record<string, VariableDecl> = {
-    [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-  };
-  const actions: Record<string, ActionDecl> = {
-    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-      EDIT_MODE_KEY,
-      EDIT_MODE_ARRANGE,
-    ),
-  };
+  const { variables, actions } = editModeArtifacts();
   out.variables = { ...(out.variables ?? {}), ...variables };
   out.actions = { ...(out.actions ?? {}), ...actions };
+}
+
+// [LAW:one-source-of-truth] Edit mode's state and its switch, minted the same
+// way by this pass and by the settings menu (which every config hosts): the two
+// keys, the toggle's cycle, and the close.
+export function editModeArtifacts(): {
+  readonly variables: Record<string, VariableDecl>;
+  readonly actions: Record<string, ActionDecl>;
+} {
+  return {
+    variables: {
+      [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+      [EDIT_CONFIGURE_KEY]: disclosureStateVar(
+        EDIT_CONFIGURE_KEY,
+        DISCLOSURE_CLOSED,
+      ),
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE,
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED,
+      },
+    },
+  };
 }
