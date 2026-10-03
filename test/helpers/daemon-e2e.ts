@@ -12,7 +12,11 @@
 
 import path from "node:path";
 
-import { PROTOCOL_VERSION, type ClientHints } from "../../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  type ClientHints,
+  type Response,
+} from "../../src/daemon/protocol";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
@@ -51,33 +55,19 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
   };
 }
 
-// One status-line render, as Claude Code would ask for it. `hints` are the
-// client-observed facts (termCols/termRows/ssh) spread onto the request the
-// way the real client spreads them; `args` is the client's argv (binary path
-// first, as parseRenderArgs expects), empty for a bare render.
-export async function render(
+// One render request, retried on TIMEOUT within the budget above, its output
+// returned. The one spelling of the transient contract: `render` below and
+// test/helpers/drive-bar.ts both send through it.
+export async function renderRequest(
   sockPath: string,
-  sessionId: string,
-  cwd: string,
-  hints: ClientHints = {},
-  args: string[] = [],
+  request: Record<string, unknown>,
+  replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     const resp = await sendDaemonRequest(
       sockPath,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData: hookData(sessionId, cwd),
-        args,
-        cwd,
-        // What the real client always reports from its env: test/setup.ts
-        // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
-        // host's Claude Code settings. A case's own hints win.
-        claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
-        ...hints,
-      },
-      REPLY_BUDGET_MS,
+      { v: PROTOCOL_VERSION, kind: "render", ...request },
+      replyBudgetMs,
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
@@ -92,15 +82,48 @@ export async function render(
   }
 }
 
+// One status-line render, as Claude Code would ask for it. `hints` are the
+// client-observed facts (termCols/termRows/ssh) spread onto the request the
+// way the real client spreads them; `args` is the client's argv (binary path
+// first, as parseRenderArgs expects), empty for a bare render.
+export function render(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  hints: ClientHints = {},
+  args: string[] = [],
+): Promise<string> {
+  return renderRequest(sockPath, {
+    hookData: hookData(sessionId, cwd),
+    args,
+    cwd,
+    // What the real client always reports from its env: test/setup.ts
+    // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
+    // host's Claude Code settings. A case's own hints win.
+    claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
+    ...hints,
+  });
+}
+
 // A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
-// as the wire request the URL handler app sends.
-export async function click(sockPath: string, url: string): Promise<void> {
+// as the wire request the URL handler app sends. The daemon's answer is
+// returned as it came, refusal included.
+export function sendClick(
+  sockPath: string,
+  url: string,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<Response> {
   const { verb, value } = parseHandlerUrl(url);
-  const resp = await sendDaemonRequest(
+  return sendDaemonRequest(
     sockPath,
     { v: PROTOCOL_VERSION, kind: "click", verb, value },
-    REPLY_BUDGET_MS,
+    replyBudgetMs,
   );
+}
+
+// `sendClick`, for a test whose click must land.
+export async function click(sockPath: string, url: string): Promise<void> {
+  const resp = await sendClick(sockPath, url);
   if (!resp.ok) {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }

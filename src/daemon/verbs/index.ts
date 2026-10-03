@@ -47,6 +47,7 @@ import {
   describeStep,
   type Journal,
   type SettingsHistory,
+  type Step,
 } from "../settings-history";
 import type { NavigationHistory } from "../navigation-history";
 import { durableConfigPath } from "../../config/loader/discovery";
@@ -571,6 +572,21 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
   return parseRenderOrigin(raw);
 }
 
+// [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
+// session renders from reloads it before the click answers, as save does; one
+// that wrote no such file rebuilds nothing (a reload restarts every source).
+// Another session's file reaches its render through the fs watcher.
+function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
+  // A session with no recorded render has no cache entry to draw stale.
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  if (raw === null) return;
+  const origin = parseRenderOrigin(raw);
+  const file = originConfigFile(origin);
+  if (step.some((c) => c.kind === "file" && c.file === file)) {
+    ctx.reloadConfig(origin);
+  }
+}
+
 function originConfigFile(origin: RenderOrigin): string {
   return durableConfigPath(
     origin.projectDir,
@@ -588,9 +604,9 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
 // write shape, writing into the session's config file instead of
-// SessionState. The write is DURABLE — RenderCache's watcher on that file
-// (src/daemon/cache/render.ts) picks it up on the next reload, exactly as a
-// hand edit would; the two are indistinguishable by design.
+// SessionState. The write is DURABLE, and the session's config reloads before
+// the click answers, as save's does, so the next render draws it
+// ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
 // [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
@@ -614,6 +630,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
     key,
   );
   writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
     `set-config: ${landing.key}=${result.value} → ${file} (session=${sid})`,
@@ -668,6 +685,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
@@ -948,6 +966,7 @@ const undo: VerbHandler = (value, ctx) => {
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
+  reloadIfWritten(ctx, sid, step);
   ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -971,6 +990,7 @@ const rewind: VerbHandler = (value, ctx) => {
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
+  reloadIfWritten(ctx, sid, restored);
   ctx.dlog(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -983,6 +1003,7 @@ const redo: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(sessionId);
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
+  reloadIfWritten(ctx, sid, step);
   ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
