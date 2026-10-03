@@ -76,8 +76,8 @@ export function resolveFill(
   // its natural width, because that width is already inside the measurement above.
   const share = Math.floor(deficit / demands.length);
   const remainder = deficit - share * demands.length;
-  // The content grows, then its trail rejoins: a left-justified fill pads
-  // BEFORE the trail, never after it.
+  // The content grows, then its lead and trail rejoin: a left-justified fill
+  // pads BEFORE the trail, never after it.
   demands.forEach(({ at, how }, i) => {
     const grow = share + (i === demands.length - 1 ? remainder : 0);
     const { text } = row[at]!;

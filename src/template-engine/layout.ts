@@ -51,6 +51,8 @@ export interface SegmentLayoutOptions {
    * assignment here.
    */
   baseStyle?: Style;
+  /** Cells drawn inside the cell before the sized content (SegmentNode.lead). */
+  lead?: readonly RichText[];
   /** Cells drawn inside the cell after the sized content (SegmentNode.trail). */
   trail?: readonly RichText[];
 }
@@ -126,17 +128,30 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 export interface LaidCell {
   readonly text: RichText;
   readonly fill?: CellSizing;
-  // Drawn inside the cell after `text`, never resized with it
-  // (SegmentNode.trail). Joined by `stripItem` once sizing is final.
+  // Drawn inside the cell before / after `text`, never resized with it
+  // (SegmentNode.lead / .trail). Joined by `stripItem` once sizing is final.
+  readonly lead?: RichText;
   readonly trail?: RichText;
 }
 
-// The ONE strip item a laid cell serializes to: its sized text, then its trail,
-// on the cell's own ground.
-export function stripItem({ text, trail }: LaidCell): RichText {
-  if (trail === undefined) return text;
-  const joined = collapseToCell([text, trail]);
-  joined.style = text.style;
+// A laid cell's parts in drawing order — its lead, its sized text, its trail —
+// as the objects the row's fill sizing will still grow in place: a copy joined
+// now would record a fill cell at its natural width.
+export function cellParts({ lead, text, trail }: LaidCell): RichText[] {
+  return [
+    ...(lead === undefined ? [] : [lead]),
+    text,
+    ...(trail === undefined ? [] : [trail]),
+  ];
+}
+
+// The ONE strip item a laid cell serializes to: its parts, on the cell's own
+// ground.
+export function stripItem(cell: LaidCell): RichText {
+  const parts = cellParts(cell);
+  if (parts.length === 1) return cell.text;
+  const joined = collapseToCell(parts);
+  joined.style = cell.text.style;
   return joined;
 }
 
@@ -156,7 +171,15 @@ export function applySegmentLayout(
   cells: readonly RichText[],
   options: SegmentLayoutOptions,
 ): LaidCell[] {
-  const { width, justify, truncate, baseStyle, padding, trail = [] } = options;
+  const {
+    width,
+    justify,
+    truncate,
+    baseStyle,
+    padding,
+    lead = [],
+    trail = [],
+  } = options;
 
   if (cells.length === 0) return [];
 
@@ -166,19 +189,20 @@ export function applySegmentLayout(
   // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
   // the cell's wrapping style, so the segment bg is continuous.
   const cell = collapseToCell(cells, baseStyle).pad(padding);
-  // The trail is carried beside the content rather than joined here, so the
-  // content alone is what any sizing — this call's or the row's fill — resizes:
-  // a fixed width never truncates the trail away, and a fill's pad lands before
-  // it. It takes only a right pad: the content's own right pad separates them.
-  const tail =
-    trail.length === 0
-      ? {}
-      : {
-          trail: collapseToCell(
-            [...trail, new RichText(" ".repeat(padding))],
-            baseStyle,
-          ),
-        };
+  // The lead and trail are carried beside the content rather than joined here,
+  // so the content alone is what any sizing — this call's or the row's fill —
+  // resizes: a fixed width never truncates them away, and a fill's pad lands
+  // between them. Each takes only its outer pad: the content's own pads
+  // separate them from it.
+  const pad = new RichText(" ".repeat(padding));
+  const tail = {
+    ...(lead.length > 0 && {
+      lead: collapseToCell([pad, ...lead], baseStyle),
+    }),
+    ...(trail.length > 0 && {
+      trail: collapseToCell([...trail, pad], baseStyle),
+    }),
+  };
   if (width === "auto") return [{ text: cell, ...tail }];
   const how: CellSizing = { justify, truncate };
   // "fill" leaves the cell content-sized and states its demand; the row resolves

@@ -596,7 +596,7 @@ as `.settings.<name>`:
 - Every placement in a layout has its own `id` — a bare one takes its
   segment's name, so a second placement of one segment names an id of its
   own. The id is the placement's identity: its menus' open state and edit
-  mode's `🚫` address it.
+  mode's `✖` address it.
 
 ```json5 check:pass
 {
@@ -641,7 +641,7 @@ that placement alone, `"bar"` included. A template reads it as
 ```
 
 A setting is also changeable from the bar. In edit mode every placement
-carries a `⚙` beside its `🚫` (every placement has `theme`); clicking it
+carries a `⚙️` after its name (every placement has `theme`); clicking it
 configures that one placement: the `+`/`-` chrome goes away and one control
 per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
 list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel

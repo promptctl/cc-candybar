@@ -85,9 +85,9 @@ export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
-export const REMOVE_GLYPH = "🚫";
+export const REMOVE_GLYPH = "✖";
 export const ADD_GLYPH = "✚";
-export const CONFIGURE_GLYPH = "⚙";
+export const CONFIGURE_GLYPH = "⚙️";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -192,25 +192,28 @@ function chromeCell(
   return { kind: "segment", name };
 }
 
-// The `-` affordance (drawn `🚫`) for one placement, addressed by its id: a
+// The `-` affordance (drawn `✖`) for one placement, addressed by its id: a
 // literal `removeSegment` action, and the `{{ action }}` that clicks it. The
 // action is named by its POSITION, as an insertion's is: an id is free text,
-// and `ident` would collapse `git-2` and `git_2` onto one action.
+// and `ident` would collapse `git-2` and `git_2` onto one action. It is red
+// TEXT on the cell's own ground, floored to stay legible on it, as the `✚`
+// beside it is green.
 function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
   const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id,
   };
-  return `{{ action "${actionName}" "${REMOVE_GLYPH}" }}`;
+  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
 }
 
-// The affordances drawn inside a placement's own cell — its `⚙` when it has
-// settings, then its `🚫` — carried as the segment node's `trail` so nothing
-// sits between a placement and what acts on it. A trail is not a segment, so
-// no segment `when` hides it: it carries arrange mode's gate itself.
-function trailOf(terms: readonly string[]): string {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${terms.join("")}{{ end }}`;
+// An affordance drawn inside a placement's own cell — its `✖` as the segment
+// node's `lead`, its `⚙️` as its `trail` — so nothing sits between a placement
+// and what acts on it. Neither is a segment, so no segment `when` hides it:
+// each carries arrange mode's gate itself.
+function inArrangeMode(term: string): string {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
 }
 
 // ─── Configure mode (brandon-segment-settings-i4n.g64) ──────────────────────
@@ -255,7 +258,7 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
-// What configure mode adds to one placement: the `⚙` that
+// What configure mode adds to one placement: the `⚙️` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
 // through. The body is a disclosure over edit mode's one key at this
@@ -422,7 +425,7 @@ function insertTerm(
   // a tint the terminal's colour depth may flatten. The `✕` names it.
   //
   // Closed, the `✚` is green TEXT on the chrome cell's own ground — no
-  // background of its own — so "add" reads by colour beside the red 🚫,
+  // background of its own — so "add" reads by colour beside the red ✖,
   // floored to stay legible on the tint that ground is. Open, the `✕` keeps
   // the trigger's own chosen text: the trigger's ground is decided after the
   // body evaluates (by the drop this very menu makes), so `bgOf` cannot see
@@ -449,9 +452,9 @@ interface SpliceCtx {
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `⚙` and `-` as its own trail and is followed by one gap
+// segment child carries its `-` as its lead and `⚙️` as its trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
-// `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
+// `+` (so N consecutive segments read `+ [-seg1⚙️] + [-seg2⚙️] + [-seg3⚙️] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
 // untouched — but the disclosure BODY a segment hangs (a group's children,
@@ -496,17 +499,19 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
     // The buttons are drawn inside the cell of the placement they act on, in
     // whichever of the two views shows it, so nothing sits between them.
-    const trail = trailOf([configure.term, remove]);
+    const lead = inArrangeMode(remove);
+    const trail = inArrangeMode(configure.term);
     const cells: LayoutNode[] = [
       ...leading.map((lead) =>
         chromeCell(lead.host, lead.template, ctx.artifacts),
       ),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(child, decl, ctx.artifacts, configure), trail },
+      { ...labelChrome(child, decl, ctx.artifacts, configure), lead, trail },
       {
         ...spliced,
         when: inNamesView("false", child.when ?? "true"),
+        lead,
         trail,
         drafts: configure.drafts,
       },

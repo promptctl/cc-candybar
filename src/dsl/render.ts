@@ -552,7 +552,7 @@ export function registerDslConfig(
   const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
   // A node's templates recur across many nodes — edit mode gates every chrome
   // cell and every placed segment in every preset by a handful of predicates,
-  // and draws one segment's remove trail on both its label and its content —
+  // and draws one segment's remove lead and configure trail on both its label and its content —
   // so each distinct source is parsed once and its template shared. A parsed
   // template holds no evaluation state, so sharing one is sharing its AST.
   const nodeTemplates = new Map<string, Template<RichText>>();
@@ -1153,8 +1153,10 @@ export function renderDsl(
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly lead: Template<RichText> | undefined;
       readonly trail: Template<RichText> | undefined;
     },
+    bodyOpen: boolean,
   ): EvaluatedSegment => {
     try {
       const drawnAt = registry.drawnAt();
@@ -1175,8 +1177,17 @@ export function renderDsl(
         segScope,
       );
       const fragments = templates.body.evaluate(segScope);
-      // Evaluated while the segment is still entered, so its colours read the
-      // cell it is drawn in.
+      // [LAW:one-source-of-truth] Open is the PRESENCE of something under the
+      // segment: a dropped menu body (known only now the body has evaluated),
+      // or an open disclosure body. Decided once, here, and returned — the
+      // walk picks the cell's Style by this same value.
+      const open = active.drops.length > 0 || bodyOpen;
+      // The lead and trail are evaluated while the segment is still entered,
+      // and after its ground is final, so `{{ bgOf }}` in them reads the
+      // ground they are drawn on: an open segment wears its band's state
+      // colour, not its closed background.
+      if (open) active.bg = bandFor(palette, disclosure, drawnAt).state;
+      const lead = templates.lead?.evaluate(segScope) ?? [];
       const trail = templates.trail?.evaluate(segScope) ?? [];
       // Read only where something hangs open under the segment: a band that
       // can never be drawn (a hue with no state) throws when it is opened,
@@ -1199,7 +1210,7 @@ export function renderDsl(
         },
         disclosure,
       };
-      return { styles, fragments, trail, drops: active.drops };
+      return { styles, fragments, lead, trail, drops: active.drops, open };
     } finally {
       compiled.activeSegment.current = null;
     }

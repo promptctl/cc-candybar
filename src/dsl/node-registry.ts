@@ -56,7 +56,7 @@ import {
   applySegmentLayout,
   placementScope,
 } from "../template-engine/index.js";
-import type { LaidCell } from "../template-engine/layout.js";
+import { cellParts, type LaidCell } from "../template-engine/layout.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -78,6 +78,7 @@ export interface CompiledSegmentNode {
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
   readonly opens?: CompiledOpens;
+  readonly lead?: Template<RichText>;
   readonly trail?: Template<RichText>;
 }
 export interface CompiledOpens {
@@ -144,10 +145,6 @@ export interface Line<C> {
 }
 export type RenderedLine = Line<LaidCell>;
 
-// A laid cell's parts, as the objects the row's fill sizing will still grow in
-// place: a copy joined now would record a fill cell at its natural width.
-const cellParts = ({ text, trail }: LaidCell): readonly RichText[] =>
-  trail === undefined ? [text] : [text, trail];
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────
@@ -236,8 +233,12 @@ export interface NodeRenderCtx {
       readonly bg: Template<RichText> | undefined;
       readonly fg: Template<RichText> | undefined;
       readonly body: Template<RichText>;
+      readonly lead: Template<RichText> | undefined;
       readonly trail: Template<RichText> | undefined;
     },
+    // Whether the disclosure body this segment hangs is open: with the menu
+    // bodies its own template drops, it decides the ground the segment wears.
+    bodyOpen: boolean,
   ): EvaluatedSegment;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
@@ -288,8 +289,12 @@ export interface SegmentStyles {
 export interface EvaluatedSegment {
   readonly styles: SegmentStyles;
   readonly fragments: readonly RichText[];
+  readonly lead: readonly RichText[];
   readonly trail: readonly RichText[];
   readonly drops: readonly RichText[];
+  // Whether anything hangs open under the segment — a dropped menu body or
+  // its open disclosure body — so it wears its band's state colour.
+  readonly open: boolean;
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -486,6 +491,9 @@ const segmentType: NodeType<"segment"> = {
           placement: node.opens.placement,
         },
       }),
+      ...(node.lead !== undefined && {
+        lead: cctx.parse(node.lead, "lead"),
+      }),
       ...(node.trail !== undefined && {
         trail: cctx.parse(node.trail, "trail"),
       }),
@@ -503,7 +511,7 @@ const segmentType: NodeType<"segment"> = {
     const { seg, compiled: segCompiled } = found;
     if (!ctx.visible) return [];
     // [LAW:one-source-of-truth] Every template of THIS placement — its
-    // segment's `when`, `bg:`, `fg:`, body, and edit mode's trail — reads
+    // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
     // this placement's settings; nothing outside the placement does.
     const scope = placementScope(ctx.scope, node.settings);
 
@@ -536,31 +544,33 @@ const segmentType: NodeType<"segment"> = {
       // a menu can sit anywhere in the template, under any wrapper, and
       // content after it stays inline. Each becomes one full-width line
       // stacked below the segment's row.
-      const { styles, fragments, trail, drops } = ctx.evaluateSegment(
-        node,
-        scope,
-        palette,
-        ctx.region,
-        {
-          bg: segCompiled.bg,
-          fg: segCompiled.fg,
-          body: segCompiled.template,
-          trail: node.trail,
-        },
-      );
       // The disclosure body this segment opens (a group's, the settings menu's,
       // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
       // each entering the seam in turn — on the band this trigger computed.
       // Walked open or closed, like every child: visibility is a value.
       const bodyOpen =
         node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
-      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of something
+      // [LAW:dataflow-not-control-flow] `open` is the PRESENCE of something
       // under the segment: a dropped menu body, or an open disclosure body.
       // Either way the segment is the TRIGGER of the band below it and wears
       // that band's state colour — drawn from what it opens, not from where
-      // it sits. No state re-read beyond the body's own gate; the drop list
-      // IS the open-menu signal, and every Style was resolved at entry.
-      const open = drops.length > 0 || bodyOpen;
+      // it sits. The seam decides it (the drop list is only known once the
+      // body has evaluated) and evaluates the lead and trail on that ground.
+      const { styles, fragments, lead, trail, drops, open } =
+        ctx.evaluateSegment(
+          node,
+          scope,
+          palette,
+          ctx.region,
+          {
+            bg: segCompiled.bg,
+            fg: segCompiled.fg,
+            body: segCompiled.template,
+            lead: node.lead,
+            trail: node.trail,
+          },
+          bodyOpen,
+        );
       const baseStyle = open ? styles.trigger : styles.closed;
       const layout = {
         width: seg.width ?? "auto",
@@ -627,6 +637,7 @@ const segmentType: NodeType<"segment"> = {
       ).map((line, i) => ({
         cells: applySegmentLayout(line, {
           ...layout,
+          lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
           trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
         }),
         band: "own",
@@ -682,7 +693,8 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
-              trail: errorTrail(node, scope, ctx),
+              lead: errorAffix(node.lead, node, scope, ctx),
+              trail: errorAffix(node.trail, node, scope, ctx),
             },
           ),
           band: "own",
@@ -693,22 +705,32 @@ const segmentType: NodeType<"segment"> = {
   },
 };
 
-// A broken segment stays removable: edit mode's `-` rides its ⚠ cell as it
-// rides any cell. The trail is entered as a body of its own, so a trail that
-// fails too is one more reported error beside the first, never a bar-wide throw.
-function errorTrail(
+// A broken segment stays configurable and removable: edit mode's buttons ride
+// its ⚠ cell as they ride any cell. Each is entered as a body of its own, so
+// one that fails too is one more reported error beside the first, never a
+// bar-wide throw.
+function errorAffix(
+  affix: Template<RichText> | undefined,
   node: CompiledSegmentNode,
   scope: object,
   ctx: NodeRenderCtx,
 ): readonly RichText[] {
-  if (node.trail === undefined) return [];
+  if (affix === undefined) return [];
   try {
-    return ctx.evaluateSegment(node, scope, ctx.palette, ctx.region, {
-      bg: undefined,
-      fg: undefined,
-      body: node.trail,
-      trail: undefined,
-    }).fragments;
+    return ctx.evaluateSegment(
+      node,
+      scope,
+      ctx.palette,
+      ctx.region,
+      {
+        bg: undefined,
+        fg: undefined,
+        body: affix,
+        lead: undefined,
+        trail: undefined,
+      },
+      false,
+    ).fragments;
   } catch (err) {
     ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
     return [];

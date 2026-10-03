@@ -22,8 +22,8 @@ import { NODE_FLAGS } from "./cli-flags";
 // reader matches text to affordance by shape rather than by reading order.
 export const EDIT_MODE_HELP = [
   "✚ inserts",
-  "🚫 removes",
-  "⚙ configures",
+  "✖ removes",
+  "⚙️ configures",
   "↺ resets layout",
 ] as const;
 

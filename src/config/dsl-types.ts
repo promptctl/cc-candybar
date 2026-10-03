@@ -91,7 +91,7 @@ export interface SegmentNode {
   // instance of. Its template/palette/`when` live on its SegmentDecl.
   readonly name: string;
   // The placement's identity (brandon-segment-settings-i4n): what a menu's
-  // open state, edit mode's `🚫`/`+`, and the config-file editor address. A
+  // open state, edit mode's `✖`/`+`, and the config-file editor address. A
   // name, never a position — positions shift when a sibling is added or
   // removed. Absent ≡ the segment's name, so `"git"` and
   // `{ seg: "git", id: "git" }` are one placement; read it through
@@ -118,10 +118,11 @@ export interface SegmentNode {
   // producer and the loader's segment schema does not list the field, so no
   // config can author it.
   readonly opens?: Opens;
-  // A template drawn inside this segment's own cell, after its content and
-  // after any sizing, so it reads as part of the segment: edit mode's remove
-  // button, which has to sit against the segment it removes. Synthesis-only,
-  // like `opens`.
+  // Templates drawn inside this segment's own cell, before (`lead`) and after
+  // (`trail`) its content and outside any sizing, so they read as part of the
+  // segment: edit mode's configure and remove buttons, which have to sit
+  // against the segment they act on. Synthesis-only, like `opens`.
+  readonly lead?: string;
   readonly trail?: string;
   // Where this placement's unsaved setting values live (brandon-segment-
   // settings-i4n.g64): setting name → the session key configure mode's
