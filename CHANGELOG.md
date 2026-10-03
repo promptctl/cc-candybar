@@ -1,3 +1,10 @@
+# [1.102.0](https://github.com/promptctl/cc-candybar/compare/v1.101.0...v1.102.0) (2026-10-03)
+
+
+### Features
+
+* **edit:** ⊖ removes in red, ⊕ adds in green on no fill ([#290](https://github.com/promptctl/cc-candybar/issues/290)) ([e83b63f](https://github.com/promptctl/cc-candybar/commit/e83b63f7b63759509fb3d9bba316bfc5f4ea06b2))
+
 # [1.101.0](https://github.com/promptctl/cc-candybar/compare/v1.100.1...v1.101.0) (2026-10-03)
 
 
