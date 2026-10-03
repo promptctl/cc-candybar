@@ -82,7 +82,7 @@ const EPHEMERAL_STORAGE: HistoryStorage = { load: () => ({}), save: () => {} };
 const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey),
 );
-const isSettingKey = (key: string): boolean =>
+export const isSettingKey = (key: string): boolean =>
   SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
 
 // [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a

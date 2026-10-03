@@ -55,6 +55,9 @@ export type { OptionDomain } from "./option-domain.js";
 // like `int: true` is for a set-int cursor. `save` is the third marker: it
 // writes every setting the session holds unsaved (src/daemon/setting-drafts.ts)
 // to the config file, and the daemon — not the click — knows which they are.
+// `back` is undo's twin over what is OPEN rather than what is set: it restores
+// the menus, tabs, pickers and edit mode the session's last navigating click
+// changed (src/daemon/navigation-history.ts), and leaves every setting alone.
 export const ACTION_KEYS = [
   "set",
   "persist",
@@ -63,6 +66,7 @@ export const ACTION_KEYS = [
   "reset",
   "undo",
   "redo",
+  "back",
   "save",
   "preset",
   "doctor",
@@ -109,6 +113,10 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         wire input
 //   redo                — the inverse of undo: re-apply the most recently
 //                         undone step -> no gate, no key
+//   back                — restore what the session's last navigating click
+//                         opened or closed -> no gate, no key: the values
+//                         restored are the daemon's own record, never wire
+//                         input
 //   save                — write every unsaved setting to the config file and
 //                         release it from the session -> no gate of its own:
 //                         each value re-crosses the session gate that admitted
@@ -212,6 +220,7 @@ export type ActionDecl =
   | { readonly reset: string }
   | { readonly undo: true }
   | { readonly redo: true }
+  | { readonly back: true }
   | { readonly save: true }
   // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
   // daemon names the preset and reads what it holds at click time — while

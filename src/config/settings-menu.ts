@@ -44,6 +44,7 @@ import {
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
+  type SegmentNode,
   type VariableDecl,
 } from "./dsl-types.js";
 import {
@@ -176,6 +177,16 @@ const SETTINGS_REF: DisclosureRef = {
 // Undo and redo step the session's one settings history
 // (src/daemon/settings-history.ts).
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
+// [LAW:one-source-of-truth] `◁` restores what the session's last navigating
+// click opened or closed (src/daemon/navigation-history.ts). It is drawn in
+// the door's own cell, before the door, and while there is nothing to go back
+// to its place holds a blank of its width, so the door never moves.
+const BACK_ACTION = `${SETTINGS_NS}back`;
+const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
+export const BACK_GLYPH = "◁";
+const BACK_LEAD =
+  `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
+  `{{ else }}${" ".repeat(BACK_GLYPH.length)}{{ end }}`;
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
@@ -568,44 +579,52 @@ const tabBody = (tab: TabName): ContainerNode => ({
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? disclosureNode(
-          node.name,
-          SETTINGS_REF,
-          // Two lines stacked over the bar, then the open tab's body. The
-          // first line holds what the menu is FOR — switching arrangement —
-          // and, beside it, the save cell whenever it has something to do.
-          // The second is the tab strip.
-          {
-            kind: "container",
-            direction: "vertical",
-            children: [
-              {
-                kind: "container",
-                direction: "horizontal",
-                children: [
-                  ...controlsAt("door"),
-                  { kind: "segment", name: SAVE_SEG },
-                ],
-              },
-              {
-                kind: "container",
-                direction: "horizontal",
-                children: TABS.map(({ member }) =>
-                  disclosureNode(
-                    tabSeg(member),
-                    tabRef(member),
-                    tabBody(member),
-                    "drop",
+      ? withBack(
+          disclosureNode(
+            node.name,
+            SETTINGS_REF,
+            // Two lines stacked over the bar, then the open tab's body. The
+            // first line holds what the menu is FOR — switching arrangement —
+            // and, beside it, the save cell whenever it has something to do.
+            // The second is the tab strip.
+            {
+              kind: "container",
+              direction: "vertical",
+              children: [
+                {
+                  kind: "container",
+                  direction: "horizontal",
+                  children: [
+                    ...controlsAt("door"),
+                    { kind: "segment", name: SAVE_SEG },
+                  ],
+                },
+                {
+                  kind: "container",
+                  direction: "horizontal",
+                  children: TABS.map(({ member }) =>
+                    disclosureNode(
+                      tabSeg(member),
+                      tabRef(member),
+                      tabBody(member),
+                      "drop",
+                    ),
                   ),
-                ),
-              },
-            ],
-          },
-          "above",
+                },
+              ],
+            },
+            "above",
+          ),
         )
       : node;
   }
   return expandContainer(node);
+}
+
+// The door wears `◁` as its cell's lead, so it is inside the door's cell and
+// takes the same place whether it can be clicked or not.
+function withBack(door: SegmentNode): SegmentNode {
+  return { ...door, lead: BACK_LEAD };
 }
 
 function expandContainer<
@@ -655,6 +674,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
       [UNDO_ACTION]: { undo: true },
+      [BACK_ACTION]: { back: true },
       [REDO_ACTION]: { redo: true },
       [PRESET_SAVE]: { preset: "save" },
       [PRESET_DELETE]: {
@@ -691,6 +711,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         template: `{{ action "${EDIT_SEG}" "✎ arrange" "✎ done" }}`,
       },
     },
+  };
+  artifacts.variables[BACK_COUNT] = {
+    kind: "input",
+    path: "navigation.back",
+    type: "number",
+    default: 0,
   };
   // The counts the daemon publishes every render, one per save-cell part.
   for (const p of SAVE_PARTS) {

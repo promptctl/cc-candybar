@@ -155,6 +155,7 @@ export function checkPayload(
     // part of the settings menu's save cell, each gated on having something to
     // do, renders and gets its template checked.
     history: { undo: 1, redo: 1 },
+    navigation: { back: 1 },
     unsaved: 1,
     resettable: 1,
   };

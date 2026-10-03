@@ -97,6 +97,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     },
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
+    navigation: () => 0,
   } as unknown as RenderPayloadDeps;
   return { deps, counts };
 }

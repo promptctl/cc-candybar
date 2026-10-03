@@ -38,6 +38,7 @@ function depsWith(
     tmuxService: { getSessionId: async () => ABSENT },
     log: (level: string, msg: string) => logs.push({ level, msg }),
     history: () => EMPTY_HISTORY_DEPTH,
+    navigation: () => 0,
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }

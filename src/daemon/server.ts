@@ -63,6 +63,7 @@ import { resetSpawnBackoff } from "./acquire";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
 import { SettingsHistory, fileHistoryStorage } from "./settings-history";
+import { NavigationHistory } from "./navigation-history";
 import {
   VERBS,
   BadVerbArgs,
@@ -141,6 +142,7 @@ const usageStore = new SessionUsageStore();
 const sessionState = new SessionState();
 // [LAW:locality-or-seam] Same terms: ephemeral until runDaemon binds its file.
 const settingsHistory = new SettingsHistory(sessionState, dlog);
+const navigationHistory = new NavigationHistory();
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -1271,6 +1273,7 @@ const verbCtx = {
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
+  navigation: navigationHistory,
   // The config a session's last render resolved from — the same entry the
   // render drew the bar with, so a save compares against the bar the user saw.
   configFor: (origin: RenderOrigin) =>
@@ -1352,6 +1355,7 @@ const payloadDeps = {
   // the rate-limit ETA projection and the template's reset countdown read.
   clock: () => new Date(),
   history: (sessionId: string) => settingsHistory.depth(sessionId),
+  navigation: (sessionId: string) => navigationHistory.depth(sessionId),
 };
 
 function handleClick(verb: string, value: string): Response {
