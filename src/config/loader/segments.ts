@@ -21,6 +21,7 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { SEGMENT_GROUPS } from "../segment-groups.js";
 import { isReservedName } from "./reserved-namespace.js";
 import { renamedHint } from "./renamed-segments.js";
 import {
@@ -169,6 +170,7 @@ const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   // set `description` on its own segment or on a delta over a bundled name
   // with no further edit anywhere (brandon-config-schema-qqg).
   description: optionalStringSpec(),
+  group: optionalEnumSpec(SEGMENT_GROUPS),
   width: widthSpec(),
   justify: optionalEnumSpec(JUSTIFY_MODES),
   truncate: optionalEnumSpec(TRUNCATE_MODES),

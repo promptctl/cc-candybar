@@ -23,8 +23,7 @@
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
 // as data). The generic engine never imports this module.
 
-import { RichText } from "@promptctl/rich-js";
-import type { Style } from "@promptctl/rich-js";
+import { RichText, Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -37,6 +36,11 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
+import {
+  libraryLayout,
+  libraryRow,
+  type LibraryPageLayout,
+} from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   requireActiveSegment,
@@ -253,7 +257,7 @@ export function renderPicker(
   paged: boolean,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
-): RichText {
+): readonly RichText[] {
   const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the presented action above (its
   // options, its current-mark); the CLICK is realized from the declaration
@@ -282,11 +286,23 @@ export function renderPicker(
   const available = paged ? rowBudget(runtime) : Infinity;
   const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
-  const firstPass = paginate(widths, available, closeReserve);
-  const pages =
-    firstPass.length > 1
-      ? paginate(widths, available, closeReserve + arrowReserve)
-      : firstPass;
+
+  // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
+  // domain's one section is the run of cells `paginate` fits to the width, and
+  // a catalogue domain's (`library`, src/config/option-domain.ts) are its
+  // groups. The cursor, the ←/→/✕ affordances and the click are the same code
+  // either way — only what a page is made of differs, and that is data.
+  const pages: readonly LibraryPageLayout[] =
+    apply.library !== undefined
+      ? libraryLayout(apply.options, apply.library, paged)
+      : (() => {
+          const firstPass = paginate(widths, available, closeReserve);
+          return (
+            firstPass.length > 1
+              ? paginate(widths, available, closeReserve + arrowReserve)
+              : firstPass
+          ).map((cells) => [{ label: "", indices: cells }]);
+        })();
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
   // (the key was never written) — parse it at this trust boundary; an out-of-range
@@ -296,7 +312,7 @@ export function renderPicker(
   const pageIdx = Number.isInteger(rawPage)
     ? Math.max(0, Math.min(rawPage, pages.length - 1))
     : 0;
-  const pageCells = pages[pageIdx] ?? [];
+  const pageSections = pages[pageIdx] ?? [];
 
   const pageUrl = (value: number): string =>
     effectsUrl([
@@ -326,30 +342,90 @@ export function renderPicker(
       ...closeEffects,
     ]);
 
-  const frags: RichText[] = [
-    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
-  ];
-  if (pageIdx > 0) {
-    frags.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
-  }
   // [LAW:dataflow-not-control-flow] An item is placed by its index in the
   // WHOLE option domain, not on its page: paging changes which cells show,
   // never what colour an option is.
-  for (const i of pageCells) {
+  const optionCell = (i: number, text: string): RichText => {
     const option = apply.options[i]!;
-    frags.push(
-      linkFragment(
-        option,
-        optionUrl(option),
-        option === current,
-        itemStyle({ index: i, count: apply.options.length }, option),
-      ),
+    return linkFragment(
+      text,
+      optionUrl(option),
+      option === current,
+      itemStyle({ index: i, count: apply.options.length }, option),
     );
+  };
+  const nav: RichText[] = [
+    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
+  ];
+  if (pageIdx > 0) {
+    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
-  if (pageIdx < pages.length - 1) {
-    frags.push(linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false));
+  const next =
+    pageIdx < pages.length - 1
+      ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)]
+      : [];
+
+  if (apply.library === undefined) {
+    const indices = pageSections.flatMap((section) => section.indices);
+    return [
+      assemble(
+        [
+          ...nav,
+          ...indices.map((i) => optionCell(i, apply.options[i]!)),
+          ...next,
+        ],
+        paged,
+      ),
+    ];
   }
-  return assemble(frags, paged);
+
+  // A library page: the nav row names where the reader is (one group per page
+  // when paged), then one row per member — name, description — each row the
+  // member's whole click target.
+  const { library } = apply;
+  const where =
+    pages.length > 1 && pageSections.length === 1
+      ? [
+          new RichText(
+            `${pageSections[0]!.label} ${pageIdx + 1}/${pages.length}`,
+            { style: new Style({ bold: true }) },
+          ),
+        ]
+      : [];
+  const lines: RichText[] = [assemble([...nav, ...where, ...next], paged)];
+  for (const section of pageSections) {
+    if (pageSections.length > 1) {
+      lines.push(
+        assemble(
+          [new RichText(section.label, { style: new Style({ bold: true }) })],
+          paged,
+        ),
+      );
+    }
+    const nameWidth = Math.max(
+      ...section.indices.map((i) => cellWidth(apply.options[i]!)),
+    );
+    for (const i of section.indices) {
+      const option = apply.options[i]!;
+      lines.push(
+        assemble(
+          [
+            optionCell(
+              i,
+              libraryRow(
+                option,
+                nameWidth,
+                library.entry(option).description,
+                available,
+              ),
+            ),
+          ],
+          paged,
+        ),
+      );
+    }
+  }
+  return lines;
 }
 
 // [LAW:dataflow-not-control-flow] One func; the two action NAMES select which
@@ -394,7 +470,7 @@ export function pickerFuncs(
           "set-int",
           "an int action ({ set, int: true })",
         );
-        return renderPicker(
+        const lines = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
           [[page.key, "-1"]],
@@ -412,6 +488,15 @@ export function pickerFuncs(
             activeSegment.drawnAt(),
           ),
         );
+        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
+        // one value, so it cannot carry a library's several rows; a menu body
+        // is where a catalogue domain lays out.
+        if (lines.length !== 1) {
+          throw new Error(
+            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as ${lines.length} rows; a catalogue renders in a {{ menu }} body`,
+          );
+        }
+        return lines[0]!;
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },

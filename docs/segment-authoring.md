@@ -304,6 +304,14 @@ per-field delta, so overriding a bundled segment's `template` inherits that
 segment's description — which then describes something that is no longer there.
 If your version means something different, say so there too.
 
+`group:` files the segment in the library edit mode's `⊕` opens: one of
+`location`, `git`, `model-context`, `cost-limits`, `activity` or
+`session-tools`, naming what the segment is about. A segment that declares none
+is listed under `other`, so a new segment of yours appears in the library with
+no further wiring: its `description:` is the line shown beside its name, and its
+`group:` the page it stands on. Every bundled segment declares one, and the
+loader refuses any other value, naming the six.
+
 A segment with no `bg:` wears a tint the theme derives from its position in
 the row. Authoring a `bg:` is a statement of meaning — this cell is hot — and
 the next step is how to state it from a number.

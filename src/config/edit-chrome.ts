@@ -45,6 +45,7 @@ import { type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
+import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
   EDIT_MODE_GATE,
@@ -212,12 +213,32 @@ export function addableSegmentDomains(
   config: DslConfig,
 ): ReadonlyMap<string, ResolvedDomain> {
   // Segment names carry no colour, so this domain declares no `paletteOf` —
-  // a `+` picker's options keep their band placement.
+  // a `+` picker's options keep their band placement. What it DOES know about
+  // itself is that its members are a catalogue: each segment's authored `group`
+  // and `description` (absent group: `other`), so the picker lays it out as a
+  // library. [LAW:one-source-of-truth] Read from the declarations themselves,
+  // so a segment from any config — a user's, a future bundled one — is in the
+  // library with no wiring.
   return new Map([
     [
       ADDABLE_DOMAIN,
       {
         members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
+        library: {
+          groups: LIBRARY_GROUPS.map((id) => ({
+            id,
+            label: GROUP_LABELS[id],
+          })),
+          entry: (option) => {
+            const decl = config.segments[option]!;
+            return {
+              group: decl.group ?? OTHER_GROUP,
+              ...(decl.description !== undefined && {
+                description: decl.description,
+              }),
+            };
+          },
+        },
       },
     ],
   ]);
