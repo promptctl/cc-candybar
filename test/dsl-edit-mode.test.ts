@@ -390,29 +390,29 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   });
 
   test("a segment's `-` is drawn inside its own cell, in both views", () => {
-    // Inside the cell means on the segment's own node, as its trail — not a
+    // Inside the cell means on the segment's own node, as its lead — not a
     // sibling cell a joiner separates from it. Both the live content node and
     // the name label that stands in for it carry it.
     const config = parseAndValidate("<test>", BASE, ALLOWED);
-    const trails = new Map<string, string>();
+    const leads = new Map<string, string>();
     for (const node of walkNodes(fragmentNode(config.presets.default!.root!))) {
-      if (node.kind === "segment" && node.trail !== undefined) {
-        trails.set(node.name, node.trail);
+      if (node.kind === "segment" && node.lead !== undefined) {
+        leads.set(node.name, node.lead);
       }
     }
-    const removal = (trail: string | undefined) =>
-      /"(edit\.default\.remove\.[^"]+)"/.exec(trail ?? "")?.[1];
+    const removal = (lead: string | undefined) =>
+      /"(edit\.default\.remove\.[^"]+)"/.exec(lead ?? "")?.[1];
     for (const seg of ["directory", "git", "trigger"]) {
-      const remove = removal(trails.get(seg));
+      const remove = removal(leads.get(seg));
       expect(config.actions[remove!]).toMatchObject({ removeSegment: seg });
-      expect(removal(trails.get(`edit.label:${seg}:${seg}`))).toBe(remove);
+      expect(removal(leads.get(`edit.label:${seg}:${seg}`))).toBe(remove);
     }
   });
 
-  // A fill cell's pad is part of its content, so the `-` rides AFTER the pad,
+  // A fill cell's pad is part of its content, so the `⚙️` rides AFTER the pad,
   // against the cell's far edge — never stranded mid-cell with the pad beyond it
-  // — and the `⚙️` leads the content, outside its sizing.
-  test("a fill segment's `⚙️` leads and its `-` sits after the leftover width it absorbed", () => {
+  // — and the `-` leads the content, outside its sizing.
+  test("a fill segment's `-` leads and its `⚙️` sits after the leftover width it absorbed", () => {
     const src = BASE.replace(
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
@@ -428,7 +428,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
     expect(row).toMatch(
-      new RegExp(`${CONFIGURE_GLYPH} d {4,}${REMOVE_GLYPH}`),
+      new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH} `),
     );
     dispose();
   });
@@ -444,7 +444,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     click(open(EDIT_LIVE_KEY, "open"));
     const out = render();
     expect(stripAnsi(out)).toMatch(
-      new RegExp(`${CONFIGURE_GLYPH} ⚠ git: [^\n]*${REMOVE_GLYPH}`),
+      new RegExp(`${REMOVE_GLYPH}⚠ git: [^\n]*${CONFIGURE_GLYPH}`),
     );
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
     dispose();

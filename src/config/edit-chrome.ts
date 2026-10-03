@@ -208,8 +208,8 @@ function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
   return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
 }
 
-// An affordance drawn inside a placement's own cell — its `⚙️` as the segment
-// node's `lead`, its `✖` as its `trail` — so nothing sits between a placement
+// An affordance drawn inside a placement's own cell — its `✖` as the segment
+// node's `lead`, its `⚙️` as its `trail` — so nothing sits between a placement
 // and what acts on it. Neither is a segment, so no segment `when` hides it:
 // each carries arrange mode's gate itself.
 function inArrangeMode(term: string): string {
@@ -452,7 +452,7 @@ interface SpliceCtx {
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `⚙️` as its lead and `-` as its trail and is followed by one gap
+// segment child carries its `-` as its lead and `⚙️` as its trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
 // `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
@@ -502,8 +502,8 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     // The space after the gear is the gear's own: terminals advance one
     // column for `⚙️` (a narrow base character under an emoji selector)
     // and paint it two wide, over the column after it.
-    const lead = inArrangeMode(`${configure.term} `);
-    const trail = inArrangeMode(remove);
+    const lead = inArrangeMode(remove);
+    const trail = inArrangeMode(`${configure.term} `);
     const cells: LayoutNode[] = [
       ...leading.map((lead) =>
         chromeCell(lead.host, lead.template, ctx.artifacts),
