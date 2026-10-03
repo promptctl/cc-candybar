@@ -411,8 +411,8 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
 
   // A fill cell's pad is part of its content, so the `-` rides AFTER the pad,
   // against the cell's far edge — never stranded mid-cell with the pad beyond it
-  // — and the `🔧` leads the content, outside its sizing.
-  test("a fill segment's `🔧` leads and its `-` sits after the leftover width it absorbed", () => {
+  // — and the `⚙️` leads the content, outside its sizing.
+  test("a fill segment's `⚙️` leads and its `-` sits after the leftover width it absorbed", () => {
     const src = BASE.replace(
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
@@ -428,7 +428,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
     expect(row).toMatch(
-      new RegExp(`${CONFIGURE_GLYPH}d {4,}${REMOVE_GLYPH}`),
+      new RegExp(`${CONFIGURE_GLYPH} d {4,}${REMOVE_GLYPH}`),
     );
     dispose();
   });
@@ -444,7 +444,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     click(open(EDIT_LIVE_KEY, "open"));
     const out = render();
     expect(stripAnsi(out)).toMatch(
-      new RegExp(`${CONFIGURE_GLYPH}⚠ git: [^\n]*${REMOVE_GLYPH}`),
+      new RegExp(`${CONFIGURE_GLYPH} ⚠ git: [^\n]*${REMOVE_GLYPH}`),
     );
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
     dispose();

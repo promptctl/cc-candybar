@@ -87,7 +87,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 export const REMOVE_GLYPH = "✖";
 export const ADD_GLYPH = "✚";
-export const CONFIGURE_GLYPH = "🔧";
+export const CONFIGURE_GLYPH = "⚙️";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -208,7 +208,7 @@ function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
   return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
 }
 
-// An affordance drawn inside a placement's own cell — its `🔧` as the segment
+// An affordance drawn inside a placement's own cell — its `⚙️` as the segment
 // node's `lead`, its `✖` as its `trail` — so nothing sits between a placement
 // and what acts on it. Neither is a segment, so no segment `when` hides it:
 // each carries arrange mode's gate itself.
@@ -452,7 +452,7 @@ interface SpliceCtx {
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `🔧` as its lead and `-` as its trail and is followed by one gap
+// segment child carries its `⚙️` as its lead and `-` as its trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
 // `+` (so N consecutive segments read `+ [seg1-] + [seg2-] + [seg3-] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
@@ -499,7 +499,10 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
     // The buttons are drawn inside the cell of the placement they act on, in
     // whichever of the two views shows it, so nothing sits between them.
-    const lead = inArrangeMode(configure.term);
+    // The space after the gear is the gear's own: terminals advance one
+    // column for `⚙️` (a narrow base character under an emoji selector)
+    // and paint it two wide, over the column after it.
+    const lead = inArrangeMode(`${configure.term} `);
     const trail = inArrangeMode(remove);
     const cells: LayoutNode[] = [
       ...leading.map((lead) =>
