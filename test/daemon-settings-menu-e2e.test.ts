@@ -75,9 +75,9 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       expect(opened).toContain("📐 layout"); // the tab holding edit mode
       expect(opened).toContain("▦"); // preset switching
 
-      // 3. Edit mode is genuinely entered from the layout tab, and the same
-      //    click closes the menu, so the row's edit chrome is on screen the
-      //    moment edit mode is — no close click.
+      // 3. Edit mode is genuinely entered from the layout tab: the row's edit
+      //    chrome is on screen the moment edit mode is, and the menu stays
+      //    open above it.
       await click(
         sockPath,
         urlWriting(await render(sockPath, SID, projectDir), "candybar.tab", "layout"),
@@ -86,10 +86,8 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       expect(stripAnsi(bodyOut)).toContain("✎ arrange");
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
       const editing = await render(sockPath, SID, projectDir);
-      expect(stripAnsi(editing)).toContain(DOOR_GLYPH);
-      // The menu closed with the same click: its body is gone. (`✎ done`
-      // shows either way — it leads edit mode's own top row.)
-      expect(stripAnsi(editing)).not.toContain("📐 layout");
+      expect(stripAnsi(editing)).toContain(DOOR_CLOSE_GLYPH);
+      expect(stripAnsi(editing)).toContain("📐 layout");
       expect(
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,

@@ -262,7 +262,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       expect(members.length).toBeGreaterThanOrEqual(3);
       // Names view: every member but the content (which yields its cell to
       // its label) renders. The label wears the colour the live content wears;
-      // an insertion point (`⊕`) is drawn on no fill at all.
+      // an insertion point (`✚`) is drawn on no fill at all.
       for (const { name } of members.filter(({ name }) => name !== content)) {
         const expected = name.startsWith(`${EDIT_NS}${PRESET_FLOOR}.insertSeg.`)
           ? "(no bg)"
@@ -518,6 +518,8 @@ describe("a band whose nested hue has no state", () => {
       ["primary", new ColorRgba(0x10, 0x9b, 0xdb)],
       ["secondary", new ColorRgba(0xa8, 0x90, 0x21)],
       ["accent", new ColorRgba(0x39, 0x1a, 0x1b)],
+      // Not a decoration role: the open body's ✕ is written in it.
+      ["warning", new ColorRgba(0xe0, 0xaf, 0x68)],
     ]),
   );
 

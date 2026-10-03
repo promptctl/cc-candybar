@@ -304,7 +304,7 @@ per-field delta, so overriding a bundled segment's `template` inherits that
 segment's description — which then describes something that is no longer there.
 If your version means something different, say so there too.
 
-`group:` files the segment in the library edit mode's `⊕` opens: one of
+`group:` files the segment in the library edit mode's `✚` opens: one of
 `location`, `git`, `model-context`, `cost-limits`, `activity` or
 `session-tools`, naming what the segment is about. A segment that declares none
 is listed under `other`, so a new segment of yours appears in the library with
@@ -604,7 +604,7 @@ as `.settings.<name>`:
 - Every placement in a layout has its own `id` — a bare one takes its
   segment's name, so a second placement of one segment names an id of its
   own. The id is the placement's identity: its menus' open state and edit
-  mode's `⊖` address it.
+  mode's `✖` address it.
 
 ```json5 check:pass
 {

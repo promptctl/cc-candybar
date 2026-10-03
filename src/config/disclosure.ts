@@ -21,6 +21,7 @@
 // `src/config/loader/reserved-namespace.ts`.
 
 import type { ActionDecl } from "./action.js";
+import type { SemanticRole } from "../themes/decor.js";
 import type {
   ContainerNode,
   DisclosureRef,
@@ -58,6 +59,15 @@ export const DISCLOSURE_GLYPH_OPEN = "▾";
 // and their dropped bodies are identical too, so row 0 is the only place the
 // answer can live). Two affordances, one meaning, one glyph.
 export const DISCLOSURE_GLYPH_CLOSE = "✕";
+
+// [LAW:one-source-of-truth] The theme role a close glyph's TEXT wears, beside
+// the glyph it colours: a body's or a picker's ✕ is `warning` — it closes one
+// panel — and the risen door's ✖ is `error` — it dismisses the whole menu. The
+// hue is the role's; only its lightness moves, until it reads on the ground it
+// is drawn on (`closeOn`, render/band-style.ts; `readableOn` in the door's
+// template).
+export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
+export const DOOR_CLOSE_ROLE: SemanticRole = "error";
 
 // [LAW:one-source-of-truth] The global settings menu's own glyph — its whole
 // closed display by default, since the door binds a glyph / `✖` rather than a
@@ -193,7 +203,17 @@ export function disclosureTrigger(
   closed: string,
   open: string,
 ): string {
-  return `{{ action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}" }}`;
+  return `{{ ${disclosureTriggerCall(action, closed, open)} }}`;
+}
+
+// The same binding as an expression, for a trigger whose template does more
+// with it than emit it (the settings door colours its open glyph).
+export function disclosureTriggerCall(
+  action: string,
+  closed: string,
+  open: string,
+): string {
+  return `action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}"`;
 }
 
 // [LAW:single-enforcer] THE backing `state` variable a disclosure key implies:

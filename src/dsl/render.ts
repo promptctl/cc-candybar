@@ -11,7 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { RichText, Palette } from "@promptctl/rich-js";
+import type { ColorRgba, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -101,7 +101,7 @@ import {
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
-import { stateCell } from "../render/band-style.js";
+import { closeCell, stateCell } from "../render/band-style.js";
 import {
   barRoot,
   bandFor,
@@ -1176,17 +1176,21 @@ export function renderDsl(
         templates.fg,
         segScope,
       );
+      // `{{ bgOf }}` reads the ground the text is drawn on: an open segment
+      // wears its band's state colour, not its closed background. An open
+      // disclosure body is known before the body evaluates, so the body reads
+      // it too; a dropped menu is known only after, so the lead and trail —
+      // evaluated last — read the final ground either way.
+      const state = (): ColorRgba =>
+        bandFor(palette, disclosure, drawnAt).state;
+      if (bodyOpen) active.bg = state();
       const fragments = templates.body.evaluate(segScope);
       // [LAW:one-source-of-truth] Open is the PRESENCE of something under the
       // segment: a dropped menu body (known only now the body has evaluated),
       // or an open disclosure body. Decided once, here, and returned — the
       // walk picks the cell's Style by this same value.
       const open = active.drops.length > 0 || bodyOpen;
-      // The lead and trail are evaluated while the segment is still entered,
-      // and after its ground is final, so `{{ bgOf }}` in them reads the
-      // ground they are drawn on: an open segment wears its band's state
-      // colour, not its closed background.
-      if (open) active.bg = bandFor(palette, disclosure, drawnAt).state;
+      if (open) active.bg = state();
       const lead = templates.lead?.evaluate(segScope) ?? [];
       const trail = templates.trail?.evaluate(segScope) ?? [];
       // Read only where something hangs open under the segment: a band that
@@ -1205,6 +1209,13 @@ export function renderDsl(
           return stateCell(
             palette,
             bandFor(palette, disclosure, drawnAt).plane,
+            drawnAt,
+          );
+        },
+        get close() {
+          return closeCell(
+            palette,
+            bandFor(palette, disclosure, drawnAt).state,
             drawnAt,
           );
         },

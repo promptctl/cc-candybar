@@ -35,7 +35,7 @@ import {
   type CompiledActionDecl,
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
-import { optionItemStyle } from "./band-style.js";
+import { closeOn, optionItemStyle } from "./band-style.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import { fitCells, libraryLayout, type LibraryPageLayout } from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
@@ -273,6 +273,9 @@ export function renderPicker(
   paged: boolean,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
+  // The ✕'s text on the ground the picker is laid on (`closeOn`): the caller
+  // knows that ground — a menu body's plane, a bare picker's own segment.
+  closeStyle: Style,
 ): readonly RichText[] {
   const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the presented action above (its
@@ -361,7 +364,7 @@ export function renderPicker(
     );
   };
   const nav: RichText[] = [
-    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
+    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false, closeStyle),
   ];
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
@@ -473,6 +476,12 @@ export function pickerFuncs(
             `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`,
           );
         }
+        const active = requireActiveSegment(activeSegment, "{{ picker }}");
+        if (active.bg === undefined) {
+          throw new Error(
+            `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a picker is drawn on that background`,
+          );
+        }
         const [line] = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
@@ -484,12 +493,13 @@ export function pickerFuncs(
           // the default — the same resolution a `{{ menu }}` with no
           // "distribution" option makes.
           optionItemStyle(
-            requireActiveSegment(activeSegment, "{{ picker }}"),
+            active,
             placedBy(undefined),
             runtime,
             apply.paletteOf,
             activeSegment.drawnAt(),
           ),
+          closeOn(active.palette, active.bg, activeSegment.drawnAt()),
         );
         return line!;
       },

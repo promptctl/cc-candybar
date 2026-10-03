@@ -510,10 +510,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     dispose();
   });
 
-  // The red `⊖` is floored against the ground it is DRAWN on. A segment
+  // The red `✖` is floored against the ground it is DRAWN on. A segment
   // with something open under it wears its band's state colour, not its
   // closed background, so the floor is measured against that.
-  test("an open segment's `⊖` stays legible on the state colour it wears", () => {
+  test("an open segment's `✖` stays legible on the state colour it wears", () => {
     const src = BASE.replace(
       "segments: {",
       `actions: { pick: { set: 'pick', from: ['a', 'b'] } },
@@ -540,9 +540,9 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     dispose();
   });
 
-  // An insertion point is drawn on no fill: its `⊕` is green text on the
-  // terminal's own ground, where `⊖` sits inside its placement's cell.
-  test("`⊕` is drawn on no fill, `⊖` on its segment's own cell", () => {
+  // An insertion point is drawn on no fill: its `✚` is green text on the
+  // terminal's own ground, where `✖` sits inside its placement's cell.
+  test("`✚` is drawn on no fill, `✖` on its segment's own cell", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(

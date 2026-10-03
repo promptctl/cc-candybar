@@ -52,12 +52,16 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   DOOR_CLOSE_GLYPH,
+  DOOR_CLOSE_ROLE,
   DOOR_GLYPH,
   disclosureCycleAction,
   disclosureNode,
   disclosureStateVar,
+  disclosureTerm,
   disclosureTrigger,
+  disclosureTriggerCall,
 } from "./disclosure.js";
+import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
   doctorReportKeys,
@@ -96,7 +100,6 @@ export const SETTINGS_OPEN = "open";
 
 // The body's content segments.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
-const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
 const COMMANDS_SEG = `${SETTINGS_NS}commands`;
@@ -685,14 +688,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
-      // menu: edit mode works on the bar, with its own `✓ done` row above it,
-      // so the menu closes and leaves the bar to it. The edit control is
-      // therefore the toggle and the close fired as one click, composed from
-      // two ordinary actions — the close is a literal write to the key the
-      // door's own cycle writes, so each carries the gate it always carried.
-      [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
-      [EDIT_SEG]: { do: [...EDIT_SWITCH, SETTINGS_CLOSE] },
+      // Entering or leaving edit mode is a click like every other in the
+      // menu: the menu stays as it was, so `◁ back` and the tabs stay in reach
+      // while the bar is arranged.
+      [EDIT_SEG]: { do: [...EDIT_SWITCH] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
@@ -717,13 +716,16 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // names what it opens, `✖` names what the click does.
       //
       // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values.
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ is written in the theme's `DOOR_CLOSE_ROLE`, made readable on
+      // the state colour it is drawn on; closed, the author's glyph keeps the
+      // cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: disclosureTrigger(
-          SETTINGS_ANCHOR,
-          doorGlyph,
-          DOOR_CLOSE_GLYPH,
-        ),
+        template:
+          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, doorGlyph, DOOR_CLOSE_GLYPH)} }}` +
+          `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
+          `{{ fg (readableOn (color "${DOOR_CLOSE_ROLE}") (bgOf) ${TEXT_MIN_CONTRAST}) $door }}` +
+          `{{ else }}{{ $door }}{{ end }}`,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template },

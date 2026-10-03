@@ -272,8 +272,9 @@ export interface NodeRenderCtx {
 // [LAW:types-are-the-program] Every Style a segment can wear, resolved at
 // entry as one value. `closed` is its authored `bg:`/`fg:`; `trigger` is the
 // state colour of the band it opens — what it wears while that band is dropped
-// below it; `band` is that band's plane, the floor its dropped lines sit on.
-// Which one a line wears is a VALUE the walk selects by the drop's presence,
+// below it; `band` is that band's plane, the floor its dropped lines sit on;
+// `close` is the trigger's ground with the close glyph's text, which the ✕
+// leading the body it opens wears. Which one a line wears is a VALUE the walk selects by the drop's presence,
 // never a transform applied after the fact. `disclosure` is the band those
 // two were drawn from, returned so the body the segment opens is rendered on
 // the SAME band its trigger wears — one read, no second derivation.
@@ -281,6 +282,7 @@ export interface SegmentStyles {
   readonly closed: Style;
   readonly trigger: Style;
   readonly band: Style;
+  readonly close: Style;
   readonly disclosure: Disclosure;
 }
 
@@ -654,18 +656,26 @@ const segmentType: NodeType<"segment"> = {
       // body, on its first row: every later row leads with a blank of each of
       // its cells' widths in the same colour, so the rows stay aligned and read
       // as one panel with one way to close it.
-      const leadCell = (text: RichText, padding: number): readonly LaidCell[] =>
-        applySegmentLayout(fragmentsToCells([text], styles.trigger), {
+      const leadCell = (
+        text: RichText,
+        style: Style,
+        padding: number,
+      ): readonly LaidCell[] =>
+        applySegmentLayout(fragmentsToCells([text], style), {
           ...layout,
           width: "auto",
-          baseStyle: styles.trigger,
+          baseStyle: style,
           padding,
         });
       const firstOwn = bodyLines.findIndex((l) => l.band === "own");
       const { lead: openLead, stays } =
         opens !== undefined && firstOwn !== -1
           ? OPEN_LEAD[opens.placement](inlineLines, () =>
-              leadCell(ctx.closeDisclosure(opens.key), ctx.padding),
+              leadCell(
+                ctx.closeDisclosure(opens.key),
+                styles.close,
+                ctx.padding,
+              ),
             )
           : { lead: [], stays: inlineLines };
       const holdLead = openLead.flatMap((cell) =>
@@ -675,6 +685,7 @@ const segmentType: NodeType<"segment"> = {
               cellParts(cell).reduce((w, part) => w + part.cellLength, 0),
             ),
           ),
+          styles.trigger,
           0,
         ),
       );

@@ -51,7 +51,8 @@ import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker, requireOptionKind } from "./picker.js";
-import { optionItemStyle } from "./band-style.js";
+import { closeOn, optionItemStyle } from "./band-style.js";
+import { bandFor } from "../themes/decor.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -175,6 +176,16 @@ function renderMenu(
             options.distribution,
             action,
             requireOptionKind(action, applyName, "menu").paletteOf,
+            runtime.activeSegment.drawnAt(),
+          ),
+          // The ✕ sits on the band's plane, as the body's items do.
+          closeOn(
+            placement.palette,
+            bandFor(
+              placement.palette,
+              placement.disclosure,
+              runtime.activeSegment.drawnAt(),
+            ).plane,
             runtime.activeSegment.drawnAt(),
           ),
         )

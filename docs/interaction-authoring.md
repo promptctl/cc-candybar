@@ -358,7 +358,7 @@ on a bar of your own:
   },
   segments: {
     presets: {
-      template: '▦ {{ .preset.effective }} {{ action "keepBar" "⊕" }}{{ if not .preset.bundled }} {{ action "dropPreset" "🗑" }}{{ end }}',
+      template: '▦ {{ .preset.effective }} {{ action "keepBar" "✚" }}{{ if not .preset.bundled }} {{ action "dropPreset" "🗑" }}{{ end }}',
     },
   },
   root: { v: ["presets"] },
@@ -798,8 +798,8 @@ truncates rather than staying reachable past a new edit).
 
 `do` names actions you already declared and fires them all from one click, in
 order. Reach for it when one intent needs two writes — "enter edit mode AND
-close the menu I entered it from" is exactly how the settings menu's `✎ arrange`
-is built. It has no gate of its own: each member keeps the gate it already
+start with no placement configured" is exactly how the settings menu's
+`✎ arrange` is built. It has no gate of its own: each member keeps the gate it already
 derives, so nothing a `do` fires could not be clicked alone.
 
 ```json5 check:pass
@@ -911,31 +911,31 @@ detection `{{ menu }}` uses to find its own placements) and, only then,
 synthesizes:
 
 - `edit.mode` — a `state` variable holding `closed` (the default) or
-  `arrange` (the `⊕`/`⊖` chrome below); `edit.configure`, holding `closed` or
+  `arrange` (the `✚`/`✖` chrome below); `edit.configure`, holding `closed` or
   `<preset>:<id>` (the one placement whose settings hang open, a level inside
   arranging) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
   above verbatim; to close a configured placement as you leave, as the
   bundled controls do, fire `edit.unconfigure` beside it in a `do`.
 - For **every** preset (the `"default"` floor included) and every ordinary
-  segment in its resolved root: a red `⊖` (a synthesized `removeSegment` action
-  behind `{{ action }}`) drawn inside the segment's own cell, then a green `⊕`
+  segment in its resolved root: a red `✖` (a synthesized `removeSegment` action
+  behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
   in a cell of its own (a synthesized `insertSegmentFrom` action behind
   `{{ menu }}`, ranging every declared segment — one already on the bar is
   added as a second placement with an id of its own) that inserts after it. The
-  `⊕` opens a **library**, not a grid of names: each segment's `group:` is a
+  `✚` opens a **library**, not a grid of names: each segment's `group:` is a
   page (`←`/`→` turn through them, the nav row names the group and its place;
   a group of more than eight turns over onto further pages),
   and each segment is one row of its name and `description:`, the whole row the
   click that inserts it. A segment declaring no `group:` stands under `other`,
-  plus one `⊕` leading each run — so N segments
-  in a row read `⊕ [⊖ seg1⚙️] ⊕ [⊖ seg2⚙️] ⊕ … [⊖ segN⚙️] ⊕`. Every affordance is gated on edit
+  plus one `✚` leading each run — so N segments
+  in a row read `✚ [✖ seg1⚙️] ✚ [✖ seg2⚙️] ✚ … [✖ segN⚙️] ✚`. Every affordance is gated on edit
   mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - Every placement also carries a `⚙️` closing its cell — every placement has
   at least the `theme` setting. Clicking it writes `<preset>:<id>` to `edit.configure`, which
-  hangs one control per setting below that placement (the `⊕`/`⊖`/`⚙️` chrome
+  hangs one control per setting below that placement (the `✚`/`✖`/`⚙️` chrome
   stays, and the bar shows live output so a setting's effect is visible) — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
@@ -946,8 +946,8 @@ synthesizes:
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle, on the row above the
   bar) puts the live output back; a segment with no cell right now —
-  hidden, or rendering nothing — then has no `⊖` either, so find it in the
-  names view (a failing segment keeps its `⊖` and `⚙️` on its `⚠` cell).
+  hidden, or rendering nothing — then has no `✖` either, so find it in the
+  names view (a failing segment keeps its `✖` and `⚙️` on its `⚠` cell).
 - A row above the bar, led by the ways out, so they are found without reopening
   the menu edit mode was entered from: `✓ save` (`✓ done` while there is
   nothing to keep) writes this session's unsaved settings — a placement's
@@ -1234,8 +1234,8 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
   `menuGlyph` are free text and are set in the config file only.
-- **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). It also closes
-  the menu in the same click, so you land on the bar you are about to edit.
+- **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). The
+  menu stays open, so `◁ back` and the tabs stay in reach while you arrange.
 - **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
   probes your setup for a fault outside cc-candybar that makes the bar look

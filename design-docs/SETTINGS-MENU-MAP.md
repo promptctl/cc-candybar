@@ -37,7 +37,7 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 
 ```
 ✓ save  ↩ cancel  ↺ reset layout  ☐ live
-🍫 | ⊕ | host ⚙⊖ | ⊕ | directory ⚙⊖ | ⊕ | gitaculous ⚙⊖ | ⊕
+🍫 | ✚ | host ⚙✖ | ✚ | directory ⚙✖ | ✚ | gitaculous ⚙✖ | ✚
 ```
 
 - **Save** writes the session's unsaved settings (a placement's configure-mode values among them; layout changes are already written) and leaves edit mode. With nothing to keep it reads `✓ done`, and cancel is hidden.
@@ -51,18 +51,18 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 Now:
 
 ```
-🍫  |  ⊕  |  ⊖ host⚙️  |  ⊕  |  ⊖ directory⚙️  |  ⊕  |  ⊖ gitaculous⚙️  |  ⊕
+🍫  |  ✚  |  ✖ host⚙️  |  ✚  |  ✖ directory⚙️  |  ✚  |  ✖ gitaculous⚙️  |  ✚
 ```
 
 The positions are what Brandon asked for. The glyphs and colours are not: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
 
-- Remove is `⊖` in red. Add is `⊕` in green.
-- The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
+- Remove is `✖` in red. Add is `✚` in green.
+- The colour is the glyph's text colour only. `✖` sits on its segment's own background. `✚` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
 - The row keeps today's cells, at today's widths.
 
 ### The add menu is a library
 
-The `⊕` opens a library of the declared segments (brandon-menu-ia-q30.kpl), not a grid of bare names: one page per group (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for any segment that declares none), turned with `←`/`→`, and one row per segment, its name and its description cut to the row. The group is the segment's own `group:`, so a segment from any config appears with no wiring. A rendered sample of each segment was decided against: it would evaluate every segment's templates outside any placement.
+The `✚` opens a library of the declared segments (brandon-menu-ia-q30.kpl), not a grid of bare names: one page per group (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for any segment that declares none), turned with `←`/`→`, and one row per segment, its name and its description cut to the row. The group is the segment's own `group:`, so a segment from any config appears with no wiring. A rendered sample of each segment was decided against: it would evaluate every segment's templates outside any placement.
 
 ```
 ✕ ← git 2/6 →
@@ -162,7 +162,7 @@ Under epic brandon-menu-ia-q30 unless noted, in this order:
 5. **Charset and colour depth leave the menu** and lose their session halves; their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`.
 6. **Session tab additions:** `⎘ resume` and `↗ config`.
 7. **Edit mode save and cancel:** cancel puts back what a savepoint taken when edit mode opens recorded, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
-8. **Edit mode glyphs:** `⊖` in red and `⊕` in green, text colour only, with `⊕` drawn on no fill.
+8. **Edit mode glyphs:** `✖` in red and `✚` in green, text colour only, with `✚` drawn on no fill.
 9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
 10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.
 11. **Clicking `directory` copies the full path.** This replaces the unused `copyDir` action.

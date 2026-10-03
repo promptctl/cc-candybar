@@ -11,9 +11,11 @@ import {
   type ColorDepth,
 } from "@promptctl/rich-js";
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
+import { DISCLOSURE_CLOSE_ROLE } from "../config/disclosure.js";
 import {
   bandItemFor,
   paletteRole,
+  TEXT_MIN_CONTRAST,
   textOn,
   type PlacedStep,
   type Distribution,
@@ -39,6 +41,47 @@ export function stateCell(
     bgcolor: ColorSpec.fromRgba(background),
     color: ColorSpec.fromRgba(textOn(palette, background, drawnAt)),
   });
+}
+
+/**
+ * The text of a close glyph — a body's lead ✕, a picker's ✕ — drawn on
+ * `ground`: the theme's `DISCLOSURE_CLOSE_ROLE` with its hue kept, its
+ * lightness moved by rich-js `ensureContrast` until it clears
+ * `TEXT_MIN_CONTRAST` at the drawn depth — the same floor and the same
+ * function `readableOn` is. Text only: the cell's ground is whatever it is laid
+ * on.
+ */
+export function closeOn(
+  palette: Palette,
+  ground: ColorRgba,
+  drawnAt: ColorDepth,
+): Style {
+  return new Style({
+    color: ColorSpec.fromRgba(
+      ensureContrast(
+        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
+        ground,
+        TEXT_MIN_CONTRAST,
+        drawnAt,
+      ),
+    ),
+  });
+}
+
+/**
+ * A state cell whose text is the close glyph's: `background` as the ground,
+ * `closeOn` it as the text — what the ✕ leading an open body wears on its
+ * trigger's state colour.
+ */
+export function closeCell(
+  palette: Palette,
+  background: ColorRgba,
+  drawnAt: ColorDepth,
+): Style {
+  return Style.combine([
+    stateCell(palette, background, drawnAt),
+    closeOn(palette, background, drawnAt),
+  ]);
 }
 
 /**

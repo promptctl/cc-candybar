@@ -103,8 +103,8 @@ const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 const EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
 const CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
 const TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-export const REMOVE_GLYPH = "⊖";
-export const ADD_GLYPH = "⊕";
+export const REMOVE_GLYPH = "✖";
+export const ADD_GLYPH = "✚";
 export const CONFIGURE_GLYPH = "⚙️";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
@@ -251,17 +251,17 @@ function chromeCell(
   artifacts: ChromeArtifacts,
 ): SegmentNode {
   // [LAW:one-type-per-behavior] An insertion point is drawn on no fill: its
-  // `⊕` is green TEXT on the terminal's own ground (`NO_FILL`), where a
-  // placement's `⊖` sits inside that placement's own cell.
+  // `✚` is green TEXT on the terminal's own ground (`NO_FILL`), where a
+  // placement's `✖` sits inside that placement's own cell.
   artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
   return { kind: "segment", name };
 }
 
-// The `-` affordance (drawn `⊖`) for one placement, addressed by its id: a
+// The `-` affordance (drawn `✖`) for one placement, addressed by its id: a
 // literal `removeSegment` action, and the `{{ action }}` that clicks it. The
 // action is named by its POSITION, as an insertion's is: an id is free text,
 // and `ident` would collapse `git-2` and `git_2` onto one action. It is red
-// TEXT on the cell's own ground, floored to stay legible on it, as the `⊕`
+// TEXT on the cell's own ground, floored to stay legible on it, as the `✚`
 // beside it is green.
 function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
   const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
@@ -273,7 +273,7 @@ function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
   return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
 }
 
-// An affordance drawn inside a placement's own cell — its `⊖` as the segment
+// An affordance drawn inside a placement's own cell — its `✖` as the segment
 // node's `lead`, its `⚙️` as its `trail` — so nothing sits between a placement
 // and what acts on it. Neither is a segment, so no segment `when` hides it:
 // each carries arrange mode's gate itself.
@@ -493,8 +493,8 @@ function insertTerm(
   // depend on: with one static display, "which one did I open" would rest on
   // a tint the terminal's colour depth may flatten. The `✕` names it.
   //
-  // Closed, the `⊕` is green TEXT on no fill at all (`NO_FILL`), so "add" reads
-  // by colour beside the red ⊖, floored to stay legible on the theme's own
+  // Closed, the `✚` is green TEXT on no fill at all (`NO_FILL`), so "add" reads
+  // by colour beside the red ✖, floored to stay legible on the theme's own
   // background, which `bgOf` reads for a fill-less cell. Open, the `✕` keeps
   // the trigger's own chosen text: the trigger's ground is decided after the
   // body evaluates (by the drop this very menu makes), so `bgOf` cannot see
