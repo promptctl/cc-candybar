@@ -87,7 +87,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 export const REMOVE_GLYPH = "🚫";
 export const ADD_GLYPH = "✚";
-export const CONFIGURE_GLYPH = "⚙";
+export const CONFIGURE_GLYPH = "⚙️";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -206,11 +206,11 @@ function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
 }
 
 // The affordances drawn inside a placement's own cell — its `⚙` when it has
-// settings, then its `🚫` — carried as the segment node's `trail` so nothing
+// settings, then a space and its `🚫` — carried as the segment node's `trail` so nothing
 // sits between a placement and what acts on it. A trail is not a segment, so
 // no segment `when` hides it: it carries arrange mode's gate itself.
 function trailOf(terms: readonly string[]): string {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${terms.join("")}{{ end }}`;
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${terms.join(" ")}{{ end }}`;
 }
 
 // ─── Configure mode (brandon-segment-settings-i4n.g64) ──────────────────────
