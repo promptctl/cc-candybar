@@ -28,10 +28,8 @@ import {
   type ColorCompatibility,
 } from "../src/themes/policy";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
-import {
-  DEFAULT_DSL_CONFIG,
-  GIT_QUIET_MIN_CONTRAST,
-} from "../src/config/default-dsl-config";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { VERB_SET_STATE } from "../src/click/wire";
@@ -142,7 +140,7 @@ const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 // any other. Where 256 draws a divider in a seam truecolor drew as an arrow,
 // there was no truecolor text there to keep a floor from, so that divider is
 // held to the lowest of them.
-const FLOORS = [TEXT_MIN_CONTRAST, GIT_QUIET_MIN_CONTRAST];
+const FLOORS = [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST];
 const DIVIDER_FLOOR = Math.min(...FLOORS);
 
 type Chars = ReturnType<typeof drawnChars>;

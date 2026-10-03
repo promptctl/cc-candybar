@@ -36,6 +36,7 @@
 //     not merely tidy.
 
 import { ident } from "./ident.js";
+import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
@@ -187,11 +188,10 @@ const BACK_STEP = `${BACK_ACTION}.step`;
 const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
 const BACK_SEG = BACK_ACTION;
 const BACK_GLYPH = "◁";
-const BACK_QUIET_FG = `(readableOn (mix (contrastOn (bgOf)) (bgOf) 60) (bgOf) 3)`;
 const BACK_CELL: SegmentDecl = {
   template:
     `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
-    `{{ else }}{{ fg ${BACK_QUIET_FG} "${BACK_GLYPH}" }}{{ end }}`,
+    `{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`,
 };
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).

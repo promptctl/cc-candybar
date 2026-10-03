@@ -31,7 +31,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
-import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
+import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT } from "../src/help-text";
 import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
@@ -182,13 +182,14 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
 
 // The real route into edit mode from a minimal user config: the `✎ arrange`
 // control lives in the settings menu's 📐 layout tab, which is the whole point of
-// candybar-settings-ui-aok.1 — a user root deletes every other trigger. The same
-// click closes the menu, so what is measured is the edit-mode bar itself, not
-// the bar with a panel hanging open over it.
+// candybar-settings-ui-aok.1 — a user root deletes every other trigger.
+// Arranging keeps the menu open, so the door closes it after: what is measured
+// is the edit-mode bar itself, not the bar with the menu risen over it.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
   rt.clickWriting(rt.render(200), "candybar.tab", "layout");
   rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
 }
 
 // ─── 1. Identity with the corpus, not similarity ─────────────────────────────
