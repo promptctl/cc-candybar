@@ -29,6 +29,13 @@ import type { Template } from "@promptctl/go-template-js";
 import type { ActiveSegment } from "../render/active-segment.js";
 import { textOn } from "../themes/decor.js";
 
+// [LAW:one-source-of-truth] The one spelling of "this cell has no fill": a
+// segment's `bg:` set to this word draws its text on the terminal's own
+// ground, with no background of the cell's own. Every other `bg:` value is a
+// colour reference, so this is the only word the resolver treats as the
+// ABSENCE of a colour rather than a colour.
+export const NO_FILL = "none";
+
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg", detail: string) {
     super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
@@ -54,7 +61,7 @@ export class ColorSpecError extends Error {
  * There is no "is this a name or a color" branch anywhere — one total
  * function over both. [LAW:dataflow-not-control-flow]
  *
- * A segment always has a background. `tint` is the decorative one its region
+ * A segment has a background unless its `bg:` is `NO_FILL`. `tint` is the decorative one its region
  * dealt it — a vocabulary entry on the bar, a band item under a trigger — the
  * floor every segment wears; an authored `bg:` states MEANING (a threshold's
  * `error`, a host's `warning`) and paints over it.
@@ -86,8 +93,16 @@ export function resolveSegmentColors(
 
   // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
-  const bgColor =
-    bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : tint;
+  const filled = bgSpec !== NO_FILL;
+  // [LAW:dataflow-not-control-flow] A fill-less cell still has a GROUND: the
+  // theme's own background stands in for the terminal's, so `bgOf` and every
+  // contrast floor measure against the colour the text is drawn on. Only the
+  // Style differs — it carries no `bgcolor`.
+  const bgColor = !filled
+    ? resolveRef(palette, "background", "bg")
+    : bgSpec !== undefined
+      ? resolveRef(palette, bgSpec, "bg")
+      : tint;
 
   // Phase 2 — publish it, then foreground, which may now ask about it.
   active.bg = bgColor;
@@ -98,7 +113,7 @@ export function resolveSegmentColors(
       : textOn(palette, bgColor, drawnAt);
 
   return new Style({
-    bgcolor: ColorSpec.fromRgba(bgColor),
+    ...(filled && { bgcolor: ColorSpec.fromRgba(bgColor) }),
     color: ColorSpec.fromRgba(fgColor),
   });
 }

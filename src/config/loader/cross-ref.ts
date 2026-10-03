@@ -370,7 +370,7 @@ export function validateCrossReferences(
   //
   // [LAW:types-are-the-program] Every placement's identity is its id
   // (`placementId`), and one id names one placement: a menu's open state,
-  // edit mode's `✖`, and the config-file editor all address a placement by
+  // edit mode's `⊖`, and the config-file editor all address a placement by
   // it, so two placements sharing one would share all three. Counted over the
   // same rendered tree, for the same reason.
   const checkPlacementCounts = (

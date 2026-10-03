@@ -48,17 +48,17 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 
 ### Add and remove
 
-Today, after #288:
+Now:
 
 ```
-🍫  |  ✚  |  ✖ host⚙️  |  ✚  |  ✖ directory⚙️  |  ✚  |  ✖ gitaculous⚙️  |  ✚
+🍫  |  ⊕  |  ⊖ host⚙️  |  ⊕  |  ⊖ directory⚙️  |  ⊕  |  ⊖ gitaculous⚙️  |  ⊕
 ```
 
 The positions are what Brandon asked for. The glyphs and colours are not: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
 
 - Remove is `⊖` in red. Add is `⊕` in green.
-- The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. Today every cell gets a background (`resolveSegmentColors`), so a cell with no fill is new.
-- The row keeps today's cells. Each `⊖` is one column narrower than the `🚫` it replaces.
+- The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
+- The row keeps today's cells. Each `⊖` is one column narrower than the `✖` it replaces.
 
 ## The look tab
 

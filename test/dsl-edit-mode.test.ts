@@ -57,6 +57,7 @@ import {
 import {
   ADDABLE_DOMAIN,
   EDIT_LIVE_KEY,
+  ADD_GLYPH,
   REMOVE_GLYPH,
   CONFIGURE_GLYPH,
   arrangedSegment,
@@ -71,7 +72,12 @@ import { menuMember, menuStateKey } from "../src/config/menu-keys";
 
 // The truecolor fg and bg in force where `text` first appears in `rendered`
 // (links removed): every SGR before it, folded in order.
-function colorsAt(rendered: string, text: string): { fg: string; bg: string } {
+// The colours in force at `text`'s first column; either is undefined when none
+// is (a cell drawn with no fill has no bg).
+function paintAt(
+  rendered: string,
+  text: string,
+): { fg: string | undefined; bg: string | undefined } {
   const at = stripAnsi(rendered).indexOf(text);
   expect(at).toBeGreaterThanOrEqual(0);
   let fg: string | undefined;
@@ -99,6 +105,11 @@ function colorsAt(rendered: string, text: string): { fg: string; bg: string } {
       }
     }
   }
+  return { fg, bg };
+}
+
+function colorsAt(rendered: string, text: string): { fg: string; bg: string } {
+  const { fg, bg } = paintAt(rendered, text);
   expect(fg).toBeDefined();
   expect(bg).toBeDefined();
   return { fg: fg!, bg: bg! };
@@ -492,10 +503,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     dispose();
   });
 
-  // The red `✖` is floored against the ground it is DRAWN on. A segment
+  // The red `⊖` is floored against the ground it is DRAWN on. A segment
   // with something open under it wears its band's state colour, not its
   // closed background, so the floor is measured against that.
-  test("an open segment's `✖` stays legible on the state colour it wears", () => {
+  test("an open segment's `⊖` stays legible on the state colour it wears", () => {
     const src = BASE.replace(
       "segments: {",
       `actions: { pick: { set: 'pick', from: ['a', 'b'] } },
@@ -519,6 +530,24 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(
       contrastRatio(parseRgbHex(fg), parseRgbHex(bg)),
     ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    dispose();
+  });
+
+  // An insertion point is drawn on no fill: its `⊕` is green text on the
+  // terminal's own ground, where `⊖` sits inside its placement's cell.
+  test("`⊕` is drawn on no fill, `⊖` on its segment's own cell", () => {
+    const { render, click, dispose } = buildEditRuntime(BASE);
+    const toggle = ownUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+      ),
+    )!;
+    click(toggle);
+    const out = withoutLinks(render());
+    const add = paintAt(out, ADD_GLYPH);
+    expect(add.fg).toBeDefined();
+    expect(add.bg).toBeUndefined();
+    expect(paintAt(out, REMOVE_GLYPH).bg).toBeDefined();
     dispose();
   });
 

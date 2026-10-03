@@ -596,7 +596,7 @@ as `.settings.<name>`:
 - Every placement in a layout has its own `id` — a bare one takes its
   segment's name, so a second placement of one segment names an id of its
   own. The id is the placement's identity: its menus' open state and edit
-  mode's `✖` address it.
+  mode's `⊖` address it.
 
 ```json5 check:pass
 {

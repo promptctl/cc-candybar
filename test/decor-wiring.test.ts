@@ -260,9 +260,13 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       // The label, the content, and the `- +` cell (and the row's leading `+`).
       expect(members.length).toBeGreaterThanOrEqual(3);
       // Names view: every member but the content (which yields its cell to
-      // its label) renders, all in the colour the live content wears.
+      // its label) renders. The label wears the colour the live content wears;
+      // an insertion point (`⊕`) is drawn on no fill at all.
       for (const { name } of members.filter(({ name }) => name !== content)) {
-        expect([content, name, rt.bgOf(name)]).toEqual([content, name, live.get(content)]);
+        const expected = name.startsWith("edit.default.insertSeg.")
+          ? "(no bg)"
+          : live.get(content);
+        expect([content, name, rt.bgOf(name)]).toEqual([content, name, expected]);
       }
     }
     rt.dispose();
