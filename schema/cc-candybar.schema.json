@@ -1098,6 +1098,18 @@
           {
             "type": "object",
             "properties": {
+              "back": {
+                "const": true
+              }
+            },
+            "required": [
+              "back"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "save": {
                 "const": true
               }
