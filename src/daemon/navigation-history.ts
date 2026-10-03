@@ -47,8 +47,27 @@ export interface NavigationJournal {
 export class NavigationHistory {
   private past: Map<string, readonly NavigationStep[]> = new Map();
 
-  depth(sessionId: string): number {
-    return this.past.get(sessionId)?.length ?? 0;
+  // [LAW:one-source-of-truth] How many steps going back can restore — the
+  // stack `back` itself would walk, so `◁` shows exactly while a click on it
+  // restores something.
+  depth(sessionId: string, store: SessionStateRW): number {
+    return this.current(sessionId, store).length;
+  }
+
+  // The session's steps, less those on top whose keys something else has
+  // since rewritten (a layout edit releasing the placement it configured):
+  // restoring one would write over a view that is gone.
+  private current(
+    sessionId: string,
+    store: SessionStateRW,
+  ): readonly NavigationStep[] {
+    const holds = (step: NavigationStep): boolean =>
+      step.every((c) => store.get(sessionId, c.key) === c.after);
+    let steps = this.past.get(sessionId) ?? [];
+    while (steps.length > 0 && !holds(steps.at(-1)!)) {
+      steps = steps.slice(0, -1);
+    }
+    return steps;
   }
 
   // `store` is the click's own view of session state — the settings journal's,
@@ -71,7 +90,8 @@ export class NavigationHistory {
       for (const { key, before: b } of before) {
         changes.set(key, {
           key,
-          before: changes.get(key)?.before ?? b,
+          // The key's first `before` in this click, null included.
+          before: changes.has(key) ? changes.get(key)!.before : b,
           after: store.get(sessionId, key),
         });
       }
@@ -105,23 +125,15 @@ export class NavigationHistory {
     };
   }
 
-  // Restores the last step into `store` and returns it, with how many steps it
-  // discarded first. A step is current while every key it changed still holds
-  // what it left there; one something else has since rewritten (a layout edit
-  // releasing the placement it configured) would restore over a view that is
-  // gone, so it is discarded rather than replayed. Written through the bare
-  // store, never a navigation journal, so going back is not itself a step.
+  // Restores the last current step into `store` and returns it, with how many
+  // stale steps it discarded first. Written through the bare store, never a
+  // navigation journal, so going back is not itself a step.
   back(
     sessionId: string,
     store: SessionStateRW,
   ): { readonly step: NavigationStep; readonly discarded: number } {
     const all = this.past.get(sessionId) ?? [];
-    const current = (step: NavigationStep): boolean =>
-      step.every((c) => store.get(sessionId, c.key) === c.after);
-    let steps = all;
-    while (steps.length > 0 && !current(steps.at(-1)!)) {
-      steps = steps.slice(0, -1);
-    }
+    const steps = this.current(sessionId, store);
     const discarded = all.length - steps.length;
     const step = steps.at(-1);
     if (step === undefined) {

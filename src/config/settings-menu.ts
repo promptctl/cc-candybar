@@ -187,6 +187,7 @@ const UNDO_ACTION = `${SETTINGS_NS}undo`;
 // the door's own cell, before the door, and while there is nothing to go back
 // to its place holds a blank of its width, so the door never moves.
 const BACK_ACTION = `${SETTINGS_NS}back`;
+const BACK_STEP = `${BACK_ACTION}.step`;
 const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
 export const BACK_GLYPH = "◁";
 const BACK_LEAD =
@@ -700,7 +701,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
       [UNDO_ACTION]: { undo: true },
-      [BACK_ACTION]: { back: true },
+      // [LAW:composability] Going back can reopen a view a confirm sits in, so
+      // it disarms every confirm as the door does: a confirm is only ever
+      // clicked in the view its own arming click was made in.
+      [BACK_STEP]: { back: true },
+      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
       [REDO_ACTION]: { redo: true },
       [PRESET_SAVE]: { preset: "save" },
       [PRESET_DELETE]: {

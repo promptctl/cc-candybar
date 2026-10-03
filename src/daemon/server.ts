@@ -1355,7 +1355,8 @@ const payloadDeps = {
   // the rate-limit ETA projection and the template's reset countdown read.
   clock: () => new Date(),
   history: (sessionId: string) => settingsHistory.depth(sessionId),
-  navigation: (sessionId: string) => navigationHistory.depth(sessionId),
+  navigation: (sessionId: string) =>
+    navigationHistory.depth(sessionId, sessionState),
 };
 
 function handleClick(verb: string, value: string): Response {

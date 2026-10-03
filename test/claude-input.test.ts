@@ -454,6 +454,14 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
         do: [`candybar.tab.${tab}.toggle`, "candybar.commands.clear.disarm"],
       });
     }
+    // ◁ can reopen the view a confirm sits in, so it disarms them too.
+    expect(rt.config.actions["candybar.back"]).toEqual({
+      do: [
+        "candybar.back.step",
+        "candybar.resetAll.disarm",
+        "candybar.commands.clear.disarm",
+      ],
+    });
     expect(rt.config.actions["candybar.commands.clear.disarm"]).toEqual({
       set: "candybar.commands.clear.armed",
       to: "disarmed",

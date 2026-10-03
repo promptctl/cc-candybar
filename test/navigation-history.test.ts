@@ -14,6 +14,7 @@ import {
 } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/update-notice";
+import { NavigationHistory } from "../src/daemon/navigation-history";
 
 const MENU = "nav-test.menu";
 const TAB = "nav-test.tab";
@@ -61,7 +62,7 @@ describe("back", () => {
     const { sessionState, ctx, set, back, dispose } = setup();
     set(ARMED, "armed");
     set(UPDATE_DISMISSED_KEY, "1.2.3");
-    expect(ctx.navigation.depth("s1")).toBe(0);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
     // The door's click disarms beside closing the menu; going back reopens the
     // menu and leaves the confirm disarmed.
     set(MENU, "open");
@@ -73,12 +74,25 @@ describe("back", () => {
     dispose();
   });
 
+  test("a key one click writes twice goes back to its value before the click, unset included", () => {
+    const store = new SessionState();
+    const history = new NavigationHistory();
+    const journal = history.begin(store);
+    journal.sessionState.set("s1", MENU, "open");
+    journal.sessionState.set("s1", MENU, "closed");
+    journal.commit();
+    history.back("s1", store);
+    expect(store.get("s1", MENU)).toBeNull();
+  });
+
   test("a step over state something else has since rewritten is discarded, not replayed", () => {
-    const { sessionState, set, back, dispose } = setup();
+    const { sessionState, ctx, set, back, dispose } = setup();
     set(MENU, "open");
     set(TAB, "b");
     // Not a navigating click: a layout edit releasing what the tab opened.
     sessionState.clear("s1", TAB);
+    // ◁ counts only what a click on it restores.
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(1);
     back();
     expect(sessionState.get("s1", MENU)).toBeNull();
     expect(() => back()).toThrow(BadVerbArgs);
@@ -89,20 +103,20 @@ describe("back", () => {
     const { sessionState, ctx, set, back, dispose } = setup();
     set(MENU, "open");
     set(TAB, "b");
-    expect(ctx.navigation.depth("s1")).toBe(2);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(2);
     back();
     expect(sessionState.get("s1", TAB)).toBeNull();
     expect(sessionState.get("s1", MENU)).toBe("open");
     back();
     expect(sessionState.get("s1", MENU)).toBeNull();
-    expect(ctx.navigation.depth("s1")).toBe(0);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
     dispose();
   });
 
   test("one click is one step, however many keys it moved", () => {
     const { sessionState, ctx, set, back, dispose } = setup();
     set(MENU, "open", TAB, "a");
-    expect(ctx.navigation.depth("s1")).toBe(1);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(1);
     back();
     expect(sessionState.get("s1", MENU)).toBeNull();
     expect(sessionState.get("s1", TAB)).toBeNull();
@@ -121,26 +135,26 @@ describe("back", () => {
   });
 
   test("a click that changes only a setting is no step", () => {
-    const { ctx, set, dispose } = setup();
+    const { sessionState, ctx, set, dispose } = setup();
     set("theme", "nord");
-    expect(ctx.navigation.depth("s1")).toBe(0);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
     dispose();
   });
 
   test("going back is not itself a step, and an empty history refuses loudly", () => {
-    const { ctx, set, back, dispose } = setup();
+    const { sessionState, ctx, set, back, dispose } = setup();
     set(MENU, "open");
     back();
-    expect(ctx.navigation.depth("s1")).toBe(0);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(0);
     expect(back).toThrow(BadVerbArgs);
     dispose();
   });
 
   test("a click that writes what is already there is no step", () => {
-    const { ctx, set, dispose } = setup();
+    const { sessionState, ctx, set, dispose } = setup();
     set(MENU, "open");
     set(MENU, "open");
-    expect(ctx.navigation.depth("s1")).toBe(1);
+    expect(ctx.navigation.depth("s1", sessionState)).toBe(1);
     dispose();
   });
 });
