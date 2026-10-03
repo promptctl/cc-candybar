@@ -179,6 +179,14 @@ describe("the add menu is a segment library", () => {
     r.dispose();
   });
 
+  test("a multi-line description folds onto its one row", () => {
+    const r = rig(400, `mine: { template: 'M', description: 'Shows X.\\n  Hidden when Y.' }`);
+    expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])).toEqual([
+      ["mine", "Shows X. Hidden when Y."],
+    ]);
+    r.dispose();
+  });
+
   test("a user segment declaring a group joins it; one with no description is its bare name", () => {
     const r = rig(
       400,

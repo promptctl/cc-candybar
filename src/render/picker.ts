@@ -36,6 +36,7 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
+import { sanitizeText } from "./diagnostic-text.js";
 import { fitCells, libraryLayout, type LibraryPageLayout } from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
@@ -406,7 +407,11 @@ export function renderPicker(
     );
     for (const i of section.indices) {
       const option = apply.options[i]!;
-      const description = catalogue.entries[i]!.description;
+      // An authored description is free text and a row is one cell: control
+      // characters and line breaks fold to single spaces, as a diagnostic's do.
+      const authored = catalogue.entries[i]!.description;
+      const description =
+        authored === undefined ? undefined : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
       const row =
         description === undefined ? option : `${option}${gap}${description}`;
