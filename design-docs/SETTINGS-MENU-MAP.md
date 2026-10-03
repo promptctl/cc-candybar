@@ -40,10 +40,10 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 🍫 | ⊕ | host ⚙⊖ | ⊕ | directory ⚙⊖ | ⊕ | gitaculous ⚙⊖ | ⊕
 ```
 
-- **Save** writes the layout changes to the config file and leaves edit mode. With no changes it reads `✓ done`, and cancel is hidden.
+- **Save** keeps the changes and leaves edit mode. With no changes it reads `✓ done`, and cancel is hidden.
 - **Cancel** discards the changes and leaves edit mode.
-- **Layout changes become drafts.** Today each `+`/`-` click writes the config file at once. For cancel to discard anything, layout changes have to be session drafts, the same model brandon-save-undo-bwi.hpi gives settings.
-- **`☐ live`** moves onto this row from the end of the bar's last row, where it sits today. It is an edit-mode control like the other three.
+- **Layout changes are not drafts.** Each `+`/`-` click writes the config file at once and is one step of the session's undo history. Cancel steps that history back to where edit mode opened (a savepoint), so there is no second copy of the layout: a per-session unsaved layout would need a compiled tree per session, and the render cache holds one per project and directory. Save writes nothing further; it releases the savepoint.
+- **`☐ live`** is on this row now, not at the end of the bar's last row. It is an edit-mode control like the other three.
 - **`↺ reset layout`** is today's `↺ default customized`, renamed. It shows only when the config file has its own layout for the active preset, and clicking it restores the bundled layout. The old label didn't say that.
 
 ### Add and remove
@@ -151,7 +151,7 @@ Under epic brandon-menu-ia-q30 unless noted, in this order:
 4. **The look tab:** four `◀ name ▶` selectors. The name opens a plain menu whose choices show their effect in text colour on one shared background.
 5. **Charset and colour depth leave the menu** and lose their session halves; their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`.
 6. **Session tab additions:** `⎘ resume` and `↗ config`.
-7. **Edit mode save and cancel:** layout changes become session drafts, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
+7. **Edit mode save and cancel:** cancel steps the undo history back to a savepoint edit mode takes when it opens, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
 8. **Edit mode glyphs:** `⊖` in red and `⊕` in green, text colour only, with `⊕` drawn on no fill.
 9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
 10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.

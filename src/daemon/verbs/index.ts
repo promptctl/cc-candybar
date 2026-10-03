@@ -91,6 +91,7 @@ import {
   VERB_LOAD_CONFIG,
   VERB_REDO,
   VERB_BACK,
+  VERB_REWIND,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
@@ -959,6 +960,20 @@ const back: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
+// [LAW:single-enforcer] Cancel for edit mode. The history owns where the
+// savepoint is and which steps lie above it (SettingsHistory.rewind); this
+// handler is plumbing between the wire and it, and says what it discarded.
+// [LAW:no-silent-failure] A session with no savepoint, and a step whose target
+// changed since, are loud BAD_REQUESTs surfaced as a transient click.error.
+const rewind: VerbHandler = (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  const undone = ctx.history.rewind(sid);
+  ctx.dlog(
+    "info",
+    `rewind: discarded ${undone.length} step(s) since edit mode opened: ${undone.map(describeStep).join(" | ") || "none"} (session=${sid})`,
+  );
+};
+
 // undo's mirror — steps the same history forward one click.
 const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
@@ -1195,6 +1210,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_UNDO, undo],
   [VERB_REDO, redo],
   [VERB_BACK, back],
+  [VERB_REWIND, rewind],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -1222,6 +1238,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_UNDO,
   VERB_REDO,
   VERB_BACK,
+  VERB_REWIND,
   VERB_TOOLBAR_TOGGLE,
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,

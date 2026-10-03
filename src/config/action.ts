@@ -67,6 +67,7 @@ export const ACTION_KEYS = [
   "undo",
   "redo",
   "back",
+  "rewind",
   "save",
   "preset",
   "doctor",
@@ -221,6 +222,7 @@ export type ActionDecl =
   | { readonly undo: true }
   | { readonly redo: true }
   | { readonly back: true }
+  | { readonly rewind: true }
   | { readonly save: true }
   // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
   // daemon names the preset and reads what it holds at click time — while

@@ -104,6 +104,12 @@ export const VERB_REDO = "redo";
 // (src/daemon/navigation-history.ts). Args: `[sessionId]`, like undo. An empty
 // history is a loud BAD_REQUEST, never a silent no-op.
 export const VERB_BACK = "back";
+// [LAW:one-source-of-truth] Cancel for edit mode: step the session's settings
+// history back to the savepoint edit mode opened at, discarding everything done
+// since (src/daemon/settings-history.ts `rewind`). Args: `[sessionId]`, like
+// undo. Saving needs no verb: leaving edit mode releases the savepoint, the
+// changes having been written as they were made.
+export const VERB_REWIND = "rewind";
 // [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
 // 5d6): rebuild a source checkout, or stage the newer release over an
 // install. Args: `[sessionId]` — carried for click.error surfacing only. The

@@ -1661,7 +1661,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       withCustomized,
       editingSession,
     ).rendered.replace(INVISIBLE, "");
-    expect(editing).toContain("↺ default customized");
+    expect(editing).toContain("↺ reset layout");
 
     // A hand-authored root is "customized" from its first render; outside
     // edit mode that must not put a one-click reset of it on the bar.
@@ -1672,7 +1672,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     ).rendered.replace(INVISIBLE, "");
     // The banner's own text, not its glyph: the bar's autocompact control
     // carries a ↺ of its own.
-    expect(viewing).not.toContain("↺ default customized");
+    expect(viewing).not.toContain("↺ reset layout");
 
     const clean = renderPreset(
       "default",
@@ -1680,6 +1680,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
       undefined,
       editingSession,
     ).rendered.replace(INVISIBLE, "");
-    expect(clean).not.toContain("↺ default customized");
+    expect(clean).not.toContain("↺ reset layout");
   });
 });

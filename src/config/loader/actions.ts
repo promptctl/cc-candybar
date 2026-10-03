@@ -148,6 +148,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   undo: markerArm("undo"),
   redo: markerArm("redo"),
   back: markerArm("back"),
+  rewind: markerArm("rewind"),
   save: markerArm("save"),
   preset: presetArm,
   doctor: doctorArm,
@@ -182,6 +183,7 @@ function actionDeclJson(): JsonNode {
       markerArmJson("undo"),
       markerArmJson("redo"),
       markerArmJson("back"),
+      markerArmJson("rewind"),
       markerArmJson("save"),
       ...presetArmJson(),
       ...doctorArmJson(),
@@ -253,11 +255,13 @@ function resetArm(
 // the settings a save writes are the session's own drafts. `function`, not a
 // const arrow, so ACTION_ARMS above (built before this declaration in source
 // order) can reference it directly via hoisting.
-type MarkerKey = "undo" | "redo" | "back" | "save";
+type MarkerKey = "undo" | "redo" | "back" | "rewind" | "save";
 const MARKER_SUBJECT: Record<MarkerKey, string> = {
   undo: "it steps the session's settings history",
   redo: "it steps the session's settings history",
   back: "it steps the session's navigation history",
+  rewind:
+    "it steps the session's settings history back to where edit mode opened",
   save: "it saves the session's unsaved settings",
 };
 function markerArm(key: MarkerKey): ArmParse<ActionDecl> {
