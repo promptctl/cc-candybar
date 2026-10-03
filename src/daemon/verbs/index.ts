@@ -963,9 +963,9 @@ const back: VerbHandler = (value, ctx) => {
 // [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
 // since edit mode opened and how to put it back (SettingsHistory.rewind); this
 // handler is plumbing between the wire and it, and says what it put back.
-// [LAW:no-silent-failure] A session with no savepoint, and a target changed
-// since, are loud BAD_REQUESTs surfaced as a transient click.error, with
-// nothing written.
+// [LAW:no-silent-failure] A session with no savepoint is a loud BAD_REQUEST
+// with nothing written; a target changed since is one too, raised after every
+// other target was put back, naming the target it kept.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   // The click's own earlier changes are a step of their own first, as undo's.
