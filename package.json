@@ -24,6 +24,7 @@
     "test:coverage": "jest --coverage",
     "demo": "tsx src/demo/dsl.ts",
     "gallery": "tsx src/demo/gallery.ts",
+    "bar": "node --require ./scripts/version-stamp.cjs --import tsx scripts/drive-bar.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "preloadtest": "pnpm build",
     "loadtest": "node --import tsx scripts/daemon-load-harness.ts",
