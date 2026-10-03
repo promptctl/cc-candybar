@@ -35,7 +35,6 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
-import { cellLen } from "@promptctl/rich-js";
 import { ident } from "./ident.js";
 import type { ActionDecl } from "./action.js";
 import {
@@ -46,7 +45,6 @@ import {
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
-  type SegmentNode,
   type VariableDecl,
 } from "./dsl-types.js";
 import {
@@ -179,16 +177,20 @@ const SETTINGS_REF: DisclosureRef = {
 // (src/daemon/settings-history.ts).
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
 // [LAW:one-source-of-truth] `◁` restores what the session's last navigating
-// click opened or closed (src/daemon/navigation-history.ts). It is drawn in
-// the door's own cell, before the door, and while there is nothing to go back
-// to its place holds a blank of its width, so the door never moves.
+// click opened or closed (src/daemon/navigation-history.ts). It leads the
+// menu's first line, right after the risen door, and is always drawn — quiet
+// and inert while there is nothing to go back to — so nothing after it moves.
 const BACK_ACTION = `${SETTINGS_NS}back`;
 const BACK_STEP = `${BACK_ACTION}.step`;
 const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-export const BACK_GLYPH = "◁";
-const BACK_LEAD =
-  `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
-  `{{ else }}${" ".repeat(cellLen(BACK_GLYPH))}{{ end }}`;
+const BACK_SEG = BACK_ACTION;
+const BACK_GLYPH = "◁";
+const BACK_QUIET_FG = `(readableOn (mix (contrastOn (bgOf)) (bgOf) 60) (bgOf) 3)`;
+const BACK_CELL: SegmentDecl = {
+  template:
+    `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
+    `{{ else }}{{ fg ${BACK_QUIET_FG} "${BACK_GLYPH}" }}{{ end }}`,
+};
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
@@ -581,7 +583,7 @@ const tabBody = (tab: TabName): ContainerNode => ({
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? withBack(disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"))
+      ? disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above")
       : node;
   }
   return expandContainer(node);
@@ -598,7 +600,11 @@ function doorBody(): ContainerNode {
       {
         kind: "container",
         direction: "horizontal",
-        children: [...controlsAt("door"), { kind: "segment", name: SAVE_SEG }],
+        children: [
+          { kind: "segment", name: BACK_SEG },
+          ...controlsAt("door"),
+          { kind: "segment", name: SAVE_SEG },
+        ],
       },
       {
         kind: "container",
@@ -645,12 +651,6 @@ function doorFolds(artifacts: MenuArtifacts): string[] {
     artifacts.actions[name] = { set: key, to: decl.default };
     return name;
   });
-}
-
-// The door wears `◁` as its cell's lead, so it is inside the door's cell and
-// takes the same place whether it can be clicked or not.
-function withBack(door: SegmentNode): SegmentNode {
-  return { ...door, lead: BACK_LEAD };
 }
 
 function expandContainer<
@@ -727,6 +727,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template },
+      [BACK_SEG]: BACK_CELL,
       [SAVE_SEG]: SAVE_CELL,
       [PRESET_SAVE]: {
         template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,

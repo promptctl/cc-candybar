@@ -15,7 +15,7 @@ The menu is two lines, then the body of the open tab. The first line holds the p
 ❌  host  directory  gitaculous          ← the bar, unchanged
 ```
 
-A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row.
+A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ❌, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."

@@ -1199,7 +1199,9 @@ tab's `✕` closes the tab and leaves the menu open. Nothing stacks — a row
 carries the `✕` of the innermost disclosure it belongs to, and a picker line
 keeps the picker's own. This is true of every disclosure on the bar (a group
 body, a `(?)` line), not only this menu; no author writes it and no author can
-decline it. The menu's own two lines lead with the door's `✕`.
+decline it. The menu opens above the bar and its door rises with it: the menu's
+first line leads with the door itself, wearing `❌`, then `◁ back` (muted while
+there is nothing to go back to), and the bar's row closes up where the door was.
 
 - **`⚡ session`** holds, on one row, **`⎘ id ↗ proj ↗ log ↗ repo`**, the quick actions: copy the session id,
   open the project or the transcript in your editor, open the repo's web page.
@@ -1448,7 +1450,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- ◁ 🍫  ✱ Opus 4.8 
+ 🍫  ✱ Opus 4.8 
  ◀ nord ▶ 
 ```
 
