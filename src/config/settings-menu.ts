@@ -61,7 +61,6 @@ import {
   disclosureTrigger,
   disclosureTriggerCall,
 } from "./disclosure.js";
-import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
   doctorReportKeys,
@@ -717,14 +716,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is written in the theme's `DOOR_CLOSE_ROLE`, made readable on
-      // the state colour it is drawn on; closed, the author's glyph keeps the
-      // cell's own text.
+      // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
+      // with no contrast floor: a floor moves its lightness until the red no
+      // longer reads as red on the state colour, and the ✖ must be red on
+      // every theme. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, doorGlyph, DOOR_CLOSE_GLYPH)} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
-          `{{ fg (readableOn (color "${DOOR_CLOSE_ROLE}") (bgOf) ${TEXT_MIN_CONTRAST}) $door }}` +
+          `{{ fg (color "${DOOR_CLOSE_ROLE}") $door }}` +
           `{{ else }}{{ $door }}{{ end }}`,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },

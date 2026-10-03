@@ -62,10 +62,10 @@ export const DISCLOSURE_GLYPH_CLOSE = "✕";
 
 // [LAW:one-source-of-truth] The theme role a close glyph's TEXT wears, beside
 // the glyph it colours: a body's or a picker's ✕ is `warning` — it closes one
-// panel — and the risen door's ✖ is `error` — it dismisses the whole menu. The
-// hue is the role's; only its lightness moves, until it reads on the ground it
-// is drawn on (`closeOn`, render/band-style.ts; `readableOn` in the door's
-// template).
+// panel — and the risen door's ✖ is `error` — it dismisses the whole menu. A
+// ✕ keeps the role's hue and moves only its lightness, until it reads on the
+// ground it is drawn on (`closeOn`, render/band-style.ts); the door's ✖ is the
+// role's colour as the theme gives it, so it is that theme's red.
 export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
 export const DOOR_CLOSE_ROLE: SemanticRole = "error";
 
