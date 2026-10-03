@@ -411,8 +411,8 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
 
   // A fill cell's pad is part of its content, so the `-` rides AFTER the pad,
   // against the cell's far edge — never stranded mid-cell with the pad beyond it
-  // — and the `⚙️` leads the content, outside its sizing.
-  test("a fill segment's `⚙️` leads and its `-` sits after the leftover width it absorbed", () => {
+  // — and the `🔧` leads the content, outside its sizing.
+  test("a fill segment's `🔧` leads and its `-` sits after the leftover width it absorbed", () => {
     const src = BASE.replace(
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
