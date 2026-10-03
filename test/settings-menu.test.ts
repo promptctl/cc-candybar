@@ -40,7 +40,6 @@ import {
 } from "../src/config/edit-chrome";
 import {
   anchorUnderGate,
-  BACK_GLYPH,
   countAnchors,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
@@ -667,10 +666,8 @@ describe("the default placement never inherits an author's gate", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
     expect(opened).toHaveLength(closed.length + MENU_LINES);
-    // The `◁` slot leads the door's cell; this runtime records no back
-    // history, so it holds the blank of the glyph's width.
-    const backSlot = " ".repeat(BACK_GLYPH.length);
-    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + backSlot + DOOR_CLOSE_GLYPH)).toBe(true);
+    // This runtime records no back history, so no `◁` leads the door's cell.
+    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });
