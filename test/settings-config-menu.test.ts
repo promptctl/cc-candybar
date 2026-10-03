@@ -624,6 +624,17 @@ describe("reset returns settings to the bundled default", () => {
   };
   const labelled = (text: string): string | undefined =>
     links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
+  // The confirm's own ✕: it disarms and leaves the menu open — the risen
+  // door is a ✕ that disarms too, but it closes the menu.
+  const cancelResetAll = (): string =>
+    links(r.render()).find((l) => {
+      const args = effectsOf(l.url).flatMap((e) => e.args);
+      return (
+        stripAnsi(l.text) === "✕" &&
+        args.includes("candybar.resetAll.armed") &&
+        !args.includes("candybar.menu")
+      );
+    })!.url;
   const userContent = () => {
     const { segments, root, presets } = durable.parsed() as {
       segments: unknown;
@@ -692,12 +703,7 @@ describe("reset returns settings to the bundled default", () => {
   test("the armed reset all offers a ✕ that disarms it without resetting", () => {
     const before = durable.text();
     r.click(labelled("⟲")!);
-    const cancel = links(r.render()).find(
-      (l) =>
-        stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll.armed")),
-    )!.url;
-    r.click(cancel);
+    r.click(cancelResetAll());
     expect(labelled("⟲ reset all?")).toBeUndefined();
     expect(labelled("⟲")).toBeDefined();
     expect(durable.text()).toBe(before);
@@ -714,12 +720,7 @@ describe("reset returns settings to the bundled default", () => {
     r.click(labelled("⟲")!);
     r.sessionState.clear(SID, "padding");
     expect(labelled("⟲ reset all?")).toBeDefined();
-    const cancel = links(r.render()).find(
-      (l) =>
-        stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll.armed")),
-    )!.url;
-    r.click(cancel);
+    r.click(cancelResetAll());
     expect(labelled("⟲ reset all?")).toBeUndefined();
     expect(labelled("⟲")).toBeUndefined();
   });

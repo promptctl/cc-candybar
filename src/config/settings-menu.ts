@@ -35,8 +35,8 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
-import { cellLen } from "@promptctl/rich-js";
 import { ident } from "./ident.js";
+import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
@@ -46,7 +46,6 @@ import {
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
-  type SegmentNode,
   type VariableDecl,
 } from "./dsl-types.js";
 import {
@@ -54,11 +53,14 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   DOOR_CLOSE_GLYPH,
+  DOOR_CLOSE_ROLE,
   DOOR_GLYPH,
   disclosureCycleAction,
   disclosureNode,
   disclosureStateVar,
+  disclosureTerm,
   disclosureTrigger,
+  disclosureTriggerCall,
 } from "./disclosure.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
@@ -98,7 +100,6 @@ export const SETTINGS_OPEN = "open";
 
 // The body's content segments.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
-const SETTINGS_CLOSE = `${SETTINGS_NS}close`;
 const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
 const COMMANDS_SEG = `${SETTINGS_NS}commands`;
@@ -179,16 +180,19 @@ const SETTINGS_REF: DisclosureRef = {
 // (src/daemon/settings-history.ts).
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
 // [LAW:one-source-of-truth] `◁` restores what the session's last navigating
-// click opened or closed (src/daemon/navigation-history.ts). It is drawn in
-// the door's own cell, before the door, and while there is nothing to go back
-// to its place holds a blank of its width, so the door never moves.
+// click opened or closed (src/daemon/navigation-history.ts). It leads the
+// menu's first line, right after the risen door, and is always drawn — quiet
+// and inert while there is nothing to go back to — so nothing after it moves.
 const BACK_ACTION = `${SETTINGS_NS}back`;
 const BACK_STEP = `${BACK_ACTION}.step`;
 const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-export const BACK_GLYPH = "◁";
-const BACK_LEAD =
-  `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
-  `{{ else }}${" ".repeat(cellLen(BACK_GLYPH))}{{ end }}`;
+const BACK_SEG = BACK_ACTION;
+const BACK_GLYPH = "◁";
+const BACK_CELL: SegmentDecl = {
+  template:
+    `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
+    `{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`,
+};
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
@@ -581,7 +585,7 @@ const tabBody = (tab: TabName): ContainerNode => ({
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? withBack(disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"))
+      ? disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above")
       : node;
   }
   return expandContainer(node);
@@ -598,7 +602,11 @@ function doorBody(): ContainerNode {
       {
         kind: "container",
         direction: "horizontal",
-        children: [...controlsAt("door"), { kind: "segment", name: SAVE_SEG }],
+        children: [
+          { kind: "segment", name: BACK_SEG },
+          ...controlsAt("door"),
+          { kind: "segment", name: SAVE_SEG },
+        ],
       },
       {
         kind: "container",
@@ -647,12 +655,6 @@ function doorFolds(artifacts: MenuArtifacts): string[] {
   });
 }
 
-// The door wears `◁` as its cell's lead, so it is inside the door's cell and
-// takes the same place whether it can be clicked or not.
-function withBack(door: SegmentNode): SegmentNode {
-  return { ...door, lead: BACK_LEAD };
-}
-
 function expandContainer<
   N extends { readonly children: readonly LayoutNode[] },
 >(node: N): N {
@@ -685,14 +687,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
-      // menu: edit mode works on the bar, with its own `✓ done` row above it,
-      // so the menu closes and leaves the bar to it. The edit control is
-      // therefore the toggle and the close fired as one click, composed from
-      // two ordinary actions — the close is a literal write to the key the
-      // door's own cycle writes, so each carries the gate it always carried.
-      [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
-      [EDIT_SEG]: { do: [...EDIT_SWITCH, SETTINGS_CLOSE] },
+      // Entering or leaving edit mode is a click like every other in the
+      // menu: the menu stays as it was, so `◁ back` and the tabs stay in reach
+      // while the bar is arranged.
+      [EDIT_SEG]: { do: [...EDIT_SWITCH] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
@@ -714,19 +712,24 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // below, which are a word plus the ▸/▾ that gates it. The door has no
       // label to gate: it is a glyph, so a second glyph beside it would be the
       // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `❌` names what the click does.
+      // names what it opens, `✖` names what the click does.
       //
       // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values.
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
+      // with no contrast floor: a floor moves its lightness until the red no
+      // longer reads as red on the state colour, and the ✖ must be red on
+      // every theme. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: disclosureTrigger(
-          SETTINGS_ANCHOR,
-          doorGlyph,
-          DOOR_CLOSE_GLYPH,
-        ),
+        template:
+          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, doorGlyph, DOOR_CLOSE_GLYPH)} }}` +
+          `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
+          `{{ fg (color "${DOOR_CLOSE_ROLE}") $door }}` +
+          `{{ else }}{{ $door }}{{ end }}`,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template },
+      [BACK_SEG]: BACK_CELL,
       [SAVE_SEG]: SAVE_CELL,
       [PRESET_SAVE]: {
         template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,

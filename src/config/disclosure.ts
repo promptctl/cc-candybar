@@ -21,6 +21,7 @@
 // `src/config/loader/reserved-namespace.ts`.
 
 import type { ActionDecl } from "./action.js";
+import type { SemanticRole } from "../themes/decor.js";
 import type {
   ContainerNode,
   DisclosureRef,
@@ -59,9 +60,22 @@ export const DISCLOSURE_GLYPH_OPEN = "▾";
 // answer can live). Two affordances, one meaning, one glyph.
 export const DISCLOSURE_GLYPH_CLOSE = "✕";
 
+// [LAW:one-source-of-truth] The theme role a close glyph's TEXT wears, beside
+// the glyph it colours: a body's or a picker's ✕ is `warning` — it closes one
+// panel — and the risen door's ✖ is `error` — it dismisses the whole menu. A
+// ✕ keeps the role's hue and moves only its lightness, until it reads on the
+// ground it is drawn on (`closeOn`, render/band-style.ts); the door's ✖ is the
+// role's colour as the theme gives it, so it is that theme's red.
+export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
+export const DOOR_CLOSE_ROLE: SemanticRole = "error";
+
 // [LAW:one-source-of-truth] The global settings menu's own glyph — its whole
-// closed display by default, since the door binds a glyph / `❌` rather than a label plus an
-// arrow: one symbol per state, so the landmark never renders as two.
+// closed display by default, since the door binds a glyph / `✖` rather than a
+// label plus an arrow: one symbol per state, so the landmark never renders as
+// two. Open, the door rises to lead its own body's first row, so its close is
+// one column wide like the ✕ every other body leads with — the rows beneath
+// lead with that width's blank and stay aligned — and heavier, so the close
+// that dismisses the whole menu reads apart from a body's ✕.
 //
 // It lives HERE, beside the vocabulary it completes, rather than in
 // settings-menu.ts where the rest of that menu's spellings live, because the
@@ -71,7 +85,7 @@ export const DISCLOSURE_GLYPH_CLOSE = "✕";
 // a cycle [LAW:one-way-deps]. Every consumer already imports this module for
 // the arrows, so this is downhill from all of them.
 export const DOOR_GLYPH = "🍫";
-export const DOOR_CLOSE_GLYPH = "❌";
+export const DOOR_CLOSE_GLYPH = "✖";
 
 // [LAW:single-enforcer] THE display rule every multi-state trigger obeys: bind
 // one display per member, or ONE static display that shows in every state. It
@@ -189,7 +203,17 @@ export function disclosureTrigger(
   closed: string,
   open: string,
 ): string {
-  return `{{ action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}" }}`;
+  return `{{ ${disclosureTriggerCall(action, closed, open)} }}`;
+}
+
+// The same binding as an expression, for a trigger whose template does more
+// with it than emit it (the settings door colours its open glyph).
+export function disclosureTriggerCall(
+  action: string,
+  closed: string,
+  open: string,
+): string {
+  return `action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}"`;
 }
 
 // [LAW:single-enforcer] THE backing `state` variable a disclosure key implies:

@@ -40,7 +40,6 @@ import {
 } from "../src/config/edit-chrome";
 import {
   anchorUnderGate,
-  BACK_GLYPH,
   countAnchors,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
@@ -102,6 +101,11 @@ function userConfig(root: string): string {
 }
 
 const TWO_SEGMENT_ROW = `{ h: ['directory', 'model'] }`;
+
+// A bar row as it reads once the door has risen out of it: the door's glyph
+// and the powerline seam that followed it.
+const withoutDoor = (line: string): string =>
+  line.replace(new RegExp(`${DOOR_GLYPH}.`, "u"), "");
 
 function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
@@ -197,7 +201,7 @@ describe("the global settings menu is reachable from a user config", () => {
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
-    // One symbol per state: the open door is the ❌, and the door glyph is gone.
+    // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
     // Switch presets (the picker's own disclosure glyph, hosted by the preset
@@ -228,23 +232,24 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(line1).not.toContain("⎘ id");
     expect(line2.indexOf("⚡ session")).toBeLessThan(line2.indexOf("🧰 tools"));
     expect(line3).toContain("↗ proj");
-    // The bar: the door wears ❌, every other byte of every other row is
-    // what it was.
-    expect(bar[0]!.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(stripAnsi(closed[0]!));
+    // The bar: the door has risen to lead line 1, every other byte of every
+    // row is what it was.
+    expect(line1.includes(DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(bar[0]).toBe(withoutDoor(stripAnsi(closed[0]!)));
     expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });
 
-  test("a door on a row of its own leaves every other row byte-identical", () => {
+  test("a door on a row of its own takes its row with it, every other row byte-identical", () => {
     const { render, clickWriting, dispose } = buildRuntime(
       userConfig(`{ v: ['${SETTINGS_ANCHOR}', ${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
     const closed = render().split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length + MENU_LINES);
-    expect(stripAnsi(opened[MENU_LINES]!)).toContain(DOOR_CLOSE_GLYPH);
-    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
+    expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
+    expect(stripAnsi(opened[0]!)).toContain(DOOR_CLOSE_GLYPH);
+    expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
     dispose();
   });
 
@@ -259,7 +264,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(before.join("\n")).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened.slice(MENU_LINES).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(before);
+    expect(opened.slice(MENU_LINES)).toEqual(before.map(withoutDoor));
     dispose();
   });
 
@@ -272,12 +277,16 @@ describe("the global settings menu is reachable from a user config", () => {
     const closed = stripAnsi(render()).split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
+    expect(opened[0]).toContain(DOOR_CLOSE_GLYPH);
     expect(opened[2]).toContain("⎘ id");
-    expect(opened.slice(MENU_LINES).map((l) => l.replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH))).toEqual(closed);
+    // The door's column composes as if the door were absent: the line under
+    // it moves up and zips with `model`.
+    expect(opened.slice(MENU_LINES)).toHaveLength(closed.length - 1);
+    expect(opened.slice(MENU_LINES).join("|")).toMatch(/t\/proj.*Opus/u);
     dispose();
   });
 
-  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and closes the menu", () => {
+  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", () => {
     const { render, clickWriting, sessionState, dispose } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
@@ -285,9 +294,9 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), TAB_KEY, "layout");
     clickWriting(render(), EDIT_MODE_KEY, "arrange");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
-    // The same click closed the menu, so the door's row is back — with its
-    // edit chrome — and no close click is needed to reach it.
-    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
+    // The menu stays as it was, so its tabs and ◁ back stay in reach while
+    // the bar is arranged.
+    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe("open");
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
     const editing = linkUrls(render()).filter((u) =>
@@ -298,7 +307,6 @@ describe("the global settings menu is reachable from a user config", () => {
     // top left, lands on the plain bar.
     clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
-    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     dispose();
   });
 
@@ -311,7 +319,9 @@ describe("the global settings menu is reachable from a user config", () => {
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
-      effectsOf(u).some((e) => e.args[1]?.startsWith("menus.candybar_")),
+      effectsOf(u).some(
+        (e) => e.args[1]?.startsWith("menus.candybar_") && e.args[2] !== DISCLOSURE_CLOSED,
+      ),
     );
     expect(pickerUrl).toBeDefined();
     click(pickerUrl!);
@@ -666,12 +676,10 @@ describe("the default placement never inherits an author's gate", () => {
     expect(closed[2]).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    expect(opened).toHaveLength(closed.length + MENU_LINES);
-    // The `◁` slot leads the door's cell; this runtime records no back
-    // history, so it holds the blank of the glyph's width.
-    const backSlot = " ".repeat(BACK_GLYPH.length);
-    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + backSlot + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
+    // The door's own row rises with it to lead the menu.
+    expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
+    expect(opened[0]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
     dispose();
   });
 
@@ -751,7 +759,10 @@ describe("the menu in a config that declares no variables", () => {
     for (let frontier = true; frontier; ) {
       frontier = false;
       for (const url of linkUrls(render())) {
-        const opens = effectsOf(url).filter(
+        const effects = effectsOf(url);
+        // The walk explores the menu, so it never takes the click that closes it.
+        if (effects.some((e) => e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED)) continue;
+        const opens = effects.filter(
           (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
         );
         const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");

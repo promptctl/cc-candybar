@@ -92,7 +92,7 @@ export interface SegmentNode {
   // instance of. Its template/palette/`when` live on its SegmentDecl.
   readonly name: string;
   // The placement's identity (brandon-segment-settings-i4n): what a menu's
-  // open state, edit mode's `⊖`/`⊕`, and the config-file editor address. A
+  // open state, edit mode's `✖`/`✚`, and the config-file editor address. A
   // name, never a position — positions shift when a sibling is added or
   // removed. Absent ≡ the segment's name, so `"git"` and
   // `{ seg: "git", id: "git" }` are one placement; read it through
@@ -172,8 +172,9 @@ export function freePlacementId(
 }
 
 // Where an open body's rows go: `drop` hangs them below the trigger's row;
-// `above` lifts them over the whole bar, so opening the body moves no row of
-// the bar (brandon-menu-ia-q30.4oj — the settings door).
+// `above` lifts them over the whole bar, and the trigger rises with them to
+// lead their first row as the body's close, so the bar's rows render as if
+// the trigger were absent (brandon-menu-ia-q30.4oj — the settings door).
 export type Placement = "drop" | "above";
 
 export interface Opens {

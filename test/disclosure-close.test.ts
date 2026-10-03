@@ -85,22 +85,32 @@ const closes = (link: Link, key: string): boolean =>
       e.args[2] === DISCLOSURE_CLOSED,
   );
 
-// A body's rows: the first's first link is the ✕ closing `key`, and no other
-// ✕ closing `key` sits anywhere on the body — one ✕, the innermost band's.
-// Every later row leads with the blank: its first cell holds only spaces.
-function expectBodyLedBy(rows: readonly string[], key: string): void {
+// A body's rows: the first's first link is the close (`glyph`) closing `key`,
+// and no other close of `key` sits anywhere on the body — one, the innermost
+// band's. Every later row leads with the blank: its first cell holds only
+// spaces.
+function expectBodyLedBy(
+  rows: readonly string[],
+  key: string,
+  glyph: string = DISCLOSURE_GLYPH_CLOSE,
+): void {
   const [head, ...rest] = rows;
   if (head === undefined) throw new Error("no body rows");
   const first = links(head)[0];
   if (first === undefined) throw new Error(`no link on: ${JSON.stringify(head)}`);
-  expect(first.text).toBe(DISCLOSURE_GLYPH_CLOSE);
+  expect(first.text).toBe(glyph);
   expect(closes(first, key)).toBe(true);
   const closing = rows
     .flatMap(links)
-    .filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE && closes(l, key));
+    .filter((l) => l.text === glyph && closes(l, key));
   expect(closing).toHaveLength(1);
   for (const row of rest) expect(stripAnsi(row)).toMatch(/^\W*? +\S/u);
 }
+
+// A bar row as it reads once the door has risen out of it: the door's glyph
+// and the powerline seam that followed it.
+const withoutDoor = (line: string): string =>
+  line.replace(new RegExp(`${DOOR_GLYPH}.`, "u"), "");
 
 function build(src: string, withDefault: boolean) {
   const config = parseAndValidate(
@@ -173,25 +183,23 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     // The bar row carries no row ✕: only the door itself, which is a trigger.
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
-    // The door opens ABOVE: two menu lines stacked over the bar, each led by
-    // the door's ✕, then the open tab's two rows (⚡ session, where a fresh
-    // session opens), each led by the tab's ✕ alone; the bar row keeps its
-    // cells, the door wearing ❌ and no row ✕.
+    // The door opens ABOVE and rises with its body: the door itself, wearing
+    // ✖, leads the first of two menu lines stacked over the bar, then the
+    // open tab's two rows (⚡ session, where a fresh session opens), each led
+    // by the tab's ✕ alone; the bar row keeps every cell but the door.
     const tabKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tab`;
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
     expect(lines).toHaveLength(5);
-    expectBodyLedBy(lines.slice(0, 2), SETTINGS_ANCHOR);
+    expectBodyLedBy(lines.slice(0, 2), SETTINGS_ANCHOR, DOOR_CLOSE_GLYPH);
     expectBodyLedBy(lines.slice(2, 4), tabKey);
     for (const row of lines.slice(2, 4)) {
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }
     const bar = (): string => lines[lines.length - 1]!;
-    const [door] = links(bar());
-    expect(door?.text).toBe(DOOR_CLOSE_GLYPH);
-    expect(closes(door!, SETTINGS_ANCHOR)).toBe(true);
+    expect(links(bar()).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     expect(links(bar()).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
-    expect(stripAnsi(bar()).replace(DOOR_CLOSE_GLYPH, DOOR_GLYPH)).toBe(closedBar);
+    expect(stripAnsi(bar())).toBe(withoutDoor(closedBar));
 
     // 🎨 look open: its one row replaces the session tab's two below the
     // menu's second line, led by the tab's ✕ — and 🍫's ✕ is not on it.
@@ -233,8 +241,8 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(3);
 
-    // And the door's ❌ closes the menu: back to the bar alone.
-    rt.click(links(bar())[0]!.url);
+    // And the door's ✖ closes the menu: back to the bar alone.
+    rt.click(links(lines[0]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);
     expect(links(lines[0]!)[0]?.text).toBe(DOOR_GLYPH);

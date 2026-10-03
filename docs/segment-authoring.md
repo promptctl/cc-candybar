@@ -118,7 +118,7 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- ◁ 🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
+ 🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
@@ -304,7 +304,7 @@ per-field delta, so overriding a bundled segment's `template` inherits that
 segment's description — which then describes something that is no longer there.
 If your version means something different, say so there too.
 
-`group:` files the segment in the library edit mode's `⊕` opens: one of
+`group:` files the segment in the library edit mode's `✚` opens: one of
 `location`, `git`, `model-context`, `cost-limits`, `activity` or
 `session-tools`, naming what the segment is about. A segment that declares none
 is listed under `other`, so a new segment of yours appears in the library with
@@ -518,7 +518,7 @@ want in your order:
 ```
 
 ```render
- ◁ 🍫  ⎇ main SU? (1 stashed) ▸ 
+ 🍫  ⎇ main SU? (1 stashed) ▸ 
 ```
 
 Start every session expanded — redeclare the state variable with the other
@@ -534,7 +534,7 @@ default. The arrow still collapses it for the session that clicks:
 ```
 
 ```render
- ◁ 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+ 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
 ```
 
 Hide one fact — override its piece with an empty body. A piece is shared, so
@@ -548,7 +548,7 @@ the fact leaves both forms:
 ```
 
 ```render
- ◁ 🍫  ⎇ main +2/-1 ▸ 
+ 🍫  ⎇ main +2/-1 ▸ 
 ```
 
 Hide a fact from one copy only — each optional piece also reads a setting of
@@ -567,7 +567,7 @@ it does not):
 ```
 
 ```render
- ◁ 🍫  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+ 🍫  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -582,7 +582,7 @@ or re-spell it by overriding its piece:
 ```
 
 ```render
- ◁ 🍫  on main +2/-1 SU? ▸ 
+ 🍫  on main +2/-1 SU? ▸ 
 ```
 
 ## One segment, many placements: settings
@@ -604,7 +604,7 @@ as `.settings.<name>`:
 - Every placement in a layout has its own `id` — a bare one takes its
   segment's name, so a second placement of one segment names an id of its
   own. The id is the placement's identity: its menus' open state and edit
-  mode's `⊖` address it.
+  mode's `✖` address it.
 
 ```json5 check:pass
 {
@@ -624,7 +624,7 @@ as `.settings.<name>`:
 ```
 
 ```render
- ◁ 🍫  Opus 4.8  ◆ Opus 
+ 🍫  Opus 4.8  ◆ Opus 
 ```
 
 The segment's `when`, `bg:` and `fg:` read the same `.settings` as its

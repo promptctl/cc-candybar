@@ -9,13 +9,13 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✕  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
-✕  ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+✖  ◁  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
+   ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
-❌  host  directory  gitaculous          ← the bar, unchanged
+host  directory  gitaculous             ← the bar, less the door
 ```
 
-A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row.
+A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ✖, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
@@ -37,7 +37,7 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 
 ```
 ✓ save  ↩ cancel  ↺ reset layout  ☐ live
-🍫 | ⊕ | host ⚙⊖ | ⊕ | directory ⚙⊖ | ⊕ | gitaculous ⚙⊖ | ⊕
+🍫 | ✚ | host ⚙✖ | ✚ | directory ⚙✖ | ✚ | gitaculous ⚙✖ | ✚
 ```
 
 - **Save** writes the session's unsaved settings (a placement's configure-mode values among them; layout changes are already written) and leaves edit mode. With nothing to keep it reads `✓ done`, and cancel is hidden.
@@ -51,18 +51,18 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 Now:
 
 ```
-🍫  |  ⊕  |  ⊖ host⚙️  |  ⊕  |  ⊖ directory⚙️  |  ⊕  |  ⊖ gitaculous⚙️  |  ⊕
+🍫  |  ✚  |  ✖ host⚙️  |  ✚  |  ✖ directory⚙️  |  ✚  |  ✖ gitaculous⚙️  |  ✚
 ```
 
 The positions are what Brandon asked for. The glyphs and colours are not: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
 
-- Remove is `⊖` in red. Add is `⊕` in green.
-- The colour is the glyph's text colour only. `⊖` sits on its segment's own background. `⊕` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
+- Remove is `✖` in red. Add is `✚` in green.
+- The colour is the glyph's text colour only. `✖` sits on its segment's own background. `✚` gets no fill: it's drawn on the terminal's own background. A cell with no fill is `bg: "none"` (`NO_FILL`, `resolveSegmentColors`); every other cell still gets a background.
 - The row keeps today's cells, at today's widths.
 
 ### The add menu is a library
 
-The `⊕` opens a library of the declared segments (brandon-menu-ia-q30.kpl), not a grid of bare names: one page per group (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for any segment that declares none), turned with `←`/`→`, and one row per segment, its name and its description cut to the row. The group is the segment's own `group:`, so a segment from any config appears with no wiring. A rendered sample of each segment was decided against: it would evaluate every segment's templates outside any placement.
+The `✚` opens a library of the declared segments (brandon-menu-ia-q30.kpl), not a grid of bare names: one page per group (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for any segment that declares none), turned with `←`/`→`, and one row per segment, its name and its description cut to the row. The group is the segment's own `group:`, so a segment from any config appears with no wiring. A rendered sample of each segment was decided against: it would evaluate every segment's templates outside any placement.
 
 ```
 ✕ ← git 2/6 →
@@ -162,7 +162,7 @@ Under epic brandon-menu-ia-q30 unless noted, in this order:
 5. **Charset and colour depth leave the menu** and lose their session halves; their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`.
 6. **Session tab additions:** `⎘ resume` and `↗ config`.
 7. **Edit mode save and cancel:** cancel puts back what a savepoint taken when edit mode opens recorded, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
-8. **Edit mode glyphs:** `⊖` in red and `⊕` in green, text colour only, with `⊕` drawn on no fill.
+8. **Edit mode glyphs:** `✖` in red and `✚` in green, text colour only, with `✚` drawn on no fill.
 9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
 10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.
 11. **Clicking `directory` copies the full path.** This replaces the unused `copyDir` action.

@@ -272,8 +272,9 @@ export interface NodeRenderCtx {
 // [LAW:types-are-the-program] Every Style a segment can wear, resolved at
 // entry as one value. `closed` is its authored `bg:`/`fg:`; `trigger` is the
 // state colour of the band it opens — what it wears while that band is dropped
-// below it; `band` is that band's plane, the floor its dropped lines sit on.
-// Which one a line wears is a VALUE the walk selects by the drop's presence,
+// below it; `band` is that band's plane, the floor its dropped lines sit on;
+// `close` is the trigger's ground with the close glyph's text, which the ✕
+// leading the body it opens wears. Which one a line wears is a VALUE the walk selects by the drop's presence,
 // never a transform applied after the fact. `disclosure` is the band those
 // two were drawn from, returned so the body the segment opens is rendered on
 // the SAME band its trigger wears — one read, no second derivation.
@@ -281,6 +282,7 @@ export interface SegmentStyles {
   readonly closed: Style;
   readonly trigger: Style;
   readonly band: Style;
+  readonly close: Style;
   readonly disclosure: Disclosure;
 }
 
@@ -473,6 +475,26 @@ const BODY_PLACE: Record<
   above: () => "above",
 };
 
+// [LAW:dataflow-not-control-flow] What leads the first row of an open body,
+// by the body's placement, and what of the trigger's own rows stays where the
+// trigger sits. A `drop` body hangs under a trigger that stays on its row, so
+// the body's row leads with a ✕. An `above` body lifts over the whole bar and
+// its trigger rises with it: the trigger's own row becomes that lead — the
+// body's one close, its click the trigger's — and leaves the row it sat on.
+const OPEN_LEAD: Record<
+  Placement,
+  (
+    inline: RenderedLines,
+    close: () => readonly LaidCell[],
+  ) => { readonly lead: readonly LaidCell[]; readonly stays: RenderedLines }
+> = {
+  drop: (inline, close) => ({ lead: close(), stays: inline }),
+  above: (inline) => ({
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
+    stays: inline.slice(1),
+  }),
+};
+
 const segmentType: NodeType<"segment"> = {
   compile(node, cctx) {
     return {
@@ -597,43 +619,6 @@ const segmentType: NodeType<"segment"> = {
                 ...line,
                 place: BODY_PLACE[opens.placement](line),
               }));
-      // The ✕ the body this segment opens leads with (brandon-disclosure-43z):
-      // one content-sized cell in the trigger's own state colour — the colour
-      // the open trigger wears, so the ✕ and the trigger it answers to read as
-      // one affordance — laid through the same layout as the trigger's cells,
-      // so it pads like them. ONE per body, on its first row: every later row
-      // leads with a blank of the same width in the same colour, so the rows
-      // stay aligned and read as one panel with one way to close it.
-      const leadCell = (text: RichText): readonly LaidCell[] =>
-        applySegmentLayout(fragmentsToCells([text], styles.trigger), {
-          ...layout,
-          width: "auto",
-          baseStyle: styles.trigger,
-        });
-      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-      const close =
-        node.opens !== undefined && firstOwn !== -1
-          ? ctx.closeDisclosure(node.opens.key)
-          : undefined;
-      const closeLead = close === undefined ? [] : leadCell(close);
-      const holdLead =
-        close === undefined
-          ? []
-          : leadCell(new RichText(" ".repeat(close.cellLength)));
-      // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
-      // the band this trigger opened gets its lead — the first its ✕, the rest
-      // the blank beside it; a row of a band hung deeper inside (a `{{ menu }}`
-      // body, a nested disclosure's rows) already has its own and gets none.
-      // Every line then returns as a row of a DEEPER band, so the band this
-      // trigger sits on never leads it again.
-      const leadOf = (line: RenderedLine, i: number): readonly LaidCell[] =>
-        line.band !== "own" ? [] : i === firstOwn ? closeLead : holdLead;
-      const ledBody: RenderedLines = bodyLines.map((line, i) => ({
-        cells: [...leadOf(line, i), ...line.cells],
-        band: "deeper",
-        place: line.place,
-      }));
-
       // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
       // lines BEFORE per-segment layout — width/justify/truncate then measure each
       // line cleanly. A newline-free segment is the degenerate one-line case. Each
@@ -665,11 +650,65 @@ const segmentType: NodeType<"segment"> = {
         band: "deeper",
         place: "flow",
       }));
-      const laidLines = [...inlineLines, ...dropLines];
+      // The lead of the body this segment opens (brandon-disclosure-43z), in
+      // the trigger's own state colour — the colour the open trigger wears, so
+      // the lead and the trigger it answers to read as one affordance. ONE per
+      // body, on its first row: every later row leads with a blank of each of
+      // its cells' widths in the same colour, so the rows stay aligned and read
+      // as one panel with one way to close it.
+      const leadCell = (
+        text: RichText,
+        style: Style,
+        padding: number,
+      ): readonly LaidCell[] =>
+        applySegmentLayout(fragmentsToCells([text], style), {
+          ...layout,
+          width: "auto",
+          baseStyle: style,
+          padding,
+        });
+      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+      const { lead: openLead, stays } =
+        opens !== undefined && firstOwn !== -1
+          ? OPEN_LEAD[opens.placement](inlineLines, () =>
+              leadCell(
+                ctx.closeDisclosure(opens.key),
+                styles.close,
+                ctx.padding,
+              ),
+            )
+          : { lead: [], stays: inlineLines };
+      const holdLead = openLead.flatMap((cell) =>
+        leadCell(
+          new RichText(
+            " ".repeat(
+              cellParts(cell).reduce((w, part) => w + part.cellLength, 0),
+            ),
+          ),
+          styles.trigger,
+          0,
+        ),
+      );
+      // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
+      // the band this trigger opened gets its lead — the first its close, the
+      // rest the blank beside it; a row of a band hung deeper inside (a
+      // `{{ menu }}` body, a nested disclosure's rows) already has its own and
+      // gets none. Every line then returns as a row of a DEEPER band, so the
+      // band this trigger sits on never leads it again.
+      const leadOf = (line: RenderedLine, i: number): readonly LaidCell[] =>
+        line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
+      const ledBody: RenderedLines = bodyLines.map((line, i) => ({
+        cells: [...leadOf(line, i), ...line.cells],
+        band: "deeper",
+        place: line.place,
+      }));
 
-      // The sink holds THIS segment's cells — its inline row(s), the menu
-      // bands it dropped, and one ✕ per row of the body it led (none when
-      // the body laid no row). A disclosure body's cells belong to the
+      const laidLines = [...stays, ...dropLines];
+
+      // The sink holds THIS segment's cells — the inline row(s) it left
+      // where it sits, the menu bands it dropped, and the lead of each row of
+      // the body it led (none when the body laid no row) — a risen trigger's
+      // row among them. A disclosure body's cells belong to the
       // segments in it, each of which sinks its own.
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(
