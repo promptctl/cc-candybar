@@ -588,9 +588,9 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
 // write shape, writing into the session's config file instead of
-// SessionState. The write is DURABLE — RenderCache's watcher on that file
-// (src/daemon/cache/render.ts) picks it up on the next reload, exactly as a
-// hand edit would; the two are indistinguishable by design.
+// SessionState. The write is DURABLE, and the session's config reloads before
+// the click answers, as save's does, so the next render draws it
+// ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
 // [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
@@ -614,6 +614,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
     key,
   );
   writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
     `set-config: ${landing.key}=${result.value} → ${file} (session=${sid})`,
@@ -668,6 +669,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
@@ -944,10 +946,12 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
 const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
+  ctx.reloadConfig(origin);
   ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -968,9 +972,17 @@ const back: VerbHandler = (value, ctx) => {
 // other target was put back, naming the target it kept.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
+  const origin = sessionOrigin(ctx, sid);
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
-  const restored = ctx.history.rewind(sid);
+  // A refused step may still have written: rewind puts back every target
+  // but the one it keeps. So the reload runs whether or not it throws.
+  let restored: ReturnType<typeof ctx.history.rewind>;
+  try {
+    restored = ctx.history.rewind(sid);
+  } finally {
+    ctx.reloadConfig(origin);
+  }
   ctx.dlog(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -981,8 +993,10 @@ const rewind: VerbHandler = (value, ctx) => {
 const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
+  ctx.reloadConfig(origin);
   ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 

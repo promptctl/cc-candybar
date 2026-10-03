@@ -1,8 +1,9 @@
 // [LAW:verifiable-goals] scripts/drive-bar.ts is the tool a design doc's
 // drawings are reproduced with, so it is held to what it promises: a click on
 // what the bar drew lands in a real daemon's session and the next render shows
-// it; a durable click writes the harness's copy of the config, never the file
-// it was started from; a click on text the bar did not draw fails, naming what
+// it, a durable one included; a durable click writes the harness's copy of the
+// config, never the file it was started from; a click that would act on the
+// developer's machine is not sent; a click on text the bar did not draw fails, naming what
 // it did draw.
 
 import fs from "node:fs";
@@ -58,6 +59,28 @@ describe("drive-bar", () => {
     const { refused, rendered } = await bar.click("/compact");
     expect(refused).not.toBeNull();
     expect(stripAnsi(rendered)).toContain("⚠");
+  });
+
+  test("a click that rewrites the config file shows in the very next render", async () => {
+    bar = await startBar({ width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    await bar.render();
+    await bar.click(DOOR_GLYPH);
+    await bar.click("📐 layout");
+    await bar.click("✎ arrange");
+    // ✖ #1 is the risen door; #2 removes host, #3 directory.
+    expect(stripAnsi((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
+    // Undo writes the file back; the render after it must already draw it.
+    const { refused, rendered } = await bar.click("↶");
+    expect(refused).toBeNull();
+    expect(stripAnsi(rendered)).toContain("✖ directory");
+  });
+
+  test("a click that would act on this machine is not sent", async () => {
+    bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    await bar.render();
+    await bar.click(DOOR_GLYPH);
+    const { refused } = await bar.click("⎘ id");
+    expect(refused).toMatch(/^not sent: copy /);
   });
 
   test("a click on text the bar did not draw names what it drew", async () => {

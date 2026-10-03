@@ -9,7 +9,7 @@ pnpm bar --ssh --width 80 🍫 "🎨 look" "▸#2"    # open the menu, the look 
 pnpm bar --links 🍫                             # …and list what every link on the last render does
 ```
 
-`--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from `main` at `dff9dbb`.
+`--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from this branch on top of `main` at `dff9dbb`, which is why the git cell reads `docs/ui-elements-inventory`.
 
 ## At a glance
 

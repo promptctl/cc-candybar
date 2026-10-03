@@ -19,34 +19,45 @@
 // [LAW:no-silent-failure] A click on text the bar did not draw stops the run,
 // naming what it did draw. A click the daemon refuses is a fact about the bar,
 // not a failure of the harness: the refusal is returned beside the next render,
-// which shows it in the red strip exactly as a user would see it. A click whose
-// verb reaches the outside world (a slash command typed into a Claude Code
-// pane, an update) is refused here as it would be for a session with no pane.
+// which shows it in the red strip exactly as a user would see it. A slash
+// command is refused by the daemon itself, since this session records no
+// Claude Code pane. A click whose verb acts on the developer's machine (the
+// clipboard, VS Code, a rebuild of this checkout) is never sent: it comes back
+// as not sent, naming its effects, and the bar renders as it was. A click the
+// daemon answers TIMEOUT stops the run: it may or may not have landed.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
-import { PROTOCOL_VERSION, type Response } from "../../src/daemon/protocol";
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import { parseHandlerUrl } from "../../src/install/index";
-import { URL_SCHEME } from "../../src/click/wire";
+import {
+  URL_SCHEME,
+  VERB_APPLY_UPDATE,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+  VERB_SHOW_CONFIG_ERROR,
+  VERB_SHOW_CONFIG_WARNING,
+} from "../../src/click/wire";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { withStamp } from "../../scripts/version-stamp.cjs";
-import { sendDaemonRequest } from "./daemon-wire";
+import { renderRequest, sendClick } from "./daemon-e2e";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import { links, stripAnsi } from "./ansi";
 import { effectsOf } from "./click";
 
 const SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
 const REPLY_BUDGET_MS = 10_000;
-// A render over the daemon's per-request budget answers TIMEOUT, which the
-// real client treats as transient: it prints nothing and the next statusline
-// tick asks again. A cold first render (a git spawn, a config compile) can
-// take that long on a loaded machine, so the harness asks again too, a bounded
-// number of times, exactly as test/helpers/daemon-e2e.ts's render does.
-const TIMEOUT_RETRY_BUDGET = 5;
+// The verbs whose handler acts outside the daemon on this machine: pbcopy,
+// `open -a "Visual Studio Code"`, `pnpm build` in the checkout.
+const MACHINE_VERBS: ReadonlySet<string> = new Set([
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+  VERB_SHOW_CONFIG_ERROR,
+  VERB_SHOW_CONFIG_WARNING,
+  VERB_APPLY_UPDATE,
+]);
 
 export interface BarOptions {
   /** Terminal columns the client reports. */
@@ -67,7 +78,10 @@ export interface DrawnLink {
   readonly url: string;
 }
 
-/** What a click did: the render after it, and the daemon's refusal if it refused. */
+/**
+ * What a click did: the render after it, and why it did nothing, if it did
+ * nothing — the daemon refused it, or the harness did not send it.
+ */
 export interface Clicked {
   readonly rendered: string;
   readonly refused: string | null;
@@ -150,34 +164,40 @@ export function describeLink(link: DrawnLink): string {
 export async function startBar(opts: BarOptions): Promise<Bar> {
   const daemonEnv = prepareIsolatedDaemonEnv("ccb-bar");
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bar-"));
-  const configPath = path.join(scratch, "config.json5");
-  fs.writeFileSync(
-    configPath,
-    opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
-  );
-  const claudeConfigDir = path.join(scratch, "claude");
-  fs.mkdirSync(claudeConfigDir);
-  const env: NodeJS.ProcessEnv = {
-    ...daemonEnv.env,
-    // The daemon dies with this process, however this process ends.
-    [PARENT_PID_ENV]: String(process.pid),
-    // No update notice reaches the network: the registry is a closed port.
-    CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
-    // An empty Claude Code config dir, so the daemon wears no host memento.
-    CLAUDE_CONFIG_DIR: claudeConfigDir,
-    NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
+  const removeDirs = (): void => {
+    daemonEnv.removeTmpDirs();
+    fs.rmSync(scratch, { recursive: true, force: true });
   };
-  const daemon = await spawnDaemonWithEnv(env);
+  const configPath = path.join(scratch, "config.json5");
+  const claudeConfigDir = path.join(scratch, "claude");
+  let daemon: Awaited<ReturnType<typeof spawnDaemonWithEnv>>;
+  try {
+    fs.writeFileSync(
+      configPath,
+      opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
+    );
+    fs.mkdirSync(claudeConfigDir);
+    daemon = await spawnDaemonWithEnv({
+      ...daemonEnv.env,
+      // The daemon dies with this process, however this process ends.
+      [PARENT_PID_ENV]: String(process.pid),
+      // No update notice reaches the network: the registry is a closed port.
+      CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
+      // An empty Claude Code config dir, so the daemon wears no host memento.
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+      NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
+    });
+  } catch (e) {
+    removeDirs();
+    throw e;
+  }
   const sockPath = daemonEnv.sockPath;
   let last = "";
 
-  const send = (req: Record<string, unknown>): Promise<Response> =>
-    sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, ...req }, REPLY_BUDGET_MS);
-
-  const render = async (): Promise<string> => {
-    for (let attempt = 1; ; attempt++) {
-      const resp = await send({
-        kind: "render",
+  const render = async (): Promise<string> =>
+    (last = await renderRequest(
+      sockPath,
+      {
         hookData: hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
         args: ["cc-candybar", "--config", configPath],
         cwd: opts.cwd,
@@ -185,12 +205,9 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
         termRows: opts.rows,
         ssh: opts.ssh,
         claudeConfigDir,
-      });
-      if (resp.ok && "output" in resp) return (last = resp.output);
-      if (!resp.ok && resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render refused: ${JSON.stringify(resp)}`);
-    }
-  };
+      },
+      REPLY_BUDGET_MS,
+    ));
 
   const click = async (text: string, nth = 1): Promise<Clicked> => {
     const drawn = drawnLinks(last);
@@ -204,8 +221,13 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     if (!isBarLink(hit.url)) {
       throw new Error(`"${text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    const { verb, value } = parseHandlerUrl(hit.url);
-    const resp = await send({ kind: "click", verb, value });
+    if (effectsOf(hit.url).some(({ verb }) => MACHINE_VERBS.has(verb))) {
+      return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
+    }
+    const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);
+    if (!resp.ok && resp.code === "TIMEOUT") {
+      throw new Error(`"${text}" timed out: whether it landed is unknown (${resp.error})`);
+    }
     return {
       refused: resp.ok ? null : `${resp.error} (${resp.code})`,
       rendered: await render(),
@@ -218,8 +240,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     click,
     stop: () => {
       daemon.killTree();
-      daemonEnv.removeTmpDirs();
-      fs.rmSync(scratch, { recursive: true, force: true });
+      removeDirs();
     },
   };
 }

@@ -24,6 +24,12 @@ function parseStep(step: string): [string, number] {
   return m === null ? [step, 1] : [m[1]!, Number(m[2])];
 }
 
+// A count of columns or rows: a whole number ≥ 1, or the run stops naming it.
+function cells(flag: string, raw: string): number {
+  if (!/^[1-9]\d*$/.test(raw)) throw new Error(`--${flag} must be a whole number ≥ 1, got "${raw}"`);
+  return Number(raw);
+}
+
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     options: {
@@ -37,8 +43,8 @@ async function main(): Promise<void> {
     allowPositionals: true,
   });
   const bar = await startBar({
-    width: Number(values.width),
-    rows: Number(values.rows),
+    width: cells("width", values.width),
+    rows: cells("rows", values.rows),
     config: values.config ?? null,
     cwd: path.resolve(values.cwd),
     ssh: values.ssh,
