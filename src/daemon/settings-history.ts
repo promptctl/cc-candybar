@@ -321,7 +321,12 @@ export class SettingsHistory {
         future: without(future, gone),
         ...(savepoint !== undefined && {
           savepoint: {
-            at: savepoint.at,
+            // A step left empty leaves the stack, so the position counts the
+            // steps below it that survive.
+            at: without(
+              [...past, ...[...future].reverse()].slice(0, savepoint.at),
+              gone,
+            ).length,
             net: savepoint.net.filter((c) => !gone.has(identity(c))),
           },
         }),
@@ -383,7 +388,17 @@ export class SettingsHistory {
     while (next.size > MAX_SESSIONS || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value!;
       if (next.size > 1) next.delete(oldest);
-      else next.set(oldest, withoutOldestStep(h));
+      else if (h.past.length + h.future.length > 0) {
+        next.set(oldest, withoutOldestStep(h));
+      } else {
+        // [LAW:no-silent-failure] Edit mode's net change alone is over the
+        // bound: the savepoint goes, and with it cancel, said here.
+        this.logger(
+          "warn",
+          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES} bytes; cancel is no longer available`,
+        );
+        next.delete(oldest);
+      }
     }
     this.storage.save(Object.fromEntries(next));
     this.state = next;

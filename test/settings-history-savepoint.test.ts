@@ -209,6 +209,54 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
   });
 });
 
+describe("the savepoint under the history's bounds", () => {
+  test("a net change alone over the byte bound releases the savepoint, said in the log", () => {
+    const logs: string[] = [];
+    const history = new SettingsHistory(new SessionState(), (_l, m) =>
+      logs.push(m),
+    );
+    const toggle = history.begin();
+    toggle.sessionState.set(SID, EDIT_MODE_KEY, "arrange");
+    toggle.commit();
+    const big = history.begin();
+    big.sessionState.set(SID, "theme", "x".repeat(9 * 1024 * 1024));
+    big.commit();
+    expect(history.history(SID).savepoint).toBeUndefined();
+    expect(logs.join("\n")).toMatch(/cancel is no longer available/);
+  });
+
+  test("a refused undo that empties a step below the savepoint moves it down with the stack", () => {
+    const { history, sessionState, pick, toggle, theme } = rig();
+    const other = path.join(dir, "other.json5");
+    fs.writeFileSync(other, "o0");
+    const both = (): void => {
+      const before = readConfigText(other);
+      writeConfigText(other, "o1", () => {});
+      const journal = history.begin();
+      journal.file(SID, other, before, "o1");
+      journal.commit();
+    };
+    both(); // A: changes `other`
+    pick("nord"); // B
+    toggle("arrange"); // at = 2
+    // C: changes `other` and the theme, made in edit mode.
+    const journal = history.begin();
+    writeConfigText(other, "o2", () => {});
+    journal.file(SID, other, "o1", "o2");
+    journal.sessionState.set(SID, "theme", "gruvbox");
+    journal.commit();
+    fs.writeFileSync(other, "hand edit");
+    expect(() => history.undo(SID)).toThrow(/changed since that edit/);
+    // A was only `other`, so it left; the savepoint counts B alone below it.
+    expect(history.history(SID).savepoint?.at).toBe(1);
+    history.rewind(SID);
+    expect(theme()).toBe("nord");
+    expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    history.undo(SID);
+    expect(sessionState.get(SID, "theme")).toBeNull();
+  });
+});
+
 describe("the savepoint survives a restart", () => {
   test("it is saved with the history and read back with it, and cancels there", () => {
     const historyFile = path.join(dir, "history.json");
