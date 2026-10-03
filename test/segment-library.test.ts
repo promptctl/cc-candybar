@@ -23,7 +23,11 @@ import {
   OTHER_GROUP,
   SEGMENT_GROUPS,
 } from "../src/config/segment-groups";
-import { fitCells, libraryLayout } from "../src/render/library";
+import {
+  LIBRARY_PAGE_ROWS,
+  fitCells,
+  libraryLayout,
+} from "../src/render/library";
 import { cellWidth } from "../src/render/picker";
 import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
@@ -124,7 +128,8 @@ function walk(r: ReturnType<typeof rig>): Map<string, [string, string][]> {
       const nav = /^✕\s*(?:←\s*)?(.+?) \d+\/\d+(?:\s*→)?$/.exec(line);
       if (nav !== null && labels.has(nav[1]!)) {
         current = nav[1]!;
-        found.set(current, []);
+        // A group larger than a page turns over onto pages of its own.
+        found.set(current, found.get(current) ?? []);
       } else if (current !== undefined && line.length > 0) {
         const [, name, description = ""] =
           /^(\S+)(?:\s{2,}(.*))?$/.exec(line) ?? [];
@@ -159,6 +164,18 @@ describe("the add menu is a segment library", () => {
     expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])).toEqual([
       ["mine", "My own thing."],
     ]);
+    r.dispose();
+  });
+
+  test("a group larger than a page turns over: every member is listed, each page fits", () => {
+    const names = Array.from(
+      { length: LIBRARY_PAGE_ROWS + 3 },
+      (_, i) => `mine${i}`,
+    );
+    const r = rig(80, names.map((n) => `${n}: { template: 'M' }`).join(", "));
+    expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])!.map(([n]) => n)).toEqual(
+      names,
+    );
     r.dispose();
   });
 
@@ -221,24 +238,23 @@ describe("the add menu is a segment library", () => {
 });
 
 describe("libraryLayout", () => {
-  const library = {
-    groups: [
-      { id: "a", label: "A" },
-      { id: "b", label: "B" },
-      { id: "c", label: "C" },
-    ],
-    entry: (o: string) => ({ group: o.startsWith("x") ? "a" : "b" }),
-  };
+  const groups = [
+    { id: "a", label: "A" },
+    { id: "b", label: "B" },
+    { id: "c", label: "C" },
+  ];
+  const entries = (options: string[]) =>
+    options.map((o) => ({ group: o.startsWith("x") ? "a" : "b" }));
 
   test("pages are the non-empty groups, in the domain's order, members in its order", () => {
-    expect(libraryLayout(["y1", "x1", "y2"], library, true)).toEqual([
+    expect(libraryLayout(entries(["y1", "x1", "y2"]), groups, true)).toEqual([
       [{ label: "A", indices: [1] }],
       [{ label: "B", indices: [0, 2] }],
     ]);
   });
 
   test("unpaged, one page holds every group", () => {
-    expect(libraryLayout(["y1", "x1"], library, false)).toEqual([
+    expect(libraryLayout(entries(["y1", "x1"]), groups, false)).toEqual([
       [
         { label: "A", indices: [1] },
         { label: "B", indices: [0] },
@@ -246,14 +262,21 @@ describe("libraryLayout", () => {
     ]);
   });
 
+  test("paged, a group larger than a page turns over onto pages of its own", () => {
+    const many = Array.from(
+      { length: LIBRARY_PAGE_ROWS + 2 },
+      (_, i) => `y${i}`,
+    );
+    const pages = libraryLayout(entries(many), groups, true);
+    expect(pages.map((p) => p.map((s) => [s.label, s.indices.length]))).toEqual(
+      [[["B", LIBRARY_PAGE_ROWS]], [["B", 2]]],
+    );
+  });
+
   test("a member naming an unlisted group is a loud error, not an omission", () => {
-    expect(() =>
-      libraryLayout(
-        ["zz"],
-        { ...library, entry: () => ({ group: "zzz" }) },
-        true,
-      ),
-    ).toThrow(/"zz" \(group "zzz"\).*does not list/);
+    expect(() => libraryLayout([{ group: "zzz" }], groups, true)).toThrow(
+      /#0 \(group "zzz"\).*does not list/,
+    );
   });
 });
 
@@ -262,5 +285,11 @@ describe("fitCells", () => {
     expect(fitCells("abcdefgh", 5)).toBe("abcd…");
     expect(cellWidth(fitCells("世界世界世界", 6))).toBeLessThanOrEqual(6);
     expect(fitCells("abc", 5)).toBe("abc");
+  });
+
+  test("never splits a grapheme cluster or overflows on one", () => {
+    const cut = fitCells("ab⚠️cdef", 4);
+    expect(cellWidth(cut)).toBeLessThanOrEqual(4);
+    expect(cut.includes("⚠") ? cut.includes("⚠️") : true).toBe(true);
   });
 });

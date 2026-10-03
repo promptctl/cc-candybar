@@ -23,15 +23,15 @@ export type SegmentGroup = (typeof SEGMENT_GROUPS)[number];
 
 // What a segment that declares no group stands under.
 export const OTHER_GROUP = "other";
-export type LibraryGroup = SegmentGroup | typeof OTHER_GROUP;
+export type LibraryGroupId = SegmentGroup | typeof OTHER_GROUP;
 
 // The library's pages, in order: every declared group, then `other`.
-export const LIBRARY_GROUPS: readonly LibraryGroup[] = [
+export const LIBRARY_GROUPS: readonly LibraryGroupId[] = [
   ...SEGMENT_GROUPS,
   OTHER_GROUP,
 ];
 
-export const GROUP_LABELS: Readonly<Record<LibraryGroup, string>> = {
+export const GROUP_LABELS: Readonly<Record<LibraryGroupId, string>> = {
   location: "location",
   git: "git",
   "model-context": "model & context",

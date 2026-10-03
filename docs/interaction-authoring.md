@@ -924,7 +924,8 @@ synthesizes:
   `{{ menu }}`, ranging every declared segment — one already on the bar is
   added as a second placement with an id of its own) that inserts after it. The
   `⊕` opens a **library**, not a grid of names: each segment's `group:` is a
-  page (`←`/`→` turn through them, the nav row names the group and its place),
+  page (`←`/`→` turn through them, the nav row names the group and its place;
+  a group of more than eight turns over onto further pages),
   and each segment is one row of its name and `description:`, the whole row the
   click that inserts it. A segment declaring no `group:` stands under `other`,
   plus one `⊕` leading each run — so N segments

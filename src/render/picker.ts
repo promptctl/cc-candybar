@@ -36,11 +36,7 @@ import {
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 import { optionItemStyle } from "./band-style.js";
-import {
-  libraryLayout,
-  libraryRow,
-  type LibraryPageLayout,
-} from "./library.js";
+import { fitCells, libraryLayout, type LibraryPageLayout } from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   requireActiveSegment,
@@ -137,6 +133,25 @@ export function paginate(
   }
   if (cur.length > 0) pages.push(cur);
   return pages;
+}
+
+// ✕ is always present; ←/→ appear only on a multi-page grid. Reserve arrow
+// space only after a first pass proves it overflows — reserving it
+// unconditionally is self-fulfilling (a run that fits with just ✕ could be
+// forced to split, making arrows appear unnecessarily). At an infinite width
+// (the wrap case) paginate yields one page, so neither pass splits.
+function gridPages(
+  widths: readonly number[],
+  available: number,
+): readonly LibraryPageLayout[] {
+  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
+  const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
+  const firstPass = paginate(widths, available, closeReserve);
+  return (
+    firstPass.length > 1
+      ? paginate(widths, available, closeReserve + arrowReserve)
+      : firstPass
+  ).map((cells) => [{ label: "", indices: cells }]);
 }
 
 // [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
@@ -275,34 +290,24 @@ export function renderPicker(
   // false below, structurally rather than by accident.
   const current =
     "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
-  const widths = apply.options.map(cellWidth);
 
-  // ✕ is always present; ←/→ appear only on a multi-page menu. Reserve arrow
-  // space only after a first pass proves it overflows — reserving it
-  // unconditionally is self-fulfilling (a run that fits with just ✕ could be
-  // forced to split, making arrows appear unnecessarily).
-  // In wrap mode (available = Infinity) paginate yields one page, so neither
-  // pass splits.
+  // In wrap mode (available = Infinity) everything stands on one page.
   const available = paged ? rowBudget(runtime) : Infinity;
-  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
-  const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
 
   // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
   // domain's one section is the run of cells `paginate` fits to the width, and
   // a catalogue domain's (`library`, src/config/option-domain.ts) are its
   // groups. The cursor, the ←/→/✕ affordances and the click are the same code
-  // either way — only what a page is made of differs, and that is data.
+  // either way — only what a page is made of differs, and that is data. The
+  // catalogue's entries are taken once, here, and read by layout and rows.
+  const catalogue = apply.library && {
+    groups: apply.library.groups,
+    entries: apply.options.map(apply.library.entry),
+  };
   const pages: readonly LibraryPageLayout[] =
-    apply.library !== undefined
-      ? libraryLayout(apply.options, apply.library, paged)
-      : (() => {
-          const firstPass = paginate(widths, available, closeReserve);
-          return (
-            firstPass.length > 1
-              ? paginate(widths, available, closeReserve + arrowReserve)
-              : firstPass
-          ).map((cells) => [{ label: "", indices: cells }]);
-        })();
+    catalogue !== undefined
+      ? libraryLayout(catalogue.entries, catalogue.groups, paged)
+      : gridPages(apply.options.map(cellWidth), available);
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
   // (the key was never written) — parse it at this trust boundary; an out-of-range
@@ -365,7 +370,7 @@ export function renderPicker(
       ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)]
       : [];
 
-  if (apply.library === undefined) {
+  if (catalogue === undefined) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
       assemble(
@@ -379,27 +384,21 @@ export function renderPicker(
     ];
   }
 
-  // A library page: the nav row names where the reader is (one group per page
-  // when paged), then one row per member — name, description — each row the
-  // member's whole click target.
-  const { library } = apply;
+  // A library page: the nav row names where the reader is — the page's group
+  // whenever it holds one, and its place when there are several pages — then
+  // one row per member, name and description, each row the member's whole
+  // click target.
+  const bold = new Style({ bold: true });
+  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
   const where =
-    pages.length > 1 && pageSections.length === 1
-      ? [
-          new RichText(
-            `${pageSections[0]!.label} ${pageIdx + 1}/${pages.length}`,
-            { style: new Style({ bold: true }) },
-          ),
-        ]
+    pageSections.length === 1
+      ? [new RichText(`${pageSections[0]!.label}${position}`, { style: bold })]
       : [];
   const lines: RichText[] = [assemble([...nav, ...where, ...next], paged)];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
       lines.push(
-        assemble(
-          [new RichText(section.label, { style: new Style({ bold: true }) })],
-          paged,
-        ),
+        assemble([new RichText(section.label, { style: bold })], paged),
       );
     }
     const nameWidth = Math.max(
@@ -407,22 +406,11 @@ export function renderPicker(
     );
     for (const i of section.indices) {
       const option = apply.options[i]!;
-      lines.push(
-        assemble(
-          [
-            optionCell(
-              i,
-              libraryRow(
-                option,
-                nameWidth,
-                library.entry(option).description,
-                available,
-              ),
-            ),
-          ],
-          paged,
-        ),
-      );
+      const description = catalogue.entries[i]!.description;
+      const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
+      const row =
+        description === undefined ? option : `${option}${gap}${description}`;
+      lines.push(assemble([optionCell(i, fitCells(row, available))], paged));
     }
   }
   return lines;
@@ -470,7 +458,17 @@ export function pickerFuncs(
           "set-int",
           "an int action ({ set, int: true })",
         );
-        const lines = renderPicker(
+        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
+        // one value, so it cannot carry a library's several rows; a menu body
+        // is where a catalogue domain lays out. Refused by what the domain
+        // declares, before anything renders.
+        const apply = requireOptionKind(runtime, applyName, "picker");
+        if (apply.library !== undefined) {
+          throw new Error(
+            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`,
+          );
+        }
+        const [line] = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
           [[page.key, "-1"]],
@@ -484,19 +482,11 @@ export function pickerFuncs(
             requireActiveSegment(activeSegment, "{{ picker }}"),
             placedBy(undefined),
             runtime,
-            requireOptionKind(runtime, applyName, "picker").paletteOf,
+            apply.paletteOf,
             activeSegment.drawnAt(),
           ),
         );
-        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
-        // one value, so it cannot carry a library's several rows; a menu body
-        // is where a catalogue domain lays out.
-        if (lines.length !== 1) {
-          throw new Error(
-            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as ${lines.length} rows; a catalogue renders in a {{ menu }} body`,
-          );
-        }
-        return lines[0]!;
+        return line!;
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },
