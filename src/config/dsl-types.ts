@@ -91,7 +91,7 @@ export interface SegmentNode {
   // instance of. Its template/palette/`when` live on its SegmentDecl.
   readonly name: string;
   // The placement's identity (brandon-segment-settings-i4n): what a menu's
-  // open state, edit mode's `✖`/`+`, and the config-file editor address. A
+  // open state, edit mode's `⊖`/`⊕`, and the config-file editor address. A
   // name, never a position — positions shift when a sibling is added or
   // removed. Absent ≡ the segment's name, so `"git"` and
   // `{ seg: "git", id: "git" }` are one placement; read it through

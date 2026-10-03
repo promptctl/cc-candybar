@@ -28,6 +28,7 @@ import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   decorFor,
   DISTRIBUTIONS,
@@ -260,9 +261,13 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       // The label, the content, and the `- +` cell (and the row's leading `+`).
       expect(members.length).toBeGreaterThanOrEqual(3);
       // Names view: every member but the content (which yields its cell to
-      // its label) renders, all in the colour the live content wears.
+      // its label) renders. The label wears the colour the live content wears;
+      // an insertion point (`⊕`) is drawn on no fill at all.
       for (const { name } of members.filter(({ name }) => name !== content)) {
-        expect([content, name, rt.bgOf(name)]).toEqual([content, name, live.get(content)]);
+        const expected = name.startsWith(`${EDIT_NS}${PRESET_FLOOR}.insertSeg.`)
+          ? "(no bg)"
+          : live.get(content);
+        expect([content, name, rt.bgOf(name)]).toEqual([content, name, expected]);
       }
     }
     rt.dispose();

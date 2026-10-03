@@ -121,7 +121,10 @@ the theme derives from its position: row n wears step n of the
 tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
 to read on whatever its background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
-tint.
+tint. `bg: "none"` is the one word that is no colour: the cell draws its text
+on the terminal's own ground with no fill behind it, and `{{ bgOf }}` reads the
+theme's background there, so a contrast floor still measures against the ground
+the text lands on.
 
 The canonical control-strip config — cycle chip, bounded stepper, copy/open
 toolbar:
@@ -906,26 +909,26 @@ detection `{{ menu }}` uses to find its own placements) and, only then,
 synthesizes:
 
 - `edit.mode` — a `state` variable holding `closed` (the default) or
-  `arrange` (the `✚`/`✖` chrome below); `edit.configure`, holding `closed` or
+  `arrange` (the `⊕`/`⊖` chrome below); `edit.configure`, holding `closed` or
   `<preset>:<id>` (the one placement whose settings hang open, a level inside
   arranging) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
   above verbatim; to close a configured placement as you leave, as the
   bundled controls do, fire `edit.unconfigure` beside it in a `do`.
 - For **every** preset (the `"default"` floor included) and every ordinary
-  segment in its resolved root: a red `✖` (a synthesized `removeSegment` action
-  behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
+  segment in its resolved root: a red `⊖` (a synthesized `removeSegment` action
+  behind `{{ action }}`) drawn inside the segment's own cell, then a green `⊕`
   in a cell of its own (a synthesized `insertSegmentFrom` action behind
   `{{ menu }}`, ranging every declared segment — one already on the bar is
   added as a second placement with an id of its own) that inserts after it,
-  plus one `✚` leading each run — so N segments
-  in a row read `✚ [✖ seg1⚙️] ✚ [✖ seg2⚙️] ✚ … [✖ segN⚙️] ✚`. Every affordance is gated on edit
+  plus one `⊕` leading each run — so N segments
+  in a row read `⊕ [⊖ seg1⚙️] ⊕ [⊖ seg2⚙️] ⊕ … [⊖ segN⚙️] ⊕`. Every affordance is gated on edit
   mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - Every placement also carries a `⚙️` closing its cell — every placement has
   at least the `theme` setting. Clicking it writes `<preset>:<id>` to `edit.configure`, which
-  hangs one control per setting below that placement (the `✚`/`✖`/`⚙️` chrome
+  hangs one control per setting below that placement (the `⊕`/`⊖`/`⚙️` chrome
   stays, and the bar shows live output so a setting's effect is visible) — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
@@ -936,8 +939,8 @@ synthesizes:
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
   `(?)`) puts the live output back; a segment with no cell right now —
-  hidden, or rendering nothing — then has no `✖` either, so find it in the
-  names view (a failing segment keeps its `✖` and `⚙️` on its `⚠` cell).
+  hidden, or rendering nothing — then has no `⊖` either, so find it in the
+  names view (a failing segment keeps its `⊖` and `⚙️` on its `⚠` cell).
 - A row above the bar, led by `✎ done`, which fires `edit.toggle` and closes
   any configured placement — the way out, without reopening the menu edit mode was entered from.
 
