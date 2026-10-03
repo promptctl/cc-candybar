@@ -1,3 +1,10 @@
+## [1.105.1](https://github.com/promptctl/cc-candybar/compare/v1.105.0...v1.105.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **daemon:** durable config clicks draw in the next render; UI elements inventory and pnpm bar harness ([#295](https://github.com/promptctl/cc-candybar/issues/295)) ([ab34725](https://github.com/promptctl/cc-candybar/commit/ab34725bf3e1338e64739b9d6c2df5e4bf9da8a0)), closes [#287](https://github.com/promptctl/cc-candybar/issues/287)
+
 # [1.105.0](https://github.com/promptctl/cc-candybar/compare/v1.104.0...v1.105.0) (2026-10-03)
 
 
