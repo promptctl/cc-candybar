@@ -1,3 +1,10 @@
+# [1.101.0](https://github.com/promptctl/cc-candybar/compare/v1.100.1...v1.101.0) (2026-10-03)
+
+
+### Features
+
+* **menu:** ◁ back, configure nested in arrange, door folds its body ([#289](https://github.com/promptctl/cc-candybar/issues/289)) ([d373675](https://github.com/promptctl/cc-candybar/commit/d373675c0b456edd923fce0ef56351db48efb0b8))
+
 ## [1.100.1](https://github.com/promptctl/cc-candybar/compare/v1.100.0...v1.100.1) (2026-10-03)
 
 
