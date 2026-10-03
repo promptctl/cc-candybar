@@ -905,9 +905,10 @@ opts a config in — the loader detects the reference (the same AST-based
 detection `{{ menu }}` uses to find its own placements) and, only then,
 synthesizes:
 
-- `edit.mode` — a `state` variable holding `closed` (the default),
-  `arrange` (the `✚`/`✖` chrome below), or `configure:<preset>:<id>` (one
-  placement's settings) — and `edit.toggle` itself, a `cycle` action between
+- `edit.mode` — a `state` variable holding `closed` (the default) or
+  `arrange` (the `✚`/`✖` chrome below); `edit.configure`, holding `closed` or
+  `<preset>:<id>` (the one placement whose settings hang open, a level inside
+  arranging) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
   above verbatim.
 - For **every** preset (the `"default"` floor included) and every ordinary
@@ -922,21 +923,22 @@ synthesizes:
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
 - Every placement also carries a `⚙️` closing its cell — every placement has
-  at least the `theme` setting. Clicking it writes `configure:<preset>:<id>` to `edit.mode`, which
-  hides every `✚`/`✖` and hangs one control per setting below that
-  placement's name — shown, with every row holding it, whatever their `when`
+  at least the `theme` setting. Clicking it writes `<preset>:<id>` to `edit.configure`, which
+  hangs one control per setting below that placement (the `✚`/`✖`/`⚙️` chrome
+  stays, and the bar shows live output so a setting's effect is visible) — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
   (see "One segment, many placements" in `docs/segment-authoring.md`). One
-  key holds the mode, so configuring another placement closes this one.
+  key holds the configured placement, so configuring another closes this one;
+  the body's `✕` returns to arranging.
 - While edit mode is open each segment reads as its **name**, whether or not
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
   found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
   `(?)`) puts the live output back; a segment with no cell right now —
   hidden, or rendering nothing — then has no `✖` either, so find it in the
   names view (a failing segment keeps its `✖` and `⚙️` on its `⚠` cell).
-- A row above the bar, led by `✎ done`, which fires `edit.toggle` — the way
-  out, without reopening the menu edit mode was entered from.
+- A row above the bar, led by `✎ done`, which fires `edit.toggle` and closes
+  any configured placement — the way out, without reopening the menu edit mode was entered from.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
 its `✎ arrange` entry fires `edit.toggle` (through a `do` that also closes the
