@@ -1,3 +1,10 @@
+# [1.103.0](https://github.com/promptctl/cc-candybar/compare/v1.102.0...v1.103.0) (2026-10-03)
+
+
+### Features
+
+* **edit:** save and cancel for edit mode ([#292](https://github.com/promptctl/cc-candybar/issues/292)) ([a7307bc](https://github.com/promptctl/cc-candybar/commit/a7307bc55e6e1d5124b362320df525614db482be))
+
 # [1.102.0](https://github.com/promptctl/cc-candybar/compare/v1.101.0...v1.102.0) (2026-10-03)
 
 
