@@ -48,10 +48,10 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 
 ### Add and remove
 
-Today, after #251:
+Today, after #288:
 
 ```
-🍫  |  ✚  |  host ⚙🚫  |  ✚  |  directory ⚙🚫  |  ✚  |  gitaculous ⚙🚫  |  ✚
+🍫  |  ✚  |  ✖ host⚙️  |  ✚  |  ✖ directory⚙️  |  ✚  |  ✖ gitaculous⚙️  |  ✚
 ```
 
 The positions are what Brandon asked for. The glyphs and colours are not: "use symbols that are more clear what they're for and some colors that make it more obvious (maybe solid red for the 'remove' action) and blue or green for 'add'. Please do not use a background on the add/remove characters, just style the text itself."
