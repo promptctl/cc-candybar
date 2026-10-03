@@ -9,13 +9,13 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✕  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
-✕  ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+✖  ◁  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
+   ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
-❌  host  directory  gitaculous          ← the bar, unchanged
+host  directory  gitaculous             ← the bar, less the door
 ```
 
-A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ❌, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
+A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ✖, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."

@@ -714,7 +714,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // below, which are a word plus the ▸/▾ that gates it. The door has no
       // label to gate: it is a glyph, so a second glyph beside it would be the
       // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `❌` names what the click does.
+      // names what it opens, `✖` names what the click does.
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values.

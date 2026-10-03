@@ -201,7 +201,7 @@ describe("the global settings menu is reachable from a user config", () => {
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
-    // One symbol per state: the open door is the ❌, and the door glyph is gone.
+    // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
     // Switch presets (the picker's own disclosure glyph, hosted by the preset

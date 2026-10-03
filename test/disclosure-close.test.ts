@@ -184,7 +184,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     // The door opens ABOVE and rises with its body: the door itself, wearing
-    // ❌, leads the first of two menu lines stacked over the bar, then the
+    // ✖, leads the first of two menu lines stacked over the bar, then the
     // open tab's two rows (⚡ session, where a fresh session opens), each led
     // by the tab's ✕ alone; the bar row keeps every cell but the door.
     const tabKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tab`;
@@ -241,7 +241,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     lines = rt.render();
     expect(lines).toHaveLength(3);
 
-    // And the door's ❌ closes the menu: back to the bar alone.
+    // And the door's ✖ closes the menu: back to the bar alone.
     rt.click(links(lines[0]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);

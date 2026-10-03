@@ -1169,7 +1169,7 @@ so there is no session `set` twin to pair it with. (The display globals
 
 One disclosure is present in **every** bar, whatever the config says: the
 global settings menu, rendered as `🍫`. It is one symbol per state rather than a
-label plus an arrow: `🍫` closed, `❌` open. By default it is the leading cell of
+label plus an arrow: `🍫` closed, `✖` open. By default it is the leading cell of
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
 is shared by every preset). Place the reserved `candybar.menu` segment name
@@ -1180,17 +1180,18 @@ yourself to move it anywhere else.
 ```
 
 Opening it shows the always-available functionality. The menu opens
-**above** the bar: two lines stacked over the bar's rows, which stay exactly as
-they were, then the open tab's body, and the door — now `❌` — closes the menu.
+**above** the bar: two lines stacked over the bar's rows, then the open tab's
+body. The door rises with it — now `✖`, it leads the menu's first line and
+closes the menu, and the bar's row closes up where it was.
 The second line is five tabs, one open at a time; the open one wears its state
 colour, and its body drops below the strip. The tab stays open when the menu
 closes, so reopening the menu returns to it:
 
 ```
-✕ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
-✕ ⚡ session   ▾ 🎨 look   📐 layout   ⚙ config   🧰 tools
+✖ ◁ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
+  ⚡ session   ▾ 🎨 look   📐 layout   ⚙ config   🧰 tools
 ✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺
-❌ host   directory   gitaculous          ← the bar, unchanged
+host   directory   gitaculous             ← the bar, less the door
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1200,7 +1201,7 @@ carries the `✕` of the innermost disclosure it belongs to, and a picker line
 keeps the picker's own. This is true of every disclosure on the bar (a group
 body, a `(?)` line), not only this menu; no author writes it and no author can
 decline it. The menu opens above the bar and its door rises with it: the menu's
-first line leads with the door itself, wearing `❌`, then `◁ back` (muted while
+first line leads with the door itself, wearing `✖`, then `◁ back` (muted while
 there is nothing to go back to), and the bar's row closes up where the door was.
 
 - **`⚡ session`** holds, on one row, **`⎘ id ↗ proj ↗ log ↗ repo`**, the quick actions: copy the session id,
