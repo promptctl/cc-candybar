@@ -40,6 +40,7 @@ import {
 } from "../src/config/edit-chrome";
 import {
   anchorUnderGate,
+  BACK_GLYPH,
   countAnchors,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
@@ -463,11 +464,13 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     // What each tab's click writes: the open one's closes it, every other
-    // one's opens that tab.
+    // one's opens that tab. A tab's click leads with its own write; the door's
+    // also writes the tab key, back to the first tab, after its own.
     const writes = (rendered: string) =>
-      linkUrls(rendered).flatMap((u) =>
-        effectsOf(u).flatMap((e) => (e.args[1] === TAB_KEY ? [e.args[2]] : [])),
-      );
+      linkUrls(rendered).flatMap((u) => {
+        const [face] = effectsOf(u);
+        return face?.args[1] === TAB_KEY ? [face.args[2]] : [];
+      });
     for (const open of TABS) {
       // A fresh session opens on ⚡ session, so only the others take a click.
       if (open !== "session") clickWriting(render(), TAB_KEY, open);
@@ -490,7 +493,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     dispose();
   });
 
-  test("closing the menu and reopening it returns to the last tab", () => {
+  test("closing the menu folds everything in it: reopening finds it as a fresh session does", () => {
     const { render, clickWriting, sessionState, dispose } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
@@ -498,11 +501,15 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     // A fresh session opens on ⚡ session.
     expect(stripAnsi(render())).toContain("⎘ id");
     clickWriting(render(), TAB_KEY, "tools");
-    clickWriting(render(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
-    expect(stripAnsi(render())).not.toContain("🩺 doctor");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    expect(sessionState.get("s1", TAB_KEY)).toBe("tools");
     expect(stripAnsi(render())).toContain("🩺 doctor");
+    // However the menu was closed — here a row's ✕ — the door's click that
+    // reopens it folds what was left open inside it.
+    clickWriting(render(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    expect(sessionState.get("s1", TAB_KEY)).toBe("session");
+    const reopened = stripAnsi(render());
+    expect(reopened).toContain("⎘ id");
+    expect(reopened).not.toContain("🩺 doctor");
     dispose();
   });
 
@@ -641,7 +648,10 @@ describe("the default placement never inherits an author's gate", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
     expect(opened).toHaveLength(closed.length + MENU_LINES);
-    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
+    // The `◁` slot leads the door's cell; this runtime records no back
+    // history, so it holds the blank of the glyph's width.
+    const backSlot = " ".repeat(BACK_GLYPH.length);
+    expect(opened[MENU_LINES]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + backSlot + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
     dispose();
   });

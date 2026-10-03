@@ -597,30 +597,39 @@ const segmentType: NodeType<"segment"> = {
                 ...line,
                 place: BODY_PLACE[opens.placement](line),
               }));
-      // The ✕ every row of the body this segment opens leads with
-      // (brandon-disclosure-43z): one content-sized cell in the trigger's own
-      // state colour — the colour the open trigger wears, so the ✕ on a row
-      // and the trigger it answers to read as one affordance — laid through
-      // the same layout as the trigger's cells, so it pads like them.
-      const closeLead =
-        node.opens !== undefined && bodyLines.some((l) => l.band === "own")
-          ? applySegmentLayout(
-              fragmentsToCells(
-                [ctx.closeDisclosure(node.opens.key)],
-                styles.trigger,
-              ),
-              { ...layout, width: "auto", baseStyle: styles.trigger },
-            )
-          : [];
+      // The ✕ the body this segment opens leads with (brandon-disclosure-43z):
+      // one content-sized cell in the trigger's own state colour — the colour
+      // the open trigger wears, so the ✕ and the trigger it answers to read as
+      // one affordance — laid through the same layout as the trigger's cells,
+      // so it pads like them. ONE per body, on its first row: every later row
+      // leads with a blank of the same width in the same colour, so the rows
+      // stay aligned and read as one panel with one way to close it.
+      const leadCell = (text: RichText): readonly LaidCell[] =>
+        applySegmentLayout(fragmentsToCells([text], styles.trigger), {
+          ...layout,
+          width: "auto",
+          baseStyle: styles.trigger,
+        });
+      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+      const close =
+        node.opens !== undefined && firstOwn !== -1
+          ? ctx.closeDisclosure(node.opens.key)
+          : undefined;
+      const closeLead = close === undefined ? [] : leadCell(close);
+      const holdLead =
+        close === undefined
+          ? []
+          : leadCell(new RichText(" ".repeat(close.cellLength)));
       // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
-      // the band this trigger opened gets its ✕; a row of a band hung deeper
-      // inside (a `{{ menu }}` body, a nested disclosure's rows) already has
-      // its own and gets none. Every line then returns as a row of a DEEPER
-      // band, so the band this trigger sits on never leads it again.
-      const leadOf = (line: RenderedLine): readonly LaidCell[] =>
-        line.band === "own" ? closeLead : [];
-      const ledBody: RenderedLines = bodyLines.map((line) => ({
-        cells: [...leadOf(line), ...line.cells],
+      // the band this trigger opened gets its lead — the first its ✕, the rest
+      // the blank beside it; a row of a band hung deeper inside (a `{{ menu }}`
+      // body, a nested disclosure's rows) already has its own and gets none.
+      // Every line then returns as a row of a DEEPER band, so the band this
+      // trigger sits on never leads it again.
+      const leadOf = (line: RenderedLine, i: number): readonly LaidCell[] =>
+        line.band !== "own" ? [] : i === firstOwn ? closeLead : holdLead;
+      const ledBody: RenderedLines = bodyLines.map((line, i) => ({
+        cells: [...leadOf(line, i), ...line.cells],
         band: "deeper",
         place: line.place,
       }));

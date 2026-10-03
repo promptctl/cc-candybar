@@ -3,6 +3,7 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { NavigationHistory } from "../../src/daemon/navigation-history";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   parseEffects,
@@ -55,6 +56,7 @@ export function testVerbContext(
   return {
     sessionState,
     history,
+    navigation: new NavigationHistory(),
     dlog: () => {},
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");

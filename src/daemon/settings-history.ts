@@ -25,7 +25,7 @@ import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
 import type { DaemonLogger } from "./log";
-import type { SessionStateRW } from "./session-state";
+import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
 
@@ -82,7 +82,7 @@ const EPHEMERAL_STORAGE: HistoryStorage = { load: () => ({}), save: () => {} };
 const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey),
 );
-const isSettingKey = (key: string): boolean =>
+export const isSettingKey = (key: string): boolean =>
   SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
 
 // [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
@@ -156,40 +156,12 @@ export class SettingsHistory {
       );
       pending.set(sessionId, changes);
     };
-    const inner = this.sessionState;
-    // A change is recorded only once its write has landed, and its `after` is
-    // what the store then reads — a write that throws records nothing.
-    const recorded = (
-      sessionId: string,
-      keys: readonly string[],
-      write: () => void,
-    ): void => {
-      const before = keys
-        .filter(isSettingKey)
-        .map((key) => ({ key, before: inner.get(sessionId, key) }));
-      write();
-      for (const { key, before: b } of before) {
-        note(sessionId, {
-          kind: "session",
-          key,
-          before: b,
-          after: inner.get(sessionId, key),
-        });
-      }
-    };
-    const sessionState: SessionStateRW = {
-      get: (sessionId, key) => inner.get(sessionId, key),
-      set: (sessionId, key, value) =>
-        recorded(sessionId, [key], () => inner.set(sessionId, key, value)),
-      setBatch: (sessionId, pairs) =>
-        recorded(
-          sessionId,
-          pairs.map((p) => p.key),
-          () => inner.setBatch(sessionId, pairs),
-        ),
-      clear: (sessionId, key) =>
-        recorded(sessionId, [key], () => inner.clear(sessionId, key)),
-    };
+    const sessionState = recordingView(
+      this.sessionState,
+      isSettingKey,
+      (sessionId, key, before, after) =>
+        note(sessionId, { kind: "session", key, before, after }),
+    );
     return {
       sessionState,
       file: (sessionId, file, before, after) =>

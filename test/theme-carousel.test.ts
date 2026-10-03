@@ -397,10 +397,11 @@ describe("the settings menu's theme, look and style controls are carousels", () 
     rt.dispose();
   });
 
-  // The carousel and the rows beneath it are the rows of an open body, each
-  // led by the body's ✕ as a cell of its own; all of them fit the row that ✕
-  // leaves them, at any padding and any strip shape, so the terminal never
-  // breaks a row away from its ✕ — and nothing else on the bar overflows.
+  // The carousel and the rows beneath it are the rows of an open body: the
+  // first led by the body's one ✕ as a cell of its own, the rest by a blank of
+  // its width; all of them fit the row that lead leaves them, at any padding
+  // and any strip shape, so the terminal never breaks a row away from its lead
+  // — and nothing else on the bar overflows.
   test.each(
     (["theme", "preset"] as const).flatMap((control) =>
       (["powerline", "capsule", "plain"] as const).flatMap((style) =>
@@ -413,11 +414,15 @@ describe("the settings menu's theme, look and style controls are carousels", () 
       openCarousel(rt, control);
       const lines = stripAnsi(rt.render()).split("\n");
       const ring = lines.findIndex((l) => RING.test(l));
-      // The ring, then every line the rows beneath it draw (the preset
-      // preview draws one per row of the layout), each led by the ✕.
+      // The ring, led by the ✕, then every line the rows beneath it draw (the
+      // preset preview draws one per row of the layout), led by its blank.
       const beneath = rt.sink.get(`candybar.carousel.${control}.0`)!.length;
       const body = lines.slice(ring, ring + 1 + beneath);
-      expect([width, body.filter((l) => !/^\W*✕/u.test(l))]).toEqual([width, []]);
+      const ledByClose = body.map((l) => /^\W*✕/u.test(l));
+      expect([width, ledByClose]).toEqual([
+        width,
+        body.map((_, i) => i === 0),
+      ]);
       expect(body).toHaveLength(1 + beneath);
       const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
       expect([width, over]).toEqual([width, []]);
@@ -528,8 +533,8 @@ describe("glyphs and colour depth sit in the settings menu, not on the bar", () 
   );
 });
 
-// The preview's rows, as the labels each draws: the lines after the ring, led
-// by the body's ✕, up to the next line the body does not lead.
+// The preview's rows, as the labels each draws: the lines after the ring, up to
+// the preset actions or the menu's tab strip below the body.
 function previewLabels(rendered: string): string[][] {
   const lines = stripAnsi(rendered).split("\n");
   const ring = lines.findIndex((l) => RING.test(l));
@@ -538,7 +543,7 @@ function previewLabels(rendered: string): string[][] {
     // The preview's rows end where the ring's body goes on to the preset
     // actions (brandon-save-undo-bwi.o6u), or where the body ends: the
     // menu's tab strip is the next line.
-    if (!/^\W*✕/u.test(line) || line.includes("🗑 delete") || line.includes("⚡ session")) break;
+    if (line.includes("🗑 delete") || line.includes("⚡ session")) break;
     rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
   }
   return rows;

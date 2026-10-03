@@ -43,6 +43,7 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
   VERB_REDO,
+  VERB_BACK,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
@@ -194,6 +195,8 @@ export type CompiledActionDecl =
   // the history (not this action) decides which step moves.
   | { readonly kind: "undo" }
   | { readonly kind: "redo" }
+  // A step of the session's navigation history — the same keyless shape.
+  | { readonly kind: "back" }
   // Write every unsaved setting — the daemon derives which at click time.
   | { readonly kind: "save" }
   // Save the bar as a new preset, or delete the preset the template names.
@@ -476,6 +479,7 @@ function compileAction(
   if ("slash" in action) return { kind: "slash", line: action.slash };
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
+  if ("back" in action) return { kind: "back" };
   if ("save" in action) return { kind: "save" };
   if ("preset" in action) {
     return action.preset === "save"
@@ -741,6 +745,11 @@ export function realize(
     case "redo":
       return {
         effects: [{ verb: VERB_REDO, args: [sessionId] }],
+        active: false,
+      };
+    case "back":
+      return {
+        effects: [{ verb: VERB_BACK, args: [sessionId] }],
         active: false,
       };
     case "save":

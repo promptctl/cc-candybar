@@ -8,7 +8,9 @@ import type {
 } from "../../src/config/dsl-types";
 import { rootOf } from "../../src/config/root";
 import {
+  EDIT_CONFIGURE_KEY,
   EDIT_MODE_KEY,
+  EDIT_SWITCH,
   EDIT_TOGGLE_ACTION,
 } from "../../src/config/loader/edit-mode";
 import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
@@ -56,13 +58,24 @@ export const oneSegmentRoot = (
 // of this per-preset edit-chrome machinery is what these single-segment tests
 // exercise (test/dsl-edit-mode.test.ts and test/dsl-layout-edit.test.ts own
 // that surface), so the clean narrowing drops every synthesized per-preset
-// `edit.*` chrome artifact too — EXCEPT the two bare, preset-independent
-// names (`edit.mode`/`edit.toggle`) Phase A synthesis writes once, which stay
-// so the settings menu's `✎ arrange` still compiles.
+// `edit.*` chrome artifact too — EXCEPT the bare, preset-independent names the
+// settings menu mints once (its `✎ arrange` fires EDIT_SWITCH, over the two
+// keys), which stay so that control still compiles.
+const MENU_EDIT_NAMES: ReadonlySet<string> = new Set([
+  EDIT_MODE_KEY,
+  EDIT_CONFIGURE_KEY,
+  EDIT_TOGGLE_ACTION,
+  ...EDIT_SWITCH,
+]);
 const EDIT_CHROME_NAME = (name: string) =>
-  name.startsWith(EDIT_NS) &&
-  name !== EDIT_MODE_KEY &&
-  name !== EDIT_TOGGLE_ACTION;
+  name.startsWith(EDIT_NS) && !MENU_EDIT_NAMES.has(name);
+
+// Every record entry but the per-preset edit chrome — for a test narrowing a
+// config its own way.
+export const dropEditChrome = <V>(rec: Readonly<Record<string, V>>) =>
+  Object.fromEntries(
+    Object.entries(rec).filter(([name]) => !EDIT_CHROME_NAME(name)),
+  );
 
 export const narrowToSegment = (
   parsed: ValidatedConfig,
@@ -71,10 +84,6 @@ export const narrowToSegment = (
   // the render a pair the loader would refuse.
   settings?: Readonly<Record<string, SettingValue>>,
 ): ValidatedConfig => {
-  const dropEditChrome = <V>(rec: Readonly<Record<string, V>>) =>
-    Object.fromEntries(
-      Object.entries(rec).filter(([name]) => !EDIT_CHROME_NAME(name)),
-    );
   return {
     ...parsed,
     root: rootOf(oneSegmentRoot(segment, settings)),

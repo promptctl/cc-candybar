@@ -208,12 +208,14 @@ function build(src: string, withDefault = false) {
       handler(e.value, ctx);
     }
   };
-  // The link spans of a segment's inline cell, by URL.
+  // The link spans of a segment's cells, by URL.
   const urlsIn = (name: string): string[] =>
-    cellsOf(name)[0]!.spans.flatMap((s) =>
-      typeof s.style !== "string" && s.style.link !== undefined
-        ? [s.style.link]
-        : [],
+    cellsOf(name).flatMap((cell) =>
+      cell.spans.flatMap((s) =>
+        typeof s.style !== "string" && s.style.link !== undefined
+          ? [s.style.link]
+          : [],
+      ),
     );
   // Click the affordance in `name` that writes `value` to `key` — a
   // disclosure toggle's set-state — loud when it is not on the bar.

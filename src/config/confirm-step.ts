@@ -12,6 +12,14 @@ import type { VariableDecl } from "./dsl-types.js";
 const ARMED = "armed";
 const DISARMED = "disarmed";
 
+// [LAW:one-source-of-truth] Every confirm's SessionState key ends here, so the
+// daemon can tell one from every other key without a list: an armed confirm
+// is one click from firing, so going back (src/daemon/navigation-history.ts)
+// must never restore one — it is armed only by its own click.
+const CONFIRM_KEY_SUFFIX = ".armed";
+export const isConfirmKey = (key: string): boolean =>
+  key.endsWith(CONFIRM_KEY_SUFFIX);
+
 export interface ConfirmStep {
   readonly template: string;
   // A template expression, true while the step is armed: whatever shows the
@@ -30,6 +38,7 @@ export function confirmStep(
   labels: { readonly arm: string; readonly confirm: string },
   fires: readonly string[],
 ): ConfirmStep {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
   const arm = `${key}.arm`;
   const disarm = `${key}.disarm`;
   const armed = `(eq .${key} "${ARMED}")`;
@@ -41,12 +50,14 @@ export function confirmStep(
       `{{ action "${key}" "${labels.confirm}" }} {{ action "${disarm}" "✕" }}` +
       `{{ else }}{{ action "${arm}" "${labels.arm}" }}{{ end }}`,
     actions: {
-      [arm]: { set: key, to: ARMED },
-      [disarm]: { set: key, to: DISARMED },
+      [arm]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
       [key]: { do: [disarm, ...fires] },
     },
     armed,
-    variables: { [key]: { kind: "state", key, default: DISARMED } },
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED },
+    },
     disarm,
   };
 }

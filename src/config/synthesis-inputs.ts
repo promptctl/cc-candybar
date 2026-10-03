@@ -32,8 +32,8 @@ export interface SynthesisArtifacts {
 }
 
 // Every variable the artifacts READ. Three kinds of read: the dotted refs of
-// every template (segment fields, node `when`s, template variables, copy/open
-// actions); session.id, which realizing an action reads for the click's first
+// every template (segment fields, node `when`s and the lead/trail drawn in a
+// segment node's cell, template variables, copy/open actions); session.id, which realizing an action reads for the click's first
 // wire segment (render/action.ts) and a `state` variable reads to key its
 // session (SourceRegistry.declareState); and the `.effective` projection a
 // `set` or `persist` on a setting reads its current value back through
@@ -55,7 +55,13 @@ function synthesisReads(
     add(seg.when);
   }
   for (const tree of trees) {
-    for (const node of walkNodes(tree)) add(node.when);
+    for (const node of walkNodes(tree)) {
+      add(node.when);
+      if (node.kind === "segment") {
+        add(node.lead);
+        add(node.trail);
+      }
+    }
   }
   for (const v of Object.values(artifacts.variables)) {
     if (v.kind === "template") add(v.template);

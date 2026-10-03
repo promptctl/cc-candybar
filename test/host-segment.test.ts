@@ -63,6 +63,7 @@ const DEPS = {
   tmuxService: { getSessionId: async () => ABSENT },
   log: () => {},
   history: () => EMPTY_HISTORY_DEPTH,
+    navigation: () => 0,
 } as unknown as RenderPayloadDeps;
 
 const HOOK = {

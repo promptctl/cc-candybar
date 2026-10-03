@@ -1,12 +1,14 @@
-// brandon-disclosure-43z — every row of an open disclosure body leads with a
-// ✕ that closes THAT disclosure. [LAW:behavior-not-structure] The contract is
+// brandon-disclosure-43z — an open disclosure body leads with ONE ✕ that
+// closes THAT disclosure: its first row carries it, every later row a blank of
+// its width in its colour, so a panel has one way to close it and its rows
+// stay aligned. [LAW:behavior-not-structure] The contract is
 // read off the rendered lines (their leading OSC-8 link and what it writes)
 // and off the daemon's own verb handlers (a click actually closes), never off
 // the walk's shape:
-//   - the row a body renders leads with one ✕ whose click writes the body's
-//     state key back to the closed sentinel;
-//   - a VERTICAL body leads every one of its rows, and an accordion group's ✕
-//     writes the SHARED key it was opened through;
+//   - the first row a body renders leads with one ✕ whose click writes the
+//     body's state key back to the closed sentinel;
+//   - a VERTICAL body leads every later row with the blank, and an accordion
+//     group's ✕ writes the SHARED key it was opened through;
 //   - nesting does not stack: a row is led by the innermost band it sits on
 //     (⚙ config's row carries ⚙'s ✕ and not 🍫's), and a `{{ menu }}` line
 //     dropped inside a body keeps the picker's own ✕ alone;
@@ -83,18 +85,21 @@ const closes = (link: Link, key: string): boolean =>
       e.args[2] === DISCLOSURE_CLOSED,
   );
 
-// The row's lead: its first link must be the ✕ closing `key`, and no other
-// disclosure's ✕ may sit anywhere on the row — one ✕, the innermost band's.
-function expectLedBy(line: string, key: string): void {
-  const rowLinks = links(line);
-  const first = rowLinks[0];
-  if (first === undefined) throw new Error(`no link on: ${JSON.stringify(line)}`);
+// A body's rows: the first's first link is the ✕ closing `key`, and no other
+// ✕ closing `key` sits anywhere on the body — one ✕, the innermost band's.
+// Every later row leads with the blank: its first cell holds only spaces.
+function expectBodyLedBy(rows: readonly string[], key: string): void {
+  const [head, ...rest] = rows;
+  if (head === undefined) throw new Error("no body rows");
+  const first = links(head)[0];
+  if (first === undefined) throw new Error(`no link on: ${JSON.stringify(head)}`);
   expect(first.text).toBe(DISCLOSURE_GLYPH_CLOSE);
   expect(closes(first, key)).toBe(true);
-  const otherCloses = rowLinks
-    .slice(1)
+  const closing = rows
+    .flatMap(links)
     .filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE && closes(l, key));
-  expect(otherCloses).toEqual([]);
+  expect(closing).toHaveLength(1);
+  for (const row of rest) expect(stripAnsi(row)).toMatch(/^\W*? +\S/u);
 }
 
 function build(src: string, withDefault: boolean) {
@@ -176,9 +181,9 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
     lines = rt.render();
     expect(lines).toHaveLength(5);
-    for (const row of lines.slice(0, 2)) expectLedBy(row, SETTINGS_ANCHOR);
+    expectBodyLedBy(lines.slice(0, 2), SETTINGS_ANCHOR);
+    expectBodyLedBy(lines.slice(2, 4), tabKey);
     for (const row of lines.slice(2, 4)) {
-      expectLedBy(row, tabKey);
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }
     const bar = (): string => lines[lines.length - 1]!;
@@ -193,7 +198,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     rt.clickWriting(lines, tabKey, "look");
     lines = rt.render();
     expect(lines).toHaveLength(4);
-    expectLedBy(lines[2]!, tabKey);
+    expectBodyLedBy([lines[2]!], tabKey);
     expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
     // A carousel opened inside the tab's body is its own disclosure's body
@@ -204,8 +209,8 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
     expect(lines).toHaveLength(6);
+    expectBodyLedBy(lines.slice(3, 5), pickers);
     for (const row of lines.slice(3, 5)) {
-      expectLedBy(row, pickers);
       expect(links(row).some((l) => closes(l, tabKey))).toBe(false);
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }
@@ -223,7 +228,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     rt.clickWriting(lines, tabKey, "tools");
     lines = rt.render();
     expect(lines).toHaveLength(4);
-    expectLedBy(lines[2]!, tabKey);
+    expectBodyLedBy([lines[2]!], tabKey);
     rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
@@ -265,15 +270,15 @@ describe("brandon-disclosure-43z — a group body", () => {
     lines = rt.render();
     // Bar row, toggle `one`, its three body rows, toggle `two`.
     expect(lines).toHaveLength(6);
-    for (const row of lines.slice(2, 5)) expectLedBy(row, "acc");
-    // The nested horizontal row is led once — by the container, not per cell.
-    expect(links(lines[3]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
+    expectBodyLedBy(lines.slice(2, 5), "acc");
+    // The first row is led once — by the container, not per cell.
+    expect(links(lines[2]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
     // Rows outside the body carry none.
     for (const row of [lines[0]!, lines[1]!, lines[5]!]) {
       expect(links(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
-    rt.click(links(lines[4]!)[0]!.url);
+    rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
     rt.dispose();
@@ -323,16 +328,14 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
       expect.stringContaining("B"),
       expect.stringContaining("D"),
     ]);
-    for (const row of body) {
-      expectLedBy(row, key);
-      expect(closeLinks(row)).toHaveLength(1);
-    }
+    expectBodyLedBy(body, key);
+    expect(body.map((row) => closeLinks(row).length)).toEqual([1, 0, 0, 0, 0]);
     for (const row of [lines[0]!, lines[1]!, lines[7]!]) {
       expect(closeLinks(row)).toEqual([]);
     }
-    // The trigger sinks one ✕ per row it led — five — beside its own cells.
+    // The trigger sinks the one ✕ it led its body with beside its own cells.
     const leads = rt.sink.get(key)!.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
-    expect(leads).toHaveLength(5);
+    expect(leads).toHaveLength(1);
     rt.dispose();
   });
 

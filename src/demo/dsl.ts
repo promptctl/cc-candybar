@@ -91,6 +91,7 @@ const payload = {
   },
   ...effectiveInputs(effective),
   history: EMPTY_HISTORY_DEPTH,
+  navigation: { back: 0 },
 };
 
 // A fresh store + registry for this run. (A hot-reloading daemon would

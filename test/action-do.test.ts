@@ -98,7 +98,10 @@ describe("do: several declared actions, one click", () => {
         '{{ menu "pickAndClose" "▸" "▾" }}',
       ),
     );
-    const trigger = linkUrls(rt.render()).find((u) => u.includes("menus."));
+    // The menu's own trigger: its click leads with the menu's state key.
+    const trigger = linkUrls(rt.render()).find((u) =>
+      String(effectsOf(u)[0]?.args[1]).startsWith("menus."),
+    );
     rt.click(trigger!);
     const dracula = linkUrls(rt.render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "dracula"),

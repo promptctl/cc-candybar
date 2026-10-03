@@ -100,6 +100,10 @@ export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // no-op.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
+// Restore what the session's last navigating click opened or closed
+// (src/daemon/navigation-history.ts). Args: `[sessionId]`, like undo. An empty
+// history is a loud BAD_REQUEST, never a silent no-op.
+export const VERB_BACK = "back";
 // [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
 // 5d6): rebuild a source checkout, or stage the newer release over an
 // install. Args: `[sessionId]` — carried for click.error surfacing only. The

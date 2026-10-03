@@ -395,13 +395,13 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     // The bar tray's own /clear links: its arm key, or the line itself.
     const clearLinks = () =>
       rt.links().filter((l) =>
-        l.effects.some((e) => e.args[1] === "commands.clear" || e.args[1] === "/clear"),
+        l.effects.some((e) => e.args[1] === "commands.clear.armed" || e.args[1] === "/clear"),
       );
     // Disarmed, no link in the tray can type /clear.
     const [arm] = clearLinks();
     expect(clearLinks()).toHaveLength(1);
     expect(arm!.effects).toEqual([
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "armed"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "armed"] },
     ]);
     clickUrl(arm!.url, rt.ctx);
     expect(invocations()).toEqual([]);
@@ -409,15 +409,15 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     // Armed: a confirm that disarms and types /clear, and a ✕ that only disarms.
     const [confirm, cancel] = clearLinks();
     expect(confirm!.effects).toEqual([
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "disarmed"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "disarmed"] },
       { verb: VERB_SLASH, args: ["s1", "/clear"] },
     ]);
     expect(cancel!.effects).toEqual([
-      { verb: VERB_SET_STATE, args: ["s1", "commands.clear", "disarmed"] },
+      { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "disarmed"] },
     ]);
     clickUrl(confirm!.url, rt.ctx);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
-    expect(rt.sessionState.get("s1", "commands.clear")).toBe("disarmed");
+    expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
     rt.dispose();
   });
@@ -426,23 +426,26 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     const rt = tray(null);
     const armed = () => rt.links().find((l) => typedLines(l.effects).includes("/clear"));
     clickUrl(
-      rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear"))!.url,
+      rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed"))!.url,
       rt.ctx,
     );
     expect(() => clickUrl(armed()!.url, rt.ctx)).toThrow(/not running inside tmux/);
     expect(rt.sessionState.get("s1", "click.error")).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );
-    expect(rt.sessionState.get("s1", "commands.clear")).toBe("disarmed");
+    expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
     expect(invocations()).toEqual([]);
     rt.dispose();
   });
 
   test("the settings door and every tab disarm the menu's /clear, so a confirm is never clicked in a view it was not armed in", () => {
     const rt = tray(HINT);
-    expect(rt.config.actions["candybar.menu"]).toEqual({
-      do: ["candybar.menu.toggle", "candybar.resetAll.disarm", "candybar.commands.clear.disarm"],
-    });
+    const door = rt.config.actions["candybar.menu"];
+    expect(door !== undefined && "do" in door ? door.do.slice(0, 3) : door).toEqual([
+      "candybar.menu.toggle",
+      "candybar.resetAll.disarm",
+      "candybar.commands.clear.disarm",
+    ]);
     // A tab click hides or shows the tray: arming /clear on ⚡ session, then
     // leaving it, must not come back to an armed confirm. `⟲` sits on the
     // door's first line, in view whichever tab is open, so a tab leaves it armed.
@@ -451,8 +454,16 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
         do: [`candybar.tab.${tab}.toggle`, "candybar.commands.clear.disarm"],
       });
     }
+    // ◁ can reopen the view a confirm sits in, so it disarms them too.
+    expect(rt.config.actions["candybar.back"]).toEqual({
+      do: [
+        "candybar.back.step",
+        "candybar.resetAll.disarm",
+        "candybar.commands.clear.disarm",
+      ],
+    });
     expect(rt.config.actions["candybar.commands.clear.disarm"]).toEqual({
-      set: "candybar.commands.clear",
+      set: "candybar.commands.clear.armed",
       to: "disarmed",
     });
     rt.dispose();

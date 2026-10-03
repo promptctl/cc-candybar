@@ -43,13 +43,25 @@ import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 // affordance's `when` gate) and a hand-authored trigger segment read/write
 // these same names — one declaration, no drift.
 //
-// [LAW:types-are-the-program] ONE key holds which edit mode is on
-// (brandon-segment-settings-i4n.g64): `closed`, `arrange` (the +/- chrome), or
-// `configure:<id>` (one placement's settings). Configuring two placements at
-// once, or configuring while arranging, is a second value this key would have
-// to hold at the same time — unrepresentable, with nothing to check.
+// [LAW:types-are-the-program] ONE key holds whether edit mode is on: `closed`
+// or `arrange` (the +/- chrome). Configuring a placement is a level INSIDE
+// arranging, so it is a second key, `edit.configure`, holding `closed` or the
+// one placement whose settings hang open — configuring two at once is a second
+// value that key would have to hold, unrepresentable, and closing the settings
+// leaves arranging exactly as it was.
 export const EDIT_MODE_KEY = "edit.mode";
+export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
+// Closes whichever placement's settings hang open.
+export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+// [LAW:one-source-of-truth] What the bundled controls that enter or leave edit
+// mode fire: the toggle, and the close of the settings left open, so arranging
+// from them starts with none configured. `edit.toggle` stays the bare cycle,
+// because an author's own `do` may fire it and a `do` cannot fire a `do`.
+export const EDIT_SWITCH = [
+  EDIT_TOGGLE_ACTION,
+  EDIT_UNCONFIGURE_ACTION,
+] as const;
 export const EDIT_MODE_ARRANGE = "arrange";
 
 // The namespace every placement's unsaved setting value lives under, as a
@@ -65,7 +77,7 @@ export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 // `[A-Za-z0-9_]`, and the loader refuses one in an id), so the member names
 // exactly one placement.
 export function configureMember(presetIdent: string, id: string): string {
-  return `configure:${presetIdent}:${id}`;
+  return `${presetIdent}:${id}`;
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
@@ -129,15 +141,35 @@ export function synthesizeEditModeToggle(
 ): void {
   reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
   if (!fileWantsEditMode(out)) return;
-  const variables: Record<string, VariableDecl> = {
-    [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-  };
-  const actions: Record<string, ActionDecl> = {
-    [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-      EDIT_MODE_KEY,
-      EDIT_MODE_ARRANGE,
-    ),
-  };
+  const { variables, actions } = editModeArtifacts();
   out.variables = { ...(out.variables ?? {}), ...variables };
   out.actions = { ...(out.actions ?? {}), ...actions };
+}
+
+// [LAW:one-source-of-truth] Edit mode's state and its switch, minted the same
+// way by this pass and by the settings menu (which every config hosts): the two
+// keys, the toggle's cycle, and the close.
+export function editModeArtifacts(): {
+  readonly variables: Record<string, VariableDecl>;
+  readonly actions: Record<string, ActionDecl>;
+} {
+  return {
+    variables: {
+      [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+      [EDIT_CONFIGURE_KEY]: disclosureStateVar(
+        EDIT_CONFIGURE_KEY,
+        DISCLOSURE_CLOSED,
+      ),
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE,
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED,
+      },
+    },
+  };
 }

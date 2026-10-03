@@ -48,6 +48,7 @@ import {
   type Journal,
   type SettingsHistory,
 } from "../settings-history";
+import type { NavigationHistory } from "../navigation-history";
 import { durableConfigPath } from "../../config/loader/discovery";
 import {
   placementId,
@@ -57,7 +58,12 @@ import {
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
-import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
+import {
+  configureMember,
+  EDIT_CONFIGURE_KEY,
+  PLACEMENT_DRAFT_NS,
+} from "../../config/loader/edit-mode";
+import { ident } from "../../config/ident";
 import {
   durableLanding,
   placementDrafts,
@@ -84,6 +90,7 @@ import {
   VERB_OPEN_VSCODE,
   VERB_LOAD_CONFIG,
   VERB_REDO,
+  VERB_BACK,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
@@ -135,6 +142,10 @@ export interface VerbContext {
   // (src/daemon/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
   readonly history: SettingsHistory;
+  // [LAW:one-source-of-truth] The one back history over what a session has
+  // open (src/daemon/navigation-history.ts), journaled around each click
+  // beside the settings history.
+  readonly navigation: NavigationHistory;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
@@ -146,8 +157,11 @@ export interface VerbContext {
 
 // What a handler runs with: the daemon's context, with `sessionState` the
 // click's journaling view of it and `journal` where its file writes report.
+// `navigating` is the view the navigating verbs write through: the same store,
+// with what they change on screen recorded for `back` as well.
 export interface ClickContext extends VerbContext {
   readonly journal: Journal;
+  readonly navigating: SessionStateRW;
 }
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
@@ -263,9 +277,9 @@ const showConfigWarning: VerbHandler = (value, ctx) =>
 // storage owned by the daemon process persists the change automatically.
 const toolbarToggle: VerbHandler = (value, ctx) => {
   const sessionId = requireSessionId(oneArg(value));
-  const expanded = ctx.sessionState.get(sessionId, "toolbar-expanded");
-  if (expanded) ctx.sessionState.clear(sessionId, "toolbar-expanded");
-  else ctx.sessionState.set(sessionId, "toolbar-expanded", "1");
+  const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
+  if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
+  else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
 };
 
 // [LAW:single-enforcer] One verb writes SessionState — for every
@@ -353,7 +367,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // observers fire, so an autorun never sees half-applied batch state.
   // Partial application is unrepresentable: validation already passed,
   // and the seam guarantees the writes ship as one transaction.
-  ctx.sessionState.setBatch(sid, validated);
+  ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
   ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
 };
@@ -436,7 +450,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   const result = validateStateWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
-  ctx.sessionState.set(sid, key, result.value);
+  ctx.navigating.set(sid, key, result.value);
   ctx.dlog(
     "info",
     `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
@@ -827,29 +841,47 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
-// The session keys holding unsaved values of every placement an edit ended:
-// a draft slot of a (preset, id) the config held before the edit and no longer
-// holds after it. Measured over every preset, since a row can be shared — an
-// edit made in one preset's layout can end a placement another renders.
-// [LAW:dataflow-not-control-flow] No branch on the op: an insertion ends
-// nothing, and the comparison says so.
-function endedDrafts(before: DslConfig, after: DslConfig): readonly string[] {
+// Every placement an edit ended: a (preset, id) the config held before the
+// edit and no longer holds after it. Measured over every preset, since a row
+// can be shared — an edit made in one preset's layout can end a placement
+// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
+// insertion ends nothing, and the comparison says so.
+function endedPlacements(
+  before: DslConfig,
+  after: DslConfig,
+): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
   const placed = (config: DslConfig, preset: string) =>
     [...walkNodes(presetRoot(config, preset).node)].filter(
       (n): n is SegmentNode => n.kind === "segment",
     );
   const survivors = new Set(
     presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => `${preset}\0${placementId(n)}`),
+      placed(after, preset).map((n) =>
+        configureMember(ident(preset), placementId(n)),
+      ),
     ),
   );
   return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset).flatMap((n) =>
-      survivors.has(`${preset}\0${placementId(n)}`)
-        ? []
-        : Object.values(n.drafts ?? {}).map((slot) => slot.key),
-    ),
+    placed(before, preset)
+      .map((node) => ({
+        member: configureMember(ident(preset), placementId(node)),
+        node,
+      }))
+      .filter(({ member }) => !survivors.has(member)),
   );
+}
+
+// What an ended placement leaves in the session: its unsaved values, and the
+// configure key while it names that placement — a later placement that takes
+// its id is a new instance, and must inherit neither.
+function endedSessionKeys(
+  ended: ReturnType<typeof endedPlacements>,
+  configuring: string | null,
+): readonly string[] {
+  return ended.flatMap(({ member, node }) => [
+    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
+    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
+  ]);
 }
 
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
@@ -884,16 +916,16 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   const file = originConfigFile(origin);
   const before = ctx.configFor(origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
-  // A removed placement's unsaved values end with it: a later placement that
-  // takes its id is a new instance, and must not inherit them. Measured on the
-  // file as it now reads, and released in the same click, so its undo brings
-  // the placement and its drafts back.
+  // A removed placement's session state ends with it (endedSessionKeys).
+  // Measured on the file as it now reads, and released in the same click, so
+  // its undo brings the placement and its drafts back.
   ctx.reloadConfig(origin);
-  // The unsaved values the edit discards — the fact its log line carries.
-  const released = endedDrafts(before, ctx.configFor(origin)).filter(
-    (draftKey) => ctx.sessionState.get(sid, draftKey) !== null,
-  );
-  for (const draftKey of released) ctx.sessionState.clear(sid, draftKey);
+  // The session state the edit discards — the fact its log line carries.
+  const released = endedSessionKeys(
+    endedPlacements(before, ctx.configFor(origin)),
+    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
+  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
+  for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(
@@ -916,6 +948,15 @@ const undo: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
   ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
+};
+
+// [LAW:single-enforcer] Back restores through the click's settings view, never
+// a navigation journal, so going back is not itself a step it could return to.
+const back: VerbHandler = (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  const { step, discarded } = ctx.navigation.back(sid, ctx.sessionState);
+  const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
+  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
 // undo's mirror — steps the same history forward one click.
@@ -1153,6 +1194,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
   [VERB_UNDO, undo],
   [VERB_REDO, redo],
+  [VERB_BACK, back],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -1179,6 +1221,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,
+  VERB_BACK,
   VERB_TOOLBAR_TOGGLE,
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
@@ -1255,12 +1298,19 @@ function journaled(
 ): (value: string, ctx: VerbContext) => void {
   return (value, ctx) => {
     const journal = ctx.history.begin();
+    const navigation = ctx.navigation.begin(journal.sessionState);
     const failures: unknown[] = [];
     try {
-      handler(value, { ...ctx, sessionState: journal.sessionState, journal });
+      handler(value, {
+        ...ctx,
+        sessionState: journal.sessionState,
+        journal,
+        navigating: navigation.sessionState,
+      });
     } catch (e) {
       failures.push(e);
     }
+    navigation.commit();
     try {
       journal.commit();
     } catch (e) {

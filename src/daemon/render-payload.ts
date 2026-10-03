@@ -387,6 +387,10 @@ export interface RenderPayload extends ClaudeHookData {
   // something to step. Required: the daemon always holds a history, empty is
   // `{ undo: 0, redo: 0 }`.
   readonly history: HistoryDepth;
+  // How many steps this session's back history holds
+  // (src/daemon/navigation-history.ts), so the bar's `◁` shows exactly while
+  // there is somewhere to go back to.
+  readonly navigation: { readonly back: number };
   // [LAW:one-source-of-truth] How many settings this session has picked that
   // the config file does not already resolve to — the drafts a `save` writes
   // (src/daemon/setting-drafts.ts), derived every render so the menu's
@@ -663,6 +667,8 @@ export interface RenderPayloadDeps {
   readonly clock?: () => Date;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
+  // The session's back depth — NavigationHistory.depth in the daemon.
+  readonly navigation: (sessionId: string) => number;
 }
 
 // ─── Rate-limit projection (pure) ──────────────────────────────────────────────
@@ -1382,6 +1388,7 @@ export async function buildRenderPayload(
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
     history: deps.history(hookData.session_id),
+    navigation: { back: deps.navigation(hookData.session_id) },
     ...settingCounts,
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
