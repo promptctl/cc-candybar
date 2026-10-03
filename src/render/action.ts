@@ -44,6 +44,7 @@ import {
   VERB_OPEN_VSCODE,
   VERB_REDO,
   VERB_BACK,
+  VERB_REWIND,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
@@ -197,6 +198,7 @@ export type CompiledActionDecl =
   | { readonly kind: "redo" }
   // A step of the session's navigation history — the same keyless shape.
   | { readonly kind: "back" }
+  | { readonly kind: "rewind" }
   // Write every unsaved setting — the daemon derives which at click time.
   | { readonly kind: "save" }
   // Save the bar as a new preset, or delete the preset the template names.
@@ -480,6 +482,7 @@ function compileAction(
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
+  if ("rewind" in action) return { kind: "rewind" };
   if ("save" in action) return { kind: "save" };
   if ("preset" in action) {
     return action.preset === "save"
@@ -750,6 +753,12 @@ export function realize(
     case "back":
       return {
         effects: [{ verb: VERB_BACK, args: [sessionId] }],
+        active: false,
+      };
+    // One-shot, like undo: which steps it takes back is server-side state.
+    case "rewind":
+      return {
+        effects: [{ verb: VERB_REWIND, args: [sessionId] }],
         active: false,
       };
     case "save":

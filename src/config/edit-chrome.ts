@@ -58,6 +58,7 @@ import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
+import { SAVE_SEG, UNSAVED_VAR } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
@@ -85,7 +86,22 @@ import {
 export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
+// Leaving edit mode, kept: `✓ save` while there is something to keep, `✓ done`
+// while there is not. The two are one action: write the session's unsaved
+// settings (a placement's configure-mode picks among them — the layout edits
+// were written as they were made), then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
+// `↩ cancel`: put back everything changed since edit mode opened, then leave
+// (src/daemon/settings-history.ts `rewind`).
+export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
+const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
+// How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
+// — the daemon's own count, read by the cells' labels and gates; a ref, never
+// a second counter. How many settings are unsaved is the settings menu's own
+// `unsaved` variable.
+const EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+const CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+const TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
 export const REMOVE_GLYPH = "⊖";
 export const ADD_GLYPH = "⊕";
 export const CONFIGURE_GLYPH = "⚙️";
@@ -603,11 +619,11 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
 // the trigger rides, so this function places ONE cell; see withTrailingCell.
 function wrapWithPresetRows(
   splicedRoot: LayoutNode,
-  presetName: string,
   presetIdent: string,
   rootKey: string,
   artifacts: ChromeArtifacts,
-  lead: LayoutNode,
+  lead: readonly LayoutNode[],
+  live: LayoutNode,
   tail: LayoutNode,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
@@ -623,21 +639,21 @@ function wrapWithPresetRows(
   // edited down to zero non-exempt segments (no removeTerm/insertTerm
   // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootKey };
-  const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
+    template: `{{ action "${actionName}" "↺ reset layout" }}`,
     when: CUSTOMIZED_BANNER_GATE,
   };
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      // The way out leads the top row, top left, where it is found without
-      // reopening the menu edit mode was entered from.
+      // The ways out lead the top row, top left, where they are found without
+      // reopening the menu edit mode was entered from: keep or discard what
+      // was changed, restore the bundled layout, and the view toggle.
       {
         kind: "container",
         direction: "horizontal",
-        children: [lead, { kind: "segment", name: chromeSegName }],
+        children: [...lead, { kind: "segment", name: chromeSegName }, live],
       },
       // The `(?)`'s body drops BELOW the row the trigger rides while the
       // disclosure is open, like every other disclosure body in this codebase.
@@ -715,7 +731,8 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
-  lead: LayoutNode,
+  lead: readonly LayoutNode[],
+  live: LayoutNode,
   tail: LayoutNode,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
@@ -733,11 +750,11 @@ function spliceEditChromeForPreset(
   );
   return wrapWithPresetRows(
     spliced,
-    presetName,
     ctx.presetIdent,
     ctx.rootKey,
     artifacts,
     lead,
+    live,
     tail,
   );
 }
@@ -789,26 +806,59 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
     when: EDIT_MODE_GATE,
   };
-  const tail: LayoutNode = {
-    kind: "container",
-    direction: "horizontal",
-    children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
-  };
+  // The view toggle leads the edit row with the other edit-mode controls; the
+  // `(?)` alone trails the bar's last row.
+  const live: LayoutNode = { kind: "segment", name: EDIT_LIVE_KEY };
+  const tail: LayoutNode = help;
   // Leaving edit mode, minted once like the `(?)`: the same switch the menu's
   // `✎ arrange` fires (EDIT_SWITCH), so the two cannot disagree about what
-  // leaving edit mode closes.
+  // leaving edit mode closes. `✓` also saves; the menu's `✎ done` does not,
+  // and leaves anything unsaved to the `💾 save` beside it.
+  artifacts.variables[EDIT_CHANGES_VAR] = {
+    kind: "input",
+    path: "history.sinceEdit",
+    type: "number",
+    default: 0,
+  };
+  // [LAW:one-source-of-truth] Saving is the settings menu's own `💾 save`
+  // action, so the two cannot disagree about what saving writes.
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [...EDIT_SWITCH],
+    do: [SAVE_SEG, ...EDIT_SWITCH],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ action "${EDIT_DONE_SEG}" "✎ done" }}`,
+    template:
+      `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}` +
+      `{{ else }}{{ action "${EDIT_DONE_SEG}" "✓ done" }}{{ end }}`,
     when: EDIT_MODE_GATE,
   };
-  const lead: LayoutNode = { kind: "segment", name: EDIT_DONE_SEG };
+  // [LAW:one-source-of-truth] Cancel is the rewind and then the same switch
+  // `✓` fires, as one click: the rewind is the face, the switch rides along
+  // (`do`), so leaving edit mode closes exactly what it closes everywhere.
+  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
+  artifacts.actions[EDIT_CANCEL_SEG] = {
+    do: [EDIT_REWIND_ACTION, ...EDIT_SWITCH],
+  };
+  // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
+  // nothing changed there is nothing to discard.
+  artifacts.segments[EDIT_CANCEL_SEG] = {
+    template: `{{ action "${EDIT_CANCEL_SEG}" "↩ cancel" }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`,
+  };
+  const lead: LayoutNode[] = [
+    { kind: "segment", name: EDIT_DONE_SEG },
+    { kind: "segment", name: EDIT_CANCEL_SEG },
+  ];
   const presets: Record<string, PresetDecl> = { ...config.presets };
   const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
-    const root = spliceEditChromeForPreset(config, name, artifacts, lead, tail);
+    const root = spliceEditChromeForPreset(
+      config,
+      name,
+      artifacts,
+      lead,
+      live,
+      tail,
+    );
     roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }

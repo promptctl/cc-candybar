@@ -151,10 +151,11 @@ export function checkPayload(
     // globals, so a `.preset.effective`/`.endcaps.effective` label is checked
     // against the value it will actually show, never its declared default.
     ...effectiveInputs(effective),
-    // One step each way, one unsaved setting and one resettable one, so every
-    // part of the settings menu's save cell, each gated on having something to
-    // do, renders and gets its template checked.
-    history: { undo: 1, redo: 1 },
+    // One step each way, one change made since edit mode opened, one unsaved
+    // setting and one resettable one, so every part of the settings menu's
+    // save cell and edit mode's save and cancel cells, each gated on having
+    // something to do, renders and gets its template checked.
+    history: { undo: 1, redo: 1, sinceEdit: 1 },
     navigation: { back: 1 },
     unsaved: 1,
     resettable: 1,

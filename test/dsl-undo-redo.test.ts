@@ -297,7 +297,7 @@ describe("undo/redo click → the session's settings history", () => {
     const pinned = durable.text()!;
     press(runtime, "pickPadding"); // session
     expect([theme(), padding(), globals().palette]).toEqual(["nord", "3", "dracula"]);
-    expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
 
     press(runtime, "back");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
@@ -305,7 +305,7 @@ describe("undo/redo click → the session's settings history", () => {
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
     press(runtime, "back");
     expect([theme(), padding(), durable.text()]).toEqual([null, null, original]);
-    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 3 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 3, sinceEdit: 0 });
 
     press(runtime, "fwd");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
@@ -313,7 +313,7 @@ describe("undo/redo click → the session's settings history", () => {
     expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
     press(runtime, "fwd");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", "3", pinned]);
-    expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
     runtime.dispose();
   });
 
@@ -339,7 +339,7 @@ describe("undo/redo click → the session's settings history", () => {
     const runtime = buildRuntime(src);
     press(runtime, "pickTheme"); // the slot now renders openMenu
     expect(runtime.sessionState.get("s1", "menus.x")).toBe("open");
-    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 0 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
     runtime.dispose();
   });
 
@@ -417,7 +417,7 @@ describe("undo/redo click → the session's settings history", () => {
     // Nothing was overwritten, and the file step is gone: every change this
     // session made to that file chains through the state the hand edit replaced.
     expect(durable.text()).toBe(handEdited);
-    expect(runtime.history.depth("s1")).toEqual({ undo: 1, redo: 0 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     press(runtime, "back"); // the session pick is still undoable
     expect(runtime.sessionState.get("s1", "theme")).toBeNull();
@@ -437,12 +437,12 @@ describe("undo/redo click → the session's settings history", () => {
     press(a, "pinDracula");
     press(b, "removeDirectory");
     const afterB = durable.text()!;
-    expect(history.depth("a")).toEqual({ undo: 1, redo: 0 });
-    expect(history.depth("b")).toEqual({ undo: 1, redo: 0 });
+    expect(history.depth("a")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    expect(history.depth("b")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     expect(() => press(a, "back")).toThrow(/changed since that edit/);
     expect(durable.text()).toBe(afterB);
-    expect(history.depth("a")).toEqual({ undo: 0, redo: 0 });
+    expect(history.depth("a")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
 
     press(b, "back"); // b's own step is intact
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
@@ -524,7 +524,7 @@ describe("settings history: a step lands whole, and records only what landed", (
     expect(() => history.undo("s1")).toThrow(/config write failed/);
     expect(sessionState.get("s1", "theme")).toBe("nord");
     expect(durable.text()).toBe("{ after: 1 }");
-    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0 });
+    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     chmodSync(durable.projectDir, 0o700); // and once it can, the step is intact
     history.undo("s1");
@@ -550,7 +550,7 @@ describe("settings history: a step lands whole, and records only what landed", (
       /store refused/,
     );
     journal.commit();
-    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0 });
+    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
 
   test("an undo in the same click as a change undoes that change, as two clicks would", () => {
@@ -562,7 +562,7 @@ describe("settings history: a step lands whole, and records only what landed", (
     runtime.sessionState.set("s1", "theme", "gruvbox");
     press(runtime, "pickPadding"); // the slot now renders pickThenUndo
     expect(runtime.sessionState.get("s1", "theme")).toBe("gruvbox");
-    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 1 });
+    expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
     press(runtime, "fwd");
     expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
     runtime.dispose();
@@ -578,12 +578,12 @@ describe("settings history: a step lands whole, and records only what landed", (
     };
     step("old", "/a", "a", "b"); // 4 MB
     step("new", "/b", "c", "d"); // 4 MB — 8 MB total, at the bound
-    expect(history.depth("old")).toEqual({ undo: 1, redo: 0 });
+    expect(history.depth("old")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     step("new", "/b", "d", "e"); // 12 MB — over it
-    expect(history.depth("old")).toEqual({ undo: 0, redo: 0 });
-    expect(history.depth("new")).toEqual({ undo: 2, redo: 0 });
+    expect(history.depth("old")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+    expect(history.depth("new")).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
     step("new", "/b", "e", "f"); // a lone session over it loses its oldest step
-    expect(history.depth("new")).toEqual({ undo: 2, redo: 0 });
+    expect(history.depth("new")).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
   });
 });
 
@@ -610,7 +610,7 @@ describe("settings history: the step and its record land together", () => {
     gate.refusing = true;
     expect(() => history.undo("s1")).toThrow(/history save refused/);
     expect(sessionState.get("s1", "theme")).toBe("nord");
-    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0 });
+    expect(history.depth("s1")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     gate.refusing = false;
     history.undo("s1");
@@ -625,6 +625,6 @@ describe("settings history: the step and its record land together", () => {
     expect(() => journal.commit()).toThrow(/history save refused/);
     gate.refusing = false;
     journal.commit();
-    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0 });
+    expect(history.depth("s1")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
 });

@@ -805,19 +805,19 @@ describe("apply-layout-op click → the config file", () => {
   });
 });
 
-// ─── the "customized" banner's own escaping: quote/backslash preset names ──
+// ─── the reset-layout banner and quote/backslash preset names ──────────────
 
 // brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
 // preset name (only empty/slash/newline are rejected — see loader/
-// presets.ts), and wrapWithPresetRows splices the name into a
-// synthesized Go-template string literal. Unlike the newline case (which
-// gets rejected at load, since escaping can't fix an embedded literal
-// newline), a quote/backslash-bearing name is escaped, not rejected — so
-// this proves the escape actually holds through real parseAndValidate +
-// registerDslConfig + renderDsl, not just by inspection.
-describe('the "customized" banner escapes quote/backslash preset names', () => {
+// presets.ts). The banner's label used to splice the preset name into a
+// synthesized Go-template string literal and had to escape it; it is the fixed
+// text `↺ reset layout` now, but the preset name still reaches the chrome's
+// action names and root key, so this keeps proving such a preset compiles and
+// renders its banner through real parseAndValidate + registerDslConfig +
+// renderDsl.
+describe('the reset-layout banner survives quote/backslash preset names', () => {
 
-  test('a preset named with a " and a \\ compiles and renders the literal label', () => {
+  test('a preset named with a " and a \\ compiles and still renders the banner', () => {
     const presetName = 'foo"bar\\baz';
     const config = parseAndValidate(
       "<test>",
@@ -863,7 +863,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
       undefined,
       { preset: presetName },
     );
-    expect(rendered.replace(INVISIBLE, "")).toContain(`↺ ${presetName} customized`);
+    expect(rendered.replace(INVISIBLE, "")).toContain("↺ reset layout");
     registry.dispose();
   });
 });
@@ -929,7 +929,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
       const rendered = renderGated(buildConfig(gate));
       expect(rendered.includes("GATED_CONTENT")).toBe(contentShown);
       expect(rendered).toContain(DOOR_GLYPH);
-      expect(rendered).toContain("↺ gated customized");
+      expect(rendered).toContain("↺ reset layout");
     },
   );
 });

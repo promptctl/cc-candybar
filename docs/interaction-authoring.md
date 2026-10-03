@@ -90,6 +90,7 @@ declares exactly one value source:
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
+| `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
 | `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
@@ -938,12 +939,20 @@ synthesizes:
   the body's `✕` returns to arranging.
 - While edit mode is open each segment reads as its **name**, whether or not
   its own `when` or an enclosing container's would show it, so a segment hidden right now can still be
-  found and removed. `☐ live` (the `edit.live` toggle beside edit mode's
-  `(?)`) puts the live output back; a segment with no cell right now —
+  found and removed. `☐ live` (the `edit.live` toggle, on the row above the
+  bar) puts the live output back; a segment with no cell right now —
   hidden, or rendering nothing — then has no `⊖` either, so find it in the
   names view (a failing segment keeps its `⊖` and `⚙️` on its `⚠` cell).
-- A row above the bar, led by `✎ done`, which fires `edit.toggle` and closes
-  any configured placement — the way out, without reopening the menu edit mode was entered from.
+- A row above the bar, led by the ways out, so they are found without reopening
+  the menu edit mode was entered from: `✓ save` (`✓ done` while there is
+  nothing to keep) writes this session's unsaved settings — a placement's
+  configure-mode values among them — and leaves, `↩ cancel` (shown only while
+  something differs from when edit mode opened) puts everything back and
+  leaves, `↺ reset layout` (only while the config file authors this preset's
+  layout) restores the bundled layout, and `☐ live` is the view toggle. Every
+  layout click is written to the config file as it is made and is one step of
+  the session's undo history; opening edit mode records what each thing it
+  goes on to change held then, and cancel puts those values back in one step.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
 its `✎ arrange` entry fires the same switch (through a `do` that also closes the
@@ -1217,7 +1226,7 @@ decline it. The menu's own two lines lead with the door's `✕`.
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
   `menuGlyph` are free text and are set in the config file only.
-- **`✎ arrange`** enters edit mode (and `✎ done` leaves it). It also closes
+- **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). It also closes
   the menu in the same click, so you land on the bar you are about to edit.
 - **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
   under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
@@ -1781,8 +1790,8 @@ name" below).
 ## `(?)` — instructions where they are needed
 
 The bar ships a `(?)` in edit mode, and it needs nothing in your config: it
-trails the bar's last row and explains what `+`, `-` and the `↺ … customized`
-banner do when clicked. Where that row is itself gated by another disclosure
+trails the bar's last row and explains what `+`, `-` and the `↺ reset layout`
+button do when clicked. Where that row is itself gated by another disclosure
 it takes a line of its own instead, so the `(?)` can never end up hidden
 behind something you have to open first.
 

@@ -193,13 +193,20 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
+  // The daemon publishes the session's history depth into every render's
+  // payload (`history.sinceEdit` is what edit mode's save cell counts).
+  const history = durable.historyFor(sessionState);
   const render = (width?: number): string =>
     renderDsl(
       config,
       compiled,
       store,
       registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
+      {
+        session_id: sessionId,
+        project_dir: "/tmp/proj",
+        history: history.depth(sessionId),
+      },
       opts(width),
     );
   const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
@@ -209,7 +216,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
     ({ key, spec }) => registerConfigValidator(key, spec),
   );
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, history),
     // The config this bar rendered with, which an insertion mints its id
     // against — the daemon's own lookup.
     configFor: () => config,
@@ -228,7 +235,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
     stateDisposers.forEach((d) => d());
     configDisposers.forEach((d) => d());
   };
-  return { config, store, render, click, dispose, ctx };
+  return { config, store, render, click, dispose, ctx, history, sessionState };
 }
 
 // ─── loader: insertSegmentFrom's ActionDecl shape ─────────────────────────
@@ -551,7 +558,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     dispose();
   });
 
-  test("edit mode leads with ✎ done, top left, and it leaves edit mode", () => {
+  test("edit mode leads with ✓ done, top left, and it leaves edit mode", () => {
     const { render, click, dispose } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
@@ -560,7 +567,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     )!;
     click(toggle);
     const [first] = stripAnsi(render()).split("\n");
-    expect(first).toContain("✎ done");
+    expect(first).toContain("✓ done");
     expect(first).not.toMatch(/directory|git|trigger/);
     const done = ownUrls(render()).find((u) =>
       effectsOf(u).some(
@@ -569,7 +576,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     );
     expect(done).toBeDefined();
     click(done!);
-    expect(stripAnsi(render())).not.toContain("✎ done");
+    expect(stripAnsi(render())).not.toContain("✓ done");
     dispose();
   });
 
@@ -859,5 +866,144 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     // segment's cells do, since applySegmentLayout pads BEFORE sizing with
     // no knowledge of which segments are "chrome".
     expect(padded2.length).toBeGreaterThan(padded0.length);
+  });
+});
+
+// ─── save and cancel (brandon-menu-ia-q30.3y8) ──────────────────────────────
+//
+// Every layout click is already written and already one step of the session's
+// settings history, so edit mode's cancel is that history stepped back to where
+// edit mode opened, and its save is only leaving. Driven through the real verb
+// table: the clicks are the rendered links, and the assertions are on the file
+// the clicks wrote.
+
+describe("edit mode's save and cancel", () => {
+  const find = (
+    rt: ReturnType<typeof buildEditRuntime>,
+    pick: (e: ReturnType<typeof effectsOf>[number]) => boolean,
+  ): string => ownUrls(rt.render()).find((u) => effectsOf(u).some(pick))!;
+  const open = (rt: ReturnType<typeof buildEditRuntime>): void =>
+    rt.click(
+      find(
+        rt,
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+      ),
+    );
+  const removeGit = (rt: ReturnType<typeof buildEditRuntime>): void =>
+    rt.click(ownUrls(rt.render()).find((u) => u.includes("remove%253Agit"))!);
+  const cancel = (rt: ReturnType<typeof buildEditRuntime>): void =>
+    rt.click(find(rt, (e) => e.verb === "rewind"));
+  const done = (rt: ReturnType<typeof buildEditRuntime>): void =>
+    rt.click(
+      ownUrls(rt.render()).find((u) => {
+        const effects = effectsOf(u);
+        return (
+          !effects.some((e) => e.verb === "rewind") &&
+          effects.some(
+            (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
+          )
+        );
+      })!,
+    );
+  const topRow = (rt: ReturnType<typeof buildEditRuntime>): string =>
+    stripAnsi(rt.render()).split("\n")[0]!;
+
+  test("the row reads ✓ done with nothing changed, and ✓ save ↩ cancel after a change", () => {
+    const rt = buildEditRuntime(BASE);
+    open(rt);
+    expect(topRow(rt)).toContain("✓ done");
+    expect(topRow(rt)).not.toContain("cancel");
+    expect(topRow(rt)).toContain("☐ live");
+    removeGit(rt);
+    expect(topRow(rt)).toContain("✓ save");
+    expect(topRow(rt)).toContain("↩ cancel");
+    // The live toggle left the bar's last row for the edit row, so the `(?)`
+    // is alone after the content.
+    const rows = stripAnsi(rt.render()).split("\n");
+    expect(rows.at(-1)).toContain("(?)");
+    expect(rows.at(-1)).not.toContain("live");
+    rt.dispose();
+  });
+
+  test("cancel restores the file byte for byte, leaves edit mode, and leaves nothing to redo", () => {
+    const rt = buildEditRuntime(BASE);
+    const original = durable.text();
+    open(rt);
+    removeGit(rt);
+    expect(durable.text()).not.toBe(original);
+    cancel(rt);
+    expect(durable.text()).toBe(original);
+    expect(rt.sessionState.get("s1", EDIT_MODE_KEY)).not.toBe(
+      EDIT_MODE_ARRANGE,
+    );
+    expect(rt.history.depth("s1")).toEqual({
+      undo: 0,
+      redo: 0,
+      sinceEdit: 0,
+    });
+    expect(stripAnsi(rt.render())).not.toContain("✓ done");
+    rt.dispose();
+  });
+
+  test("save keeps the change; the next time edit mode opens it counts from there", () => {
+    const rt = buildEditRuntime(BASE);
+    const original = durable.text();
+    open(rt);
+    removeGit(rt);
+    const edited = durable.text();
+    done(rt);
+    expect(durable.text()).toBe(edited);
+    expect(edited).not.toBe(original);
+    expect(rt.history.depth("s1")).toEqual({
+      undo: 1,
+      redo: 0,
+      sinceEdit: 0,
+    });
+    open(rt);
+    expect(topRow(rt)).toContain("✓ done");
+    rt.dispose();
+  });
+
+  test("cancel takes back only what edit mode did, and undoing afterwards does not resurrect it", () => {
+    const rt = buildEditRuntime(BASE);
+    const original = durable.text();
+    // A step from before edit mode opened.
+    const earlier = rt.history.begin();
+    earlier.sessionState.set("s1", "theme", "nord");
+    earlier.commit();
+    open(rt);
+    removeGit(rt);
+    cancel(rt);
+    expect(rt.history.depth("s1")).toEqual({
+      undo: 1,
+      redo: 0,
+      sinceEdit: 0,
+    });
+    expect(rt.sessionState.get("s1", "theme")).toBe("nord");
+    VERBS.get("undo")!("s1", rt.ctx);
+    expect(rt.sessionState.get("s1", "theme")).toBeNull();
+    expect(durable.text()).toBe(original);
+    expect(rt.history.depth("s1")).toEqual({
+      undo: 0,
+      redo: 1,
+      sinceEdit: 0,
+    });
+    rt.dispose();
+  });
+
+  test("rewind says what it put back, and a session with no savepoint is refused loudly", () => {
+    const rt = buildEditRuntime(BASE);
+    expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
+    open(rt);
+    removeGit(rt);
+    const logs: string[] = [];
+    VERBS.get("rewind")!("s1", {
+      ...rt.ctx,
+      dlog: (_level, message) => logs.push(message),
+    });
+    expect(logs.join("\n")).toMatch(
+      /rewind: put back .* as edit mode found it \(session=s1\)/,
+    );
+    rt.dispose();
   });
 });
