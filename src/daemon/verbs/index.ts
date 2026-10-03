@@ -47,6 +47,7 @@ import {
   describeStep,
   type Journal,
   type SettingsHistory,
+  type Step,
 } from "../settings-history";
 import type { NavigationHistory } from "../navigation-history";
 import { durableConfigPath } from "../../config/loader/discovery";
@@ -571,6 +572,21 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
   return parseRenderOrigin(raw);
 }
 
+// [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
+// session renders from reloads it before the click answers, as save does; one
+// that wrote no such file rebuilds nothing (a reload restarts every source).
+// Another session's file reaches its render through the fs watcher.
+function reloadIfWritten(
+  ctx: VerbContext,
+  origin: RenderOrigin,
+  step: Step,
+): void {
+  const file = originConfigFile(origin);
+  if (step.some((c) => c.kind === "file" && c.file === file)) {
+    ctx.reloadConfig(origin);
+  }
+}
+
 function originConfigFile(origin: RenderOrigin): string {
   return durableConfigPath(
     origin.projectDir,
@@ -951,7 +967,7 @@ const undo: VerbHandler = (value, ctx) => {
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
-  ctx.reloadConfig(origin);
+  reloadIfWritten(ctx, origin, step);
   ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -975,14 +991,8 @@ const rewind: VerbHandler = (value, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
-  // A refused step may still have written: rewind puts back every target
-  // but the one it keeps. So the reload runs whether or not it throws.
-  let restored: ReturnType<typeof ctx.history.rewind>;
-  try {
-    restored = ctx.history.rewind(sid);
-  } finally {
-    ctx.reloadConfig(origin);
-  }
+  const restored = ctx.history.rewind(sid);
+  reloadIfWritten(ctx, origin, restored);
   ctx.dlog(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -996,7 +1006,7 @@ const redo: VerbHandler = (value, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
-  ctx.reloadConfig(origin);
+  reloadIfWritten(ctx, origin, step);
   ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 

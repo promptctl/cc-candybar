@@ -30,13 +30,16 @@ function cells(flag: string, raw: string): number {
   return Number(raw);
 }
 
+// `pnpm bar` runs in the package root; paths mean what they meant where it was typed.
+const invokedIn = process.env.INIT_CWD ?? process.cwd();
+
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     options: {
       width: { type: "string", default: "120" },
       rows: { type: "string", default: "40" },
       config: { type: "string" },
-      cwd: { type: "string", default: process.cwd() },
+      cwd: { type: "string", default: invokedIn },
       ssh: { type: "boolean", default: false },
       links: { type: "boolean", default: false },
     },
@@ -45,8 +48,8 @@ async function main(): Promise<void> {
   const bar = await startBar({
     width: cells("width", values.width),
     rows: cells("rows", values.rows),
-    config: values.config ?? null,
-    cwd: path.resolve(values.cwd),
+    config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
+    cwd: path.resolve(invokedIn, values.cwd),
     ssh: values.ssh,
   });
   try {
