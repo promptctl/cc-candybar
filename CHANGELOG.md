@@ -1,3 +1,10 @@
+# [1.105.0](https://github.com/promptctl/cc-candybar/compare/v1.104.0...v1.105.0) (2026-10-03)
+
+
+### Features
+
+* **menu:** the door rises with its menu, ◁ back beside it; closes wear theme colours; arranging keeps the menu open ([#294](https://github.com/promptctl/cc-candybar/issues/294)) ([618b1f3](https://github.com/promptctl/cc-candybar/commit/618b1f34fce52ce5b7c9f6fff6e5b392456faa9b))
+
 # [1.104.0](https://github.com/promptctl/cc-candybar/compare/v1.103.0...v1.104.0) (2026-10-03)
 
 
