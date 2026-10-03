@@ -35,6 +35,7 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
+import { cellLen } from "@promptctl/rich-js";
 import { ident } from "./ident.js";
 import type { ActionDecl } from "./action.js";
 import {
@@ -179,13 +180,15 @@ const SETTINGS_REF: DisclosureRef = {
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
 // [LAW:one-source-of-truth] `◁` restores what the session's last navigating
 // click opened or closed (src/daemon/navigation-history.ts). It is drawn in
-// the door's own cell, before the door, only while there is something to go
-// back to: a blank in its place widened the idle door by the glyph and a pad.
+// the door's own cell, before the door, and while there is nothing to go back
+// to its place holds a blank of its width, so the door never moves.
 const BACK_ACTION = `${SETTINGS_NS}back`;
 const BACK_STEP = `${BACK_ACTION}.step`;
 const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-const BACK_GLYPH = "◁";
-const BACK_LEAD = `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ end }}`;
+export const BACK_GLYPH = "◁";
+const BACK_LEAD =
+  `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
+  `{{ else }}${" ".repeat(cellLen(BACK_GLYPH))}{{ end }}`;
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
