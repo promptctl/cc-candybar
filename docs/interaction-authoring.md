@@ -122,9 +122,10 @@ tones of it, so neighbours differ without anyone choosing colours, and a segment
 to read on whatever its background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
 tint. `bg: "none"` is the one word that is no colour: the cell draws its text
-on the terminal's own ground with no fill behind it, and `{{ bgOf }}` reads the
-theme's background there, so a contrast floor still measures against the ground
-the text lands on.
+on the terminal's own ground with no fill behind it. With no `fg:` the text
+keeps the terminal's own colour, which reads on that ground; an authored `fg:`
+that calls `{{ bgOf }}` gets the theme's background, a stand-in for a ground
+the bar cannot see.
 
 The canonical control-strip config — cycle chip, bounded stepper, copy/open
 toolbar:
