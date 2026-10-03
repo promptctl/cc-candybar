@@ -92,7 +92,11 @@ describe("the savepoint is taken when edit mode opens and released when it close
     journal.commit();
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
-    expect(history.history(SID).savepoint).toEqual({ at: 1, net: [] });
+    expect(history.history(SID).savepoint).toEqual({
+      at: 1,
+      net: [],
+      below: [],
+    });
   });
 
   test("clearing the key closes edit mode too", () => {
@@ -115,7 +119,7 @@ describe("the savepoint is taken when edit mode opens and released when it close
 });
 
 describe("cancel puts back what edit mode found, whatever the stack did", () => {
-  test("restores the file, leaves no redo, and releases the savepoint", () => {
+  test("restores the file and leaves no redo; edit mode, still open, starts over from there", () => {
     const { history, edit, toggle } = rig();
     edit(); // v1: before edit mode
     toggle("arrange");
@@ -124,6 +128,12 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     history.rewind(SID);
     expect(readConfigText(file)).toBe("v1");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    // A rewind alone leaves edit mode open, so it is cancellable again.
+    edit(); // v4
+    expect(history.depth(SID).sinceEdit).toBe(1);
+    history.rewind(SID);
+    expect(readConfigText(file)).toBe("v1");
+    toggle("closed");
     expect(history.history(SID).savepoint).toBeUndefined();
   });
 
@@ -193,19 +203,56 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a file edited by hand since refuses before writing anything, and keeps the rest cancellable", () => {
+  test("a file edited by hand since is kept, everything else is put back, and the refusal names it", () => {
     const { history, edit, pick, toggle, theme } = rig();
     toggle("arrange");
     pick("nord");
     edit(); // v1
     fs.writeFileSync(file, "hand edit");
-    expect(() => history.rewind(SID)).toThrow(/changed since that edit/);
+    expect(() => history.rewind(SID)).toThrow(
+      /config\.json5 changed since edit mode opened — kept as it is/,
+    );
     expect(readConfigText(file)).toBe("hand edit");
-    expect(theme()).toBe("nord");
-    expect(history.depth(SID).sinceEdit).toBe(1);
-    history.rewind(SID);
     expect(theme()).toBeNull();
-    expect(readConfigText(file)).toBe("hand edit");
+    expect(history.depth(SID)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+  });
+
+  test("a fresh step that abandons steps from before edit mode keeps them for the stack cancel gives back", () => {
+    const { history, edit, toggle } = rig();
+    edit(); // v1
+    edit(); // v2
+    edit(); // v3
+    toggle("arrange"); // at = 3
+    history.undo(SID); // v2: s3 below the savepoint
+    history.undo(SID); // v1: s2 too
+    edit(); // v4: abandons s2 and s3
+    history.rewind(SID);
+    expect(readConfigText(file)).toBe("v3");
+    expect(history.depth(SID)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
+    history.undo(SID);
+    expect(readConfigText(file)).toBe("v2");
+    history.undo(SID);
+    expect(readConfigText(file)).toBe("v1");
+  });
+
+  test("steps abandoned by two fresh steps keep their order", () => {
+    const { history, edit, pick, toggle, theme } = rig();
+    pick("a"); // p1
+    pick("b"); // p2
+    pick("c"); // p3
+    toggle("arrange"); // at = 3
+    history.undo(SID); // theme b
+    edit(); // abandons p3; at = 2
+    history.undo(SID); // undo the edit
+    history.undo(SID); // theme a: p2 below
+    edit(); // abandons the edit and p2; at = 1
+    history.rewind(SID);
+    expect(theme()).toBe("c");
+    expect(readConfigText(file)).toBe("v0");
+    history.undo(SID);
+    expect(theme()).toBe("b");
+    history.undo(SID);
+    expect(theme()).toBe("a");
   });
 });
 

@@ -32,7 +32,7 @@
 //     landing it between a segment and the `-` that removes it.
 //   • It also GUARANTEES `edit.toggle` and the `edit.mode` state it cycles
 //     (see ensureEditToggle below), which edit chrome's gates read and its
-//     `✎ done` fires — so the ordering is load-bearing in that direction too,
+//     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
 import { cellLen } from "@promptctl/rich-js";
@@ -142,8 +142,11 @@ const tabRef = (tab: TabName): DisclosureRef => ({
 // exactly while there are N of them, writing all of them to the file in one
 // click. There is no destination selector to consult: where a click lands is
 // the same place every time, and saving is its own, visible act.
-const SAVE_SEG = `${SETTINGS_NS}save`;
-const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
+// Exported because edit mode's `✓ save` fires this same save and reads this
+// same count (src/config/edit-chrome.ts): the menu is in every config, and
+// is synthesized before edit chrome.
+export const SAVE_SEG = `${SETTINGS_NS}save`;
+export const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
@@ -683,7 +686,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:composability] Entering or leaving edit mode is a trip OUT of the
-      // menu: edit mode works on the bar, with its own `✎ done` row above it,
+      // menu: edit mode works on the bar, with its own `✓ done` row above it,
       // so the menu closes and leaves the bar to it. The edit control is
       // therefore the toggle and the close fired as one click, composed from
       // two ordinary actions — the close is a literal write to the key the

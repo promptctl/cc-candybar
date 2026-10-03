@@ -61,7 +61,11 @@ import {
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import {
+  VERBS,
+  SESSION_RENDER_ORIGIN_KEY,
+  encodeRenderOrigin,
+} from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -116,7 +120,22 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  // The session has rendered, as it always has before a click: edit mode's
+  // `✓` runs the settings menu's `save`, which acts on the config the
+  // session renders.
+  sessionState.set(
+    "s1",
+    SESSION_RENDER_ORIGIN_KEY,
+    encodeRenderOrigin({
+      projectDir: "/tmp/proj",
+      cwd: "/tmp/proj",
+      configFile: null,
+    }),
+  );
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState),
+    configFor: () => config,
+  };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -275,7 +294,7 @@ describe("the global settings menu is reachable from a user config", () => {
       u.includes("apply-layout-op"),
     );
     expect(editing.length).toBeGreaterThan(0);
-    // Leaving needs no trip back into the menu: edit mode's own `✎ done`,
+    // Leaving needs no trip back into the menu: edit mode's own `✓ done`,
     // top left, lands on the plain bar.
     clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);

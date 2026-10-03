@@ -58,6 +58,7 @@ import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
+import { SAVE_SEG, UNSAVED_VAR } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
@@ -90,18 +91,17 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 // settings (a placement's configure-mode picks among them — the layout edits
 // were written as they were made), then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
-const EDIT_SAVE_ACTION = `${EDIT_NS}save`;
 // `↩ cancel`: put back everything changed since edit mode opened, then leave
 // (src/daemon/settings-history.ts `rewind`).
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
 const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 // How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
-// and how many settings are unsaved: the daemon's own counts, read by the
-// cells' labels and gates. Refs, never second counters.
+// — the daemon's own count, read by the cells' labels and gates; a ref, never
+// a second counter. How many settings are unsaved is the settings menu's own
+// `unsaved` variable.
 const EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
-const EDIT_UNSAVED_VAR = `${EDIT_NS}unsaved`;
 const CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
-const TO_KEEP = `(or ${CHANGED} (gt .${EDIT_UNSAVED_VAR} 0))`;
+const TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
 export const REMOVE_GLYPH = "⊖";
 export const ADD_GLYPH = "⊕";
 export const CONFIGURE_GLYPH = "⚙️";
@@ -812,24 +812,18 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   const tail: LayoutNode = help;
   // Leaving edit mode, minted once like the `(?)`: the same switch the menu's
   // `✎ arrange` fires (EDIT_SWITCH), so the two cannot disagree about what
-  // leaving edit mode closes.
+  // leaving edit mode closes. `✓` also saves; the menu's `✎ done` does not,
+  // and leaves anything unsaved to the `💾 save` beside it.
   artifacts.variables[EDIT_CHANGES_VAR] = {
     kind: "input",
     path: "history.sinceEdit",
     type: "number",
     default: 0,
   };
-  artifacts.variables[EDIT_UNSAVED_VAR] = {
-    kind: "input",
-    path: "unsaved",
-    type: "number",
-    default: 0,
-  };
-  // [LAW:one-type-per-behavior] Saving is the one `save` the settings menu's
-  // `💾 save` fires, so the two cannot disagree about what saving writes.
-  artifacts.actions[EDIT_SAVE_ACTION] = { save: true };
+  // [LAW:one-source-of-truth] Saving is the settings menu's own `💾 save`
+  // action, so the two cannot disagree about what saving writes.
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [EDIT_SAVE_ACTION, ...EDIT_SWITCH],
+    do: [SAVE_SEG, ...EDIT_SWITCH],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:

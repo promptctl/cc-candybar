@@ -68,11 +68,14 @@ export interface SessionHistory {
 // `net` backwards, through the same all-or-nothing `apply` a `↶` takes, so it
 // does not depend on how the stack moved meanwhile: the cap trimming steps
 // made in edit mode, a `↶` below where it opened, a fresh step abandoning the
-// redo stack. `at` is where the stack stood (the length of `past`), and is
-// used only to give the stack back its shape after a cancel.
+// redo stack. `at` and `below` give the stack back the shape it had: `at` is
+// how many steps of `past` were there when edit mode opened, and `below` the
+// steps from before it that a fresh step in edit mode abandoned off the redo
+// stack after a `↶` took them back — in order, right above `at`.
 export interface Savepoint {
   readonly at: number;
   readonly net: Step;
+  readonly below: readonly Step[];
 }
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -258,12 +261,14 @@ export class SettingsHistory {
 
   // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
   // changed back to what it held when edit mode opened — one step, landing
-  // whole or not at all (`apply`) — then give the stack back the shape it had:
-  // the steps made since are dropped, steps `↶` took back below the savepoint
-  // are past again, and nothing is left to redo, so neither `↶` nor `↷` can
-  // bring back what was discarded. A target changed since by anything else
-  // refuses by name before anything is written, exactly as `↶` does, and
-  // leaves edit mode's net change. Returns what it put back.
+  // whole or not at all (`apply`) — then give the stack back the shape it had,
+  // with nothing to redo, so neither `↶` nor `↷` can bring back what was
+  // discarded. A target changed since by anything else (a hand edit, another
+  // session) is not put back: overwriting it would destroy that change, and no
+  // later cancel could put it back either. Every other target is, and then the
+  // refusal names what was kept, loudly. Edit mode stays where it is — the
+  // click that cancels also leaves — so the savepoint is taken again at the
+  // stack as it now stands. Returns what it put back.
   rewind(sessionId: string): Step {
     const history = this.history(sessionId);
     const { savepoint } = history;
@@ -272,20 +277,32 @@ export class SettingsHistory {
         "rewind: edit mode has no savepoint — nothing to cancel",
       );
     }
-    this.apply(sessionId, savepoint.net, "before", "rewind", {
-      past: pastAt(history, savepoint.at),
+    const stale = savepoint.net.filter(
+      (c) => this.read(sessionId, c) !== c.after,
+    );
+    const gone = new Set(stale.map(identity));
+    const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
+    const past = capped(without(pastAt(history, savepoint), gone));
+    this.apply(sessionId, putBack, "before", "rewind", {
+      past,
       future: [],
+      savepoint: { at: past.length, net: [], below: [] },
     });
-    return savepoint.net;
+    if (stale.length > 0) {
+      throw new BadVerbArgs(
+        `rewind: ${stale.map(describe).join(", ")} changed since edit mode opened — kept as it is; everything else edit mode changed was put back`,
+      );
+    }
+    return putBack;
   }
 
   redo(sessionId: string): Step {
-    const { past, future } = this.history(sessionId);
+    const history = this.history(sessionId);
+    const { past, future } = history;
     const step = future.at(-1);
     if (step === undefined) {
       throw new BadVerbArgs("redo: nothing to redo");
     }
-    const history = this.history(sessionId);
     const all = [...past, step];
     const kept = capped(all);
     this.apply(sessionId, step, "after", "redo", {
@@ -328,6 +345,7 @@ export class SettingsHistory {
               gone,
             ).length,
             net: savepoint.net.filter((c) => !gone.has(identity(c))),
+            below: without(savepoint.below, gone),
           },
         }),
       });
@@ -408,7 +426,11 @@ export class SettingsHistory {
 function weight(state: ReadonlyMap<string, SessionHistory>): number {
   let bytes = 0;
   for (const { past, future, savepoint } of state.values()) {
-    for (const step of [...past, ...future, savepoint?.net ?? []]) {
+    for (const step of [
+      ...past,
+      ...future,
+      ...(savepoint === undefined ? [] : [savepoint.net, ...savepoint.below]),
+    ]) {
       for (const c of step) {
         bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
       }
@@ -458,6 +480,7 @@ function savepointAfter(
         savepoint: {
           at: Math.max(0, savepoint.at - dropped),
           net: withNet(savepoint.net, step),
+          below: savepoint.below,
         },
       };
 }
@@ -481,23 +504,37 @@ function withNet(net: Step, step: Step): Step {
 const reversed = (step: Step): Step =>
   step.map((c) => ({ ...c, before: c.after, after: c.before }));
 
-// A fresh step abandons whatever was undone, so a savepoint that pointed into
-// the undone steps now points at the top of what is left.
+// A fresh step abandons whatever was undone. Steps from before edit mode
+// among them are kept in the savepoint's `below`, so a cancel can still give
+// the stack back the shape it had; the savepoint now stands at the top of
+// what is left of `past`.
 function afterAppend(history: SessionHistory, step: Step): SessionHistory {
   const all = [...history.past, step];
   const past = capped(all);
+  const { savepoint } = history;
+  const abandonedBelow =
+    savepoint === undefined
+      ? 0
+      : Math.max(0, savepoint.at - history.past.length);
   return {
     past,
     future: [],
     ...savepointAfter(
-      history.savepoint && {
-        at: Math.min(history.savepoint.at, history.past.length),
-        net: history.savepoint.net,
+      savepoint && {
+        at: Math.min(savepoint.at, history.past.length),
+        net: savepoint.net,
+        below: [...redone(history.future, abandonedBelow), ...savepoint.below],
       },
       all.length - past.length,
       step,
     ),
   };
+}
+
+// The next `count` steps `↷` would take, in the order it would take them.
+function redone(future: readonly Step[], count: number): Step[] {
+  const n = Math.min(count, future.length);
+  return future.slice(future.length - n).reverse();
 }
 
 function afterUndo(history: SessionHistory, step: Step): SessionHistory {
@@ -508,13 +545,17 @@ function afterUndo(history: SessionHistory, step: Step): SessionHistory {
   };
 }
 
-// The stack as it stood at `at`: the steps made since leave, and steps `↶`
-// took back below it return to `past` — as many as the redo stack still holds.
-function pastAt(history: SessionHistory, at: number): readonly Step[] {
+// The stack as it stood when edit mode opened: the steps made since leave,
+// and the steps `↶` took back below it — still on the redo stack, or kept in
+// `below` once a fresh step abandoned them — are past again.
+function pastAt(history: SessionHistory, savepoint: Savepoint): Step[] {
   const { past, future } = history;
-  if (past.length >= at) return past.slice(0, at);
-  const back = Math.min(at - past.length, future.length);
-  return [...past, ...future.slice(future.length - back).reverse()];
+  const kept = past.slice(0, savepoint.at);
+  return [
+    ...kept,
+    ...redone(future, savepoint.at - kept.length),
+    ...savepoint.below,
+  ];
 }
 
 // Opening takes the savepoint at the stack as it stands; closing releases it.
@@ -523,7 +564,10 @@ function withToggle(
   toggle: EditToggle,
 ): SessionHistory {
   if (isOpen(toggle.after) && !isOpen(toggle.before)) {
-    return { ...history, savepoint: { at: history.past.length, net: [] } };
+    return {
+      ...history,
+      savepoint: { at: history.past.length, net: [], below: [] },
+    };
   }
   if (!isOpen(toggle.after) && isOpen(toggle.before)) {
     const { past, future } = history;
@@ -576,7 +620,8 @@ function isSavepoint(v: unknown): v is Savepoint {
     Number.isInteger(o.at) &&
     (o.at as number) >= 0 &&
     Array.isArray(o.net) &&
-    o.net.every(isChange)
+    o.net.every(isChange) &&
+    isSteps(o.below)
   );
 }
 
