@@ -695,7 +695,7 @@ describe("reset returns settings to the bundled default", () => {
     const cancel = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
+        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll.armed")),
     )!.url;
     r.click(cancel);
     expect(labelled("⟲ reset all?")).toBeUndefined();
@@ -717,7 +717,7 @@ describe("reset returns settings to the bundled default", () => {
     const cancel = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "✕" &&
-        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll")),
+        effectsOf(l.url).some((e) => e.args.includes("candybar.resetAll.armed")),
     )!.url;
     r.click(cancel);
     expect(labelled("⟲ reset all?")).toBeUndefined();

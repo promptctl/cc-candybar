@@ -58,7 +58,12 @@ import {
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
-import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
+import {
+  configureMember,
+  EDIT_CONFIGURE_KEY,
+  PLACEMENT_DRAFT_NS,
+} from "../../config/loader/edit-mode";
+import { ident } from "../../config/ident";
 import {
   durableLanding,
   placementDrafts,
@@ -836,29 +841,47 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
-// The session keys holding unsaved values of every placement an edit ended:
-// a draft slot of a (preset, id) the config held before the edit and no longer
-// holds after it. Measured over every preset, since a row can be shared — an
-// edit made in one preset's layout can end a placement another renders.
-// [LAW:dataflow-not-control-flow] No branch on the op: an insertion ends
-// nothing, and the comparison says so.
-function endedDrafts(before: DslConfig, after: DslConfig): readonly string[] {
+// Every placement an edit ended: a (preset, id) the config held before the
+// edit and no longer holds after it. Measured over every preset, since a row
+// can be shared — an edit made in one preset's layout can end a placement
+// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
+// insertion ends nothing, and the comparison says so.
+function endedPlacements(
+  before: DslConfig,
+  after: DslConfig,
+): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
   const placed = (config: DslConfig, preset: string) =>
     [...walkNodes(presetRoot(config, preset).node)].filter(
       (n): n is SegmentNode => n.kind === "segment",
     );
   const survivors = new Set(
     presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => `${preset}\0${placementId(n)}`),
+      placed(after, preset).map((n) =>
+        configureMember(ident(preset), placementId(n)),
+      ),
     ),
   );
   return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset).flatMap((n) =>
-      survivors.has(`${preset}\0${placementId(n)}`)
-        ? []
-        : Object.values(n.drafts ?? {}).map((slot) => slot.key),
-    ),
+    placed(before, preset)
+      .map((node) => ({
+        member: configureMember(ident(preset), placementId(node)),
+        node,
+      }))
+      .filter(({ member }) => !survivors.has(member)),
   );
+}
+
+// What an ended placement leaves in the session: its unsaved values, and the
+// configure key while it names that placement — a later placement that takes
+// its id is a new instance, and must inherit neither.
+function endedSessionKeys(
+  ended: ReturnType<typeof endedPlacements>,
+  configuring: string | null,
+): readonly string[] {
+  return ended.flatMap(({ member, node }) => [
+    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
+    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
+  ]);
 }
 
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
@@ -893,16 +916,16 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   const file = originConfigFile(origin);
   const before = ctx.configFor(origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
-  // A removed placement's unsaved values end with it: a later placement that
-  // takes its id is a new instance, and must not inherit them. Measured on the
-  // file as it now reads, and released in the same click, so its undo brings
-  // the placement and its drafts back.
+  // A removed placement's session state ends with it (endedSessionKeys).
+  // Measured on the file as it now reads, and released in the same click, so
+  // its undo brings the placement and its drafts back.
   ctx.reloadConfig(origin);
-  // The unsaved values the edit discards — the fact its log line carries.
-  const released = endedDrafts(before, ctx.configFor(origin)).filter(
-    (draftKey) => ctx.sessionState.get(sid, draftKey) !== null,
-  );
-  for (const draftKey of released) ctx.sessionState.clear(sid, draftKey);
+  // The session state the edit discards — the fact its log line carries.
+  const released = endedSessionKeys(
+    endedPlacements(before, ctx.configFor(origin)),
+    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
+  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
+  for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(
@@ -931,9 +954,9 @@ const undo: VerbHandler = (value, ctx) => {
 // a navigation journal, so going back is not itself a step it could return to.
 const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const step = ctx.navigation.back(sid, ctx.sessionState);
+  const { step, discarded } = ctx.navigation.back(sid, ctx.sessionState);
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} (session=${sid})`);
+  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
 // undo's mirror — steps the same history forward one click.

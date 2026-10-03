@@ -35,6 +35,7 @@
 //     `✎ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
+import { cellLen } from "@promptctl/rich-js";
 import { ident } from "./ident.js";
 import type { ActionDecl } from "./action.js";
 import {
@@ -68,7 +69,10 @@ import {
 import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
+  EDIT_CONFIGURE_KEY,
+  EDIT_SWITCH,
   EDIT_TOGGLE_ACTION,
+  EDIT_UNCONFIGURE_ACTION,
 } from "./loader/edit-mode.js";
 import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
@@ -113,8 +117,8 @@ const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 // a time, its body dropped below the strip. A tab strip is an accordion: every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
-// open trigger. The key is session state the door never writes, so closing the
-// menu and reopening it returns to the tab that was open.
+// open trigger. The door's click folds it back to the first tab (doorFolds),
+// so the menu always reopens at its top level.
 const TAB_KEY = `${SETTINGS_NS}tab`;
 const TABS = [
   { member: "session", label: "⚡ session" },
@@ -187,7 +191,7 @@ const BACK_COUNT = `${SETTINGS_NS}navigation.back`;
 export const BACK_GLYPH = "◁";
 const BACK_LEAD =
   `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}` +
-  `{{ else }}${" ".repeat(BACK_GLYPH.length)}{{ end }}`;
+  `{{ else }}${" ".repeat(cellLen(BACK_GLYPH))}{{ end }}`;
 const REDO_ACTION = `${SETTINGS_NS}redo`;
 // How many settings a reset all would change (RenderPayload.resettable).
 const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
@@ -580,7 +584,7 @@ const tabBody = (tab: TabName): ContainerNode => ({
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? withBack(disclosureNode(node.name, SETTINGS_REF, doorBody(), "above"))
+      ? withBack(disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"))
       : node;
   }
   return expandContainer(node);
@@ -615,6 +619,10 @@ function doorBody(): ContainerNode {
   };
 }
 
+// The door's body is one value: the anchor hangs it and the fold reads its keys
+// off it, so the two cannot describe different bodies.
+const DOOR_BODY = doorBody();
+
 // [LAW:one-source-of-truth] The door's click returns everything its body holds
 // to how a fresh session finds it — each disclosure inside it, at any depth,
 // written back to its state variable's default (the first tab, every picker
@@ -624,7 +632,7 @@ function doorBody(): ContainerNode {
 // the door's toggle in the same click.
 function doorFolds(artifacts: MenuArtifacts): string[] {
   const keys = new Map<string, string>();
-  for (const node of walkNodes(doorBody())) {
+  for (const node of walkNodes(DOOR_BODY)) {
     if (node.kind === "segment" && node.opens !== undefined) {
       keys.set(node.opens.ref.key, node.opens.ref.variable);
     }
@@ -687,7 +695,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // two ordinary actions — the close is a literal write to the key the
       // door's own cycle writes, so each carries the gate it always carried.
       [SETTINGS_CLOSE]: { set: SETTINGS_REF.key, to: DISCLOSURE_CLOSED },
-      [EDIT_SEG]: { do: [EDIT_TOGGLE_ACTION, SETTINGS_CLOSE] },
+      [EDIT_SEG]: { do: [...EDIT_SWITCH, SETTINGS_CLOSE] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       [SAVE_SEG]: { save: true },
@@ -870,6 +878,16 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
     EDIT_MODE_KEY,
     EDIT_MODE_ARRANGE,
   );
+  // The other half of EDIT_SWITCH: which placement's settings hang open inside
+  // arranging — none to begin with — and the close every switch fires.
+  artifacts.variables[EDIT_CONFIGURE_KEY] = disclosureStateVar(
+    EDIT_CONFIGURE_KEY,
+    DISCLOSURE_CLOSED,
+  );
+  artifacts.actions[EDIT_UNCONFIGURE_ACTION] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: DISCLOSURE_CLOSED,
+  };
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from

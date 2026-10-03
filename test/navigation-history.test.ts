@@ -13,9 +13,12 @@ import {
   VERB_UNDO,
 } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
+import { UPDATE_DISMISSED_KEY } from "../src/daemon/update-notice";
 
 const MENU = "nav-test.menu";
 const TAB = "nav-test.tab";
+// A confirm's key, by the suffix every confirmStep gives it.
+const ARMED = "nav-test.clear.armed";
 
 function setup() {
   const sessionState = new SessionState();
@@ -28,6 +31,14 @@ function setup() {
     registerStateValidator(TAB, {
       kind: "allow-list",
       allowed: ["a", "b"],
+    }),
+    registerStateValidator(ARMED, {
+      kind: "allow-list",
+      allowed: ["armed", "disarmed"],
+    }),
+    registerStateValidator(UPDATE_DISMISSED_KEY, {
+      kind: "allow-list",
+      allowed: ["1.2.3"],
     }),
   ];
   // `theme` is a built-in key: its gate (the installed themes) is permanent.
@@ -46,6 +57,34 @@ function setup() {
 }
 
 describe("back", () => {
+  test("a decision is never navigation: an armed confirm and a dismissed notice stay as they are", () => {
+    const { sessionState, ctx, set, back, dispose } = setup();
+    set(ARMED, "armed");
+    set(UPDATE_DISMISSED_KEY, "1.2.3");
+    expect(ctx.navigation.depth("s1")).toBe(0);
+    // The door's click disarms beside closing the menu; going back reopens the
+    // menu and leaves the confirm disarmed.
+    set(MENU, "open");
+    set(MENU, "closed", ARMED, "disarmed");
+    back();
+    expect(sessionState.get("s1", MENU)).toBe("open");
+    expect(sessionState.get("s1", ARMED)).toBe("disarmed");
+    expect(sessionState.get("s1", UPDATE_DISMISSED_KEY)).toBe("1.2.3");
+    dispose();
+  });
+
+  test("a step over state something else has since rewritten is discarded, not replayed", () => {
+    const { sessionState, set, back, dispose } = setup();
+    set(MENU, "open");
+    set(TAB, "b");
+    // Not a navigating click: a layout edit releasing what the tab opened.
+    sessionState.clear("s1", TAB);
+    back();
+    expect(sessionState.get("s1", MENU)).toBeNull();
+    expect(() => back()).toThrow(BadVerbArgs);
+    dispose();
+  });
+
   test("steps each navigating click back in turn, to the state before the first", () => {
     const { sessionState, ctx, set, back, dispose } = setup();
     set(MENU, "open");

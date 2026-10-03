@@ -50,7 +50,7 @@ import {
   EDIT_MODE_GATE,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
-  EDIT_TOGGLE_ACTION,
+  EDIT_SWITCH,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
@@ -85,7 +85,6 @@ export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
-const EDIT_UNCONFIGURE = `${EDIT_NS}unconfigure`;
 export const REMOVE_GLYPH = "✖";
 export const ADD_GLYPH = "✚";
 export const CONFIGURE_GLYPH = "⚙️";
@@ -96,9 +95,26 @@ const EDIT_LIVE_REF: DisclosureRef = {
 };
 // Configuring a placement shows the live output too: its settings change what
 // it draws, and a name cannot show that.
-const NOTHING_CONFIGURED = `(eq .${EDIT_CONFIGURE_KEY} "${DISCLOSURE_CLOSED}")`;
-const NAMES_VIEW = `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) ${NOTHING_CONFIGURED}`;
-const LABEL_GATE = `{{ ${NAMES_VIEW} }}`;
+//
+// [LAW:one-source-of-truth] "A placement is configured" is a fact about the
+// tree this preset renders, not about the key alone: the key can name a
+// placement this tree does not hold — one a layout edit removed, or one in
+// another preset — and then nothing is configured here and the names view
+// stands. So the fact is a per-preset template variable over exactly the
+// members this preset's configure bodies open on, minted once its splice has
+// collected them (configuringVar); every gate reads it.
+function configuringVar(presetIdent: string): string {
+  return `${EDIT_NS}configuring.p${presetIdent}`;
+}
+function namesView(presetIdent: string): string {
+  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
+}
+function configuringDecl(members: readonly string[]): VariableDecl {
+  const terms = members.map(
+    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`,
+  );
+  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
+}
 
 // [LAW:dataflow-not-control-flow] The names view decides a gate outright;
 // every other view hands it to the author's own `when`, evaluated exactly as
@@ -108,8 +124,12 @@ const LABEL_GATE = `{{ ${NAMES_VIEW} }}`;
 // segment is `false` and the label shows, and an authored container is `true`
 // so nothing placed hides behind a gate; outside it the label is false and
 // the bar renders exactly what it renders without edit mode.
-function inNamesView(verdict: "true" | "false", when: string): string {
-  return `{{ if ${NAMES_VIEW} }}${verdict}{{ else }}${when}{{ end }}`;
+function inNamesView(
+  presetIdent: string,
+  verdict: "true" | "false",
+  when: string,
+): string {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when}{{ end }}`;
 }
 
 // [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate.
@@ -267,10 +287,10 @@ export function placementDraftKey(
 // What configure mode adds to one placement: the `⚙️` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
-// through. The body is a disclosure over edit mode's one key at this
-// placement's `configure:<id>` member, so its `✕` writes that key closed and
-// entering any other mode — arranging, or configuring another placement —
-// closes it by overwriting the value it is open on.
+// through. The body is a disclosure over `edit.configure` at this placement's
+// `<preset>:<id>` member, so its `✕` writes that key closed, configuring
+// another placement closes it by overwriting the value it is open on, and
+// every switch into or out of edit mode closes it (EDIT_SWITCH).
 interface ConfigureParts {
   readonly term: string;
   readonly ref: DisclosureRef;
@@ -287,6 +307,7 @@ function configureParts(
   const id = placementId(node);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.presetIdent, id);
+  ctx.configured.push(member);
   const enter = `${prefix}.configure.${posIdent}`;
   ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
   const drafts: Record<string, DraftSlot> = {};
@@ -357,9 +378,10 @@ export function arrangedSegment(name: string): string | undefined {
 function labelChrome(
   child: SegmentNode,
   decl: SegmentDecl,
-  artifacts: ChromeArtifacts,
+  ctx: SpliceCtx,
   configure: ConfigureParts,
 ): SegmentNode {
+  const { artifacts } = ctx;
   const id = placementId(child);
   const name = `${LABEL_NS}${id}:${child.name}`;
   artifacts.segments[name] = {
@@ -373,7 +395,7 @@ function labelChrome(
       configure.ref,
       configure.body,
       "drop",
-      shownWhile([configure.ref], LABEL_GATE),
+      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`),
     ),
     ...(theme !== undefined && { settings: { [THEME_SETTING]: theme } }),
     drafts: { [THEME_SETTING]: configure.drafts[THEME_SETTING]! },
@@ -455,6 +477,8 @@ interface SpliceCtx {
   readonly segments: DslConfig["segments"];
   readonly artifacts: ChromeArtifacts;
   readonly posCounter: { n: number };
+  // Every configure member the splice mints, collected for configuringVar.
+  readonly configured: string[];
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
@@ -513,10 +537,10 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       ),
       // Labelled by the placement's id: two placements of one segment are
       // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(child, decl, ctx.artifacts, configure), lead, trail },
+      { ...labelChrome(child, decl, ctx, configure), lead, trail },
       {
         ...spliced,
-        when: inNamesView("false", child.when ?? "true"),
+        when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
         lead,
         trail,
         drafts: configure.drafts,
@@ -553,7 +577,7 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     ...(node.when !== undefined && {
       when: shownWhile(
         configureRefsIn(children),
-        inNamesView("true", node.when),
+        inNamesView(ctx.presetIdent, "true", node.when),
       ),
     }),
   };
@@ -697,9 +721,14 @@ function spliceEditChromeForPreset(
     segments: config.segments,
     artifacts,
     posCounter: { n: 0 },
+    configured: [],
   };
+  const spliced = spliceContainer(node, ctx);
+  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
+    ctx.configured,
+  );
   return wrapWithPresetRows(
-    spliceContainer(node, ctx),
+    spliced,
     presetName,
     ctx.presetIdent,
     ctx.rootKey,
@@ -761,23 +790,11 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     direction: "horizontal",
     children: [{ kind: "segment", name: EDIT_LIVE_KEY }, help],
   };
-  // Which placement's settings hang open inside arranging — none to begin with.
-  // Its ✕ writes it closed through the disclosure's own close, so the closed
-  // value is gated by the action that leaving edit mode fires as well.
-  artifacts.variables[EDIT_CONFIGURE_KEY] = disclosureStateVar(
-    EDIT_CONFIGURE_KEY,
-    DISCLOSURE_CLOSED,
-  );
-  artifacts.actions[EDIT_UNCONFIGURE] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: DISCLOSURE_CLOSED,
-  };
-  // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
-  // `✎ arrange` fires, so the two cannot disagree about what "edit mode" is,
-  // and the settings left open close with it, so arranging next time starts
-  // with none.
+  // Leaving edit mode, minted once like the `(?)`: the same switch the menu's
+  // `✎ arrange` fires (EDIT_SWITCH), so the two cannot disagree about what
+  // leaving edit mode closes.
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [EDIT_TOGGLE_ACTION, EDIT_UNCONFIGURE],
+    do: [...EDIT_SWITCH],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
     template: `{{ action "${EDIT_DONE_SEG}" "✎ done" }}`,

@@ -610,8 +610,9 @@ const segmentType: NodeType<"segment"> = {
           width: "auto",
           baseStyle: styles.trigger,
         });
+      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
       const close =
-        node.opens !== undefined && bodyLines.some((l) => l.band === "own")
+        node.opens !== undefined && firstOwn !== -1
           ? ctx.closeDisclosure(node.opens.key)
           : undefined;
       const closeLead = close === undefined ? [] : leadCell(close);
@@ -619,7 +620,6 @@ const segmentType: NodeType<"segment"> = {
         close === undefined
           ? []
           : leadCell(new RichText(" ".repeat(close.cellLength)));
-      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
       // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
       // the band this trigger opened gets its lead — the first its ✕, the rest
       // the blank beside it; a row of a band hung deeper inside (a `{{ menu }}`

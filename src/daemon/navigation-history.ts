@@ -5,14 +5,16 @@
 // SET and `◁` steps what it LOOKED AT, and neither can reach the other's keys.
 //
 // A STEP is one navigating click: what the `set-state`, `step-state` and
-// toolbar verbs wrote, less every settings key. Those three verbs are the
+// toolbar verbs wrote to navigation keys (isNavigationKey). Those three verbs are the
 // navigating ones by construction — they are how every disclosure, cursor and
 // mode click lands — while the session keys other paths write (a doctor
 // report, a click's error, the client's own hints) never pass through them.
 // `back` writes each change's `before`; the history is held in memory only, so
 // a daemon restart starts every session with nothing to go back to.
 
+import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "./settings-history";
+import { UPDATE_DISMISSED_KEY } from "./update-notice";
 import type { SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 
@@ -28,6 +30,12 @@ export type NavigationStep = readonly NavigationChange[];
 // bound, the session that navigated least recently goes first.
 const MAX_STEPS = 20;
 const MAX_SESSIONS = 32;
+
+// [LAW:one-source-of-truth] The keys going back restores: everything those
+// verbs write except a DECISION — a setting (undo's), a dismissed update
+// notice, or a confirm's arming, which would come back one click from firing.
+const isNavigationKey = (key: string): boolean =>
+  !isSettingKey(key) && !isConfirmKey(key) && key !== UPDATE_DISMISSED_KEY;
 
 // Records one click's navigation. Writes through `sessionState` land in the
 // store it wraps and are recorded; `commit` turns them into one step.
@@ -56,7 +64,7 @@ export class NavigationHistory {
       write: () => void,
     ): void => {
       const before = keys
-        .filter((key) => !isSettingKey(key))
+        .filter(isNavigationKey)
         .map((key) => ({ key, before: store.get(sessionId, key) }));
       write();
       const changes = pending.get(sessionId) ?? new Map();
@@ -97,20 +105,37 @@ export class NavigationHistory {
     };
   }
 
-  // Restores the last step into `store` and returns it. Written through the
-  // bare store, never a navigation journal, so going back is not itself a step.
-  back(sessionId: string, store: SessionStateRW): NavigationStep {
-    const steps = this.past.get(sessionId) ?? [];
+  // Restores the last step into `store` and returns it, with how many steps it
+  // discarded first. A step is current while every key it changed still holds
+  // what it left there; one something else has since rewritten (a layout edit
+  // releasing the placement it configured) would restore over a view that is
+  // gone, so it is discarded rather than replayed. Written through the bare
+  // store, never a navigation journal, so going back is not itself a step.
+  back(
+    sessionId: string,
+    store: SessionStateRW,
+  ): { readonly step: NavigationStep; readonly discarded: number } {
+    const all = this.past.get(sessionId) ?? [];
+    const current = (step: NavigationStep): boolean =>
+      step.every((c) => store.get(sessionId, c.key) === c.after);
+    let steps = all;
+    while (steps.length > 0 && !current(steps.at(-1)!)) {
+      steps = steps.slice(0, -1);
+    }
+    const discarded = all.length - steps.length;
     const step = steps.at(-1);
     if (step === undefined) {
-      throw new BadVerbArgs("back: nothing to go back to");
+      this.put(sessionId, steps);
+      throw new BadVerbArgs(
+        `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over state since rewritten, discarded)` : ""}`,
+      );
     }
     for (const { key, before } of step) {
       if (before === null) store.clear(sessionId, key);
       else store.set(sessionId, key, before);
     }
     this.put(sessionId, steps.slice(0, -1));
-    return step;
+    return { step, discarded };
   }
 
   private push(sessionId: string, step: NavigationStep): void {

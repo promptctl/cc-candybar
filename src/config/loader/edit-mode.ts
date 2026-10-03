@@ -52,6 +52,16 @@ import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 export const EDIT_MODE_KEY = "edit.mode";
 export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
+// Closes whichever placement's settings hang open.
+export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+// [LAW:one-source-of-truth] What every click that enters or leaves edit mode
+// fires: the toggle, and the close of the settings left open, so arranging
+// always starts with none configured whichever control switched it — the
+// menu's `✎ arrange` and edit mode's own `✎ done` spread this one list.
+export const EDIT_SWITCH = [
+  EDIT_TOGGLE_ACTION,
+  EDIT_UNCONFIGURE_ACTION,
+] as const;
 export const EDIT_MODE_ARRANGE = "arrange";
 
 // The namespace every placement's unsaved setting value lives under, as a

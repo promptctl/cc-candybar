@@ -14,8 +14,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
-import { EDIT_TOGGLE_ACTION } from "../src/config/loader/edit-mode";
+import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { INVISIBLE } from "./helpers/ansi";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
@@ -46,14 +45,7 @@ const dirOnlyRoot = {
 // (`directory`'s own template never references `edit.toggle`, so none of
 // that machinery is needed in this file) or the baked-in full root shadows
 // the narrowed one.
-const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
-  Object.fromEntries(
-    Object.entries(rec).filter(
-      // `edit.toggle` stays: the settings menu's `✎ arrange` fires it (a `do`),
-      // and it is a plain cycle that compiles with nothing else of edit mode.
-      ([name]) => !name.startsWith(EDIT_NS) || name === EDIT_TOGGLE_ACTION,
-    ),
-  );
+const dropEditNs = dropEditChrome;
 
 function renderDir(paths: {
   home: string;

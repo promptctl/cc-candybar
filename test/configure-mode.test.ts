@@ -63,6 +63,7 @@ import { encodeLayoutOp } from "../src/config/layout-ops";
 import { presetRootKey } from "../src/config/loader/persist-target";
 import { placementDrafts } from "../src/daemon/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
@@ -592,10 +593,54 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     );
     rt.click(remove);
     expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBeNull();
+    // The configure key named it, so it ends with it: a later placement that
+    // takes the id opens with nothing configured.
+    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
     // One click, one step: its undo brings the placement and its draft back.
     VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
+    rt.dispose();
+  });
+
+  test.each([
+    ["a placement this tree does not hold", "default", "gone"],
+    ["another preset's placement", "other", "vcs"],
+  ])(
+    "a configure key naming %s leaves the names view",
+    (_label, preset, id) => {
+      durable.write(SRC);
+      const rt = buildRuntime(SRC);
+      configurePlacement(rt.sessionState, SID, preset, id);
+      const text = stripAnsi(rt.render());
+      expect(text).toContain("vcs2");
+      expect(text).not.toContain("d-short-2");
+      rt.dispose();
+    },
+  );
+
+  test("every control that leaves edit mode closes the configured placement", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    // The menu's own ✎ control sits in its layout tab.
+    rt.sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
+    rt.sessionState.set(SID, "candybar.tab", "layout");
+    const leaving = linkUrls(rt.render()).filter((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+      ),
+    );
+    // ✎ done on the bar and ✎ in the menu.
+    expect(new Set(leaving).size).toBe(2);
+    for (const url of leaving) {
+      expect(
+        effectsOf(url).some(
+          (e) =>
+            e.args[1] === EDIT_CONFIGURE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+        ),
+      ).toBe(true);
+    }
     rt.dispose();
   });
 
