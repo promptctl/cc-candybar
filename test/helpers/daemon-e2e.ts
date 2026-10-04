@@ -25,6 +25,7 @@ import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { detectMementoEnv } from "../../src/memento-hint";
+import { PACKAGE_VERSION } from "../../src/version";
 export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
@@ -118,7 +119,13 @@ export function sendClick(
   const { verb, value } = parseHandlerUrl(url);
   return sendDaemonRequest(
     sockPath,
-    { v: PROTOCOL_VERSION, kind: "click", verb, value },
+    {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      verb,
+      value,
+      clientVersion: PACKAGE_VERSION,
+    },
     replyBudgetMs,
   );
 }

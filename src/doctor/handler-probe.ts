@@ -167,12 +167,21 @@ export async function probeUrlHandler(
 
 // ─── The production edge ─────────────────────────────────────────────────────
 
+// Each of the probe's three commands answers in well under a second; one that
+// has not by now (no window server to ask, as over SSH) is a failure to report.
+const SPAWN_MS = 5000;
+
 function run(
   category: LaunchCategory,
   bin: string,
   args: readonly string[],
 ): Asked<string> {
-  const result = launchSync({ bin, args: [...args], category });
+  const result = launchSync({
+    bin,
+    args: [...args],
+    category,
+    timeoutMs: SPAWN_MS,
+  });
   return result.ok
     ? ok(result.stdout)
     : failed(result.stderr.trim() || result.error || result.reason);
