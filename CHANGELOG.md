@@ -1,3 +1,10 @@
+# [1.107.0](https://github.com/promptctl/cc-candybar/compare/v1.106.0...v1.107.0) (2026-10-04)
+
+
+### Features
+
+* **site:** the live bar on GitHub Pages, replaying Claude turns ([#297](https://github.com/promptctl/cc-candybar/issues/297)) ([490d129](https://github.com/promptctl/cc-candybar/commit/490d12913e678a1c678ee589c06aebe8f8fca5d6))
+
 # [1.106.0](https://github.com/promptctl/cc-candybar/compare/v1.105.1...v1.106.0) (2026-10-04)
 
 
