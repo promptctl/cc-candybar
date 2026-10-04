@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cc-candybar live bar</title>
+<!-- xterm.js as rich-js's live terminals pin it (examples/_browser-shell/xterm.ts), plus two addons:
+     fit sizes the terminal to its frame, unicode11 counts an emoji as the two cells the daemon lays out. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
+  integrity="sha384-LJcOxlx9IMbNXDqJ2axpfEQKkAYbFjJfhXexLfiRJhjDU81mzgkiQq8rkV0j6dVh" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"
+  integrity="sha384-/nfmYPUzWMS6v2atn8hbljz7NE0EI1iGx34lJaNzyVjWGDzMv+ciUZUeJpKA3Glc" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"
+  integrity="sha384-AQLWHRKAgdTxkolJcLOELg4E9rE89CPE2xMy3tIRFn08NcGKPTsELdvKomqji+DL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-unicode11@0.6.0/lib/xterm-addon-unicode11.js"
+  integrity="sha384-TRFd6VMCxgysJR064ejrzKZhZopm7WydOdc8FpH326xQa+kikhTCovIdbypt3L+p" crossorigin="anonymous"></script>
+<style>
+  /* rich-js's Powerline subset: arrows and caps without a patched font (FONT-LICENSE). */
+  @font-face {
+    font-family: "Rich Powerline";
+    src: url("/rich-powerline.woff2") format("woff2");
+    unicode-range: U+E0A0-E0D7;
+    font-display: block;
+  }
+  :root {
+    --page: #101118; --panel: #181a24; --line: #2a2d3d; --text: #d5d8e6; --muted: #858aa3;
+    --accent: #7aa2f7; --bad: #f7768e;
+    --mono: "Rich Powerline", "JetBrains Mono", "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  header .group { display: flex; gap: 6px; align-items: center; }
+  header .label { color: var(--muted); }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #size { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  main { padding: 16px; display: grid; gap: 12px; }
+  /* Drag the frame's right edge to change the columns the bar is rendered at. */
+  #frame { resize: horizontal; overflow: hidden; width: 100%; max-width: 100%; min-width: 240px;
+           border: 1px solid var(--line); border-radius: 4px; padding: 8px; background: var(--ground); }
+  #term { width: 100%; }
+  #status { font-family: var(--mono); min-height: 1.45em; white-space: pre-wrap; word-break: break-word; }
+  #status .bad { color: var(--bad); }
+  #status .muted { color: var(--muted); }
+  details summary { cursor: pointer; color: var(--muted); }
+  .links { overflow-x: auto; }
+  table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  td { padding: 2px 12px 2px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+  td:first-child { white-space: nowrap; }
+  td button { font-family: var(--mono); font-size: 12px; padding: 0 6px; }
+  td.does { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>cc-candybar · live bar</h1>
+  <div class="group"><span class="label">columns</span>
+    <button type="button" data-cols="80">80</button>
+    <button type="button" data-cols="120">120</button>
+    <button type="button" data-cols="200">200</button>
+    <button type="button" id="fit">fit window</button>
+  </div>
+  <div class="group"><span class="label">terminal ground</span>
+    <button type="button" data-ground="dark" aria-pressed="true">dark</button>
+    <button type="button" data-ground="light">light</button>
+  </div>
+  <div class="group">
+    <button type="button" id="redraw">↻ redraw</button>
+    <button type="button" id="restart" title="A fresh daemon, session and config copy">⟲ new session</button>
+  </div>
+  <span id="size"></span>
+</header>
+<main>
+  <div id="frame"><div id="term"></div></div>
+  <div id="status"><span class="muted">Click anything in the bar. Hover a link to see what it does.</span></div>
+  <details open>
+    <summary>Every link on screen</summary>
+    <div class="links"><table><tbody id="links"></tbody></table></div>
+  </details>
+</main>
+<script>
+"use strict";
+const GROUNDS = {
+  dark: { background: "#16161e", foreground: "#c0caf5", cursor: "#16161e" },
+  light: { background: "#f4f4f7", foreground: "#343b58", cursor: "#f4f4f7" },
+};
+const frame = document.getElementById("frame");
+const status = document.getElementById("status");
+const linksBody = document.getElementById("links");
+let view = { ansi: "", links: [] };
+
+function say(text, cls) {
+  status.replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
+}
+
+const term = new Terminal({
+  fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--mono"),
+  fontSize: 14,
+  convertEol: true,
+  disableStdin: true,
+  cursorBlink: false,
+  allowProposedApi: true,
+  theme: GROUNDS.dark,
+  linkHandler: {
+    allowNonHttpProtocols: true,
+    activate: (_event, uri) => follow(uri),
+    hover: (_event, uri) => {
+      const link = view.links.find((l) => l.url === uri);
+      say(link ? `${link.text}  →  ${link.does}` : uri, "muted");
+    },
+    leave: () => {},
+  },
+});
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit);
+term.loadAddon(new Unicode11Addon.Unicode11Addon());
+term.unicode.activeVersion = "11";
+
+// The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
+// which is what caps its diagnostic strip.
+const REPORTED_ROWS = 40;
+function size() {
+  return { width: term.cols, rows: REPORTED_ROWS };
+}
+function fitCols() {
+  return fit.proposeDimensions()?.cols ?? term.cols;
+}
+
+function draw(next) {
+  view = next;
+  const lines = next.ansi.replace(/\n$/, "").split("\n");
+  term.resize(term.cols, Math.max(lines.length, 4));
+  term.reset();
+  term.write("\x1b[?25l" + lines.join("\n"));
+  document.getElementById("size").textContent = `${term.cols} columns`;
+  linksBody.replaceChildren(...next.links.map((l) => {
+    const row = document.createElement("tr");
+    const go = Object.assign(document.createElement("button"), { type: "button", textContent: l.text || "(blank)" });
+    go.addEventListener("click", () => follow(l.url));
+    const button = document.createElement("td");
+    button.append(go);
+    row.append(button, Object.assign(document.createElement("td"), { className: "does", textContent: l.does }));
+    return row;
+  }));
+}
+
+// The server answers requests one at a time, in the order they were sent, so every answer is drawn.
+async function post(route, body) {
+  try {
+    const res = await fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...size(), ...body }) });
+    const answer = await res.json();
+    if (!res.ok) { say(answer.error, "bad"); return null; }
+    draw(answer);
+    return answer;
+  } catch (e) {
+    say(`the bar server did not answer: ${e.message}. Is pnpm bar:web still running?`, "bad");
+    return null;
+  }
+}
+
+async function follow(url) {
+  // Links outside the bar's scheme are the terminal's: a page or a file opens here, never in the daemon.
+  if (!url.startsWith("cc-candybar://")) {
+    if (/^https?:/.test(url)) window.open(url, "_blank", "noopener");
+    say(`opens ${url}`, "muted");
+    return;
+  }
+  const link = view.links.find((l) => l.url === url);
+  const answer = await post("/click", { url });
+  if (answer === null) return;
+  say(answer.refused ? `${link?.text ?? url}: ${answer.refused}` : `clicked ${link?.text ?? url}`, answer.refused ? "bad" : "muted");
+}
+
+let resizeTimer;
+function refit() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const cols = fitCols();
+    if (cols === term.cols) return;
+    term.resize(cols, term.rows);
+    post("/render", {});
+  }, 120);
+}
+
+function setCols(cols) {
+  // Move the frame by whole cells, then ask the fit itself: the leftover past the last
+  // whole cell rounds with the width, so a pixel either way can gain or lose a column.
+  const cell = term.element.querySelector(".xterm-screen").getBoundingClientRect().width / term.cols;
+  let width = Math.round(frame.getBoundingClientRect().width + (cols - term.cols) * cell);
+  frame.style.width = `${width}px`;
+  for (let nudge = 0; nudge < Math.ceil(cell) && fitCols() !== cols; nudge++) {
+    width += Math.sign(cols - fitCols());
+    frame.style.width = `${width}px`;
+  }
+}
+
+document.getElementById("fit").addEventListener("click", () => { frame.style.width = "100%"; });
+document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
+  term.options.theme = GROUNDS[b.dataset.ground];
+  frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
+  document.querySelectorAll("[data-ground]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+}));
+
+// Measure cells only once the Powerline face is loaded, or the arrows are measured in a fallback.
+document.fonts.load("14px 'Rich Powerline'", "").then(() => {
+  frame.style.setProperty("--ground", GROUNDS.dark.background);
+  term.open(document.getElementById("term"));
+  term.resize(fitCols(), term.rows);
+  new ResizeObserver(refit).observe(frame);
+  // The controls that measure or draw the terminal exist only once it does.
+  document.querySelectorAll("[data-cols]").forEach((b) => b.addEventListener("click", () => setCols(Number(b.dataset.cols))));
+  document.getElementById("redraw").addEventListener("click", () => post("/render", {}));
+  document.getElementById("restart").addEventListener("click", async () => {
+    if (await post("/restart", {})) say("new session", "muted");
+  });
+  post("/render", {});
+});
+</script>
+</body>
+</html>

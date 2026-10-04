@@ -59,11 +59,13 @@ const MACHINE_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_UPDATE,
 ]);
 
-export interface BarOptions {
-  /** Terminal columns the client reports. */
+/** The terminal the client reports: columns, and rows (which cap the diagnostic strip). */
+export interface TerminalSize {
   readonly width: number;
-  /** Terminal rows the client reports (caps the diagnostic strip). */
   readonly rows: number;
+}
+
+export interface BarOptions extends TerminalSize {
   /** A config file to start from; the daemon reads and writes a copy. */
   readonly config: string | null;
   /** The session's working directory: git and the directory segment read it. */
@@ -78,6 +80,9 @@ export interface DrawnLink {
   readonly url: string;
 }
 
+/** A click on a URL the last render did not draw: the page is showing an older render. */
+export class NotDrawnError extends Error {}
+
 /**
  * What a click did: the render after it, and why it did nothing, if it did
  * nothing — the daemon refused it, or the harness did not send it.
@@ -91,11 +96,15 @@ export interface Bar {
   /** The config file the daemon reads and every durable click writes. */
   readonly configPath: string;
   render(): Promise<string>;
+  /** Report a new terminal size; every render after it is drawn at that size. */
+  resize(size: TerminalSize): void;
   /**
    * Click the `nth` (from 1) link of the last render whose visible text is
    * `text`, then render again.
    */
   click(text: string, nth?: number): Promise<Clicked>;
+  /** Click the link of the last render that carries `url`, then render again. */
+  follow(url: string): Promise<Clicked>;
   stop(): void;
 }
 
@@ -193,6 +202,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
   }
   const sockPath = daemonEnv.sockPath;
   let last = "";
+  let size: TerminalSize = { width: opts.width, rows: opts.rows };
 
   const render = async (): Promise<string> =>
     (last = await renderRequest(
@@ -201,8 +211,8 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
         hookData: hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
         args: ["cc-candybar", "--config", configPath],
         cwd: opts.cwd,
-        termCols: opts.width,
-        termRows: opts.rows,
+        termCols: size.width,
+        termRows: size.rows,
         ssh: opts.ssh,
         claudeConfigDir,
       },
@@ -218,15 +228,29 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
           drawn.map((l) => JSON.stringify(l.text)).join(" "),
       );
     }
+    return send(hit);
+  };
+
+  // A URL is followed only if the last render drew it: a page showing an older
+  // render would otherwise click what the bar no longer offers.
+  const follow = async (url: string): Promise<Clicked> => {
+    const hit = drawnLinks(last).find((l) => l.url === url);
+    if (hit === undefined) {
+      throw new NotDrawnError(`the last render drew no link to ${url}; render again and click what it drew`);
+    }
+    return send(hit);
+  };
+
+  const send = async (hit: DrawnLink): Promise<Clicked> => {
     if (!isBarLink(hit.url)) {
-      throw new Error(`"${text}" opens ${hit.url}: the terminal's click, not the daemon's`);
+      throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
     if (effectsOf(hit.url).some(({ verb }) => MACHINE_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
     const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);
     if (!resp.ok && resp.code === "TIMEOUT") {
-      throw new Error(`"${text}" timed out: whether it landed is unknown (${resp.error})`);
+      throw new Error(`"${hit.text}" timed out: whether it landed is unknown (${resp.error})`);
     }
     return {
       refused: resp.ok ? null : `${resp.error} (${resp.code})`,
@@ -237,7 +261,11 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
   return {
     configPath,
     render,
+    resize: (next) => {
+      size = next;
+    },
     click,
+    follow,
     stop: () => {
       daemon.killTree();
       removeDirs();
