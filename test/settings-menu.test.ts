@@ -514,7 +514,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
       expect(openBg).toBeDefined();
       expect(closedBgs).not.toContain(openBg);
       // The body is the open tab's: its first control, and no other tab's.
-      const marker = { session: "⎘ id", look: "◐ ", layout: "✎ arrange", config: "🔣 ", tools: "🩺 doctor" };
+      const marker = { session: "⎘ id", look: "◐ ", layout: "✎ arrange", config: "update notice", tools: "🩺 doctor" };
       for (const tab of TABS) {
         expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
       }

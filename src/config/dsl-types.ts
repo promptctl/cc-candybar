@@ -539,8 +539,7 @@ export interface Globals {
   // caps, U+E0Bx). "ascii" swaps the caps for single-column ASCII glyphs so
   // terminals/fonts without powerline glyphs render cleanly instead of tofu.
   // Orthogonal to `endcaps`: endcaps pick the joiner shape, charset the glyphs.
-  // The config default under a session pick — `effectiveCharset` resolves
-  // both into renderOpts.charset.
+  // Set only in the config file: it has no session pick.
   readonly charset?: Charset;
 
   // Which theme role each ROW of the closed bar wears, in order — a named
@@ -565,8 +564,7 @@ export interface Globals {
   // legacy "auto" default, which would change rendering for existing users).
   // The type excludes "auto" entirely: the daemon is detached, so env
   // detection would read the wrong terminal — see COLOR_COMPATIBILITIES.
-  // The config default under a session pick — `effectiveColorCompatibility`
-  // resolves both into renderOpts.colorCompatibility.
+  // Set only in the config file: it has no session pick.
   readonly colorCompatibility?: ColorCompatibility;
 }
 

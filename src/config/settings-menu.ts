@@ -308,8 +308,6 @@ const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
   endcaps: "look",
   autoWrap: "layout",
   padding: "layout",
-  charset: "config",
-  colorCompatibility: "config",
   updateNotice: "config",
 };
 const controlsAt = (place: "door" | TabName): LayoutNode[] =>

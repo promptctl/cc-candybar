@@ -36,6 +36,7 @@ import {
   perConfigDomainsFor,
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
+import { CONFIG_ONLY_KEYS } from "../setting-projections.js";
 import {
   isExpression,
   isEndcaps,
@@ -194,6 +195,13 @@ export function validateCrossReferences(
   // the bundled stdlib.
   const optionDomains = perConfigDomainsFor(cfg);
   for (const [name, a] of Object.entries(cfg.actions)) {
+    if ("set" in a && CONFIG_ONLY_KEYS.has(a.set)) {
+      ctx.issues.push({
+        path: `actions.${name}.set`,
+        message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
+        line: findKeyLine(ctx.source, ["actions", name, "set"]),
+      });
+    }
     if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
     if (!knownOptionDomainNames(optionDomains).includes(a.from)) {
       ctx.issues.push({

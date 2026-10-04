@@ -50,7 +50,7 @@ Configuration:
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
   preset switching and five tabs: ⚡ session (quick actions and commands),
   🎨 look (theme/style/variation/endcaps), 📐 layout (new preset, edit mode,
-  wrap, padding), ⚙ config (charset, colour depth, update notice) and
+  wrap, padding), ⚙ config (update notice) and
   🧰 tools. A change applies to this session at once; 💾 save appears while
   you have unsaved changes and writes them to your config file.
   The 🧰 tools tab holds 🩺 doctor: click it to check your setup, and click a

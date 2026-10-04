@@ -39,12 +39,12 @@ import {
   type StyleSelection,
   effectivePadding,
   effectiveEndcaps,
-  effectiveCharset,
-  effectiveColorCompatibility,
   effectiveVariation,
   effectiveUpdateNotice,
   EXPRESSION_SLOTS,
   isExpression,
+  DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -88,11 +88,9 @@ import type { VariationName } from "../themes/decor.js";
 // BuildLineOptions), so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
 // theme/style already followed, generalized to every globals field a menu or
-// stepper can persist. Every one of them composes SessionState over the config
-// default (a session pick can diverge from the persisted default for its own
-// session) — `charset` and `colorCompatibility` included, because a session
-// runs in one terminal and those two describe it (see CHARSETS in
-// themes/policy.ts).
+// stepper can persist. Those with a session pick compose it over the config
+// default; `charset`, `colorCompatibility` and `separator` have none and
+// resolve from the config alone (see resolveEffectiveGlobals).
 export interface EffectiveGlobals {
   // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
   // (brandon-themes-dzl) — `style`'s twin one dimension over, and for the same
@@ -211,9 +209,10 @@ export function resolveEffectiveGlobals(
       sessionPick("variation"),
       globals.variation,
     ),
-    // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
-    // `staged ?? config ?? floor` — the same chain minus the rung they do not
-    // have, spelled with the same `??` rather than a second mechanism.
+    // [LAW:one-source-of-truth] The fields with no SessionState half (this one,
+    // charset, colorCompatibility) resolve as `staged ?? config ?? floor` — the
+    // same chain minus the rung they do not have, spelled with the same `??`
+    // rather than a second mechanism.
     separator: staged.default_separator ?? globals.default_separator,
     autoWrap: effectiveAutoWrap(
       staged.autoWrap,
@@ -225,21 +224,16 @@ export function resolveEffectiveGlobals(
       sessionPick("padding"),
       globals.padding,
     ),
-    charset: effectiveCharset(
-      staged.charset,
-      sessionPick("charset"),
-      globals.charset,
-    ),
+    charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
     updateNotice: effectiveUpdateNotice(
       staged.updateNotice,
       sessionPick("updateNotice"),
       globals.updateNotice,
     ),
-    colorCompatibility: effectiveColorCompatibility(
-      staged.colorCompatibility,
-      sessionPick("colorCompatibility"),
-      globals.colorCompatibility,
-    ),
+    colorCompatibility:
+      staged.colorCompatibility ??
+      globals.colorCompatibility ??
+      DEFAULT_COLOR_COMPATIBILITY,
   };
 }
 

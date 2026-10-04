@@ -82,7 +82,7 @@ declares exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
+| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -268,8 +268,8 @@ click still carries the session id, for error-surfacing — every config has
 
 ### Drafts and `save`
 
-A setting the menu offers — theme, style, variation, endcaps, charset, colour
-depth, wrap, padding, preset — is a **draft** while the bar your session
+A setting the menu offers — theme, style, variation, endcaps, wrap, padding,
+preset — is a **draft** while the bar your session
 renders differs from the bar your config file renders on its own. Nothing
 records that: the daemon compares the two on every render and publishes how
 many differ as the payload input `unsaved`. Pick a value and then pick your
@@ -427,21 +427,23 @@ a different thing: it writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
 something newer appears.
 
-`charset`, `colorCompatibility`, `autoWrap` and `padding` each have a session
-half, because each describes the terminal a session runs in — whether its font
-carries the powerline glyphs, how many colours it draws (a pane inside tmux can
-draw 256 while its neighbour draws truecolor), how much bar fits in it — and
-two sessions on one machine can sit in two different terminals. Both spellings
-are available for them: `persist:` writes the durable default every session
-sees, `set:` writes only the clicking session's. `charsets` and
+`autoWrap` and `padding` each have a session half, because each describes how
+much bar fits in the terminal a session runs in, and two sessions on one
+machine can sit in two different terminals. Both spellings are available for
+them: `persist:` writes the durable default every session sees, `set:` writes
+only the clicking session's. `charset` and `colorCompatibility` have no session
+half: they are set in the config file, so `persist:` is their only click, and a
+`set` on either key is a load error (it would write a session value no render
+reads). `charsets` and
 `colorCompatibilities` are registered domains exactly like `themes`/`endcaps`,
 sourced from the same enums the loader validates `globals.charset` and
 `globals.colorCompatibility` against, so there is no second list to drift out of
 sync. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is a
 bounded range, so it takes a stepper pair — neither needs a registered domain.
 
-They resolve like every other pickable global: **the session's own pick, over
-the persisted default, over the config file's value, over the built-in floor.**
+`autoWrap` and `padding` resolve like every other pickable global: **the
+session's own pick, over the persisted default, over the config file's value,
+over the built-in floor.**
 A session value outside the field's domain — a stale entry from when the range
 or vocabulary was wider — is treated as no session value at all and falls
 through to the default, rather than throwing or rendering something the label
@@ -764,7 +766,7 @@ each shown only while it has a step to take.
 A step is one click. A click that writes several things — a save and the
 session picks it releases — is one step, undone together. What counts as
 a settings change is a session pick of a setting the menu offers (theme,
-style, variation, endcaps, charset, colour depth, wrap, padding, preset) and
+style, variation, endcaps, wrap, padding, preset) and
 every write to a config file; opening a menu or paging a picker is not, so
 undo never walks back through navigation. A click that changes nothing (a
 pick of the value already in place) records no step.
@@ -1163,7 +1165,8 @@ it, so the segment tracks the bundled declaration again.
 
 A segment's `palette:` has no SessionState half — `persist` is its only seam,
 so there is no session `set` twin to pair it with. (The display globals
-`charset`, `colorCompatibility`, `autoWrap` and `padding` do have one.)
+`autoWrap` and `padding` do have one; `charset` and `colorCompatibility` do
+not, and a `set` on either is a load error.)
 
 ### The global settings menu: `candybar.menu`
 
@@ -1225,15 +1228,16 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   made it (see "Save as preset" above).
 - **`🎨 look`** holds theme, style, variation and endcaps; **`📐 layout`**
   holds `+ preset`, which keeps the bar as a new preset and switches to it,
-  `✎ arrange`, wrap and padding; **`⚙ config`** holds the rest: charset (the
-  joiner glyphs: `unicode` or `ascii`), colour depth (`truecolor`, `256`,
-  `ansi`, `none`) and the update notice. Every setting is ONE control, in
+  `✎ arrange`, wrap and padding; **`⚙ config`** holds the update notice.
+  Every setting is ONE control, in
   exactly one tab, each with a `↺` that forgets its durable default. The
   controls are generated from the `globals` declarations: a field with a list
   of values gets a carousel, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
-  `menuGlyph` are free text and are set in the config file only.
+  `menuGlyph` are free text and are set in the config file only, as are
+  `charset` (the joiner glyphs: `unicode` or `ascii`) and `colorCompatibility`
+  (`truecolor`, `256`, `ansi`, `none`), which have no control at all.
 - **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). The
   menu stays open, so `◁ back` and the tabs stay in reach while you arrange.
 - **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
@@ -1495,7 +1499,7 @@ segment sits.
 
 The apply action must hold a value to centre on: a `{ set, from }` action
 whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `style`,
-`preset`, `endcaps`, `variation`, `charset`, `colorCompatibility`, `autoWrap`, `padding` —
+`preset`, `endcaps`, `variation`, `autoWrap`, `padding` —
 needs no `state` variable: it reads back through its `.effective` projection
 (`theme.effective`), which wins over a `state` variable on the same key, so the
 centre is the value the bar is rendering with even before the session picks

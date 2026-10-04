@@ -73,8 +73,6 @@ const SPELLING: {
   style: (e) => (e.style.kind === "decided" ? e.style.name : null),
   endcaps: (e) => e.endcaps,
   variation: (e) => e.variation,
-  charset: (e) => e.charset,
-  colorCompatibility: (e) => e.colorCompatibility,
   autoWrap: (e) => (e.autoWrap ? BOOLEAN_TRUE : BOOLEAN_FALSE),
   padding: (e) => String(e.padding),
   updateNotice: (e) => (e.updateNotice ? BOOLEAN_TRUE : BOOLEAN_FALSE),
