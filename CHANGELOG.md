@@ -1,3 +1,10 @@
+## [1.108.1](https://github.com/promptctl/cc-candybar/compare/v1.108.0...v1.108.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **daemon:** memento and the today seed read the session's Claude Code, not the daemon's env ([#299](https://github.com/promptctl/cc-candybar/issues/299)) ([65ea906](https://github.com/promptctl/cc-candybar/commit/65ea9060c93efdeb26f00a02889d84621a2b01eb))
+
 # [1.108.0](https://github.com/promptctl/cc-candybar/compare/v1.107.0...v1.108.0) (2026-10-04)
 
 
