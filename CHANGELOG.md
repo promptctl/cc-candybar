@@ -1,3 +1,10 @@
+# [1.111.0](https://github.com/promptctl/cc-candybar/compare/v1.110.0...v1.111.0) (2026-10-04)
+
+
+### Features
+
+* **theme:** the alt variation turns the hue every three cells along a row ([#303](https://github.com/promptctl/cc-candybar/issues/303)) ([c0e45ec](https://github.com/promptctl/cc-candybar/commit/c0e45ec0ab00d2b7b1e4594146d9d27188186a02))
+
 # [1.110.0](https://github.com/promptctl/cc-candybar/compare/v1.109.1...v1.110.0) (2026-10-04)
 
 
