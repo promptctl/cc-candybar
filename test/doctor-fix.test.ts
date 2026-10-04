@@ -19,7 +19,9 @@ const NO_TMUX: DoctorEdge = {
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
+  loadConfig: () => ({ path: null, error: null, warning: null, unused: [] }),
 };
+const ORIGIN = { projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null };
 
 let dir: string;
 beforeEach(() => {
@@ -44,7 +46,7 @@ const factsIn = (
   conf: string,
   tmux: ClientHints["tmux"],
   edge: DoctorEdge = NO_TMUX,
-) => gatherFacts(edge, { tmux, claudeConfigDir: conf });
+) => gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN);
 // Outside tmux: the settings half alone.
 const factsOf = (conf: string) => factsIn(conf, null);
 
@@ -166,6 +168,7 @@ describe("gatherFacts", () => {
         asked.push(hint);
         return { kind: "ok", value: ["osc7", "RGB"] };
       },
+      loadConfig: NO_TMUX.loadConfig,
     };
     expect(factsIn(absent, HINT, edge).tmux).toEqual({
       kind: "inside",

@@ -252,6 +252,33 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
 }
 
 /**
+ * The config files that exist at a LATER location of the search order than
+ * the one the search stops at: a user config behind a project one, say. Only
+ * the first file found is read — files never merge with each other — so each
+ * of these is a config the bar ignores entirely (brandon-doctor-v62x.e91).
+ * The winner's same-location sibling is the extension collision below, not a
+ * shadowed location, and an explicit `configFile` bypasses the chain, so it
+ * shadows nothing.
+ *
+ * [LAW:single-enforcer] The same enumerator and the same presence probe the
+ * resolver folds over, so "found first" here is the file the resolver loads.
+ */
+export function shadowedConfigs(
+  projectDir?: string,
+  cwd?: string,
+  configFile?: string,
+): readonly string[] {
+  const [winner, ...behind] = dslConfigCandidatePaths(
+    projectDir,
+    cwd,
+    configFile,
+  ).filter((candidate) => presence(candidate) === "present");
+  return winner === undefined
+    ? []
+    : behind.filter((p) => path.dirname(p) !== path.dirname(winner));
+}
+
+/**
  * Detect same-location extension collisions: any location where BOTH
  * `<base>.json5` and `<base>.json` exist simultaneously. The resolver picks
  * .json5 (documented format wins), but the user almost certainly didn't

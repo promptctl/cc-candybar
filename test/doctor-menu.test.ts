@@ -34,7 +34,7 @@ import {
 import { VERBS, SESSION_CLIENT_HINTS_KEY, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
-import type { DoctorEdge } from "../src/doctor/edge";
+import type { ConfigLoad, DoctorEdge } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
@@ -68,7 +68,14 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function buildRuntime(tmux: TmuxHint | null) {
+const CLEAN_LOAD: ConfigLoad = {
+  path: null,
+  error: null,
+  warning: null,
+  unused: [],
+};
+
+function buildRuntime(tmux: TmuxHint | null, load: ConfigLoad = CLEAN_LOAD) {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['directory', 'model'] } }`,
@@ -99,10 +106,13 @@ function buildRuntime(tmux: TmuxHint | null) {
       probes += 1;
       return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
     },
+    loadConfig: () => load,
   };
+  const logs: string[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, config),
     doctor,
+    dlog: (_level, message) => logs.push(message),
   };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
@@ -142,6 +152,7 @@ function buildRuntime(tmux: TmuxHint | null) {
     clickVerb,
     urlOfVerb,
     openTools,
+    logs,
     probes: () => probes,
   };
 }
@@ -166,16 +177,43 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const lines = rt.render().split("\n");
     const toolsRow = lines.findIndex((l) => l.includes("▾ 🧰 tools"));
     expect(toolsRow).toBeGreaterThanOrEqual(0);
-    // A vertical body: the button on one row, the report on the next — a long
-    // reason never widens the settings band it hangs from.
+    // A vertical body: the button on one row, then one row per check in
+    // CHECKS order — a long reason never widens the settings band it hangs from.
     expect(lines[toolsRow + 1]).toContain("🩺 doctor");
     // The tools body leads with one ✕ (brandon-disclosure-43z), on its first
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
     expect(lines[toolsRow + 1]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
-    const report = lines[toolsRow + 2]!;
-    expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
-    expect(report).toContain("✗ tmux truecolor");
+    const reports = lines.slice(toolsRow + 2, toolsRow + 4);
+    for (const report of reports) {
+      expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
+    }
+    expect(reports[0]).toContain("✓ config");
+    expect(reports[1]).toContain("✗ tmux truecolor");
+  });
+
+  // brandon-doctor-v62x.e91: the config check's row, and the run's log line
+  // carrying each check's verdict and how many problems a failed one found.
+  test("a config with problems: its row names the first and counts the rest, with no [fix]", () => {
+    const rt = buildRuntime(null, {
+      ...CLEAN_LOAD,
+      path: "/p/.cc-candybar.json5",
+      unused: [
+        { kind: "variable", name: "v" },
+        { kind: "action", name: "a" },
+      ],
+    });
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    const out = rt.render();
+    expect(out).toContain(
+      '✗ config — variable "v" is never read (+1 more — run `cc-candybar doctor`)',
+    );
+    expect(out).toContain("✓ tmux truecolor");
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
+    expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
+      "doctor: config=failed(2) tmuxTruecolor=ok (session=s1)",
+    ]);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {

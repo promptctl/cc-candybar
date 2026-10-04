@@ -1067,13 +1067,17 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : "failed"}`).join(" ")} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} (session=${sid})`,
   );
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  writeReport(ctx, sid, gatherFacts(ctx.doctor, sessionHints(ctx, sid)));
+  writeReport(
+    ctx,
+    sid,
+    gatherFacts(ctx.doctor, sessionHints(ctx, sid), sessionOrigin(ctx, sid)),
+  );
 };
 
 // Re-probe THIS check at click time and perform the fix its fresh verdict
@@ -1089,7 +1093,11 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid));
+  const facts = gatherFacts(
+    ctx.doctor,
+    sessionHints(ctx, sid),
+    sessionOrigin(ctx, sid),
+  );
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(

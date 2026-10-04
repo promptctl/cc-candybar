@@ -111,7 +111,7 @@ Charset and colour depth go: "you can just remove 'charset' and 'colordepth' com
 
 ## Doctor checks
 
-Today the doctor has one check, tmux truecolor. "doctor has nothing to do with compatibility. we just haven't added any additional checks to it yet."
+The doctor began with one check, tmux truecolor. "doctor has nothing to do with compatibility. we just haven't added any additional checks to it yet."
 
 From Brandon:
 

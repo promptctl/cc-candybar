@@ -38,6 +38,14 @@ export function doctorReportKeys(checkName: string): ReportKeys {
   };
 }
 
+// The bar's row has room for one problem: it names the first and counts the
+// rest, pointing at the surface that lists them.
+function rowReason(reason: string, more: readonly string[] = []): string {
+  return more.length === 0
+    ? reason
+    : `${reason} (+${more.length} more — run \`cc-candybar doctor\`)`;
+}
+
 // [LAW:dataflow-not-control-flow] One fold from reports to the pairs a single
 // setBatch commits — every key written on every run, so a check that was
 // failed and is now ok has its reason and fixable cleared by the same write
@@ -55,7 +63,7 @@ export function doctorReportPairs(
         ]
       : [
           { key: keys.verdict, value: VERDICT_FAILED },
-          { key: keys.reason, value: verdict.reason },
+          { key: keys.reason, value: rowReason(verdict.reason, verdict.more) },
           {
             key: keys.fixable,
             value: verdict.fix === undefined ? BOOLEAN_FALSE : BOOLEAN_TRUE,

@@ -278,6 +278,23 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
+// [LAW:single-enforcer] Every declared helper a template CALLS — directly, or
+// through a helper it calls — as one more fold over the call-graph walk. Read
+// off the calls rather than off the blocks a helper yields, so a helper with
+// an empty body is still called.
+export function templateHelperRefs(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): ReadonlySet<string> {
+  const called = new Set<string>();
+  for (const { code, dot, root } of callGraphBlocks(template, helpers)) {
+    for (const { name } of helperCalls(code, dot, root)) {
+      if (Object.hasOwn(helpers, name)) called.add(name);
+    }
+  }
+  return called;
+}
+
 // [LAW:types-are-the-program] What a template reference resolves against:
 // the declared variable NAMES (exactly the keys the runtime store holds) and,
 // among them, the DOCUMENTS — `parse: { json }` sources whose fields are a
