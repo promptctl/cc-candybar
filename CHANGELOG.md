@@ -1,3 +1,10 @@
+# [1.106.0](https://github.com/promptctl/cc-candybar/compare/v1.105.1...v1.106.0) (2026-10-04)
+
+
+### Features
+
+* **bar:** pnpm bar:web, the live bar in a browser terminal you can click ([#296](https://github.com/promptctl/cc-candybar/issues/296)) ([c479bb3](https://github.com/promptctl/cc-candybar/commit/c479bb3629c24ba8e770f464879fbec33b0fc885))
+
 ## [1.105.1](https://github.com/promptctl/cc-candybar/compare/v1.105.0...v1.105.1) (2026-10-03)
 
 
