@@ -1,3 +1,10 @@
+# [1.114.0](https://github.com/promptctl/cc-candybar/compare/v1.113.2...v1.114.0) (2026-10-04)
+
+
+### Features
+
+* **menu:** every option setting is ◀ value ▶, the value opening a plain list ([#308](https://github.com/promptctl/cc-candybar/issues/308)) ([c14bd8d](https://github.com/promptctl/cc-candybar/commit/c14bd8d9d60cf6d1f3a86453d7d3c0ccf990cbce))
+
 ## [1.113.2](https://github.com/promptctl/cc-candybar/compare/v1.113.1...v1.113.2) (2026-10-04)
 
 
