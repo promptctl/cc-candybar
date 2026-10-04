@@ -20,8 +20,8 @@ import {
   ENDCAPS_SHAPES,
 } from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
+import { configOptionDomains } from "../../config/edit-chrome";
 import {
-  perConfigDomainsFor,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../../config/option-domain";
@@ -204,7 +204,7 @@ export function stateKeySeed(
 // need, DERIVED from the action table — the same declarations the
 // `{{ action }}` fn realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
-  const perConfigDomains = perConfigDomainsFor(config);
+  const perConfigDomains = configOptionDomains(config);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>
       actionKeySpecs(a, perConfigDomains),

@@ -34,10 +34,10 @@ import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
   unknownOptionDomain,
-  perConfigDomainsFor,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../option-domain.js";
+import { configOptionDomains } from "../edit-chrome.js";
 import { listGlobalsFieldNames, settingControlDomain } from "./globals.js";
 import {
   CONFIG_ONLY_KEYS,
@@ -205,7 +205,7 @@ export function validateCrossReferences(
   // to resolve. Runs post-merge for the same reason globals.style does above:
   // "styles" isn't fully known until the user's styles: block has merged onto
   // the bundled stdlib.
-  const optionDomains = perConfigDomainsFor(cfg);
+  const optionDomains = configOptionDomains(cfg);
   const knownDomains = knownOptionDomainNames(optionDomains);
   for (const [name, a] of Object.entries(cfg.actions)) {
     // Every arm that draws from a domain — set, persist, insertSegmentFrom —

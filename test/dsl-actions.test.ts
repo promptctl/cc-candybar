@@ -680,6 +680,20 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
   });
 
+  test("a `from` over the addable segments loads, as it renders", () => {
+    // The loader checks a domain name against the map the render and the
+    // click gates resolve it through, so it never refuses a name they draw from.
+    const src = `{
+      actions: {
+        add: { persist: 'presets.default.root', insertSegmentFrom: 'edit.addable', anchor: 'bar', relation: 'after' },
+        pick: { set: 'k', from: 'edit.addable' },
+      },
+      segments: { bar: { template: 'x' } },
+      root: 'bar',
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
+  });
+
   test("two of set/copy/open is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v', copy: 'x' } }`),

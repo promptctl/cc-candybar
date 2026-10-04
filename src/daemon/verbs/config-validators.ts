@@ -12,11 +12,10 @@
 
 import type { ActionDecl } from "../../config/action";
 import {
-  perConfigDomainsFor,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../../config/option-domain";
-import { addableSegmentDomains } from "../../config/edit-chrome";
+import { configOptionDomains } from "../../config/edit-chrome";
 import type { DslConfig, Globals } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { encodeLayoutOp } from "../../config/layout-ops";
@@ -189,16 +188,7 @@ function clearableContributions(config: DslConfig): KeySpecContribution[] {
 }
 
 function actionContributions(config: DslConfig): KeySpecContribution[] {
-  // [LAW:one-source-of-truth] The "addable segment" domains
-  // (edit-chrome.ts's `addableSegmentDomains`) merge in here alongside
-  // styles/presets — the same per-preset seam `insertSegmentFrom` resolves
-  // through at render (render.ts's registerDslConfig merges the identical
-  // map), so the rendered picker options and the derived click gate can
-  // never diverge over what's addable.
-  const perConfigDomains = new Map([
-    ...perConfigDomainsFor(config),
-    ...addableSegmentDomains(config),
-  ]);
+  const perConfigDomains = configOptionDomains(config);
   return [
     ...clearableContributions(config),
     ...Object.values(config.actions).flatMap((a) =>

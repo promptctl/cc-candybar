@@ -29,7 +29,6 @@ import {
   parseSettingSpelling,
   settingsOf,
 } from "../config/dsl-types.js";
-import { perConfigDomainsFor } from "../config/option-domain.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import {
   PRESET_FLOOR,
@@ -37,10 +36,7 @@ import {
   presetNames,
   presetRoot,
 } from "../config/presets.js";
-import {
-  addableSegmentDomains,
-  arrangedSegment,
-} from "../config/edit-chrome.js";
+import { configOptionDomains, arrangedSegment } from "../config/edit-chrome.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -487,22 +483,14 @@ export function registerDslConfig(
   };
   // [LAW:one-source-of-truth] The config's style names — the one PER-CONFIG
   // option domain. Fed to every consumer (the `styles()` binding below, and —
-  // via perConfigDomainsFor, the SAME construction cross-ref.ts and
-  // state-validators.ts use — the compiled set-option domains), so the
+  // via configOptionDomains, the SAME map cross-ref.ts and both gates
+  // use — the compiled set-option domains), so the
   // rendered options, a hand-authored `range styles`, and the derived click
   // gate (which reads the same config in deriveActionValidators) trace to
   // one source.
   const styleNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
-  // [LAW:one-source-of-truth] The "addable segment" per-preset domains merge
-  // in here — the SAME map config-validators.ts's deriveConfigActionValidators
-  // merges — so a synthesized `insertSegmentFrom` action's rendered options
-  // and its derived click gate resolve from one source, never two
-  // independently-computed sets.
-  const perConfigDomains = new Map([
-    ...perConfigDomainsFor(config),
-    ...addableSegmentDomains(config),
-  ]);
+  const perConfigDomains = configOptionDomains(config);
   const engine = createCcCandybarEngine(
     {
       ...actionFuncs(actionRuntime),
