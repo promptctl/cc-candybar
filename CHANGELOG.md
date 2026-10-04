@@ -1,3 +1,10 @@
+# [1.108.0](https://github.com/promptctl/cc-candybar/compare/v1.107.0...v1.108.0) (2026-10-04)
+
+
+### Features
+
+* **menu:** charset and colour depth leave the settings menu ([#298](https://github.com/promptctl/cc-candybar/issues/298)) ([57c9603](https://github.com/promptctl/cc-candybar/commit/57c96030a8d29695756f562454bd43ea300f772e))
+
 # [1.107.0](https://github.com/promptctl/cc-candybar/compare/v1.106.0...v1.107.0) (2026-10-04)
 
 
