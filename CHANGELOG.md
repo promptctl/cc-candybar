@@ -1,3 +1,10 @@
+## [1.116.1](https://github.com/promptctl/cc-candybar/compare/v1.116.0...v1.116.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **config:** the style/endcaps rename leaves no stale surface ([#315](https://github.com/promptctl/cc-candybar/issues/315)) ([981f2c5](https://github.com/promptctl/cc-candybar/commit/981f2c525af514c0c196876fb70d896422a11a5d))
+
 # [1.116.0](https://github.com/promptctl/cc-candybar/compare/v1.115.1...v1.116.0) (2026-10-04)
 
 
