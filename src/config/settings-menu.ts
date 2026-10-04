@@ -74,6 +74,8 @@ import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
+import { autocompactControl } from "./autocompact-control.js";
+import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import {
@@ -105,6 +107,11 @@ const TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
 const TOOLBAR = quickActions(SETTINGS_NS);
 const COMMANDS_SEG = `${SETTINGS_NS}commands`;
 const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
+const AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
+const AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+
+// A reference to one of the menu's segments.
+const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 
 // ─── The tabs (brandon-menu-tabs-wnu.qqz) ───────────────────────────────────
 //
@@ -428,7 +435,7 @@ const controlRef = (name: string): DisclosureRef => ({
 function controlNode(c: MenuControl): LayoutNode {
   const self = controlSeg(c.name);
   return c.control.kind === "inline"
-    ? { kind: "segment", name: self }
+    ? seg(self)
     : disclosureNode(
         self,
         controlRef(c.name),
@@ -436,7 +443,7 @@ function controlNode(c: MenuControl): LayoutNode {
           kind: "container",
           direction: "vertical",
           children: [
-            { kind: "segment", name: controlCarousel(c.name) },
+            seg(controlCarousel(c.name)),
             ...c.beneath.map(
               (_, row): LayoutNode => ({
                 kind: "segment",
@@ -488,7 +495,7 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 // never inherits the author's gate. A gated row is led from outside its gate,
 // on the same line. A gated stack gets the door on its own row above it.
 function prependAnchor(node: LayoutNode): LayoutNode {
-  const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
+  const anchorRef: LayoutNode = seg(SETTINGS_ANCHOR);
   if (node.kind === "container" && node.direction === "vertical") {
     const [first, ...rest] = node.children;
     return node.when === undefined && first !== undefined
@@ -549,27 +556,37 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 // controls, so `PLACE` naming any tab is a placement the bar renders.
 interface TabBody {
   readonly direction: ContainerNode["direction"];
-  readonly segments: readonly string[];
+  readonly content: readonly LayoutNode[];
 }
 const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
-  session: { direction: "vertical", segments: [TOOLBAR_SEG, COMMANDS_SEG] },
-  look: { direction: "horizontal", segments: [] },
-  layout: { direction: "horizontal", segments: [PRESET_SAVE, EDIT_SEG] },
-  config: { direction: "horizontal", segments: [] },
+  // The quick actions, then the commands typed into Claude Code beside the
+  // auto-compact window they would summarize at.
+  session: {
+    direction: "vertical",
+    content: [
+      seg(TOOLBAR_SEG),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)],
+      },
+    ],
+  },
+  look: { direction: "horizontal", content: [] },
+  layout: {
+    direction: "horizontal",
+    content: [seg(PRESET_SAVE), seg(EDIT_SEG)],
+  },
+  config: { direction: "horizontal", content: [] },
   tools: {
     direction: "vertical",
-    segments: [DOCTOR_SEG, ...CHECKS.map((c) => doctorRowSeg(c.name))],
+    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
   },
 };
 const tabBody = (tab: TabName): ContainerNode => ({
   kind: "container",
   direction: TAB_CONTENT[tab].direction,
-  children: [
-    ...TAB_CONTENT[tab].segments.map(
-      (name): LayoutNode => ({ kind: "segment", name }),
-    ),
-    ...controlsAt(tab),
-  ],
+  children: [...TAB_CONTENT[tab].content, ...controlsAt(tab)],
 });
 
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
@@ -603,11 +620,7 @@ function doorBody(): ContainerNode {
       {
         kind: "container",
         direction: "horizontal",
-        children: [
-          { kind: "segment", name: BACK_SEG },
-          ...controlsAt("door"),
-          { kind: "segment", name: SAVE_SEG },
-        ],
+        children: [seg(BACK_SEG), ...controlsAt("door"), seg(SAVE_SEG)],
       },
       {
         kind: "container",
@@ -694,6 +707,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [EDIT_SEG]: { do: [...EDIT_SWITCH] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
+      ...AUTOCOMPACT.actions,
       [SAVE_SEG]: { save: true },
       [UNDO_ACTION]: { undo: true },
       // [LAW:composability] Going back can reopen a view a confirm sits in, so
@@ -730,6 +744,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template, when: COMMANDS.when },
+      [AUTOCOMPACT_SEG]: {
+        template: AUTOCOMPACT.template,
+        bg: AUTOCOMPACT.bg,
+        when: AUTOCOMPACT.when,
+      },
       [BACK_SEG]: BACK_CELL,
       [SAVE_SEG]: SAVE_CELL,
       [PRESET_SAVE]: {

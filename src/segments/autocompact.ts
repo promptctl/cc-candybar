@@ -16,9 +16,9 @@ import { readClaudeSettings } from "../claude-settings.js";
 import { failed, ok, type Outcome } from "../utils/outcome.js";
 
 // The windows the bar offers: Claude Code's whole accepted range, in the 100K
-// steps its controls move by. Each is one declared `slash` action
-// (src/config/default-dsl-config.ts), so these are also the only lines a click
-// on the control can type.
+// steps its controls move by. Each is one declared `slash` action per
+// instance of the control (src/config/autocompact-control.ts), so these are
+// also the only lines a click on it can type.
 export const AUTOCOMPACT_WINDOWS: readonly number[] = Array.from(
   { length: 10 },
   (_, i) => (i + 1) * 100_000,

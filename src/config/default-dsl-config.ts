@@ -31,11 +31,11 @@
 import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
-import { IN_TMUX, PAYLOAD_INPUTS } from "./payload-inputs.js";
+import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
-import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
-import { slashLine } from "../claude-input/slash-line.js";
+import { autocompactControl } from "./autocompact-control.js";
+import { formatTokenCount } from "./format-token-count.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
 // same one the renderer holds chosen text to (textOn).
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
@@ -44,6 +44,10 @@ import { QUIET_TEXT } from "./quiet-text.js";
 // The bundled `commands` segment's instance, under names no user config
 // spells by accident.
 const COMMAND_TRAY = commandTray("commands.");
+const AUTOCOMPACT = autocompactControl(
+  "autocompact.",
+  (n) => `{{ template "formatTokenCount" ${n} }}`,
+);
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -503,36 +507,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     "memento.session": { kind: "input", path: "memento.session", default: "" },
     "memento.error": { kind: "input", path: "memento.error", default: "" },
 
-    // Claude Code's auto-compact window as its `/autocompact` last wrote it
-    // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
-    // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
-    // to the model's context window; `lower`/`higher` are the windows − and +
-    // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
-    // settings file the daemon could not read, and the only field set when it
-    // is.
-    "autocompact.window": {
-      kind: "input",
-      path: "autocompact.window",
-      type: "number",
-      default: -1,
-    },
-    ...Object.fromEntries(
-      ["applied", "lower", "higher"].map((field) => [
-        `autocompact.${field}`,
-        {
-          kind: "input",
-          path: `autocompact.${field}`,
-          type: "number",
-          default: 0,
-        },
-      ]),
-    ),
-    "autocompact.error": {
-      kind: "input",
-      path: "autocompact.error",
-      default: "",
-    },
-
     // Metrics — daemon fetches via MetricsProvider; numeric.
     "metrics.lastResponseTime": {
       kind: "input",
@@ -968,25 +942,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ or (ge .memento.ceiling 0) (ne .memento.error "") }}',
     },
     // Beside the ceiling: where Claude Code itself will summarize the context.
-    // Claude Code's `/autocompact` is its only writer, so each control types
-    // that command into the session (a `slash` action per window below); the
-    // daemon names the window − and + land on (autoCompactControls), and ↺
-    // hands the window back to `auto`.
     autocompact: {
       group: "model-context",
       description:
         "Claude Code's auto-compact window: − and + move it by 100K, ↺ returns it to auto. Clicks type /autocompact into this session, so the controls show only inside tmux.",
-      template:
-        '{{ if ne .autocompact.error "" }}⇲ ⚠ {{ .autocompact.error }}{{ else }}' +
-        '⇲ {{ if eq .autocompact.window 0 }}auto{{ else }}{{ template "formatTokenCount" .autocompact.applied }}{{ end }}' +
-        // The window reads anywhere; its controls show only where a click has
-        // a pane to type into.
-        `{{ if ${IN_TMUX} }}` +
-        '{{ if gt .autocompact.lower 0 }} {{ action (printf "autocompact.%d" .autocompact.lower) "−" }}{{ end }}' +
-        '{{ if gt .autocompact.higher 0 }} {{ action (printf "autocompact.%d" .autocompact.higher) "+" }}{{ end }}' +
-        '{{ if gt .autocompact.window 0 }} {{ action "autocompact.auto" "↺" }}{{ end }}{{ end }}{{ end }}',
-      bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
-      when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+      template: AUTOCOMPACT.template,
+      bg: AUTOCOMPACT.bg,
+      when: AUTOCOMPACT.when,
     },
     metrics: {
       group: "activity",
@@ -1159,16 +1121,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     "ceiling.lower": { ceiling: "set", to: "-100_000" },
     "ceiling.off": { ceiling: "set", to: "off" },
     "ceiling.clear": { ceiling: "clear" },
-    // The `autocompact` segment's controls. [LAW:one-source-of-truth] One
-    // action per window Claude Code accepts, so the lines a click can type are
-    // exactly AUTOCOMPACT_WINDOWS; the segment picks one by name.
-    "autocompact.auto": { slash: slashLine("/autocompact auto") },
-    ...Object.fromEntries(
-      AUTOCOMPACT_WINDOWS.map((w) => [
-        `autocompact.${w}`,
-        { slash: slashLine(`/autocompact ${w}`) },
-      ]),
-    ),
+    ...AUTOCOMPACT.actions,
   },
 
   // ─── Styles ───────────────────────────────────────────────────────────────
@@ -1581,10 +1534,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The single home of the K/M token-scale rule. >=1e6 → "X.YM", >=1e3 → "X.YK",
     // else the integer verbatim (0 and negatives fall through to this arm, exactly
     // as the retired JS did). No " tokens" suffix — that is formatTokens' job.
-    formatTokenCount:
-      '{{ if ge . 1000000 }}{{ printf "%.1f" (divf . 1000000) }}M' +
-      '{{ else if ge . 1000 }}{{ printf "%.1f" (divf . 1000) }}K' +
-      "{{ else }}{{ . }}{{ end }}",
+    formatTokenCount: formatTokenCount("."),
     formatTokens: '{{ template "formatTokenCount" . }} tokens',
     // A tool tally — `"Bash:3,Read:1"`, the payload's one encoding for both
     // running and completed tools — read back as `Bash×3 Read`, capped at the
