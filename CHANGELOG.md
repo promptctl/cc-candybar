@@ -1,3 +1,15 @@
+# [1.115.0](https://github.com/promptctl/cc-candybar/compare/v1.114.1...v1.115.0) (2026-10-04)
+
+
+### Bug Fixes
+
+* **check:** render every preset, not only the one a fresh session opens in ([#312](https://github.com/promptctl/cc-candybar/issues/312)) ([e748c8e](https://github.com/promptctl/cc-candybar/commit/e748c8e972d8101683881c788df9ba924391aea8))
+
+
+### Features
+
+* **doctor:** the doctor checks that the config is correct ([#311](https://github.com/promptctl/cc-candybar/issues/311)) ([0eefcc6](https://github.com/promptctl/cc-candybar/commit/0eefcc611718e2e915deedb5ec824d441d787335))
+
 ## [1.114.1](https://github.com/promptctl/cc-candybar/compare/v1.114.0...v1.114.1) (2026-10-04)
 
 
