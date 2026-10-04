@@ -81,7 +81,6 @@ Adding a source kind = code change. Variable declarations cannot define new sour
 {
   branch: {
     kind: "git", field: "branch",
-    cache: { watch_file: ".git/HEAD" },
     default: "(detached)",
   },
   cwd_short: {
@@ -113,7 +112,8 @@ Each source kind has a default policy. User-overridable per variable:
 | `env` | `never` (per process) | n/a |
 | `template` | auto-tracked dependencies | `never`, `ttl` |
 | `time` | `ttl: 1s` | any TTL |
-| `shell` / `file` / `git` | **must declare one of:** `ttl`, `watch_file`, `depends_on`, `key`, `never` | required |
+| `shell` / `file` | **must declare one of:** `ttl`, `watch_file`, `depends_on`, `key`, `never` | required |
+| `git` | the daemon's git cache, which watches the repository | none — a `cache:` is a load error |
 
 `depends_on: [varName, …]` — recompute when any listed variable invalidates.
 `key: <template>` — recompute when the rendered key string changes.

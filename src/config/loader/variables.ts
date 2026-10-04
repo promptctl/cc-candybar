@@ -31,6 +31,7 @@ import {
   fields,
   isPlainObject,
   oneOfPresent,
+  refuseRemoved,
   oneOfPresentJson,
   optionalStringField,
   optionalStringSpec,
@@ -368,8 +369,14 @@ const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
 };
 const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
   field: gitFieldSpec(),
-  cache: requireCacheSpec("git"),
   default: optionalStringSpec(),
+};
+// [LAW:no-silent-failure] A git variable refreshes through the daemon's git
+// cache, which watches the repository itself; a `cache:` here was required and
+// then never read, so a ttl or a watched path changed nothing.
+const GIT_VAR_REMOVED = {
+  cache:
+    "a git variable follows the repository's own watchers (.git/HEAD and .git/index), so it takes no cache policy — delete the key",
 };
 const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
   key: requireStringSpec(),
@@ -392,10 +399,12 @@ function arm<
 >(
   kind: K,
   fieldMap: FieldSpecMap<M>,
+  removed: Readonly<Record<string, string>> = {},
 ): TaggedArm<Extract<VariableDecl, { kind: K }>> {
   return {
     ...armFacets(VARIABLE_TAG, kind, fieldMap),
     parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
+      refuseRemoved(ctx, removed, path, raw);
       const body = fields(ctx, fieldMap, path, raw);
       // [LAW:types-are-the-program] `fieldMap: FieldSpecMap<M>` is checked against
       // the member's non-`kind` fields at each call site, so {kind, ...body} IS the
@@ -428,7 +437,7 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS),
     time: arm("time", TIME_FIELDS),
-    git: arm("git", GIT_VAR_FIELDS),
+    git: arm("git", GIT_VAR_FIELDS, GIT_VAR_REMOVED),
     state: arm("state", STATE_FIELDS),
   },
 };

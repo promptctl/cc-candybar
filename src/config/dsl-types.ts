@@ -678,10 +678,12 @@ export interface TimeVarDecl {
   readonly default?: string;
 }
 
+// [LAW:types-are-the-program] No `cache`: a git variable refreshes through the
+// daemon's git cache, which watches the repository, so there is no policy for
+// an author to choose and the loader refuses one.
 export interface GitVarDecl {
   readonly kind: "git";
   readonly field: GitField;
-  readonly cache: CacheDecl;
   readonly default?: string;
 }
 
@@ -761,14 +763,14 @@ export type VariableDeclWithCache =
   | FileVarDecl
   | ShellVarDecl
   | TemplateVarDecl
-  | TimeVarDecl
-  | GitVarDecl;
+  | TimeVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   return (
     v.kind !== "literal" &&
     v.kind !== "input" &&
     v.kind !== "env" &&
+    v.kind !== "git" &&
     v.kind !== "state"
   );
 }
@@ -780,14 +782,6 @@ export const GIT_FIELDS: readonly GitField[] = [
   "ahead",
   "behind",
   "stash",
-];
-
-// Source kinds where the user MUST declare a cache policy (no sensible default).
-// Aligns with the proposal's cache-invalidation table.
-export const SOURCES_REQUIRING_CACHE: readonly SourceKind[] = [
-  "file",
-  "shell",
-  "git",
 ];
 
 export interface SegmentDecl {
