@@ -219,7 +219,10 @@ async function follow(url) {
     return;
   }
   const link = view.links.find((l) => l.url === url);
-  const answer = await call(() => transport.click(url, size()));
+  // Started now, not queued behind a redraw: a copy happens only inside the click's own
+  // gesture. Its answer is drawn in turn.
+  const clicked = transport.click(url, size());
+  const answer = await call(() => clicked);
   if (answer === null) return;
   say(answer.refused ? `${link?.text ?? url}: ${answer.refused}` : `clicked ${link?.text ?? url}`, answer.refused ? "bad" : "muted");
 }

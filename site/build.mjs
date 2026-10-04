@@ -1,4 +1,5 @@
-// Build the Pages site into site/dist: `pnpm bar:web`'s page and font, with a
+// Build the Pages site into site/dist (or the directory given as the first argument):
+// `pnpm bar:web`'s page and font, with a
 // transport (site/transport.ts) that runs the daemon's own modules in the page
 // over a simulated Node (site/shims).
 import { build } from "esbuild";
@@ -28,7 +29,8 @@ alias.stream = alias["node:stream"] = "readable-stream";
 alias.buffer = alias["node:buffer"] = "buffer";
 alias.timers = alias["node:timers"] = shim("timers.ts");
 
-const dist = path.join(here, "dist");
+// The output directory: site/dist, or the one named as the first argument (the test builds into its own).
+const dist = path.resolve(process.argv[2] ?? path.join(here, "dist"));
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 const page = path.join(here, "..", "scripts", "bar-web");
@@ -50,4 +52,4 @@ const result = await build({
   sourcemap: true,
 });
 const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
-console.log(`built site/dist (transport.js (${(bytes / 1e6).toFixed(1)} MB with map)`);
+console.log(`built ${path.relative(process.cwd(), dist)} (transport.js (${(bytes / 1e6).toFixed(1)} MB with map)`);

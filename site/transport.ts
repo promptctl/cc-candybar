@@ -13,7 +13,7 @@ import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/
 import { parseHandlerUrl } from "../src/install/index";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
-import { CLAUDE_DIR, REPO, appendTranscript, forgetConfig, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
+import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
 
 // The page's clipboard (this file is checked against Node's types, which have no `navigator`).
 declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
@@ -154,26 +154,34 @@ async function render(size: Size) {
   return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
 }
 
+// The page's clipboard. The write starts before anything is awaited: a browser
+// copies only while the click's own gesture is live. [LAW:no-silent-failure] A
+// copy the browser refuses says so, with the text it would have copied.
+function copy(text: string): Promise<string | null> {
+  let writing: Promise<void>;
+  try {
+    writing = navigator.clipboard.writeText(text);
+  } catch (e) {
+    writing = Promise.reject(e);
+  }
+  return writing.then(
+    () => null,
+    (e: unknown) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
+  );
+}
+
 // A click carrying a verb that acts on the machine (HOST_VERBS) is never sent
 // to the daemon, as on any bar driven outside a real session. A click that only
-// copies is the page's own to do: its clipboard. [LAW:no-silent-failure] A copy
-// the browser refuses says so, with the text it would have copied.
+// copies is the page's own to do: its clipboard.
 async function click(url: string, size: Size) {
   const effects = effectsOf(url);
-  if (effects.some((e) => e.verb in HOST_VERBS)) {
-    const copies = effects.filter((e) => e.verb === VERB_COPY);
-    if (copies.length === effects.length) {
-      const text = copies.map((e) => e.args.join("/")).join("\n");
-      const refused = await Promise.resolve()
-        .then(() => navigator.clipboard.writeText(text))
-        .then(
-          () => null,
-          (e: unknown) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
-        );
-      return { ...(await render(size)), refused };
-    }
-    const elsewhere = effects.flatMap((e) => (e.verb in HOST_VERBS ? [HOST_VERBS[e.verb]] : []));
-    return { ...(await render(size)), refused: `not sent: on a real machine this ${elsewhere.join(", ")}` };
+  const host = effects.filter((e) => HOST_VERBS.has(e.verb));
+  if (host.length > 0) {
+    const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
+    const refused = copiesOnly
+      ? await copy(effects.map((e) => e.args.join("/")).join("\n"))
+      : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...(await render(size)), refused };
   }
   const { verb, value } = parseHandlerUrl(url);
   let refused: string | null = null;
@@ -233,10 +241,10 @@ export const transport = {
     "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
   render,
   click,
-  // A new session over the bundled config: the file the settings menu saved is
-  // removed and the daemon re-reads it now, as a save's click does after it writes.
+  // A new session over the bundled config: what the visitor's clicks wrote is
+  // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size: Size) => {
-    forgetConfig();
+    forgetWrites();
     reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
     sessionId = crypto.randomUUID();
     startAt(t);

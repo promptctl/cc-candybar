@@ -6,22 +6,6 @@
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
-  parseEffects,
-  decodeSegments,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_DISPATCH,
-  VERB_REDO,
-  VERB_RESET_CONFIG,
-  VERB_SET_CONFIG,
-  VERB_SET_STATE,
-  VERB_STEP_CONFIG,
-  VERB_STEP_STATE,
-  VERB_UNDO,
-  VERB_DOCTOR_FIX,
-  VERB_CEILING,
-  VERB_SLASH,
-} from "../../src/click/wire";
-import {
   VERBS,
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,

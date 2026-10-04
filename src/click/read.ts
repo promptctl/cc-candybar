@@ -11,24 +11,15 @@ import {
   decodeSegments,
   parseEffects,
   URL_SCHEME,
-  VERB_APPLY_LAYOUT_OP,
   VERB_APPLY_UPDATE,
-  VERB_CEILING,
   VERB_COPY,
   VERB_DISPATCH,
-  VERB_DOCTOR_FIX,
+  VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
-  VERB_REDO,
-  VERB_RESET_CONFIG,
-  VERB_SET_CONFIG,
-  VERB_SET_STATE,
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
-  VERB_SLASH,
-  VERB_STEP_CONFIG,
-  VERB_STEP_STATE,
-  VERB_UNDO,
 } from "./wire";
+import { SEGMENTED_VERBS } from "../daemon/verbs";
 
 export const stripAnsi = (s: string): string => s.replace(INVISIBLE, "");
 
@@ -96,29 +87,22 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
-// [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
-// handler does: set-state/step-state and their config-file twins
-// set-config/step-config/reset-config are the multi-argument verbs
-// (slash-segmented); every other verb takes ONE argument — the whole value
-// decoded once — so a direct `copy/a/b` reports one arg "a/b" (exactly what the
-// copy handler copies), not two.
-const MULTI_ARG_VERBS = new Set<string>([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_DOCTOR_FIX,
-  VERB_CEILING,
-  VERB_SLASH,
-]);
+// [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
+// does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
+// verbs' values are `/`-separated segments; load-config is `<session>/<path>`,
+// split at the first slash only, since a path has slashes; every other verb
+// takes ONE argument, the whole value decoded once, so a direct `copy/a/b`
+// reports one arg "a/b" (exactly what the copy handler copies).
 function decodeArgs(verb: string, value: string): string[] {
-  return MULTI_ARG_VERBS.has(verb)
-    ? decodeSegments(value)
-    : [decodeURIComponent(value)];
+  if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
+  const slash = value.indexOf("/");
+  if (verb === VERB_LOAD_CONFIG && slash !== -1) {
+    return [
+      decodeURIComponent(value.slice(0, slash)),
+      decodeURIComponent(value.slice(slash + 1)),
+    ];
+  }
+  return [decodeURIComponent(value)];
 }
 
 /** A click URL's ordered effect list (verb + decoded args); a direct URL is the one-effect case. */
@@ -145,11 +129,18 @@ export function describeLink(link: DrawnLink, sessionId: string): string {
  * The verbs whose handler acts on the machine outside the daemon, and what each
  * does there. A bar driven anywhere but a real session (the harness, the page)
  * does not send a click carrying one.
+ *
+ * The verbs that act through what the session REPORTS are not here, because a
+ * driven bar reports an isolated machine: slash types into the tmux pane the
+ * session's hint names (a driven bar sends no tmux hint, so the daemon refuses
+ * it), ceiling runs the memento found under the daemon's CLAUDE_CONFIG_DIR, and
+ * doctor-fix writes the session's own Claude config dir (both empty scratch
+ * dirs for a driven bar). Their refusals are the bar's own, worth showing.
  */
-export const HOST_VERBS: Readonly<Record<string, string>> = {
-  [VERB_COPY]: "copies to the clipboard",
-  [VERB_OPEN_VSCODE]: "opens a file in VS Code",
-  [VERB_SHOW_CONFIG_ERROR]: "copies the config error",
-  [VERB_SHOW_CONFIG_WARNING]: "copies the config warning",
-  [VERB_APPLY_UPDATE]: "rebuilds cc-candybar",
-};
+export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
+  [VERB_COPY, "copies to the clipboard"],
+  [VERB_OPEN_VSCODE, "opens a file in VS Code"],
+  [VERB_SHOW_CONFIG_ERROR, "copies the config error"],
+  [VERB_SHOW_CONFIG_WARNING, "copies the config warning"],
+  [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
+]);

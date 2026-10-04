@@ -8,18 +8,23 @@
 // copy the page cannot make says so, with its text.
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+
+import { stripAnsi } from "./helpers/ansi";
 
 jest.setTimeout(60_000);
 
 const ROOT = process.cwd();
 
 test("the built site renders, clicks, and plays its scenario with no server", () => {
-  execFileSync("node", [path.join(ROOT, "site/build.mjs")], { stdio: "pipe" });
+  // Built into a directory of its own, so a test run never replaces the developer's site/dist.
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
+  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe" });
   const probe = `
-    const { transport } = await import(${JSON.stringify(path.join(ROOT, "site/dist/transport.js"))});
+    const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     const size = { width: 120, rows: 40 };
-    const plain = (s) => s.replace(/\\u001b\\[[0-9;]*m|\\u001b\\]8;[^\\u001b]*\\u001b\\\\/g, "");
     const first = await transport.render(size);
     const door = first.links.find((l) => l.text === "🍫");
     const opened = await transport.click(door.url, size);
@@ -27,11 +32,17 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
     const working = await transport.render(size);
-    console.log(JSON.stringify({ first: plain(first.ansi), refused: opened.refused, opened: plain(opened.ansi), working: plain(working.ansi), copied: copied.refused }));
+    console.log(JSON.stringify({ renders: { first: first.ansi, opened: opened.ansi, working: working.ansi }, refused: opened.refused, copied: copied.refused }));
     process.exit(0);
   `;
-  const out = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
-  const r = JSON.parse(out.trim().split("\n").pop()!) as Record<string, string | null>;
+  const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
+  fs.rmSync(out, { recursive: true, force: true });
+  const { renders, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
+    renders: Record<"first" | "opened" | "working", string>;
+    refused: string | null;
+    copied: string | null;
+  };
+  const r = { ...said, first: stripAnsi(renders.first), opened: stripAnsi(renders.opened), working: stripAnsi(renders.working) };
   expect(r.first).toContain("~/c/tidepool");
   expect(r.first).toContain("fix-cache-timer");
   expect(r.refused).toBeNull();

@@ -1,6 +1,7 @@
 // node:child_process in the page. Every external program the daemon starts goes
 // through src/proc/launch.ts; here a program is answered by the simulated
 // machine's `programs` table, or fails to start as a missing binary would.
+import { Buffer } from "buffer";
 import { EventEmitter } from "events";
 
 export interface ProgramRun {
@@ -13,8 +14,11 @@ export const programs = new Map<string, Program>();
 
 const enoent = (cmd: string) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
 
+// A child's stdout/stderr: Buffer chunks, as Node's are, until setEncoding asks for text.
 class Stream extends EventEmitter {
-  setEncoding() { return this; }
+  private encoding: BufferEncoding | null = null;
+  setEncoding(encoding: BufferEncoding) { this.encoding = encoding; return this; }
+  chunk(text: string) { this.emit("data", this.encoding === null ? Buffer.from(text) : text); }
   pipe() { return this; }
   destroy() {}
   end() {}
@@ -24,8 +28,10 @@ class Stream extends EventEmitter {
 
 let nextPid = 5000;
 export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: string } = {}) {
+  const program = programs.get(cmd.split("/").pop()!);
   const child = Object.assign(new EventEmitter(), {
-    pid: nextPid++,
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === undefined ? undefined : nextPid++,
     stdout: new Stream(),
     stderr: new Stream(),
     stdin: new Stream(),
@@ -36,15 +42,14 @@ export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: s
     unref: () => {},
     ref: () => {},
   });
-  const program = programs.get(cmd.split("/").pop()!);
   setTimeout(() => {
     if (program === undefined) {
       child.emit("error", enoent(cmd));
       return;
     }
     const run = program(args, opts.cwd);
-    if (run.stdout) child.stdout.emit("data", run.stdout);
-    if (run.stderr) child.stderr.emit("data", run.stderr);
+    if (run.stdout) child.stdout.chunk(run.stdout);
+    if (run.stderr) child.stderr.chunk(run.stderr);
     child.exitCode = run.code;
     child.stdout.emit("end");
     child.stderr.emit("end");

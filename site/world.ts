@@ -30,6 +30,7 @@ export interface RepoState {
 let repo: RepoState;
 
 export const CONFIG_FILE = `${HOME}/.config/cc-candybar/config.json5`;
+const SETTINGS = "{}\n";
 
 /**
  * Lay the machine out, once per page: the daemon's watchers hold on to these
@@ -45,7 +46,7 @@ export function seedWorld(state: RepoState): void {
     [`${GIT}/index`]: "",
     [`${GIT}/refs/heads/${state.branch}`]: `${state.head}\n`,
     [`${GIT}/logs/refs/stash`]: "0000 1111 demo <demo@example.com> 1759000000 +0000\tWIP on main: try a bigger TTL\n",
-    [`${CLAUDE_DIR}/settings.json`]: "{}\n",
+    [`${CLAUDE_DIR}/settings.json`]: SETTINGS,
     [`${HOME}/.config/cc-candybar/.keep`]: "",
     [`${HOME}/.local/state/.keep`]: "",
     "/tmp/.keep": "",
@@ -88,9 +89,14 @@ programs.set("git", (args) => {
   return { code: 128, stdout: "", stderr: `fatal: the demo's git does not answer \`${line}\`\n` };
 });
 
-/** Forget what the settings menu saved: the next render is the bundled default again. */
-export function forgetConfig(): void {
+/**
+ * Undo what the visitor's clicks wrote to the machine: the config the settings
+ * menu saved, and the doctor's fix to Claude Code's settings. The next render
+ * is the bundled default on a machine as it was laid out.
+ */
+export function forgetWrites(): void {
   if (vol.existsSync(CONFIG_FILE)) vol.unlinkSync(CONFIG_FILE);
+  vol.writeFileSync(`${CLAUDE_DIR}/settings.json`, SETTINGS);
 }
 
 /**

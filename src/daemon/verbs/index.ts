@@ -1245,6 +1245,28 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SLASH, slash],
 ]);
 
+// [LAW:one-source-of-truth] The verbs whose handler splits its value into
+// `/`-separated segments (decodeSegments); every other verb decodes its whole
+// value as one argument (oneArg, or load-config's split at the first slash).
+// It is what src/click/read.ts decodes a click's effects by, to describe them
+// as the handler will read them; a handler that changes codec changes its row.
+export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_DELETE_PRESET,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_UNDO,
+  VERB_REDO,
+  VERB_DOCTOR_FIX,
+  VERB_CEILING,
+  VERB_SLASH,
+]);
+
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
 // id — the set `dispatch` reads to know which session a failing click should
 // surface its error in. Membership here is the fact; a verb that carries the

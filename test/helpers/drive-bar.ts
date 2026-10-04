@@ -21,9 +21,10 @@
 // not a failure of the harness: the refusal is returned beside the next render,
 // which shows it in the red strip exactly as a user would see it. A slash
 // command is refused by the daemon itself, since this session records no
-// Claude Code pane. A click whose verb acts on the developer's machine (the
-// clipboard, VS Code, a rebuild of this checkout) is never sent: it comes back
-// as not sent, naming its effects, and the bar renders as it was. A click the
+// Claude Code pane. A click whose verb acts on the developer's machine
+// (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
+// checkout) is never sent: it comes back as not sent, naming its effects, and
+// the bar renders as it was. A click the
 // daemon answers TIMEOUT stops the run: it may or may not have landed.
 
 import fs from "node:fs";
@@ -212,7 +213,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     if (!isBarLink(hit.url)) {
       throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    if (effectsOf(hit.url).some(({ verb }) => verb in HOST_VERBS)) {
+    if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
     const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);
