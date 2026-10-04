@@ -8,10 +8,6 @@
 // This test replicates that resolution as src/daemon/server.ts performs it and
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
-//
-// brandon-menu-ia-q30.42a gives `charset` and `colorCompatibility` the same
-// half: they describe the terminal a session runs in, and two sessions on one
-// machine can sit in two terminals (see CHARSETS in themes/policy.ts).
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -29,8 +25,6 @@ import {
   resolveStyleSelection,
   effectivePadding,
   effectiveEndcaps,
-  effectiveCharset,
-  effectiveColorCompatibility,
   effectiveVariation,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
@@ -42,6 +36,7 @@ import {
   DEFAULT_WRAP,
 } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
+import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
@@ -54,14 +49,10 @@ const src = (padding: number): string => `{
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     sessionPadding: { kind: 'state', key: 'padding', default: '' },
     sessionWrap: { kind: 'state', key: 'autoWrap', default: '' },
-    sessionCharset: { kind: 'state', key: 'charset', default: '' },
-    sessionDepth: { kind: 'state', key: 'colorCompatibility', default: '' },
   },
   actions: {
     padUp: { set: 'padding', min: ${PADDING_RANGE.min}, max: ${PADDING_RANGE.max}, by: 1 },
     toggleWrap: { set: 'autoWrap', cycle: ['true', 'false'] },
-    pickCharset: { set: 'charset', from: 'charsets' },
-    pickDepth: { set: 'colorCompatibility', from: 'colorCompatibilities' },
   },
   segments: {
     a: { template: 'AAAA', bg: 'surface', fg: 'foreground' },
@@ -97,16 +88,8 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       { session_id: sid },
       {
         endcaps: "powerline" as const,
-        colorCompatibility: effectiveColorCompatibility(
-          undefined,
-          sessionState.get(sid, "colorCompatibility"),
-          config.globals.colorCompatibility,
-        ),
-        charset: effectiveCharset(
-          undefined,
-          sessionState.get(sid, "charset"),
-          config.globals.charset,
-        ),
+        colorCompatibility: "truecolor" as const,
+        charset: "unicode" as const,
         wrap: effectiveAutoWrap(undefined, 
           sessionState.get(sid, "autoWrap"),
           config.globals.autoWrap,
@@ -210,38 +193,6 @@ describe("an autoWrap click changes one session's bar", () => {
   });
 });
 
-describe("a terminal click changes one session's bar", () => {
-  // The powerline joiner between the two cells: a private-use glyph under
-  // `unicode`, a plain ASCII one under `ascii`.
-  const POWERLINE_ARROW = "\ue0b0";
-
-  it("an ascii pick swaps the joiner glyphs for that session only", () => {
-    const { sessionState, render, dispose } = buildRuntime();
-    try {
-      expect(render("s-glyph", WIDE)).toContain(POWERLINE_ARROW);
-      setState(sessionState, "s-glyph", "charset", "ascii");
-      expect(render("s-glyph", WIDE)).not.toContain(POWERLINE_ARROW);
-      expect(render("s-other", WIDE)).toContain(POWERLINE_ARROW);
-    } finally {
-      dispose();
-    }
-  });
-
-  it("a colour depth of none drops every colour for that session only", () => {
-    const { sessionState, render, dispose } = buildRuntime();
-    // A truecolor foreground or background SGR parameter.
-    const TRUECOLOR = /\x1b\[[0-9;]*[34]8;2;/;
-    try {
-      expect(render("s-depth", WIDE)).toMatch(TRUECOLOR);
-      setState(sessionState, "s-depth", "colorCompatibility", "none");
-      expect(render("s-depth", WIDE)).not.toMatch(TRUECOLOR);
-      expect(render("s-other", WIDE)).toMatch(TRUECOLOR);
-    } finally {
-      dispose();
-    }
-  });
-});
-
 describe("a session value outside the domain is not a session value", () => {
   // Every case here is a stale SessionState entry — written when the config's
   // range or vocabulary was wider, or by a hand-edited state file. The contract
@@ -320,15 +271,6 @@ describe("a stale session pick falls to the config default, not the floor", () =
   };
   const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
 
-  it("charset and colour depth: a stale pick yields the configured value", () => {
-    expect(effectiveCharset(undefined, "wide", "ascii")).toBe("ascii");
-    expect(effectiveCharset(undefined, "wide", undefined)).toBe("unicode");
-    expect(effectiveColorCompatibility(undefined, "auto", "256")).toBe("256");
-    expect(effectiveColorCompatibility(undefined, "auto", undefined)).toBe(
-      "truecolor",
-    );
-  });
-
   it("variation: the session pick over the configured one, a stale pick falling through", () => {
     expect(effectiveVariation(undefined, "mono", "duo")).toBe("mono");
     expect(effectiveVariation(undefined, "accent-primary", "duo")).toBe("duo");
@@ -387,5 +329,31 @@ describe("padding's bound is one declaration, not three copies", () => {
       ALLOWED,
     );
     expect(config.globals.padding).toBe(PADDING_RANGE.max);
+  });
+});
+
+// brandon-menu-ia-q30.5y4: charset and colour depth are set in the config file
+// only, so a session write to either key — a stale entry from when they had a
+// session half, or an author's `set` — moves nothing.
+describe("charset and colour depth have no session half", () => {
+  it("the config file's value renders whatever the session holds", () => {
+    const config = parseAndValidate(
+      "<no-session-half>",
+      `{ globals: { palette: '${BASE_THEME}', charset: 'ascii', colorCompatibility: '256' } }`,
+      ALLOWED,
+    );
+    const picks: Record<string, string> = {
+      charset: "unicode",
+      colorCompatibility: "none",
+    };
+    const effective = resolveEffectiveGlobals(
+      config,
+      (key) => picks[key] ?? null,
+      () => false,
+    );
+    expect([effective.charset, effective.colorCompatibility]).toEqual([
+      "ascii",
+      "256",
+    ]);
   });
 });

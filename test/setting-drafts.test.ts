@@ -139,8 +139,6 @@ const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   style: { pin: "'dim'", pick: "vivid" },
   endcaps: { pin: "'capsule'", pick: "plain" },
   variation: { pin: "'mono'", pick: "duo" },
-  charset: { pin: "'ascii'", pick: "unicode" },
-  colorCompatibility: { pin: "'256'", pick: "ansi" },
   autoWrap: { pin: "false", pick: "true" },
   padding: { pin: "3", pick: "2" },
   updateNotice: { pin: "false", pick: "true" },

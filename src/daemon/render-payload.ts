@@ -39,12 +39,12 @@ import {
   type StyleSelection,
   effectivePadding,
   effectiveEndcaps,
-  effectiveCharset,
-  effectiveColorCompatibility,
   effectiveVariation,
   effectiveUpdateNotice,
   EXPRESSION_SLOTS,
   isExpression,
+  DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -211,9 +211,10 @@ export function resolveEffectiveGlobals(
       sessionPick("variation"),
       globals.variation,
     ),
-    // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
-    // `staged ?? config ?? floor` — the same chain minus the rung they do not
-    // have, spelled with the same `??` rather than a second mechanism.
+    // [LAW:one-source-of-truth] The fields with no SessionState half (this one,
+    // charset, colorCompatibility) resolve as `staged ?? config ?? floor` — the
+    // same chain minus the rung they do not have, spelled with the same `??`
+    // rather than a second mechanism.
     separator: staged.default_separator ?? globals.default_separator,
     autoWrap: effectiveAutoWrap(
       staged.autoWrap,
@@ -225,21 +226,16 @@ export function resolveEffectiveGlobals(
       sessionPick("padding"),
       globals.padding,
     ),
-    charset: effectiveCharset(
-      staged.charset,
-      sessionPick("charset"),
-      globals.charset,
-    ),
+    charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
     updateNotice: effectiveUpdateNotice(
       staged.updateNotice,
       sessionPick("updateNotice"),
       globals.updateNotice,
     ),
-    colorCompatibility: effectiveColorCompatibility(
-      staged.colorCompatibility,
-      sessionPick("colorCompatibility"),
-      globals.colorCompatibility,
-    ),
+    colorCompatibility:
+      staged.colorCompatibility ??
+      globals.colorCompatibility ??
+      DEFAULT_COLOR_COMPATIBILITY,
   };
 }
 

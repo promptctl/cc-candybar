@@ -15,8 +15,6 @@ export {
   effectiveEndcaps,
   effectiveAutoWrap,
   effectivePadding,
-  effectiveCharset,
-  effectiveColorCompatibility,
   effectiveVariation,
   isVariationName,
   VARIATION_NAMES,

@@ -1,12 +1,11 @@
 // brandon-colour-depth-64q — colour depth governs colour, never the controls.
 //
-// [LAW:verifiable-goals] Pick `none` from the bar's own colour-depth ring and
-// the bar draws no SGR yet keeps every link it has drawn in colour — including
-// the ring's way back, which a click on the colourless bar then takes.
+// [LAW:verifiable-goals] With `colorCompatibility: 'none'` in the config file
+// the bar draws no SGR yet keeps every link it draws in colour, and the open
+// tab still reads as open.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
-import { SETTINGS } from "../src/config/setting-projections";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { SessionState } from "../src/daemon/session-state";
@@ -30,12 +29,11 @@ import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SGR = /\x1b\[[0-9;]*m/g;
-const DEPTH_KEY = SETTINGS.colorCompatibility.sessionKey;
 
-test("picking colour depth none keeps every link, and the colourless bar picks its way back", () => {
+test("colour depth none keeps every link the bar draws in colour", () => {
   const config = parseAndValidate(
     "<test>",
-    "{}",
+    "{ globals: { colorCompatibility: 'none' } }",
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
@@ -110,15 +108,11 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
         throw new Error(`nothing on the bar writes ${key}`);
       clickUrl(url, ctx);
     };
-    // Open the 🍫 door, ⚙ config, then the 🌈 colour depth ring — the clicks a user makes.
+    // Open the 🍫 door, then ⚙ config — the clicks a user makes.
     const opened = (v: string) => v !== DISCLOSURE_CLOSED;
     click(render(), SETTINGS_ANCHOR, opened);
     click(render(), "candybar.tab", (v) => v === "config");
-    click(render(), "menus.candybar_pickers", (v) =>
-      v.endsWith("colorCompatibility"),
-    );
 
-    click(render(), DEPTH_KEY, (v) => v === "none");
     expect(effectiveDepth()).toBe("none");
     const none = render();
     expect(none.match(SGR)).toBeNull();
@@ -128,10 +122,6 @@ test("picking colour depth none keeps every link, and the colourless bar picks i
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 
-    // The way back, taken from the colourless bar itself.
-    click(none, DEPTH_KEY, (v) => v !== "none");
-    expect(effectiveDepth()).not.toBe("none");
-    expect(render().match(SGR)).not.toBeNull();
   } finally {
     disposers.forEach((d) => d());
     registry.dispose();

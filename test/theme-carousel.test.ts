@@ -25,8 +25,8 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
   DEFAULT_VARIATION,
   effectiveVariation,
-  effectiveCharset,
-  effectiveColorCompatibility,
+  DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import type {
@@ -116,16 +116,9 @@ function rig(
       config.globals.preset,
       config.presets,
     );
-    const charset = effectiveCharset(
-      undefined,
-      sessionState.get(SID, "charset"),
-      config.globals.charset,
-    );
-    const depth = effectiveColorCompatibility(
-      undefined,
-      sessionState.get(SID, "colorCompatibility"),
-      config.globals.colorCompatibility,
-    );
+    const charset = config.globals.charset ?? DEFAULT_CHARSET;
+    const depth =
+      config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY;
     const variation = effectiveVariation(
       undefined,
       sessionState.get(SID, "variation"),
@@ -372,15 +365,11 @@ const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
 
 // The door, then the control's tab, then its carousel.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
-const TAB_OF: Record<string, string> = {
-  charset: "⚙ config",
-  colorCompatibility: "⚙ config",
-};
 function openCarousel(rt: ReturnType<typeof rig>, control: string): void {
   rt.render();
   rt.clickText("🍫");
   // The preset control sits on the door's first line; the rest in a tab.
-  if (control !== "preset") rt.clickText(TAB_OF[control] ?? "🎨 look");
+  if (control !== "preset") rt.clickText("🎨 look");
   rt.clickWriting(PICKERS, `candybar.apply.${control}`);
 }
 
@@ -473,64 +462,23 @@ describe("the variation control", () => {
   });
 });
 
-describe("glyphs and colour depth sit in the settings menu, not on the bar", () => {
-  test("the bar carries no terminal drawer; the ⚙ config tab holds both controls", () => {
+// brandon-menu-ia-q30.5y4: "make users set them in the config file."
+describe("glyphs and colour depth are set in the config file, not the menu", () => {
+  test("no link on the bar or in the ⚙ config tab writes either key", () => {
     const rt = rig(`{}`);
-    expect(stripAnsi(rt.render())).not.toContain("terminal");
+    rt.render();
     rt.clickText("🍫");
     rt.clickText("⚙ config");
-    const text = stripAnsi(rt.render());
-    expect(text).toContain("🔣 unicode");
-    expect(text).toContain("🌈 truecolor");
+    const rendered = rt.render();
+    expect(stripAnsi(rendered)).not.toMatch(/🔣|🌈/u);
+    const writers = links(rendered).filter((l) =>
+      effectsOf(l.url).some((e) =>
+        ["charset", "colorCompatibility"].includes(e.args[1] ?? ""),
+      ),
+    );
+    expect(writers).toEqual([]);
     rt.dispose();
   });
-
-  // They describe the terminal a session runs in, so they are session picks
-  // like every control beside them: ▶ tries the next value in this session
-  // alone and the bar re-centres on it.
-  test.each([
-    // [key, current, the trial ▶]
-    ["charset", "unicode", "ascii"],
-    ["colorCompatibility", "truecolor", "256"],
-  ])(
-    "%s is a session pick",
-    (key, current, next) => {
-      const rt = rig(`{}`);
-      rt.render();
-      rt.clickText("🍫");
-      rt.clickText("⚙ config");
-      rt.clickWriting(PICKERS, `candybar.apply.${key}`);
-      expect(stripAnsi(rt.render())).toMatch(
-        new RegExp(`${CAROUSEL_PREV} ${current} ${CAROUSEL_NEXT}`),
-      );
-      const trial = effectsOf(rt.linkOn(key, CAROUSEL_NEXT).url);
-      expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
-        ["set-state", key, next],
-      ]);
-      rt.clickWriting(key, next);
-      expect(stripAnsi(rt.render())).toMatch(
-        new RegExp(`${CAROUSEL_PREV} ${next} ${CAROUSEL_NEXT}`),
-      );
-      rt.dispose();
-    },
-  );
-
-  test.each(["charset", "colorCompatibility"])(
-    "%s's ↺ forgets the durable default",
-    (key) => {
-      const rt = rig(`{}`);
-      rt.render();
-      rt.clickText("🍫");
-      rt.clickText("⚙ config");
-      const reset = links(rt.render()).filter((l) =>
-        effectsOf(l.url).some(
-          (e) => e.verb === "reset-config" && e.args[1] === key,
-        ),
-      );
-      expect(reset.map((l) => stripAnsi(l.text))).toEqual(["↺"]);
-      rt.dispose();
-    },
-  );
 });
 
 // The preview's rows, as the labels each draws: the lines after the ring, up to

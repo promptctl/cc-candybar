@@ -413,13 +413,8 @@ export function effectiveEndcaps(
 // powerline-private-use cap glyphs (U+E0Bx and the U+E0D7 lead — tofu without
 // a Nerd Font) for plain-ASCII equivalents; it is orthogonal to Endcaps:
 // endcaps picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
-// It is ENDCAPS_SHAPES' twin in resolution too: a session pick over the config
-// default. Charset describes the TERMINAL (does its font carry the powerline
-// private-use glyphs), and a Claude Code session runs in ONE terminal — two
-// sessions on one machine can sit in two terminals with two fonts, so the
-// session is exactly the scope that fact varies over, and the config file is
-// the default every terminal starts from. Same for COLOR_COMPATIBILITIES below
-// (a pane inside tmux draws at 256 while its neighbour draws truecolor).
+// Unlike endcaps it has no session pick: the config file is its only source
+// (brandon-menu-ia-q30.5y4), and so for COLOR_COMPATIBILITIES below.
 export const CHARSETS = ["unicode", "ascii"] as const;
 export type Charset = (typeof CHARSETS)[number];
 
@@ -429,22 +424,6 @@ export const DEFAULT_CHARSET: Charset = "unicode";
 
 export function isCharset(value: string): value is Charset {
   return (CHARSETS as readonly string[]).includes(value);
-}
-
-// [LAW:one-type-per-behavior] effectiveEndcaps's twin: the narrowing guard
-// IS the parse, and a stale session entry falls through to the config default.
-export function effectiveCharset(
-  stagedCharset: Charset | undefined,
-  sessionCharset: string | null,
-  globalsCharset: Charset | undefined,
-): Charset {
-  return effectiveGlobal(
-    stagedCharset,
-    sessionCharset,
-    globalsCharset,
-    DEFAULT_CHARSET,
-    (raw) => (isCharset(raw) ? raw : null),
-  );
 }
 
 // --- Color-depth identifiers ---
@@ -482,20 +461,6 @@ export function isColorCompatibility(
   value: string,
 ): value is ColorCompatibility {
   return (COLOR_COMPATIBILITIES as readonly string[]).includes(value);
-}
-
-export function effectiveColorCompatibility(
-  stagedDepth: ColorCompatibility | undefined,
-  sessionDepth: string | null,
-  globalsDepth: ColorCompatibility | undefined,
-): ColorCompatibility {
-  return effectiveGlobal(
-    stagedDepth,
-    sessionDepth,
-    globalsDepth,
-    DEFAULT_COLOR_COMPATIBILITY,
-    (raw) => (isColorCompatibility(raw) ? raw : null),
-  );
 }
 
 // [LAW:one-source-of-truth] The depth a setting draws at, which is what a
