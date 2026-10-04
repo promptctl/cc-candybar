@@ -52,6 +52,7 @@ function depsWith(
 // boundary. An empty object is the honest "this render carried no hints"
 // (the shape an old client produces), so `host.ssh` stays absent throughout.
 const NO_HINTS: ClientHints = {};
+const TMUX_PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
@@ -304,11 +305,11 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       undefined,
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
-      NO_HINTS,
+      { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
     );
 
-    expect(payload.tmux).toEqual({ session: "main-session" });
+    expect(payload.tmux).toEqual({ pane: "%7", session: "main-session" });
     expect(payload.session).toEqual({ cost: 1.25, tokens: 42 });
     expect(payload.today).toBeUndefined();
     expect(logs).toEqual([]);
@@ -330,14 +331,72 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       undefined,
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
-      NO_HINTS,
+      { tmux: TMUX_PANE },
+      NO_CONFIG_FILE,
+    );
+
+    // The pane is the client's report and survives the failed name lookup.
+    expect(payload.tmux).toEqual({ pane: "%7" });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.msg).toContain("tmux:");
+    expect(logs[0]!.msg).toContain("stub bug");
+  });
+
+  // brandon-tmux-tk7: the tmux family is the session's own client hint. With
+  // no pane reported the service is never asked, whatever it would answer —
+  // the daemon's own tmux is not this session's.
+  test.each<[string, ClientHints]>([
+    ["not in tmux", { tmux: null }],
+    ["a client too old to say", NO_HINTS],
+  ])("%s: no tmux family, and tmux is not asked", async (_name, hints) => {
+    const logs: LogEntry[] = [];
+    let asked = 0;
+    const deps = depsWith(ABSENT, logs, {
+      tmuxService: {
+        getSessionId: async () => {
+          asked++;
+          return ok("the-daemons-own-session");
+        },
+      },
+    });
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      LANE_PATHS,
+      EFFECTIVE_GLOBALS,
+      hints,
       NO_CONFIG_FILE,
     );
 
     expect(payload.tmux).toBeUndefined();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]!.msg).toContain("tmux:");
-    expect(logs[0]!.msg).toContain("stub bug");
+    expect(asked).toBe(0);
+    expect(logs).toEqual([]);
+  });
+
+  test("the pane the client reported is the pane tmux is asked about", async () => {
+    const asked: unknown[] = [];
+    const deps = depsWith(ABSENT, [], {
+      tmuxService: {
+        getSessionId: async (hint: unknown) => {
+          asked.push(hint);
+          return ABSENT;
+        },
+      },
+    });
+
+    await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      LANE_PATHS,
+      EFFECTIVE_GLOBALS,
+      { tmux: TMUX_PANE },
+      NO_CONFIG_FILE,
+    );
+
+    expect(asked).toEqual([TMUX_PANE]);
   });
 });
 

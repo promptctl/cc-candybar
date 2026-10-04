@@ -20,8 +20,10 @@
 // naming what it did draw. A click the daemon refuses is a fact about the bar,
 // not a failure of the harness: the refusal is returned beside the next render,
 // which shows it in the red strip exactly as a user would see it. A slash
-// command is refused by the daemon itself, since this session records no
-// Claude Code pane. A click whose verb acts on the developer's machine
+// command is refused by the daemon itself: the session reports a tmux pane (so
+// the bar draws its slash controls, as it does for a session inside tmux) on a
+// socket in the harness's scratch dir, where no tmux server listens. A click
+// whose verb acts on the developer's machine
 // (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
 // checkout) is never sent: it comes back as not sent, naming its effects, and
 // the bar renders as it was. A click the
@@ -182,6 +184,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
         termCols: size.width,
         termRows: size.rows,
         ssh: opts.ssh,
+        tmux: { socket: path.join(scratch, "tmux.sock"), pane: "%0", truecolor: null },
         claudeConfigDir,
       },
       REPLY_BUDGET_MS,

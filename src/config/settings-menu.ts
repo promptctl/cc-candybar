@@ -729,7 +729,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
           `{{ else }}{{ $door }}{{ end }}`,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      [COMMANDS_SEG]: { template: COMMANDS.template },
+      [COMMANDS_SEG]: { template: COMMANDS.template, when: COMMANDS.when },
       [BACK_SEG]: BACK_CELL,
       [SAVE_SEG]: SAVE_CELL,
       [PRESET_SAVE]: {

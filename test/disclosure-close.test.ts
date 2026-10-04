@@ -59,6 +59,8 @@ const OPTS = {
 
 const PAYLOAD = {
   session_id: SID,
+  // A session inside tmux: the session tab's body holds the command tray row.
+  tmux: { pane: "%0" },
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },

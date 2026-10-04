@@ -233,7 +233,9 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS, PRESET_FLOOR),
       EFFECTIVE_GLOBALS,
-      NO_HINTS,
+      // The tmux lane asks about the pane the client reported; with none
+      // there is nothing to ask.
+      { tmux: { socket: "/tmp/tmux.sock", pane: "%0", truecolor: null } },
       NO_CONFIG_FILE,
     );
     expect(counts.git).toBe(1);

@@ -8,6 +8,7 @@
 import type { ActionDecl } from "./action.js";
 import type { VariableDecl } from "./dsl-types.js";
 import { confirmStep } from "./confirm-step.js";
+import { IN_TMUX } from "./payload-inputs.js";
 import { slashLine } from "../claude-input/slash-line.js";
 
 const COMMANDS = ["/compact", "/model"] as const;
@@ -18,6 +19,8 @@ const CLEAR = "/clear";
 // `candybar.commands` are two instances of this one tray.
 export function commandTray(prefix: string): {
   readonly template: string;
+  // The tray is all slash buttons, so it shows only where a click can type.
+  readonly when: string;
   readonly actions: Readonly<Record<string, ActionDecl>>;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly disarm: string;
@@ -35,6 +38,7 @@ export function commandTray(prefix: string): {
       COMMANDS.map(
         (line) => `{{ action "${commandAction(line)}" "${line}" }} `,
       ).join("") + clear.template,
+    when: `{{ ${IN_TMUX} }}`,
     actions: {
       ...Object.fromEntries(
         COMMANDS.map((line) => [

@@ -31,7 +31,7 @@
 import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
+import { IN_TMUX, PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
@@ -203,9 +203,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // platform without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
 
-    // Tmux session id flows through the daemon's augmented payload
-    // (TmuxService caches by socket and never re-spawns for the lifetime of
-    // the daemon, so this stays cheap). A `kind: "shell"` declaration would
+    // The tmux session name of the pane this session's client reported flows
+    // through the daemon's augmented payload (TmuxService asks once per pane
+    // for the lifetime of the daemon, so this stays cheap; `tmux.pane` itself
+    // is in PAYLOAD_INPUTS). A `kind: "shell"` declaration would
     // spawn the subprocess at every cache-entry creation regardless of
     // whether the tmux segment is in the active layout — buildNeededPrefixes
     // gates the input variant so unused segments cost nothing.
@@ -769,8 +770,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     commands: {
       group: "session-tools",
       description:
-        "Type /compact, /model or /clear into this session; /clear asks for a second click.",
+        "Type /compact, /model or /clear into this session; /clear asks for a second click. Hidden when not inside tmux.",
       template: COMMAND_TRAY.template,
+      when: COMMAND_TRAY.when,
     },
     // Declared-but-opt-in: a theme stepper that lives ON the bar — one click
     // per theme, with no menu to open (brandon-theme-picker-bgw.exj).
@@ -970,13 +972,16 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     autocompact: {
       group: "model-context",
       description:
-        "Claude Code's auto-compact window: − and + move it by 100K, ↺ returns it to auto. Clicks type /autocompact into this session.",
+        "Claude Code's auto-compact window: − and + move it by 100K, ↺ returns it to auto. Clicks type /autocompact into this session, so the controls show only inside tmux.",
       template:
         '{{ if ne .autocompact.error "" }}⇲ ⚠ {{ .autocompact.error }}{{ else }}' +
         '⇲ {{ if eq .autocompact.window 0 }}auto{{ else }}{{ template "formatTokenCount" .autocompact.applied }}{{ end }}' +
+        // The window reads anywhere; its controls show only where a click has
+        // a pane to type into.
+        `{{ if ${IN_TMUX} }}` +
         '{{ if gt .autocompact.lower 0 }} {{ action (printf "autocompact.%d" .autocompact.lower) "−" }}{{ end }}' +
         '{{ if gt .autocompact.higher 0 }} {{ action (printf "autocompact.%d" .autocompact.higher) "+" }}{{ end }}' +
-        '{{ if gt .autocompact.window 0 }} {{ action "autocompact.auto" "↺" }}{{ end }}{{ end }}',
+        '{{ if gt .autocompact.window 0 }} {{ action "autocompact.auto" "↺" }}{{ end }}{{ end }}{{ end }}',
       bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
       when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
     },

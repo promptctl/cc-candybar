@@ -132,8 +132,9 @@ export function describeLink(link: DrawnLink, sessionId: string): string {
  *
  * The verbs that act through what the session REPORTS are not here, because a
  * driven bar reports an isolated machine: slash types into the tmux pane the
- * session's hint names (a driven bar sends no tmux hint, so the daemon refuses
- * it), ceiling runs the memento found under the session's own Claude config
+ * session's hint names (a driven bar either reports no pane, so the bar draws
+ * no slash control, or names a socket no tmux server listens on, so the daemon
+ * refuses the click), ceiling runs the memento found under the session's own Claude config
  * dir, and doctor-fix writes that same dir (an empty scratch dir for a driven
  * bar). Their refusals are the bar's own, worth showing.
  */
