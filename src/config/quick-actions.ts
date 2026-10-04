@@ -19,9 +19,9 @@ export function quickActions(prefix: string): {
   const name = (action: QuickAction) => `${prefix}${action}`;
   return {
     // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
-    // are gated on their values: no workspace gives no resume command, a
-    // local-only repo no page, and a bar on the bundled default no file, and
-    // the glyph is absent.
+    // are gated on their values: a payload the daemon did not build (the
+    // demo) carries no resume command, a local-only repo no page, and a bar
+    // on the bundled default no file, and the glyph is absent.
     template:
       `{{ action "${name("copySession")}" "⎘ id" }}` +
       `{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "⎘ resume" }}{{ end }}` +

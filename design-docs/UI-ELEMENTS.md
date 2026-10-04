@@ -436,7 +436,7 @@ One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab
 | Region | Click |
 |---|---|
 | `⎘ id` | copies the session id |
-| `⎘ resume` | copies the shell command that resumes this session (`cd <project> && claude --resume <id>`, with `CLAUDE_CONFIG_DIR` when the session runs under one) |
+| `⎘ resume` | copies the shell command that resumes this session (`cd <project> && claude --resume <id>`, with `CLAUDE_CONFIG_DIR` when the session runs under one and `--add-dir <dir>` for each directory the session added) |
 | `↗ proj` / `↗ log` | opens the project directory / the transcript in VS Code |
 | `↗ repo` | web link to the repository (shown when there is one) |
 | `↗ config` | opens the config file the bar renders from in VS Code (shown when there is one) |

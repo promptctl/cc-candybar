@@ -25,8 +25,9 @@ export interface ClaudeHookData {
     current_dir: string;
     project_dir: string;
     // "Empty array if none have been added" — documented as always present,
-    // but nothing checks the hook JSON, so the type admits a build that omits
-    // it; buildRenderPayload's workspace normalization reads absence as none.
+    // but validateHookData admits its absence (a build that omits it still
+    // renders) and checks its kind when present; buildRenderPayload's
+    // workspace normalization reads absence as none added.
     added_dirs?: string[];
     // Absent when not inside a linked git worktree
     git_worktree?: string;

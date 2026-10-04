@@ -402,8 +402,8 @@ export interface RenderPayload extends ClaudeHookData {
   // there is a file to open.
   readonly configPath?: string;
   // The shell command that resumes this session (src/claude-resume.ts) —
-  // what the menu's `⎘ resume` copies. Absent with the hook's workspace.
-  readonly resumeCommand?: string;
+  // what the menu's `⎘ resume` copies.
+  readonly resumeCommand: string;
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -1413,13 +1413,11 @@ export async function buildRenderPayload(
     navigation: { back: deps.navigation(hookData.session_id) },
     ...settingCounts,
     ...(configPath !== null && { configPath }),
-    ...(workspace !== undefined && {
-      resumeCommand: resumeCommand(
-        workspace,
-        hookData.session_id,
-        hints.claudeConfigDir,
-      ),
-    }),
+    resumeCommand: resumeCommand(
+      workspace,
+      hookData.session_id,
+      hints.claudeConfigDir,
+    ),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

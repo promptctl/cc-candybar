@@ -10,7 +10,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
-import { shellWord } from "../shell-word";
+import { shellWord, singleQuoted } from "../shell-word";
 import {
   claudeConfigDir,
   claudeSettingsPath,
@@ -529,11 +529,7 @@ function updateClaudeSettings(
   // would also claim `<binPath>-backup …` as ours and overwrite it.
   // Any single-quoting of the path is ours too: a version whose quoter left
   // fewer characters bare wrote the path quoted where shellWord leaves it bare.
-  const managedTokens = [
-    binPath,
-    shellWord(binPath),
-    `'${binPath.replaceAll("'", `'\\''`)}'`,
-  ];
+  const managedTokens = [binPath, shellWord(binPath), singleQuoted(binPath)];
   const isOurs =
     typeof existing === "string" &&
     (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||

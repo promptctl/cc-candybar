@@ -6,6 +6,10 @@
 // expands `=cmd` to that command's path.
 const SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
 
+export function singleQuoted(s: string): string {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+
 export function shellWord(s: string): string {
-  return SHELL_SAFE.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
+  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
 }
