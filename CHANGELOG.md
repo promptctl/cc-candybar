@@ -1,3 +1,10 @@
+# [1.113.0](https://github.com/promptctl/cc-candybar/compare/v1.112.0...v1.113.0) (2026-10-04)
+
+
+### Features
+
+* **menu:** the session tab carries the autocompact control ([#306](https://github.com/promptctl/cc-candybar/issues/306)) ([1cf652f](https://github.com/promptctl/cc-candybar/commit/1cf652f874853237d71c86aaa39f97792adc2328))
+
 # [1.112.0](https://github.com/promptctl/cc-candybar/compare/v1.111.0...v1.112.0) (2026-10-04)
 
 
