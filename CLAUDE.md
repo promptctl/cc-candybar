@@ -29,6 +29,8 @@ Start by running `lit quickstart` to load the workflow instructions. It prints h
 | Watch tests | `pnpm test:watch` |
 | Build the native (Rust) render-path client | `just install-rust` |
 | TUI demo (no Claude Code needed) | `just demo` (or `pnpm demo`) |
+| The bar in a browser terminal you can click | `pnpm bar:web` (`--config`, `--ssh`, `--port`) |
+| Build the GitHub Pages site (daemon in the page, `site/`) | `pnpm site:build` → `site/dist` |
 | Verify TS↔Rust wire-protocol version match | `pnpm check:protocol` |
 
 `prepublishOnly` runs lint → typecheck → check:protocol → build, in that order. Any of those failing blocks publish — fix the root cause; never bypass.
