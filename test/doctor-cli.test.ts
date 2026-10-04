@@ -162,6 +162,17 @@ describe("doctorPlan over a real config", () => {
     expect(out.stdout).toMatch(/errorAt/);
   });
 
+  test("a file named on the command line is the one checked, over $CC_CANDYBAR_CONFIG", () => {
+    const named = path.join(dir, "named.json5");
+    const hinted = path.join(dir, "hinted.json5");
+    fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
+    fs.writeFileSync(hinted, "{}");
+    expect(
+      doctorPlan(REAL, inDir({ CC_CANDYBAR_CONFIG: hinted }), project, named)
+        .stdout,
+    ).toBe(`✗ config — helper "h" is never called\n✓ tmux truecolor\n`);
+  });
+
   test("$CC_CANDYBAR_CONFIG names the file checked, as the client reports it", () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);

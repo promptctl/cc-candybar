@@ -1268,7 +1268,9 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   the facts the statusline client reported on the session's last render —
   not the daemon's own environment. `cc-candybar doctor` runs the same checks
   from a shell, with the exit code as the verdict; where the bar's row names
-  one problem and counts the rest, it lists every one.
+  one problem and counts the rest, it lists every one. It checks the config a
+  session started in that directory would load; `cc-candybar doctor <file>`
+  checks the file a statusline command names with `--config`.
 
 Preset, theme, style, variation and endcaps are each `◀ value ▶`: `◀` and
 `▶` apply the previous and next value, so stepping through themes recolours the

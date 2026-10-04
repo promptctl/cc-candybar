@@ -12,6 +12,7 @@ import {
   chmodSync,
   mkdtempSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   mkdirSync,
 } from "node:fs";
@@ -511,6 +512,21 @@ describe("shadowedConfigs", () => {
       writeFileSync(join(project, ".cc-candybar.json"), VALID_CFG);
       expect(shadowedConfigs(project, project)).toEqual([user]);
       expect(detectConfigCollisions(project, project)).not.toBeNull();
+    });
+  });
+
+  test("a shadowed location is named once, by the file the search would read there", () => {
+    withBoth((project, user) => {
+      writeFileSync(user.replace(/5$/, ""), VALID_CFG);
+      expect(shadowedConfigs(project, project)).toEqual([user]);
+    });
+  });
+
+  test("one directory spelled two ways is one location, never a file behind itself", () => {
+    withBoth((project, user) => {
+      const alias = join(project, "alias");
+      symlinkSync(project, alias);
+      expect(shadowedConfigs(alias, project)).toEqual([user]);
     });
   });
 

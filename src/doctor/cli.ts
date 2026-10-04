@@ -12,6 +12,7 @@
 // session's recorded client hint and render origin there — and the fold is
 // one function either way.
 
+import path from "node:path";
 import process from "node:process";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
@@ -25,6 +26,7 @@ import {
   type DoctorEdge,
 } from "./edge.js";
 import { detectConfigEnv } from "../config-hint.js";
+import { expandHome } from "../config/dsl-loader.js";
 import { loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { sanitizeConfigPath } from "../daemon/protocol.js";
@@ -69,6 +71,7 @@ export function doctorPlan(
   edge: DoctorEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
+  configFile: string | undefined = undefined,
 ): CliPlan {
   let facts: DoctorFacts;
   try {
@@ -79,11 +82,14 @@ export function doctorPlan(
         claudeConfigDir: detectClaudeConfigDir(env, cwd),
       },
       // The config the daemon would load for a session started here: this
-      // directory, under the override the statusline client would report.
+      // directory, under the file named on the command line (a statusline
+      // command's own `--config`), else the override the statusline client
+      // would report.
       {
         projectDir: cwd,
         cwd,
-        configFile: sanitizeConfigPath(detectConfigEnv(env)) ?? null,
+        configFile:
+          sanitizeConfigPath(configFile ?? detectConfigEnv(env)) ?? null,
       },
     );
   } catch (e) {
@@ -98,17 +104,23 @@ export function doctorPlan(
   };
 }
 
+// `cc-candybar doctor [config-file]` — the argv binding. The one argument is
+// the config file a session's statusline command names with `--config`, so
+// the CLI can check the file that session's bar renders.
 export function runDoctorCli(args: readonly string[]): never {
-  if (args.length > 0) {
+  // An empty string is a mis-expanded shell variable, never "no argument".
+  if (args.length > 1 || args[0] === "" || args[0]?.startsWith("--")) {
     process.stderr.write(
-      "doctor: takes no arguments\nUsage: cc-candybar doctor\n",
+      "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
     );
     process.exit(EXIT_USAGE);
   }
+  const cwd = process.cwd();
   const plan = doctorPlan(
     productionEdge(loadConfigOnce),
     process.env,
-    process.cwd(),
+    cwd,
+    args[0] === undefined ? undefined : path.resolve(cwd, expandHome(args[0])),
   );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);

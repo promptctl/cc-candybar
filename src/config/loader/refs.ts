@@ -223,30 +223,45 @@ export type ActionSite = "action" | "options";
 // two string literals (`{{ picker "applyTheme" "themePage" true true }}`); a
 // `menu` binds ONLY its apply action (`{{ menu "applyTheme" (dict …) }}`) —
 // its page cursor is synthesized from identity, and the dict's option-name
-// literals must never be misread as action refs — and a `carousel` binds only
-// its apply action too. One scan arms on any keyword with that keyword's own
-// arg count [LAW:single-enforcer]. A keyword after `.` or `$` is a field read
-// (`eq .menu "open"`), never a call.
+// literals must never be misread as action refs — and a `carousel` binds its
+// apply action and, when it names one, the action its centre fires
+// (`{{ carousel "applyTheme" 0 "openThemes" }}`: the neighbour cap between
+// them is a number, so the centre action is the call's second string literal).
+// One scan arms on any keyword with that keyword's own arg count
+// [LAW:single-enforcer], and a name is a literal among the call's OWN
+// arguments: one inside a parenthesised argument belongs to that expression,
+// and the call ends at its closing `)` or a `|`, so an optional name left out
+// is never filled from whatever follows. A keyword after `.` or `$` is a field
+// read (`eq .menu "open"`), never a call.
 const BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel)\s+$/;
 const NAME_ARGS: Readonly<Record<string, number>> = {
   action: 1,
   picker: 2,
   menu: 1,
-  carousel: 1,
+  carousel: 2,
 };
 function* actionBindings(
   code: string,
 ): IterableIterator<{ name: string; site: ActionSite }> {
   let cursor = 0;
   let pending = 0; // remaining name args to capture for the current call
+  let depth = 0; // parentheses open inside the current call's argument list
   let site: ActionSite = "action";
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
-    const kw = BINDING_KEYWORD_RE.exec(code.slice(cursor, s.index));
+    const between = code.slice(cursor, s.index);
+    const kw = BINDING_KEYWORD_RE.exec(between);
     if (kw !== null) {
       pending = NAME_ARGS[kw[1]!]!;
+      depth = 0;
       site = kw[1] === "action" ? "action" : "options";
+    } else {
+      for (const ch of between) {
+        if (ch === "(") depth++;
+        if (ch === ")") depth--;
+        if (depth < 0 || (ch === "|" && depth === 0)) pending = 0;
+      }
     }
-    if (pending > 0) {
+    if (pending > 0 && depth === 0) {
       yield { name: s[0].slice(1, -1), site };
       pending--;
     }

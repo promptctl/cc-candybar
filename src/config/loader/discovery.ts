@@ -256,9 +256,13 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
  * the one the search stops at: a user config behind a project one, say. Only
  * the first file found is read — files never merge with each other — so each
  * of these is a config the bar ignores entirely (brandon-doctor-v62x.e91).
- * The winner's same-location sibling is the extension collision below, not a
- * shadowed location, and an explicit `configFile` bypasses the chain, so it
- * shadows nothing.
+ * One file per LOCATION, the one the search would read there: a location's
+ * other extension is the collision below, not a second shadowed config, and
+ * an explicit `configFile` bypasses the chain, so it shadows nothing.
+ *
+ * A location is its directory as the filesystem resolves it, so a project
+ * directory and a cwd that spell one directory two ways (a symlinked
+ * checkout, macOS's `/tmp`) are one location, never a file behind itself.
  *
  * [LAW:single-enforcer] The same enumerator and the same presence probe the
  * resolver folds over, so "found first" here is the file the resolver loads.
@@ -268,14 +272,17 @@ export function shadowedConfigs(
   cwd?: string,
   configFile?: string,
 ): readonly string[] {
-  const [winner, ...behind] = dslConfigCandidatePaths(
+  const firstAt = new Map<string, string>();
+  for (const candidate of dslConfigCandidatePaths(
     projectDir,
     cwd,
     configFile,
-  ).filter((candidate) => presence(candidate) === "present");
-  return winner === undefined
-    ? []
-    : behind.filter((p) => path.dirname(p) !== path.dirname(winner));
+  )) {
+    if (presence(candidate) !== "present") continue;
+    const location = fs.realpathSync(path.dirname(candidate));
+    if (!firstAt.has(location)) firstAt.set(location, candidate);
+  }
+  return [...firstAt.values()].slice(1);
 }
 
 /**
