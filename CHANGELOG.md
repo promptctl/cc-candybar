@@ -1,3 +1,10 @@
+# [1.109.0](https://github.com/promptctl/cc-candybar/compare/v1.108.1...v1.109.0) (2026-10-04)
+
+
+### Features
+
+* **menu:** the session tab gains ⎘ resume and ↗ config ([#300](https://github.com/promptctl/cc-candybar/issues/300)) ([c686759](https://github.com/promptctl/cc-candybar/commit/c686759f8fd34e6230c22dcfc102b9fcd7e12c26))
+
 ## [1.108.1](https://github.com/promptctl/cc-candybar/compare/v1.108.0...v1.108.1) (2026-10-04)
 
 
