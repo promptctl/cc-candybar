@@ -35,6 +35,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { FLOOR_STYLE } from "./helpers/floor-style";
+import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
@@ -75,7 +76,7 @@ const HOOK = {
 } as never;
 
 const payloadWith = (hints: ClientHints) =>
-  buildRenderPayload(HOOK, DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, { unsaved: 0, resettable: 0, configPath: null });
+  buildRenderPayload(HOOK, DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, NO_CONFIG_FILE);
 
 describe("shortHostname", () => {
   test("takes everything before the first dot — zsh's %m, not %M", () => {

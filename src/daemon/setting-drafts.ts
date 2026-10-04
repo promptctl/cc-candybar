@@ -398,19 +398,29 @@ export function fileHeldSettings(raw: RawDslConfig): ReadonlySet<string> {
   );
 }
 
-// [LAW:one-source-of-truth] What the menu's save cell counts: every draft a
-// save writes, settings and placements alike, and every setting a reset all
-// would change — one the session holds a draft for or the file holds a value
-// for (`fileHeld`, from fileHeldSettings over the file's raw parse).
+// [LAW:one-source-of-truth] What the menu's save cell counts and its controls
+// mark: every draft a save writes, settings and placements alike, and, per
+// setting, whether its reset would change anything — the session holds a
+// draft for it or the file holds a value for it (`fileHeld`, from
+// fileHeldSettings over the file's raw parse), exactly the layers the reset
+// clears (brandon-menu-ia-q30.nk8). A value the active preset pins is neither,
+// so it is not marked: a reset could not move it.
 export function settingCounts(
   config: DslConfig,
   fileHeld: ReadonlySet<string>,
   sessionPick: (key: string) => string | null,
 ): SettingCounts {
   const drafts = settingDrafts(config, sessionPick);
+  const drafted = new Set(drafts.map((d) => d.configKey));
+  const resettable = Object.fromEntries(
+    SETTING_ROWS.map(([name, row]) => [
+      name,
+      drafted.has(row.configKey) || fileHeld.has(row.configKey),
+    ]),
+  ) as Record<SettingName, boolean>;
   return {
     unsaved: drafts.length + placementDrafts(config, sessionPick).length,
-    resettable: new Set([...drafts.map((d) => d.configKey), ...fileHeld]).size,
+    resettable,
   };
 }
 

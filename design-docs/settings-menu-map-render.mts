@@ -91,6 +91,8 @@ const PROPOSED: Record<string, readonly string[]> = {
   "door line 1 + reset confirm": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
   "door line 2: tabs": ["✕", "▾ ⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
   "door line 2: tabs, two marked": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools"],
+  // checkPayload marks every setting resettable, so every tab holding a control is marked.
+  "today tabs, all marked (validates model)": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config •", "🧰 tools"],
   "session links": ["✕", "⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config"],
   "session commands": ["✕", "/compact", "/clear", "/model", "⏲ autocompact ▸"],
   "look": ["✕", "◀ tokyo-night ▶", "◀ none ▶", "◀ accent ▶", "◀ powerline ▶"],
@@ -109,7 +111,7 @@ for (const [name, cells] of Object.entries(PROPOSED)) {
 // must equal the line Part 1 rendered for that state that holds its marker, or
 // the script fails.
 const VALIDATES: Record<string, [state: string, marker: string]> = {
-  "door line 2: tabs": ["default door @200", "⚡ session"],
+  "today tabs, all marked (validates model)": ["default door @200", "⚡ session"],
   "tools": ["default tools @200", "🩺 doctor"],
   "today look tab (validates model)": ["default look @200", "◐ none"],
   "today layout tab (validates model)": ["default layout @200", "✎ arrange"],

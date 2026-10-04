@@ -20,6 +20,7 @@ import type {
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { FLOOR_STYLE } from "./helpers/floor-style";
+import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 
 type LogEntry = { level: string; msg: string };
 
@@ -98,7 +99,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.git).toBeUndefined();
@@ -121,7 +122,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.git).toBeUndefined();
@@ -149,7 +150,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -191,7 +192,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     chmodSync(transcript, 0o644);
 
@@ -222,7 +223,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.cache).toEqual({
@@ -261,7 +262,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.context).toBeUndefined();
@@ -304,7 +305,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -330,7 +331,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.tmux).toBeUndefined();
@@ -369,7 +370,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       new Set(), // no provider lane needed for this projection
       effective,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     // `theme` and `style` are the two fields this projection does NOT carry:
     // renderDsl injects both `.effective` values, because under a RULE in that
@@ -430,7 +431,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.git).toMatchObject({
@@ -461,7 +462,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -494,7 +495,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
 
     expect("prNumber" in payload.git!).toBe(false);
@@ -529,7 +530,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     return { payload, asked };
   };
@@ -569,7 +570,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.autocompact).toEqual({
       window: 800_000,
@@ -623,7 +624,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
       new Set(paths),
       EFFECTIVE_GLOBALS,
       hints,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     return { scopes, seeded };
   };
@@ -670,7 +671,7 @@ describe("buildRenderPayload — config file and resume command", () => {
       new Set(),
       EFFECTIVE_GLOBALS,
       hints,
-      { unsaved: 0, resettable: 0, configPath },
+      { ...NO_CONFIG_FILE, configPath },
     );
 
   test("a config file's path is present; the bundled default's is absent", async () => {
@@ -699,7 +700,7 @@ describe("buildRenderPayload — config file and resume command", () => {
       new Set(),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.resumeCommand).toBe("cd /tmp && claude --resume test-session");
   });

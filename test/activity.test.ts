@@ -31,6 +31,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
+import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -453,7 +454,7 @@ describe("the payload projection", () => {
       new Set(["activity"]),
       EFFECTIVE_GLOBALS,
       {},
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     return built.activity;
   };

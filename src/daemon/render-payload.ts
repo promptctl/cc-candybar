@@ -23,6 +23,7 @@ import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, Globals, VariableDecl } from "../config/dsl-types.js";
 import type { BuildLineOptions } from "../render/strip.js";
+import type { SettingName } from "../config/setting-projections.js";
 import type { RenderSelection } from "../dsl/render.js";
 import {
   effectivePresetName,
@@ -391,11 +392,12 @@ export interface RenderPayload extends ClaudeHookData {
   // (src/daemon/setting-drafts.ts), derived every render so the menu's
   // `💾 save N` exists exactly while there is something to save.
   readonly unsaved: number;
-  // How many settings a reset all would change: those with a draft, or with
-  // a value the config file holds at a layer a reset clears
-  // (settingCounts over fileHeldSettings, src/daemon/setting-drafts.ts), so the menu's `⟲`
-  // exists exactly while it would do something.
-  readonly resettable: number;
+  // Per setting, whether its reset would change anything: it has a draft, or
+  // the config file holds a value at a layer a reset clears (settingCounts
+  // over fileHeldSettings, src/daemon/setting-drafts.ts). Total over SETTINGS,
+  // so each control's `↺`, each tab's `•`, and the menu's `⟲` show exactly
+  // while they would do something.
+  readonly resettable: Readonly<Record<SettingName, boolean>>;
   // The config file this session's bar renders from (the render cache
   // entry's resolved path); absent when it renders the bundled default
   // because no file exists, so the menu's `↗ config` shows exactly while
