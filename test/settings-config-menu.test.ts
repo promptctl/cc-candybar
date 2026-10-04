@@ -30,14 +30,6 @@ import {
   renderSelectionOf,
   resolveEffectiveGlobals,
 } from "../src/daemon/render-payload";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import {
   fileHeldSettings,
@@ -45,7 +37,7 @@ import {
 } from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
 import { parseHandlerUrl } from "../src/install/index";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -65,12 +57,14 @@ const TWO_SEGMENT_ROOT = `{
 
 // [LAW:one-source-of-truth] One rig: parse the user file through the real
 // cascade (merged on the bundled default, validated — which is where the
-// settings menu is synthesized), install the derived gates the daemon
-// installs, and expose render/click over the real handlers. Every assertion
-// below reads the same bar a running daemon would produce.
+// settings menu is synthesized), and expose render/click over the real
+// handlers, each click gated by the config the rig currently holds. Every
+// assertion below reads the same bar a running daemon would produce.
 // `durable`, when given, is the session's config file: the rig writes `source`
 // there and records the render origin a durable click resolves it from — the
-// same two facts a real render leaves behind for a real click.
+// same two facts a real render leaves behind for a real click. Without one the
+// rig records a plain render origin, since every click resolves its config
+// from the session's last render.
 function rig(
   source: string,
   durable?: DurableConfig,
@@ -89,10 +83,10 @@ function rig(
 } {
   const sessionState = new SessionState();
   durable?.write(source);
-  durable?.seedOrigin(sessionState, SID);
+  if (durable === undefined) recordRender(sessionState, SID);
+  else durable.seedOrigin(sessionState, SID);
   // Everything the daemon's cache entry holds for one config — rebuilt whole
-  // on a reload, the old registry and gates disposed first, exactly as
-  // RenderCache.reloadInto swaps an entry's state.
+  // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
     const config = parseAndValidate(
       "<user>",
@@ -103,20 +97,11 @@ function rig(
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-    const disposers = [
-      ...deriveActionValidators(config).map(({ key, spec }) =>
-        registerStateValidator(key, spec),
-      ),
-      ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-        registerConfigValidator(key, spec),
-      ),
-      () => registry.dispose(),
-    ];
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
       loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, ALLOWED).raw,
     );
-    return { config, store, registry, compiled, disposers, fileHeld };
+    return { config, store, registry, compiled, fileHeld };
   };
   let entry = load(source);
   const logs: string[] = [];
@@ -133,7 +118,7 @@ function rig(
         ),
       });
       const next = load(durable!.text()!);
-      entry.disposers.forEach((d) => d());
+      entry.registry.dispose();
       entry = next;
     },
   };
@@ -195,7 +180,7 @@ function rig(
       if (!handler) throw new Error(`no handler for verb "${verb}"`);
       handler(value, ctx);
     },
-    dispose: () => entry.disposers.forEach((d) => d()),
+    dispose: () => entry.registry.dispose(),
   };
 }
 

@@ -17,15 +17,16 @@ import {
   resolveEffectiveGlobals,
 } from "../src/daemon/render-payload";
 import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import {
   listResolvablePaletteNames,
   type ColorCompatibility,
 } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
+import {
+  clickUrl,
+  effectsOf,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SGR = /\x1b\[[0-9;]*m/g;
@@ -40,12 +41,10 @@ test("colour depth none keeps every link the bar draws in colour", () => {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-    const ctx = testVerbContext(sessionState);
+    const ctx = testVerbContext(sessionState, undefined, config);
     // [LAW:one-source-of-truth] The daemon's own resolution: session picks fold
     // into the effective globals, which feed both the payload's `.effective`
     // read-backs and the depth the bytes are drawn at. `drawnAt` overrides only
@@ -123,7 +122,6 @@ test("colour depth none keeps every link the bar draws in colour", () => {
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 
   } finally {
-    disposers.forEach((d) => d());
     registry.dispose();
   }
 });

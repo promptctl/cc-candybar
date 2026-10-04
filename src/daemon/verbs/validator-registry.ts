@@ -1,13 +1,13 @@
-// [LAW:one-type-per-behavior] The keyed-validator-registry ALGEBRA, extracted
-// from state-validators.ts (candybar-config-engine-71o.2) so it has exactly
-// ONE implementation shared by two independent keyspaces: SessionState writes
+// [LAW:one-type-per-behavior] The keyed-validator ALGEBRA, extracted from
+// state-validators.ts (candybar-config-engine-71o.2) so it has exactly ONE
+// implementation shared by two independent keyspaces: SessionState writes
 // (`set` actions, state-validators.ts) and persistent config writes (`persist`
 // actions, config-validators.ts). What differs between the two is only DATA —
-// which keys are baseline/permanent and what namespace the keys live in — so
-// this module is the "one cutter" and each keyspace is an instance of it, not
-// a hand-rolled copy of the merge/dispose/rebuild logic.
+// which keys are built in, what a config contributes, and what namespace the
+// keys live in — so this module is the "one cutter" and each keyspace is an
+// instance of it, not a hand-rolled copy of the merge.
 //
-// [LAW:one-source-of-truth] THE spec algebra: a key's live registrations
+// [LAW:one-source-of-truth] THE spec algebra: a key's contributions
 // (DerivedValidatorSpec[]) collapse to ONE spec via mergeKeySpecs, and a spec
 // is residue-projected to a KeyValidator via validatorForSpec. Both keyspaces
 // read this from the SAME functions, so "what does a range/allow-list/int
@@ -30,25 +30,22 @@ export type KeyValidator = (rawValue: string) => ValidateResult;
 // action's `set`/`persist` declares about a key, from which the validator is
 // residue. A key is one of three key shapes: an integer (a menu's page
 // index), an allow-list (the union of values some button can write), or a
-// bounded integer range (a stepper's value). The registry compares specs to
-// decide whether two registrations can share a key (same `kind`) and merges
-// them by unioning content (allow-list members; range bounds); the opaque
+// bounded integer range (a stepper's value). A gate compares specs to decide
+// whether two contributions can share a key (same `kind`) and merges them by
+// unioning content (allow-list members; range bounds); the opaque
 // `KeyValidator` it builds from the spec cannot be compared or merged, which
-// is why registration takes the spec and owns validator construction.
+// is why a contribution is the spec and the gate owns validator construction.
 //
 // [LAW:one-source-of-truth] The spec carries only content (kind + allow-list
 // members + range bounds), never the human label — the label is a pure
-// function of the key, computed where the validator is built, so two
-// registrations of one key yield byte-identical validators regardless of
-// which config registered first.
+// function of the key, computed where the validator is built.
 export type DerivedValidatorSpec =
   | { readonly kind: "int" }
   | { readonly kind: "allow-list"; readonly allowed: readonly string[] }
   | {
       // A bounded-integer key (a stepper's value): `min`/`max` gate it. What
-      // an UNSET key steps from is not here: this registry merges every loaded
-      // config, and that value is a fact about ONE session's config, so the
-      // step verbs resolve it at click time.
+      // an UNSET key steps from is not here: it is a value some session's
+      // picks resolve, so the step verbs resolve it at click time.
       readonly kind: "range";
       readonly min: number;
       readonly max: number;
@@ -284,144 +281,125 @@ export interface RangeParams {
   readonly max: number;
 }
 
-interface BaselineEntry {
-  readonly permanent: true;
-  readonly validator: KeyValidator;
-}
-// [LAW:single-enforcer] Every live contribution to the key and the ONE spec
-// mergeKeySpecs folds them into — the same coherence rule a single config's
-// action table merges by, so whether two configs may share a key is decided
-// where whether two actions may is, never by a second kind check here.
-interface DerivedEntry {
-  readonly permanent: false;
-  readonly specs: DerivedValidatorSpec[];
-  merged: DerivedValidatorSpec;
-  validator: KeyValidator;
-}
-type ValidatorEntry = BaselineEntry | DerivedEntry;
-
-export interface ValidatorRegistry {
-  register(key: string, spec: DerivedValidatorSpec): () => void;
+// [LAW:types-are-the-program] What ONE config's sessions may write: built
+// whole from a set of contributions and never changed after, so a session's
+// click is gated — and its stepper wrapped — by the config that session
+// renders and by no other the daemon happens to hold.
+export interface Gate {
   validate(key: string, rawValue: string): ValidateResult;
   listKeys(): readonly string[];
-  // [LAW:one-source-of-truth] The permanent/baseline subset of listKeys() —
-  // exposed so a consumer that needs to distinguish "derived from an action
-  // table" from "always writable" (e.g. dropping an allow-list contribution
-  // aimed at a baseline key) reads it from the registry that owns the
-  // distinction, rather than re-declaring the baseline set as a second list.
-  listBaselineKeys(): readonly string[];
   rangeParamsFor(key: string): RangeParams | null;
 }
 
-// [LAW:one-type-per-behavior] ONE registry implementation, instantiated once
-// per keyspace. `baseline` seeds PERMANENT entries (raw KeyValidator
-// functions, never re-claimable — SessionState's legacy theme/style/
-// toolbar-expanded); an empty baseline (the config-file keyspace) means
-// every key is fully derived from the action table, exactly the epic's
-// "zero engine edits to add a menu-able field" goal. `noun` names the
-// keyspace in every message ("state"/"config") so the two instances stay
-// operator-distinguishable — a "state key" and "config key" error can never
-// be confused for the other keyspace's gate.
-//
 // [LAW:no-silent-fallbacks] An unknown key is a caller-visible rejection
-// (validate) or a loud throw (a baseline re-claim, an incoherent merge) — never a
-// silent accept-and-store.
-export function createValidatorRegistry(
+// (validate); a contribution that cannot be addressed, re-claims a built-in
+// key, or contradicts another on its key is a loud throw — never a silent
+// accept-and-store.
+function createGate(
   baseline: Readonly<Record<string, KeyValidator>>,
-  noun: string = "state",
-): ValidatorRegistry {
-  const entries = new Map<string, ValidatorEntry>(
-    Object.entries(baseline).map(([key, validator]) => [
-      key,
-      { validator, permanent: true } as const,
-    ]),
-  );
-
-  function baselineKeys(): readonly string[] {
-    const out: string[] = [];
-    for (const [key, entry] of entries) if (entry.permanent) out.push(key);
-    return out;
+  contributions: readonly KeySpecContribution[],
+  noun: string,
+): Gate {
+  const validators = new Map<string, KeyValidator>(Object.entries(baseline));
+  const ranges = new Map<string, RangeParams>();
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    // [LAW:types-are-the-program] The wire splits its tail on `/`, so a
+    // slash-bearing key can never be addressed — listing it would be
+    // gate-vs-wire drift.
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" — the wire shape splits on ` +
+          `"/" so a slash-bearing key cannot be addressed. Use a slash-free key.`,
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be ` +
+          `re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`,
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
   }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`,
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null,
+  };
+}
+
+export interface Keyspace<C extends object> {
+  // A key every session may write whatever config it renders — the daemon's
+  // own links (the update notice's), drawn above any config's bar.
+  register(key: string, spec: DerivedValidatorSpec): () => void;
+  // The gate of the sessions rendering `config`.
+  gateFor(config: C): Gate;
+}
+
+// [LAW:one-type-per-behavior] ONE keyspace implementation, instantiated once
+// per wire. `baseline` seeds the built-in keys (raw KeyValidator functions,
+// never re-claimable — SessionState's theme/endcaps/toolbar-expanded; none
+// for the config file). `derive` is what a config contributes: its action
+// table's writes. `noun` names the keyspace in every message
+// ("state"/"config").
+//
+// [LAW:one-source-of-truth] A gate is DERIVED from its config, so there is
+// nothing to register when a config loads and nothing to dispose when it
+// goes: two configs declaring one key differently each gate their own
+// sessions. The memo holds the derivation per config object (a reload is a
+// new object) and is dropped whole when a daemon-wide key changes.
+// [LAW:no-shared-mutable-globals] The daemon-wide contributions are the one
+// mutable thing here, owned by the keyspace and written only through
+// `register` and the disposer it returns.
+export function createKeyspace<C extends object>(
+  baseline: Readonly<Record<string, KeyValidator>>,
+  noun: string,
+  derive: (config: C) => readonly KeySpecContribution[],
+): Keyspace<C> {
+  const daemonWide: KeySpecContribution[] = [];
+  let epoch = 0;
+  const gates = new WeakMap<C, { epoch: number; gate: Gate }>();
 
   return {
     register(key, spec) {
-      if (!key) throw new Error("register: key is required");
-      // [LAW:types-are-the-program] The set-state wire splits its tail on
-      // `/`, so a slash-bearing key can never be addressed — listing it
-      // would be registry-vs-wire drift. Reject at registration so the
-      // unreachable-but-listed state is unrepresentable.
-      if (key.includes("/")) {
-        throw new Error(
-          `register: key "${key}" contains "/" — the wire shape splits on ` +
-            `"/" so a slash-bearing key cannot be addressed. Use a slash-free key.`,
-        );
-      }
-      const existing = entries.get(key);
-      if (existing) {
-        if (existing.permanent) {
-          throw new Error(
-            `register: key "${key}" is a built-in ${noun} key and cannot be ` +
-              `re-claimed (built-in keys: ${[...baselineKeys()].join(", ")})`,
-          );
-        }
-        // Merge BEFORE committing: an incoherent pair throws with the entry
-        // exactly as it was.
-        const merged = mergeKeySpecs(key, [...existing.specs, spec], noun);
-        existing.specs.push(spec);
-        existing.merged = merged;
-        existing.validator = validatorForSpec(key, merged, noun);
-      } else {
-        const merged = mergeKeySpecs(key, [spec], noun);
-        entries.set(key, {
-          permanent: false,
-          specs: [spec],
-          merged,
-          validator: validatorForSpec(key, merged, noun),
-        });
-      }
+      const contribution = { key, spec };
+      // Built before committing: a key the wire cannot address, a built-in
+      // re-claimed, or a spec no daemon-wide sibling can share its key with
+      // throws with the keyspace exactly as it was.
+      createGate(baseline, [...daemonWide, contribution], noun);
+      daemonWide.push(contribution);
+      epoch++;
       let active = true;
       return () => {
         if (!active) return;
         active = false;
-        const entry = entries.get(key);
-        if (!entry || entry.permanent) return;
-        const i = entry.specs.indexOf(spec);
-        if (i >= 0) entry.specs.splice(i, 1);
-        if (entry.specs.length === 0) {
-          entries.delete(key);
-        } else {
-          entry.merged = mergeKeySpecs(key, entry.specs, noun);
-          entry.validator = validatorForSpec(key, entry.merged, noun);
-        }
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
       };
     },
 
-    validate(key, rawValue) {
-      const entry = entries.get(key);
-      if (!entry) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...entries.keys()].join(", ")})`,
-        };
-      }
-      return entry.validator(rawValue);
-    },
-
-    listKeys() {
-      return [...entries.keys()];
-    },
-
-    listBaselineKeys() {
-      return baselineKeys();
-    },
-
-    rangeParamsFor(key) {
-      const entry = entries.get(key);
-      if (!entry || entry.permanent || entry.merged.kind !== "range") {
-        return null;
-      }
-      const { min, max } = entry.merged;
-      return { min, max };
+    gateFor(config) {
+      const held = gates.get(config);
+      if (held?.epoch === epoch) return held.gate;
+      const gate = createGate(
+        baseline,
+        [...daemonWide, ...derive(config)],
+        noun,
+      );
+      gates.set(config, { epoch, gate });
+      return gate;
     },
   };
 }

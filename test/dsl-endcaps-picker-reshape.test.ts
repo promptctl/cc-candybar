@@ -16,7 +16,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { recordRender, testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   effectiveEndcaps,
@@ -70,26 +70,31 @@ function buildRuntime() {
       width: Number.POSITIVE_INFINITY,
     });
 
-  return { sessionState, render };
+  return { config, sessionState, render };
 }
 
-function clickEndcaps(sessionState: SessionState, style: string): void {
+function clickEndcaps(
+  { config, sessionState }: ReturnType<typeof buildRuntime>,
+  style: string,
+): void {
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]);
-  clickUrl(url, testVerbContext(sessionState));
+  recordRender(sessionState, SID);
+  clickUrl(url, testVerbContext(sessionState, undefined, config));
 }
 
 describe("DSL style picker — live reshape", () => {
   test("clicking a style changes the bytes the joiner emits between cells", () => {
-    const { sessionState, render } = buildRuntime();
+    const rt = buildRuntime();
+    const { sessionState, render } = rt;
 
     const powerline = render(); // default: SessionState unset -> "powerline" floor
     expect(powerline.length).toBeGreaterThan(0);
 
-    clickEndcaps(sessionState, "capsule");
+    clickEndcaps(rt, "capsule");
     const capsule = render();
 
-    clickEndcaps(sessionState, "plain");
+    clickEndcaps(rt, "plain");
     const plain = render();
 
     // [LAW:verifiable-goals] The reshape IS the contract: each strip style yields
@@ -101,10 +106,11 @@ describe("DSL style picker — live reshape", () => {
   });
 
   test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", () => {
-    const { sessionState, render } = buildRuntime();
+    const rt = buildRuntime();
+    const { sessionState, render } = rt;
     const seen = new Map<string, string>();
     for (const style of ENDCAPS_SHAPES) {
-      clickEndcaps(sessionState, style);
+      clickEndcaps(rt, style);
       const out = render();
       expect(out.length).toBeGreaterThan(0);
       seen.set(style, out);

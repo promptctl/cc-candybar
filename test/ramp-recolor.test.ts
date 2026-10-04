@@ -17,12 +17,8 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { resolveStyleSelection, resolveThemeSelection } from "../src/themes";
 
 const SID = "s-ramp-recolor";
@@ -67,12 +63,10 @@ const SRC = `{
 
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
-// The derived click gate — the sole authority on what a set-state may write
-// — registered per test so the style click travels the road a real click
-// travels, and released after so the daemon-global registry stays clean.
-const disposers: Array<() => void> = [];
+// Each runtime's source registry, released after the test that built it.
+const registries: SourceRegistry[] = [];
 afterEach(() => {
-  for (const dispose of disposers.splice(0)) dispose();
+  for (const registry of registries.splice(0)) registry.dispose();
 });
 
 function buildRuntime() {
@@ -81,12 +75,10 @@ function buildRuntime() {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  disposers.push(
-    () => registry.dispose(),
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-  );
+  registries.push(registry);
+  // The click gate is the config this session renders, so the theme and style
+  // clicks travel the road a real click travels.
+  recordRender(sessionState, SID);
 
   const render = (payload: { pct: number; stop: string }): string => {
     const theme = resolveThemeSelection(
@@ -114,7 +106,7 @@ function buildRuntime() {
   const click = (key: "theme" | "style", value: string): void =>
     clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
-      testVerbContext(sessionState),
+      testVerbContext(sessionState, undefined, config),
     );
   return { render, click };
 }

@@ -29,14 +29,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-chrome";
@@ -48,7 +40,7 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
 } from "../src/config/disclosure";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -140,15 +132,8 @@ function buildRuntime(root: string) {
   // the daemon really emits for this config. Before brandon-themes-dzl this rig
   // passed a textual-dark palette beside a config declaring tokyo-night, and the
   // snapshot pinned a bar production never renders.
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
-  const ctx: VerbContext = testVerbContext(sessionState);
+  recordRender(sessionState, SID);
+  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const render = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
   const click = (url: string): void => {
@@ -169,8 +154,7 @@ function buildRuntime(root: string) {
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
     click(link.url);
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, render, click, clickLabel, dispose };
+  return { config, sessionState, render, click, clickLabel };
 }
 
 // [LAW:single-enforcer] "Hosts a menu" is decided by the same authority the
@@ -203,9 +187,8 @@ describe("every {{ menu }} the bundled default renders", () => {
   // The coverage guard. A bundled menu added later lands in this list, and the
   // failing snapshot is the reminder that it wants bytes committed below.
   test("coverage: the menu-hosting segments of the bundled default", () => {
-    const { config, dispose } = buildRuntime(`{ h: ['model'] }`);
+    const { config } = buildRuntime(`{ h: ['model'] }`);
     expect(menuHostingSegments(config)).toMatchSnapshot();
-    dispose();
   });
 
   // The settings menu, reached the way a user reaches it. Its controls open
@@ -224,7 +207,6 @@ describe("every {{ menu }} the bundled default renders", () => {
     const out = rig.render();
     expect(menuOpeners(out)).toEqual([]);
     expect(out).toMatchSnapshot("closed");
-    rig.dispose();
   });
 
   // [LAW:verifiable-goals] The affordance the ticket is about. These bytes
@@ -257,7 +239,6 @@ describe("every {{ menu }} the bundled default renders", () => {
       expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_CLOSED}`);
       expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("closed");
-      rig.dispose();
     });
 
     test("one + opened: exact bytes", () => {
@@ -270,7 +251,6 @@ describe("every {{ menu }} the bundled default renders", () => {
       const out = rig.render();
       expect(barRow(out)).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("open");
-      rig.dispose();
     });
 
     // [LAW:verifiable-goals] The regression removing the glyph invites, pinned
@@ -291,7 +271,6 @@ describe("every {{ menu }} the bundled default renders", () => {
       rig.click(openers[0]!.url);
       const openRow = barRow(rig.render());
       expect(openRow).not.toBe(closedRow);
-      rig.dispose();
     });
   });
 });

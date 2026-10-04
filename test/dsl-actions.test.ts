@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] Action-surface acceptance, driven through the real spine
 // (registerDslConfig + renderDsl), the real loader (parseAndValidate), and the
-// real set-state gate (deriveActionValidators + registerStateValidator +
-// validateStateWrite) — never a parallel rig:
+// real set-state gate (stateGate of the config the session renders, built from
+// deriveActionValidators) — never a parallel rig:
 //
 //   1. A `{{ action "name" display [boundValue] }}` call renders ONE clickable
 //      region whose OSC-8 URL is the action realized against current state —
@@ -11,8 +11,9 @@
 //      a CUSTOM key yields an allow-list; a bounded set yields a range; a set on
 //      a BASELINE key (theme/style) reuses the baseline gate (derives nothing);
 //      copy/open derive nothing.
-//   3. deriveActionValidators feeds the SAME registerStateValidator merge/dispose
-//      lifecycle — same-key registrations union, dispose ref-counts.
+//   3. A config's gate is its own derived specs over the daemon-wide keys
+//      (registerStateValidator) — same-key daemon-wide registrations union, and
+//      each one's dispose takes only its own members back out.
 //   4. The action table is the SOLE interaction authority — multiple actions
 //      writing one key merge at one site.
 //   5. The loader proves the ActionDecl invariants (one effect; one set value
@@ -29,7 +30,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   deriveActionValidators,
   registerStateValidator,
-  validateStateWrite,
+  stateGate,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
@@ -73,8 +74,8 @@ interface SideEffect {
   readonly args: string[];
 }
 
-// Drive a config through the real spine + the real derived gate
-// (deriveActionValidators — the sole interaction authority). `click` drives state
+// Drive a config through the real spine + the real derived gate (the gate of
+// the config the session renders — the sole interaction authority). `click` drives state
 // verbs (set-state, step-state) through the REAL daemon leaf handlers against a
 // real SessionState, so the gate, the relative-step wrap, and the unset seed are
 // exercised exactly as the daemon runs them; copy/open are recorded as side
@@ -94,9 +95,6 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(width),
     );
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
   const sideEffects: SideEffect[] = [];
   recordRender(sessionState, sessionId);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
@@ -115,8 +113,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       handler(e.value, ctx); // real set-state / step-state through the gate
     }
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, sessionState, render, click, sideEffects, dispose };
+  return { config, store, sessionState, render, click, sideEffects };
 }
 
 // ─── Literal set action ────────────────────────────────────────────────────────
@@ -134,7 +131,7 @@ describe("2de.12 — literal set action", () => {
   }`;
 
   test("renders one clickable region whose click sets the literal value", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("vanilla 🍫");
     const urls = ownUrls(out);
@@ -146,7 +143,6 @@ describe("2de.12 — literal set action", () => {
     expect(sessionState.get("s1", "flavor")).toBe("chocolate");
     // The next render reflects the mutated state (the cross-process loop in one process).
     expect(stripAnsi(render())).toContain("chocolate 🍫");
-    dispose();
   });
 
   test("derives an allow-list gate of {to} for the custom key", () => {
@@ -157,13 +153,12 @@ describe("2de.12 — literal set action", () => {
   });
 
   test("marks the region active when the key already holds the literal value", () => {
-    const { render, sessionState, dispose } = buildRuntime(SRC);
+    const { render, sessionState } = buildRuntime(SRC);
     sessionState.set("s1", "flavor", "chocolate");
     const out = render();
     expect(boldUrls(out).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "flavor", "chocolate"] }],
     ]);
-    dispose();
   });
 });
 
@@ -184,11 +179,10 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
   });
 
   test("the click still passes the baseline theme gate end-to-end", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const url = ownUrls(render())[0]!;
     click(url);
     expect(sessionState.get("s1", "theme")).toBe("nord");
-    dispose();
   });
 });
 
@@ -207,13 +201,12 @@ describe("2de.12 — option set action", () => {
   }`;
 
   test("renders one clickable per option, each binding its value into the set", () => {
-    const { render, dispose } = buildRuntime(SRC);
+    const { render } = buildRuntime(SRC);
     const urls = ownUrls(render());
     expect(urls).toHaveLength(THEMES.length);
     expect(urls.map(effectsOf)).toEqual(
       THEMES.map((t) => [{ verb: "set-state", args: ["s1", "sel", t] }]),
     );
-    dispose();
   });
 
   test("derives an allow-list of the resolved option domain for the custom key", () => {
@@ -224,23 +217,21 @@ describe("2de.12 — option set action", () => {
   });
 
   test("the bound option clicks pass the derived gate and mutate state", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const target = THEMES[1]!;
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === target),
     )!;
     click(url);
     expect(sessionState.get("s1", "sel")).toBe(target);
-    dispose();
   });
 
   test("marks exactly the currently-selected option active", () => {
-    const { render, sessionState, dispose } = buildRuntime(SRC);
+    const { render, sessionState } = buildRuntime(SRC);
     sessionState.set("s1", "sel", THEMES[2]!);
     expect(boldUrls(render()).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sel", THEMES[2]!] }],
     ]);
-    dispose();
   });
 
   test("an explicit boundValue writes a value distinct from the display text", () => {
@@ -258,7 +249,7 @@ describe("2de.12 — option set action", () => {
       segments: { bar: { template: '{{ action "choose" "🎨 fancy" "${target}" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render, click, sessionState, dispose } = buildRuntime(src);
+    const { render, click, sessionState } = buildRuntime(src);
     const out = render();
     expect(stripAnsi(out)).toContain("🎨 fancy");
     const url = ownUrls(out)[0]!;
@@ -267,7 +258,6 @@ describe("2de.12 — option set action", () => {
     ]);
     click(url);
     expect(sessionState.get("s1", "sel")).toBe(target);
-    dispose();
   });
 });
 
@@ -294,13 +284,12 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   }`;
 
   test("renders one clickable per inline value, needing no registration", () => {
-    const { render, dispose } = buildRuntime(SRC);
+    const { render } = buildRuntime(SRC);
     const urls = ownUrls(render());
     expect(urls.map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sort-order", "asc"] }],
       [{ verb: "set-state", args: ["s1", "sort-order", "desc"] }],
     ]);
-    dispose();
   });
 
   test("derives an allow-list gate of exactly the inline values", () => {
@@ -314,22 +303,20 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   });
 
   test("a click on an inline option passes the derived gate and mutates state", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "desc"),
     )!;
     click(url);
     expect(sessionState.get("s1", "sort-order")).toBe("desc");
-    dispose();
   });
 
   test("a value outside the inline domain is rejected loudly at the wire", () => {
-    const { dispose } = buildRuntime(SRC); // registers the derived gate
-    const res = validateStateWrite("sort-order", "bogus");
+    const { config } = buildRuntime(SRC);
+    const res = stateGate(config).validate("sort-order", "bogus");
     expect(res.ok).toBe(false);
     if (!res.ok)
       expect(res.reason).toMatch(/unknown state "sort-order" "bogus"/);
-    dispose();
   });
 
   // [LAW:one-source-of-truth] Mirrors cycleSpec's duplicate-member rejection —
@@ -396,13 +383,12 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
           spec: { kind: "allow-list", allowed: ["red", "green", "blue"] },
         },
       ]);
-      const { render, click, sessionState, dispose } = buildRuntime(src);
+      const { render, click, sessionState } = buildRuntime(src);
       const url = ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[2] === "green"),
       )!;
       click(url);
       expect(sessionState.get("s1", "fruit")).toBe("green");
-      dispose();
     } finally {
       unregister();
     }
@@ -433,7 +419,7 @@ describe("2de.12 — bounded set action", () => {
   }`;
 
   test("◀/▶ emit a RELATIVE step-state nudge (key + signed by), no absolute target; display is plain text", () => {
-    const { render, dispose } = buildRuntime(SRC);
+    const { render } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("◀ 14 ▶");
     const urls = ownUrls(out);
@@ -443,47 +429,42 @@ describe("2de.12 — bounded set action", () => {
       [{ verb: "step-state", args: ["s1", "level", "-2"] }],
       [{ verb: "step-state", args: ["s1", "level", "2"] }],
     ]);
-    dispose();
   });
 
   // [LAW:one-source-of-truth] Acceptance: the ◀/▶ link is byte-identical across
   // renders at DIFFERENT current values — proof it carries no `current` snapshot.
   test("the step-state link is byte-identical across renders at different current values", () => {
-    const { render, sessionState, dispose } = buildRuntime(SRC);
+    const { render, sessionState } = buildRuntime(SRC);
     const at14 = ownUrls(render());
     sessionState.set("s1", "level", "58");
     const at58 = ownUrls(render());
     expect(stripAnsi(render())).toContain("◀ 58 ▶");
     expect(at58).toEqual(at14); // identical link strings despite 14 → 58
-    dispose();
   });
 
   // Acceptance: N rapid clicks on the SAME link with NO render between move the
   // value by N·step — the idempotency is gone (mirror the live repro harness).
   test("three identical clicks with no render between step +3 (idempotency gone)", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const up = ownUrls(render())[1]!; // ▶, captured once
     click(up);
     click(up);
     click(up); // same URL string, three times, no render between
     expect(sessionState.get("s1", "level")).toBe("20"); // 14 → 16 → 18 → 20
-    dispose();
   });
 
   test("the first click seeds from the variable default (14), not from min", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     expect(sessionState.get("s1", "level")).toBeNull(); // unset
     click(ownUrls(render())[1]!); // ▶ from a never-written key
     expect(sessionState.get("s1", "level")).toBe("16"); // 14+2, NOT 0+2
-    dispose();
   });
 
   test("navigation WRAPS past a bound to the other end at apply time", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     sessionState.set("s1", "level", "60"); // max
     click(ownUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
     expect(sessionState.get("s1", "level")).toBe("0");
-    dispose();
   });
 
   test("two bounded actions on one key merge to a single range gate", () => {
@@ -494,10 +475,9 @@ describe("2de.12 — bounded set action", () => {
   });
 
   test("a click steps and the next render shows the new value", () => {
-    const { render, click, dispose } = buildRuntime(SRC);
+    const { render, click } = buildRuntime(SRC);
     click(ownUrls(render())[1]!); // ▶: 14 → 16
     expect(stripAnsi(render())).toContain("◀ 16 ▶");
-    dispose();
   });
 });
 
@@ -538,29 +518,26 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   };
 
   test("a NUMERIC bare display writes the page index (the manual open-at-page pattern)", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     click(urlWriting(render(), "0"));
     expect(sessionState.get("s1", "theme-page")).toBe("0");
-    dispose();
   });
 
   test("a NON-numeric bare display is rejected LOUDLY at the wire (must be an integer)", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const bad = urlWriting(render(), "▸");
     // The realize path DID emit the click (the display becomes the value); the int
     // gate rejects it at apply time — the verb throws BAD_REQUEST, not a silent no-op.
     expect(() => click(bad)).toThrow(/must be an integer/);
     // And state is untouched — the rejection is loud, never a silent corruption.
     expect(sessionState.get("s1", "theme-page")).toBeNull();
-    dispose();
   });
 
   test("the derived int gate rejects a non-integer directly (clear reason)", () => {
-    const { dispose } = buildRuntime(SRC); // registers the theme-page int gate
-    const res = validateStateWrite("theme-page", "▸");
+    const { config } = buildRuntime(SRC);
+    const res = stateGate(config).validate("theme-page", "▸");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toMatch(/must be an integer, got "▸"/);
-    dispose();
   });
 });
 
@@ -587,7 +564,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
   });
 
   test("copy carries the evaluated template; open carries the evaluated target", () => {
-    const { render, click, sideEffects, dispose } = buildRuntime(SRC);
+    const { render, click, sideEffects } = buildRuntime(SRC);
     const urls = ownUrls(render());
     expect(urls).toHaveLength(2);
     urls.forEach(click);
@@ -595,14 +572,27 @@ describe("2de.12 — copy / open actions derive no gate", () => {
       { verb: "copy", args: ["s1"] },
       { verb: "open-vscode", args: ["/tmp/proj"] },
     ]);
-    dispose();
   });
 });
 
-// ─── deriveActionValidators merge / dispose lifecycle ───────────────────────────
+// ─── per-key merge: daemon-wide keys, and one config's actions ─────────────────
 
-describe("2de.12 — derived specs feed the registerStateValidator lifecycle", () => {
-  test("same-key allow-lists union; dispose ref-counts down to removal", () => {
+describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
+  // `k` is a daemon-wide key here on purpose: registerStateValidator is the
+  // subject. No config declares it, so what a config's gate says about `k` is
+  // exactly what the daemon-wide registrations contribute.
+  test("same-key daemon-wide allow-lists union; each dispose takes its own back, down to removal", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        segments: { bar: { template: 'x', bg: 'surface', fg: 'foreground' } },
+        root: 'bar',
+      }`,
+      ALLOWED,
+    );
+    const validate = (v: string) => stateGate(config).validate("k", v);
     const d1 = registerStateValidator("k", {
       kind: "allow-list",
       allowed: ["a", "b"],
@@ -613,14 +603,14 @@ describe("2de.12 — derived specs feed the registerStateValidator lifecycle", (
     });
     // Union of both registrations is accepted.
     for (const v of ["a", "b", "c"]) {
-      expect(validateStateWrite("k", v).ok).toBe(true);
+      expect(validate(v).ok).toBe(true);
     }
     d1();
     // d1's "a" is gone; d2's "b","c" remain.
-    expect(validateStateWrite("k", "a").ok).toBe(false);
-    expect(validateStateWrite("k", "c").ok).toBe(true);
+    expect(validate("a").ok).toBe(false);
+    expect(validate("c").ok).toBe(true);
     d2();
-    expect(validateStateWrite("k", "c").ok).toBe(false); // key removed
+    expect(validate("c").ok).toBe(false); // key removed
   });
 
   test("deriveActionValidators merges multiple actions writing one key", () => {
@@ -794,7 +784,7 @@ describe("2de.4 — cycle set action", () => {
   }`;
 
   test("renders the current member's display; the click writes the successor", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const { render, click, sessionState } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("▸ details");
     const urls = ownUrls(out);
@@ -810,11 +800,10 @@ describe("2de.4 — cycle set action", () => {
     expect(effectsOf(ownUrls(out2)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "0"] },
     ]);
-    dispose();
   });
 
   test("a current value outside the domain counts as the first member", () => {
-    const { render, sessionState, dispose } = buildRuntime(SRC);
+    const { render, sessionState } = buildRuntime(SRC);
     // Bypass the gate to simulate a foreign/legacy stored value.
     sessionState.set("s1", "details-open", "garbage");
     const out = render();
@@ -822,18 +811,16 @@ describe("2de.4 — cycle set action", () => {
     expect(effectsOf(ownUrls(out)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "1"] },
     ]);
-    dispose();
   });
 
   test("a single display is static across states (the bare-glyph toggle)", () => {
     const src = SRC.replace('"▸ details" "▾ details"', '"⊕"');
-    const { render, click, sessionState, dispose } = buildRuntime(src);
+    const { render, click, sessionState } = buildRuntime(src);
     const out = render();
     expect(stripAnsi(out)).toContain("⊕");
     click(ownUrls(out)[0]!);
     expect(sessionState.get("s1", "details-open")).toBe("1");
     expect(stripAnsi(render())).toContain("⊕");
-    dispose();
   });
 
   test("a display arity that is neither 1 nor the member count surfaces as a visible error cell", () => {
@@ -847,12 +834,11 @@ describe("2de.4 — cycle set action", () => {
       segments: { bar: { template: '{{ action "next" "A" "B" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render, dispose } = buildRuntime(src);
+    const { render } = buildRuntime(src);
     // [LAW:no-silent-failure] Arity errors surface as a visible ⚠ error cell
     // rather than crashing the bar — partial rendering keeps other segments alive.
     const out = stripAnsi(render());
     expect(out).toMatch(/⚠.*bar.*cycles 3 members/);
-    dispose();
   });
 
   test("the error cell is a cell of its row: a neighbour renders beside it, not below", () => {
@@ -869,12 +855,11 @@ describe("2de.4 — cycle set action", () => {
       },
       root: { h: ['bar', 'ok'] },
     }`;
-    const { render, dispose } = buildRuntime(src);
+    const { render } = buildRuntime(src);
     const errorRow = stripAnsi(render())
       .split("\n")
       .find((line) => line.includes("unregisteredFn"));
     expect(errorRow).toContain("NEIGHBOUR");
-    dispose();
   });
 
   test("a multi-line error message stays one cell of its row", () => {
@@ -887,13 +872,12 @@ describe("2de.4 — cycle set action", () => {
       },
       root: { h: ['bar', 'ok'] },
     }`;
-    const { render, dispose } = buildRuntime(src);
+    const { render } = buildRuntime(src);
     const errorRow = stripAnsi(render())
       .split("\n")
       .find((line) => line.includes("FIRST"));
     expect(errorRow).toContain("SECOND");
     expect(errorRow).toContain("NEIGHBOUR");
-    dispose();
   });
 
   test("derives an allow-list gate of exactly the members", () => {
@@ -917,7 +901,7 @@ describe("2de.4 — cycle set action", () => {
       segments: { bar: { template: '{{ action "next" "○" "◐" "●" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render, click, sessionState, dispose } = buildRuntime(src);
+    const { render, click, sessionState } = buildRuntime(src);
     for (const [display, written] of [
       ["○", "low"],
       ["◐", "high"],
@@ -928,7 +912,6 @@ describe("2de.4 — cycle set action", () => {
       click(ownUrls(out)[0]!);
       expect(sessionState.get("s1", "mode")).toBe(written);
     }
-    dispose();
   });
 
   test("accordion: two cycles sharing a key — a sibling's path counts as closed, the gate is the union", () => {
@@ -957,7 +940,7 @@ describe("2de.4 — cycle set action", () => {
         spec: { kind: "allow-list", allowed: ["closed", "a", "b"] },
       },
     ]);
-    const { render, click, sessionState, dispose } = buildRuntime(src);
+    const { render, click, sessionState } = buildRuntime(src);
     // Open A.
     click(ownUrls(render())[0]!);
     expect(sessionState.get("s1", "menu")).toBe("a");
@@ -970,7 +953,6 @@ describe("2de.4 — cycle set action", () => {
     expect(sessionState.get("s1", "menu")).toBe("b");
     expect(stripAnsi(render())).toContain("▸A");
     expect(stripAnsi(render())).toContain("▾B");
-    dispose();
   });
 });
 

@@ -46,7 +46,8 @@ import {
   renderDsl,
   type CompiledConfig,
 } from "./dsl/render.js";
-import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
+import { stateGate } from "./daemon/verbs/state-validators.js";
+import { configGate } from "./daemon/verbs/config-validators.js";
 import { resumeCommand } from "./claude-resume.js";
 import {
   effectiveInputs,
@@ -423,10 +424,10 @@ async function loadRegisterRender(
   const prepared = await prepareConfig(configPath, cwd, warnings);
   const { config } = prepared;
   try {
-    // Derivation only (the throw-on-clash coherence pass over the action
-    // table); the daemon additionally registers the results in its global
-    // validator registry, which a one-shot check has no wire to serve.
-    deriveActionValidators(config);
+    // The gates the daemon derives when it loads this config: an action
+    // table that cannot gate fails here as it fails that load.
+    stateGate(config);
+    configGate(config);
 
     // Fresh session (no clicked theme/endcaps/style), so the session half of
     // each resolution is null — the config default over the floor, exactly

@@ -29,15 +29,7 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-  validateStateWrite,
-} from "../src/daemon/verbs/state-validators";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
+import { stateGate } from "../src/daemon/verbs/state-validators";
 import {
   configureMember,
   EDIT_MODE_ARRANGE,
@@ -113,14 +105,6 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
     if (cell === undefined) throw new Error(`placement "${id}" did not render`);
     return definedStyle(cell.style).bgcolor!.value!.hex;
   };
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
   let current = config;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
@@ -135,8 +119,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, compiled, sessionState, render, bgOf, click, ctx, dispose };
+  return { config, compiled, sessionState, render, bgOf, click, ctx };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -170,7 +153,6 @@ describe("a placement's theme recolours that placement alone", () => {
     // The template reads the placement's own value.
     expect(underA).toContain(FOLLOW_BAR);
     expect(underA).toContain(PIN);
-    rt.dispose();
   });
 
   test("a pinned placement wears exactly what it would when the bar is that theme", () => {
@@ -181,8 +163,6 @@ describe("a placement's theme recolours that placement alone", () => {
     );
     following.render(PIN);
     expect(pinned.bgOf("pinned")).toBe(following.bgOf("pinned"));
-    pinned.dispose();
-    following.dispose();
   });
 
   test("a definition's palette pins every copy, and a placement's `bar` follows again", () => {
@@ -197,7 +177,6 @@ describe("a placement's theme recolours that placement alone", () => {
     rt.render(BAR_B);
     expect(rt.bgOf("tag")).toBe(pinnedA);
     expect(rt.bgOf("free")).not.toBe(freeA);
-    rt.dispose();
   });
 });
 
@@ -262,9 +241,10 @@ describe("configure mode picks a placement's theme", () => {
       );
     const [first] = listResolvablePaletteNames();
     expect(writing(first!).length).toBeGreaterThan(0);
-    expect(validateStateWrite(key, first!).ok).toBe(true);
-    expect(validateStateWrite(key, FOLLOW_BAR).ok).toBe(true);
-    expect(validateStateWrite(key, "nope").ok).toBe(false);
+    const gate = stateGate(rt.config);
+    expect(gate.validate(key, first!).ok).toBe(true);
+    expect(gate.validate(key, FOLLOW_BAR).ok).toBe(true);
+    expect(gate.validate(key, "nope").ok).toBe(false);
     // The option is painted on the ground of the theme it applies.
     const [r, g, b] = hex(paletteForThemeName(first!), "background")
       .slice(1)
@@ -282,7 +262,6 @@ describe("configure mode picks a placement's theme", () => {
     following.render(first!);
     expect(rt.bgOf("tag")).toBe(following.bgOf("tag"));
     expect(rt.bgOf("pinned")).toBe(pinnedBefore);
-    following.dispose();
 
     const logged: string[] = [];
     VERBS.get(VERB_SAVE)!(SID, {
@@ -296,7 +275,6 @@ describe("configure mode picks a placement's theme", () => {
     expect(durable.text()).toContain(
       `{ seg: "tag", settings: { theme: "${first}" } }`,
     );
-    rt.dispose();
   });
 });
 
@@ -319,7 +297,6 @@ describe("configure mode over a placement several presets share", () => {
       effectsOf(u).some((e) => e.args[1] === key),
     );
     expect(controls.length).toBeGreaterThan(0);
-    rt.dispose();
   });
 });
 
@@ -350,6 +327,5 @@ describe("the layout preview while arranging", () => {
       paletteForThemeName(BAR_B),
       paletteForThemeName(PIN),
     ]);
-    rt.dispose();
   });
 });

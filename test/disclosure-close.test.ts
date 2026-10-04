@@ -37,13 +37,9 @@ import {
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/loader/reserved-namespace";
 import type { RichText } from "@promptctl/rich-js";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { links, stripAnsi, type Link } from "./helpers/ansi";
@@ -123,10 +119,8 @@ function build(src: string, withDefault: boolean) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  recordRender(sessionState, SID);
+  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string[] => {
     const errors: string[] = [];
@@ -164,10 +158,7 @@ function build(src: string, withDefault: boolean) {
     sink,
     click,
     clickWriting,
-    dispose: () => {
-      disposers.forEach((d) => d());
-      registry.dispose();
-    },
+    dispose: () => registry.dispose(),
   };
 }
 

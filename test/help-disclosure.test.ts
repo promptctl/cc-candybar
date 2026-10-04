@@ -22,10 +22,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
@@ -33,7 +30,12 @@ import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT } from "../src/help-text";
-import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
+import {
+  testVerbContext,
+  clickUrl,
+  effectsOf,
+  recordRender,
+} from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import {
@@ -45,15 +47,6 @@ import {
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
-
-// [LAW:no-ambient-temporal-coupling] STATE_VALIDATORS is a daemon-GLOBAL,
-// ref-counted registry, so a runtime that fails an assertion before disposing
-// leaks its entries into every later test in the file. Cleanup is owned by the
-// harness, not by each test remembering to call it.
-const openRuntimes: Array<{ dispose: () => void }> = [];
-afterEach(() => {
-  while (openRuntimes.length > 0) openRuntimes.pop()!.dispose();
-});
 
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
@@ -83,9 +76,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  recordRender(sessionState, SID);
 
   // [LAW:one-source-of-truth] The daemon's own globals resolution, called the
   // way the daemon calls it — so edit mode's staged look (plain joiner, " | "
@@ -121,7 +112,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   };
 
   const click = (url: string): void =>
-    clickUrl(url, testVerbContext(sessionState));
+    clickUrl(url, testVerbContext(sessionState, undefined, config));
 
   // [LAW:behavior-not-structure] Which segments are `(?)` triggers is read off
   // what they RENDER — the help glyph — so the assertions survive any renaming
@@ -161,8 +152,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const lines = (width: number): string[] =>
     stripAnsi(render(width)).split("\n");
 
-  const dispose = (): void => disposers.forEach((d) => d());
-  const rt = {
+  return {
     config,
     sessionState,
     render,
@@ -170,10 +160,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
     click,
     clickWriting,
     toggleHelp,
-    dispose,
   };
-  openRuntimes.push(rt);
-  return rt;
 }
 
 function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {

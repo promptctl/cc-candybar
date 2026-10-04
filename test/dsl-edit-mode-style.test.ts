@@ -21,12 +21,8 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -69,14 +65,12 @@ function buildRuntime(source: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  // [LAW:single-enforcer] The real derived gate — the sole authority on what a
-  // click may write. Registering it here is what makes the set-state calls
+  // [LAW:single-enforcer] The real gate is the one this session's config
+  // derives — the sole authority on what a click may write. Recording the
+  // render and the config it rendered with is what makes the set-state calls
   // below travel the same road a real click travels.
-  liveDisposers.push(
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-  );
+  recordRender(sessionState, SID);
+  renderedConfig.set(sessionState, config);
 
   // [LAW:one-source-of-truth] The daemon's own resolution, called the way the
   // daemon calls it — a session-key reader and the entry's customized fact.
@@ -120,16 +114,16 @@ function setState(
   key: string,
   value: string,
 ): void {
-  clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]), testVerbContext(sessionState));
+  clickUrl(
+    effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
+    testVerbContext(sessionState, undefined, renderedConfig.get(sessionState)),
+  );
 }
 
-// [LAW:single-enforcer] STATE_VALIDATORS is daemon-global and ref-counted, so a
-// registration leaked past its test would widen the gate for every suite that
-// follows. One drain, here, covering every runtime any test built.
-const liveDisposers: Array<() => void> = [];
-afterEach(() => {
-  for (const dispose of liveDisposers.splice(0)) dispose();
-});
+// The config each runtime's session renders with, which is the config its
+// clicks are gated by. Keyed on the session state so a test that builds two
+// runtimes gates each one's clicks by its own config.
+const renderedConfig = new WeakMap<SessionState, ValidatedConfig>();
 
 const enterEditMode = (s: SessionState) =>
   setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);

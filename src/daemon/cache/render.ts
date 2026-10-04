@@ -19,14 +19,8 @@ import type {
 } from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../verbs/state-validators.js";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../verbs/config-validators.js";
+import { stateGate } from "../verbs/state-validators.js";
+import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -141,11 +135,6 @@ export interface DslRenderState {
   // The config keys the FILE holds a value for at a layer a reset clears
   // (fileHeldSettings) — from the same raw parse, for the same reason.
   readonly fileHeldSettings: ReadonlySet<string>;
-  // [LAW:single-enforcer] Disposers for the SessionState validators this config
-  // installed (derived from its action table). Disposed on swap/eviction in the
-  // same dispose-before-swap transaction as the SourceRegistry, so a reload
-  // never leaks a stale writable-key entry or shadows the next config's keys.
-  readonly validatorDisposers: ReadonlyArray<() => void>;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -356,10 +345,8 @@ export class RenderCache {
         const [oldestKey, evicted] = oldest;
         // [LAW:single-enforcer] dispose the registry on eviction — it owns
         // timers, fs watchers, and git subscriptions. Dropping the entry
-        // without dispose leaks every async handle the config declared. The
-        // validator disposers free this entry's writable-key entries too.
+        // without dispose leaks every async handle the config declared.
         evicted.state.registry.dispose();
-        evicted.state.validatorDisposers.forEach((dispose) => dispose());
         evicted.watcher?.release();
         this.entries.delete(oldestKey);
       }
@@ -406,13 +393,9 @@ export class RenderCache {
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
-      // timers, fs watchers, MobX reactions, and git subscriptions; the old
-      // validator disposers own this entry's writable-key entries in the
-      // global registry. Both are disposed in one step before the swap —
-      // dropping either reference without disposing would leak handles or
-      // shadow the new config's keys.
+      // timers, fs watchers, MobX reactions, and git subscriptions — dropping
+      // the reference without disposing would leak them.
       entry.state.registry.dispose();
-      entry.state.validatorDisposers.forEach((dispose) => dispose());
       entry.state = loaded.state;
     }
     // Rebinds to the broken file (and its sibling candidates) too, so an
@@ -531,12 +514,6 @@ export class RenderCache {
     );
 
     let compiled: CompiledConfig;
-    // [LAW:single-enforcer] Validators this config installs (one per menu page
-    // key) are part of the same construction transaction as the registry: any
-    // failure (registration, a duplicate-key throw) disposes every handle built
-    // so far — registry AND already-installed validators — before rethrowing, so
-    // loadFromDisk preserves the prior last-known-good with nothing half-installed.
-    const validatorDisposers: Array<() => void> = [];
     try {
       // [LAW:one-source-of-truth] The action runtime reads session.id + current
       // picker values from registry.variableStore — the same store this entry's
@@ -548,27 +525,15 @@ export class RenderCache {
       // appended before the validator pass so a derive throw still carries
       // them.
       warnings.push(...compiled.loadWarnings);
-      // [LAW:one-source-of-truth] Derive the writable-key validators from the
-      // config's action table (the sole interaction authority) through one
-      // coherence merge (deriveActionValidators), then register them so the click
-      // wire accepts the picker's ←/→/apply-close writes and every other action
-      // write alike. Merging before registration lets a trigger's literal "0" be
-      // absorbed into a picker's int page gate instead of colliding.
-      // registerStateValidator throws on a duplicate baseline key — caught here to
-      // roll the whole reload back.
-      for (const { key, spec } of deriveActionValidators(config)) {
-        validatorDisposers.push(registerStateValidator(key, spec));
-      }
-      // [LAW:one-source-of-truth] The `persist` action table's twin
-      // derivation, registered through the SAME dispose-before-swap
-      // transaction — a config's persistent-config-writable-key surface
-      // lives and dies with this cache entry exactly like its SessionState
-      // surface does.
-      for (const { key, spec } of deriveConfigActionValidators(config)) {
-        validatorDisposers.push(registerConfigValidator(key, spec));
-      }
+      // [LAW:no-silent-failure] The gates this config's sessions click through
+      // are derived from its action table on demand (stateGate / configGate),
+      // so nothing is installed here. They are built once now so an action
+      // table that cannot gate — a built-in key re-claimed, two actions that
+      // contradict each other on one key — fails this load, never the first
+      // click.
+      stateGate(config);
+      configGate(config);
     } catch (err) {
-      for (const dispose of validatorDisposers) dispose();
       registry.dispose();
       throw err;
     }
@@ -585,7 +550,6 @@ export class RenderCache {
       compiled,
       neededInputPaths: neededPrefixesByPreset(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-      validatorDisposers,
       authoredRoots: authoredRoots(merged, raw),
       fileHeldSettings: fileHeldSettings(raw),
     };

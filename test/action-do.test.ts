@@ -9,13 +9,14 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { effectsOf, clickUrl, testVerbContext } from "./helpers/click";
+import {
+  effectsOf,
+  clickUrl,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -49,14 +50,12 @@ function runtime(src: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp/proj" });
-  const disposers = deriveActionValidators(cfg).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  recordRender(sessionState, "s1");
   return {
     sessionState,
     render: () => renderDsl(cfg, compiled, store, registry, PAYLOAD, OPTS),
-    click: (url: string) => clickUrl(url, testVerbContext(sessionState)),
-    dispose: () => disposers.forEach((d) => d()),
+    click: (url: string) =>
+      clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };
 }
 
@@ -86,7 +85,6 @@ describe("do: several declared actions, one click", () => {
     // The head's current state drives the next display and the next write.
     const next = rt.render();
     expect(stripAnsi(next)).toContain("◉ unfocus");
-    rt.dispose();
   });
 
   test("a {{ menu }} over a do headed by an option action: each pick also fires the rest", () => {
@@ -113,7 +111,6 @@ describe("do: several declared actions, one click", () => {
     rt.click(dracula!);
     expect(rt.sessionState.get("s1", "theme")).toBe("dracula");
     expect(rt.sessionState.get("s1", "panel")).toBe("closed");
-    rt.dispose();
   });
 });
 

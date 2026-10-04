@@ -14,12 +14,8 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import {
   effectiveAutoWrap,
   resolveStyleSelection,
@@ -28,7 +24,7 @@ import {
   effectiveVariation,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
-import type { PresetDecl } from "../src/config/dsl-types";
+import type { DslConfig, PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";
 import {
   PADDING_RANGE,
@@ -69,13 +65,6 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  // The click below goes through the real dispatch, which consults the
-  // daemon-global validator registry — so the config's derived gate has to be
-  // registered, exactly as the daemon registers it on load.
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // server.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
@@ -102,22 +91,26 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       },
     );
 
-  const dispose = (): void => {
-    for (const d of disposers) d();
-    registry.dispose();
-  };
+  const dispose = (): void => registry.dispose();
 
   return { config, sessionState, render, dispose };
 }
 
 function setState(
+  config: DslConfig,
   sessionState: SessionState,
   sid: string,
   key: string,
   value: string,
 ): void {
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
-  clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]), testVerbContext(sessionState));
+  // The dispatch gates the write by the config the clicking session renders,
+  // so the session's render is recorded first.
+  recordRender(sessionState, sid);
+  clickUrl(
+    effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+    testVerbContext(sessionState, undefined, config),
+  );
 }
 
 
@@ -136,7 +129,7 @@ describe("a padding click changes one session's bar", () => {
     try {
       const bystanderBefore = stripAnsi(clicked.render("s-bystander", WIDE));
 
-      setState(clicked.sessionState, "s-clicker", "padding", "5");
+      setState(clicked.config, clicked.sessionState, "s-clicker", "padding", "5");
 
       expect(stripAnsi(clicked.render("s-clicker", WIDE))).toBe(
         stripAnsi(asIfConfigured.render("s-clicker", WIDE)),
@@ -156,7 +149,7 @@ describe("a padding click changes one session's bar", () => {
     try {
       const atConfigDefault = stripAnsi(render("s-clear", WIDE));
 
-      setState(sessionState, "s-clear", "padding", "7");
+      setState(config, sessionState, "s-clear", "padding", "7");
       expect(stripAnsi(render("s-clear", WIDE))).not.toBe(atConfigDefault);
 
       sessionState.clear("s-clear", "padding");
@@ -180,7 +173,7 @@ describe("an autoWrap click changes one session's bar", () => {
       const wrappedRows = render("s-wrap", NARROW).split("\n").length;
       expect(wrappedRows).toBeGreaterThan(1);
 
-      setState(sessionState, "s-wrap", "autoWrap", "false");
+      setState(config, sessionState, "s-wrap", "autoWrap", "false");
 
       // The regression this pins: a `false` session pick is a real answer, not
       // a missing one. Resolving with `||` instead of `??` would fall through

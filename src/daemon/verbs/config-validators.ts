@@ -1,10 +1,10 @@
 // [LAW:one-source-of-truth] The persistent-config-write instance of the
-// shared keyed-validator registry (validator-registry.ts) — the twin of
+// shared keyspace (validator-registry.ts) — the twin of
 // state-validators.ts for `persist` actions instead of `set` actions.
 // Gates stay derived the same way as session writes: a `persist` action
 // carries its target key and value SOURCE as literal data, so the
 // writable-key gate DERIVES from the action table exactly like
-// deriveActionValidators does for `set`. No baseline keys: every config
+// stateGate does for `set`. No baseline keys: every config
 // globals field becomes writable ONLY when a config declares a `persist`
 // action for it — the epic's "zero engine edits to add a menu-able field"
 // goal, realized more strictly here than SessionState's legacy baseline
@@ -25,31 +25,30 @@ import {
   presetRootKey,
 } from "../../config/loader/persist-target";
 import {
-  createValidatorRegistry,
+  createKeyspace,
   mergeContributions,
   type DerivedValidatorSpec,
+  type Gate,
   type KeySpecContribution,
-  type RangeParams,
-  type ValidateResult,
 } from "./validator-registry";
 
-// [LAW:no-silent-fallbacks] No baseline entries: a config globals field is
+// [LAW:no-silent-fallbacks] No built-in keys: a config globals field is
 // writable ONLY when some `persist` action names it.
-const registry = createValidatorRegistry({}, "config");
+const keyspace = createKeyspace({}, "config", deriveConfigActionValidators);
 
-export function listConfigKeys(): readonly string[] {
-  return registry.listKeys();
-}
-
-export function validateConfigWrite(
+// A config key every session may write, whatever config it renders.
+export function registerConfigValidator(
   key: string,
-  rawValue: string,
-): ValidateResult {
-  return registry.validate(key, rawValue);
+  spec: DerivedValidatorSpec,
+): () => void {
+  return keyspace.register(key, spec);
 }
 
-export function rangeParamsForConfig(key: string): RangeParams | null {
-  return registry.rangeParamsFor(key);
+// [LAW:single-enforcer] The gate every durable write passes: the config-file
+// writes the sessions rendering `config` may make — what its action table
+// derives, over the daemon-wide keys.
+export function configGate(config: DslConfig): Gate {
+  return keyspace.gateFor(config);
 }
 
 // [LAW:one-source-of-truth] The ONE place mapping a `persist` ACTION to the
@@ -160,7 +159,7 @@ export function configKeySeed(globals: Globals, key: string): string | null {
 }
 
 // [LAW:one-source-of-truth] Every key a config's action table can CLEAR is a
-// registered key, so `reset-config`'s membership check
+// key of its gate, so `reset-config`'s membership check
 // (src/daemon/verbs/index.ts's resetConfig) passes for exactly the keys some
 // declared action targets — a `reset` names its key outright, and a structural
 // `persist` on `presets.<name>.root` makes that root a key its own reset may
@@ -170,12 +169,12 @@ export function configKeySeed(globals: Globals, key: string): string | null {
 // and a preset edited down to zero addable segments contributes no layout op
 // for its root, yet its reset must still resolve.
 //
-// An EMPTY allow-list registers the key without granting any WRITE: a real
+// An EMPTY allow-list contributes the key without granting any WRITE: a real
 // write still needs a real action elsewhere, and mergeKeySpecs unions an empty
 // array with whatever those contribute, whatever their kind.
 //
 // [LAW:no-mode-explosion] A config with no reset and no structural persist
-// registers nothing here, preserving this module's "zero baseline keys" floor
+// contributes nothing here, preserving this module's "zero baseline keys" floor
 // (a key is writable or clearable only because SOME action names it).
 function clearableContributions(config: DslConfig): KeySpecContribution[] {
   const keys = new Set<string>();
@@ -209,19 +208,12 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   ];
 }
 
-// [LAW:single-enforcer] The SOLE install-site derivation: a config's
-// persistent-config-writable-key surface is the merge of every `persist`
-// ACTION it declares, through the SAME coherence pass deriveActionValidators
-// uses for `set`.
+// [LAW:single-enforcer] The SOLE derivation: what a config contributes to its
+// sessions' config-file gate is the merge of every `persist` ACTION it
+// declares, through the SAME coherence pass deriveActionValidators uses for
+// `set`.
 export function deriveConfigActionValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
   return mergeContributions(actionContributions(config), "config");
-}
-
-export function registerConfigValidator(
-  key: string,
-  spec: DerivedValidatorSpec,
-): () => void {
-  return registry.register(key, spec);
 }

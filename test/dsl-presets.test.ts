@@ -9,8 +9,8 @@
 // (5) `cc-candybar check` catches a preset staging a segment nobody declared.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, deriveActionValidators +
-// registerStateValidator + the real dispatch for the click, the real
+// loader, registerDslConfig + renderDsl for rendering, the real dispatch for
+// the click (gated by the config the session renders), the real
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
@@ -22,7 +22,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   ConfigError,
@@ -31,10 +31,7 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { rootNode } from "../src/config/root";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
 import {
   PRESET_FLOOR,
   effectivePresetName,
@@ -304,11 +301,9 @@ describe("preset selection — the arrangement the bar renders", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-    // The daemon's cache installs the derived gate at config load; mirror it so
-    // the click below passes through the real validator.
-    const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
+    // A click is gated by the config its session renders; record the render so
+    // the click below resolves this config and passes through its real gate.
+    recordRender(sessionState, SID);
     // The daemon's exact order: resolve the preset, take ITS globals, render.
     const resolve = (): { preset: string; padding: number } => {
       const preset = effectivePresetName(
@@ -332,14 +327,19 @@ describe("preset selection — the arrangement the bar renders", () => {
       );
     };
     const dispose = (): void => {
-      for (const d of disposers) d();
       registry.dispose();
     };
     return { config, sessionState, resolve, render, dispose };
   }
 
-  const clickPreset = (sessionState: SessionState, preset: string): void => {
-    clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]), testVerbContext(sessionState));
+  const clickPreset = (
+    rt: ReturnType<typeof buildRuntime>,
+    preset: string,
+  ): void => {
+    clickUrl(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]),
+      testVerbContext(rt.sessionState, undefined, rt.config),
+    );
   };
 
   test("with no pick, the floor renders the config's own root", () => {
@@ -357,7 +357,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   test("a session pick restages the layout — the click drives the real wire", () => {
     const rt = buildRuntime();
     try {
-      clickPreset(rt.sessionState, "both");
+      clickPreset(rt,"both");
       expect(rt.resolve().preset).toBe("both");
       const out = rt.render();
       expect(out).toContain("ALPHA");
@@ -380,7 +380,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   test("a session pick beats the config literal — the chain's last layer wins", () => {
     const rt = buildRuntime(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
-      clickPreset(rt.sessionState, PRESET_FLOOR);
+      clickPreset(rt,PRESET_FLOOR);
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       expect(rt.render()).not.toContain("BETA");
     } finally {
@@ -394,7 +394,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const rt = buildRuntime();
     try {
       expect(rt.resolve().padding).toBe(1);
-      clickPreset(rt.sessionState, "roomy");
+      clickPreset(rt,"roomy");
       expect(rt.resolve().padding).toBe(4);
       // `roomy` declares no root, so the config's own layout still renders —
       // the fragment is a DELTA, not a replacement.

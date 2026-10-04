@@ -24,6 +24,7 @@ import {
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
+import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
@@ -734,53 +735,43 @@ describe("RenderCache", () => {
     }
   });
 
-  test("a picker config loads into multiple cache entries without a validator clash", () => {
-    // [LAW:one-source-of-truth] A picker's page (int) action derives a writable
-    // page-key validator into the GLOBAL registry. Two cache entries sharing one
-    // config (one repo, two cwds) both register that key; ref-counting must let
-    // both succeed and keep the key valid until the last entry is gone. Before
-    // ref-counting, the second entry threw "already has a validator" and rendered
-    // a config error.
+  test("two projects declaring one key differently both load: a gate is its own config's", () => {
+    // [LAW:one-source-of-truth] brandon-state-gates-lbs. Each config's click
+    // gate is derived from that config alone, so one project declaring `k` as
+    // a word list and another as a range are two gates. When every loaded
+    // config merged into one gate per key, the second of these failed its load
+    // on the first one's members.
     const { cache, cleanups } = makeCache();
-    const { dir, cleanup } = mkConfigDir();
-    cleanups.push(cleanup);
-    const cfg = join(dir, ".cc-candybar.json5");
-    writeFileSync(
-      cfg,
-      JSON.stringify({
-        globals: {},
-        variables: {
-          "session.id": { kind: "input", path: "session_id", default: "" },
-          "term.cols": {
-            kind: "input",
-            path: "term.cols",
-            type: "number",
-            default: 80,
+    const project = (actions: Record<string, unknown>): string => {
+      const { dir, cleanup } = mkConfigDir();
+      cleanups.push(cleanup);
+      writeFileSync(
+        join(dir, ".cc-candybar.json5"),
+        JSON.stringify({
+          variables: {
+            "session.id": { kind: "input", path: "session_id", default: "" },
+            k: { kind: "state", key: "k", default: "1" },
           },
-          page: { kind: "state", key: "menu-page", default: "-1" },
-        },
-        actions: {
-          applyTheme: { set: "theme", from: "themes" },
-          menuPage: { set: "menu-page", int: true },
-        },
-        segments: {
-          s: {
-            template: '{{ picker "applyTheme" "menuPage" true true }}',
-            bg: "surface",
-            fg: "foreground",
-          },
-        },
-        root: { seg: "s", when: "{{ ge (int .page) 0 }}" },
-      }),
-    );
+          actions,
+          segments: { s: { template: "{{ .k }}" } },
+          root: { h: ["s"] },
+        }),
+      );
+      return dir;
+    };
     try {
-      const sub = join(dir, "sub");
-      const a = cache.getOrCreate(dir, dir, undefined);
-      const b = cache.getOrCreate(dir, sub, undefined);
-      // Both entries loaded cleanly — no validator clash on the shared page key.
-      expect(a.lastError).toBeNull();
-      expect(b.lastError).toBeNull();
-      expect(a).not.toBe(b);
+      const words = project({ pick: { set: "k", from: ["narrow", "wide"] } });
+      const range = project({ step: { set: "k", min: 1, max: 9, by: 1 } });
+      const narrower = project({ step: { set: "k", min: 1, max: 3, by: 1 } });
+      const entries = [words, range, narrower].map((dir) =>
+        cache.getOrCreate(dir, dir, undefined),
+      );
+      expect(entries.map((e) => e.lastError)).toEqual([null, null, null]);
+      const [w, r, n] = entries.map((e) => stateGate(e.state.config));
+      expect(w!.validate("k", "wide").ok).toBe(true);
+      expect(w!.rangeParamsFor("k")).toBeNull();
+      expect(r!.rangeParamsFor("k")).toEqual({ min: 1, max: 9 });
+      expect(n!.rangeParamsFor("k")).toEqual({ min: 1, max: 3 });
     } finally {
       for (const fn of cleanups) fn();
     }

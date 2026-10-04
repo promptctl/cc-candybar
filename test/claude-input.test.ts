@@ -18,10 +18,6 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,
@@ -359,9 +355,6 @@ function tray(tmux: TmuxHint | null) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     claudeInput: productionClaudeInputEdge(),
@@ -371,7 +364,7 @@ function tray(tmux: TmuxHint | null) {
     linkUrls(renderDsl(config, compiled, store, registry, { session_id: "s1" }, OPTS)).map(
       (u) => ({ url: u, effects: effectsOf(u) }),
     );
-  return { config, links, ctx, sessionState, dispose: () => disposers.forEach((d) => d()) };
+  return { config, links, ctx, sessionState };
 }
 
 const typedLines = (effects: { verb: string; args: string[] }[]) =>
@@ -386,7 +379,6 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     clickUrl(button.url, rt.ctx);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(line);
-    rt.dispose();
   });
 
   test("/clear takes a second click: the first arms it and types nothing", () => {
@@ -419,7 +411,6 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
     expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
-    rt.dispose();
   });
 
   test("outside tmux the confirm says so in the bar and disarms, typing nothing", () => {
@@ -435,7 +426,6 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     );
     expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
     expect(invocations()).toEqual([]);
-    rt.dispose();
   });
 
   test("the settings door and every tab disarm the menu's /clear, so a confirm is never clicked in a view it was not armed in", () => {
@@ -466,6 +456,5 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       set: "candybar.commands.clear.armed",
       to: "disarmed",
     });
-    rt.dispose();
   });
 });

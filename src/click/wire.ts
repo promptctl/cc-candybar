@@ -87,7 +87,7 @@ export const VERB_RESET_CONFIG = "reset-config";
 // the config file authors at `key` (a "presets.<name>.root" target). Args:
 // `[sessionId, key, op]` — `op` is one opaque token from
 // src/config/layout-ops.ts's codec, the SAME shape a `persist … to` literal's
-// value would be, gated the SAME way (validateConfigWrite) — only the write's
+// value would be, gated the SAME way (configGate) — only the write's
 // SHAPE (a tree edit vs. a value) differs, which is exactly why this is its
 // own verb rather than another VERB_SET_CONFIG value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";

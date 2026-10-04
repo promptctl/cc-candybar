@@ -35,16 +35,9 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS } from "../src/daemon/verbs";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
+import { deriveConfigActionValidators } from "../src/daemon/verbs/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls } from "./helpers/ansi";
 
@@ -175,15 +168,8 @@ function buildRuntime(
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(),
     );
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
-  // The config a save compares against, re-read from the file on a reload.
+  // The config a click is gated by and a save compares against, re-read from
+  // the file on a reload.
   let current: DslConfig = config;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, history),
@@ -200,8 +186,7 @@ function buildRuntime(
     if (!handler) throw new Error(`no handler for verb "${verb}"`);
     handler(value, ctx);
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, dispose, ctx, sessionState, history };
+  return { config, store, render, click, ctx, sessionState, history };
 }
 
 const ACTION_ORDER = [
@@ -280,7 +265,6 @@ describe("undo/redo click → the session's settings history", () => {
       past: [durable.fileStep(original, written)],
       future: [],
     });
-    runtime.dispose();
   });
 
   // brandon-save-undo-bwi.jby's acceptance: one history steps a mix of
@@ -314,7 +298,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "fwd");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", "3", pinned]);
     expect(runtime.history.depth("s1")).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
-    runtime.dispose();
   });
 
   test("undo restores a session pick's PRIOR value, not just absence", () => {
@@ -328,7 +311,6 @@ describe("undo/redo click → the session's settings history", () => {
     expect(runtime.sessionState.get("s1", "padding")).toBe("3");
     press(runtime, "back");
     expect(runtime.sessionState.get("s1", "padding")).toBe("2");
-    runtime.dispose();
   });
 
   test("opening a menu or paging is not a settings change — it never becomes a step", () => {
@@ -340,7 +322,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "pickTheme"); // the slot now renders openMenu
     expect(runtime.sessionState.get("s1", "menus.x")).toBe("open");
     expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
-    runtime.dispose();
   });
 
   test("a click that changes nothing records no step", () => {
@@ -350,7 +331,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "pickTheme");
     press(runtime, "pickTheme"); // already nord
     expect(durable.history().past).toHaveLength(2);
-    runtime.dispose();
   });
 
   test("reset (a delete) is undoable too — one history over every write shape", () => {
@@ -368,7 +348,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "back"); // undo the reset
     expect(durable.text()).toBe(pinned);
     expect(globals().palette).toBe("dracula");
-    runtime.dispose();
   });
 
   test("a structural (root) edit undoes through the SAME mechanism — no layout-specific code", () => {
@@ -379,7 +358,6 @@ describe("undo/redo click → the session's settings history", () => {
 
     press(runtime, "back");
     expect(durable.text()).toBe(original);
-    runtime.dispose();
   });
 
   test("a save and the session picks it releases are one step, undone together", () => {
@@ -401,7 +379,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "fwd");
     expect(globals()).toMatchObject({ palette: "nord", padding: 3 });
     expect(runtime.sessionState.get("s1", "theme")).toBeNull();
-    runtime.dispose();
   });
 
   test("undo refuses loudly when the file was hand-edited since, and drops that file's steps so the rest stay steppable", () => {
@@ -422,7 +399,6 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "back"); // the session pick is still undoable
     expect(runtime.sessionState.get("s1", "theme")).toBeNull();
     expect(durable.text()).toBe(handEdited);
-    runtime.dispose();
   });
 
   // The decision the ticket asked for: a session's history is its OWN clicks.
@@ -447,20 +423,16 @@ describe("undo/redo click → the session's settings history", () => {
     press(b, "back"); // b's own step is intact
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(globals().palette).toBe("dracula");
-    a.dispose();
-    b.dispose();
   });
 
   test("undo at the bottom of the stack is a loud no-op, never silent", () => {
     const runtime = buildRuntime(SRC);
     expect(() => press(runtime, "back")).toThrow(/nothing to undo/);
-    runtime.dispose();
   });
 
   test("redo at the top of the stack is a loud no-op, never silent", () => {
     const runtime = buildRuntime(SRC);
     expect(() => press(runtime, "fwd")).toThrow(/nothing to redo/);
-    runtime.dispose();
   });
 
   test("a fresh change after an undo truncates the abandoned redo path", () => {
@@ -472,14 +444,12 @@ describe("undo/redo click → the session's settings history", () => {
     press(runtime, "pickTheme"); // a fresh change — of any kind — abandons the redo
     expect(durable.history().future).toEqual([]);
     expect(() => press(runtime, "fwd")).toThrow(/nothing to redo/);
-    runtime.dispose();
   });
 
   test("history survives a restart — a fresh read of the same on-disk files", () => {
     const runtime = buildRuntime(SRC);
     press(runtime, "pinDracula");
     press(runtime, "back");
-    runtime.dispose();
 
     // "Restart": a brand-new runtime and history, same XDG_STATE_HOME,
     // nothing carried over in memory.
@@ -487,7 +457,6 @@ describe("undo/redo click → the session's settings history", () => {
     expect(() => press(restarted, "back")).toThrow(/nothing to undo/);
     press(restarted, "fwd"); // redo survived the "restart"
     expect(globals().palette).toBe("dracula");
-    restarted.dispose();
   });
 
   test("the history is bounded — the oldest step drops once 50 are exceeded", () => {
@@ -497,7 +466,6 @@ describe("undo/redo click → the session's settings history", () => {
     }
     expect(durable.history().past).toHaveLength(50);
     expect(durable.history().future).toEqual([]);
-    runtime.dispose();
   });
 });
 
@@ -565,7 +533,6 @@ describe("settings history: a step lands whole, and records only what landed", (
     expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
     press(runtime, "fwd");
     expect(runtime.sessionState.get("s1", "theme")).toBe("nord");
-    runtime.dispose();
   });
 
   test("history is bounded by bytes: the session that changed least recently goes first", () => {

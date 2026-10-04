@@ -38,14 +38,10 @@ import {
   resolveThemeSelection,
   transposedPalette,
 } from "../src/themes/palette-resolvers";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { links, stripAnsi } from "./helpers/ansi";
 import {
@@ -83,9 +79,9 @@ function opts(
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
-// settings menu is synthesized), install the derived gates, render through
-// renderDsl with the session's theme and style resolved the way the daemon
-// resolves them, and click through the real verb handlers.
+// settings menu is synthesized), render through renderDsl with the session's
+// theme and style resolved the way the daemon resolves them, and click through
+// the real verb handlers, gated by that config.
 function rig(
   source: string,
   width = 200,
@@ -102,10 +98,8 @@ function rig(
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-  const gates = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const ctx = testVerbContext(sessionState);
+  recordRender(sessionState, SID);
+  const ctx = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
   const render = (): string => {
@@ -209,10 +203,7 @@ function rig(
     },
     sink,
     sessionState,
-    dispose: () => {
-      for (const d of gates) d();
-      registry.dispose();
-    },
+    dispose: () => registry.dispose(),
   };
 }
 

@@ -1,11 +1,10 @@
-// [LAW:one-source-of-truth] The set-state verb's writable surface IS
-// the STATE_VALIDATORS registry. The verb's wire-level tests in
+// [LAW:one-source-of-truth] The set-state verb's writable surface IS the
+// clicking session's gate (stateGate). The verb's wire-level tests in
 // dsl-state-cascade.test.ts assert end-to-end behavior (cascade
-// propagation, error messages); this file asserts the registry's
-// CONTRACT directly so the schema cannot drift silently — a future
-// agent adding or removing a validator must update this test, which
-// surfaces the change in the diff and prompts re-checking every
-// downstream consumer (DSL function bindings, docs, panel migrations).
+// propagation, error messages); this file asserts the SessionState
+// keyspace's CONTRACT directly — the built-in keys every session has, and a
+// daemon-wide key — so the schema cannot drift silently. What a config
+// contributes, and how two configs stay apart, is validator-registry.test.ts.
 //
 // [LAW:behavior-not-structure] The assertions pin the writable schema
 // (the set of keys, what each validator accepts/rejects), not the
@@ -16,24 +15,25 @@
 // homes.
 
 import {
-  listStateKeys,
   makeAllowListValidator,
   registerStateValidator,
-  validateStateWrite,
+  stateGate,
   type ValidateResult,
 } from "../src/daemon/verbs/state-validators";
 import { listResolvablePaletteNames, ENDCAPS_SHAPES } from "../src/themes/policy";
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 
-describe("state-validators registry contract", () => {
-  test("listStateKeys() exactly enumerates the baseline writable schema", () => {
-    // [LAW:single-enforcer] One assertion of "these are THE baseline
-    // writable keys." When .2 (this ticket) introduces the extension
-    // API, the BASELINE remains the static three — extensions
-    // register/dispose around it without polluting the assertion. A
-    // future child that adds a baseline key updates THIS list and
+// The gate of a session whose config declares no action: the built-in keys,
+// and whatever is registered daemon-wide at the moment it is asked.
+const bare = () => stateGate(EMPTY_DEFAULT);
+
+describe("state-validators contract", () => {
+  test("a config declaring nothing has exactly the built-in writable keys", () => {
+    // [LAW:single-enforcer] One assertion of "these are THE built-in
+    // writable keys." A future change that adds one updates THIS list and
     // surfaces the change in the diff, so downstream surfaces (DSL
     // bindings, docs, panel migration) get the signal.
-    expect([...listStateKeys()].sort()).toEqual(
+    expect([...bare().listKeys()].sort()).toEqual(
       ["endcaps", "theme", "toolbar-expanded"].sort(),
     );
   });
@@ -45,7 +45,7 @@ describe("state-validators registry contract", () => {
     // drift where the theme registry adds a palette but the validator
     // rejects it (or vice versa).
     for (const themeName of listResolvablePaletteNames()) {
-      const result = validateStateWrite("theme", themeName);
+      const result = bare().validate("theme", themeName);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(themeName);
     }
@@ -53,7 +53,7 @@ describe("state-validators registry contract", () => {
 
   test("style validator accepts every ENDCAPS_SHAPES entry", () => {
     for (const shape of ENDCAPS_SHAPES) {
-      const result = validateStateWrite("endcaps", shape);
+      const result = bare().validate("endcaps", shape);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(shape);
     }
@@ -71,7 +71,7 @@ describe("state-validators registry contract", () => {
       ["false", ""],
     ];
     for (const [input, normalized] of expected) {
-      const result = validateStateWrite("toolbar-expanded", input);
+      const result = bare().validate("toolbar-expanded", input);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(normalized);
     }
@@ -83,162 +83,52 @@ describe("state-validators registry contract", () => {
     // a value?). Accepting it would be a silent semantic guess; the
     // validator rejects it explicitly so the operator sees the malformed
     // input rather than a quietly-applied default.
-    const result = validateStateWrite("toolbar-expanded", "");
+    const result = bare().validate("toolbar-expanded", "");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/expected boolean-ish/);
   });
 
-  test("unknown key rejection lists the registered keys", () => {
+  test("unknown key rejection lists the gate's keys", () => {
     // [LAW:errors-context-in-errors] The rejection IS the schema
     // surface for a confused caller — confirms the error carries the
-    // current listStateKeys() contents, not a stale literal.
-    const result = validateStateWrite("not-a-key", "x");
+    // gate's own keys, not a stale literal.
+    const result = bare().validate("not-a-key", "x");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      for (const key of listStateKeys()) expect(result.reason).toContain(key);
+      for (const key of bare().listKeys()) expect(result.reason).toContain(key);
     }
   });
 
-  test("registerStateValidator adds a key and the disposer removes it", () => {
-    // [LAW:locality-or-seam] The caller (widget-config loader) owns the
-    // lifecycle of the validator it installed. Disposer-on-register is
-    // the seam that lets a hot-reload of a DSL config dispose old +
-    // install new without a global reset path that could clobber other
-    // configs' entries.
+  test("a daemon-wide key is writable in a session until its disposer runs", () => {
     const disposer = registerStateValidator("mode", {
       kind: "allow-list",
       allowed: ["full", "compact"],
     });
     try {
-      expect(listStateKeys()).toContain("mode");
-      expect(validateStateWrite("mode", "full")).toEqual({
+      expect(bare().listKeys()).toContain("mode");
+      expect(bare().validate("mode", "full")).toEqual({
         ok: true,
         value: "full",
       });
-      const bad = validateStateWrite("mode", "bogus");
+      const bad = bare().validate("mode", "bogus");
       expect(bad.ok).toBe(false);
       if (!bad.ok) expect(bad.reason).toMatch(/unknown state "mode" "bogus"/);
     } finally {
       disposer();
     }
-    expect(listStateKeys()).not.toContain("mode");
-    const after = validateStateWrite("mode", "full");
+    expect(bare().listKeys()).not.toContain("mode");
+    const after = bare().validate("mode", "full");
     expect(after.ok).toBe(false);
     if (!after.ok) expect(after.reason).toMatch(/unknown state key "mode"/);
   });
 
-  test("registerStateValidator unions same-kind specs and ref-counts by spec", () => {
-    // [LAW:one-source-of-truth] The same derived key legitimately registers more
-    // than once — two cache entries sharing one config (identical specs → the
-    // union is idempotent), or two distinct configs whose buttons write the same
-    // custom key with DIFFERENT members. The gate is the UNION: every value any
-    // live registration can render is accepted, so neither config's clicks fail.
-    // The key survives until the LAST spec disposes; disposing one shrinks the
-    // union back to what remains.
-    const disposeRed = registerStateValidator("mode-2", {
-      kind: "allow-list",
-      allowed: ["red"],
-    });
-    const disposeBlue = registerStateValidator("mode-2", {
-      kind: "allow-list",
-      allowed: ["blue"],
-    });
-    try {
-      // Union: both registrations' members are deliverable.
-      expect(validateStateWrite("mode-2", "red").ok).toBe(true);
-      expect(validateStateWrite("mode-2", "blue").ok).toBe(true);
-      // Disposing the "red" registration shrinks the union — "red" no longer
-      // deliverable, "blue" still is, key still alive.
-      disposeRed();
-      expect(listStateKeys()).toContain("mode-2");
-      expect(validateStateWrite("mode-2", "red").ok).toBe(false);
-      expect(validateStateWrite("mode-2", "blue").ok).toBe(true);
-    } finally {
-      disposeBlue();
-    }
-    // Both disposed → the key is gone.
-    expect(listStateKeys()).not.toContain("mode-2");
-  });
-
-  test("registerStateValidator throws on an incoherent spec for a live key", () => {
-    // [LAW:types-are-the-program] A state key has ONE key shape. Registering
-    // a non-integer allow-list for a key already held as an int page index is
-    // a contradiction no merged validator could honor — it throws at
-    // registration (the same merge a single action table is held to), not
-    // silently keeps whichever loaded first.
-    const dispose = registerStateValidator("kind-clash", { kind: "int" });
-    try {
-      expect(() =>
-        registerStateValidator("kind-clash", {
-          kind: "allow-list",
-          allowed: ["a"],
-        }),
-      ).toThrow(/key "kind-clash" is an integer spec .* non-integer value\(s\) to it \(a\)/);
-      // The rejected registration left the int gate intact.
-      expect(validateStateWrite("kind-clash", "5").ok).toBe(true);
-    } finally {
-      dispose();
-    }
-    expect(listStateKeys()).not.toContain("kind-clash");
-  });
-
-  test("registerStateValidator throws on a baseline key (theme/style/toolbar-expanded)", () => {
-    // [LAW:no-silent-fallbacks] Baseline keys are permanent; a widget config that
-    // names its menu page key `theme` collides loudly at load rather than
-    // silently hijacking the canonical theme validator (which would then reject
-    // the menu's integer page writes confusingly at click time).
+  test("a built-in key cannot be re-claimed daemon-wide", () => {
+    // [LAW:no-silent-fallbacks] Built-in keys are permanent; a claim on
+    // `theme` collides loudly rather than silently hijacking the canonical
+    // theme validator.
     expect(() =>
       registerStateValidator("theme", { kind: "allow-list", allowed: ["x"] }),
     ).toThrow(/built-in state key/);
-  });
-
-  test("registerStateValidator rejects empty key", () => {
-    expect(() =>
-      registerStateValidator("", { kind: "int" }),
-    ).toThrow(/key is required/);
-  });
-
-  test("registerStateValidator rejects slash-bearing keys", () => {
-    // [LAW:types-are-the-program] The set-state wire shape splits the
-    // tail on "/" — a slash-bearing key would be broken into two
-    // segments before dispatch, making it structurally unaddressable.
-    // Listing such a key in listStateKeys() while it cannot be written
-    // to is the registry-vs-wire drift the registration check forbids.
-    expect(() =>
-      registerStateValidator("a/b", { kind: "int" }),
-    ).toThrow(/contains "\/"/);
-    // The failing registration must NOT pollute the registry.
-    expect(listStateKeys()).not.toContain("a/b");
-  });
-
-  test("disposer is idempotent (second call is a no-op)", () => {
-    // [LAW:single-enforcer] Double-dispose must not affect a key
-    // re-registered by a different caller between calls.
-    const dispose1 = registerStateValidator("idem-1", {
-      kind: "allow-list",
-      allowed: ["a"],
-    });
-    dispose1();
-    expect(listStateKeys()).not.toContain("idem-1");
-    // Re-register under the same key with a different spec.
-    const dispose2 = registerStateValidator("idem-1", {
-      kind: "allow-list",
-      allowed: ["b"],
-    });
-    try {
-      // Second call of the FIRST disposer must NOT remove the new entry — it
-      // removes its OWN (already-gone) spec once, then no-ops.
-      dispose1();
-      expect(listStateKeys()).toContain("idem-1");
-      expect(validateStateWrite("idem-1", "b")).toEqual({
-        ok: true,
-        value: "b",
-      });
-      // The first spec's member is gone — only the re-registered spec gates now.
-      expect(validateStateWrite("idem-1", "a").ok).toBe(false);
-    } finally {
-      dispose2();
-    }
   });
 
   test("makeAllowListValidator accepts members and rejects non-members", () => {
@@ -285,7 +175,7 @@ describe("state-validators registry contract", () => {
 
   test("makeAllowListValidator rejects slash-bearing allowed values at factory time", () => {
     // [LAW:types-are-the-program] Symmetric with the slash-rejection on
-    // registerStateValidator: the wire splits BOTH keys and values on
+    // a gate's keys: the wire splits BOTH keys and values on
     // "/" so a slash-bearing option could never be delivered to the
     // validator as a single value. Catching at factory-build (config-
     // load time) per [LAW:verifiable-goals] — a misconfigured widget
@@ -303,28 +193,6 @@ describe("state-validators registry contract", () => {
     expect(() =>
       makeAllowListValidator(["a", "b", "c"], "mode"),
     ).not.toThrow();
-  });
-
-  test("an allow-list spec registers as a working gate", () => {
-    // [LAW:one-type-per-behavior] The canonical "widget options = allow list"
-    // registration shape — an allow-list spec expresses "key X is written from
-    // list Y"; the registry builds the validator (label derived from the key).
-    const disposer = registerStateValidator("compose-key", {
-      kind: "allow-list",
-      allowed: ["one", "two"],
-    });
-    try {
-      expect(validateStateWrite("compose-key", "one")).toEqual({
-        ok: true,
-        value: "one",
-      });
-      const bad = validateStateWrite("compose-key", "three");
-      expect(bad.ok).toBe(false);
-      if (!bad.ok)
-        expect(bad.reason).toMatch(/unknown state "compose-key" "three"/);
-    } finally {
-      disposer();
-    }
   });
 
   test("ValidateResult discriminant is exhaustive (type-level)", () => {
@@ -357,7 +225,7 @@ describe("state-validators registry contract", () => {
     };
     const [aPaletteName] = listResolvablePaletteNames();
     expect(aPaletteName).toBeDefined();
-    checkShape(validateStateWrite("theme", aPaletteName!));
-    checkShape(validateStateWrite("not-a-key", "x"));
+    checkShape(bare().validate("theme", aPaletteName!));
+    checkShape(bare().validate("not-a-key", "x"));
   });
 });

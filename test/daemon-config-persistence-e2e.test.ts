@@ -157,7 +157,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // does not show the pick. A closed menu renders no theme name at all, so
       // asserting on a collapsed bar would pass whether or not the pick
       // leaked — the string simply is not reachable output. Opening it first
-      // is what makes the absence evidence.
+      // is what makes the absence evidence. It renders first, as any session
+      // does before it has a link to click: a click is gated by the config
+      // its session renders.
+      await render(sockPath, OTHER_SID, projectDir);
       await click(
         sockPath,
         effectsUrl([

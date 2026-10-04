@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] 2de.13 acceptance for the picker helper, driven through
 // the real spine (registerDslConfig + renderDsl), the real loader
-// (parseAndValidate), and the real set-state gate (deriveActionValidators +
-// registerStateValidator + validateStateWrite) — never a parallel rig:
+// (parseAndValidate), and the real set-state gate (the loaded config's own
+// `stateGate`) — never a parallel rig:
 //
 //   1. `{{ picker "apply" "page" closeOnPick paged }}` renders a width-fit run of
 //      option cells over named actions, with ✕/←/→ navigating the page cursor.
@@ -23,8 +23,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   deriveActionValidators,
-  registerStateValidator,
-  validateStateWrite,
+  stateGate,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf, boldUrls } from "./helpers/click";
@@ -85,27 +84,24 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(width),
     );
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  const gate = stateGate(config);
   const click = (url: string): void => {
     for (const { verb, args } of effectsOf(url)) {
       if (verb !== "set-state") continue;
       const [sid, ...pairs] = args;
       for (let i = 0; i < pairs.length; i += 2) {
-        const result = validateStateWrite(pairs[i]!, pairs[i + 1]!);
+        const result = gate.validate(pairs[i]!, pairs[i + 1]!);
         if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
         sessionState.set(sid!, pairs[i]!, result.value);
       }
     }
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, sessionState, render, click, dispose };
+  return { config, store, sessionState, render, click };
 }
 
 describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   test("a closed menu (page -1) is absent; opening shows ✕ + a page + active mark", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(
+    const { render, click, sessionState } = buildRuntime(
       pickerConfig(true, true),
     );
     // Closed: the when-gate (page>=0) drops the row entirely — only the trigger.
@@ -127,11 +123,10 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(stripAnsi(open)).toContain("✕");
     // The default theme (current) renders bold (active).
     expect(boldUrls(open).join(" ")).toContain(THEMES[0]!);
-    dispose();
   });
 
   test("clicking a theme applies AND closes (closeOnPick=true): adjacent session writes, one batch", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(
+    const { render, click, sessionState } = buildRuntime(
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -153,11 +148,10 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     click(themeUrl!);
     expect(sessionState.get("s1", "theme-pick")).toBe(eff[0]!.args[2]);
     expect(sessionState.get("s1", "theme-page")).toBe("-1"); // closed
-    dispose();
   });
 
   test("closeOnPick=false: a theme click applies only (no page reset)", () => {
-    const { render, sessionState, dispose } = buildRuntime(
+    const { render, sessionState } = buildRuntime(
       pickerConfig(false, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -168,7 +162,6 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(themeUrl).toBeDefined();
     // Apply only: the page key is NOT in the write.
     expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
-    dispose();
   });
 
   test("default (closeOnPick omitted) is stay-open: a theme click applies only, menu still renders", () => {
@@ -178,7 +171,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       '{{ picker "applyTheme" "themePage" true true }}',
       '{{ picker "applyTheme" "themePage" }}',
     );
-    const { render, sessionState, dispose } = buildRuntime(src);
+    const { render, sessionState } = buildRuntime(src);
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
     expect(stripAnsi(open)).toContain("✕"); // open: the close affordance is present
@@ -189,11 +182,10 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(themeUrl).toBeDefined();
     // Default closeOnPick=false ⇒ the page key is NOT written (menu stays open).
     expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
-    dispose();
   });
 
   test("paged: a narrow width slices into pages with → ; clicking → advances the cursor", () => {
-    const { render, click, sessionState, dispose } = buildRuntime(
+    const { render, click, sessionState } = buildRuntime(
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -212,11 +204,10 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(nextUrl).toBeDefined();
     click(nextUrl!);
     expect(sessionState.get("s1", "theme-page")).toBe("1");
-    dispose();
   });
 
   test("wrap (paged=false): one page of ALL themes, no ←/→ even when narrow", () => {
-    const { render, sessionState, dispose } = buildRuntime(
+    const { render, sessionState } = buildRuntime(
       pickerConfig(true, false),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -226,7 +217,6 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(plain).not.toContain("←");
     // Every theme is present (the long line wraps via FlexStrip, none dropped).
     for (const t of THEMES) expect(plain).toContain(t);
-    dispose();
   });
 });
 
@@ -246,14 +236,11 @@ describe("2de.13 — picker gate derivation (int arm)", () => {
 
   test("the int gate accepts any integer (-1 closed, page indices) and rejects non-int", () => {
     const config = parseAndValidate("<test>", pickerConfig(true, true), ALLOWED);
-    const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
-    expect(validateStateWrite("theme-page", "-1").ok).toBe(true);
-    expect(validateStateWrite("theme-page", "0").ok).toBe(true);
-    expect(validateStateWrite("theme-page", "7").ok).toBe(true);
-    expect(validateStateWrite("theme-page", "x").ok).toBe(false);
-    disposers.forEach((d) => d());
+    const gate = stateGate(config);
+    expect(gate.validate("theme-page", "-1").ok).toBe(true);
+    expect(gate.validate("theme-page", "0").ok).toBe(true);
+    expect(gate.validate("theme-page", "7").ok).toBe(true);
+    expect(gate.validate("theme-page", "x").ok).toBe(false);
   });
 });
 

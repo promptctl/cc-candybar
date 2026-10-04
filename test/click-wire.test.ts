@@ -22,10 +22,21 @@ import {
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import {
+  recordRender,
+  testVerbContext,
+  effectsOf,
+  clickUrl,
+} from "./helpers/click";
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 
 const SID = "s1";
-const ctx = (sessionState: SessionState) => (testVerbContext(sessionState));
+// A session that has rendered a config declaring no action: its gate holds
+// the built-in keys (theme, endcaps) and nothing else.
+const ctx = (sessionState: SessionState) => {
+  recordRender(sessionState, SID);
+  return testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
+};
 
 describe("click wire — encode/decode round-trip", () => {
   test("a single effect serializes to a dispatch URL and decodes back", () => {
