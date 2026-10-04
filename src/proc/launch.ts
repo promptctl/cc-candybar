@@ -67,6 +67,12 @@ export const LAUNCH_CATEGORIES = [
   // The doctor's tmux query — click-driven like the verbs above, and its own
   // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",
+  // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
+  // the CLI's own process: the link it opens, and — only for a link that did
+  // not come back — the Launch Services lookup and the applet's script.
+  "doctor.open",
+  "doctor.launch-services",
+  "doctor.osadecompile",
   // The memento plugin's context ceiling (src/memento/edge.ts): `read` asks its
   // own module for the ceiling in force on a render-cache miss; `move` runs its
   // `ceiling` command on a click. Separate so daemon-stats tells a render cost

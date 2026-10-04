@@ -44,6 +44,7 @@ import {
   encodeFrame,
   makeFrameReader,
   parseClientHints,
+  sanitizeClientVersion,
   sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
@@ -76,6 +77,7 @@ import {
 import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
+import { ProbeArrivals } from "../doctor/handler-probe";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -112,6 +114,7 @@ import { DiagnosticDump } from "./diagnostic-dump.js";
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
+const handlerProbes = new ProbeArrivals();
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -876,6 +879,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         renderCacheSize: renderCache.size,
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
+        handlerProbes: handlerProbes.list(),
       }),
     });
   }
@@ -1155,7 +1159,13 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
   }
 
   if (req.kind === "click") {
-    return stay(await handleClick(req.verb, req.value));
+    return stay(
+      handleClick(
+        req.verb,
+        req.value,
+        sanitizeClientVersion(req.clientVersion),
+      ),
+    );
   }
 
   if (req.kind === "debug") {
@@ -1294,6 +1304,7 @@ const verbCtx = {
       unused: entry.state.unused,
     };
   }),
+  probes: handlerProbes,
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
@@ -1381,7 +1392,11 @@ const payloadDeps = {
   history: (sessionId: string) => settingsHistory.depth(sessionId),
 };
 
-function handleClick(verb: string, value: string): Response {
+function handleClick(
+  verb: string,
+  value: string,
+  clientVersion: string | null,
+): Response {
   const handler = VERBS.get(verb);
   if (!handler) {
     return {
@@ -1392,7 +1407,7 @@ function handleClick(verb: string, value: string): Response {
     };
   }
   try {
-    handler(value, verbCtx);
+    handler(value, { ...verbCtx, clientVersion });
     return { ok: true, output: "" };
   } catch (e) {
     const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";

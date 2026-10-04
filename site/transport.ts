@@ -11,6 +11,7 @@ import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/re
 import { handleRequest, reloadConfig } from "../src/daemon/server";
 import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
+import { PACKAGE_VERSION } from "../src/version";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
 import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
@@ -186,7 +187,7 @@ async function click(url: string, size: Size) {
   const { verb, value } = parseHandlerUrl(url);
   let refused: string | null = null;
   try {
-    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value, clientVersion: PACKAGE_VERSION });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }

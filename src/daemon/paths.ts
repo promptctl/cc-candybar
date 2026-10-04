@@ -56,8 +56,12 @@ export function daemonDir(): string {
 // CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
 // (tests, dev, multiple intentional instances).
 export function socketPath(): string {
-  const override = process.env.CC_CANDYBAR_SOCKET;
-  if (override) return override;
+  return process.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+
+// The socket a process with no override reaches — the URL handler app's, which
+// Launch Services starts without this shell's environment.
+export function defaultSocketPath(): string {
   const uid = os.userInfo().uid;
   return path.join("/tmp", `cc-candybar-${uid}`, "socket");
 }

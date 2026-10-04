@@ -39,6 +39,7 @@ const facts = (
 ): DoctorFacts => ({
   tmux,
   config,
+  urlHandler: { kind: "unsupported" },
   claudeSettings: { path: "/home/u/.claude/settings.json", env },
 });
 
@@ -236,6 +237,7 @@ describe("config probe", () => {
       runDoctor(facts({ kind: "outside" })).map((r) => [r.check.name, r.verdict.ok]),
     ).toEqual([
       ["config", true],
+      ["urlHandler", true],
       ["tmuxTruecolor", true],
     ]);
   });

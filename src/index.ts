@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     // the bar's 🩺 click runs, over this process's own environment (which IS
     // Claude Code's when run from a Claude Code shell).
     if (subcommand === "doctor") {
-      runDoctorCli(process.argv.slice(3)); // owns its own exit code
+      await runDoctorCli(process.argv.slice(3)); // owns its own exit code
       return;
     }
     // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler

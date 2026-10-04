@@ -231,6 +231,14 @@ export interface ClickRequest {
   kind: "click";
   verb: string;
   value: string;
+  // The package version of the client that delivered the click — the URL
+  // handler's staged runtime, or a page whose daemon runs in it. Absent from
+  // a handler too old to report it.
+  clientVersion?: string;
+}
+
+export function sanitizeClientVersion(v: unknown): string | null {
+  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
 }
 
 export interface StatsRequest {

@@ -9,8 +9,9 @@
 //
 // [LAW:single-enforcer] No parallel check logic: the CLI differs from the click
 // only in WHERE its facts come from — its own env and directory here, the
-// session's recorded client hint and render origin there — and the fold is
-// one function either way.
+// session's recorded client hint and render origin there; a link it opens
+// itself here (handler-probe.ts), the click that asked there — and the fold
+// is one function either way.
 
 import path from "node:path";
 import process from "node:process";
@@ -25,6 +26,11 @@ import {
   type ConfigOrigin,
   type DoctorEdge,
 } from "./edge.js";
+import {
+  probeUrlHandler,
+  productionHandlerProbeEdge,
+  type HandlerProbeEdge,
+} from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
 import { expandHome } from "../config/dsl-loader.js";
 import { loadFromDisk } from "../daemon/cache/render.js";
@@ -67,15 +73,16 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
 
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
-export function doctorPlan(
+export async function doctorPlan(
   edge: DoctorEdge,
+  handler: HandlerProbeEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
   configFile: string | undefined = undefined,
-): CliPlan {
+): Promise<CliPlan> {
   let facts: DoctorFacts;
   try {
-    facts = gatherFacts(
+    const gathered = gatherFacts(
       edge,
       {
         tmux: detectTmuxHint(env),
@@ -92,6 +99,9 @@ export function doctorPlan(
           sanitizeConfigPath(configFile ?? detectConfigEnv(env)) ?? null,
       },
     );
+    // Last: the probe opens a link and waits, which a run that cannot report
+    // has no reason to do.
+    facts = { ...gathered, urlHandler: await probeUrlHandler(handler) };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
@@ -107,7 +117,7 @@ export function doctorPlan(
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
-export function runDoctorCli(args: readonly string[]): never {
+export async function runDoctorCli(args: readonly string[]): Promise<never> {
   // An empty string is a mis-expanded shell variable, never "no argument".
   if (args.length > 1 || args[0] === "" || args[0]?.startsWith("--")) {
     process.stderr.write(
@@ -116,8 +126,9 @@ export function runDoctorCli(args: readonly string[]): never {
     process.exit(EXIT_USAGE);
   }
   const cwd = process.cwd();
-  const plan = doctorPlan(
+  const plan = await doctorPlan(
     productionEdge(loadConfigOnce),
+    productionHandlerProbeEdge(),
     process.env,
     cwd,
     args[0] === undefined ? undefined : path.resolve(cwd, expandHome(args[0])),
