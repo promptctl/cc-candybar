@@ -1,5 +1,5 @@
 // brandon-menu-ia-q30.jl1: the two template arguments the `◀ value ▶` picker
-// is built from — a carousel whose centre is the author's own fragment, and a
+// is built from — a carousel whose centre fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -22,11 +22,11 @@ const OPTS = {
 };
 const PAYLOAD = { session_id: "s1", workspace: { current_dir: "/tmp/proj" } };
 
-function renderOf(template: string): string {
+function renderOf(template: string, current = "mid"): string {
   const config = parseAndValidate(
     "<user>",
     `{
-      variables: { zoom: { kind: 'state', key: 'zoom', default: 'mid' } },
+      variables: { zoom: { kind: 'state', key: 'zoom', default: '${current}' } },
       actions: {
         pick: { set: 'zoom', from: ['low', 'mid', 'high'] },
         page: { set: 'zoom.page', int: true },
@@ -44,22 +44,30 @@ function renderOf(template: string): string {
   return renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
 }
 
-describe("{{ carousel }} with a centre fragment", () => {
-  test("the arrows still step; the centre is the fragment, not the option", () => {
-    const out = renderOf('{{ carousel "pick" 0 (action "hello" "MID") }}');
-    expect(stripAnsi(out)).toMatch(/◀ MID ▶/);
+describe("{{ carousel }} with a centre action", () => {
+  test("the arrows still step; the centre shows the option and fires the named action", () => {
+    const out = renderOf('{{ carousel "pick" 0 "hello" }}');
+    expect(stripAnsi(out)).toMatch(/◀ mid ▶/);
     const writes = (text: string) =>
       effectsOf(links(out).find((l) => stripAnsi(l.text) === text)!.url);
     expect(writes("◀")[0]!.args.slice(1)).toEqual(["zoom", "low"]);
     expect(writes("▶")[0]!.args.slice(1)).toEqual(["zoom", "high"]);
-    // The centre fires the fragment's own action, never a write of `zoom`.
-    expect(writes("MID").some((e) => e.args[1] === "zoom")).toBe(false);
+    // The centre fires the named action, never a write of `zoom`.
+    expect(writes("mid").some((e) => e.args[1] === "zoom")).toBe(false);
   });
 
-  test("a centre that is not a fragment is refused, naming the shape", () => {
-    expect(stripAnsi(renderOf('{{ carousel "pick" 0 "MID" }}'))).toMatch(
-      /centre must be a fragment/,
+  test("a centre naming no declared action is refused", () => {
+    expect(stripAnsi(renderOf('{{ carousel "pick" 0 "nope" }}'))).toMatch(
+      /centre must name a declared action/,
     );
+  });
+
+  test("an unknown current value centres on the first option, still clickable", () => {
+    // The value an empty or stale key holds is no option: the centre shows
+    // the first, the one ▶ steps from, and its click still fires.
+    const out = renderOf('{{ carousel "pick" 0 "hello" }}', "");
+    expect(stripAnsi(out)).toMatch(/◀ low ▶/);
+    expect(links(out).some((l) => stripAnsi(l.text) === "low")).toBe(true);
   });
 });
 

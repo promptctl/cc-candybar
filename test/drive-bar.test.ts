@@ -42,7 +42,9 @@ describe("drive-bar", () => {
     await bar.render();
     await bar.click(DOOR_GLYPH);
     await bar.click("📐 layout");
-    const { rendered: out } = await bar.click("▶");
+    // The second ▶ on screen: the first steps the preset control on the door's
+    // line, the second the padding stepper in the layout tab.
+    const { rendered: out } = await bar.click("▶", 2);
     // The stepper's step is a session draft; save writes it to the config.
     const save = drawnLinks(out).find((l) => describeLink(l).startsWith("save "));
     expect(save).toBeDefined();

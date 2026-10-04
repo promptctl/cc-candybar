@@ -10,7 +10,7 @@
 //   - In arrange mode every placement carries a ⚙: `theme` is a setting each
 //     one has (brandon-settings-menu-6c5), declared or not.
 //   - Configure mode hangs one control per declared setting below that
-//     placement, generated from its domain: a toggle, a word carousel, a stepper.
+//     placement, generated from its domain: a toggle, a word picker, a stepper.
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
@@ -147,7 +147,7 @@ function buildRuntime(
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
   // A link whose click writes `value` to `key` — or, for a stepper
-  // (`step-state`), steps `key` by `value`. A carousel over two words draws
+  // (`step-state`), steps `key` by `value`. A picker over two words writes
   // the other one behind both its arrows, so there may be more than one; they
   // are one click.
   const urlWriting = (out: string, key: string, value: string): string => {
@@ -253,7 +253,7 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    // The flag toggles, the word carousel picks, the stepper steps and wraps.
+    // The flag toggles, the word picker's arrow picks, the stepper steps and wraps.
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "1"));

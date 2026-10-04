@@ -1474,11 +1474,13 @@ writes unsaved, so the two always show the same theme:
  ◀ nord ▶ 
 ```
 
-A third argument replaces the centre's own cell with a fragment of yours —
-`{{ carousel "applyAction" 0 (action "openList" .current) }}` keeps the arrows
-stepping and makes the name a different click. That is how the settings menu
-draws `◀ value ▶` with the value opening the list of every choice; any
-fragment works, a `(menu …)` trigger included.
+A third argument names a declared action the centre fires instead of applying
+itself — `{{ carousel "applyAction" 0 "openList" }}` keeps the arrows stepping
+and makes the name a different click, while the name shown is still the
+carousel's own current value. That is how the settings menu draws `◀ value ▶`
+with the value opening the list of every choice. A name that is not a declared
+action is a render error, `carousel "applyAction": centre must name a declared
+action…`.
 
 A carousel owns no state of its own — its centre is the action's current value —
 so the call is the whole declaration. It is a picker, not a disclosure: put it

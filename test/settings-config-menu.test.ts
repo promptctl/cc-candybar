@@ -321,10 +321,10 @@ describe("the config menu, reached from a user config whose root is one row", ()
       })
       .join("\n");
     // One labelled control each, showing the value the bar actually rendered.
-    expect(out).toContain("▦ default"); // preset
-    expect(out).toContain("🎨 tokyo-night"); // theme
-    expect(out).toContain("◐ none"); // style
-    expect(out).toContain("✦ powerline"); // style
+    expect(out).toContain("▦ ◀ default ▶"); // preset
+    expect(out).toContain("🎨 ◀ tokyo-night ▶"); // theme
+    expect(out).toContain("◐ ◀ none ▶"); // style
+    expect(out).toContain("✦ ◀ powerline ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
     expect(out).toContain("☑ update notice"); // updateNotice
@@ -491,7 +491,7 @@ describe("save under a preset that pins the setting", () => {
       )!,
     );
     const capsule = plain(r.render());
-    expect(capsule).toContain("✦ capsule");
+    expect(capsule).toContain("✦ ◀ capsule ▶");
     expect(capsule).not.toContain(PLAIN_SEAM);
     const pickPlain = writesTo(r.render(), "endcaps").find((u) =>
       effectsOf(u).some((e) => e.args[1] === "endcaps" && e.args[2] === "plain"),
@@ -517,7 +517,7 @@ describe("save under a preset that pins the setting", () => {
       };
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(parsed.globals).not.toHaveProperty("endcaps");
-      expect(after).toContain("✦ plain");
+      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
       expect(r.logs).toContainEqual(
@@ -553,7 +553,7 @@ describe("save under a preset that pins the setting", () => {
       expect(parsed.globals).toEqual({ preset: "narrow" });
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(r.sessionState.get(SID, "preset")).toBeNull();
-      expect(after).toContain("✦ plain");
+      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
     } finally {
@@ -636,7 +636,7 @@ describe("reset returns settings to the bundled default", () => {
 
   test("↺ clears the session's pick and the saved value, and the bar shows the default", () => {
     r.sessionState.set(SID, "theme", "dracula");
-    expect(plain(r.render())).toContain("🎨 dracula");
+    expect(plain(r.render())).toContain("🎨 ◀ dracula ▶");
     r.click(resetOf("palette"));
     expect(r.reloads).toEqual([
       { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
@@ -644,7 +644,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
     const theme = DEFAULT_DSL_CONFIG.globals.palette as string;
-    expect(plain(r.render())).toContain(`🎨 ${theme}`);
+    expect(plain(r.render())).toContain(`🎨 ◀ ${theme} ▶`);
     expect(plain(r.render())).not.toContain("💾");
     expect(userContent()).toEqual(USER_CONTENT);
   });
@@ -744,7 +744,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "style")).toBeNull();
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
-    expect(plain(r.render())).toContain("◐ none");
+    expect(plain(r.render())).toContain("◐ ◀ none ▶");
     expect(plain(r.render())).not.toContain("💾");
     showTab(r, "layout");
     expect(plain(r.render())).toContain("padding 1");
@@ -860,10 +860,11 @@ describe("the drift marker", () => {
 
 // [LAW:verifiable-goals] brandon-theme-picker-bgw.etd: choosing a theme is
 // trying several, so a pick must leave the picker open with the new pick
-// current. Driven the way a user drives it: two clicks found in the rendered
-// bytes and dispatched through the real verb handlers, at 80 columns. The theme control is a carousel
-// (brandon-theme-picker-bgw.ef6): each rotation is a pick, so "stays open" is
-// a claim about the ring after two of them.
+// current. Driven the way a user drives it: clicks found in the rendered
+// bytes and dispatched through the real verb handlers, at 80 columns. The theme
+// control is a picker (brandon-menu-ia-q30.jl1): `◀ name ▶` whose name opens
+// the list of every theme, so "stays open" is a claim about that list after
+// two picks from it.
 describe("a pick leaves the picker open", () => {
   let r: ReturnType<typeof rig>;
   beforeEach(() => {
@@ -878,30 +879,34 @@ describe("a pick leaves the picker open", () => {
   });
   afterEach(() => r.dispose());
 
-  // The theme control's carousel arrow `glyph`: the link that writes the
-  // session theme and reads as that arrow.
-  const arrow = (rendered: string, glyph: string): string =>
-    links(rendered).find(
-      (l) =>
-        stripAnsi(l.text) === glyph &&
+  // An option of the open theme list other than `current`: a link that writes
+  // the session theme and reads as a theme's name, not an arrow.
+  const option = (rendered: string, current: string) =>
+    links(rendered).find((l) => {
+      const text = stripAnsi(l.text);
+      return (
+        text !== "◀" &&
+        text !== "▶" &&
+        text !== current &&
         effectsOf(l.url).some(
-          (e) => e.verb === "set-state" && e.args[1] === "theme",
-        ),
-    )!.url;
+          (e) => e.verb === "set-state" && e.args[1] === "theme" && e.args[2] === text,
+        )
+      );
+    })!;
+  const theme = (rendered: string) => /🎨 ◀ (\S+) ▶/.exec(plain(rendered))![1]!;
 
-  test("two picks in a row: still open, the ring centred on the second pick", () => {
-    const opened = plain(r.render());
-    r.click(arrow(r.render(), "▶"));
+  test("two picks in a row from the list: still open, the control naming the second pick", () => {
+    const opened = r.render();
+    const pickOne = option(opened, theme(opened));
+    r.click(pickOne.url);
     const first = r.render();
-    r.click(arrow(first, "▶"));
+    expect(theme(first)).toBe(stripAnsi(pickOne.text));
+    const pickTwo = option(first, theme(first));
+    r.click(pickTwo.url);
     const second = r.render();
-    const theme = (rendered: string) => /🎨 (\S+) [▸▾]/.exec(plain(rendered))![1]!;
-    expect(theme(first)).not.toBe(theme(opened));
-    expect(theme(second)).not.toBe(theme(first));
-    // Still open after each pick, centred on what was picked.
-    for (const rendered of [first, second]) {
-      expect(plain(rendered)).toContain(`◀ ${theme(rendered)} ▶`);
-    }
+    expect(theme(second)).toBe(stripAnsi(pickTwo.text));
+    // Still open after each pick: the list's options are still drawn.
+    expect(option(second, theme(second))).toBeDefined();
   });
 });
 

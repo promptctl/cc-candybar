@@ -1001,8 +1001,8 @@ describe("a user menu cannot join a synthesized accordion", () => {
     expect(Object.keys(config.variables)).toContain(pickerStateKey);
     // One key, and more than one menu's cycle action written onto it — that IS
     // the accordion.
-    const cyclesOnIt = Object.keys(config.actions).filter((name) =>
-      name.startsWith(`${pickerStateKey}.`),
+    const cyclesOnIt = Object.values(config.actions).filter(
+      (a) => "cycle" in a && "set" in a && a.set === pickerStateKey,
     );
     expect(cyclesOnIt.length).toBeGreaterThan(1);
   });
@@ -1115,8 +1115,12 @@ describe("every settings control has a setting projection", () => {
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const controls = Object.entries(config.actions).filter(([name]) =>
-    name.startsWith("candybar.apply."),
+  // A picker also mints the machinery of its list of options under its apply
+  // name — the toggle that opens it, its page cursor, the click doing both —
+  // which writes navigation, not a setting.
+  const LIST_MACHINERY = /\.(toggle|page|page\.first|open)$/;
+  const controls = Object.entries(config.actions).filter(
+    ([name]) => name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
   );
   const sessionKey = (a: ActionDecl): string =>
     "set" in a ? a.set : `(not a set: ${JSON.stringify(a)})`;

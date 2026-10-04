@@ -64,6 +64,7 @@ import {
   menuActionName,
   menuMember,
   menuPageKey,
+  sharedMenuStateKey,
   menuStateKey,
 } from "./menu-keys.js";
 import {
@@ -374,7 +375,9 @@ function configureParts(
       key,
       variable,
       segName,
-      `${prefix}.configure.${posIdent}`,
+      // A shared `{{ menu }}` key's spelling: `ident`-normalized under
+      // `menus.`, so it is a template path no other variable owns.
+      sharedMenuStateKey(`${prefix}.configure.${posIdent}`),
     );
     Object.assign(ctx.artifacts.actions, control.actions);
     Object.assign(ctx.artifacts.variables, control.variables);

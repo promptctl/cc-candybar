@@ -81,8 +81,8 @@ function controlDomainOf(domain: SettingDecl["domain"]): ControlDomain {
 
 // The control, and the actions it writes `key` through — named `name` (and
 // `name.down`/`name.up` for a stepper). `readVar` is the variable holding the
-// value the bar renders with, which a stepper shows between its arrows and a
-// picker names between its own. `listKey` is the accordion a picker's list
+// value the bar renders with, which a stepper shows between its arrows (a
+// picker reads its own through its action's key). `listKey` is the accordion a picker's list
 // joins: the lists of one caller's controls share it, so one is open at a time.
 //
 // [LAW:single-enforcer] Nothing here declares a gate: every action is a `set`
@@ -108,7 +108,7 @@ export function settingControl(
     };
   }
   if ("from" in domain) {
-    return optionPicker(key, readVar, name, listKey, domain.from);
+    return optionPicker(key, name, listKey, domain.from);
   }
   const step = (by: number): ActionDecl => ({
     set: key,
@@ -138,7 +138,6 @@ export function settingControl(
 // picker draws none of its own. Opening it starts at the first page.
 function optionPicker(
   key: string,
-  readVar: string,
   name: string,
   listKey: string,
   from: OptionDomain,
@@ -150,7 +149,7 @@ function optionPicker(
   const firstPage = `${page}.first`;
   return {
     kind: "picker",
-    template: `{{ carousel "${name}" 0 (action "${open}" .${readVar}) }}`,
+    template: `{{ carousel "${name}" 0 "${open}" }}`,
     actions: {
       [name]: { set: key, from },
       [toggle]: disclosureCycleAction(listKey, name),

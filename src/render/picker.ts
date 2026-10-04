@@ -295,8 +295,14 @@ export function renderPicker(
   const current =
     "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
 
-  // In wrap mode (available = Infinity) everything stands on one page.
-  const available = paged ? rowBudget(runtime) : Infinity;
+  // In wrap mode (available = Infinity) everything stands on one page. A
+  // picker that draws no ✕ of its own is a row of a disclosure body, which the
+  // body leads with ITS ✕ — so it pages at the led row's width.
+  const available = !paged
+    ? Infinity
+    : close.length === 0
+      ? ledRowBudget(runtime)
+      : rowBudget(runtime);
 
   // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
   // domain's one section is the run of cells `paginate` fits to the width, and

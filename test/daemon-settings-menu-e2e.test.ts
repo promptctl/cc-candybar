@@ -35,7 +35,8 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { boldUrls } from "./helpers/ansi";
+import { boldUrls, links } from "./helpers/ansi";
+import { effectsOf } from "./helpers/click";
 
 jest.setTimeout(30_000);
 
@@ -135,11 +136,21 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         const pick = urlWriting(await bar(), "preset", preset);
         await click(sockPath, pick);
         const after = await bar();
-        expect(stripAnsi(after)).toContain(`▦ ${preset}`);
-        // Still open: the other preset's option is on screen, clickable.
+        expect(stripAnsi(after)).toContain(`▦ ◀ ${preset} ▶`);
+        // Still open: the list draws the other preset as an option, by name —
+        // the ◀/▶ beside the control write a preset too, but read as arrows.
         const other = preset === "compact" ? "default" : "compact";
-        expect(() => urlWriting(after, "preset", other)).not.toThrow();
-        expect(boldUrls(after)).toContain(urlWriting(after, "preset", preset));
+        const option = (name: string) =>
+          links(after).find(
+            (l) =>
+              stripAnsi(l.text) === name &&
+              effectsOf(l.url).some(
+                (e) => e.args[1] === "preset" && e.args[2] === name,
+              ),
+          );
+        expect(option(other)).toBeDefined();
+        // The pick is marked current in the list.
+        expect(boldUrls(after)).toContain(option(preset)!.url);
       }
     } finally {
       if (daemon) await killAndWait(daemon);

@@ -20,7 +20,7 @@
 // [LAW:one-way-deps] Lives in render/ beside the picker, injected into the
 // engine by registerDslConfig as data; the generic engine never imports it.
 
-import { RichText } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl } from "../click/wire.js";
 import { placedBy } from "../themes/decor.js";
@@ -85,11 +85,14 @@ export function renderCarousel(
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
   neighbours: number,
-  // What the centre cell is. Absent, it is the current option, applying
-  // itself again; given, it is the author's own fragment — the settings
-  // menu's controls put the trigger of the list of every option there, so a
-  // click on the name opens the choices and only the arrows step.
-  middleCell?: RichText,
+  // What a click on the centre does. Absent, it applies the current option
+  // again; given, it fires that declared action instead — the settings menu's
+  // controls open the list of every option there, so a click on the name
+  // opens the choices and only the arrows step. The centre's TEXT is the
+  // carousel's own current option either way, so the name the arrows step
+  // from and the name the click shows cannot disagree (an unknown current
+  // value shows the first option, the one ▶ steps from).
+  centreAction?: string,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
   // a structural insert (layout-op-option) holds none, and a key no variable
@@ -111,6 +114,9 @@ export function renderCarousel(
   const sessionId = readVar(store, "session.id");
   const { options } = apply;
   const count = options.length;
+  // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
+  // or show, so the ring is empty, as a grid over it has no cells.
+  if (count === 0) return assemble([], true);
   const current = readVar(store, apply.stateVar);
   // [LAW:one-source-of-truth] THE "unknown current counts as the first member"
   // rule every enumerated control folds over (render/action.ts cycleIndex), so
@@ -141,7 +147,25 @@ export function renderCarousel(
       itemStyle({ index: indexAt(offset), count }, ring(offset)),
     );
 
-  const middle = middleCell ?? option(0);
+  const middle =
+    centreAction === undefined
+      ? option(0)
+      : linkFragment(
+          ring(0),
+          effectsUrl(
+            realize(
+              runtime.compiled.get(centreAction)!,
+              ring(0),
+              undefined,
+              store,
+              sessionId,
+            ).effects,
+          ),
+          // Drawn as the arrows are, in the segment's own colours: the name
+          // is the control's text, not an option laid out for picking
+          // (Brandon: "The name loses its styling").
+          false,
+        );
   const base =
     cellWidth(CAROUSEL_PREV) +
     1 +
@@ -183,12 +207,13 @@ export function carouselFuncs(
       // width still decides within the cap. `0` is the bare stepper
       // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
       // neighbours are what makes it wide. Omitted = as many as fit. `centre`
-      // replaces the current option's own cell with the author's fragment
-      // (`{{ carousel "a" 0 (menu "a" .x) }}`: arrows step, the name opens).
+      // names a declared action the current option's cell fires instead of
+      // applying itself (`{{ carousel "a" 0 "openList" }}`: arrows step, the
+      // name opens).
       //
       // [LAW:parse-dont-validate] The slots differ in type and the engine
       // repeats only the trailing one, so the tail arrives as values and is
-      // parsed here: a whole number ≥ 0, then one fragment, then nothing.
+      // parsed here: a whole number ≥ 0, then one action name, then nothing.
       fn: (applyName: string, ...tail: unknown[]) => {
         const [neighbours, centre, ...extra] = tail;
         refuseSurplus(
@@ -204,9 +229,12 @@ export function carouselFuncs(
             `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
           );
         }
-        if (centre !== undefined && !(centre instanceof RichText)) {
+        if (
+          centre !== undefined &&
+          !(typeof centre === "string" && runtime.compiled.has(centre))
+        ) {
           throw new Error(
-            `carousel "${applyName}": centre must be a fragment such as (menu …) or (action …), got ${JSON.stringify(centre)}`,
+            `carousel "${applyName}": centre must name a declared action, got ${JSON.stringify(centre)}`,
           );
         }
         const cap = (neighbours as number | undefined) ?? Infinity;
@@ -231,7 +259,7 @@ export function carouselFuncs(
             active.bg,
           ),
           cap,
-          centre,
+          centre as string | undefined,
         );
       },
       argTypes: ["string", "value"],

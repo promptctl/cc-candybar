@@ -7,9 +7,10 @@
 //   2. the centre is the value the key holds, so after a click the ring is
 //      centred on what the click wrote;
 //   3. neighbours are shown only while the row has room for them;
-//   4. in the settings menu the theme, style and style controls open a carousel
-//      and no longer a grid picker; the theme and style carousels carry the
-//      preview beneath them;
+//   4. in the settings menu every option control is `◀ value ▶` — the bare
+//      carousel — whose name opens a plain list of every option
+//      (brandon-menu-ia-q30.jl1); the theme and style lists carry the preview
+//      beneath them;
 //   5. every colour in the preview is a colour the bar draws under that theme
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
@@ -354,9 +355,10 @@ describe("the carousel rotates by applying", () => {
 // "◀ padding 0 ▶" carries two.
 const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
 
-// The door, then the control's tab, then its carousel.
+// The door, then the control's tab, then its list: the click on the name
+// between its arrows.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
-function openCarousel(rt: ReturnType<typeof rig>, control: string): void {
+function openPicker(rt: ReturnType<typeof rig>, control: string): void {
   rt.render();
   rt.clickText("🍫");
   // The preset control sits on the door's first line; the rest in a tab.
@@ -364,46 +366,63 @@ function openCarousel(rt: ReturnType<typeof rig>, control: string): void {
   rt.clickWriting(PICKERS, `candybar.apply.${control}`);
 }
 
-describe("the settings menu's theme, look and style controls are carousels", () => {
-  test("opening the theme control drops a carousel and the preview, not a grid", () => {
+// brandon-menu-ia-q30.jl1: "a regular menu, no carousel". A control is
+// `label ◀ value ▶`; the name opens a plain list of every option below it.
+describe("the settings menu's look controls are ◀ name ▶ pickers whose name opens a list", () => {
+  test("opening the theme control drops a list of every theme and the preview, not a ring", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openCarousel(rt, "theme");
+    openPicker(rt, "theme");
     const text = stripAnsi(rt.render());
-    expect(text).toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
-    expect(rt.sink.has("candybar.carousel.theme.0")).toBe(true);
-    // No grid: the picker's page arrows are gone, and no option cell writes a
-    // page cursor.
-    expect(text).not.toMatch(/[←→]/);
+    // The control stays a bare stepper: the value between its arrows, with no
+    // neighbour names around it.
+    expect(text).toMatch(new RegExp(`🎨 ${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
+    expect(rt.sink.has("candybar.carousel.theme")).toBe(false);
+    // The list: the picker grid from the domain's first page, paged at the
+    // row's width (→ turns it), every option a link that applies it.
+    const themes = listResolvablePaletteNames();
+    const listed = links(rt.render())
+      .filter((l) => effectsOf(l.url).some((e) => e.args[1] === "theme"))
+      .map((l) => stripAnsi(l.text))
+      .filter((t) => themes.includes(t));
+    expect(listed.length).toBeGreaterThan(2);
+    expect(listed).toEqual(themes.slice(0, listed.length));
+    expect(text).toMatch(/→/);
+    expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
     rt.dispose();
   });
 
-  // The carousel and the rows beneath it are the rows of an open body: the
-  // first led by the body's one ✕ as a cell of its own, the rest by a blank of
-  // its width; all of them fit the row that lead leaves them, at any padding
-  // and any strip shape, so the terminal never breaks a row away from its lead
-  // — and nothing else on the bar overflows.
+  // The list and the rows beneath it are the rows of an open body: the first
+  // led by the body's one ✕ as a cell of its own (the list draws no ✕ of its
+  // own), the rest by a blank of its width; all of them fit the row that lead
+  // leaves them, at any padding and any strip shape, so the terminal never
+  // breaks a row away from its lead — and nothing else on the bar overflows.
   test.each(
     (["theme", "preset"] as const).flatMap((control) =>
       (["powerline", "capsule", "plain"] as const).flatMap((style) =>
         [0, 1, 2].map((padding) => [control, style, padding] as const),
       ),
     ),
-  )("every row of the open %s carousel fits its terminal (%s, padding %i)", (control, style, padding) => {
+  )("every row of the open %s list fits its terminal (%s, padding %i)", (control, style, padding) => {
     for (let width = 40; width <= 160; width += 3) {
       const rt = rig(`{ globals: { palette: 'nord' } }`, width, padding, style);
-      openCarousel(rt, control);
+      openPicker(rt, control);
       const lines = stripAnsi(rt.render()).split("\n");
+      // The body drops below the row the control sits in, which may itself
+      // wrap: it starts at the line holding the list's first option.
+      const listCells = rt.sink.get(`candybar.list.${control}`)!;
+      const first = listCells[0]!.plain.trim().split(/\s+/)[0]!;
       const ring = lines.findIndex((l) => RING.test(l));
-      // The ring, led by the ✕, then every line the rows beneath it draw (the
-      // preset preview draws one per row of the layout), led by its blank.
-      const beneath = rt.sink.get(`candybar.carousel.${control}.0`)!.length;
-      const body = lines.slice(ring, ring + 1 + beneath);
+      const start = lines.findIndex((l, i) => i > ring && l.includes(first));
+      const beneath = rt.sink.get(`candybar.list.${control}.0`)!.length;
+      const body = lines.slice(start, start + listCells.length + beneath);
       const ledByClose = body.map((l) => /^\W*✕/u.test(l));
       expect([width, ledByClose]).toEqual([
         width,
         body.map((_, i) => i === 0),
       ]);
-      expect(body).toHaveLength(1 + beneath);
+      expect(body.map((l) => (l.match(/✕/gu) ?? []).length)).toEqual(
+        body.map((_, i) => (i === 0 ? 1 : 0)),
+      );
       const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
       expect([width, over]).toEqual([width, []]);
       rt.dispose();
@@ -412,7 +431,7 @@ describe("the settings menu's theme, look and style controls are carousels", () 
 
   test("▶ applies the next theme and the whole bar recolours; ◀ takes it back", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openCarousel(rt, "theme");
+    openPicker(rt, "theme");
     const themes = listResolvablePaletteNames();
     const next = themes[(themes.indexOf("nord") + 1) % themes.length]!;
     const before = rt.sink.get("directory")![0]!.style;
@@ -431,7 +450,7 @@ describe("the settings menu's theme, look and style controls are carousels", () 
 describe("the variation control", () => {
   test("▶ applies the next variation in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openCarousel(rt, "variation");
+    openPicker(rt, "variation");
     expect(stripAnsi(rt.render())).toMatch(
       new RegExp(`${CAROUSEL_PREV} accent ${CAROUSEL_NEXT}`),
     );
@@ -472,13 +491,14 @@ describe("glyphs and colour depth are set in the config file, not the menu", () 
   });
 });
 
-// The preview's rows, as the labels each draws: the lines after the ring, up to
-// the preset actions or the menu's tab strip below the body.
+// The preview's rows, as the labels each draws: the lines after the list of
+// presets (the body's first row, under the control's ◀ name ▶), up to the
+// preset actions or the menu's tab strip below the body.
 function previewLabels(rendered: string): string[][] {
   const lines = stripAnsi(rendered).split("\n");
   const ring = lines.findIndex((l) => RING.test(l));
   const rows: string[][] = [];
-  for (const line of lines.slice(ring + 1)) {
+  for (const line of lines.slice(ring + 2)) {
     // The preview's rows end where the ring's body goes on to the preset
     // actions (brandon-save-undo-bwi.o6u), or where the body ends: the
     // menu's tab strip is the next line.
@@ -488,7 +508,7 @@ function previewLabels(rendered: string): string[][] {
   return rows;
 }
 
-describe("the preset control is a carousel with the layout beneath it", () => {
+describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
     const registry = new SourceRegistry(new VariableStore(), "", undefined);
@@ -565,12 +585,12 @@ describe("the preset control is a carousel with the layout beneath it", () => {
         col = barLines[line]!.indexOf(text, col) + text.length;
         barRows[line]!.push(blockLabel(name));
       }
-      openCarousel(rt, "preset");
+      openPicker(rt, "preset");
       const labels = previewLabels(rt.render());
       expect(labels).toEqual(barRows);
       // Each block wears what its segment wears on the closed bar; every
       // segment here authors no `bg:` under this payload's calm values.
-      const preview = rt.sink.get("candybar.carousel.preset.0")!;
+      const preview = rt.sink.get("candybar.list.preset.0")!;
       const blockBg = Object.fromEntries(
         preview.flatMap((cell) =>
           cell.spans.map((span) => [
@@ -588,7 +608,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
 
   test("edit mode's +/- and reset banner are not part of the arrangement the preview draws", () => {
     const rt = rig(`{}`);
-    openCarousel(rt, "preset");
+    openPicker(rt, "preset");
     const outside = previewLabels(rt.render());
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     rt.sessionState.set(SID, EDIT_LIVE_KEY, "open");
@@ -601,7 +621,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
 
   test("in edit mode's names view the preview draws every placed segment, shown or not", () => {
     const rt = rig(`{}`);
-    openCarousel(rt, "preset");
+    openPicker(rt, "preset");
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Every segment the default preset places, in order: the labels stand in
     // for them whether or not this payload renders them (it renders no host,
@@ -616,7 +636,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
 
   test("in the names view a placement with its own id stands for its segment", () => {
     const rt = rig(`{ root: { rows: { status: { h: ['model', { seg: 'model', id: 'model-2' }] } } } }`);
-    openCarousel(rt, "preset");
+    openPicker(rt, "preset");
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const rendered = rt.render();
     expect(stripAnsi(rendered)).not.toContain("⚠");
@@ -626,7 +646,7 @@ describe("the preset control is a carousel with the layout beneath it", () => {
 
   test("▶ rotates through every preset and wraps, the preview following the preset it applied", () => {
     const rt = rig(`{}`);
-    openCarousel(rt, "preset");
+    openPicker(rt, "preset");
     const seen: string[] = [];
     const rowCounts: number[] = [];
     const names = presetNames(DEFAULT_DSL_CONFIG.presets);
@@ -685,13 +705,13 @@ describe("the preview is the bar's own colours", () => {
     "%s: the preview draws exactly the colours the bar under it draws",
     (theme) => {
       const rt = rig(`{ globals: { palette: '${theme}' } }`);
-      openCarousel(rt, "theme");
+      openPicker(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
       const swatches = new Set(
         previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
       );
       // What the preview segment actually drew is the swatch set.
-      const drawn = backgrounds(rt.sink.get("candybar.carousel.theme.0")!);
+      const drawn = backgrounds(rt.sink.get("candybar.list.theme.0")!);
       expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
       // The open door wears the open state the preview shows beside its plane.
       const door = bgHex(rt.sink.get("candybar.menu")![0]!.style);
@@ -706,9 +726,9 @@ describe("the preview is the bar's own colours", () => {
     },
   );
 
-  test("under a style the preview is the styled palette the bar wears — the style carousel previews it", () => {
+  test("under a style the preview is the styled palette the bar wears — the style list previews it", () => {
     const rt = rig(`{ globals: { palette: 'gruvbox' } }`);
-    openCarousel(rt, "style");
+    openPicker(rt, "style");
     rt.click(rt.linkOn("style", CAROUSEL_NEXT).url);
     const look = rt.sessionState.get(SID, "style")!;
     expect(look).not.toBe("none");
@@ -719,17 +739,17 @@ describe("the preview is the bar's own colours", () => {
     const swatches = new Set(
       previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
     );
-    const drawn = backgrounds(rt.sink.get("candybar.carousel.style.0")!);
+    const drawn = backgrounds(rt.sink.get("candybar.list.style.0")!);
     expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
     expect(swatches.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
     rt.dispose();
   });
 
-  test("the endcaps carousel has no preview row: an endcaps shape is not a palette", () => {
+  test("the endcaps list has no preview row: an endcaps shape is not a palette", () => {
     const rt = rig(`{}`);
-    openCarousel(rt, "endcaps");
-    expect(rt.sink.has("candybar.carousel.endcaps")).toBe(true);
-    expect(rt.sink.has("candybar.carousel.endcaps.0")).toBe(false);
+    openPicker(rt, "endcaps");
+    expect(rt.sink.has("candybar.list.endcaps")).toBe(true);
+    expect(rt.sink.has("candybar.list.endcaps.0")).toBe(false);
     rt.dispose();
   });
 });
@@ -807,8 +827,8 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
 
   test("a theme picked through the settings menu is the theme the segment shows", () => {
     const rt = rig(PLACED);
-    openCarousel(rt, "theme");
-    rt.click(linkAt(bytesOf(rt, "candybar.carousel.theme"), CAROUSEL_NEXT).url);
+    openPicker(rt, "theme");
+    rt.click(linkAt(bytesOf(rt, "candybar.theme"), CAROUSEL_NEXT).url);
     const picked = rt.sessionState.get(SID, "theme")!;
     expect(picked).toBe(themeAt(NORD + 1));
     expect(switcher(rt).text).toBe(
@@ -829,10 +849,13 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
 
   test.each([
     ["-1", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got -1"],
-    // Refused at the engine's int gate, never truncated to 1.
-    ["1.5", "expected integer; found 1.5"],
-    // Not dropped: the engine repeats a trailing slot.
-    ["0 2", "takes at most 1 optional argument (neighbours), got 2"],
+    // Refused, never truncated to 1.
+    ["1.5", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got 1.5"],
+    // Not dropped: the slot after the cap is the centre, and a number is no
+    // fragment to put there.
+    ["0 2", "centre must name a declared action, got 2"],
+    // Nor is anything past the centre.
+    ['0 (action "choose" "x") 3', "takes at most 2 optional arguments (neighbours, centre), got 3"],
   ])("neighbours %s is a loud render error", (args, message) => {
     const rt = rig(`{
       variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
