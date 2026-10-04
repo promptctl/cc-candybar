@@ -45,33 +45,74 @@ export const DECOR_HUES = ["primary", "secondary", "accent"] as const;
 export type DecorHue = (typeof DECOR_HUES)[number];
 
 /**
- * The hues the closed bar wears, one per ROW, in order: row n wears step n
- * (the selection reads the row's placement, so under van der Corput a
- * two-step variation alternates and a one-step one is uniform). Each row
- * reads as a different part of the bar while the cells inside one row share
- * a hue and differ by tone — hue changing at every cell reads as team colours,
- * not as the theme (brandon-theme-picker-bgw.8fp); a row is the coarsest level
- * a bar has. A variation is a sequence of roles the way a chord progression
- * is a sequence of degrees, and it is a VALUE the render carries, so every
- * one ships through the same selection.
- * [LAW:types-are-the-program] One or two steps, no more: the hue is read with
- * `inBin` off the row's van der Corput placement (0, ½, ¼, ¾, …), which steps
- * in order through one or two bins and not through three (rows 0–3 of a
+ * Where a cell sits on its row's tone axis, from the theme's `surface` receded
+ * `TONE_RECESS` toward `background` (0) to its `surface` pulled `TONE_TINT`
+ * of the way toward the row's hue (1).
+ * Three tones, not a continuum: a row's neighbours are placed by its
+ * distribution, and van der Corput's first six cells land on 0, 1, ½, 1, 0, 1
+ * of three tones — never one tone twice in a row, and never less than half
+ * the axis apart. A continuous axis gives neighbours a quarter of it (cells
+ * 1 and 2 sit at ½ and ¼), which measured under the seam floor in 42 of 46
+ * theme × hue rows.
+ */
+export const DECOR_TONES = [0, 0.5, 1] as const;
+export type DecorTone = (typeof DECOR_TONES)[number];
+
+/**
+ * The hues the closed bar wears: row n starts on step n (the selection reads
+ * the row's placement, so under van der Corput a two-step variation
+ * alternates and a one-step one is uniform), and a row advances one step
+ * every `run` cells along it. Cells sitting side by side differ by tone; a
+ * hue changes only after a run of them — hue changing at every cell reads as
+ * team colours, not as the theme (brandon-theme-picker-bgw.8fp). A variation
+ * is a sequence of roles the way a chord progression is a sequence of
+ * degrees, and it is a VALUE the render carries, so every one ships through
+ * the same selection.
+ * [LAW:types-are-the-program] One or two hues, no more: a row's starting step
+ * is read with `inBin` off its van der Corput placement (0, ½, ¼, ¾, …), which
+ * steps in order through one or two bins and not through three (rows 0–3 of a
  * three-step variation would land on steps 0, 1, 0, 2). A longer one needs
  * a different selection, so the type does not admit it.
  */
-export type Variation = readonly [DecorHue] | readonly [DecorHue, DecorHue];
+export interface Variation {
+  readonly hues: readonly [DecorHue] | readonly [DecorHue, DecorHue];
+  /**
+   * How many cells along a row wear one hue before the row steps to the
+   * next. `WHOLE_ROW` keeps one hue across the row, so the hue changes only
+   * where the bar changes row. [LAW:dataflow-not-control-flow] One value,
+   * not a mode: ⌊index / ∞⌋ is 0 for every cell.
+   */
+  readonly run: RunLength;
+}
+
+declare const wholeRow: unique symbol;
+type WholeRow = number & { readonly [wholeRow]: true };
+
+/** A run no row outlasts: the hue changes only where the bar changes row. */
+export const WHOLE_ROW = Infinity as WholeRow;
+
+/**
+ * [LAW:types-are-the-program] A whole number of cells of at least two, or the
+ * whole row: a run of one is a hue per cell (the team colours 8fp rejected),
+ * and 0, a fraction, a negative or NaN would quietly turn the hue some other
+ * way, so none of them is a run.
+ */
+export type RunLength = 2 | 3 | 4 | 5 | 6 | 7 | 8 | WholeRow;
 
 /**
  * [LAW:one-type-per-behavior] Every variation a user can choose, named by
  * the roles it steps through. A new one is one row here: the option domain,
  * the loader's enum, the settings carousel and every floor derive from this
- * table.
+ * table. `alt` is variant C of 8fp ("base changes per cell, hue changes every
+ * few cells"): the default's hues, turning every three cells along the row —
+ * short enough that both rows of the bundled bar turn, long enough that a hue
+ * holds across two seams before it does.
  */
 export const VARIATIONS = {
-  accent: ["secondary", "accent"],
-  duo: ["primary", "secondary"],
-  mono: ["primary"],
+  accent: { hues: ["secondary", "accent"], run: WHOLE_ROW },
+  duo: { hues: ["primary", "secondary"], run: WHOLE_ROW },
+  mono: { hues: ["primary"], run: WHOLE_ROW },
+  alt: { hues: ["secondary", "accent"], run: 3 },
 } as const satisfies Record<string, Variation>;
 export type VariationName = keyof typeof VARIATIONS;
 
@@ -93,20 +134,6 @@ const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
   ? true
   : never = true;
 void _decorHuesAreNonSemantic;
-
-/**
- * Where a cell sits on its row's tone axis, from the theme's `surface` receded
- * `TONE_RECESS` toward `background` (0) to its `surface` pulled `TONE_TINT`
- * of the way toward the row's hue (1).
- * Three tones, not a continuum: a row's neighbours are placed by its
- * distribution, and van der Corput's first six cells land on 0, 1, ½, 1, 0, 1
- * of three tones — never one tone twice in a row, and never less than half
- * the axis apart. A continuous axis gives neighbours a quarter of it (cells
- * 1 and 2 sit at ½ and ¼), which measured under the seam floor in 42 of 46
- * theme × hue rows.
- */
-export const DECOR_TONES = [0, 0.5, 1] as const;
-export type DecorTone = (typeof DECOR_TONES)[number];
 
 /**
  * How far the tinted end of the tone axis moves `surface`'s LIGHTNESS toward
@@ -169,8 +196,8 @@ export const vocabularyOf = (
  */
 export const DECOR_VOCABULARY: readonly DecorEntry[] = vocabularyOf(
   DECOR_HUES.filter((hue) =>
-    Object.values(VARIATIONS).some((steps) =>
-      (steps as readonly DecorHue[]).includes(hue),
+    Object.values(VARIATIONS).some(({ hues }) =>
+      (hues as readonly DecorHue[]).includes(hue),
     ),
   ),
 );
@@ -335,6 +362,11 @@ export const inBin: Quantize = (placement, size) =>
 export const nearestPoint: Quantize = (placement, size) =>
   Math.round(placement * size) % size;
 
+/** Where a step falls on the circle; an absent step (the root) at 0. */
+function placementOf(step: PlacedStep | undefined): number {
+  return step === undefined ? 0 : step.distribution(step.index, step.count);
+}
+
 /**
  * The entry of `vocabulary` that `step` selects under `quantize`. An absent
  * step is a node alone on that axis — a bar with no vertical container, a
@@ -351,9 +383,7 @@ export function vocabularySelect<T extends {}>(
   step: PlacedStep | undefined,
   quantize: Quantize,
 ): T {
-  const placement =
-    step === undefined ? 0 : step.distribution(step.index, step.count);
-  const entry = vocabulary[quantize(placement, vocabulary.length)];
+  const entry = vocabulary[quantize(placementOf(step), vocabulary.length)];
   if (entry === undefined)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -363,14 +393,18 @@ export function vocabularySelect<T extends {}>(
  * The decorative entry a bar node's address selects under `variation`. An
  * address reads as the
  * rows it stacks through, then the cell of the innermost of them, then
- * whatever is nested inside that cell: the last of those rows chooses the hue,
- * so a row stacked above the whole bar (edit mode's reset banner) recolours no
- * row beneath it, and the cell chooses the tone. Anything nested inside a cell
+ * whatever is nested inside that cell: the last of those rows chooses the hue
+ * the row starts on, so a row stacked above the whole bar (edit mode's reset
+ * banner) recolours no row beneath it; the cell chooses the tone, and its
+ * index how many of the variation's runs it has passed along the row. Anything nested inside a cell
  * — edit mode's `+`/`-` around it, an authored `{ h }` or `{ v }` — wears the
  * cell's hue and tone: a row's cells are what sit side by side, so they are
  * what must differ, and the loader refuses a `distribution` authored inside a
- * cell, where it could place nothing. A bar with no vertical container is one
- * row and wears one hue.
+ * cell, where it could place nothing. A cell's run counts its position among
+ * its row's siblings in the tree the walk renders — authored, never what is
+ * visible, so hiding one recolours none — and a synthesized cell counts like
+ * an authored one: the settings door leading the first row takes that row's
+ * first slot.
  *
  * Rows alternate among SIBLINGS. A row that is itself a stack of rows restarts
  * the alternation inside it, so its last line can wear the hue of the row
@@ -385,9 +419,16 @@ export function decorEntryFor(
 ): DecorEntry {
   const cell = address.findIndex((step) => step.axis === "cell");
   const rows = cell === -1 ? address : address.slice(0, cell);
+  const cellStep = address[rows.length];
+  // The row starts on its own step and advances one step per run along it.
+  const { hues, run } = variation;
+  const start = inBin(placementOf(rows.at(-1)), hues.length);
+  const turn = cellStep === undefined ? 0 : Math.floor(cellStep.index / run);
+  const hue = hues[(start + turn) % hues.length];
+  if (hue === undefined) throw new Error("decorEntryFor: empty variation");
   return {
-    hue: vocabularySelect(variation, rows.at(-1), inBin),
-    tone: vocabularySelect(DECOR_TONES, address[rows.length], nearestPoint),
+    hue,
+    tone: vocabularySelect(DECOR_TONES, cellStep, nearestPoint),
   };
 }
 

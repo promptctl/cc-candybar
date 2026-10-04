@@ -105,10 +105,10 @@ const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0
 
 describe("the vocabulary", () => {
   test("is every hue any variation steps through × tones, every entry the theme's own", () => {
-    const reached = new Set(Object.values(VARIATIONS).flat());
+    const reached = new Set(Object.values(VARIATIONS).flatMap((v) => v.hues));
     expect(DECOR_VOCABULARY).toHaveLength(reached.size * DECOR_TONES.length);
-    for (const steps of Object.values(VARIATIONS)) {
-      for (const hue of steps) {
+    for (const { hues } of Object.values(VARIATIONS)) {
+      for (const hue of hues) {
         for (const tone of DECOR_TONES) expect(DECOR_VOCABULARY).toContainEqual({ hue, tone });
       }
     }
@@ -125,13 +125,13 @@ describe("the vocabulary", () => {
   });
 
   test("every variation steps only through decorative hues, and the default reaches the open hue", () => {
-    for (const steps of Object.values(VARIATIONS)) {
-      expect(steps.length).toBeGreaterThan(0);
-      for (const hue of steps) expect(DECOR_HUES).toContain(hue);
+    for (const { hues } of Object.values(VARIATIONS)) {
+      expect(hues.length).toBeGreaterThan(0);
+      for (const hue of hues) expect(DECOR_HUES).toContain(hue);
     }
     // The bundled default (brandon-theme-picker-bgw.7g6) wears the accent on
     // its second row, so every floor against the closed bar must count it.
-    expect(VARIATIONS["accent"]).toContain(OPEN_HUE);
+    expect(VARIATIONS["accent"].hues).toContain(OPEN_HUE);
   });
 
   test("every shipped theme carries every role the vocabulary names", () => {
@@ -190,7 +190,7 @@ describe("the colour is a tone of the row's hue", () => {
       );
     }
     // A bar with no vertical container is one row, in the first bar hue.
-    expect(decorEntryFor(TWO_STEP, [cell(1, 4)])).toEqual({ hue: TWO_STEP[0], tone: 1 });
+    expect(decorEntryFor(TWO_STEP, [cell(1, 4)])).toEqual({ hue: TWO_STEP.hues[0], tone: 1 });
   });
 
   test("the tone step is placed by its OWN distribution", () => {
@@ -212,18 +212,46 @@ describe("the colour is a tone of the row's hue", () => {
     // Rows land at 0, ½, ¼, ¾, … and a row's hue is the half it falls in, so
     // the first bit alternates them however many rows the bar stacks.
     const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(TWO_STEP, [row(i, 8)]).hue);
-    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => TWO_STEP[i % 2]));
+    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => TWO_STEP.hues[i % 2]));
   });
 
   test("row n wears step n of every variation, and a one-step variation is uniform", () => {
     for (const name of VARIATION_NAMES) {
-      const steps = VARIATIONS[name];
-      const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(steps, [row(i, 8), cell(0, 3)]).hue);
+      const variation = VARIATIONS[name];
+      const steps: readonly string[] = variation.hues;
+      const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(variation, [row(i, 8), cell(0, 3)]).hue);
       expect([name, hues]).toEqual([name, Array.from({ length: 8 }, (_, i) => steps[i % steps.length])]);
     }
     // The tone is the variation's business nowhere: the cell alone picks it.
     for (const name of VARIATION_NAMES) {
       expect(decorEntryFor(VARIATIONS[name], [row(1, 2), cell(3, 6)]).tone).toBe(1);
+    }
+  });
+
+  test("a whole-row variation keeps one hue across a row; alt steps it every three cells", () => {
+    const along = (variation: Variation, r: number) =>
+      [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(variation, [row(r, 2), cell(i, 8)]).hue);
+    for (const name of ["accent", "duo", "mono"] as const) {
+      const { hues } = VARIATIONS[name];
+      expect([name, along(VARIATIONS[name], 0)]).toEqual([name, Array(8).fill(hues[0])]);
+    }
+    // Variant C of 8fp: the tone turns at every cell, the hue after one cell
+    // per tone — and each row starts on its own step, so rows still differ.
+    const S = "secondary";
+    const A = "accent";
+    expect(along(VARIATIONS.alt, 0)).toEqual([S, S, S, A, A, A, S, S]);
+    expect(along(VARIATIONS.alt, 1)).toEqual([A, A, A, S, S, S, A, A]);
+    // Never a hue change at every cell: within a run, neighbours share a hue
+    // and differ by tone.
+    const tones = [0, 1, 2].map((i) => decorEntryFor(VARIATIONS.alt, [row(0, 2), cell(i, 8)]).tone);
+    expect(new Set(tones).size).toBe(3);
+  });
+
+  test("anything nested inside an alt cell wears that cell's hue", () => {
+    for (const nested of [[cell(0, 3)], [cell(2, 3)], [row(1, 2), cell(1, 3)]]) {
+      expect(decorEntryFor(VARIATIONS.alt, [row(0, 2), cell(4, 8), ...nested])).toEqual(
+        decorEntryFor(VARIATIONS.alt, [row(0, 2), cell(4, 8)]),
+      );
     }
   });
 
@@ -237,7 +265,7 @@ describe("the colour is a tone of the row's hue", () => {
   test("the root selects the variation's first step at the first tone", () => {
     // The empty address has no step to place, so no distribution can reach it.
     for (const name of VARIATION_NAMES) {
-      expect(decorEntryFor(VARIATIONS[name], [])).toEqual({ hue: VARIATIONS[name][0], tone: DECOR_TONES[0] });
+      expect(decorEntryFor(VARIATIONS[name], [])).toEqual({ hue: VARIATIONS[name].hues[0], tone: DECOR_TONES[0] });
     }
   });
 

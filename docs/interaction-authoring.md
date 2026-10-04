@@ -369,10 +369,12 @@ on a bar of your own:
 
 ### The bar's variation
 
-`globals.variation` names which theme role each ROW of the closed bar wears,
-in order: `"accent"` (the default: secondary, then accent), `"duo"` (primary,
-then secondary), or `"mono"` (every row in primary). Cells
-inside a row still differ by tone. It resolves like `endcaps` — the session's pick
+`globals.variation` names which theme roles the closed bar's cells wear: each
+row starts on its own step, in order, and a variation may turn along the row
+too. `"accent"` (the default: secondary, then accent), `"duo"` (primary,
+then secondary), `"mono"` (every row in primary), or `"alt"` (secondary and
+accent, also turning along the row every three cells, each row starting on
+its own). Cells side by side still differ by tone. It resolves like `endcaps` — the session's pick
 over the config value over the default — and the settings menu's `🎨 look`
 tab carries a `🎼` carousel over it. `variations` is a registered domain and
 `{{ .variation.effective }}` its projection, so a control of your own is the
@@ -405,7 +407,7 @@ A name outside the table is a load error that lists the ones there are:
 ```
 
 ```error
-globals.variation must be one of: accent, duo, mono; got "accent-primary"
+globals.variation must be one of: accent, duo, mono, alt; got "accent-primary"
 ```
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding

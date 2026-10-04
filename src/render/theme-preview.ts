@@ -54,7 +54,7 @@ export function previewSwatches(
 ): readonly Swatch[][] {
   const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 }, drawnAt);
   return [
-    vocabularyOf(variation).map((entry, i) => ({
+    vocabularyOf(variation.hues).map((entry, i) => ({
       text: BAR_WORDS[i % BAR_WORDS.length]!,
       colour: decorEntryColour(palette, entry),
     })),
