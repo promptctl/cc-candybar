@@ -376,7 +376,7 @@ const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
 // then never read, so a ttl or a watched path changed nothing.
 const GIT_VAR_REMOVED = {
   cache:
-    "a git variable follows the repository's own watchers (.git/HEAD and .git/index), so it takes no cache policy — delete the key",
+    "a git variable is refreshed by the daemon's own watch on the repository, so it takes no cache policy — delete the key",
 };
 const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
   key: requireStringSpec(),

@@ -569,7 +569,7 @@ export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
 
-  // Infrastructure for shell/file/git source kinds:
+  // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
   private readonly ttlMgr = new TtlBucketManager();
   // [LAW:single-enforcer] One subscription per cwd — every git variable

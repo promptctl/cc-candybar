@@ -511,7 +511,7 @@ describe("loadDslConfig — variable source kinds", () => {
       `{ variables: { b: { kind: "git", field: "branch", cache: { ttl: "1h" } } } }`,
     ).issues.filter((i) => i.path === "variables.b.cache");
     expect(refused.map((i) => i.message)).toEqual([
-      "variables.b.cache was removed: a git variable follows the repository's own watchers (.git/HEAD and .git/index), so it takes no cache policy — delete the key",
+      "variables.b.cache was removed: a git variable is refreshed by the daemon's own watch on the repository, so it takes no cache policy — delete the key",
     ]);
     const ok = parseAndValidate(
       FILE,
