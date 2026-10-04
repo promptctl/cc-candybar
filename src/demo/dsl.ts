@@ -6,141 +6,173 @@
 // pnpm runs scripts from the repo root, so a relative path resolves there,
 // not in the directory you typed the command in.
 //
-// [LAW:single-enforcer] This renders through registerDslConfig + renderDsl
-// — the exact spine the daemon calls. There is no demo-only render path; what
-// prints here is what production produces.
+// [LAW:single-enforcer] One faked status-line request goes through the
+// functions the daemon runs for a real one — parseClientHints,
+// buildRenderState, resolveEffectiveGlobals, buildRenderPayload, renderDsl —
+// over the providers the daemon builds (createPayloadProviders). There is no
+// demo-only render path and no demo-only payload: a field the daemon's
+// payload gains is in the demo's.
 //
-// [LAW:dataflow-not-control-flow] The body is straight-line: read config →
-// register → render frames → dispose. The config file and payload are data;
-// swapping either changes the output without changing this code. Rendering N
-// frames over time is not branching — it lets the asynchronous sources (shell,
-// time) populate the store and shows the line come alive, exactly as the daemon
-// re-renders on each status-line tick.
+// [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
+// dispose. The config file and the request are data; swapping either changes
+// the output without changing this code. Rendering N frames over time is not
+// branching — it lets the asynchronous sources (shell, time, git) populate
+// and shows the line come alive, exactly as the daemon re-renders on each
+// status-line tick.
 
-import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { loadConfig, validateConfig } from "../config/dsl-loader.js";
-import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
-import { VariableStore } from "../var-system/store.js";
-import { SourceRegistry } from "../var-system/sources.js";
-import { SessionState } from "../daemon/session-state.js";
-import { listResolvablePaletteNames } from "../themes/policy.js";
+import { buildRenderState } from "../daemon/cache/render.js";
+import { WatcherRegistry } from "../daemon/cache/watchers.js";
+import type { DaemonLogger } from "../daemon/log.js";
+import { createPayloadProviders } from "../daemon/payload-providers.js";
 import {
-  effectiveInputs,
+  PROTOCOL_VERSION,
+  parseClientHints,
+  type RenderRequest,
+} from "../daemon/protocol.js";
+import {
+  buildRenderPayload,
   renderOptionsOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
 } from "../daemon/render-payload.js";
-import { registerDslConfig, renderDsl } from "../dsl/render.js";
+import { SessionState } from "../daemon/session-state.js";
+import { settingCounts } from "../daemon/setting-drafts.js";
+import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
+import { renderDsl } from "../dsl/render.js";
+import { detectClaudeConfigDir } from "../claude-settings.js";
+import { detectMementoEnv } from "../memento-hint.js";
+import { detectTmuxHint } from "../tmux-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
+import { debug } from "../utils/logger.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
 
 const here = dirname(fileURLToPath(import.meta.url));
-const configPath = process.argv[2] ?? join(here, "statusline.json5");
+const cwd = process.cwd();
+const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
+const sessionId = "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 
-// [LAW:one-source-of-truth] The palette names the loader accepts are exactly
-// the names the renderer can resolve — both derive from the same registry, so
-// we hand the loader the live set rather than a hand-maintained copy.
-//
-// [LAW:single-enforcer] loadConfig IS the production read → parse → merge
-// cascade; validate promotes its result to the `ValidatedConfig` the renderer
-// accepts, so the chain is type-enforced.
-const ALLOWED = new Set(listResolvablePaletteNames());
-const config = validateConfig(
-  loadConfig(configPath, DEFAULT_DSL_CONFIG, ALLOWED),
-  configPath,
-  ALLOWED,
-);
-
-// The demo has no SessionState, so every resolution below is the config default
-// over its floor. The PRESET resolves first — its fragment supplies the display
-// globals every other option reads — the same preset-first order server.ts and
-// check.ts resolve in, so the demo prints the arrangement a fresh session opens
-// in.
-// [LAW:one-source-of-truth] THE daemon's resolver, not a mirror of it — a
-// fresh-session pick reader (null for every key) and no overrides log to be
-// customized by. The demo previously restated this chain field by field and had
-// already drifted: it hardcoded `endcaps: "powerline"` below and so ignored a
-// config's own `globals.endcaps`.
-const effective = resolveEffectiveGlobals(
-  config,
-  () => null,
-  () => false,
-);
-
-// One Claude Code status-line hook event, faked. The `input` vars in the
-// config (cwd, model, session) read their values out of this object, and the
-// resolved globals ride on it exactly as they do on the daemon's payload.
-// [LAW:one-source-of-truth] `effectiveInputs` is the daemon's own projection,
-// so a `.endcaps.effective` label shows the endcaps the demo renders in.
-const payload = {
-  hook_event_name: "Status",
-  session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
-  cwd: process.cwd(),
-  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-  workspace: {
-    current_dir: process.cwd(),
-    project_dir: process.cwd(),
+// The request a statusline client would send for this terminal: one Claude
+// Code hook event, faked, and the hints the client reads from its own
+// environment. A session that has never run has no transcript, so the path
+// names no file — a missing transcript is an empty session, not a failure.
+const request: RenderRequest = {
+  v: PROTOCOL_VERSION,
+  kind: "render",
+  hookData: {
+    hook_event_name: "Status",
+    session_id: sessionId,
+    transcript_path: join(tmpdir(), `cc-candybar-demo-${sessionId}.jsonl`),
+    cwd,
+    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
   },
-  ...effectiveInputs(effective),
-  history: EMPTY_HISTORY_DEPTH,
-  navigation: { back: 0 },
+  args: ["cc-candybar", "--config", configPath],
+  cwd,
+  termCols: process.stdout.columns,
+  termRows: process.stdout.rows,
+  ssh: false,
+  tmux: detectTmuxHint(process.env),
+  claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
+  mementoEnv: detectMementoEnv(process.env, cwd),
 };
+const { hookData } = request;
+const hints = parseClientHints(request);
+const width = applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 
-// A fresh store + registry for this run. (A hot-reloading daemon would
-// dispose() the old pair and build new ones — see registerDslConfig's docs.)
-// registerDslConfig wires the time/shell sources' timers and watchers onto the
-// registry, so dispose() must run even if registration or rendering throws —
-// otherwise those handles keep the process alive. try/finally guarantees it.
-const store = new VariableStore();
-// [LAW:no-silent-failure] An EMPTY SessionState — `kind: "state"` variables
-// (the default config's pickers, any interactive config) require one at
-// registration; without it declareState fails and the segment renders an error
-// cell. The demo never clicks, so an empty store is correct: every state var
-// resolves to its declared default (closed pickers, "(default)" labels).
-const registry = new SourceRegistry(store, "", undefined, new SessionState());
+// [LAW:no-silent-failure] What the daemon writes to daemon.log, the demo says
+// on stderr when it is a problem; the daemon's routine lines stay behind
+// CC_CANDYBAR_DEBUG. The demo never writes the daemon's own log file.
+const log: DaemonLogger = (level, message) =>
+  level === "info"
+    ? debug(message)
+    : void process.stderr.write(`${level}: ${message}\n`);
+
+const watchers = new WatcherRegistry({ logger: log });
+const providers = createPayloadProviders({ watchers, logger: log });
+// A session that has never clicked: every pick is absent, so each setting
+// resolves to the config's own value, every picker is closed, and there is
+// nothing to undo or go back to.
+const sessionState = new SessionState();
+const sessionPick = (key: string): string | null =>
+  sessionState.get(sessionId, key);
+
+const warnings: Array<string | null> = [];
+// A config that does not load throws here, with the loader's message: the demo
+// renders the file it was given or nothing.
+const state = buildRenderState(cwd, configPath, warnings, {
+  gitService: providers.gitProvider,
+  sessionState,
+});
 try {
-  const compiled = registerDslConfig(config, registry, {
-    cwd: process.cwd(),
-  });
+  for (const warning of warnings) {
+    if (warning !== null) process.stderr.write(`warning: ${warning}\n`);
+  }
+  const effective = resolveEffectiveGlobals(
+    state.config,
+    sessionPick,
+    (preset: string) => state.authoredRoots.has(preset),
+  );
 
   process.stdout.write(
     `\n  DSL demo — ${configPath}\n` +
-      `  rendered through registerDslConfig + renderDsl (the daemon's spine)\n` +
+      `  one faked status-line request, rendered by the daemon's own functions\n` +
       `  watch the git branch segment appear and the clock tick:\n\n`,
   );
 
   for (let frame = 0; frame < FRAMES; frame++) {
+    const payload = await buildRenderPayload(
+      hookData,
+      {
+        ...providers,
+        history: () => EMPTY_HISTORY_DEPTH,
+        navigation: () => 0,
+      },
+      cwd,
+      state.neededInputPaths(effective.preset),
+      effective,
+      hints,
+      {
+        ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
+        configPath,
+      },
+    );
     const line = renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
+      state.config,
+      state.compiled,
+      state.store,
+      state.registry,
       payload,
-      renderOptionsOf(
-        effective,
-        // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
-        // reserve the daemon does so demo output matches the bytes a real
-        // statusline would emit at the same terminal width.
-        applyClaudeCodeReserve(
-          process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
-        ),
-      ),
-      undefined,
+      renderOptionsOf(effective, width),
+      {
+        onRenderWarning: (message: string) =>
+          process.stderr.write(`warning: ${message}\n`),
+      },
       renderSelectionOf(effective),
     );
-    process.stdout.write(`  ${line}\n`);
+    process.stdout.write(
+      line
+        .split("\n")
+        .map((row) => `  ${row}\n`)
+        .join(""),
+    );
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
   }
 
   process.stdout.write("\n");
 } finally {
-  registry.dispose();
+  // The registry owns the config's timers and watchers, the providers their
+  // own; all of them are released so the process ends when the frames do.
+  state.registry.dispose();
+  providers.gitProvider.close();
+  providers.usageStore.close();
+  watchers.closeAll();
 }
