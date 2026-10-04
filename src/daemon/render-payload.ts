@@ -88,11 +88,9 @@ import type { VariationName } from "../themes/decor.js";
 // BuildLineOptions), so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
 // theme/style already followed, generalized to every globals field a menu or
-// stepper can persist. Every one of them composes SessionState over the config
-// default (a session pick can diverge from the persisted default for its own
-// session) — `charset` and `colorCompatibility` included, because a session
-// runs in one terminal and those two describe it (see CHARSETS in
-// themes/policy.ts).
+// stepper can persist. Those with a session pick compose it over the config
+// default; `charset`, `colorCompatibility` and `separator` have none and
+// resolve from the config alone (see resolveEffectiveGlobals).
 export interface EffectiveGlobals {
   // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
   // (brandon-themes-dzl) — `style`'s twin one dimension over, and for the same

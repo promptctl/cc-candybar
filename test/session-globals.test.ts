@@ -356,4 +356,29 @@ describe("charset and colour depth have no session half", () => {
       "256",
     ]);
   });
+
+  it.each(["charset", "colorCompatibility"])(
+    "an authored `set` on %s is a load error naming persist",
+    (key) => {
+      expect(() =>
+        parseAndValidate(
+          "<set-config-only>",
+          `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { set: '${key}', to: 'x' } } }`,
+          ALLOWED,
+        ),
+      ).toThrow(
+        new RegExp(`actions\\.pick sets "${key}", which has no session pick.*persist: "${key}"`),
+      );
+    },
+  );
+
+  it("a `persist` on the same key still loads", () => {
+    expect(() =>
+      parseAndValidate(
+        "<persist-config-only>",
+        `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { persist: 'charset', from: 'charsets' } } }`,
+        ALLOWED,
+      ),
+    ).not.toThrow();
+  });
 });

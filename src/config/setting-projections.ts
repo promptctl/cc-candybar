@@ -92,16 +92,6 @@ export const SETTINGS = {
 export const SETTING_PROJECTIONS: readonly SettingProjection[] =
   Object.values(SETTINGS);
 
-// The projections no session picks: the config file is their only writer
-// (brandon-menu-ia-q30.5y4), by hand or through an authored `persist`.
-const CONFIG_ONLY_PROJECTIONS: readonly ConfigProjection[] = [
-  { configKey: "charset", effectiveVar: "charset.effective" },
-  {
-    configKey: "colorCompatibility",
-    effectiveVar: "colorCompatibility.effective",
-  },
-];
-
 // [LAW:types-are-the-program] Every globals field with no row above, and why
 // the bar offers no control for it (brandon-settings-coverage-g4p.zoj, the
 // list Brandon confirmed). Keyed by exactly the fields SETTINGS leaves out, so
@@ -120,6 +110,28 @@ export const UNCONTROLLED_GLOBALS: Readonly<
   colorCompatibility:
     "set in the config file: Brandon cut the control (brandon-menu-ia-q30.5y4)",
 };
+
+// The projections no session picks: the config file is their only writer
+// (brandon-menu-ia-q30.5y4), by hand or through an authored `persist`. Each is
+// an uncontrolled global, so a field here has no control by construction.
+type UncontrolledField = keyof typeof UNCONTROLLED_GLOBALS;
+const CONFIG_ONLY_PROJECTIONS: ReadonlyArray<
+  ConfigProjection & {
+    readonly configKey: UncontrolledField;
+  }
+> = [
+  { configKey: "charset", effectiveVar: "charset.effective" },
+  {
+    configKey: "colorCompatibility",
+    effectiveVar: "colorCompatibility.effective",
+  },
+];
+
+// [LAW:no-silent-failure] The keys an authored `set` is refused on: a session
+// write there would render nothing, since no rung reads it.
+export const CONFIG_ONLY_KEYS: ReadonlySet<string> = new Set(
+  CONFIG_ONLY_PROJECTIONS.map((p) => p.configKey),
+);
 
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar
 // is rendering with — whichever rung (staged, session, config, floor) produced
