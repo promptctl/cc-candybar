@@ -51,6 +51,7 @@ import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
 import { perSetting } from "./config/setting-projections.js";
+import { presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
   renderOptionsOf,
@@ -423,8 +424,8 @@ export function renderEffective(
   return { rendered, failures };
 }
 
-// The verdict: the prepared config rendered for a fresh session, every render
-// error a failure. Returns the rendered line.
+// The verdict: the prepared config rendered under every preset, every render
+// error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
   configPath: string | null,
   cwd: string,
@@ -444,70 +445,72 @@ async function loadRegisterRender(
       releaseUpdateKeys();
     }
 
-    // Fresh session (no clicked theme/endcaps/style), so the session half of
-    // each resolution is null — the config default over the floor, exactly
-    // what the daemon renders for a session that has never clicked.
-    // [LAW:one-source-of-truth] The preset resolves first and its fragment's
-    // globals feed every field below, the SAME order the daemon resolves in
-    // (server.ts) — so `check` renders the arrangement a fresh session actually
-    // opens in, not the config's un-presetted root.
-    const effective: EffectiveGlobals = resolveEffectiveGlobals(
+    // [LAW:verifiable-goals] Every preset a session can switch to is a bar
+    // the daemon renders, so every one is a pass: a segment only one preset
+    // places, or a rule in one preset's globals, is otherwise compiled and
+    // never evaluated, and exit 0 blesses a bar that throws on the first
+    // switch (brandon-check-ew8j). Each preset renders twice — once as a
+    // fresh session sees it, once with `.preset.customized` true, the one
+    // gate the rich fixture cannot drive on its own (it is a daemon-resolved
+    // fact about session state, not a hookData field). The resolution is THE
+    // daemon's (resolveEffectiveGlobals) with the session's preset pick as
+    // the only input that varies, so each pass renders what a session on
+    // that preset would — edit mode off, nothing else clicked.
+    // The preset a session that has picked none opens in.
+    const freshPreset = resolveEffectiveGlobals(
       config,
-      // A fresh session: no clicked theme/endcaps/style, and edit mode off. The
-      // resolution is THE daemon's (resolveEffectiveGlobals), not a copy that
-      // agrees with it today — which is the whole reason check renders what the
-      // daemon would render rather than something adjacent.
       () => null,
-      // [LAW:no-silent-failure] `check` renders the file as the bundled
-      // default's peer, never as a customization OF it — a root the file
-      // authors is simply the bar `check` verifies, so `.preset.customized`
-      // is false for THIS (primary, returned) render. A second render pass below also
-      // exercises `true`, so a `.preset.customized`-gated segment still
-      // gets checked — just not through this value.
       () => false,
-    );
-    const renderOnce = (payloadEffective: EffectiveGlobals) =>
-      renderEffective(prepared, payloadEffective, CHECK_WIDTH);
-
-    const primary = renderOnce(effective);
-    // [LAW:verifiable-goals] `.preset.customized` is the ONE gate this
-    // config surface adds that a rich, data-driven fixture (checkPayload's
-    // own stated design one comment up) can never drive true on its own —
-    // every OTHER field a segment might gate on is a VALUE checkPayload can
-    // just supply richly; this one is a daemon-resolved FACT about session
-    // state, not a hookData field a config author's own file ever carries.
-    // Without a second pass, a typo or MissingFieldError inside a user's
-    // OWN `when: '{{ .preset.customized }}'`-gated content (docs/
-    // interaction-authoring.md's own documented pattern) would pass check
-    // clean and only surface later as a live ⚠ error cell. Second pass
-    // only — the RETURNED rendering stays the realistic default (a fresh
-    // session has never customized anything); this pass exists purely to
-    // catch broken content behind the one gate the first pass can't reach.
-    const customizedCheck = renderOnce({
-      ...effective,
-      presetCustomized: true,
-    });
-
-    // [LAW:no-silent-failure] An UNCONDITIONAL segment error (one whose
-    // `when`, if any, is true in both passes — the two renders share the
-    // same config/store/registry and differ only in `presetCustomized`)
-    // fires in BOTH passes identically. Deduped by segment NAME rather than
-    // concatenated: a customizedCheck error is only genuinely NEW
-    // information when primary didn't already report that same segment —
-    // reporting it twice would double-count one bug and the "(under
-    // .preset.customized = true)" tag would misdirect the reader into
-    // thinking it's specific to that gate when it isn't.
-    const errors = [
-      ...[...primary.failures].map(
-        ([label, message]) => `${label}: ${message}`,
-      ),
-      ...[...customizedCheck.failures]
-        .filter(([label]) => !primary.failures.has(label))
-        .map(
-          ([label, message]) =>
-            `${label}: ${message} (under .preset.customized = true)`,
+    ).preset;
+    const render = (preset: string, customized: boolean) => ({
+      preset,
+      customized,
+      ...renderEffective(
+        prepared,
+        resolveEffectiveGlobals(
+          config,
+          (key) => (key === "preset" ? preset : null),
+          () => customized,
         ),
+        CHECK_WIDTH,
+      ),
+    });
+    const primary = render(freshPreset, false);
+    const outs = [
+      primary,
+      render(freshPreset, true),
+      ...presetNames(config.presets)
+        .filter((p) => p !== freshPreset)
+        .flatMap((p) => [render(p, false), render(p, true)]),
     ];
+
+    // [LAW:one-source-of-truth] One failure per (what failed, why), however
+    // many passes hit it: an unconditional error fires in every pass, and
+    // reporting it once per preset would count one bug N times. A failure
+    // the fresh session's own pass shows is reported bare — that is the bar
+    // a session opens on; any other is tagged with every pass that reached
+    // it, so the reader knows which switch exposes it.
+    const found = new Map<
+      string,
+      { line: string; where: string[]; fresh: boolean }
+    >();
+    for (const { preset, customized, failures } of outs) {
+      const isFresh = preset === freshPreset && !customized;
+      const where = [
+        ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
+        ...(customized ? [".preset.customized = true"] : []),
+      ].join(", ");
+      for (const [label, message] of failures) {
+        const line = `${label}: ${message}`;
+        const seen = found.get(line) ?? { line, where: [], fresh: false };
+        seen.fresh ||= isFresh;
+        seen.where.push(where);
+        found.set(line, seen);
+      }
+    }
+    const errors = [...found.values()].map((f) =>
+      f.fresh ? f.line : `${f.line} (under ${f.where.join("; ")})`,
+    );
     if (errors.length > 0) {
       throw new Error(
         `config renders with ${errors.length} render error${
