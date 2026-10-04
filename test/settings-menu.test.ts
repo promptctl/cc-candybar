@@ -103,7 +103,11 @@ const TWO_SEGMENT_ROW = `{ h: ['directory', 'model'] }`;
 const withoutDoor = (line: string): string =>
   line.replace(new RegExp(`${DOOR_GLYPH}.`, "u"), "");
 
-function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
+function buildRuntime(
+  src: string,
+  dflt: DslConfig = DEFAULT_DSL_CONFIG,
+  payload: object = PAYLOAD,
+) {
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   const store = new VariableStore();
@@ -113,7 +117,7 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string => {
     sink.clear();
-    return renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
+    return renderDsl(config, compiled, store, registry, payload, OPTS, {
       perSegmentSink: sink,
     });
   };
@@ -502,6 +506,63 @@ describe("the menu's second line is five tabs, one open at a time", () => {
         expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
       }
     }
+  });
+
+  // brandon-menu-ia-q30.0nl: the auto-compact window sits beside the commands
+  // that would summarize at it, as the menu's own instance of the control, so
+  // it needs nothing from the config it lands in (EMPTY_DEFAULT: no bundled
+  // `autocompact` segment, actions or `formatTokenCount` helper).
+  test.each([
+    ["the bundled default", DEFAULT_DSL_CONFIG, userConfig(TWO_SEGMENT_ROW)],
+    [
+      "an empty default",
+      EMPTY_DEFAULT,
+      `{ segments: { hi: { template: "hi" } }, root: { h: ['hi'] } }`,
+    ],
+  ])("the session tab's second row carries the autocompact control over %s", (_name, dflt, src) => {
+    const AUTOCOMPACT = "candybar.autocompact";
+    const { render, clickWriting, sink, config } = buildRuntime(
+      src,
+      dflt,
+      {
+        ...PAYLOAD,
+        autocompact: {
+          window: 400_000,
+          applied: 400_000,
+          lower: 300_000,
+          higher: 500_000,
+          error: "",
+        },
+      },
+    );
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    const raw = render();
+    const cells = sink.get(AUTOCOMPACT);
+    expect(cells).toBeDefined();
+    const text = cells!.map((c) => c.plain).join("");
+    expect(text).toContain("⇲ 400.0K");
+    // − / + / ↺ type /autocompact through the one slash verb.
+    const slashes = linkUrls(raw)
+      .flatMap((u) => effectsOf(u))
+      .filter((e) => e.verb === "slash")
+      .map((e) => e.args[1]);
+    expect(slashes).toEqual(
+      expect.arrayContaining([
+        "/autocompact 300000",
+        "/autocompact 500000",
+        "/autocompact auto",
+      ]),
+    );
+    // The second row of the session tab: the commands, then the window.
+    const row = [...walkNodes(resolvedRoot(config))].find(
+      (n) =>
+        n.kind === "container" &&
+        n.children.some((c) => c.kind === "segment" && c.name === AUTOCOMPACT),
+    );
+    expect(row && row.kind === "container" ? segmentNames(row) : []).toEqual([
+      "candybar.commands",
+      AUTOCOMPACT,
+    ]);
   });
 
   test("closing the menu folds everything in it: reopening finds it as a fresh session does", () => {

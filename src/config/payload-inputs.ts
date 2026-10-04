@@ -154,6 +154,36 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   // `slash` click types into, so IN_TMUX below is the gate for one.
   "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
 
+  // Claude Code's auto-compact window as its `/autocompact` last wrote it
+  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+  // to the model's context window; `lower`/`higher` are the windows − and +
+  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+  // settings file the daemon could not read, and the only field set when it
+  // is.
+  "autocompact.window": {
+    kind: "input",
+    path: "autocompact.window",
+    type: "number",
+    default: -1,
+  },
+  ...Object.fromEntries(
+    ["applied", "lower", "higher"].map((field) => [
+      `autocompact.${field}`,
+      {
+        kind: "input",
+        path: `autocompact.${field}`,
+        type: "number",
+        default: 0,
+      },
+    ]),
+  ),
+  "autocompact.error": {
+    kind: "input",
+    path: "autocompact.error",
+    default: "",
+  },
+
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare
   // path remote) — the quick-action tray's link reads that value, not a flag.

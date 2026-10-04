@@ -136,9 +136,12 @@ describe("slash controls and the session's tmux pane", () => {
     const { text, lines } = await bar({ tmux: PANE });
     expect(text).toContain("🎨 look");
     expect(lines).toEqual([
-      // the menu's tray, above the bar
+      // the menu's session tab, above the bar: its tray, then its autocompact
       "/compact",
       "/model",
+      "/autocompact 300000",
+      "/autocompact 500000",
+      "/autocompact auto",
       // the bar's own tray, then autocompact
       "/compact",
       "/model",
