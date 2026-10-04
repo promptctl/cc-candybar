@@ -15,7 +15,9 @@ import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
-import { INVISIBLE } from "./helpers/ansi";
+import { INVISIBLE, links } from "./helpers/ansi";
+import { parseHandlerUrl } from "../src/install/index";
+import { parseEffects, VERB_COPY, VERB_DISPATCH } from "../src/click/wire";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -47,11 +49,13 @@ const dirOnlyRoot = {
 // the narrowed one.
 const dropEditNs = dropEditChrome;
 
-function renderDir(paths: {
-  home: string;
-  project_dir: string;
-  current_dir: string;
-}): string {
+type DirPaths = { home: string; project_dir: string; current_dir: string };
+
+function renderDir(paths: DirPaths): string {
+  return renderDirRaw(paths).replace(INVISIBLE, "").trim();
+}
+
+function renderDirRaw(paths: DirPaths): string {
   const base = parseAndValidate("<default>", SERIALIZED);
   const parsed = {
     ...base,
@@ -87,9 +91,7 @@ function renderDir(paths: {
       padding: 0,
       charset: "ascii",
       width: Number.POSITIVE_INFINITY,
-    })
-      .replace(INVISIBLE, "")
-      .trim();
+    });
   } finally {
     registry.dispose();
   }
@@ -158,6 +160,27 @@ describe("default directory segment renders fish-abbreviated", () => {
         current_dir: "/var/log/nginx",
       }),
     ).toBe("/v/l/nginx");
+  });
+});
+
+describe("clicking the directory copies the full path", () => {
+  // brandon-menu-ia-q30.fuh: the abbreviation hides the path, so the whole
+  // cell is one link whose click copies `.current_dir` — not the shown text.
+  test("the cell is one copy link carrying the unabbreviated cwd", () => {
+    const current_dir = "/Users/bmf/code/cc-candybar/src/deep dir/leaf";
+    const rendered = renderDirRaw({
+      home: "/Users/bmf",
+      project_dir: "/Users/bmf/code/cc-candybar",
+      current_dir,
+    });
+    const cellLinks = links(rendered);
+    expect(cellLinks.map((l) => l.text.trim())).toEqual(["~/c/c/s/d/leaf"]);
+    const { verb, value } = parseHandlerUrl(cellLinks[0]!.url);
+    const effects =
+      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    expect(effects.map((e) => e.verb)).toEqual([VERB_COPY]);
+    // The copy handler's own decode (oneArg) is one decodeURIComponent.
+    expect(decodeURIComponent(effects[0]!.value)).toBe(current_dir);
   });
 });
 

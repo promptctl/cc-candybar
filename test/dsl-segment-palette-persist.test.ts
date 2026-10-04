@@ -64,7 +64,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { testVerbContext } from "./helpers/click";
-import { linkUrls } from "./helpers/ansi";
+import { linkUrls, links } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -416,11 +416,15 @@ describe("segment-palette persist action click → the config file", () => {
     expect(fileSegments(durable).directory).toBeUndefined();
     const original = durable.text()!;
 
-    const [applyUrl, resetUrl] = ownUrls(render());
-    click(applyUrl!);
+    // By label: `directory` itself is a link now (its copy-the-path click).
+    const rendered = render();
+    const urlOf = (label: string): string =>
+      links(rendered).find((l) => l.text.includes(label))!.url;
+    const [applyUrl, resetUrl] = [urlOf("nord"), urlOf("↺")];
+    click(applyUrl);
     expect(fileSegments(durable).directory).toEqual({ palette: "nord" });
 
-    click(resetUrl!);
+    click(resetUrl);
     expect(durable.text()).toBe(original);
   });
 });
