@@ -61,7 +61,7 @@ import {
   disclosureTerm,
   disclosureTrigger,
   disclosureTriggerCall,
-  escapeTemplateLiteral,
+  templateLiteral,
 } from "./disclosure.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
@@ -148,7 +148,6 @@ const tabRef = (tab: TabName): DisclosureRef => ({
 // same count (src/config/edit-chrome.ts): the menu is in every config, and
 // is synthesized before edit chrome.
 export const SAVE_SEG = `${SETTINGS_NS}save`;
-export const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
@@ -261,10 +260,10 @@ const controlBeneath = (name: string, row: number): string =>
 // brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
 const controlResettable = (name: string): string =>
   `${SETTINGS_NS}resettable.${name}`;
-// A boolean `or` over the named controls' resettable flags — `false` over none,
-// so a tab holding no control is never marked.
 // What a marked tab carries after its label.
 const DRIFT_MARK = " •";
+// A boolean `or` over the named controls' resettable flags — `false` over none,
+// so a tab holding no control is never marked.
 const anyResettable = (names: readonly string[]): string =>
   names.length === 0
     ? "false"
@@ -357,28 +356,24 @@ interface SavePart {
   readonly body: string;
   readonly shown: string;
 }
-// The counts the save cell reads, each an input the daemon publishes.
-const SAVE_COUNTS = {
-  unsaved: UNSAVED_VAR,
-  undo: `${SETTINGS_NS}history.undo`,
-  redo: `${SETTINGS_NS}history.redo`,
-} as const;
-const SAVE_COUNT_PATHS: Readonly<Record<keyof typeof SAVE_COUNTS, string>> = {
-  unsaved: "unsaved",
-  undo: "history.undo",
-  redo: "history.redo",
-};
-const counted = (count: keyof typeof SAVE_COUNTS, body: string): SavePart => ({
+// The payload paths of the counts the save cell reads; each is read through
+// the input variable `saveCountVar(path)`.
+const SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"] as const;
+type SaveCount = (typeof SAVE_COUNTS)[number];
+const saveCountVar = (count: SaveCount): string => `${SETTINGS_NS}${count}`;
+// Exported for edit mode's `✓ save`, which reads the same count (see SAVE_SEG).
+export const UNSAVED_VAR = saveCountVar("unsaved");
+const counted = (count: SaveCount, body: string): SavePart => ({
   body,
-  shown: `(gt .${SAVE_COUNTS[count]} 0)`,
+  shown: `(gt .${saveCountVar(count)} 0)`,
 });
 const SAVE_PARTS: readonly SavePart[] = [
   counted(
     "unsaved",
     `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
   ),
-  counted("undo", `{{ action "${UNDO_ACTION}" "↶" }}`),
-  counted("redo", `{{ action "${REDO_ACTION}" "↷" }}`),
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "↶" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
     body: RESET_ALL.template,
     shown: `(or ${anyResettable(CONTROLS.map((c) => c.name))} ${RESET_ALL.armed})`,
@@ -728,7 +723,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // every theme. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
-          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, doorGlyph, DOOR_CLOSE_GLYPH)} }}` +
+          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
           `{{ fg (color "${DOOR_CLOSE_ROLE}") $door }}` +
           `{{ else }}{{ $door }}{{ end }}`,
@@ -755,10 +750,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     default: 0,
   };
   // The counts the daemon publishes every render, read by the save cell.
-  for (const [count, variable] of Object.entries(SAVE_COUNTS)) {
-    artifacts.variables[variable] = {
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
       kind: "input",
-      path: SAVE_COUNT_PATHS[count as keyof typeof SAVE_COUNTS],
+      path: count,
       type: "number",
       default: 0,
     };
@@ -781,12 +776,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       do: [tabToggle(member), ...TAB_DISARMS],
     };
     const marked = anyResettable(controlsIn(member).map((c) => c.name));
-    const mark = `(ternary "${DRIFT_MARK}" "" ${marked})`;
+    const mark = `(ternary ${templateLiteral(DRIFT_MARK)} "" ${marked})`;
+    const display = (text: string): string =>
+      `(print ${templateLiteral(text)} ${mark})`;
     artifacts.segments[tabSeg(member)] = {
-      template:
-        `{{ action "${tabSeg(member)}" ` +
-        `(print "${escapeTemplateLiteral(label)}" ${mark}) ` +
-        `(print "${escapeTemplateLiteral(`${DISCLOSURE_GLYPH_OPEN} ${label}`)}" ${mark}) }}`,
+      template: `{{ ${disclosureTriggerCall(
+        tabSeg(member),
+        display(label),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label}`),
+      )} }}`,
     };
   }
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);

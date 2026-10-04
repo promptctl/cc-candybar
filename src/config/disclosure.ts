@@ -203,17 +203,25 @@ export function disclosureTrigger(
   closed: string,
   open: string,
 ): string {
-  return `{{ ${disclosureTriggerCall(action, closed, open)} }}`;
+  return `{{ ${disclosureTriggerCall(action, templateLiteral(closed), templateLiteral(open))} }}`;
 }
 
-// The same binding as an expression, for a trigger whose template does more
-// with it than emit it (the settings door colours its open glyph).
+// The same binding as an expression, over displays that are themselves
+// template expressions — for a trigger whose template does more with it than
+// emit it (the settings door colours its open glyph) or whose text is computed
+// (a settings tab carries its drift mark). A literal display is
+// `templateLiteral(text)`.
 export function disclosureTriggerCall(
   action: string,
   closed: string,
   open: string,
 ): string {
-  return `action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}"`;
+  return `action "${action}" ${closed} ${open}`;
+}
+
+// A Go-template string literal whose value is `text`.
+export function templateLiteral(text: string): string {
+  return `"${escapeTemplateLiteral(text)}"`;
 }
 
 // [LAW:single-enforcer] THE backing `state` variable a disclosure key implies:

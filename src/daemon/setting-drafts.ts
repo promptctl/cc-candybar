@@ -42,6 +42,7 @@ import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
   SETTING_PROJECTIONS,
+  perSetting,
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
@@ -412,12 +413,11 @@ export function settingCounts(
 ): SettingCounts {
   const drafts = settingDrafts(config, sessionPick);
   const drafted = new Set(drafts.map((d) => d.configKey));
-  const resettable = Object.fromEntries(
-    SETTING_ROWS.map(([name, row]) => [
-      name,
-      drafted.has(row.configKey) || fileHeld.has(row.configKey),
-    ]),
-  ) as Record<SettingName, boolean>;
+  const resettable = perSetting(
+    (name) =>
+      drafted.has(SETTINGS[name].configKey) ||
+      fileHeld.has(SETTINGS[name].configKey),
+  );
   return {
     unsaved: drafts.length + placementDrafts(config, sessionPick).length,
     resettable,

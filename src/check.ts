@@ -50,13 +50,14 @@ import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
-import { SETTINGS } from "./config/setting-projections.js";
+import { perSetting } from "./config/setting-projections.js";
 import {
   effectiveInputs,
   renderOptionsOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
+  type RenderPayload,
 } from "./daemon/render-payload.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
@@ -166,9 +167,7 @@ export function checkPayload(
     history: { undo: 1, redo: 1, sinceEdit: 1 },
     navigation: { back: 1 },
     unsaved: 1,
-    resettable: Object.fromEntries(
-      Object.keys(SETTINGS).map((name) => [name, true]),
-    ),
+    resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
     // A resume command (the daemon's own projection) and a config file, so
     // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
     // and get checked.

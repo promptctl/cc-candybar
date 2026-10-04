@@ -1188,12 +1188,13 @@ body. The door rises with it — now `✖`, it leads the menu's first line and
 closes the menu, and the bar's row closes up where it was.
 The second line is five tabs, one open at a time; the open one wears its state
 colour, and its body drops below the strip. The tab stays open when the menu
-closes, so reopening the menu returns to it:
+closes, so reopening the menu returns to it. Here the theme and style are
+picked in this session and not yet saved:
 
 ```
-✖ ◁ ▦ default ▸ ↺   💾 save 2 ↶ ⟲
-  ⚡ session   ▾ 🎨 look   📐 layout   ⚙ config   🧰 tools
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   🎼 accent ▸ ↺
+✖ ◁ ▦ default ▸   💾 save 2 ↶ ⟲
+  ⚡ session   ▾ 🎨 look •   📐 layout   ⚙ config   🧰 tools
+✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸   🎼 accent ▸
 host   directory   gitaculous             ← the bar, less the door
 ```
 
@@ -1231,7 +1232,12 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   holds `+ preset`, which keeps the bar as a new preset and switches to it,
   `✎ arrange`, wrap and padding; **`⚙ config`** holds the update notice.
   Every setting is ONE control, in
-  exactly one tab, each with a `↺` that forgets its durable default. The
+  exactly one tab. A control shows `↺` while resetting it would change
+  something — it holds a draft, or your config file holds a value for it —
+  and clicking it returns the setting to the bundled default at every layer;
+  a value your own preset pins is not marked, since a reset leaves it. A tab
+  holding such a control is marked `•` (`🎨 look •`), open or closed, so
+  what differs from the default is findable without opening every tab. The
   controls are generated from the `globals` declarations: a field with a list
   of values gets a carousel, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a

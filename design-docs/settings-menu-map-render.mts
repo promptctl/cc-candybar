@@ -22,6 +22,7 @@ import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { stripAnsi } from "../test/helpers/ansi";
+import { perSetting } from "../src/config/setting-projections";
 
 const SID = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
@@ -51,7 +52,12 @@ const STATES: Record<string, Record<string, string>> = {
   edit: { [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE },
 };
 
-function renderToday(preset: string, width: number, state: Record<string, string>): string {
+// checkPayload marks every setting resettable so every ↺ renders; a fresh
+// session, with nothing to reset, is the same payload with none marked.
+type Drift = "all marked" | "fresh";
+function renderToday(
+  preset: string, width: number, state: Record<string, string>, drift: Drift = "all marked",
+): string {
   const cfg = validateConfig(loadConfig(null, DEFAULT_DSL_CONFIG), "<default>");
   const session = new SessionState();
   session.set(SID, "preset", preset);
@@ -60,7 +66,12 @@ function renderToday(preset: string, width: number, state: Record<string, string
   const registry = new SourceRegistry(store, "", undefined, session);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/home/tester/code/cc-candybar/src" });
   const eff = resolveEffectiveGlobals(cfg, (k) => session.get(SID, k) ?? null, () => false);
-  const payload = { ...checkPayload(eff), session_id: SID, term: { cols: width } };
+  const payload = {
+    ...checkPayload(eff),
+    ...(drift === "fresh" ? { resettable: perSetting(() => false) } : {}),
+    session_id: SID,
+    term: { cols: width },
+  };
   return renderDsl(
     cfg, compiled, store, registry, payload, renderOptionsOf(eff, width),
     { onSegmentError: (s, m) => console.log(`ERROR ${s}: ${m}`) },
@@ -78,6 +89,10 @@ for (const preset of ["default", "compact"]) {
       for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
       rendered.set(`${preset} ${name} @${width}`, lines);
     }
+    console.log(`--- ${preset} fresh door @${width}`);
+    const lines = stripAnsi(renderToday(preset, width, door, "fresh")).split("\n");
+    for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
+    rendered.set(`${preset} fresh door @${width}`, lines);
   }
 }
 
@@ -111,6 +126,7 @@ for (const [name, cells] of Object.entries(PROPOSED)) {
 // must equal the line Part 1 rendered for that state that holds its marker, or
 // the script fails.
 const VALIDATES: Record<string, [state: string, marker: string]> = {
+  "door line 2: tabs": ["default fresh door @200", "⚡ session"],
   "today tabs, all marked (validates model)": ["default door @200", "⚡ session"],
   "tools": ["default tools @200", "🩺 doctor"],
   "today look tab (validates model)": ["default look @200", "◐ none"],
