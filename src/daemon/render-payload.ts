@@ -77,6 +77,7 @@ import {
   type AutoCompactWindow,
 } from "../segments/autocompact.js";
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
+import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { VariationName } from "../themes/decor.js";
@@ -395,6 +396,14 @@ export interface RenderPayload extends ClaudeHookData {
   // (settingCounts over fileHeldSettings, src/daemon/setting-drafts.ts), so the menu's `⟲`
   // exists exactly while it would do something.
   readonly resettable: number;
+  // The config file this session's bar renders from (the render cache
+  // entry's resolved path); absent when it renders the bundled default
+  // because no file exists, so the menu's `↗ config` shows exactly while
+  // there is a file to open.
+  readonly configPath?: string;
+  // The shell command that resumes this session (src/claude-resume.ts) —
+  // what the menu's `⎘ resume` copies. Absent with the hook's workspace.
+  readonly resumeCommand?: string;
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -1105,6 +1114,13 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  */
 export type SettingCounts = Pick<RenderPayload, "unsaved" | "resettable">;
 
+// What the render cache entry knows about the config file the session renders
+// from: the save cell's counts and the file's path, `null` under the bundled
+// default.
+export type ConfigFileFacts = SettingCounts & {
+  readonly configPath: string | null;
+};
+
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
   deps: RenderPayloadDeps,
@@ -1129,8 +1145,9 @@ export async function buildRenderPayload(
   // trust boundary behind one name.
   hints: ClientHints,
   // What the save cell counts (src/daemon/setting-drafts.ts), derived by the
-  // caller from the config and session it rendered with.
-  settingCounts: SettingCounts,
+  // caller from the config and session it rendered with, and that config's
+  // file.
+  { configPath, ...settingCounts }: ConfigFileFacts,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -1392,6 +1409,14 @@ export async function buildRenderPayload(
     history: deps.history(hookData.session_id),
     navigation: { back: deps.navigation(hookData.session_id) },
     ...settingCounts,
+    ...(configPath !== null && { configPath }),
+    ...(workspace !== undefined && {
+      resumeCommand: resumeCommand(
+        workspace.project_dir,
+        hookData.session_id,
+        hints.claudeConfigDir,
+      ),
+    }),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

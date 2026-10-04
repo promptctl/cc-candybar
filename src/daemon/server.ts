@@ -1029,11 +1029,14 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         entry.state.neededInputPaths(effective.preset),
         effective,
         hints,
-        settingCounts(
-          entry.state.config,
-          entry.state.fileHeldSettings,
-          sessionPick,
-        ),
+        {
+          ...settingCounts(
+            entry.state.config,
+            entry.state.fileHeldSettings,
+            sessionPick,
+          ),
+          configPath: entry.configFilePath,
+        },
       );
       // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
       // and could not honour — today a `globals.palette` rule naming no installed

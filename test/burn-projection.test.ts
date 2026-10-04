@@ -162,7 +162,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       BURN_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     expect(payload.burn?.costPerHour).toBe(12);
     expect(payload.block?.etaMinutes).toBe(240);
@@ -180,7 +180,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       BURN_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     expect(payload.block?.nativeUtilization).toBe(20);
     expect(payload.block?.etaMinutes).toBeUndefined();
@@ -194,7 +194,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       new Set(["block.resetsAt", "weekly.resetsAt"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     expect(payload.burn).toBeUndefined();
   });

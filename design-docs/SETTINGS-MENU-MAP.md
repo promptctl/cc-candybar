@@ -23,7 +23,7 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 
 | Tab | Holds |
 |---|---|
-| `⚡ session` | `⎘ id`, `⎘ resume` (new), `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (new, shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
+| `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
 | `🎨 look` | Four selectors: theme, style, variation, endcaps (below) |
 | `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
 | `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds. `PLACE` in `settings-menu.ts` names each setting's tab, keyed by every `SETTINGS` row, so a control lands in exactly one |
