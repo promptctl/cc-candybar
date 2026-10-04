@@ -17,8 +17,10 @@
 // [LAW:no-silent-failure] Load warnings and render failures go to stderr, so a
 // row drawn around a ⚠ cell or a collapsed `globals.palette` rule says so.
 
+import path from "node:path";
 import process from "node:process";
 
+import { expandHome } from "../config/loader/discovery.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -28,8 +30,11 @@ const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
 const WIDTH = (process.stdout.columns ?? 200) - LABEL;
 
 const warnings: string[] = [];
+// The argv path resolved as `check` resolves its own, so `.config_path` (the
+// demo switcher's sibling links) names the file absolutely.
+const target = process.argv[2];
 const prepared = await prepareConfig(
-  process.argv[2] ?? null,
+  target === undefined ? null : path.resolve(expandHome(target)),
   process.cwd(),
   warnings,
 );

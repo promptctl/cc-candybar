@@ -67,7 +67,7 @@ function renderToday(
   const compiled = registerDslConfig(cfg, registry, { cwd: "/home/tester/code/cc-candybar/src" });
   const eff = resolveEffectiveGlobals(cfg, (k) => session.get(SID, k) ?? null, () => false);
   const payload = {
-    ...checkPayload(eff),
+    ...checkPayload(eff, null),
     ...(drift === "fresh" ? { resettable: perSetting(() => false) } : {}),
     session_id: SID,
     term: { cols: width },

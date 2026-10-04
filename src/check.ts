@@ -97,6 +97,7 @@ const SOURCE_SETTLE_MS = 5000;
 // fails that suite loudly rather than drifting silently.
 export function checkPayload(
   effective: EffectiveGlobals,
+  configPath: string | null,
 ): Record<string, unknown> {
   const home = "/home/tester";
   const nowSec = Math.floor(Date.now() / 1000);
@@ -170,9 +171,12 @@ export function checkPayload(
     resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
     // A resume command (the daemon's own projection) and a config file, so
     // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
-    // and get checked.
+    // and get checked. The config file is the one being checked, as the
+    // daemon's is the one it loaded, so a template that reads its siblings
+    // (the demo configs' switcher) is checked against where it really is;
+    // the bundled default has no file, and a stand-in keeps `↗ config` drawn.
     resumeCommand: resumeCommand(workspace, sessionId, undefined),
-    configPath: `${home}/.config/cc-candybar/config.json5`,
+    configPath: configPath ?? `${home}/.config/cc-candybar/config.json5`,
   };
 }
 
@@ -326,6 +330,7 @@ export async function checkConfig(
 // declaration failures) and any source still running at the deadline land in
 // `warnings` — the same channel RenderCache merges them into.
 export interface PreparedConfig {
+  readonly configPath: string | null;
   readonly config: ValidatedConfig;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
@@ -366,7 +371,7 @@ export async function prepareConfig(
         `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
-    return { config, compiled, store, registry };
+    return { configPath, config, compiled, store, registry };
   } catch (e) {
     registry.dispose();
     throw e;
@@ -382,7 +387,7 @@ export async function prepareConfig(
 // render could not honour (brandon-themes-dzl) — and fails the verdict, so
 // exit 0 never blesses a bar the daemon would render a complaint on.
 export function renderEffective(
-  { config, compiled, store, registry }: PreparedConfig,
+  { configPath, config, compiled, store, registry }: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
 ): { rendered: string; failures: Map<string, string> } {
@@ -400,7 +405,7 @@ export function renderEffective(
     compiled,
     store,
     registry,
-    checkPayload(effective),
+    checkPayload(effective, configPath),
     renderOptionsOf(effective, width),
     {
       onSegmentError: (placementId: string, message: string) =>
