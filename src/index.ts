@@ -104,14 +104,14 @@ Add to ~/.claude/settings.json:
 {
   "statusLine": {
     "type": "command",
-    "command": "cc-candybar --style=powerline"
+    "command": "cc-candybar"
   }
 }
 
 Run with --help for more options.
 
 To test output manually:
-echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"},"model":{"id":"claude-sonnet-4-5","display_name":"Claude"}}' | cc-candybar --style=powerline`);
+echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"},"model":{"id":"claude-sonnet-4-5","display_name":"Claude"}}' | cc-candybar`);
       process.exit(1);
     }
 

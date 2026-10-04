@@ -222,7 +222,7 @@ export function validateCrossReferences(
     ) {
       ctx.issues.push({
         path: `actions.${name}.from`,
-        message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownDomains.join(", ")})`,
+        message: `actions.${name} from: references unknown option domain "${a.from}"${renamedDomainHint(a.from)} (have: ${knownDomains.join(", ")})`,
         line: findKeyLine(ctx.source, ["actions", name, "from"]),
       });
       continue;
@@ -1067,6 +1067,23 @@ function checkHelperIssue(
 // (brandon-config-dovk). Every value such a set can write is known at load, so
 // each is checked against the domain the setting's menu control is generated
 // from, and reported at the field that states it.
+// [LAW:no-silent-failure] The option domains brandon-menu-ia-q30.xuz renamed:
+// old name → current name. The third rename of that change, `styles` (the
+// endcaps shapes) → `endcaps`, has no row: `styles` is still a domain, so an
+// old `from: "styles"` resolves, and the write it feeds is checked against its
+// setting by checkSettingWrites. A Map, because an authored name is user data.
+const RENAMED_OPTION_DOMAINS: ReadonlyMap<string, string> = new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"],
+]);
+
+function renamedDomainHint(from: string): string {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  return renamed === undefined
+    ? ""
+    : ` — it was renamed "${renamed}"; write from: "${renamed}"`;
+}
+
 function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,

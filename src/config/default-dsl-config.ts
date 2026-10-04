@@ -109,7 +109,7 @@ const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 // `ramp <value> "step" <at> <colour> …` call (rich-js `paletteFuncs`): the
 // value flows through ascending stops and the cell wears the last stop it
 // passed, so "≥ threshold → hotter" is data, not an `if` chain, and the
-// colour transposes with the palette and look like any `color`. The
+// colour transposes with the palette and style like any `color`. The
 // thresholds stay var refs a user overrides through the variables-merge-
 // by-name cascade in mergeWithDefault; a threshold set below its neighbour
 // is a loud render error (stops must ascend — the segment shows ⚠ and

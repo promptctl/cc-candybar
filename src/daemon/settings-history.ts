@@ -594,12 +594,19 @@ function describe(change: Change): string {
 
 // ─── The file ───────────────────────────────────────────────────────────────
 
+// [LAW:types-are-the-program] A session change is a change to a SETTING key —
+// the only kind the journal records. A key that has left that set since the
+// file was written (brandon-menu-ia-q30.xuz renamed `look` and `progression`)
+// names nothing a render reads, so undoing it would spend a click restoring
+// nothing; such a file is the wrong shape, dropped whole like any other.
 function isChange(v: unknown): v is Change {
   if (v === null || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   const state = (x: unknown) => x === null || typeof x === "string";
   return (
-    ((o.kind === "session" && typeof o.key === "string") ||
+    ((o.kind === "session" &&
+      typeof o.key === "string" &&
+      isSettingKey(o.key)) ||
       (o.kind === "file" && typeof o.file === "string")) &&
     state(o.before) &&
     state(o.after)

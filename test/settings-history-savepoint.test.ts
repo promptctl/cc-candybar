@@ -333,6 +333,29 @@ describe("the savepoint survives a restart", () => {
     expect(logs.join("\n")).toMatch(/unexpected shape/);
   });
 
+  test("a step on a key that is no longer a setting is a wrong-shaped file, dropped whole", () => {
+    // brandon-rename-sweep-x4yf: steps recorded under `look` before it was
+    // renamed `style`. Undoing one would restore a key nothing reads.
+    const historyFile = path.join(dir, "history.json");
+    const step = (key: string) => [
+      { kind: "session", key, before: null, after: "vivid" },
+    ];
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({ [SID]: { past: [step("style"), step("look")], future: [] } }),
+    );
+    const logs: string[] = [];
+    const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
+    expect(storage.load()).toEqual({});
+    expect(logs.join("\n")).toMatch(/unexpected shape/);
+
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({ [SID]: { past: [step("style")], future: [] } }),
+    );
+    expect(Object.keys(storage.load())).toEqual([SID]);
+  });
+
   test("a history written before savepoints existed loads with none", () => {
     const historyFile = path.join(dir, "history.json");
     fs.writeFileSync(
