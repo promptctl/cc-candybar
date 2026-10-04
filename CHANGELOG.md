@@ -1,3 +1,15 @@
+# [1.112.0](https://github.com/promptctl/cc-candybar/compare/v1.111.0...v1.112.0) (2026-10-04)
+
+
+### Bug Fixes
+
+* **tmux:** the tmux payload is the session's client hint, and slash controls show only inside tmux ([#304](https://github.com/promptctl/cc-candybar/issues/304)) ([fe8f1d2](https://github.com/promptctl/cc-candybar/commit/fe8f1d282f615b9ac872b17cecb1eed0445b0dc6))
+
+
+### Features
+
+* **directory:** clicking the directory copies the full path ([#305](https://github.com/promptctl/cc-candybar/issues/305)) ([d139b14](https://github.com/promptctl/cc-candybar/commit/d139b1419fcc03da9621ba3c55148807f6140a3e))
+
 # [1.111.0](https://github.com/promptctl/cc-candybar/compare/v1.110.0...v1.111.0) (2026-10-04)
 
 
