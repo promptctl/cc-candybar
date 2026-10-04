@@ -13,6 +13,7 @@ import type { ClaudeHookData } from "../utils/claude";
 import { requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { ClientHints, Response } from "./protocol";
+import { PACKAGE_VERSION } from "../version";
 
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
@@ -71,7 +72,7 @@ export function tryClickViaDaemon(
   value: string,
 ): Promise<ClientOutcome> {
   return requestOutcome(
-    { kind: "click", verb, value },
+    { kind: "click", verb, value, clientVersion: PACKAGE_VERSION },
     CLICK_BUDGETS,
     projectOutput,
   );

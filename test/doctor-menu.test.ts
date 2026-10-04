@@ -184,12 +184,13 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
     expect(lines[toolsRow + 1]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
-    const reports = lines.slice(toolsRow + 2, toolsRow + 4);
+    const reports = lines.slice(toolsRow + 2, toolsRow + 5);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
-    expect(reports[1]).toContain("✗ tmux truecolor");
+    expect(reports[1]).toContain("✓ URL handler");
+    expect(reports[2]).toContain("✗ tmux truecolor");
   });
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
@@ -212,7 +213,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) tmuxTruecolor=ok (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok (session=s1)",
     ]);
   });
 

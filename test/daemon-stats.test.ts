@@ -30,7 +30,9 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       renderCacheSize: 3,
       watchersActive: 2,
+      handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
     });
+    expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
 
     expect(snap.requests).toEqual({
       total: 10,
@@ -60,6 +62,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCacheSize: 0,
       watchersActive: 0,
+      handlerProbes: [],
     });
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
@@ -93,6 +96,7 @@ describe("formatStats", () => {
         p99DurationMs: {},
       },
       nextRestartReason: null,
+      handlerProbes: [],
     });
     expect(out).toContain("pid           1234");
     expect(out).toContain("uptime        2m5s");
@@ -127,6 +131,7 @@ describe("formatStats", () => {
         p99DurationMs: {},
       },
       nextRestartReason: null,
+      handlerProbes: [],
     });
     expect(out).toContain("hit rate      n/a");
   });

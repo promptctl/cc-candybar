@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { ProbeArrival } from "../doctor/handler-probe";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -78,6 +79,9 @@ export interface StatsSnapshot {
     p99DurationMs: Record<string, number>;
   };
   nextRestartReason: string | null;
+  // The `doctor-probe` links that reached this daemon, newest last — what
+  // `cc-candybar doctor` reads to learn whether the link it opened arrived.
+  handlerProbes: readonly ProbeArrival[];
 }
 
 export class RuntimeStats {
@@ -200,6 +204,7 @@ export class RuntimeStats {
     renderCacheSize: number;
     watchersActive: number;
     nextRestartReason?: string | null;
+    handlerProbes: readonly ProbeArrival[];
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -230,6 +235,7 @@ export class RuntimeStats {
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
+      handlerProbes: extras.handlerProbes,
     };
   }
 }

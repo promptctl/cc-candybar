@@ -100,6 +100,24 @@ function appleScriptSource(nodePath: string, scriptPath: string): string {
   ].join("\n");
 }
 
+// [LAW:one-source-of-truth] The reading of `appleScriptSource`'s one line,
+// kept beside its writer: the node binary and the bundle a handler app runs,
+// from the source `osadecompile` gives back, or null when the script is not
+// one this installer wrote.
+export function handlerCommand(
+  source: string,
+): { node: string; script: string } | null {
+  const m = /do shell script "'([^']+)' '([^']+)' url-handle "/.exec(source);
+  if (m === null) return null;
+  const unescape = (s: string): string => s.replace(/\\"/g, '"');
+  return { node: unescape(m[1]!), script: unescape(m[2]!) };
+}
+
+// Where `osacompile` puts the compiled script inside the bundle it builds.
+export function handlerScriptPath(app: string): string {
+  return path.join(app, "Contents", "Resources", "Scripts", "main.scpt");
+}
+
 // [LAW:one-source-of-truth] The bundle that contains *this* function is
 // the thing we need to stage. Two invocation paths reach us:
 //   - via the bin shim: process.argv[1] = ".../bin/cc-candybar" which
@@ -557,6 +575,7 @@ function updateClaudeSettings(
 
 // Exports for testing
 export const __test__ = {
+  appleScriptSource,
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
   updateClaudeSettings,

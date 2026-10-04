@@ -27,7 +27,7 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
   process.stdout.write(formatStats(outcome.value));
 }
 
-function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
+export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
   // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
   // an unchecked cast from socket JSON; the presence check is the explicit
   // narrowing at the wire edge (an ok response without `stats` classifies as

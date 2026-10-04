@@ -29,7 +29,9 @@ import type {
   Fix,
   TermFeatures,
   TmuxFacts,
+  UrlHandlerFacts,
 } from "./checks.js";
+import { PACKAGE_VERSION } from "../version.js";
 
 export interface DoctorEdge {
   // tmux's own verdict on the attached client's terminal, asked of THE server
@@ -134,18 +136,28 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
+// A click the daemon is handling IS a link that came back through the URL
+// handler, carrying the version of the handler that delivered it.
+export function clickArrived(handler: string | null): UrlHandlerFacts {
+  return { kind: "arrived", handler, bar: PACKAGE_VERSION };
+}
+
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
 // resolves from — never the daemon's own env, which answers for whichever
-// session spawned it.
+// session spawned it. The URL handler's facts are the caller's: the daemon
+// has them in the click it is handling, the CLI has to send a link and wait
+// (src/doctor/handler-probe.ts).
 export function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
   origin: ConfigOrigin,
+  urlHandler: UrlHandlerFacts,
 ): DoctorFacts {
   return {
     tmux: tmuxFacts(edge, hints.tmux),
     config: configFacts(edge, origin),
+    urlHandler,
     claudeSettings: readClaudeSettingsEnv(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

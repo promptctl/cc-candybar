@@ -127,6 +127,9 @@ export const VERB_APPLY_UPDATE = "apply-update";
 // URL — the fix is whatever the check's own verdict describes.
 export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
+// A link `cc-candybar doctor` opens to learn whether the URL handler delivers
+// it. Arg: the nonce the CLI will look for among the daemon's arrivals.
+export const VERB_DOCTOR_PROBE = "doctor-probe";
 
 // [LAW:effects-at-boundaries] Move the memento plugin's context ceiling for a
 // session. Args: `[sessionId, "set", to]` or `[sessionId, "clear"]`. The move

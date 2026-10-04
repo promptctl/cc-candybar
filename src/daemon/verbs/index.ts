@@ -97,6 +97,7 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_PROBE,
   VERB_CEILING,
   VERB_SLASH,
 } from "../../click/wire";
@@ -110,7 +111,16 @@ import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
 import { doctorReportPairs } from "../../doctor/report";
-import { applyFix, gatherFacts, type DoctorEdge } from "../../doctor/edge";
+import {
+  applyFix,
+  clickArrived,
+  gatherFacts,
+  type DoctorEdge,
+} from "../../doctor/edge";
+import {
+  parseProbeNonce,
+  type ProbeArrivals,
+} from "../../doctor/handler-probe";
 import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 
 export interface VerbContext {
@@ -124,6 +134,12 @@ export interface VerbContext {
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
+  // The package version of the client that delivered THIS click (the URL
+  // handler's staged runtime), or null from one too old to report it — the
+  // one per-click fact here; the daemon's dispatcher sets it on each click.
+  readonly clientVersion: string | null;
+  // Where a `doctor-probe` link records that it arrived.
+  readonly probes: ProbeArrivals;
   // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
   // move that makes a reading stale is the one that drops it.
   readonly memento: Pick<MementoProvider, "move">;
@@ -1076,7 +1092,26 @@ const doctorRun: VerbHandler = (value, ctx) => {
   writeReport(
     ctx,
     sid,
-    gatherFacts(ctx.doctor, sessionHints(ctx, sid), sessionOrigin(ctx, sid)),
+    gatherFacts(
+      ctx.doctor,
+      sessionHints(ctx, sid),
+      sessionOrigin(ctx, sid),
+      clickArrived(ctx.clientVersion),
+    ),
+  );
+};
+
+// A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
+// arrival is the whole effect, read back by the CLI from the daemon's stats.
+const doctorProbe: VerbHandler = (value, ctx) => {
+  const nonce = parseProbeNonce(oneArg(value));
+  if (nonce === null) {
+    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
+  }
+  ctx.probes.arrive({ nonce, handler: ctx.clientVersion });
+  ctx.dlog(
+    "info",
+    `doctor-probe: arrived nonce=${nonce} handler=${ctx.clientVersion ?? "unreported"}`,
   );
 };
 
@@ -1097,6 +1132,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
     ctx.doctor,
     sessionHints(ctx, sid),
     sessionOrigin(ctx, sid),
+    clickArrived(ctx.clientVersion),
   );
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
@@ -1264,6 +1300,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
+  [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
 ]);

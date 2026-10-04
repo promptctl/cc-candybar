@@ -14,6 +14,8 @@ import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
+import { ProbeArrivals } from "../../src/doctor/handler-probe";
+import { PACKAGE_VERSION } from "../../src/version";
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
@@ -55,6 +57,10 @@ export function testVerbContext(
         throw new Error("doctor: no config edge in this test");
       },
     },
+    // A click from the handler this build would stage, and nowhere of the
+    // daemon's for a probe to land: a test that reads arrivals hands in its own.
+    clientVersion: PACKAGE_VERSION,
+    probes: new ProbeArrivals(),
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {
       move: () => {
