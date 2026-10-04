@@ -279,6 +279,16 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const again = await store.getTodayInfo(hook("sess-0-0", activePath), root);
       expect(again.kind === "ok" && again.value.cost).toBeCloseTo(all, 5);
       expect(store.getStats().seeds).toBe(2);
+
+      // A session that starts after its directory's seed and never asks for
+      // `today` itself still counts there, and only there.
+      const late = join(odir, "other-late.jsonl");
+      writeFileSync(late, usageLine("other-late", new Date(), 3));
+      await store.getUsageInfo("other-late", hook("other-late", late));
+      const joined = await store.getTodayInfo(hook("other-0", opath), other);
+      expect(joined.kind === "ok" && joined.value.cost).toBeCloseTo(15, 5);
+      const apart = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      expect(apart.kind === "ok" && apart.value.cost).toBeCloseTo(all, 5);
     } finally {
       store.close();
       rmSync(other, { recursive: true, force: true });
