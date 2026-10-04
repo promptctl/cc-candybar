@@ -527,7 +527,13 @@ function updateClaudeSettings(
   // must not silently destroy.
   // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
   // would also claim `<binPath>-backup …` as ours and overwrite it.
-  const managedTokens = [binPath, shellWord(binPath)];
+  // Any single-quoting of the path is ours too: a version whose quoter left
+  // fewer characters bare wrote the path quoted where shellWord leaves it bare.
+  const managedTokens = [
+    binPath,
+    shellWord(binPath),
+    `'${binPath.replaceAll("'", `'\\''`)}'`,
+  ];
   const isOurs =
     typeof existing === "string" &&
     (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||

@@ -1361,6 +1361,9 @@ export async function buildRenderPayload(
         ...hookData.workspace,
         current_dir: posixify(hookData.workspace.current_dir) ?? "",
         project_dir: posixify(hookData.workspace.project_dir) ?? "",
+        added_dirs: (hookData.workspace.added_dirs ?? []).map(
+          (dir) => posixify(dir) ?? dir,
+        ),
       }
     : hookData.workspace;
 

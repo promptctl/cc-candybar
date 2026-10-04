@@ -689,4 +689,18 @@ describe("buildRenderPayload — config file and resume command", () => {
         .resumeCommand,
     ).toBe("cd /tmp && CLAUDE_CONFIG_DIR=/c/.claude claude --resume test-session");
   });
+
+  test("a hook with no added_dirs resumes with none rather than failing", async () => {
+    const { added_dirs: _, ...workspace } = hookData("/x").workspace;
+    const payload = await buildRenderPayload(
+      { ...hookData("/no/such/transcript.jsonl"), workspace },
+      depsWith(ABSENT, []),
+      undefined,
+      new Set(),
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      { unsaved: 0, resettable: 0, configPath: null },
+    );
+    expect(payload.resumeCommand).toBe("cd /tmp && claude --resume test-session");
+  });
 });

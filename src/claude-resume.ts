@@ -1,6 +1,5 @@
 import { CLAUDE_CONFIG_DIR_ENV } from "./claude-settings.js";
 import { shellWord } from "./shell-word.js";
-import type { ClaudeHookData } from "./utils/claude.js";
 
 // [LAW:one-source-of-truth] The shell command that resumes a session, built
 // from the facts Claude Code's `--resume` depends on: it looks the session up
@@ -12,7 +11,10 @@ import type { ClaudeHookData } from "./utils/claude.js";
 // `claudeConfigDir` hint: absent means the default directory, and the
 // command sets nothing.
 export function resumeCommand(
-  workspace: Pick<ClaudeHookData["workspace"], "project_dir" | "added_dirs">,
+  workspace: {
+    readonly project_dir: string;
+    readonly added_dirs: readonly string[];
+  },
   sessionId: string,
   configDir: string | undefined,
 ): string {
