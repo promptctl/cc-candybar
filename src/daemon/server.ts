@@ -47,8 +47,7 @@ import {
   sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
-import { GitDataProvider } from "./cache/git";
-import { SessionUsageStore } from "./cache/session-usage-store";
+import { createPayloadProviders } from "./payload-providers";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
@@ -101,13 +100,6 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./render-payload.js";
-import { ContextProvider } from "../segments/context.js";
-import { MetricsProvider } from "../segments/metrics.js";
-import { ActivityProvider } from "../segments/activity.js";
-import { TmuxService } from "../segments/tmux.js";
-import { MementoProvider } from "../segments/memento.js";
-import { productionMementoEdge } from "../memento/edge.js";
-import { readAutoCompactWindow } from "../segments/autocompact.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
@@ -132,11 +124,22 @@ const watcherRegistry = new WatcherRegistry({
   counters: stats,
   logger: dlog,
 });
-const gitService = new GitDataProvider({
+// [LAW:one-source-of-truth] One provider per data shape, shared across every
+// render in this daemon, built by the one constructor every renderer uses
+// (payload-providers.ts). The render cache owns DSL-state-per-config; these
+// serve the augmented payload that flows through every render.
+// [LAW:single-enforcer] `mementoProvider` is the one owner of memento's
+// ceiling: the payload reads through it and the ceiling verb moves through it,
+// so a click drops the very reading it made stale.
+const payloadProviders = createPayloadProviders({
   watchers: watcherRegistry,
   logger: dlog,
 });
-const usageStore = new SessionUsageStore();
+const {
+  gitProvider: gitService,
+  usageStore,
+  mementoProvider,
+} = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
@@ -148,17 +151,6 @@ const navigationHistory = new NavigationHistory();
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
-// [LAW:one-source-of-truth] One provider per data shape, shared across every
-// render in this daemon. The render cache owns DSL-state-per-config; these
-// providers serve the augmented payload that flows through every render.
-const contextProvider = new ContextProvider();
-const metricsProvider = new MetricsProvider();
-const activityProvider = new ActivityProvider();
-const tmuxService = new TmuxService();
-// [LAW:single-enforcer] One owner for memento's ceiling: the payload reads
-// through it and the ceiling verb moves through it, so a click drops the very
-// reading it made stale.
-const mementoProvider = new MementoProvider(productionMementoEdge());
 const renderCache = new RenderCache(
   {
     gitService,
@@ -1360,17 +1352,10 @@ function serializeSegmentCells(
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.
 const payloadDeps = {
-  gitProvider: gitService,
-  usageStore,
-  contextProvider,
-  metricsProvider,
-  activityProvider,
-  tmuxService,
-  mementoProvider,
-  autoCompact: readAutoCompactWindow,
-  // [LAW:single-enforcer] buildRenderPayload is the one log site for the
-  // outcome-carrying provider lanes (git, cache).
-  log: dlog,
+  // [LAW:single-enforcer] The providers carry `dlog` as `log`:
+  // buildRenderPayload is the one log site for the outcome-carrying provider
+  // lanes (git, cache).
+  ...payloadProviders,
   // [LAW:single-enforcer] The daemon's wall clock — the same instant source
   // the rate-limit ETA projection and the template's reset countdown read.
   clock: () => new Date(),

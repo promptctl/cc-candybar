@@ -1,14 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { debug } from "../utils/logger";
-import type { DaemonLogger } from "./log";
+import { quietLogger, type DaemonLogger } from "./log";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
-
-// [LAW:locality-or-seam] Logging is injected, not hard-wired to daemon.log.
-// The daemon passes `dlog`; tests and non-daemon callers take this quiet
-// default, which stays silent unless CC_CANDYBAR_DEBUG is set — so unit tests
-// never open the real daemon log stream.
-const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
 // [LAW:no-silent-fallbacks] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
@@ -39,6 +32,8 @@ export class FileSessionStorage implements SessionStorage {
   constructor(
     private readonly filePath: string,
     private readonly debounceMs: number = 500,
+    // [LAW:locality-or-seam] Logging is injected, not hard-wired to
+    // daemon.log: the daemon passes `dlog`, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
   ) {}
 

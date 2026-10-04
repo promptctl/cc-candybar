@@ -278,6 +278,95 @@ type LoadOutcome = {
   | { readonly state: null; readonly error: string }
 );
 
+// [LAW:single-enforcer] Construct the full new state — parsed config,
+// store, registry, compiled segments, palette — as one transaction. Any
+// failure inside disposes the partially-built registry so we don't leak
+// timers/watchers from a half-constructed reload, then rethrows so the
+// caller (loadFromDisk) preserves the prior `entry.state` unchanged. The
+// advisories each stage earns are appended to `warnings` as they arise —
+// an accumulator the caller owns, because a return value could not carry
+// them past the rethrow.
+export function buildRenderState(
+  cwd: string,
+  resolvedPath: string | null,
+  warnings: Array<string | null>,
+  deps: Pick<RenderDeps, "gitService" | "sessionState">,
+): DslRenderState {
+  // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
+  // straight-line composition. `loadConfig(null)` returns the bundled
+  // default (uniform merge against empty raw); `validateConfig` is the
+  // sole producer of `ValidatedConfig`. The renderer accepts only
+  // `ValidatedConfig`, so the compiler enforces the chain — there is no
+  // "skip validate" path that typechecks downstream.
+  // [LAW:one-source-of-truth] Hand validateConfig the whole read, so
+  // cross-ref diagnostics on the daemon path name the file's own paths and
+  // lines — the file is read once inside loadConfig, not re-read here.
+  const loaded = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
+  const { config: merged, raw } = loaded;
+  // Appended before validation so a cross-ref failure still carries the
+  // file's own advisory (a duplicate key names its line beside the error).
+  warnings.push(...loaded.warnings);
+  const config = validateConfig(loaded, resolvedPath ?? "<default>");
+
+  const store = new VariableStore();
+  // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
+  // every config's `kind: "git"` declarations route through one cache +
+  // watcher pool (rather than each registry standing up its own). The
+  // sessionState injection makes `kind: "state"` variables read/write the
+  // same per-session store the click verbs mutate. `default_empty_value`
+  // is honored from globals — it's the fallback used by input/env/etc.
+  // sources when neither the path resolves nor the declaration carries
+  // its own `default`. The loader validates it as a string; the registry
+  // default ("") matches the historical behavior when omitted.
+  const registry = new SourceRegistry(
+    store,
+    config.globals.default_empty_value ?? "",
+    deps.gitService,
+    deps.sessionState,
+  );
+
+  let compiled: CompiledConfig;
+  try {
+    // [LAW:one-source-of-truth] The action runtime reads session.id + current
+    // picker values from registry.variableStore — the same store this entry's
+    // registry declares into — so no store reference is threaded separately.
+    compiled = registerDslConfig(config, registry, { cwd });
+    // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
+    // declaration failures that didn't abort the load) flow through the
+    // same warning channel as collision warnings; both visible at once —
+    // appended before the validator pass so a derive throw still carries
+    // them.
+    warnings.push(...compiled.loadWarnings);
+    // [LAW:no-silent-failure] The gates this config's sessions click through
+    // are derived from its action table on demand (stateGate / configGate),
+    // so nothing is installed here. They are built once now so an action
+    // table that cannot gate — a built-in key re-claimed, two actions that
+    // contradict each other on one key — fails this load, never the first
+    // click.
+    stateGate(config);
+    configGate(config);
+  } catch (err) {
+    registry.dispose();
+    throw err;
+  }
+
+  // [LAW:one-source-of-truth] basePalette is NOT frozen here. One cache entry
+  // serves many sessions, but the effective theme is per-session SessionState;
+  // freezing the palette per entry would let the rendered colors diverge from
+  // the session's chosen theme. The server resolves basePalette per render
+  // from the effective theme (resolveThemeSelection, settled by renderDsl).
+  return {
+    config,
+    store,
+    registry,
+    compiled,
+    neededInputPaths: neededPrefixesByPreset(config),
+    lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    authoredRoots: authoredRoots(merged, raw),
+    fileHeldSettings: fileHeldSettings(raw),
+  };
+}
+
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private readonly deps: RenderDeps;
@@ -327,7 +416,7 @@ export class RenderCache {
       lastWarning: loaded.warning,
       // The seed's own advisories go nowhere: the strip already carries the
       // failed load's, and the default earns none by program invariant.
-      state: loaded.state ?? this.buildState(cwd, null, []),
+      state: loaded.state ?? buildRenderState(cwd, null, [], this.deps),
       watcher: null,
       watcherKey: null,
     };
@@ -444,7 +533,7 @@ export class RenderCache {
     // the same ordering, that `cc-candybar check` reports.
     let state: DslRenderState;
     try {
-      state = this.buildState(cwd, resolvedPath, advisories);
+      state = buildRenderState(cwd, resolvedPath, advisories, this.deps);
     } catch (err) {
       if (err instanceof ConfigError) advisories.push(...err.warnings);
       return {
@@ -464,94 +553,6 @@ export class RenderCache {
       warning: joinWarnings(advisories),
       state,
       error: null,
-    };
-  }
-
-  // [LAW:single-enforcer] Construct the full new state — parsed config,
-  // store, registry, compiled segments, palette — as one transaction. Any
-  // failure inside disposes the partially-built registry so we don't leak
-  // timers/watchers from a half-constructed reload, then rethrows so the
-  // caller (loadFromDisk) preserves the prior `entry.state` unchanged. The
-  // advisories each stage earns are appended to `warnings` as they arise —
-  // an accumulator the caller owns, because a return value could not carry
-  // them past the rethrow.
-  private buildState(
-    cwd: string,
-    resolvedPath: string | null,
-    warnings: Array<string | null>,
-  ): DslRenderState {
-    // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
-    // straight-line composition. `loadConfig(null)` returns the bundled
-    // default (uniform merge against empty raw); `validateConfig` is the
-    // sole producer of `ValidatedConfig`. The renderer accepts only
-    // `ValidatedConfig`, so the compiler enforces the chain — there is no
-    // "skip validate" path that typechecks downstream.
-    // [LAW:one-source-of-truth] Hand validateConfig the whole read, so
-    // cross-ref diagnostics on the daemon path name the file's own paths and
-    // lines — the file is read once inside loadConfig, not re-read here.
-    const loaded = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
-    const { config: merged, raw } = loaded;
-    // Appended before validation so a cross-ref failure still carries the
-    // file's own advisory (a duplicate key names its line beside the error).
-    warnings.push(...loaded.warnings);
-    const config = validateConfig(loaded, resolvedPath ?? "<default>");
-
-    const store = new VariableStore();
-    // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
-    // every config's `kind: "git"` declarations route through one cache +
-    // watcher pool (rather than each registry standing up its own). The
-    // sessionState injection makes `kind: "state"` variables read/write the
-    // same per-session store the click verbs mutate. `default_empty_value`
-    // is honored from globals — it's the fallback used by input/env/etc.
-    // sources when neither the path resolves nor the declaration carries
-    // its own `default`. The loader validates it as a string; the registry
-    // default ("") matches the historical behavior when omitted.
-    const registry = new SourceRegistry(
-      store,
-      config.globals.default_empty_value ?? "",
-      this.deps.gitService,
-      this.deps.sessionState,
-    );
-
-    let compiled: CompiledConfig;
-    try {
-      // [LAW:one-source-of-truth] The action runtime reads session.id + current
-      // picker values from registry.variableStore — the same store this entry's
-      // registry declares into — so no store reference is threaded separately.
-      compiled = registerDslConfig(config, registry, { cwd });
-      // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
-      // declaration failures that didn't abort the load) flow through the
-      // same warning channel as collision warnings; both visible at once —
-      // appended before the validator pass so a derive throw still carries
-      // them.
-      warnings.push(...compiled.loadWarnings);
-      // [LAW:no-silent-failure] The gates this config's sessions click through
-      // are derived from its action table on demand (stateGate / configGate),
-      // so nothing is installed here. They are built once now so an action
-      // table that cannot gate — a built-in key re-claimed, two actions that
-      // contradict each other on one key — fails this load, never the first
-      // click.
-      stateGate(config);
-      configGate(config);
-    } catch (err) {
-      registry.dispose();
-      throw err;
-    }
-
-    // [LAW:one-source-of-truth] basePalette is NOT frozen here. One cache entry
-    // serves many sessions, but the effective theme is per-session SessionState;
-    // freezing the palette per entry would let the rendered colors diverge from
-    // the session's chosen theme. The server resolves basePalette per render
-    // from the effective theme (resolveThemeSelection, settled by renderDsl).
-    return {
-      config,
-      store,
-      registry,
-      compiled,
-      neededInputPaths: neededPrefixesByPreset(config),
-      lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-      authoredRoots: authoredRoots(merged, raw),
-      fileHeldSettings: fileHeldSettings(raw),
     };
   }
 

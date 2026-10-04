@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
-import { debug } from "../../utils/logger";
+import { quietLogger } from "../log";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
 
@@ -17,9 +17,6 @@ export type GitProviderLogger = (
   level: "info" | "warn" | "error",
   message: string,
 ) => void;
-
-const defaultProviderLogger: GitProviderLogger = (_level, message) =>
-  debug(message);
 
 // [LAW:one-source-of-truth] One provider for git data in the daemon. The
 // daemon is the sole owner; segments pull via getInfo() (per-render snapshot),
@@ -254,7 +251,7 @@ export class GitDataProvider extends GitService {
     this.inner = opts.inner ?? new GitService();
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
-    this.logger = opts.logger ?? defaultProviderLogger;
+    this.logger = opts.logger ?? quietLogger;
     if (opts.watchers) {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;

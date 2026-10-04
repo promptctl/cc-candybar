@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { logPath } from "./paths";
+import { debug } from "../utils/logger";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
@@ -49,6 +50,11 @@ export type LogLevel = "info" | "warn" | "error";
 // `dlog` is the daemon's implementation (writes to daemon.log); consumers that
 // inject a different impl (a quiet default in tests) take this shape.
 export type DaemonLogger = (level: LogLevel, msg: string) => void;
+
+// What every component logs through when its caller injects no sink: silent
+// unless CC_CANDYBAR_DEBUG is set, and never daemon.log — only the daemon
+// passes `dlog`.
+export const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
 export function dlog(level: LogLevel, msg: string): void {
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;

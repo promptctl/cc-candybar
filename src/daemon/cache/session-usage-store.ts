@@ -24,7 +24,7 @@ import {
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
-import { dlog } from "../log";
+import { quietLogger, type DaemonLogger } from "../log";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -325,6 +325,7 @@ export class SessionUsageStore {
   private readonly speedFlight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
+  private readonly log: DaemonLogger;
   private hits = 0;
   private misses = 0;
   private sweeps = 0;
@@ -336,8 +337,13 @@ export class SessionUsageStore {
       maxEntries?: number;
       staleAgeMs?: number;
       sweepIntervalMs?: number;
+      // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
+      // daemon passes `dlog`; every other consumer keeps the debug-routed
+      // default and never writes daemon.log.
+      logger?: DaemonLogger;
     } = {},
   ) {
+    this.log = opts.logger ?? quietLogger;
     this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
@@ -702,11 +708,11 @@ export class SessionUsageStore {
     await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
       const outcome = await this.ingest(c.sessionId, c.path, c.mtime);
       if (outcome.kind === "failed") {
-        dlog("warn", `usageStore seed: ${outcome.reason}`);
+        this.log("warn", `usageStore seed: ${outcome.reason}`);
       }
     });
     this.seeds++;
-    dlog(
+    this.log(
       "info",
       `usageStore seed sessions=${candidates.length} dirs=${claudePaths.join(",")}`,
     );
@@ -725,7 +731,7 @@ export class SessionUsageStore {
     }
     if (dropped > 0) {
       this.sweeps++;
-      dlog("info", `usageStore sweep dropped=${dropped}`);
+      this.log("info", `usageStore sweep dropped=${dropped}`);
     }
     return dropped;
   }
@@ -736,7 +742,7 @@ export class SessionUsageStore {
       if (oldest === undefined) break;
       this.entries.delete(oldest);
       this.speedRings.delete(oldest);
-      dlog("info", `usageStore evict ${oldest}`);
+      this.log("info", `usageStore evict ${oldest}`);
     }
   }
 
