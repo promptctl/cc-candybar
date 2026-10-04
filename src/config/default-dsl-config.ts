@@ -77,7 +77,8 @@ const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 // a user restores the full path by overriding `segments.directory.template`
 // (drop the `abbreviatePath` wrapper) — the existing merge-by-name seam.
 // (3) The abbreviation hides the full path, so the cell is one `copyDir` link:
-// clicking it copies `.current_dir` whole.
+// clicking it copies `.current_dir` whole. The click lives in this template,
+// so an override keeps the `action "copyDir"` wrap or loses the click.
 const DIR_TEMPLATE =
   "{{ $dir := .current_dir }}" +
   '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +

@@ -418,8 +418,11 @@ describe("segment-palette persist action click → the config file", () => {
 
     // By label: `directory` itself is a link now (its copy-the-path click).
     const rendered = render();
-    const urlOf = (label: string): string =>
-      links(rendered).find((l) => l.text.includes(label))!.url;
+    const urlOf = (label: string): string => {
+      const matches = links(rendered).filter((l) => l.text.trim() === label);
+      expect(matches).toHaveLength(1);
+      return matches[0]!.url;
+    };
     const [applyUrl, resetUrl] = [urlOf("nord"), urlOf("↺")];
     click(applyUrl);
     expect(fileSegments(durable).directory).toEqual({ palette: "nord" });

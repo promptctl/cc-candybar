@@ -16,8 +16,8 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { INVISIBLE, links } from "./helpers/ansi";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_COPY, VERB_DISPATCH } from "../src/click/wire";
+import { effectsOf } from "../src/click/read";
+import { VERB_COPY } from "../src/click/wire";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -175,12 +175,9 @@ describe("clicking the directory copies the full path", () => {
     });
     const cellLinks = links(rendered);
     expect(cellLinks.map((l) => l.text.trim())).toEqual(["~/c/c/s/d/leaf"]);
-    const { verb, value } = parseHandlerUrl(cellLinks[0]!.url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    expect(effects.map((e) => e.verb)).toEqual([VERB_COPY]);
-    // The copy handler's own decode (oneArg) is one decodeURIComponent.
-    expect(decodeURIComponent(effects[0]!.value)).toBe(current_dir);
+    expect(effectsOf(cellLinks[0]!.url)).toEqual([
+      { verb: VERB_COPY, args: [current_dir] },
+    ]);
   });
 });
 
