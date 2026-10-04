@@ -76,6 +76,9 @@ const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 // the project root. brandon-directory-781 makes fish-abbreviation the DEFAULT;
 // a user restores the full path by overriding `segments.directory.template`
 // (drop the `abbreviatePath` wrapper) — the existing merge-by-name seam.
+// (3) The abbreviation hides the full path, so the cell is one `copyDir` link:
+// clicking it copies `.current_dir` whole. The click lives in this template,
+// so an override keeps the `action "copyDir"` wrap or loses the click.
 const DIR_TEMPLATE =
   "{{ $dir := .current_dir }}" +
   '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +
@@ -84,7 +87,7 @@ const DIR_TEMPLATE =
   '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
   `{{ $dir = ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
   "{{ end }}{{ end }}" +
-  "{{ abbreviatePath $dir }}";
+  '{{ action "copyDir" (abbreviatePath $dir) }}';
 
 // How far the two git segments' *structural* text — labels, punctuation,
 // brackets, the sha, the upstream name, the elapsed-time annotation — sits
@@ -646,7 +649,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     directory: {
       group: "location",
       description:
-        "The current directory, shortened fish-style — `~` under home, project-relative inside the project.",
+        "The current directory, shortened fish-style — `~` under home, project-relative inside the project. Click to copy the full path.",
       template: DIR_TEMPLATE,
     },
     model: {
@@ -1141,6 +1144,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   actions: {
     ...quickActions("").actions,
     ...COMMAND_TRAY.actions,
+    // The `directory` cell's click: the full path its abbreviation hides.
     copyDir: { copy: "{{ .current_dir }}" },
     // The `themeSwitcher` segment's click: each arrow writes the theme it
     // points at into this session. Gated by the themes domain it names, the

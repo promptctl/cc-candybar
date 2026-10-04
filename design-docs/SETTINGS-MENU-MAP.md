@@ -145,7 +145,7 @@ Added by me, at Brandon's request to fill out the list:
 ## Also recorded
 
 - The drift marker is the reset. `↺` appears on a control only when it has a session draft or a config-file value, which are what the reset clears. A value the active preset pins shows none, since a reset could not move it. This narrows brandon-menu-ia-q30.nk8, which counts preset-set values as drift.
-- The bundled `copyDir` action is declared and clicked by nothing. Proposal: clicking `directory` copies the full path, which the fish-abbreviated text hides.
+- Clicking `directory` copies the full path, which the fish-abbreviated text hides, through the bundled `copyDir` action.
 - Placed outside the menu: the context ceiling widget (xta.asv) and the lit widget (3xo.btb) are segments added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `⚙` beside each cell while arranging.
 
 ## Tickets
@@ -162,6 +162,6 @@ Under epic brandon-menu-ia-q30 unless noted, in this order:
 8. **Edit mode glyphs:** `✖` in red and `✚` in green, text colour only, with `✚` drawn on no fill.
 9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
 10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.
-11. **Clicking `directory` copies the full path.** This replaces the unused `copyDir` action.
+11. **Clicking `directory` copies the full path.** The click is the bundled `copyDir` action, which nothing clicked before.
 
 brandon-menu-ia-q30.nk8 narrows to the reset-only marker described under Also recorded. brandon-menu-ia-q30.kpl is unchanged.
