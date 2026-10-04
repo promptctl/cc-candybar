@@ -1,3 +1,10 @@
+## [1.113.1](https://github.com/promptctl/cc-candybar/compare/v1.113.0...v1.113.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **config:** a git variable takes no cache policy, and the loader refuses one ([#307](https://github.com/promptctl/cc-candybar/issues/307)) ([4e34bdf](https://github.com/promptctl/cc-candybar/commit/4e34bdf973ab3e3e1d2bebde0e253fff24157bda))
+
 # [1.113.0](https://github.com/promptctl/cc-candybar/compare/v1.112.0...v1.113.0) (2026-10-04)
 
 
