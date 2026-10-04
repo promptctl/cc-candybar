@@ -1,3 +1,10 @@
+## [1.115.1](https://github.com/promptctl/cc-candybar/compare/v1.115.0...v1.115.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **config:** a set on a setting key loads only with values that setting has ([#313](https://github.com/promptctl/cc-candybar/issues/313)) ([a59361b](https://github.com/promptctl/cc-candybar/commit/a59361b223a8a7f66b18a7af96438521a8d166cd))
+
 # [1.115.0](https://github.com/promptctl/cc-candybar/compare/v1.114.1...v1.115.0) (2026-10-04)
 
 
