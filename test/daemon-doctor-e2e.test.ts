@@ -163,6 +163,8 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
     const facts = await probeUrlHandler({
       ...productionHandlerProbeEdge(),
       platform: "darwin",
+      // The stand-in for the handler app below delivers to this daemon.
+      sockets: { own: sockPath, handler: sockPath },
       open: (url) => {
         const { verb, value } = parseHandlerUrl(url);
         delivered.push(tryClickViaDaemon(verb, value));

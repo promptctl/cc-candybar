@@ -181,8 +181,11 @@ function fakeEdge(
   const { arrivesOnRead = null, ...members } = over;
   const calls: string[] = [];
   let reads = 0;
+  let clock = 0;
   const edge: HandlerProbeEdge = {
     platform: "darwin",
+    sockets: { own: "/tmp/s", handler: "/tmp/s" },
+    now: () => clock,
     nonce: () => NONCE,
     daemon: async () => {
       const read = reads++;
@@ -205,6 +208,7 @@ function fakeEdge(
     },
     pause: async () => {
       calls.push("pause");
+      clock += 100;
     },
     opener: () => {
       calls.push("opener");
@@ -270,6 +274,32 @@ describe("probeUrlHandler", () => {
     });
     expect(calls.filter((c) => c === "pause")).toHaveLength(50);
     expect(calls.slice(-2)).toEqual(["opener", `script ${APP}`]);
+  });
+
+  test("the wait is five seconds on the clock, however slowly the daemon answers", async () => {
+    let clock = 0;
+    const { edge, calls } = fakeEdge({
+      now: () => clock,
+      // Each read costs half a second on top of the pause.
+      pause: async () => {
+        calls.push("pause");
+        clock += 600;
+      },
+    });
+    expect(await probeUrlHandler(edge)).toMatchObject({ kind: "lost" });
+    expect(calls.filter((c) => c === "pause")).toHaveLength(9);
+  });
+
+  test("a shell pointed at its own daemon: no link is opened, and both sockets are named", async () => {
+    const { edge, calls } = fakeEdge({
+      sockets: { own: "/tmp/dev/s", handler: "/tmp/cc-candybar-501/socket" },
+    });
+    expect(await probeUrlHandler(edge)).toEqual({
+      kind: "unprobed",
+      reason:
+        "this shell's daemon is at /tmp/dev/s (CC_CANDYBAR_SOCKET); the URL handler delivers links to /tmp/cc-candybar-501/socket",
+    });
+    expect(calls).toEqual([]);
   });
 
   test("a link Launch Services refuses is not waited for", async () => {

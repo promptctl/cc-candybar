@@ -17,6 +17,7 @@ import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats } from "../daemon/client-stats.js";
+import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
 import { launchSync, type LaunchCategory } from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
@@ -63,10 +64,15 @@ export interface DaemonView {
 
 export interface HandlerProbeEdge {
   readonly platform: NodeJS.Platform;
+  // The socket this process reaches its daemon on, and the one the handler
+  // app delivers to. They differ under `CC_CANDYBAR_SOCKET`.
+  readonly sockets: { readonly own: string; readonly handler: string };
   readonly nonce: () => string;
   readonly daemon: () => Promise<Asked<DaemonView>>;
   // Hand a URL to Launch Services. The reason it refused, or null.
   readonly open: (url: string) => string | null;
+  // The time, in milliseconds.
+  readonly now: () => number;
   // One poll interval.
   readonly pause: () => Promise<void>;
   // The app Launch Services opens the scheme with; null when none claims it.
@@ -78,7 +84,7 @@ export interface HandlerProbeEdge {
 
 // Five seconds for Launch Services to start the handler app and node to
 // deliver the link; one not back by then is reported lost.
-const POLLS = 50;
+const WAIT_MS = 5000;
 const POLL_MS = 100;
 
 function handlerApp(edge: HandlerProbeEdge): Asked<HandlerApp | null> {
@@ -109,7 +115,10 @@ async function awaitArrival(
   edge: HandlerProbeEdge,
   nonce: string,
 ): Promise<UrlHandlerFacts | null> {
-  for (let poll = 0; poll < POLLS; poll++) {
+  // [LAW:no-ambient-temporal-coupling] The bound is the clock's, so a daemon
+  // slow to answer each read cannot stretch the wait.
+  const deadline = edge.now() + WAIT_MS;
+  while (edge.now() < deadline) {
     await edge.pause();
     const view = await edge.daemon();
     // A daemon that cannot be asked this instant may answer the next poll.
@@ -132,6 +141,15 @@ export async function probeUrlHandler(
   edge: HandlerProbeEdge,
 ): Promise<UrlHandlerFacts> {
   if (edge.platform !== "darwin") return { kind: "unsupported" };
+  // The handler delivers to its own socket: a link opened from a shell whose
+  // daemon is another would land on a daemon this probe cannot read, and the
+  // links that shell's bar draws go there too.
+  if (edge.sockets.own !== edge.sockets.handler) {
+    return {
+      kind: "unprobed",
+      reason: `this shell's daemon is at ${edge.sockets.own} (CC_CANDYBAR_SOCKET); the URL handler delivers links to ${edge.sockets.handler}`,
+    };
+  }
   // The link is delivered to the daemon, so one that cannot be asked can
   // neither receive it nor say that it did.
   const daemon = await edge.daemon();
@@ -169,7 +187,11 @@ const OPENER_SCRIPT =
 
 async function daemonView(): Promise<Asked<DaemonView>> {
   const outcome = await fetchStats();
-  if (outcome.kind !== "ok") return failed(describeFailure(outcome));
+  // The description is lines (a failure, then its hint); a verdict's reason is
+  // one row.
+  if (outcome.kind !== "ok") {
+    return failed(describeFailure(outcome).split("\n").join(" — "));
+  }
   const { version, handlerProbes } = outcome.value;
   // [LAW:no-defensive-null-guards] exception: trust boundary. The snapshot is
   // socket JSON from whichever daemon is running; one from before this check
@@ -183,6 +205,8 @@ async function daemonView(): Promise<Asked<DaemonView>> {
 export function productionHandlerProbeEdge(): HandlerProbeEdge {
   return {
     platform: process.platform,
+    sockets: { own: socketPath(), handler: defaultSocketPath() },
+    now: Date.now,
     nonce: randomUUID,
     daemon: daemonView,
     open: (url) => {

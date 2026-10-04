@@ -47,8 +47,9 @@ const factsIn = (
   tmux: ClientHints["tmux"],
   edge: DoctorEdge = NO_TMUX,
 ) =>
-  gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, {
-    kind: "unsupported",
+({
+    ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN),
+    urlHandler: { kind: "unsupported" } as const,
   });
 // Outside tmux: the settings half alone.
 const factsOf = (conf: string) => factsIn(conf, null);

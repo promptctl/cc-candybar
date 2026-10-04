@@ -232,7 +232,8 @@ export interface ClickRequest {
   verb: string;
   value: string;
   // The package version of the client that delivered the click — the URL
-  // handler's staged runtime. Absent from a handler too old to report it.
+  // handler's staged runtime, or a page whose daemon runs in it. Absent from
+  // a handler too old to report it.
   clientVersion?: string;
 }
 

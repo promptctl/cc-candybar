@@ -145,19 +145,17 @@ export function clickArrived(handler: string | null): UrlHandlerFacts {
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
 // resolves from — never the daemon's own env, which answers for whichever
-// session spawned it. The URL handler's facts are the caller's: the daemon
-// has them in the click it is handling, the CLI has to send a link and wait
-// (src/doctor/handler-probe.ts).
+// session spawned it. The URL handler's facts are not gathered here: the
+// daemon has them in the click it is handling, the CLI has to send a link and
+// wait (src/doctor/handler-probe.ts), and each adds them to these.
 export function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
   origin: ConfigOrigin,
-  urlHandler: UrlHandlerFacts,
-): DoctorFacts {
+): Omit<DoctorFacts, "urlHandler"> {
   return {
     tmux: tmuxFacts(edge, hints.tmux),
     config: configFacts(edge, origin),
-    urlHandler,
     claudeSettings: readClaudeSettingsEnv(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

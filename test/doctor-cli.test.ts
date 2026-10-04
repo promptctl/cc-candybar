@@ -35,6 +35,8 @@ const refuse = (): never => {
 };
 const NO_HANDLER: HandlerProbeEdge = {
   platform: "linux",
+  sockets: { own: "/s", handler: "/s" },
+  now: refuse,
   nonce: refuse,
   daemon: refuse,
   open: refuse,
@@ -55,6 +57,21 @@ describe("doctorPlan", () => {
       stderr: `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
       code: 2,
     });
+  });
+
+  // A run that cannot report opens no link: on macOS the probe would be the
+  // refusing edge's first call.
+  test("an unreadable settings.json is reported before any link is opened", async () => {
+    fs.writeFileSync(settingsPath(), '{ "env": [1] }');
+    const plan = await doctorPlan(
+      EDGE,
+      { ...NO_HANDLER, platform: "darwin", sockets: { own: "/a", handler: "/a" } },
+      inDir(IN_TMUX),
+      "/",
+    );
+    expect(plan.stderr).toBe(
+      `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
+    );
   });
 
   // Claude Code parses settings.json strictly; a file it would refuse is not
@@ -211,14 +228,14 @@ describe("doctorPlan over a real config", () => {
       projectConfig(),
       `{ actions: { a: { copy: "t" }, b: { copy: "t" } }, helpers: { h: "x" } }`,
     );
-    const reports = runDoctor(
-      gatherFacts(
+    const reports = runDoctor({
+      ...gatherFacts(
         REAL,
         { tmux: null, claudeConfigDir: dir },
         { projectDir: project, cwd: project, configFile: null },
-        { kind: "unsupported" },
       ),
-    );
+      urlHandler: { kind: "unsupported" },
+    });
     const pairs = new Map(
       doctorReportPairs(reports).map((p) => [p.key, p.value]),
     );

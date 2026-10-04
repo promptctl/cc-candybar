@@ -1087,18 +1087,18 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   );
 }
 
+// The facts a doctor click reasons over: the session's, and the click itself
+// as the link that came back through the URL handler.
+function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
+  return {
+    ...gatherFacts(ctx.doctor, sessionHints(ctx, sid), sessionOrigin(ctx, sid)),
+    urlHandler: clickArrived(ctx.clientVersion),
+  };
+}
+
 const doctorRun: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  writeReport(
-    ctx,
-    sid,
-    gatherFacts(
-      ctx.doctor,
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      clickArrived(ctx.clientVersion),
-    ),
-  );
+  writeReport(ctx, sid, clickFacts(ctx, sid));
 };
 
 // A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
@@ -1128,12 +1128,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const facts = gatherFacts(
-    ctx.doctor,
-    sessionHints(ctx, sid),
-    sessionOrigin(ctx, sid),
-    clickArrived(ctx.clientVersion),
-  );
+  const facts = clickFacts(ctx, sid);
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(

@@ -80,10 +80,9 @@ export async function doctorPlan(
   cwd: string,
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
-  const urlHandler = await probeUrlHandler(handler);
   let facts: DoctorFacts;
   try {
-    facts = gatherFacts(
+    const gathered = gatherFacts(
       edge,
       {
         tmux: detectTmuxHint(env),
@@ -99,8 +98,10 @@ export async function doctorPlan(
         configFile:
           sanitizeConfigPath(configFile ?? detectConfigEnv(env)) ?? null,
       },
-      urlHandler,
     );
+    // Last: the probe opens a link and waits, which a run that cannot report
+    // has no reason to do.
+    facts = { ...gathered, urlHandler: await probeUrlHandler(handler) };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
