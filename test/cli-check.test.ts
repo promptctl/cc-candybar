@@ -552,7 +552,7 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain("config renders with 1 render error");
   });
 
-  it("an error every preset reaches is reported once, bare, as the fresh session sees it", async () => {
+  it("an error the fresh preset and another both reach is reported once, bare, as the fresh session sees it", async () => {
     const p = write(
       "segment-every-preset.json5",
       `{
@@ -569,6 +569,50 @@ describe("checkConfig — explicit target", () => {
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain("config renders with 1 render error");
     expect(message).not.toContain("(under");
+  });
+
+  it("an error only other presets reach is tagged once per preset, customized only where it alone reaches it", async () => {
+    const p = write(
+      "segment-several-presets.json5",
+      `{
+        globals: { preset: 'a' },
+        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
+        presets: {
+          a: {},
+          b: { root: { h: ['x', 'broken'] } },
+          c: { root: { h: ['x', { seg: 'broken', when: '{{ .preset.customized }}' }] } },
+        },
+        segments: {
+          x: { template: 'x' },
+          broken: { template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}' },
+        },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain("config renders with 1 render error");
+    expect(message).toContain(
+      '(under preset "b"; preset "c", .preset.customized = true)',
+    );
+  });
+
+  it("a render that throws under one preset is reported with that preset, beside every other failure", async () => {
+    const p = write(
+      "throw-other-preset.json5",
+      `{
+        globals: { preset: 'a' },
+        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
+        presets: { a: {}, b: { globals: { style: '{{ .nope }}' } } },
+        segments: {
+          broken: { template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}' },
+        },
+        root: { h: ['broken'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain("config renders with 2 render errors");
+    expect(message).toMatch(/^ {2}segment "broken": /m);
+    expect(message).toMatch(/^ {2}render: .*nope.* \(under preset "b"\)$/m);
   });
 
   it("returns the render of the preset a fresh session opens in", async () => {

@@ -22,6 +22,6 @@ describe("HELP_TEXT", () => {
   // shipped feature with no way in.
   test("documents check's --render preview beside the command", () => {
     expect(HELP_TEXT).toContain("check [--render] [file]");
-    expect(HELP_TEXT).toMatch(/--render also\n\s+prints the bar it rendered/);
+    expect(HELP_TEXT).toMatch(/--render also prints the bar a fresh\n\s+session opens on/);
   });
 });
