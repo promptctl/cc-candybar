@@ -1,0 +1,282 @@
+// The page's transport on GitHub Pages: the daemon runs in this page.
+//
+// [LAW:single-enforcer] A render and a click are the daemon's own request
+// handler (src/daemon/server.ts `handleRequest`), sent the request the Rust
+// client and the URL handler send. Nothing here renders: the daemon reads the
+// simulated machine (world.ts) through node:fs and node:child_process, as it
+// reads a real one, and the scenario (scenario.ts) moves that machine.
+
+import { VERB_COPY } from "../src/click/wire";
+import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
+import { handleRequest, reloadConfig } from "../src/daemon/server";
+import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
+import { parseHandlerUrl } from "../src/install/index";
+import type { ClaudeHookData } from "../src/utils/claude";
+import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
+import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
+
+// The page's clipboard (this file is checked against Node's types, which have no `navigator`).
+declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
+
+interface Size {
+  readonly width: number;
+  readonly rows: number;
+}
+
+const CONTEXT_WINDOW = 200_000;
+const TICK_MS = 250;
+const PAUSE_AT_END_MS = 6000;
+
+// ── The session and the scenario clock ──
+//
+// One session for the life of the page: the scenario replaying, looping or
+// being seeked rewrites its transcript and moves its repository, as a session's
+// own turns would, but never takes away what the visitor did in the bar (an
+// open menu, a theme, a draft). Only "new session" starts another.
+let sessionId = crypto.randomUUID();
+let transcript = "";
+let moment: Required<Moment> = INITIAL_MOMENT;
+let applied = 0; // how many STEPS have happened
+let t = 0; // scenario seconds
+let speed = 1;
+let playing = true;
+let serial = 0;
+let endedAt: number | null = null; // when the scenario reached its end, while it holds the last frame
+
+const nowSec = (): number => Date.now() / 1000;
+// A moment of the scenario on the clock: `at` seconds into it is `t - at` seconds ago.
+const clockAt = (at: number): number => nowSec() - (t - at);
+const id = (prefix: string): string => `${prefix}_${(serial++).toString(36)}`;
+
+const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState> =>
+  headAt === undefined ? rest : { ...rest, headTime: Math.floor(clockAt(headAt)) };
+
+seedWorld(onClock(INITIAL_REPO) as RepoState);
+
+function lines(entry: Entry, at: number): object[] {
+  const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
+  const usage = (output: number) => ({
+    input_tokens: 4,
+    output_tokens: output,
+    cache_creation_input_tokens: 800,
+    cache_read_input_tokens: moment.context,
+  });
+  const assistant = (content: object[], output: number) => ({
+    ...base,
+    type: "assistant",
+    requestId: id("req"),
+    message: { id: id("msg"), model: "claude-opus-4-8", role: "assistant", type: "message", content, usage: usage(output) },
+  });
+  switch (entry.kind) {
+    case "user":
+      return [{ ...base, type: "user", message: { role: "user", content: entry.text } }];
+    case "command":
+      return [{ ...base, type: "user", message: { role: "user",
+        content: `<command-name>${entry.name}</command-name>\n<command-message>${entry.name.slice(1)}</command-message>\n<command-args></command-args>` } }];
+    case "tools":
+      return [assistant(entry.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.input ?? {} })), entry.output ?? 100)];
+    case "results":
+      return [{ ...base, type: "user", message: { role: "user",
+        content: entry.ids.map((tool_use_id) => ({ type: "tool_result", tool_use_id, content: "ok" })) } }];
+    case "reply":
+      return [assistant([{ type: "text", text: entry.text }], entry.output ?? 200)];
+  }
+}
+
+function happen(step: Step): void {
+  moment = { ...moment, ...step.hook };
+  if (step.repo) updateRepo(onClock(step.repo));
+  appendTranscript(transcript, (step.transcript ?? []).flatMap((e) => lines(e, step.at)));
+}
+
+/** Put the session at `seconds` into the scenario: everything before it has happened. */
+function startAt(seconds: number): void {
+  endedAt = null;
+  transcript = newTranscript(sessionId);
+  moment = INITIAL_MOMENT;
+  applied = 0;
+  t = seconds;
+  updateRepo(onClock(INITIAL_REPO));
+  while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
+}
+
+function hookData(): ClaudeHookData {
+  const now = Math.floor(nowSec());
+  const used = Math.round((moment.context / CONTEXT_WINDOW) * 100);
+  return {
+    hook_event_name: "Status",
+    session_id: sessionId,
+    transcript_path: transcript,
+    cwd: REPO,
+    version: "2.1.0",
+    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
+    workspace: { current_dir: REPO, project_dir: REPO, added_dirs: [] },
+    cost: {
+      total_cost_usd: moment.costUsd,
+      total_duration_ms: t * 1000,
+      total_api_duration_ms: t * 600,
+      total_lines_added: moment.linesAdded,
+      total_lines_removed: moment.linesRemoved,
+    },
+    context_window: {
+      total_input_tokens: moment.context,
+      total_output_tokens: 4000,
+      context_window_size: CONTEXT_WINDOW,
+      used_percentage: used,
+      remaining_percentage: 100 - used,
+      current_usage: { input_tokens: 2000, output_tokens: 400, cache_creation_input_tokens: 4000, cache_read_input_tokens: moment.context - 6000 },
+    },
+    rate_limits: {
+      five_hour: { used_percentage: moment.fiveHour, resets_at: now + 2 * 3600 + 17 * 60 },
+      seven_day: { used_percentage: moment.sevenDay, resets_at: now + 4 * 86400 },
+    },
+  };
+}
+
+async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
+  const { resp } = await handleRequest(request);
+  if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
+  return "output" in resp ? resp.output : "";
+}
+
+async function render(size: Size) {
+  const ansi = await daemon({
+    v: PROTOCOL_VERSION,
+    kind: "render",
+    hookData: hookData(),
+    args: ["cc-candybar"],
+    cwd: REPO,
+    termCols: size.width,
+    termRows: size.rows,
+    ssh: false,
+    claudeConfigDir: CLAUDE_DIR,
+  });
+  return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
+}
+
+// The page's clipboard. The write starts before anything is awaited: a browser
+// copies only while the click's own gesture is live. [LAW:no-silent-failure] A
+// copy the browser refuses says so, with the text it would have copied.
+function copy(text: string): Promise<string | null> {
+  let writing: Promise<void>;
+  try {
+    writing = navigator.clipboard.writeText(text);
+  } catch (e) {
+    writing = Promise.reject(e);
+  }
+  return writing.then(
+    () => null,
+    (e: unknown) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
+  );
+}
+
+// A click carrying a verb that acts on the machine (HOST_VERBS) is never sent
+// to the daemon, as on any bar driven outside a real session. A click that only
+// copies is the page's own to do: its clipboard.
+async function click(url: string, size: Size) {
+  const effects = effectsOf(url);
+  const host = effects.filter((e) => HOST_VERBS.has(e.verb));
+  if (host.length > 0) {
+    const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
+    const refused = copiesOnly
+      ? await copy(effects.map((e) => e.args.join("/")).join("\n"))
+      : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...(await render(size)), refused };
+  }
+  const { verb, value } = parseHandlerUrl(url);
+  let refused: string | null = null;
+  try {
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+  } catch (e) {
+    refused = e instanceof Error ? e.message : String(e);
+  }
+  return { ...(await render(size)), refused };
+}
+
+// ── The player ──
+type Listener = (state: { index: number; playing: boolean; progress: number }) => void;
+const listeners: Listener[] = [];
+const notify = (): void => {
+  const state = { index: Math.max(0, applied - 1), playing, progress: Math.min(1, t / DURATION) };
+  for (const l of listeners) l(state);
+};
+
+let lastNotified = 0;
+// The scenario moves by the time that actually passed (a background tab's timers
+// are throttled), at the chosen speed; paused, it does not move.
+let lastTick = Date.now();
+// Playing, the scenario advances; at the end it holds the last frame, then goes round again.
+// Returns whether a step happened.
+function advance(elapsed: number): boolean {
+  if (t >= DURATION) {
+    endedAt ??= Date.now();
+    if (Date.now() - endedAt < PAUSE_AT_END_MS) return false;
+    endedAt = null;
+    startAt(0);
+    return true;
+  }
+  t = Math.min(DURATION, t + elapsed * speed);
+  const before = applied;
+  while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
+  return applied !== before;
+}
+
+setInterval(() => {
+  const elapsed = (Date.now() - lastTick) / 1000;
+  lastTick = Date.now();
+  const stepped = playing && advance(elapsed);
+  // A step is drawn at once. Between steps, and while paused, the bar still moves (its clocks,
+  // and what the daemon's watchers see a moment after a step or a seek), so redraw each second.
+  if (stepped || Date.now() - lastNotified > 1000) {
+    lastNotified = Date.now();
+    notify();
+  }
+}, TICK_MS);
+
+startAt(0);
+
+export const transport = {
+  about:
+    'This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>\'s own daemon, compiled for the browser and running in this page against a simulated machine. ' +
+    "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
+  render,
+  click,
+  // A new session over the bundled config: what the visitor's clicks wrote is
+  // undone, and the daemon re-reads the config now, as a save's click does after it writes.
+  restart: async (size: Size) => {
+    forgetWrites();
+    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    sessionId = crypto.randomUUID();
+    startAt(t);
+    notify();
+    return render(size);
+  },
+  scenario: {
+    steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
+    subscribe: (l: Listener) => {
+      listeners.push(l);
+      notify();
+    },
+    playing: () => playing,
+    play: () => {
+      playing = true;
+      notify();
+    },
+    pause: () => {
+      playing = false;
+      notify();
+    },
+    replay: () => {
+      startAt(0);
+      playing = true;
+      notify();
+    },
+    seek: (fraction: number) => {
+      startAt(fraction * DURATION);
+      notify();
+    },
+    setSpeed: (n: number) => {
+      speed = n;
+    },
+  },
+};

@@ -133,6 +133,14 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(
       effectsOf(`cc-candybar://${VERB_DOCTOR_FIX}/s1/tmuxTruecolor`),
     ).toEqual([{ verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] }]);
+    // The preset verbs segment like set-state (their handlers split), and
+    // load-config splits once, since its path has slashes of its own.
+    expect(effectsOf("cc-candybar://delete-preset/s1/custom-1")).toEqual([
+      { verb: "delete-preset", args: ["s1", "custom-1"] },
+    ]);
+    expect(effectsOf("cc-candybar://load-config/s1/%2Fhome%2Fa%2Fb.json5")).toEqual([
+      { verb: "load-config", args: ["s1", "/home/a/b.json5"] },
+    ]);
   });
 });
 

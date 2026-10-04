@@ -820,7 +820,7 @@ const stay = (resp: Response): HandledRequest => ({
   exitAfterFlush: null,
 });
 
-async function handleRequest(req: Request): Promise<HandledRequest> {
+export async function handleRequest(req: Request): Promise<HandledRequest> {
   if (
     !req ||
     typeof req !== "object" ||
@@ -1289,6 +1289,13 @@ const verbCtx = {
       origin.configFile ?? undefined,
     ),
 };
+
+/**
+ * Re-read the config a render origin resolves to, now: what a durable click
+ * does after it writes. The page in site/, which runs this daemon in a browser,
+ * calls it after it resets its simulated machine's config file.
+ */
+export const reloadConfig = verbCtx.reloadConfig;
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`

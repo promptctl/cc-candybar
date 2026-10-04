@@ -6,22 +6,6 @@
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
-  parseEffects,
-  decodeSegments,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_DISPATCH,
-  VERB_REDO,
-  VERB_RESET_CONFIG,
-  VERB_SET_CONFIG,
-  VERB_SET_STATE,
-  VERB_STEP_CONFIG,
-  VERB_STEP_STATE,
-  VERB_UNDO,
-  VERB_DOCTOR_FIX,
-  VERB_CEILING,
-  VERB_SLASH,
-} from "../../src/click/wire";
-import {
   VERBS,
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,
@@ -102,46 +86,7 @@ export function testVerbContext(
   };
 }
 
-export interface DecodedEffect {
-  readonly verb: string;
-  readonly args: string[];
-}
-
-// [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
-// handler does, so the helper cannot mask a back-compat decode regression:
-// set-state/step-state and their config-file twins set-config/step-config/
-// reset-config are the multi-argument verbs (slash-segmented); every other verb
-// takes ONE argument — the whole value decoded once — so a direct `copy/a/b`
-// reports one arg "a/b" (exactly what the copy handler copies), not two.
-const MULTI_ARG_VERBS = new Set<string>([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_DOCTOR_FIX,
-  VERB_CEILING,
-  VERB_SLASH,
-]);
-function decodeArgs(verb: string, value: string): string[] {
-  return MULTI_ARG_VERBS.has(verb)
-    ? decodeSegments(value)
-    : [decodeURIComponent(value)];
-}
-
-// Decode a rendered click URL into its ordered effect list (verb + decoded
-// args). A direct (non-dispatch) URL is the degenerate one-effect case.
-export function effectsOf(url: string): DecodedEffect[] {
-  const { verb, value } = parseHandlerUrl(url);
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
-  return parseEffects(value).map((e) => ({
-    verb: e.verb,
-    args: decodeArgs(e.verb, e.value),
-  }));
-}
+export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
 export { boldUrls } from "./ansi";
 

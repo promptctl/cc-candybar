@@ -12,6 +12,8 @@
 
 </div>
 
+**[Try the live bar in your browser →](https://promptctl.github.io/cc-candybar/)** The real daemon, compiled for the page, replays a few turns of a Claude Code session; every click in the bar is real.
+
 ## What it is
 
 CCCandybar is a statusline renderer for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). It shows session cost, context usage, git status, model info, rate-limit utilization, and more, configured through a JSON5 DSL with hot-reloading.
@@ -145,6 +147,8 @@ Run the install once to stage the runtime, then point `~/.claude/settings.json` 
 ### Developing against a checkout
 
 `just deploy` builds `dist/index.mjs` and stages the native binary at `bin/cc-candybar-native` — point your statusline command at that path. On a machine without cargo, `pnpm install && pnpm build` builds only the bundle — point your statusline at the committed `bin/cc-candybar` node entry instead. Either way the bar renders HEAD; the daemon watches the built bundle and respawns itself on rebuild.
+
+`pnpm bar:web` serves the bar at http://127.0.0.1:7317/ in a browser terminal you can click: an isolated daemon (`--config my.json5` starts it from a copy of your config, `--ssh` shows the host segment). `pnpm site:build` builds the GitHub Pages version into `site/dist`, the same page with the daemon running inside it against a simulated machine (`site/`).
 
 ### Config file
 

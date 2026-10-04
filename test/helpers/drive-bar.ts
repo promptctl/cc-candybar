@@ -21,9 +21,10 @@
 // not a failure of the harness: the refusal is returned beside the next render,
 // which shows it in the red strip exactly as a user would see it. A slash
 // command is refused by the daemon itself, since this session records no
-// Claude Code pane. A click whose verb acts on the developer's machine (the
-// clipboard, VS Code, a rebuild of this checkout) is never sent: it comes back
-// as not sent, naming its effects, and the bar renders as it was. A click the
+// Claude Code pane. A click whose verb acts on the developer's machine
+// (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
+// checkout) is never sent: it comes back as not sent, naming its effects, and
+// the bar renders as it was. A click the
 // daemon answers TIMEOUT stops the run: it may or may not have landed.
 
 import fs from "node:fs";
@@ -32,33 +33,22 @@ import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import {
-  URL_SCHEME,
-  VERB_APPLY_UPDATE,
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
-} from "../../src/click/wire";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { renderRequest, sendClick } from "./daemon-e2e";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
-import { links, stripAnsi } from "./ansi";
-import { effectsOf } from "./click";
+import {
+  describeLink as describeWith,
+  drawnLinks,
+  effectsOf,
+  HOST_VERBS,
+  isBarLink,
+  stripAnsi,
+  type DrawnLink,
+} from "../../src/click/read";
 
 const SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
 const REPLY_BUDGET_MS = 10_000;
-// The verbs whose handler acts outside the daemon on this machine: pbcopy,
-// `open -a "Visual Studio Code"`, `pnpm build` in the checkout.
-const MACHINE_VERBS: ReadonlySet<string> = new Set([
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
-  VERB_APPLY_UPDATE,
-]);
-
 /** The terminal the client reports: columns, and rows (which cap the diagnostic strip). */
 export interface TerminalSize {
   readonly width: number;
@@ -72,12 +62,6 @@ export interface BarOptions extends TerminalSize {
   readonly cwd: string;
   /** Whether the client reports an ssh session (the host segment shows over ssh). */
   readonly ssh: boolean;
-}
-
-/** One link the bar drew: its visible text and every effect a click on it fires. */
-export interface DrawnLink {
-  readonly text: string;
-  readonly url: string;
 }
 
 /** A click on a URL the last render did not draw: the page is showing an older render. */
@@ -147,27 +131,11 @@ function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
   };
 }
 
-/** Every link `rendered` draws, by visible text. */
-export function drawnLinks(rendered: string): DrawnLink[] {
-  return links(rendered).map((l) => ({
-    text: stripAnsi(l.text).trim(),
-    url: l.url,
-  }));
-}
-
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
+export { drawnLinks, type DrawnLink };
 
 /** The effects a click on `link` fires, `verb arg…` each, `;` between. */
 export function describeLink(link: DrawnLink): string {
-  if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url)
-    .map(({ verb, args }) =>
-      [verb, ...args.map((a) => (a === SESSION_ID ? "<session>" : a))].join(" "),
-    )
-    .join(" ; ");
+  return describeWith(link, SESSION_ID);
 }
 
 export async function startBar(opts: BarOptions): Promise<Bar> {
@@ -245,7 +213,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     if (!isBarLink(hit.url)) {
       throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    if (effectsOf(hit.url).some(({ verb }) => MACHINE_VERBS.has(verb))) {
+    if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
     const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);
