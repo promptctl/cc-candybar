@@ -94,7 +94,7 @@ a new category here — that forces code review of the pattern.
 | Site | Category | Sync/Async | Detached? | Notes |
 |---|---|---|---|---|
 | `src/segments/git.ts` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
-| `src/segments/tmux.ts` (`getSessionId`) | `tmux` | async | no | `tmux display-message -p '#S'`. Skipped when `TMUX_PANE` is unset. 1000ms timeout. |
+| `src/segments/tmux.ts` (`getSessionName`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. At most once per pane per 30 s. 2000ms timeout. |
 | `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
 | `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
 | `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
@@ -187,7 +187,7 @@ Same as above; daemon serves from `GitDataProvider`'s cached snapshot. Still 1 p
 
   That's **up to ~8 `git` subprocesses** for a fully-decorated cold render of one repo. **All have a 2000ms timeout**, but the daemon's per-request budget (`REQUEST_TIMEOUT_MS = 200ms`, `src/daemon/server.ts`) is much tighter — see **F4**.
 
-3. If `tmux` segment is enabled and `TMUX_PANE` is set: 1 `tmux display-message` (1s timeout).
+3. If `tmux` segment is enabled and the client reported a tmux pane: 1 `tmux display-message` (2s timeout).
 
 Total cold fan-out, fully-decorated: 1 Rust + ~8 `git` + ~1 `tmux` ≈ **10 processes for one tick**, then warm cache for ~30s (`DEFAULT_TTL_MS`).
 

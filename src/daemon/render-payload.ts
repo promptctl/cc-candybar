@@ -324,7 +324,13 @@ export interface RenderPayload extends ClaudeHookData {
   // input-var fallback chain fills in the default.
 
   readonly git?: GitPayload;
-  readonly tmux?: { readonly session: string };
+  // [LAW:one-source-of-truth] The tmux pane this session's CLIENT reported
+  // (ClientHints.tmux) — the same hint a `slash` click types into, so a
+  // control gated on `tmux.pane` shows exactly where its click has a pane to
+  // reach. Missing when the client reported "not in tmux" or is too old to
+  // say; the detached daemon's own environment is never consulted
+  // (brandon-tmux-tk7). `session` is that pane's session name.
+  readonly tmux?: { readonly pane: string; readonly session?: string };
   // [LAW:types-are-the-program] REQUIRED for the same reason theme/style are:
   // the daemon assembles it every render from sources that cannot be "not
   // requested" (two syscalls and one already-parsed wire hint). The fields
@@ -1159,6 +1165,11 @@ export async function buildRenderPayload(
   // so an ETA, a reset countdown, and a throughput figure all agree on "now".
   const nowMs = (deps.clock ?? (() => new Date()))().getTime();
 
+  // The hint's three states fold to two here: a pane to address, or none
+  // ("not in tmux" and "client too old to say" both leave nothing to ask tmux
+  // about and nothing a slash click could type into).
+  const tmuxPane = hints.tmux ?? null;
+
   // [LAW:dataflow-not-control-flow][LAW:one-type-per-behavior] Every provider
   // lane is ONE shape: "needed → call provider (whose contract is to never
   // reject — the catch makes the lane total against bugs, mapping a throw
@@ -1216,7 +1227,16 @@ export async function buildRenderPayload(
     lane("activity", wants("activity"), () =>
       deps.activityProvider.getActivityInfo(hookData.session_id, hookData),
     ),
-    lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
+    // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
+    // a config that reads only the pane (every slash gate) runs nothing here.
+    lane(
+      "tmux",
+      wants("tmux.session"),
+      (): Promise<Outcome<string>> =>
+        tmuxPane === null
+          ? Promise.resolve(ABSENT)
+          : deps.tmuxService.getSessionName(tmuxPane),
+    ),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, so it runs alongside the other providers and stays in the shared
     // in-flight budget rather than blocking the event loop on sync fs.
@@ -1404,7 +1424,12 @@ export async function buildRenderPayload(
     ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
     ...(gitProjection.git !== undefined && { git: gitProjection.git }),
-    ...(tmuxValue !== undefined && { tmux: { session: tmuxValue } }),
+    ...(tmuxPane !== null && {
+      tmux: {
+        pane: tmuxPane.pane,
+        ...(tmuxValue !== undefined && { session: tmuxValue }),
+      },
+    }),
     host: hostProjection.host,
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these

@@ -105,7 +105,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `gitaculous` | the git state, collapsed to `⎇` branch, ahead/behind and `S`/`U`/`?`/`!` flags; the `▸` at its right edge expands it to `(git)`, repo, operation, sha, flags, branch, upstream ±, stashes and time since the last commit, and `◂` collapses it again (per session). Each form and piece is overridable ([docs/segment-authoring.md](docs/segment-authoring.md#reshaping-a-bundled-segment-git)) | in a repo |
 | `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
 | `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page (also inside the settings menu) | always |
-| `commands` | type `/compact`, `/model` or `/clear` into this session (inside tmux); `/clear` asks for a second click (also inside the settings menu) | always (not placed by default) |
+| `commands` | type `/compact`, `/model` or `/clear` into this session; `/clear` asks for a second click (also inside the settings menu) | inside tmux (not placed by default) |
 | `themeSwitcher` | `◀ <theme> ▶` — the theme the bar is wearing; ◀/▶ switch this session to the previous/next theme | always (not placed by default) |
 | `session` | `§` this session's cost and tokens, plus budget status | always |
 | `today` | `☉` today's cost and tokens across sessions, plus budget status | always |
@@ -117,7 +117,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `cacheTimer` | `◴` minutes until the prompt cache expires, or `cold` | while a cache expiry is known |
 | `context` | `◔` context tokens used and the percentage left | when context tokens are known |
 | `ceiling` | `⌈` the [memento](https://github.com/promptctl/memento) context ceiling this session hands off at; `−`/`+` move it by 100K, `∞` lifts it, `↺` drops the session's own setting (memento's `ceiling set/clear session`). Placed beside `context` | when memento is installed |
-| `autocompact` | `⇲` Claude Code's auto-compact window — `auto`, or the tokens `/autocompact` last set; `−`/`+` move it by 100K up to the model's context window, `↺` returns it to `auto`. Each click types `/autocompact` into the session (inside tmux only). Placed beside `ceiling` | always |
+| `autocompact` | `⇲` Claude Code's auto-compact window — `auto`, or the tokens `/autocompact` last set; `−`/`+` move it by 100K up to the model's context window, `↺` returns it to `auto`. Each click types `/autocompact` into the session, so the controls show only inside tmux. Placed beside `ceiling` | always |
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 

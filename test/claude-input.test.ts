@@ -338,7 +338,10 @@ describe("a slash click", () => {
 
 // The bundled `commands` segment, placed as the bar's one segment: the same
 // tray the settings menu's `candybar.commands` instances under its prefix.
-function tray(tmux: TmuxHint | null) {
+// `tmux` is the hint the session holds when a click arrives; `drawnIn` is the
+// one its bar was drawn with — the same, unless the click is on a link left
+// behind by an earlier render.
+function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const config = parseAndValidate(
     "<user>",
     "{ root: { h: ['commands'] } }",
@@ -359,9 +362,14 @@ function tray(tmux: TmuxHint | null) {
     ...testVerbContext(sessionState, undefined, config),
     claudeInput: productionClaudeInputEdge(),
   };
+  // What the daemon's payload carries for that hint (RenderPayload.tmux).
+  const payload = {
+    session_id: "s1",
+    ...(drawnIn !== null && { tmux: { pane: drawnIn.pane } }),
+  };
   // The tray's links by what they do, in render order.
   const links = () =>
-    linkUrls(renderDsl(config, compiled, store, registry, { session_id: "s1" }, OPTS)).map(
+    linkUrls(renderDsl(config, compiled, store, registry, payload, OPTS)).map(
       (u) => ({ url: u, effects: effectsOf(u) }),
     );
   return { config, links, ctx, sessionState };
@@ -413,8 +421,17 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
   });
 
-  test("outside tmux the confirm says so in the bar and disarms, typing nothing", () => {
-    const rt = tray(null);
+  test("outside tmux the tray is not drawn", () => {
+    expect(tray(null).links().flatMap((l) => typedLines(l.effects))).toEqual([]);
+    expect(
+      tray(null).links().filter((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed")),
+    ).toEqual([]);
+  });
+
+  // A tray drawn inside tmux whose link is clicked once the session's client
+  // reports no pane: the verb is the gate, whatever a render once drew.
+  test("a confirm clicked after the session left tmux says so in the bar and disarms, typing nothing", () => {
+    const rt = tray(null, HINT);
     const armed = () => rt.links().find((l) => typedLines(l.effects).includes("/clear"));
     clickUrl(
       rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed"))!.url,

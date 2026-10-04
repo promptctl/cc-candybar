@@ -55,7 +55,7 @@ describe("drive-bar", () => {
     bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
     await bar.render();
     await bar.click(DOOR_GLYPH);
-    // No Claude Code pane is recorded for this session, so typing is refused.
+    // No tmux server listens on the socket this session reports, so typing is refused.
     const { refused, rendered } = await bar.click("/compact");
     expect(refused).not.toBeNull();
     expect(stripAnsi(rendered)).toContain("⚠");

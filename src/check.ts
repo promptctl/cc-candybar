@@ -146,7 +146,7 @@ export function checkPayload(
     block: { nativeUtilization: 63, resetsAt: nowSec + 2 * 3600 },
     weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
     cache: { expiresAt: nowSec + 15 * 60 },
-    tmux: { session: "work" },
+    tmux: { pane: "%0", session: "work" },
     // `ssh: true` for the same reason `tmux.session` is populated: this
     // fixture deliberately satisfies every gate so a when-gated segment
     // RENDERS and its template gets checked. A local-looking fixture would

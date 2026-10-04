@@ -149,8 +149,20 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     default: TERM_COLS_FLOOR,
   },
 
+  // The tmux pane this session's Claude Code runs in, as its client reported
+  // it; "" outside tmux (and for a client too old to say). It is the pane a
+  // `slash` click types into, so IN_TMUX below is the gate for one.
+  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
+
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare
   // path remote) — the quick-action tray's link reads that value, not a flag.
   "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" },
 };
+
+// [LAW:one-source-of-truth] The one spelling of "a `slash` click has a pane to
+// type into", as a template expression: every bundled slash control gates on
+// it, so none shows a button whose every click the verb would refuse
+// (brandon-tmux-tk7). A user's own slash button gates the same way:
+// `when: '{{ ne .tmux.pane "" }}'`.
+export const IN_TMUX = 'ne .tmux.pane ""';

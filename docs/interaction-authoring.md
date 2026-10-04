@@ -868,6 +868,7 @@ your own project slash command included — is one `slash` action and one
   segments: {
     myCommands: {
       template: '{{ action "review" "⌕ review" }} {{ action "compactKeepApi" "⊘ compact" }}',
+      when: '{{ ne .tmux.pane "" }}',
     },
   },
   root: "myCommands",
@@ -884,8 +885,12 @@ your own project slash command included — is one `slash` action and one
   `state` key the first click arms, and a `do` over a disarm and the `slash`
   that the armed view shows (the bundled `/clear` and `⟲` (reset all) are built
   this way, `src/config/confirm-step.ts`).
-- **Outside tmux the click types nothing** and says why in the bar, like
-  every refusal in the table above.
+- **Gate the button on `.tmux.pane`.** It is the tmux pane this session's
+  Claude Code runs in — the pane a click types into — and `""` outside tmux,
+  where every click would be refused. The `when` above hides the segment
+  there; the bundled trays and `autocompact`'s controls gate the same way. An
+  ungated button still types nothing outside tmux and says why in the bar,
+  like every refusal in the table above.
 
 ## Edit mode: `+`/`-` chrome for free
 

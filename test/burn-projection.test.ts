@@ -97,7 +97,7 @@ function depsWith(
           linesRemoved: 0,
         }),
     },
-    tmuxService: { getSessionId: async () => ABSENT },
+    tmuxService: { getSessionName: async () => ABSENT },
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,

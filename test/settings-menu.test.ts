@@ -156,6 +156,8 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
 
 const PAYLOAD = {
   session_id: "s1",
+  // A session inside tmux: the session tab's body holds the command tray row.
+  tmux: { pane: "%0" },
   project_dir: "/tmp/proj",
   workspace: { current_dir: "/tmp/proj" },
   model: { display_name: "Opus" },

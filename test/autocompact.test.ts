@@ -69,6 +69,9 @@ function runtime(
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const payload = {
     session_id: "s1",
+    // The session is in a pane (RenderPayload.tmux), so the controls are drawn;
+    // test/slash-gate.test.ts holds what a session outside tmux sees.
+    tmux: { pane: HINT.pane },
     context: { totalTokens: 1, contextLeft: 99 },
     ...(autocompact !== undefined && { autocompact }),
   };
