@@ -4,7 +4,7 @@
 // src/config/edit-chrome.ts) and the config's `globals` (the settings menu,
 // src/config/settings-menu.ts) — and both hand their declaration to this one
 // generator, so a flag is the same toggle, a range the same stepper and a
-// list of names the same carousel wherever a setting is changed from the bar.
+// list of names the same picker wherever a setting is changed from the bar.
 // Where the control is placed stays with each caller; what it IS lives here.
 //
 // [LAW:one-way-deps] It knows actions, option domains and the disclosure
@@ -12,8 +12,19 @@
 // depend down onto it.
 
 import type { ActionDecl } from "./action.js";
-import { escapeTemplateLiteral } from "./disclosure.js";
-import type { SettingDecl, SettingRange } from "./dsl-types.js";
+import {
+  DISCLOSURE_CLOSED,
+  disclosureCycleAction,
+  disclosureStateVar,
+  escapeTemplateLiteral,
+} from "./disclosure.js";
+import { menuActionName, menuPageKey } from "./menu-keys.js";
+import type {
+  DisclosureRef,
+  SettingDecl,
+  SettingRange,
+  VariableDecl,
+} from "./dsl-types.js";
 import { PLACEMENT_THEMES, type OptionDomain } from "./option-domain.js";
 import { BOOLEAN_MEMBERS } from "../themes/policy.js";
 
@@ -33,16 +44,26 @@ export interface ControlDecl {
 }
 
 // [LAW:types-are-the-program] What the generator hands back, discriminated by
-// how much room the control needs: an `inline` control is one cell of its
-// row; a `ring` is a carousel, which fills the row it is given with the
-// neighbours that fit — so a caller gives it a row of its own, and puts the
-// setting's label wherever that caller labels things. Either way it carries
-// the actions its template names, so the two cannot be separated.
-export interface Affordance {
-  readonly kind: "inline" | "ring";
+// whether the control opens anything: an `inline` control is one cell of its
+// row; a `picker` is `◀ name ▶` — the arrows step, the name opens the list of
+// every option (brandon-menu-ia-q30.jl1) — and carries that list: the
+// disclosure it opens on and the template of its row. The caller hangs the
+// list on the control (`disclosureNode`), with any rows of its own beneath it
+// in the same body, so they open, close and lead with one ✕ together. Either
+// way it carries the actions and state variables its templates name, so the
+// two cannot be separated.
+interface AffordanceParts {
   readonly template: string;
   readonly actions: Readonly<Record<string, ActionDecl>>;
+  readonly variables: Readonly<Record<string, VariableDecl>>;
 }
+export interface PickerList {
+  readonly ref: DisclosureRef;
+  readonly template: string;
+}
+export type Affordance =
+  | (AffordanceParts & { readonly kind: "inline" })
+  | (AffordanceParts & { readonly kind: "picker"; readonly list: PickerList });
 
 // A placement setting's declaration as a control: a word list is an inline
 // option domain, and the placement's theme ranges the placement themes.
@@ -60,9 +81,10 @@ function controlDomainOf(domain: SettingDecl["domain"]): ControlDomain {
 }
 
 // The control, and the actions it writes `key` through — named `name` (and
-// `name.down`/`name.up` for a stepper). `readVar`
-// is the variable holding the value the bar renders with, which a stepper
-// shows between its arrows.
+// `name.down`/`name.up` for a stepper). `readVar` is the variable holding the
+// value the bar renders with, which a stepper shows between its arrows (a
+// picker reads its own through its action's key). `listKey` is the accordion a picker's list
+// joins: the lists of one caller's controls share it, so one is open at a time.
 //
 // [LAW:single-enforcer] Nothing here declares a gate: every action is a `set`
 // whose value source is the declared domain, and deriveActionValidators
@@ -73,6 +95,7 @@ export function settingControl(
   key: string,
   readVar: string,
   name: string,
+  listKey: string,
 ): Affordance {
   const label = escapeTemplateLiteral(decl.label);
   const { domain } = decl;
@@ -82,14 +105,11 @@ export function settingControl(
       kind: "inline",
       template: `{{ action "${name}" "☑ ${label}" "☐ ${label}" }}`,
       actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {},
     };
   }
   if ("from" in domain) {
-    return {
-      kind: "ring",
-      template: `{{ carousel "${name}" }}`,
-      actions: { [name]: { set: key, from: domain.from } },
-    };
+    return optionPicker(label, key, name, listKey, domain.from);
   }
   const step = (by: number): ActionDecl => ({
     set: key,
@@ -106,6 +126,50 @@ export function settingControl(
     actions: {
       [`${name}.down`]: step(-domain.step),
       [`${name}.up`]: step(domain.step),
+    },
+    variables: {},
+  };
+}
+
+// [LAW:one-type-per-behavior] A choice among named options, as Brandon drew
+// it: `◀ name ▶`, the arrows applying the previous and next option (the bare
+// carousel, `{{ carousel … 0 }}`), the name opening a plain list of every
+// option — "a regular menu, no carousel" — paged to the width. The list is a
+// row of a disclosure body on `listKey`, so the body's ✕ is its close and the
+// picker draws none of its own. Opening it starts at the first page.
+// [LAW:one-source-of-truth] The toggle and the page cursor are named as a
+// shared-key `{{ menu }}` names its own (menu-keys.ts): the list IS a menu body
+// on an accordion key, so one cursor per key is exact, and the cursor lives in
+// the menu namespace, never under a setting's draft namespace.
+function optionPicker(
+  label: string,
+  key: string,
+  name: string,
+  listKey: string,
+  from: OptionDomain,
+): Affordance {
+  const ref: DisclosureRef = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open = `${name}.open`;
+  const page = menuPageKey(listKey);
+  const firstPage = `${page}.first`;
+  return {
+    kind: "picker",
+    template: `{{ "${label}" }} {{ carousel "${name}" 0 "${open}" }}`,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page]: { set: page, int: true },
+      [firstPage]: { set: page, to: "0" },
+      [open]: { do: [toggle, firstPage] },
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page]: { kind: "state", key: page, default: "0" },
+    },
+    list: {
+      ref,
+      template: `{{ picker "${name}" "${page}" false true true }}`,
     },
   };
 }

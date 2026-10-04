@@ -272,6 +272,9 @@ function forEachStage(
     cwd: "/tmp/proj",
     workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
     model: { id: "claude-opus-4-7", display_name: "Opus" },
+    // The daemon always supplies the preset it resolved; the preset control
+    // names it between its arrows, and that name is what opens its list.
+    preset: { effective: "default" },
   };
   // Open the disclosure `key` names: the click on the bar that writes it a
   // member other than closed — loud when the bar renders none.

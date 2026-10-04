@@ -11,6 +11,8 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 `--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from this branch on top of `main` at `dff9dbb`, which is why the git cell reads `docs/ui-elements-inventory`.
 
+**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The carousel itself is unchanged where it remains: the opt-in `themeSwitcher` segment and an author's own `{{ carousel }}`.
+
 ## At a glance
 
 | Element | What it is for | Where it is used | Authored as |

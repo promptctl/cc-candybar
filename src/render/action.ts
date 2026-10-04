@@ -532,6 +532,45 @@ export function presentedAction(c: CompiledActionDecl): CompiledActionDecl {
   return c.kind === "do" ? presentedAction(c.head) : c;
 }
 
+// [LAW:one-source-of-truth] The compiled twin of `actionBindsTemplateValue`
+// (src/config/action.ts): whether the action a click presents as writes a
+// value the template binds — an option, an int, a segment to insert. A caller
+// that realizes an action with nothing bound refuses these. Total over every
+// kind, so a new arm is a compile error until it answers.
+export function bindsTemplateValue(c: CompiledActionDecl): boolean {
+  const presented = presentedAction(c);
+  switch (presented.kind) {
+    case "set-option":
+    case "set-int":
+    case "persist-option":
+    case "layout-op-option":
+      return true;
+    case "set-literal":
+    case "set-bounded":
+    case "set-cycle":
+    case "copy":
+    case "open":
+    case "persist-literal":
+    case "persist-bounded":
+    case "persist-cycle":
+    case "reset":
+    case "layout-op":
+    case "undo":
+    case "redo":
+    case "back":
+    case "rewind":
+    case "save":
+    case "preset-save":
+    case "preset-delete":
+    case "doctor-run":
+    case "doctor-fix":
+    case "ceiling":
+    case "slash":
+    case "do":
+      return false;
+  }
+}
+
 function parseActionTemplate(
   parse: (src: string) => Template<RichText>,
   src: string,

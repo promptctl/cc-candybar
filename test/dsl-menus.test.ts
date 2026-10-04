@@ -88,31 +88,37 @@ function addressOf(root: CompiledNode, name: string): Address {
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-// brandon-picker-31z's cell: the applied palette's own ground, with its own
-// `primary` as the text, slid in OKLCH lightness by rich-js until it clears AA.
-// Spelled once here, so the render's rule and this file's expectation of it are
-// one line apart rather than repeated per assertion.
-const appliedGround = (applied: Palette): { bg: string; fg: string } => {
-  const ground = paletteRole(applied, "background");
-  return {
-    bg: ground.hex,
-    fg: ensureContrast(paletteRole(applied, "primary"), ground, 4.5).hex,
-  };
-};
+// A colour-valued option (brandon-picker-31z, brandon-menu-ia-q30.jl1): it sits
+// on the ground the list is drawn on — every option the same — with the applied
+// palette's own `primary` as the text, slid in OKLCH lightness by rich-js until
+// it clears AA on that ground. Spelled once here, so the render's rule and this
+// file's expectation of it are one line apart rather than repeated per assertion.
+type Ground = NonNullable<NonNullable<Style["bgcolor"]>["value"]>;
+const appliedText = (
+  applied: Palette,
+  ground: Ground,
+): { bg: string; fg: string } => ({
+  bg: ground.hex,
+  fg: ensureContrast(paletteRole(applied, "primary"), ground, 4.5).hex,
+});
 function expectApplied(
   cell: { bg: string | undefined; fg: string | undefined },
   applied: Palette,
+  ground: Ground,
 ): void {
-  const { bg, fg } = appliedGround(applied);
+  const { bg, fg } = appliedText(applied, ground);
   expect(cell.bg).toBe(bg);
   expect(cell.fg).toBe(fg);
 }
-function expectAppliedCell(style: Style, applied: Palette): void {
+function expectAppliedCell(style: Style, applied: Palette, ground: Ground): void {
   expectApplied(
     { bg: style.bgcolor?.value?.hex, fg: style.color?.value?.hex },
     applied,
+    ground,
   );
 }
+// The ground a rendered line is drawn on: its own background.
+const groundOf = (line: RichText): Ground => definedStyle(line.style).bgcolor!.value!;
 
 function opts() {
   return {
@@ -697,10 +703,11 @@ describe("toggle round trip + drop stacking", () => {
     const trigger = cells[0]!;
     expect(definedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
     expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
-    // The dropped line is the band: its plane. The OPTION cells are not —
-    // `themes` is a colour-valued domain, so brandon-picker-31z paints each
-    // cell in the theme it names, not in the band (the next describe pins that
-    // the band placement is still what a generic domain gets).
+    // The dropped line is the band: its plane. The OPTION cells sit on that
+    // plane too, every one — `themes` is a colour-valued domain, so each option
+    // says what it is in its TEXT, the theme's own primary (brandon-menu-ia-
+    // q30.jl1), rather than on a band item of its own (the next describe pins
+    // that the band placement is still what a generic domain gets).
     const body = cells[1]!;
     expect(definedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
@@ -713,9 +720,9 @@ describe("toggle round trip + drop stacking", () => {
       const name = body.plain.slice(span.start, span.end);
       const style = span.style;
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
-      expectAppliedCell(style, paletteForThemeName(name));
-      // And it is NOT the band item it would have worn before: the address is
-      // out of the decision, which is the whole point of the change.
+      expectAppliedCell(style, paletteForThemeName(name), band.plane);
+      // And it is NOT the band item it would have worn as a generic option:
+      // the address is out of the decision.
       expect(style.bgcolor?.value?.hex).not.toBe(
         bandItemFor(palette, disclosure, [
           {
@@ -1331,8 +1338,9 @@ describe("a menu's `distribution` option places its band", () => {
 
 // brandon-picker-31z: choosing a theme means reading names, and every option cell
 // used to be painted by its address in the band — a fact about the GRID, not
-// about the choice. A colour-valued option domain (`themes`, `styles`) now paints
-// each cell in the palette picking it would put in force. Driven through the real
+// about the choice. A colour-valued option domain (`themes`, `styles`) paints
+// each option's TEXT in the palette picking it would put in force, on the one
+// ground the list is drawn on (brandon-menu-ia-q30.jl1). Driven through the real
 // spine, asserted against the same two constructions the render uses
 // (paletteForThemeName / transposedPalette), never a copy of the blend.
 describe("a picker over a colour-valued domain paints what picking would apply", () => {
@@ -1394,15 +1402,18 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   }`;
   const LKEY = "menus.lookpicker.applyStyle";
 
-  test("every theme option wears that theme's own ground, text chosen by measure", () => {
+  test("every theme option sits on the list's one ground, its text in that theme's primary", () => {
     const { render, sink, clickToggle } = buildRuntime(BOTH_PICKERS_SRC);
     render();
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const cells = optionCells(sink, "themepicker", [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
-    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name));
-    // The point of the exercise: the grid actually distinguishes its options.
+    const ground = groundOf(sink.get("themepicker")![1]!);
+    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name), ground);
+    // The point of the exercise: the grid actually distinguishes its options,
+    // by their text alone — the ground is one.
+    expect(new Set(cells.map((c) => c.bg)).size).toBe(1);
     expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBeGreaterThan(1);
   });
 
@@ -1431,7 +1442,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect([...monotonic.entries()]).toEqual([...uniform.entries()]);
   });
 
-  test("every style option wears the BASE palette under that style, not the bar's already-styled one", () => {
+  test("every style option's text is the BASE palette's primary under that style, not the bar's already-styled one", () => {
     const { render, sink, config, palette, clickToggle } =
       buildRuntime(BOTH_PICKERS_SRC, "s1", "dim");
     render();
@@ -1448,12 +1459,17 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       // the assertion the implementation's own answer. Asking rich-js fresh is
       // what makes the base observable. (It is also why the memo must never be
       // handed an already-transposed palette in the first place.)
-      expectApplied(cell, transposePalette(palette, config.styles[cell.name]!));
+      expectApplied(
+        cell,
+        transposePalette(palette, config.styles[cell.name]!),
+        groundOf(sink.get("lookpicker")![1]!),
+      );
     }
-    // Every style is told apart, ground or no ground: `vivid` scales CHROMA, so
-    // its near-neutral background does not move — the hue in the text is what
-    // distinguishes it, which is why the cell carries one.
-    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBe(names.length);
+    // Every style sits on the one ground and only its text is the style's
+    // own. Text alone cannot always tell two styles apart — under `dim`,
+    // `vivid`'s chroma lift is clipped back to `none`'s primary — which is
+    // the swatch's job (brandon-theme-swatch-8v9r), not this cell's.
+    expect(new Set(cells.map((c) => c.bg)).size).toBe(1);
     // THE PREMISE, asserted rather than assumed: this bar really is wearing a
     // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
@@ -1472,15 +1488,14 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // instead of the base would transpose an already-transposed palette — which
     // both double-pays OKLCH quantization and collides transposedPalette's memo
     // (it keys on the base palette's NAME, which transposition preserves). Under
-    // that bug the identity style `none` would come back wearing dim's ground.
+    // that bug the identity style `none` would come back wearing dim's primary.
     const none = cells.find((c) => c.name === "none")!;
     const dim = cells.find((c) => c.name === "dim")!;
-    expect(none.bg).toBe(paletteRole(palette, "background").hex);
-    expect(none.bg).not.toBe(dim.bg);
+    expect(none.fg).not.toBe(dim.fg);
     expect(none.fg).toBe(
       ensureContrast(
         paletteRole(palette, "primary"),
-        paletteRole(palette, "background"),
+        groundOf(sink.get("lookpicker")![1]!),
         4.5,
       ).hex,
     );
@@ -1511,7 +1526,8 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     render();
     const cells = optionCellsOf(sink.get("grid")![0]!, [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
-    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name));
+    const ground = groundOf(sink.get("grid")![0]!);
+    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name), ground);
   });
 
   test("a picker over a domain that is NOT colour-valued keeps its band placement", () => {

@@ -31,6 +31,12 @@ import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
+import { stripAnsi } from "./helpers/ansi";
+
+// The look tab's theme control naming `theme`: `🎨 ◀ name ▶`, read off the
+// visible text, since each arrow and the name are links of their own.
+const showsTheme = (out: string, theme: string): boolean =>
+  stripAnsi(out).includes(`🎨 ◀ ${theme} ▶`);
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   click,
@@ -100,15 +106,18 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
       const menuOpen = await render(sockPath, SID, projectDir);
 
-      // The config row reveals the theme control's TRIGGER (▸), not the
-      // picker body — {{ menu }} is its own nested disclosure. Click ITS
-      // toggle (a set-state write under the reserved menus.* namespace, whose
-      // member is the apply action's name) before any per-theme option link
-      // exists to click.
+      // The look tab reveals the theme control, `◀ name ▶`, not its list of
+      // options: the name is the list's toggle (a set-state write on the
+      // pickers accordion key, whose member is the apply action's name, with
+      // the list's page reset beside it). Click it before any per-theme option
+      // link exists to click.
       const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
-        effects.length === 1 &&
-        effects[0]!.verb === "set-state" &&
-        effects[0]!.args[2] === "candybar.apply.theme",
+        effects.some(
+          (e) =>
+            e.verb === "set-state" &&
+            e.args[1] === "menus.candybar_pickers" &&
+            e.args[2] === "candybar.apply.theme",
+        ),
       );
       expect(themeMenuToggleUrl).toBeDefined();
       await click(sockPath, themeMenuToggleUrl!);
@@ -152,7 +161,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // proves nothing about what another session renders.
       await click(sockPath, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
-      expect(await render(sockPath, SID, projectDir)).toContain(`🎨 ${sessionTheme}`);
+      expect(showsTheme(await render(sockPath, SID, projectDir), sessionTheme)).toBe(true);
       // Open the other session's menu to the same depth BEFORE asserting it
       // does not show the pick. A closed menu renders no theme name at all, so
       // asserting on a collapsed bar would pass whether or not the pick
@@ -169,8 +178,9 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ]),
       );
       const otherBar = await render(sockPath, OTHER_SID, projectDir);
-      expect(otherBar).toContain("🎨 tokyo-night"); // its own default, shown
-      expect(otherBar).not.toContain(sessionTheme);
+      expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
+      // Not named as current (the ◀ beside it may well write it, as a neighbour).
+      expect(showsTheme(otherBar, sessionTheme)).toBe(false);
       expect(otherBar).not.toContain("💾"); // the draft is this session's alone
 
       // ── The draft is counted, and the file is untouched.
@@ -226,10 +236,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         OTHER_SID,
         projectDir,
-        (out) => out.includes(`🎨 ${targetTheme}`),
+        (out) => showsTheme(out, targetTheme),
         `the persisted theme "${targetTheme}" on a session that never picked one`,
       );
-      expect(afterClicks).toContain(`🎨 ${targetTheme}`);
+      expect(showsTheme(afterClicks, targetTheme)).toBe(true);
 
       // …and the SAVING session shows it too, with nothing left to save: the
       // save reloaded the file and released the picks. Its theme control is
@@ -244,10 +254,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         SID,
         projectDir,
-        (out) => out.includes(`🎨 ${targetTheme}`),
+        (out) => showsTheme(out, targetTheme),
         `the committed theme "${targetTheme}" on the session that committed it`,
       );
-      expect(committing).not.toContain(`🎨 ${sessionTheme}`);
+      expect(showsTheme(committing, sessionTheme)).toBe(false);
       expect(committing).not.toContain("💾");
 
       // [LAW:verifiable-goals] The ticket's acceptance: the hand-authored file
@@ -288,10 +298,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         FRESH_SID,
         projectDir,
-        (out) => out.includes(`🎨 ${targetTheme}`),
+        (out) => showsTheme(out, targetTheme),
         `the persisted theme "${targetTheme}" for a fresh session`,
       );
-      expect(freshOut).toContain(`🎨 ${targetTheme}`);
+      expect(showsTheme(freshOut, targetTheme)).toBe(true);
 
       // The file is STILL exactly the two-span edit after the restart — a
       // restart reads it, never rewrites it.

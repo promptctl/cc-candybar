@@ -64,6 +64,7 @@ import {
   menuActionName,
   menuMember,
   menuPageKey,
+  sharedMenuStateKey,
   menuStateKey,
 } from "./menu-keys.js";
 import {
@@ -350,7 +351,20 @@ function configureParts(
   const member = configureMember(ctx.presetIdent, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${posIdent}`;
-  ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
+  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
+  // it is a template path no other variable owns. Named by position, so the
+  // placement configured there next would find a list left open; entering
+  // configure folds it, and each visit starts with every list closed.
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold],
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member,
+  };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
@@ -366,23 +380,39 @@ function configureParts(
     };
     drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
-    // [LAW:one-type-per-behavior] The settings menu's generator: a ring gets
-    // the setting's label beside it, on the row it fills.
-    const control = settingControl(controlDeclOf(decl), key, variable, segName);
+    // [LAW:one-type-per-behavior] The settings menu's generator; the lists of
+    // one placement's pickers share one accordion.
+    const control = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      listKey,
+    );
     Object.assign(ctx.artifacts.actions, control.actions);
-    ctx.artifacts.segments[segName] = {
-      template:
-        control.kind === "ring"
-          ? `{{ "${escapeTemplateLiteral(decl.label)}" }} ${control.template}`
-          : control.template,
-    };
-    return { kind: "segment", name: segName };
+    Object.assign(ctx.artifacts.variables, control.variables);
+    if (control.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control.template };
+      return { kind: "segment", name: segName };
+    }
+    const listSeg = `${segName}.list`;
+    ctx.artifacts.segments[segName] = { template: control.template };
+    ctx.artifacts.segments[listSeg] = { template: control.list.template };
+    return disclosureNode(
+      segName,
+      control.list.ref,
+      {
+        kind: "container",
+        direction: "vertical",
+        children: [{ kind: "segment", name: listSeg }],
+      },
+      "drop",
+    );
   });
   return {
     term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
     ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row: the theme carousel fills its row with the
-    // neighbours that fit, as the settings menu's own carousels do.
+    // One control per row, its list dropping below it when opened.
     body: { kind: "container", direction: "vertical", children: controls },
     drafts,
   };

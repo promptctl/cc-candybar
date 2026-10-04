@@ -10,7 +10,7 @@
 //   - In arrange mode every placement carries a ⚙: `theme` is a setting each
 //     one has (brandon-settings-menu-6c5), declared or not.
 //   - Configure mode hangs one control per declared setting below that
-//     placement, generated from its domain: a toggle, a word carousel, a stepper.
+//     placement, generated from its domain: a toggle, a word picker, a stepper.
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
@@ -147,7 +147,7 @@ function buildRuntime(
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
   // A link whose click writes `value` to `key` — or, for a stepper
-  // (`step-state`), steps `key` by `value`. A carousel over two words draws
+  // (`step-state`), steps `key` by `value`. A picker over two words writes
   // the other one behind both its arrows, so there may be more than one; they
   // are one click.
   const urlWriting = (out: string, key: string, value: string): string => {
@@ -195,7 +195,11 @@ describe("configure mode: one placement's settings at a time", () => {
     // the label and the live view, so a placement's url shows up once per view
     // it is drawn in — one member per placement is what counts.
     const members = new Set(
-      urls.flatMap((u) => effectsOf(u).map((e) => e.args[2])),
+      urls.flatMap((u) =>
+        effectsOf(u)
+          .filter((e) => e.args[1] === EDIT_CONFIGURE_KEY)
+          .map((e) => e.args[2]),
+      ),
     );
     expect(members).toEqual(
       new Set([
@@ -205,6 +209,41 @@ describe("configure mode: one placement's settings at a time", () => {
       ]),
     );
     expect(stripAnsi(rt.render())).toContain(CONFIGURE_GLYPH);
+  });
+
+  test("a configure visit opens with every list closed, whatever the last one left open", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const enter = (): void =>
+      rt.click(
+        configureUrls(rt.render()).find((u) =>
+          effectsOf(u).some(
+            (e) => e.args[2] === configureMember("default", "vcs"),
+          ),
+        )!,
+      );
+    // The theme picker's options: each a link writing the placement's draft.
+    const themeOptions = (): number =>
+      linkUrls(rt.render()).filter((u) =>
+        effectsOf(u).some((e) => e.args[1] === draftKey("vcs", "theme")),
+      ).length;
+    enter();
+    const closed = themeOptions();
+    // The control's name opens its list: the one link that writes a menu key
+    // and the list's first page together.
+    const opener = linkUrls(rt.render()).find((u) => {
+      const keys = effectsOf(u).flatMap((e) => e.args.slice(1));
+      return (
+        keys.some((k) => k.endsWith(".page")) &&
+        keys.some((k) => /\.setting\.\w+\.theme$/.test(k))
+      );
+    });
+    rt.click(opener!);
+    expect(themeOptions()).toBeGreaterThan(closed);
+    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    enter();
+    expect(themeOptions()).toBe(closed);
   });
 
   test("configuring keeps arrange's chrome, shows the live bar, and hangs only that placement's controls", () => {
@@ -253,7 +292,7 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    // The flag toggles, the word carousel picks, the stepper steps and wraps.
+    // The flag toggles, the word picker's arrow picks, the stepper steps and wraps.
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"));
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "1"));

@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { stripAnsi } from "./helpers/ansi";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -315,8 +316,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "one other resolvable theme to exercise a theme-switching click",
         );
       }
+      // The theme control names the current theme as `🎨 ◀ name ▶`; its
+      // arrows are links writing the neighbours, so the name is read off the
+      // visible text, as the current value.
+      const names = (out: string, label: string, value: string): boolean =>
+        stripAnsi(out).includes(`${label} ◀ ${value} ▶`);
       const before = render();
-      expect(before).not.toContain(targetTheme);
+      expect(names(before, "🎨", targetTheme)).toBe(false);
 
       clickUrl(
         effectsUrl([
@@ -325,7 +331,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterTheme = render();
-      expect(afterTheme).toContain(targetTheme);
+      expect(names(afterTheme, "🎨", targetTheme)).toBe(true);
       expect(afterTheme).not.toBe(before);
 
       const targetStyle = Object.keys(parsed.styles).find(
@@ -342,7 +348,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterStyle = render();
-      expect(afterStyle).toContain(targetStyle);
+      expect(names(afterStyle, "◐", targetStyle)).toBe(true);
       expect(afterStyle).not.toBe(afterTheme);
     } finally {
       registry.dispose();

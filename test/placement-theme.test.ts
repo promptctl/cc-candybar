@@ -7,9 +7,9 @@
 //   - A placement's theme recolours that placement alone; a pinned one holds
 //     when the bar's theme moves, and `bar` follows it again.
 //   - `segments.<name>.palette` is the default for every copy of the segment.
-//   - Configure mode picks it from a carousel whose options paint in the
-//     palette picking them would put on the placement, and save writes the
-//     pick into the placement.
+//   - Configure mode picks it from a list whose options read in the text
+//     colour of the palette picking them would put on the placement, all on
+//     one ground, and save writes the pick into the placement.
 
 import { configurePlacement } from "./helpers/configure";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -37,7 +37,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -120,6 +120,35 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
   return { config, compiled, sessionState, render, bgOf, click, ctx };
+}
+
+// The colours in force where `text` is first drawn on the line that lists
+// it: the last truecolor foreground and background the SGR before it set.
+function sgrBefore(bytes: string, text: string): { fg?: string; bg?: string } {
+  const plain = withoutLinks(bytes);
+  const at = plain
+    .split("\n")
+    // An option opens with its own SGR, so it follows a space or an escape's
+    // closing `m`, and is followed by a space or the next escape.
+    .map((line) => {
+      const m = new RegExp(`[ m]${text}(?=[ \x1b])`).exec(line);
+      return { line, i: m === null ? -1 : m.index };
+    })
+    .find((l) => l.i >= 0);
+  if (at === undefined) throw new Error(`"${text}" is drawn nowhere`);
+  const out: { fg?: string; bg?: string } = {};
+  for (const m of at.line.slice(0, at.i + 1).matchAll(/\x1b\[([\d;]*)m/g)) {
+    const p = m[1]!.split(";");
+    for (let k = 0; k < p.length; k++) {
+      if (p[k] === "0" || p[k] === "")
+        Object.assign(out, { fg: undefined, bg: undefined });
+      if ((p[k] === "38" || p[k] === "48") && p[k + 1] === "2") {
+        out[p[k] === "38" ? "fg" : "bg"] = p.slice(k + 2, k + 5).join(";");
+        k += 4;
+      }
+    }
+  }
+  return out;
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -227,30 +256,45 @@ describe("load errors", () => {
 });
 
 describe("configure mode picks a placement's theme", () => {
-  test("a carousel pick recolours that placement alone, its options paint in what they apply, and save writes it", () => {
+  test("a pick from the theme list recolours that placement alone, its options read in their own text colour on one ground, and save writes it", () => {
     durable.write(TWO);
     const rt = buildRuntime(TWO);
     configurePlacement(rt.sessionState, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
+    // The control is `theme ◀ value ▶`; its name opens the list of every
+    // theme (brandon-menu-ia-q30.jl1). The open click is the one whose write
+    // names the theme control's own segment as the open member.
+    const open = linkUrls(rt.render(BAR_A)).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] !== key && (e.args[2] ?? "").endsWith(".theme"),
+      ),
+    );
+    expect(open).toBeDefined();
+    rt.click(open!);
     const out = rt.render(BAR_A);
-    // Every cell of the carousel applies the option it names, gated by the
+    // Every option of the list applies the theme it names, gated by the
     // theme domain.
     const writing = (value: string): string[] =>
       linkUrls(out).filter((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
       );
-    const [first] = listResolvablePaletteNames();
+    const [first, second] = listResolvablePaletteNames();
     expect(writing(first!).length).toBeGreaterThan(0);
+    expect(writing(second!).length).toBeGreaterThan(0);
     const gate = stateGate(rt.config);
     expect(gate.validate(key, first!).ok).toBe(true);
     expect(gate.validate(key, FOLLOW_BAR).ok).toBe(true);
     expect(gate.validate(key, "nope").ok).toBe(false);
-    // The option is painted on the ground of the theme it applies.
-    const [r, g, b] = hex(paletteForThemeName(first!), "background")
-      .slice(1)
-      .match(/../g)!
-      .map((h) => parseInt(h, 16));
-    expect(out).toContain(`48;2;${r};${g};${b}`);
+    // Brandon: "Only the foreground should be in the themes colors". Two
+    // themes whose backgrounds differ are listed on ONE ground, and told
+    // apart by their text alone.
+    expect(hex(paletteForThemeName(first!), "background")).not.toBe(
+      hex(paletteForThemeName(second!), "background"),
+    );
+    const [a, b] = [sgrBefore(out, first!), sgrBefore(out, second!)];
+    expect(a.bg).toBeDefined();
+    expect(a.bg).toBe(b.bg);
+    expect(a.fg).not.toBe(b.fg);
 
     const pinnedBefore = rt.bgOf("pinned");
     rt.click(writing(first!)[0]!);

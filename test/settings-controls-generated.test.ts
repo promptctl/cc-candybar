@@ -164,22 +164,43 @@ describe("a global the menu has never seen gets its control from the generator",
     "zoom",
     "zoom",
     "apply.zoom",
+    "zoom.list",
   );
   const { actions } = control;
 
-  test("an enum becomes a carousel over exactly its members", () => {
-    expect(control.kind).toBe("ring");
-    expect(actions).toEqual({
-      "apply.zoom": { set: "zoom", from: ["low", "mid", "high"] },
+  test("an enum becomes a picker over exactly its members", () => {
+    expect(control.kind).toBe("picker");
+    // The setting's own write, from exactly the declared members — beside it
+    // only the list's machinery: its toggle, its page cursor, and the one
+    // click opening it at the first page.
+    expect(actions["apply.zoom"]).toEqual({
+      set: "zoom",
+      from: ["low", "mid", "high"],
     });
+    const writes = Object.values(actions).flatMap((a) =>
+      "set" in a ? [a.set] : [],
+    );
+    expect(new Set(writes)).toEqual(
+      new Set(["zoom", "zoom.list", "zoom.list.page"]),
+    );
   });
 
-  test("the carousel renders its members and its gate admits exactly them", () => {
+  test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", () => {
+    if (control.kind !== "picker") throw new Error("not a picker");
+    // The list is a row of the body the control opens; here it is laid as the
+    // next row, open, so both render.
     const config = load(`{
-      variables: { zoom: { kind: 'state', key: 'zoom', default: 'mid' } },
+      variables: ${JSON.stringify({
+        zoom: { kind: "state", key: "zoom", default: "mid" },
+        ...control.variables,
+        "zoom.list": { kind: "state", key: "zoom.list", default: "apply.zoom" },
+      })},
       actions: ${JSON.stringify(actions)},
-      segments: { zoomer: { template: ${JSON.stringify(control.template)} } },
-      root: 'zoomer',
+      segments: {
+        zoomer: { template: ${JSON.stringify(control.template)} },
+        zoomlist: { template: ${JSON.stringify(control.list.template)} },
+      },
+      root: { v: ['zoomer', 'zoomlist'] },
     }`);
     const sessionState = new SessionState();
     const store = new VariableStore();
@@ -191,7 +212,21 @@ describe("a global the menu has never seen gets its control from the generator",
     expect(gate.validate("zoom", "high").ok).toBe(true);
     expect(gate.validate("zoom", "max").ok).toBe(false);
     const out = render();
-    expect(stripAnsi(out)).toMatch(/low ◀ mid ▶ high/);
+    const [trigger, list] = stripAnsi(out).split("\n");
+    // No neighbours beside the arrows: the list is where the members are.
+    expect(trigger).toContain("◀ mid ▶");
+    expect(trigger).not.toMatch(/low|high/);
+    expect(list).toMatch(/low mid high/);
+    // The list draws no ✕ of its own: the body it is a row of closes it.
+    expect(list).not.toContain("✕");
+    // The name is the list's toggle: open here, so its click closes it.
+    expect(
+      linkUrls(out).some((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === "zoom.list" && e.args[2] === "closed",
+        ),
+      ),
+    ).toBe(true);
     const high = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
     );

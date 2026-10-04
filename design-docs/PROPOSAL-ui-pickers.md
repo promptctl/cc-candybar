@@ -1,6 +1,12 @@
 # Proposal: pickers replace the carousel
 
-Brandon's proposal, 2026-09-29, recorded as he wrote it. It is not yet approved. The work to inventory the UI elements the bar has today comes first, so this proposal can be aligned with what already exists.
+Brandon's proposal, 2026-09-29, recorded as he wrote it. Read against `design-docs/UI-ELEMENTS.md` on 2026-10-04.
+
+## Decision (2026-10-04, brandon-menu-ia-q30.jl1)
+
+- **General picker: adopted** for every option-valued setting in the settings menu and in configure mode. The control is `label ◀ value ▶`: the arrows apply the previous and next value, and clicking the value opens state 3, a plain list of every choice under the row, paged to the width and closed by one `✕`. State 1 and state 2 are one line: the tab or configure body the control sits in is already the closed state, so a further click to reach the arrows would only add one. The field is named by the setting's label beside the arrows.
+- **"Each theme name has the same colour and background as the rest of the UI": adopted.** In a list, every option shares one background. A theme or style name is written in that theme's colour, which stands in for the swatch until the swatch exists.
+- **Theme picker: next.** The swatch, the two-row demo, `(random)`, swatch-only paging and folding style and variation into it are brandon-theme-swatch-8v9r. The carousel survives only as the `◀ value ▶` stepper and the opt-in `themeSwitcher` segment.
 
 The carousel goes. "I don't like the carousel. it takes too much space and a carousel only works if you can keep it in one spot when items move. Let's transition from it to other types of pickers."
 

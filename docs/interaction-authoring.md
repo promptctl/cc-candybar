@@ -1246,7 +1246,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   holding such a control is marked `•` (`🎨 look •`), open or closed, so
   what differs from the default is findable without opening every tab. The
   controls are generated from the `globals` declarations: a field with a list
-  of values gets a carousel, a boolean a `☑`/`☐` toggle, a bounded number a
+  of values gets a `◀ value ▶` picker, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
   `menuGlyph` are free text and are set in the config file only, as are
@@ -1265,16 +1265,16 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   `cc-candybar doctor` runs the same checks from a shell, with the exit code as
   the verdict.
 
-Preset, theme, style, variation and endcaps each open a **carousel** under their row — `◀`
-and `▶` beside the current value, its neighbours either side as the width
-allows — and every click in it applies, so rotating through themes recolours the
-bar at each step. The theme and style carousels carry `{{ themePreview }}` in the
-row beneath; the preset carousel carries `{{ layoutPreview }}`, the whole
-arrangement drawn small. Every one of these shares one accordion
-key, so opening the style carousel closes the theme carousel: the
+Preset, theme, style, variation and endcaps are each `◀ value ▶`: `◀` and
+`▶` apply the previous and next value, so stepping through themes recolours the
+bar at each step, and clicking the value opens the list of every choice under
+the row, paged to the width. A theme or style in that list is written in its own
+colour on the menu's one background. The theme and style lists carry
+`{{ themePreview }}` in the row beneath; the preset list carries
+`{{ layoutPreview }}`, the whole arrangement drawn small. Every one of these
+shares one accordion key, so opening the style list closes the theme list: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
-drop-down open, so you can try several in a row; the `✕` leading each of its
-rows closes it.
+list open, so you can try several in a row; the `✕` leading it closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `candybar.menu` in your
@@ -1350,11 +1350,12 @@ open.
 
 An option cell is normally coloured by where it sits in the band the menu
 opens. Over a **colour-valued** domain — `themes` and `styles`, the two whose
-members ARE colours — each cell is instead painted in the palette that picking it
-would put in force: the theme's (or style's) own background, with its own
-`primary` as the label. Nothing is authored for this and nothing can turn it off;
-it follows from the domain, so `{{ menu "applyTheme" … }}` shows every theme in
-its own colours while `{{ menu "applyEndcaps" … }}` keeps the band's. A
+members ARE colours — every option sits on the menu's one background and its
+label is written in the `primary` of the palette picking it would put in force,
+lightened or darkened until it reads. Nothing is authored for this and nothing
+can turn it off; it follows from the domain, so `{{ menu "applyTheme" … }}`
+writes every theme in its own colour while `{{ menu "applyEndcaps" … }}` keeps
+the band's. A
 `distribution` option has no effect on a colour-valued picker, since the colour
 is a fact about the option rather than about its position.
 
@@ -1445,8 +1446,8 @@ writes that neighbour. There is no highlight to move and confirm — a rotation
 IS a pick, so the bar recolours on every click and the ring re-centres on what
 you picked. Neighbours are shown in symmetric pairs, dimmed, as many as the row
 has room for; a narrow terminal shows `◀ gruvbox ▶` alone. Options are coloured
-by the one rule a picker uses (a colour-valued domain paints each name in its
-own palette).
+by the one rule a picker uses (a colour-valued domain writes each name in its
+own palette's colour, on the background every option shares).
 
 A second argument caps how many neighbours each side may show:
 `{{ carousel "applyAction" 0 }}` is the bare stepper `◀ gruvbox ▶` at any
@@ -1472,6 +1473,16 @@ writes unsaved, so the two always show the same theme:
  🍫  ✱ Opus 4.8 
  ◀ nord ▶ 
 ```
+
+A third argument names a declared action the centre fires instead of applying
+itself — `{{ carousel "applyAction" 0 "openList" }}` keeps the arrows stepping
+and makes the name a different click, while the name shown is still the
+carousel's own current value. That is how the settings menu draws `◀ value ▶`
+with the value opening the list of every choice. A name that is not a declared
+action is a render error, `carousel "applyAction": centre must name a declared
+action…`, and so is one that writes a value the template binds (an option, an
+int cursor, a segment to insert), since the centre binds none:
+`carousel "applyAction": centre "x" writes a value the template binds…`.
 
 A carousel owns no state of its own — its centre is the action's current value —
 so the call is the whole declaration. It is a picker, not a disclosure: put it

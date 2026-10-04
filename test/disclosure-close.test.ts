@@ -202,10 +202,10 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     expectBodyLedBy([lines[2]!], tabKey);
     expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
-    // A carousel opened inside the tab's body is its own disclosure's body
-    // (brandon-theme-picker-bgw.ef6): each of its rows — the ring and the
-    // preview under it — is led by that disclosure's ✕ alone, never the
-    // tab's or 🍫's.
+    // A picker's list opened inside the tab's body is its own disclosure's
+    // body (brandon-menu-ia-q30.jl1): each of its rows — the list of options
+    // and the preview under it — is led by that disclosure's ✕ alone, never
+    // the tab's or 🍫's, and the list draws no ✕ of its own.
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
@@ -216,7 +216,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }
 
-    // Clicking the tab's row ✕ closes the tab (and the carousel hanging under
+    // Clicking the tab's row ✕ closes the tab (and the list hanging under
     // it) while 🍫 stays open.
     rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
