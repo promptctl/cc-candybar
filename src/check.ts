@@ -159,6 +159,10 @@ export function checkPayload(
     navigation: { back: 1 },
     unsaved: 1,
     resettable: 1,
+    // A resume command and a config file, so the quick-action tray's
+    // value-gated `⎘ resume` and `↗ config` render and get checked.
+    resumeCommand: `cd ${home}/code/cc-candybar && claude --resume test0a1b`,
+    configPath: `${home}/.config/cc-candybar/config.json5`,
   };
 }
 

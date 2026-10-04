@@ -10,6 +10,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
+import { shellWord } from "../shell-word";
 import {
   claudeConfigDir,
   claudeSettingsPath,
@@ -42,17 +43,11 @@ const PLATFORM_PACKAGES: Record<string, string> = {
   "linux-arm64": "@promptctl/cc-candybar-linux-arm64",
 };
 
-function shellEscape(arg: string): string {
-  // Safe characters that don't need quoting in any reasonable shell.
-  if (/^[A-Za-z0-9_./=,:-]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
 function buildStatusLineCommand(
   binPath: string,
   rendererArgs: readonly string[],
 ): string {
-  return [binPath, ...rendererArgs].map(shellEscape).join(" ");
+  return [binPath, ...rendererArgs].map(shellWord).join(" ");
 }
 
 function appBundlePath(): string {
@@ -532,7 +527,7 @@ function updateClaudeSettings(
   // must not silently destroy.
   // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
   // would also claim `<binPath>-backup …` as ours and overwrite it.
-  const managedTokens = [binPath, shellEscape(binPath)];
+  const managedTokens = [binPath, shellWord(binPath)];
   const isOurs =
     typeof existing === "string" &&
     (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||
@@ -560,7 +555,6 @@ function updateClaudeSettings(
 
 // Exports for testing
 export const __test__ = {
-  shellEscape,
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
   updateClaudeSettings,

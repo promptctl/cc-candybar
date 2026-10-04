@@ -3,12 +3,12 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
+import { shellWord } from "../src/shell-word";
 
 const {
   updateClaudeSettings,
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
-  shellEscape,
   stageFile,
   stagedEntryKind,
   resolveRenderEntry,
@@ -52,7 +52,7 @@ function readCommand(settingsPath: string): string | undefined {
 describe("buildStatusLineCommand", () => {
   test("quotes a bin path containing spaces", () => {
     const cmd = buildStatusLineCommand(BIN, []);
-    expect(cmd).toBe(shellEscape(BIN));
+    expect(cmd).toBe(shellWord(BIN));
     expect(cmd).toContain("'");
   });
 

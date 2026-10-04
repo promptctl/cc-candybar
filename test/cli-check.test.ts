@@ -379,6 +379,23 @@ describe("checkConfig — explicit target", () => {
     expect((await checkConfig(p, dir)).kind).toBe("clean");
   });
 
+  // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`
+  // are gated on their values, so check's fixture supplies both and a broken
+  // override of either action is caught rather than hidden behind its gate.
+  it.each([
+    ["copyResume", "{ copy: '{{ .resume_cmd }}' }"],
+    ["openConfig", "{ open: '{{ .config_file }}' }"],
+  ])("catches a broken %s behind its value gate", async (action, decl) => {
+    const p = write(
+      `broken-${action}.json5`,
+      `{
+        actions: { ${action}: ${decl} },
+        root: { h: ['toolbar'] },
+      }`,
+    );
+    expect(expectFatal(await checkConfig(p, dir))).toContain('segment "toolbar"');
+  });
+
   // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
   // check's rich-but-static fixture can never drive true on its own (unlike
   // every OTHER field a segment might gate on, which checkPayload just

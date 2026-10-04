@@ -1114,9 +1114,9 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  */
 export type SettingCounts = Pick<RenderPayload, "unsaved" | "resettable">;
 
-// What the render cache entry knows about the config file the session renders
-// from: the save cell's counts and the file's path, `null` under the bundled
-// default.
+// Facts about the config the session renders with: the save cell's counts
+// (that config against the session's picks) and the config's file path,
+// `null` under the bundled default.
 export type ConfigFileFacts = SettingCounts & {
   readonly configPath: string | null;
 };
@@ -1412,7 +1412,7 @@ export async function buildRenderPayload(
     ...(configPath !== null && { configPath }),
     ...(workspace !== undefined && {
       resumeCommand: resumeCommand(
-        workspace.project_dir,
+        workspace,
         hookData.session_id,
         hints.claudeConfigDir,
       ),
