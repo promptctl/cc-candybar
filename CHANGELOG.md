@@ -1,3 +1,10 @@
+# [1.116.0](https://github.com/promptctl/cc-candybar/compare/v1.115.1...v1.116.0) (2026-10-04)
+
+
+### Features
+
+* **doctor:** the doctor checks that the URL handler works ([#314](https://github.com/promptctl/cc-candybar/issues/314)) ([c057dee](https://github.com/promptctl/cc-candybar/commit/c057deee82c8b43a0684f2b5f987fa84c3d1d70e))
+
 ## [1.115.1](https://github.com/promptctl/cc-candybar/compare/v1.115.0...v1.115.1) (2026-10-04)
 
 
