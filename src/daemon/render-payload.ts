@@ -70,7 +70,7 @@ import type {
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { MementoProvider } from "../segments/memento.js";
-import type { CeilingReading } from "../memento/edge.js";
+import { ceilingScope, type CeilingReading } from "../memento/edge.js";
 import {
   autoCompactControls,
   type AutoCompactControls,
@@ -1183,7 +1183,9 @@ export async function buildRenderPayload(
       wants("session.cost") || wants("session.tokens") || wants("burn"),
       () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
     ),
-    lane("today", wants("today"), () => deps.usageStore.getTodayInfo(hookData)),
+    lane("today", wants("today"), () =>
+      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir),
+    ),
     // autocompact's controls are capped to the model's context window, so
     // the lane runs for either family, as metrics runs for burn.
     lane("context", wants("context") || wants("autocompact"), () =>
@@ -1213,13 +1215,19 @@ export async function buildRenderPayload(
         nowMs,
       ),
     ),
-    // The same session and anchors memento's Stop hook resolves with.
+    // The same session, anchors and environment memento's Stop hook resolves
+    // with — the last two from the client, which runs where that hook does.
     lane("memento", wants("memento"), () =>
-      deps.mementoProvider.getCeiling({
-        sessionId: hookData.session_id,
-        projectDir: hookData.workspace?.project_dir ?? "",
-        cwd: cwd ?? hookData.workspace?.current_dir ?? "",
-      }),
+      deps.mementoProvider.getCeiling(
+        ceilingScope(
+          {
+            sessionId: hookData.session_id,
+            projectDir: hookData.workspace?.project_dir ?? "",
+            cwd: cwd ?? hookData.workspace?.current_dir ?? "",
+          },
+          hints,
+        ),
+      ),
     ),
     // [LAW:single-enforcer] The settings file of THIS session's Claude Code,
     // from the client's `claudeConfigDir` hint — never the daemon's own env,

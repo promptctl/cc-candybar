@@ -115,7 +115,7 @@ import {
   type CeilingAction,
   type SlashAction,
 } from "../../config/action";
-import type { CeilingMove } from "../../memento/edge";
+import { ceilingScope, type CeilingMove } from "../../memento/edge";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
@@ -1100,8 +1100,9 @@ const doctorFix: VerbHandler = (value, ctx) => {
 // `ceiling` actions the session's config declares: the declaration found is
 // the parsed move, so what reaches memento is what the config author wrote,
 // never text a URL made up. The session's recorded render origin supplies the
-// directories memento anchors its project layer on — the ones the bar's
-// reading was taken with.
+// directories memento anchors its project layer on, and its recorded client
+// hints the Claude Code directory and memento environment — the scope the
+// bar's reading was taken with.
 const ceiling: VerbHandler = (value, ctx) => {
   const [sessionId = "", ...args] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -1124,11 +1125,15 @@ const ceiling: VerbHandler = (value, ctx) => {
     action.ceiling === "set"
       ? { kind: "set", to: action.to }
       : { kind: "clear" };
-  ctx.memento.move(
+  const scope = ceilingScope(
     { sessionId: sid, projectDir: origin.projectDir, cwd: origin.cwd },
-    move,
+    sessionHints(ctx, sid),
   );
-  ctx.dlog("info", `ceiling: ${args.join(" ")} (session=${sid})`);
+  ctx.memento.move(scope, move);
+  ctx.dlog(
+    "info",
+    `ceiling: ${args.join(" ")} (session=${sid} claudeConfigDir=${scope.claudeConfigDir})`,
+  );
 };
 
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────

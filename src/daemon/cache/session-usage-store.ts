@@ -299,11 +299,13 @@ export class SessionUsageStore {
   // (session, observed mtime) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
   private readonly flight = new SingleFlight();
-  // [LAW:dataflow-not-control-flow] Per-day memo of the one seed scan. Unlike
-  // SingleFlight this RETAINS the resolved promise for the day, so after the
-  // first seed completes every later read awaits an already-settled promise —
-  // zero rescan. A rejected seed is dropped so the next read retries.
+  // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
+  // per Claude Code directory a session's client has reported (keyed by
+  // seedKey). Unlike SingleFlight this RETAINS the resolved promise, so after a
+  // directory's seed completes every later read awaits an already-settled
+  // promise — zero rescan. A rejected seed is dropped so the next read retries.
   private readonly seeded = new Map<string, Promise<void>>();
+  private seededDay = "";
   // [LAW:one-source-of-truth] The recent tok/s observations per session, a
   // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
   // the records map already owns; the baseline (prior counts + time) is the ring's
@@ -390,16 +392,23 @@ export class SessionUsageStore {
   // [LAW:no-silent-failure] A failed seed or a failed active-session ingest
   // makes the whole projection `failed` — a total silently missing today's
   // main work would be a confident wrong number, worse than a loud gap.
-  async getTodayInfo(hookData?: ClaudeHookData): Promise<Outcome<TodayInfo>> {
+  //
+  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint: its
+  // directory is seeded on first sight, so the sum spans every directory a
+  // session has reported today — the daemon's own env names none of them.
+  async getTodayInfo(
+    hookData: ClaudeHookData | undefined,
+    claudeConfigDir: string | undefined,
+  ): Promise<Outcome<TodayInfo>> {
     const today = dayKey(new Date());
     try {
-      await this.ensureSeeded(today);
+      await this.ensureSeeded(today, claudeConfigDir);
     } catch (error) {
       return failed(
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    // Keep the active session fresh: the seed runs once per day, so after it
+    // Keep the active session fresh: a seed runs once per day, so after it
     // every render's freshness for the active session comes from here (a hit
     // when its transcript is unchanged). Empty sessionId no-ops in ingest.
     const active = await this.ingest(
@@ -618,24 +627,34 @@ export class SessionUsageStore {
     return ok({ files: newFiles, ...mergeFolds(newFiles), mainMtime });
   }
 
-  private ensureSeeded(day: string): Promise<void> {
-    const existing = this.seeded.get(day);
+  private ensureSeeded(
+    day: string,
+    claudeConfigDir: string | undefined,
+  ): Promise<void> {
+    // Drop other days' memos so the map holds only the current day's.
+    if (this.seededDay !== day) {
+      this.seeded.clear();
+      this.seededDay = day;
+    }
+    // "" is the default directory: a reported one is an absolute path.
+    const key = claudeConfigDir ?? "";
+    const existing = this.seeded.get(key);
     if (existing) return existing;
-    // Drop other days' memos so the map holds at most the current day.
-    this.seeded.clear();
-    const promise = this.seed(day);
-    this.seeded.set(day, promise);
+    const promise = this.seed(claudeConfigDir);
+    this.seeded.set(key, promise);
     promise.catch(() => {
-      if (this.seeded.get(day) === promise) this.seeded.delete(day);
+      if (this.seeded.get(key) === promise) this.seeded.delete(key);
     });
     return promise;
   }
 
-  // The one and only whole-tree scan: lazily, once per day, ingest every
-  // session whose transcript was touched recently enough to hold a today entry.
-  private async seed(_day: string): Promise<void> {
+  // The one and only whole-tree scan: lazily, once per day and Claude Code
+  // directory, ingest every session whose transcript was touched recently
+  // enough to hold a today entry.
+  private async seed(claudeConfigDir: string | undefined): Promise<void> {
     const cutoff = seedCutoffMs();
-    const projectPaths = await findProjectPaths(getClaudePaths());
+    const claudePaths = getClaudePaths(claudeConfigDir);
+    const projectPaths = await findProjectPaths(claudePaths);
     const candidates: Array<{
       sessionId: string;
       path: string;
@@ -677,7 +696,10 @@ export class SessionUsageStore {
       }
     });
     this.seeds++;
-    dlog("info", `usageStore seed sessions=${candidates.length}`);
+    dlog(
+      "info",
+      `usageStore seed sessions=${candidates.length} dirs=${claudePaths.join(",")}`,
+    );
   }
 
   // Public for tests; called periodically from the timer.

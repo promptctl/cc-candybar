@@ -20,18 +20,43 @@ import path from "node:path";
 import {
   claudeConfigDir,
   claudeInstalledPluginsPath,
-  detectClaudeConfigDir,
 } from "../claude-settings.js";
+import type { ClientHints } from "../daemon/protocol.js";
+import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint.js";
 import { launch, launchSync, type LaunchResult } from "../proc/launch.js";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
 
 // The session a ceiling belongs to, and the two directories memento's
 // `anchored` reads its project layer from — the same pair its Stop hook sees:
 // `CLAUDE_PROJECT_DIR` from Claude Code, the working directory as fallback.
-export interface CeilingScope {
+export interface CeilingAnchor {
   readonly sessionId: string;
   readonly projectDir: string;
   readonly cwd: string;
+}
+
+// The anchor, plus what only the session's client could say about the Claude
+// Code it runs under: the configuration directory whose plugin registry names
+// that session's memento, and the variables memento resolves its config home
+// from (undefined when the client is too old to report them).
+export interface CeilingScope extends CeilingAnchor {
+  readonly claudeConfigDir: string;
+  readonly env: MementoEnvHint | undefined;
+}
+
+// [LAW:one-source-of-truth] The one crossing from a session's client hints to
+// its scope. The render takes the live frame's hints and a click the session's
+// recorded ones, both through here, so the reading a cell shows and the move
+// its click makes resolve the same memento against the same layers.
+export function ceilingScope(
+  anchor: CeilingAnchor,
+  hints: Pick<ClientHints, "claudeConfigDir" | "mementoEnv">,
+): CeilingScope {
+  return {
+    ...anchor,
+    claudeConfigDir: claudeConfigDir(hints.claudeConfigDir),
+    env: hints.mementoEnv,
+  };
 }
 
 export interface CeilingReading {
@@ -51,9 +76,10 @@ export type CeilingMove =
   | { readonly kind: "clear" };
 
 export interface MementoEdge {
-  // The installed plugin's root directory for a session in `projectDir`;
-  // absent when memento is not installed there, or Claude Code has it disabled.
-  readonly locate: (projectDir: string) => Outcome<string>;
+  // The installed plugin's root directory for the session's project, as its
+  // own Claude Code's registry records it; absent when memento is not
+  // installed there, or Claude Code has it disabled.
+  readonly locate: (scope: CeilingScope) => Outcome<string>;
   readonly read: (
     root: string,
     scope: CeilingScope,
@@ -162,20 +188,30 @@ export function locateIn(file: string, projectDir: string): Outcome<string> {
 }
 
 // [LAW:no-ambient-temporal-coupling] The daemon is detached, so its own env
-// may carry whichever session's CLAUDE_* vars spawned it; both are replaced
-// by the clicked or rendered session's, never inherited. The anchor is spelled
-// here, whole — the project, else the working directory, memento's own
-// `anchored` rule — so no spawn has to stand in the session's directory: a
+// may carry whichever session's variables spawned it; the session's CLAUDE_*
+// pair and the variables memento resolves its config home from are replaced by
+// the clicked or rendered session's, never inherited — a variable the session
+// does not set is dropped, since memento reading the daemon's would put the
+// session's layer in another session's directory. Only a client too old to
+// report them (`scope.env` undefined) leaves the daemon's in place. The anchor
+// is spelled here, whole — the project, else the working directory, memento's
+// own `anchored` rule — so no spawn has to stand in the session's directory: a
 // worktree removed since would fail the spawn itself (`spawn python3 ENOENT`)
 // and blame a python that is fine.
-function mementoEnv(scope: CeilingScope): NodeJS.ProcessEnv {
-  const {
-    CLAUDE_PROJECT_DIR: _project,
-    CLAUDE_CODE_SESSION_ID: _session,
-    ...inherited
-  } = process.env;
+export function mementoEnv(
+  scope: CeilingScope,
+  daemonEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const replaced = new Set<string>([
+    "CLAUDE_PROJECT_DIR",
+    "CLAUDE_CODE_SESSION_ID",
+    ...(scope.env === undefined ? [] : MEMENTO_ENV_VARS),
+  ]);
   return {
-    ...inherited,
+    ...Object.fromEntries(
+      Object.entries(daemonEnv).filter(([name]) => !replaced.has(name)),
+    ),
+    ...scope.env,
     CLAUDE_CODE_SESSION_ID: scope.sessionId,
     CLAUDE_PROJECT_DIR: scope.projectDir || scope.cwd,
   };
@@ -254,14 +290,12 @@ function move(root: string, scope: CeilingScope, m: CeilingMove): void {
 }
 
 export function productionMementoEdge(): MementoEdge {
-  // [LAW:single-enforcer] exception: the daemon's own CLAUDE_CONFIG_DIR, which
-  // answers for whichever session spawned it rather than the session asking;
-  // the per-session `claudeConfigDir` hint is the cure (brandon-claude-config-dir-89x).
-  const registry = claudeInstalledPluginsPath(
-    claudeConfigDir(detectClaudeConfigDir(process.env, process.cwd())),
-  );
   return {
-    locate: (projectDir) => locateIn(registry, projectDir),
+    locate: (scope) =>
+      locateIn(
+        claudeInstalledPluginsPath(scope.claudeConfigDir),
+        scope.projectDir,
+      ),
     read,
     move,
   };

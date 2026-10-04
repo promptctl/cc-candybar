@@ -243,6 +243,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let tmux = detect_tmux();
     let config_env = detect_config_env();
     let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
+    let memento_env = detect_memento_env(std::path::Path::new(&cwd));
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -279,6 +280,10 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     if let Some(dir) = claude_config_dir {
         request["claudeConfigDir"] = serde_json::Value::from(dir);
     }
+    // mementoEnv is UNCONDITIONAL like tmux: always an object, a variable the
+    // environment does not set left out of it — absence stays "client too old
+    // to report".
+    request["mementoEnv"] = memento_env;
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
@@ -520,6 +525,38 @@ fn claude_config_dir_hint(raw: Option<String>, cwd: &std::path::Path) -> Option<
         return None;
     }
     Some(cwd.join(first).to_string_lossy().into_owned())
+}
+
+// The variables that move where the memento plugin keeps its ceiling layers —
+// mirrors MEMENTO_ENV_VARS in src/memento-hint.ts, diffed by
+// scripts/check-protocol.mjs. The daemon hands them to memento's reader and
+// `ceiling` command in place of its own, which answer for whichever session
+// spawned it. They cross raw, by name: memento owns the rule that folds them
+// into its config home.
+const MEMENTO_ENV_VARS: [&str; 2] = ["MEMENTO_CONFIG_HOME", "XDG_CONFIG_HOME"];
+
+fn detect_memento_env(cwd: &std::path::Path) -> serde_json::Value {
+    memento_env_hint(|name| env::var(name).ok(), cwd)
+}
+
+// [LAW:dataflow-not-control-flow] Total by construction, like tmux_hint: always
+// an object, an unset-or-empty variable left out of it (memento reads both the
+// same way). A relative value is made absolute against this client's cwd —
+// detectMementoEnv's rule. Pure over the lookup so the table in
+// test/memento-hint.test.ts can be run against it.
+fn memento_env_hint(
+    raw: impl Fn(&str) -> Option<String>,
+    cwd: &std::path::Path,
+) -> serde_json::Value {
+    MEMENTO_ENV_VARS
+        .iter()
+        .filter_map(|name| {
+            let value = raw(name).filter(|v| !v.is_empty())?;
+            let absolute = cwd.join(value).to_string_lossy().into_owned();
+            Some((name.to_string(), serde_json::Value::from(absolute)))
+        })
+        .collect::<serde_json::Map<String, serde_json::Value>>()
+        .into()
 }
 
 fn detect_tmux() -> serde_json::Value {
@@ -1069,6 +1106,32 @@ mod tests {
         assert_eq!(hint(Some("/home/u/.claude-work")), Some("/home/u/.claude-work".into()));
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
         assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
+    }
+
+    // The same table as test/memento-hint.test.ts.
+    #[test]
+    fn memento_env_hint_reports_exactly_what_the_ts_client_reports() {
+        let cwd = std::path::Path::new("/work/proj");
+        let hint = |home: Option<&str>, xdg: Option<&str>| {
+            memento_env_hint(
+                |name| match name {
+                    "MEMENTO_CONFIG_HOME" => home.map(String::from),
+                    "XDG_CONFIG_HOME" => xdg.map(String::from),
+                    _ => None,
+                },
+                cwd,
+            )
+        };
+        assert_eq!(hint(None, None), serde_json::json!({}));
+        assert_eq!(hint(Some(""), Some("")), serde_json::json!({}));
+        assert_eq!(
+            hint(Some("/m"), None),
+            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/m" })
+        );
+        assert_eq!(
+            hint(Some("/m"), Some("cfg")),
+            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/m", "XDG_CONFIG_HOME": "/work/proj/cfg" })
+        );
     }
 
     #[test]

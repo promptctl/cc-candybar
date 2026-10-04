@@ -90,33 +90,19 @@ export interface ClaudeHookData {
   };
 }
 
-export function getClaudePaths(): string[] {
-  const paths: string[] = [];
-
-  const envPath = process.env.CLAUDE_CONFIG_DIR;
-  if (envPath) {
-    envPath.split(",").forEach((path) => {
-      const trimmedPath = path.trim();
-      if (existsSync(trimmedPath)) {
-        paths.push(trimmedPath);
-      }
-    });
-  }
-
-  if (paths.length === 0) {
-    const homeDir = homedir();
-    const configPath = join(homeDir, ".config", "claude");
-    const claudePath = join(homeDir, ".claude");
-
-    if (existsSync(configPath)) {
-      paths.push(configPath);
-    }
-    if (existsSync(claudePath)) {
-      paths.push(claudePath);
-    }
-  }
-
-  return paths;
+// The directories a session's Claude Code keeps its transcripts under:
+// the one its client detected (the `claudeConfigDir` hint), else the two
+// default locations that exist.
+//
+// [LAW:single-enforcer] The directory is the client's to report
+// (detectClaudeConfigDir, src/claude-settings.ts): this runs in the detached
+// daemon, whose own CLAUDE_CONFIG_DIR answers for whichever session spawned it.
+export function getClaudePaths(detected: string | undefined): string[] {
+  if (detected !== undefined) return [detected];
+  const homeDir = homedir();
+  return [join(homeDir, ".config", "claude"), join(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir),
+  );
 }
 
 export async function findProjectPaths(
@@ -640,6 +626,7 @@ async function collectProjectFiles(
 
 /**
  * Loads entries from Claude projects with deterministic deduplication.
+ * @param claudePaths The Claude Code directories to search (getClaudePaths)
  * @param timeFilter Optional filter to apply based on timestamp
  * @param fileFilter Optional filter to apply based on file path and modification time
  * @param sortFiles Whether to sort files by modification time
@@ -649,11 +636,11 @@ async function collectProjectFiles(
  *       where different duplicates are kept on each run, leading to flickering values.
  */
 export async function loadEntriesFromProjects(
+  claudePaths: string[],
   timeFilter?: (entry: ParsedEntry) => boolean,
   fileFilter?: (filePath: string, modTime: Date) => boolean,
   sortFiles = false,
 ): Promise<ParsedEntry[]> {
-  const claudePaths = getClaudePaths();
   const projectPaths = await findProjectPaths(claudePaths);
   const processedHashes = new Set<string>();
 

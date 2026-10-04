@@ -15,8 +15,8 @@ export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 // Code spawns it with Claude Code's exact environment and working directory,
 // while the daemon is detached and one-per-user, its env and cwd answering for
 // whichever session spawned it. So the client resolves the directory — the
-// variable's first entry (the transcript search in src/utils/claude.ts reads
-// the same list), made absolute against the client's own cwd — and reports it
+// variable's first entry, made absolute against the client's own cwd — and
+// reports it
 // as the `claudeConfigDir` hint, exactly the move `configEnv` made
 // (brandon-config-5g8). Mirrored by the Rust client
 // (detect_claude_config_dir). Total over the environment: unset or empty is

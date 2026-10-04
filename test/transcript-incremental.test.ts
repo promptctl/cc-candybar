@@ -327,11 +327,9 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     // Regression guard: the old path mutated costUSD to the priced value before
     // bucketing, so an un-costed entry contributed its priced cost to `today`.
     // foldFile must do the same — session and day cost agree for such entries.
-    // Isolate the seed to an empty CLAUDE_CONFIG_DIR so `today` folds only the
-    // active session.
-    const savedConfig = process.env.CLAUDE_CONFIG_DIR;
+    // Isolate the seed to an empty Claude Code directory so `today` folds only
+    // the active session.
     const cfgRoot = mkdtempSync(join(tmpdir(), "cc-candybar-inc-cfg-"));
-    process.env.CLAUDE_CONFIG_DIR = cfgRoot;
     try {
       const t = join(dir, "P.jsonl");
       // No costUSD → priced by the unknown-model fallback (input $3/M, output
@@ -352,7 +350,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const store = new SessionUsageStore({ sweepIntervalMs: 0 });
       try {
         const usage = await store.getUsageInfo("P", hook("P", t));
-        const today = await store.getTodayInfo(hook("P", t));
+        const today = await store.getTodayInfo(hook("P", t), cfgRoot);
         if (usage.kind !== "ok" || today.kind !== "ok")
           throw new Error("expected ok");
         expect(usage.value.session.cost).toBeCloseTo(18, 5);
@@ -363,8 +361,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         store.close();
       }
     } finally {
-      if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-      else process.env.CLAUDE_CONFIG_DIR = savedConfig;
       rmSync(cfgRoot, { recursive: true, force: true });
     }
   });
