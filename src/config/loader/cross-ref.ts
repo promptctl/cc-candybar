@@ -1077,6 +1077,16 @@ function checkSettingWrites(
   const key = a.set;
   const domain = settingControlDomain(SETTINGS[setting].configKey);
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
+  // A stepper writes every integer between its ends, which only a range
+  // domain holds by construction; its ends stand for it there and nowhere else.
+  if ("min" in a && (domain === "bool" || "from" in domain)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"]),
+    });
+    return;
+  }
   const writes = setWrites(a, optionDomains);
   if (writes === ANY_INTEGER) {
     ctx.issues.push({
@@ -1143,8 +1153,8 @@ const ANY_INTEGER = Symbol("any integer");
 
 // [LAW:types-are-the-program] Every value a `set` can write, as known at load,
 // each with the field that states it: a literal its one value, a cycle its
-// members, an option domain its members, a stepper its two ends (a range
-// holds every integer between them).
+// members, an option domain its members, a stepper its two ends (checked only
+// against a range domain, which holds every integer between them).
 function setWrites(
   a: SetAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,

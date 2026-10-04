@@ -32,6 +32,8 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     // A stepper's bad end is reported at the end that states it.
     ["{ set: 'padding', min: 0, max: 20, by: 1 }", /actions\.pick\.max: "20"/],
     ["{ set: 'padding', min: -1, max: 16, by: 1 }", /actions\.pick\.min: "-1"/],
+    // A stepper over a domain of names is refused even when its ends are names.
+    ["{ set: 'autoWrap', min: 0, max: 1, by: 1 }", /actions\.pick: a stepper writes the integers from 0 to 1, and autoWrap is not an integer range/],
     // An int cursor writes any integer the template binds.
     ["{ set: 'padding', int: true }", /actions\.pick\.int: .*padding takes an integer from 0 to 16/],
     ["{ set: 'theme', int: true }", /actions\.pick\.int: /],
