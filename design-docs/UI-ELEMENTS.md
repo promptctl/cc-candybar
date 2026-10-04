@@ -360,7 +360,7 @@ Clicking `🍫` opens the menu above the bar. The door rises with it as `✖`, i
 ```
  ✖  ◁  ▦ default ▸ ↺
     ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
- ✕  ⎘ id ↗ proj ↗ log ↗ repo
+ ✕  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
     /compact /model /clear
  ⇄ bmf@mmu  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
  ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
@@ -429,15 +429,17 @@ One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab
 **`⚡ session`**, the default:
 
 ```
- ✕  ⎘ id ↗ proj ↗ log ↗ repo
+ ✕  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
     /compact /model /clear
 ```
 
 | Region | Click |
 |---|---|
 | `⎘ id` | copies the session id |
+| `⎘ resume` | copies the shell command that resumes this session (`cd <project> && claude --resume <id>`, with `CLAUDE_CONFIG_DIR` when the session runs under one and `--add-dir <dir>` for each directory the session added) |
 | `↗ proj` / `↗ log` | opens the project directory / the transcript in VS Code |
 | `↗ repo` | web link to the repository (shown when there is one) |
+| `↗ config` | opens the config file the bar renders from in VS Code (shown when there is one) |
 | `/compact` / `/model` | types the command into this session's Claude Code pane |
 | `/clear` | [confirm step](#confirm-step), then types `/clear` |
 
@@ -622,7 +624,7 @@ At 80 columns the expanded form moves to its own row. Which facts each form show
 **Opt-in segments.** These are in no bundled row; a config places them. Placed in one row, which wraps at 80 columns:
 
 ```
- ◀ tokyo-night ▶  ⎘ id ↗ proj ↗ log ↗ repo  /compact /model /clear
+ ◀ tokyo-night ▶  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config  /compact /model /clear
  ◔ ▰▰▰▰▰▰▰▰▱▱  ↕ asc ▸   ⧖ 6.8m ⧗ 16m + 512 - 88   ⚠ PR
 ```
 
@@ -631,7 +633,7 @@ At 80 columns the expanded form moves to its own row. Which facts each form show
 | Segment | Looks | Click |
 |---|---|---|
 | `themeSwitcher` | `◀ tokyo-night ▶` | each arrow applies the previous / next theme (session `theme`) |
-| `toolbar` | `⎘ id ↗ proj ↗ log ↗ repo` | as in the `⚡ session` tab |
+| `toolbar` | `⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config` | as in the `⚡ session` tab |
 | `commands` | `/compact /model /clear` | as in the `⚡ session` tab |
 | `gitPr` | `⇆ #N`, or `⚠ PR` when the lookup failed | `⇆ #N` is a web link to the pull request |
 
@@ -713,7 +715,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `save-preset`, `delete-preset` | `+ preset`, `🗑 delete` |
 | `apply-layout-op` | edit mode's `✖` and `✚` |
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
-| `copy`, `open-vscode` | `⎘ id`, `↗ proj`, `↗ log` |
+| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `ceiling` | the ceiling segment's `−` `+` `∞` `↺` |
 | `doctor-run`, `doctor-fix` | `🩺 doctor`, `[fix]` |

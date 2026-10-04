@@ -254,3 +254,36 @@ describe("validateHookData — data pass-through and edge cases", () => {
     expect(validateHookData([]).report.missingRequired.length).toBeGreaterThan(0);
   });
 });
+
+// brandon-menu-ia-q30.ge5 review: `workspace.added_dirs` feeds the resume
+// command, so past the border it is either absent or a list of well-formed
+// strings — never a value that throws inland.
+describe("validateHookData — workspace.added_dirs", () => {
+  const withDirs = (added_dirs: unknown) => ({
+    ...VALID_HOOK,
+    workspace: { ...VALID_HOOK.workspace, added_dirs },
+  });
+
+  test("absent is legal", () => {
+    const { added_dirs: _, ...workspace } = VALID_HOOK.workspace;
+    const { report } = validateHookData({ ...VALID_HOOK, workspace });
+    expect(report.missingRequired).toHaveLength(0);
+    expect(report.typeMismatches).toHaveLength(0);
+  });
+
+  test("a list of strings is legal", () => {
+    expect(validateHookData(withDirs(["/a", "/b"])).report.typeMismatches).toHaveLength(0);
+  });
+
+  test.each([
+    ["a string", "/x", "string"],
+    ["a list holding a number", ["/a", 1], "array"],
+    ["a list holding an ill-formed string", ["\uD800"], "array"],
+  ])("%s is a type mismatch", (_label, value, got) => {
+    expect(validateHookData(withDirs(value)).report.typeMismatches).toContainEqual({
+      path: "workspace.added_dirs",
+      expected: "string-list",
+      got,
+    });
+  });
+});

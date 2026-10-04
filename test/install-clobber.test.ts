@@ -3,12 +3,12 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
+import { shellWord } from "../src/shell-word";
 
 const {
   updateClaudeSettings,
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
-  shellEscape,
   stageFile,
   stagedEntryKind,
   resolveRenderEntry,
@@ -52,7 +52,7 @@ function readCommand(settingsPath: string): string | undefined {
 describe("buildStatusLineCommand", () => {
   test("quotes a bin path containing spaces", () => {
     const cmd = buildStatusLineCommand(BIN, []);
-    expect(cmd).toBe(shellEscape(BIN));
+    expect(cmd).toBe(shellWord(BIN));
     expect(cmd).toContain("'");
   });
 
@@ -96,6 +96,19 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  });
+
+  test("a single-quoted path an older quoter wrote is recognized as ours", () => {
+    const p = tmpSettingsPath();
+    const bin = "/opt/c++@x/cc-candybar";
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(
+      p,
+      JSON.stringify({ statusLine: { type: "command", command: `'${bin}'` } }),
+    );
+
+    updateClaudeSettings(bin, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(bin);
   });
 
   test("refuses to overwrite user-customized command", () => {

@@ -47,6 +47,7 @@ import {
   type CompiledConfig,
 } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
+import { resumeCommand } from "./claude-resume.js";
 import {
   effectiveInputs,
   renderOptionsOf,
@@ -95,18 +96,21 @@ export function checkPayload(
 ): Record<string, unknown> {
   const home = "/home/tester";
   const nowSec = Math.floor(Date.now() / 1000);
+  const sessionId = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
+  const workspace = {
+    current_dir: `${home}/code/cc-candybar/src`,
+    project_dir: `${home}/code/cc-candybar`,
+    added_dirs: [],
+  };
   return {
     hook_event_name: "Status",
-    session_id: "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    session_id: sessionId,
     version: "1.15.0",
     home,
     cwd: `${home}/code/cc-candybar/src`,
     transcript_path: `${home}/.claude/projects/x/test.jsonl`,
     model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
-    workspace: {
-      current_dir: `${home}/code/cc-candybar/src`,
-      project_dir: `${home}/code/cc-candybar`,
-    },
+    workspace,
     git: {
       repoName: "cc-candybar",
       repoUrl: "https://github.com/promptctl/cc-candybar",
@@ -159,6 +163,11 @@ export function checkPayload(
     navigation: { back: 1 },
     unsaved: 1,
     resettable: 1,
+    // A resume command (the daemon's own projection) and a config file, so
+    // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
+    // and get checked.
+    resumeCommand: resumeCommand(workspace, sessionId, undefined),
+    configPath: `${home}/.config/cc-candybar/config.json5`,
   };
 }
 

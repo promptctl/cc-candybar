@@ -37,7 +37,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
@@ -516,7 +516,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // terminal/OS owns the click, no cc-candybar:// verb. Gated on the VALUE: a
   // repo with no browsable remote supplies "" and the glyph is simply absent.
   describe("toolbar repo link", () => {
-    function renderToolbar(git: Record<string, unknown>): string {
+    function renderToolbar(
+      git: Record<string, unknown>,
+      extra: Record<string, unknown> = {},
+    ): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore();
@@ -550,6 +553,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
               added_dirs: [],
             },
             git,
+            ...extra,
           },
           {
             endcaps: "powerline",
@@ -581,6 +585,31 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(line).toContain("↗ proj");
       expect(line).toContain("↗ log");
       expect(line).not.toContain("↗ repo");
+    });
+
+    // brandon-menu-ia-q30.ge5: `⎘ resume` copies the daemon's resume command
+    // and `↗ config` opens the file the bar renders from, each present
+    // exactly while the payload carries its value.
+    test("a resume command and a config file each get their glyph and click", () => {
+      const resume = "cd /tmp && claude --resume sess-1";
+      const line = renderToolbar(
+        { branch: "main" },
+        { resumeCommand: resume, configPath: "/tmp/c.json5" },
+      );
+      expect(line).toContain("⎘ resume");
+      expect(line).toContain("↗ config");
+      const effects = linkUrls(line).flatMap(effectsOf);
+      expect(effects).toContainEqual(expect.objectContaining({ args: [resume] }));
+      expect(effects).toContainEqual(
+        expect.objectContaining({ args: ["/tmp/c.json5"] }),
+      );
+    });
+
+    test("no resume command and no config file render neither glyph", () => {
+      const line = renderToolbar({ branch: "main" });
+      expect(line).toContain("⎘ id");
+      expect(line).not.toContain("⎘ resume");
+      expect(line).not.toContain("↗ config");
     });
   });
 

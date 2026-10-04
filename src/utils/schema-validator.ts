@@ -54,6 +54,14 @@ const REQUIRED_FIELDS: Array<
   ["workspace.project_dir", "string"],
 ];
 
+// Optional fields: checked only when present, so their absence is legal but a
+// present value of the wrong kind is the same type mismatch a required
+// field's would be — past this border an optional field is either absent or
+// exactly its declared kind.
+const OPTIONAL_FIELDS: Array<[string, "string-list"]> = [
+  ["workspace.added_dirs", "string-list"],
+];
+
 /**
  * Validate raw hookData received over the wire against the known Anthropic schema.
  *
@@ -92,6 +100,14 @@ export function validateHookData(raw: unknown): {
     }
   }
 
+  for (const [path, expectedType] of OPTIONAL_FIELDS) {
+    const value = resolvePath(obj, path);
+    const got = value === undefined ? expectedType : listKind(value);
+    if (got !== expectedType) {
+      report.typeMismatches.push({ path, expected: expectedType, got });
+    }
+  }
+
   for (const key of Object.keys(obj)) {
     if (!KNOWN_TOP_LEVEL.has(key)) {
       report.unknownTopLevelFields.push(key);
@@ -110,6 +126,14 @@ function kindOf(value: unknown): string {
   if (typeof value === "string" && !value.isWellFormed())
     return "ill-formed string";
   return typeof value;
+}
+
+// The "string-list" kind: an array every element of which is a well-formed
+// string, else the value's ordinary kind.
+function listKind(value: unknown): string {
+  return Array.isArray(value) && value.every((v) => kindOf(v) === "string")
+    ? "string-list"
+    : kindOf(value);
 }
 
 function resolvePath(obj: Record<string, unknown>, dotPath: string): unknown {

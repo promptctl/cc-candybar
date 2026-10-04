@@ -98,7 +98,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.git).toBeUndefined();
@@ -121,7 +121,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.git).toBeUndefined();
@@ -149,7 +149,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -191,7 +191,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     chmodSync(transcript, 0o644);
 
@@ -222,7 +222,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.cache).toEqual({
@@ -261,7 +261,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.context).toBeUndefined();
@@ -304,7 +304,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -330,7 +330,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.tmux).toBeUndefined();
@@ -369,7 +369,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       new Set(), // no provider lane needed for this projection
       effective,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     // `theme` and `style` are the two fields this projection does NOT carry:
     // renderDsl injects both `.effective` values, because under a RULE in that
@@ -430,7 +430,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.git).toMatchObject({
@@ -461,7 +461,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -494,7 +494,7 @@ describe("buildRenderPayload — git PR projection", () => {
       PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
 
     expect("prNumber" in payload.git!).toBe(false);
@@ -529,7 +529,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     return { payload, asked };
   };
@@ -569,7 +569,7 @@ describe("buildRenderPayload — autocompact lane", () => {
       AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     expect(payload.autocompact).toEqual({
       window: 800_000,
@@ -623,7 +623,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
       new Set(paths),
       EFFECTIVE_GLOBALS,
       hints,
-      { unsaved: 0, resettable: 0 },
+      { unsaved: 0, resettable: 0, configPath: null },
     );
     return { scopes, seeded };
   };
@@ -654,5 +654,53 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
     const zai = await run(["today.cost"], { claudeConfigDir: "/home/u/.claude.zai" });
     expect(zai.seeded).toEqual(["/home/u/.claude.zai"]);
     expect((await run(["today.cost"], NO_HINTS)).seeded).toEqual([undefined]);
+  });
+});
+
+// brandon-menu-ia-q30.ge5: the facts behind the menu's `⎘ resume` and
+// `↗ config` — the config file's path rides the payload exactly while the
+// session renders from one, and the resume command carries the session's
+// configuration directory from the client's hint.
+describe("buildRenderPayload — config file and resume command", () => {
+  const build = (configPath: string | null, hints: typeof NO_HINTS) =>
+    buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      depsWith(ABSENT, []),
+      undefined,
+      new Set(),
+      EFFECTIVE_GLOBALS,
+      hints,
+      { unsaved: 0, resettable: 0, configPath },
+    );
+
+  test("a config file's path is present; the bundled default's is absent", async () => {
+    expect((await build("/c/config.json5", NO_HINTS)).configPath).toBe(
+      "/c/config.json5",
+    );
+    expect("configPath" in (await build(null, NO_HINTS))).toBe(false);
+  });
+
+  test("the resume command resumes this session under its config dir", async () => {
+    expect((await build(null, NO_HINTS)).resumeCommand).toBe(
+      "cd /tmp && claude --resume test-session",
+    );
+    expect(
+      (await build(null, { ...NO_HINTS, claudeConfigDir: "/c/.claude" }))
+        .resumeCommand,
+    ).toBe("cd /tmp && CLAUDE_CONFIG_DIR=/c/.claude claude --resume test-session");
+  });
+
+  test("a hook with no added_dirs resumes with none rather than failing", async () => {
+    const { added_dirs: _, ...workspace } = hookData("/x").workspace;
+    const payload = await buildRenderPayload(
+      { ...hookData("/no/such/transcript.jsonl"), workspace },
+      depsWith(ABSENT, []),
+      undefined,
+      new Set(),
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      { unsaved: 0, resettable: 0, configPath: null },
+    );
+    expect(payload.resumeCommand).toBe("cd /tmp && claude --resume test-session");
   });
 });

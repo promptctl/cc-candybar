@@ -32,6 +32,11 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "transcript_path",
     default: "",
   },
+  // The session's resume command and the config file it renders from
+  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
+  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
+  resume_command: { kind: "input", path: "resumeCommand", default: "" },
+  config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
   // the name renderDsl settles from resolveThemeSelection, the SAME name the
   // rendered palette is built from. A theme-picker config's trigger reads

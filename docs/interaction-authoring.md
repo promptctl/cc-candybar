@@ -1207,10 +1207,11 @@ decline it. The menu opens above the bar and its door rises with it: the menu's
 first line leads with the door itself, wearing `✖`, then `◁ back` (muted while
 there is nothing to go back to), and the bar's row closes up where the door was.
 
-- **`⚡ session`** holds, on one row, **`⎘ id ↗ proj ↗ log ↗ repo`**, the quick actions: copy the session id,
-  open the project or the transcript in your editor, open the repo's web page.
+- **`⚡ session`** holds, on one row, **`⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config`**, the quick actions: copy the session id
+  or the shell command that resumes the session, open the project or the transcript in your editor, open the repo's web
+  page, open the config file the bar renders from (shown only when there is one).
   The same tray is the bundled `toolbar` segment, which any row can place,
-  bound to the bundled `copySession`/`openProject`/`openTranscript` actions,
+  bound to the bundled `copySession`/`copyResume`/`openProject`/`openTranscript`/`openConfig` actions,
   which any template can bind. The menu's tray binds its own reserved copies,
   so overriding one of those actions changes `toolbar`, not the menu. Its
   second row is `/compact /model /clear`, typed into this session's prompt.
