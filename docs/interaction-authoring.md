@@ -37,9 +37,12 @@ the daemon's exact pipeline (parse → merge on the bundled default → validate
 register → render against a rich representative payload), so "check exits 0"
 and "the daemon renders it" are one fact. It also fails (exit 1) when a
 segment's template throws at evaluation — the state a user would see as a `⚠`
-error cell in the bar. `--render` prints that bar beneath the verdict — the
-same render the exit code was reached on, so a row you rearranged is something
-you read back rather than guess at (docs/segment-authoring.md shows one).
+error cell in the bar. It renders every preset a session can switch to, the
+bundled ones included, so a fault only one preset reaches fails too, tagged
+`(under preset "<name>")`. `--render` prints the bar a fresh session opens on
+beneath the verdict — the same render that preset's pass was checked on, so a
+row you rearranged is something you read back rather than guess at
+(docs/segment-authoring.md shows one).
 `cc-candybar lint` is an alias; `cc-candybar schema` prints the JSON Schema.
 
 A user config **merges onto the bundled default** by name (globals per-field;

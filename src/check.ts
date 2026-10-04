@@ -51,6 +51,7 @@ import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
 import { perSetting } from "./config/setting-projections.js";
+import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
   renderOptionsOf,
@@ -393,11 +394,10 @@ export function renderEffective(
 ): { rendered: string; failures: Map<string, string> } {
   // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
   // appended to a list — each can fail at most once per pass, so this is the
-  // strongest true shape (dedupe-by-construction within one pass) and what
-  // makes deduping ACROSS the two passes below a plain key check rather than
-  // a message-text comparison. The key carries WHAT failed because two
-  // different domains report here — a segment, or a globals slot whose rule
-  // the render could not honour — and a bare name could not tell them apart
+  // strongest true shape (dedupe-by-construction within one pass). The key
+  // carries WHAT failed because two different domains report here — a
+  // segment, or a globals slot whose rule the render could not honour — and
+  // a bare name could not tell them apart
   // (nor stop a segment named `globals.palette` from displacing the slot).
   const failures = new Map<string, string>();
   const rendered = renderDsl(
@@ -423,8 +423,8 @@ export function renderEffective(
   return { rendered, failures };
 }
 
-// The verdict: the prepared config rendered for a fresh session, every render
-// error a failure. Returns the rendered line.
+// The verdict: the prepared config rendered under every preset, every render
+// error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
   configPath: string | null,
   cwd: string,
@@ -444,71 +444,85 @@ async function loadRegisterRender(
       releaseUpdateKeys();
     }
 
-    // Fresh session (no clicked theme/endcaps/style), so the session half of
-    // each resolution is null — the config default over the floor, exactly
-    // what the daemon renders for a session that has never clicked.
-    // [LAW:one-source-of-truth] The preset resolves first and its fragment's
-    // globals feed every field below, the SAME order the daemon resolves in
-    // (server.ts) — so `check` renders the arrangement a fresh session actually
-    // opens in, not the config's un-presetted root.
-    const effective: EffectiveGlobals = resolveEffectiveGlobals(
-      config,
-      // A fresh session: no clicked theme/endcaps/style, and edit mode off. The
-      // resolution is THE daemon's (resolveEffectiveGlobals), not a copy that
-      // agrees with it today — which is the whole reason check renders what the
-      // daemon would render rather than something adjacent.
-      () => null,
-      // [LAW:no-silent-failure] `check` renders the file as the bundled
-      // default's peer, never as a customization OF it — a root the file
-      // authors is simply the bar `check` verifies, so `.preset.customized`
-      // is false for THIS (primary, returned) render. A second render pass below also
-      // exercises `true`, so a `.preset.customized`-gated segment still
-      // gets checked — just not through this value.
-      () => false,
+    // [LAW:verifiable-goals] Every preset a session can switch to is a bar
+    // the daemon renders, so every one is a pass: a segment only one preset
+    // places, or a rule in one preset's globals, is otherwise compiled and
+    // never evaluated, and exit 0 blesses a bar that throws on the first
+    // switch (brandon-check-ew8j). Each preset renders twice — once as a
+    // fresh session sees it, once with `.preset.customized` true, the one
+    // gate the rich fixture cannot drive on its own (it is a daemon-resolved
+    // fact about session state, not a hookData field). The resolution is THE
+    // daemon's (resolveEffectiveGlobals) with the session's preset pick as
+    // the only input that varies, so each pass renders what a session on
+    // that preset would — edit mode off, nothing else clicked.
+    // The preset a session that has picked none opens in.
+    const freshPreset = effectivePresetName(
+      null,
+      config.globals.preset,
+      config.presets,
     );
-    const renderOnce = (payloadEffective: EffectiveGlobals) =>
-      renderEffective(prepared, payloadEffective, CHECK_WIDTH);
-
-    const primary = renderOnce(effective);
-    // [LAW:verifiable-goals] `.preset.customized` is the ONE gate this
-    // config surface adds that a rich, data-driven fixture (checkPayload's
-    // own stated design one comment up) can never drive true on its own —
-    // every OTHER field a segment might gate on is a VALUE checkPayload can
-    // just supply richly; this one is a daemon-resolved FACT about session
-    // state, not a hookData field a config author's own file ever carries.
-    // Without a second pass, a typo or MissingFieldError inside a user's
-    // OWN `when: '{{ .preset.customized }}'`-gated content (docs/
-    // interaction-authoring.md's own documented pattern) would pass check
-    // clean and only surface later as a live ⚠ error cell. Second pass
-    // only — the RETURNED rendering stays the realistic default (a fresh
-    // session has never customized anything); this pass exists purely to
-    // catch broken content behind the one gate the first pass can't reach.
-    const customizedCheck = renderOnce({
-      ...effective,
-      presetCustomized: true,
-    });
-
-    // [LAW:no-silent-failure] An UNCONDITIONAL segment error (one whose
-    // `when`, if any, is true in both passes — the two renders share the
-    // same config/store/registry and differ only in `presetCustomized`)
-    // fires in BOTH passes identically. Deduped by segment NAME rather than
-    // concatenated: a customizedCheck error is only genuinely NEW
-    // information when primary didn't already report that same segment —
-    // reporting it twice would double-count one bug and the "(under
-    // .preset.customized = true)" tag would misdirect the reader into
-    // thinking it's specific to that gate when it isn't.
-    const errors = [
-      ...[...primary.failures].map(
-        ([label, message]) => `${label}: ${message}`,
-      ),
-      ...[...customizedCheck.failures]
-        .filter(([label]) => !primary.failures.has(label))
-        .map(
-          ([label, message]) =>
-            `${label}: ${message} (under .preset.customized = true)`,
-        ),
+    // [LAW:no-silent-failure] A render can THROW rather than report — a
+    // globals rule whose evaluation fails is not a ⚠ cell — and one pass's
+    // throw must neither lose the failures the other passes find nor drop
+    // the preset that reached it, so it is caught here and becomes that
+    // pass's one failure. `rendered` is absent exactly then.
+    const render = (preset: string, customized: boolean) => {
+      const effective = resolveEffectiveGlobals(
+        config,
+        (key) => (key === "preset" ? preset : null),
+        () => customized,
+      );
+      let pass: { rendered?: string; failures: Map<string, string> };
+      try {
+        pass = renderEffective(prepared, effective, CHECK_WIDTH);
+      } catch (e) {
+        pass = {
+          failures: new Map([
+            ["render", e instanceof Error ? e.message : String(e)],
+          ]),
+        };
+      }
+      return { preset, customized, ...pass };
+    };
+    const primary = render(freshPreset, false);
+    const outs = [
+      primary,
+      render(freshPreset, true),
+      ...presetNames(config.presets)
+        .filter((p) => p !== freshPreset)
+        .flatMap((p) => [render(p, false), render(p, true)]),
     ];
-    if (errors.length > 0) {
+
+    // [LAW:one-source-of-truth] One failure per (what failed, why) — the
+    // line's text — however many passes hit it: an unconditional error fires
+    // in every pass, and reporting it once per preset would count one bug N
+    // times; the same segment failing for two different reasons is two
+    // failures. A failure the fresh session's own pass shows is reported
+    // bare — that is the bar a session opens on; any other is tagged with
+    // the presets that reach it, and `.preset.customized = true` only where
+    // that preset's plain pass did not, so the reader knows which switch
+    // exposes it.
+    const found = new Map<string, Map<string, Set<boolean>>>();
+    for (const { preset, customized, failures } of outs) {
+      for (const [label, message] of failures) {
+        const line = `${label}: ${message}`;
+        const reached = found.get(line) ?? new Map<string, Set<boolean>>();
+        reached.set(preset, (reached.get(preset) ?? new Set()).add(customized));
+        found.set(line, reached);
+      }
+    }
+    const errors = [...found].map(([line, reached]) => {
+      if (reached.get(freshPreset)?.has(false)) return line;
+      const where = [...reached].map(([preset, passes]) =>
+        [
+          ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
+          ...(passes.has(false) ? [] : [".preset.customized = true"]),
+        ].join(", "),
+      );
+      return `${line} (under ${where.join("; ")})`;
+    });
+    const bar = primary.rendered;
+    if (errors.length > 0 || bar === undefined) {
       throw new Error(
         `config renders with ${errors.length} render error${
           errors.length === 1 ? "" : "s"
@@ -516,7 +530,7 @@ async function loadRegisterRender(
           errors.map((m) => `  ${m}`).join("\n"),
       );
     }
-    return primary.rendered;
+    return bar;
   } finally {
     // [LAW:single-enforcer] The registry owns every async handle the config
     // declared (timers, fs watchers, git subscriptions); a one-shot check must
@@ -546,8 +560,8 @@ function warningLines(warnings: readonly string[]): string {
 
 // `--render` (brandon-check-m2a): the bar beneath the verdict line, for an
 // author who cannot look at a live one. [LAW:one-source-of-truth] It is
-// `o.rendered` — the very string the verdict was reached ON — so the bar an
-// author reads and the bar `check` blessed cannot differ; re-rendering here
+// `o.rendered` — the very string the verdict's fresh-session pass reached —
+// so the bar an author reads and the bar `check` blessed cannot differ; re-rendering here
 // (at a terminal width, say) would be two clocks, and the audience this exists
 // for reads a pipe, which has no width at all. The flag adds a VALUE to one
 // stream rather than selecting a code path: runCheck's two writes are
