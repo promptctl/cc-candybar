@@ -1,3 +1,10 @@
+## [1.114.1](https://github.com/promptctl/cc-candybar/compare/v1.114.0...v1.114.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **demo:** the config switcher loads the demo files beside the one loaded ([#310](https://github.com/promptctl/cc-candybar/issues/310)) ([220b522](https://github.com/promptctl/cc-candybar/commit/220b522edf1446f4c649dea7573d481b9d1b3207))
+
 # [1.114.0](https://github.com/promptctl/cc-candybar/compare/v1.113.2...v1.114.0) (2026-10-04)
 
 
