@@ -10,6 +10,10 @@
 // link it drew with the effects a click fires, and why the last click did
 // nothing when it did nothing. A click on a link the last render no longer
 // draws is a 409 naming it, never a guess at what the reader meant.
+//
+// Only the page drives it: a request must be JSON (so another site's page
+// needs a preflight this server never answers) sent to this server's own host
+// (so a rebound DNS name reaches nothing).
 
 import fs from "node:fs";
 import http from "node:http";
@@ -19,6 +23,7 @@ import type { AddressInfo } from "node:net";
 import {
   describeLink,
   drawnLinks,
+  NotDrawnError,
   startBar,
   type Bar,
   type BarOptions,
@@ -68,9 +73,17 @@ class HttpError extends Error {
 }
 
 async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  if (!/^application\/json\b/.test(req.headers["content-type"] ?? "")) {
+    throw new HttpError(415, `the body must be sent as application/json, got ${req.headers["content-type"] ?? "no content-type"}`);
+  }
   let text = "";
   for await (const chunk of req) text += chunk;
-  const parsed: unknown = JSON.parse(text === "" ? "{}" : text);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text === "" ? "{}" : text);
+  } catch (e) {
+    throw new HttpError(400, `the body is not JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new HttpError(400, "the body must be a JSON object");
   }
@@ -103,24 +116,32 @@ export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
       bar.resize(sizeOf(body));
       if (typeof body.url !== "string") throw new HttpError(400, "url must be a string");
       const clicked: Clicked = await bar.follow(body.url).catch((e: unknown) => {
-        throw new HttpError(409, e instanceof Error ? e.message : String(e));
+        throw e instanceof NotDrawnError ? new HttpError(409, e.message) : e;
       });
       return view(clicked.rendered, clicked.refused);
     },
-    // A new session on a fresh daemon and an untouched copy of the config.
+    // A new session on a fresh daemon and an untouched copy of the config. The
+    // old bar is stopped only once the new one runs, so a failed start leaves
+    // the page on a working bar.
     "/restart": async (body) => {
-      const size = sizeOf(body);
+      const next = await startBar({ ...opts, ...sizeOf(body) });
       bar.stop();
-      bar = await startBar({ ...opts, ...size });
+      bar = next;
       return view(await bar.render(), null);
     },
   };
 
+  let host = "";
   const server = http.createServer((req, res) => {
     const send = (status: number, type: string, payload: string | Buffer): void => {
       res.writeHead(status, { "content-type": type, "cache-control": "no-store" });
       res.end(payload);
     };
+    const fail = (status: number, error: string): void => send(status, "application/json", JSON.stringify({ error }));
+    if (req.headers.host !== host) {
+      fail(421, `this server answers only as ${host}, not ${req.headers.host ?? "no host"}`);
+      return;
+    }
     const asset = req.method === "GET" ? ASSETS[req.url ?? ""] : undefined;
     if (asset !== undefined) {
       send(200, asset.type, fs.readFileSync(path.join(opts.assets, asset.file)));
@@ -128,27 +149,27 @@ export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
     }
     const route = req.method === "POST" ? routes[req.url ?? ""] : undefined;
     if (route === undefined) {
-      send(404, "text/plain", `no ${req.method} ${req.url}`);
+      fail(404, `no ${req.method} ${req.url}`);
       return;
     }
     serial(async () => route(await readJson(req))).then(
       (v) => send(200, "application/json", JSON.stringify(v)),
-      (e: unknown) =>
-        send(
-          e instanceof HttpError ? e.status : 500,
-          "application/json",
-          JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
-        ),
+      (e: unknown) => fail(e instanceof HttpError ? e.status : 500, e instanceof Error ? e.message : String(e)),
     );
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, "127.0.0.1", resolve);
-  });
-  const { port } = server.address() as AddressInfo;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(opts.port, "127.0.0.1", resolve);
+    });
+  } catch (e) {
+    bar.stop();
+    throw e;
+  }
+  host = `127.0.0.1:${(server.address() as AddressInfo).port}`;
   return {
-    url: `http://127.0.0.1:${port}/`,
+    url: `http://${host}/`,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       bar.stop();

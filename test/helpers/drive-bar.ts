@@ -84,6 +84,9 @@ export interface DrawnLink {
  * What a click did: the render after it, and why it did nothing, if it did
  * nothing — the daemon refused it, or the harness did not send it.
  */
+/** A click on a URL the last render did not draw: the page is showing an older render. */
+export class NotDrawnError extends Error {}
+
 export interface Clicked {
   readonly rendered: string;
   readonly refused: string | null;
@@ -233,7 +236,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
   const follow = async (url: string): Promise<Clicked> => {
     const hit = drawnLinks(last).find((l) => l.url === url);
     if (hit === undefined) {
-      throw new Error(`the last render drew no link to ${url}; render again and click what it drew`);
+      throw new NotDrawnError(`the last render drew no link to ${url}; render again and click what it drew`);
     }
     return send(hit);
   };

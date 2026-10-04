@@ -92,7 +92,6 @@ const frame = document.getElementById("frame");
 const status = document.getElementById("status");
 const linksBody = document.getElementById("links");
 let view = { ansi: "", links: [] };
-let busy = false;
 
 function say(text, cls) {
   status.replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
@@ -149,9 +148,8 @@ function draw(next) {
   }));
 }
 
+// The server answers requests one at a time, in the order they were sent, so every answer is drawn.
 async function post(route, body) {
-  if (busy) return null;
-  busy = true;
   try {
     const res = await fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...size(), ...body }) });
     const answer = await res.json();
@@ -161,8 +159,6 @@ async function post(route, body) {
   } catch (e) {
     say(`the bar server did not answer: ${e.message}. Is pnpm bar:web still running?`, "bad");
     return null;
-  } finally {
-    busy = false;
   }
 }
 
@@ -191,11 +187,15 @@ function refit() {
 }
 
 function setCols(cols) {
-  // The frame's width for `cols` cells: one cell's measured width, plus the frame's padding and border.
-  const screen = term.element.querySelector(".xterm-screen");
-  const cell = screen.getBoundingClientRect().width / term.cols;
-  const chrome = frame.getBoundingClientRect().width - screen.getBoundingClientRect().width;
-  frame.style.width = `${Math.ceil(cols * cell + chrome) + 1}px`;
+  // Move the frame by whole cells, then ask the fit itself: the leftover past the last
+  // whole cell rounds with the width, so a pixel either way can gain or lose a column.
+  const cell = term.element.querySelector(".xterm-screen").getBoundingClientRect().width / term.cols;
+  let width = Math.round(frame.getBoundingClientRect().width + (cols - term.cols) * cell);
+  frame.style.width = `${width}px`;
+  for (let nudge = 0; nudge < Math.ceil(cell) && fitCols() !== cols; nudge++) {
+    width += Math.sign(cols - fitCols());
+    frame.style.width = `${width}px`;
+  }
 }
 
 document.querySelectorAll("[data-cols]").forEach((b) => b.addEventListener("click", () => setCols(Number(b.dataset.cols))));
