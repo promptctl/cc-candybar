@@ -198,17 +198,12 @@ function setCols(cols) {
   }
 }
 
-document.querySelectorAll("[data-cols]").forEach((b) => b.addEventListener("click", () => setCols(Number(b.dataset.cols))));
 document.getElementById("fit").addEventListener("click", () => { frame.style.width = "100%"; });
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
   document.querySelectorAll("[data-ground]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
 }));
-document.getElementById("redraw").addEventListener("click", () => post("/render", {}));
-document.getElementById("restart").addEventListener("click", async () => {
-  if (await post("/restart", {})) say("new session", "muted");
-});
 
 // Measure cells only once the Powerline face is loaded, or the arrows are measured in a fallback.
 document.fonts.load("14px 'Rich Powerline'", "").then(() => {
@@ -216,6 +211,12 @@ document.fonts.load("14px 'Rich Powerline'", "").then(() => {
   term.open(document.getElementById("term"));
   term.resize(fitCols(), term.rows);
   new ResizeObserver(refit).observe(frame);
+  // The controls that measure or draw the terminal exist only once it does.
+  document.querySelectorAll("[data-cols]").forEach((b) => b.addEventListener("click", () => setCols(Number(b.dataset.cols))));
+  document.getElementById("redraw").addEventListener("click", () => post("/render", {}));
+  document.getElementById("restart").addEventListener("click", async () => {
+    if (await post("/restart", {})) say("new session", "muted");
+  });
   post("/render", {});
 });
 </script>

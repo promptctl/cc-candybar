@@ -80,13 +80,13 @@ export interface DrawnLink {
   readonly url: string;
 }
 
+/** A click on a URL the last render did not draw: the page is showing an older render. */
+export class NotDrawnError extends Error {}
+
 /**
  * What a click did: the render after it, and why it did nothing, if it did
  * nothing — the daemon refused it, or the harness did not send it.
  */
-/** A click on a URL the last render did not draw: the page is showing an older render. */
-export class NotDrawnError extends Error {}
-
 export interface Clicked {
   readonly rendered: string;
   readonly refused: string | null;
