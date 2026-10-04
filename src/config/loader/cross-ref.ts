@@ -33,10 +33,11 @@ import {
 import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
-  perConfigDomainsFor,
+  unknownOptionDomain,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../option-domain.js";
+import { configOptionDomains } from "../edit-chrome.js";
 import { listGlobalsFieldNames, settingControlDomain } from "./globals.js";
 import {
   CONFIG_ONLY_KEYS,
@@ -204,9 +205,29 @@ export function validateCrossReferences(
   // to resolve. Runs post-merge for the same reason globals.style does above:
   // "styles" isn't fully known until the user's styles: block has merged onto
   // the bundled stdlib.
-  const optionDomains = perConfigDomainsFor(cfg);
+  const optionDomains = configOptionDomains(cfg);
   const knownDomains = knownOptionDomainNames(optionDomains);
   for (const [name, a] of Object.entries(cfg.actions)) {
+    // Every arm that draws from a domain — set, persist, insertSegmentFrom —
+    // names it here, so a stale name is refused at load whichever arm holds it.
+    const [field, from] =
+      "from" in a
+        ? (["from", a.from] as const)
+        : "insertSegmentFrom" in a
+          ? (["insertSegmentFrom", a.insertSegmentFrom] as const)
+          : [null, null];
+    if (
+      field !== null &&
+      typeof from === "string" &&
+      !knownDomains.includes(from)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${field}`,
+        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
+        line: findKeyLine(ctx.source, ["actions", name, field]),
+      });
+      continue;
+    }
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -214,18 +235,6 @@ export function validateCrossReferences(
         message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
         line: findKeyLine(ctx.source, ["actions", name, "set"]),
       });
-    }
-    if (
-      "from" in a &&
-      typeof a.from === "string" &&
-      !knownDomains.includes(a.from)
-    ) {
-      ctx.issues.push({
-        path: `actions.${name}.from`,
-        message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownDomains.join(", ")})`,
-        line: findKeyLine(ctx.source, ["actions", name, "from"]),
-      });
-      continue;
     }
     const setting = SESSION_KEY_TO_SETTING.get(a.set);
     if (setting !== undefined) {

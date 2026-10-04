@@ -100,6 +100,12 @@ describe("option-domain registry", () => {
     );
   });
 
+  test("a renamed domain name throws pointing at its new name", () => {
+    expect(() => resolveOptionDomain("looks", new Map())).toThrow(
+      /unknown option domain "looks" — it was renamed "styles"; write from: "styles"/,
+    );
+  });
+
   test("a built-in domain name can never be reclaimed", () => {
     expect(() => registerOptionDomain("themes", () => ["x"])).toThrow(
       /already registered.*built-in/,

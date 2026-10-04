@@ -680,6 +680,20 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
   });
 
+  test("a `from` over the addable segments loads, as it renders", () => {
+    // The loader checks a domain name against the map the render and the
+    // click gates resolve it through, so it never refuses a name they draw from.
+    const src = `{
+      actions: {
+        add: { persist: 'presets.default.root', insertSegmentFrom: 'edit.addable', anchor: 'bar', relation: 'after' },
+        pick: { set: 'k', from: 'edit.addable' },
+      },
+      segments: { bar: { template: 'x' } },
+      root: 'bar',
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
+  });
+
   test("two of set/copy/open is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v', copy: 'x' } }`),
@@ -704,6 +718,23 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       /references unknown option domain "colors"/,
     );
   });
+
+  test.each([
+    ["set: 'k'", "looks", "styles"],
+    ["set: 'k'", "progressions", "variations"],
+    ["persist: 'style'", "looks", "styles"],
+    ["persist: 'variation'", "progressions", "variations"],
+  ])(
+    "{ %s, from } naming the renamed domain %s points at %s",
+    (arm, old, renamed) => {
+      expectIssue(
+        base(`{ a: { ${arm}, from: '${old}' } }`),
+        new RegExp(
+          `unknown option domain "${old}" — it was renamed "${renamed}"; write from: "${renamed}"`,
+        ),
+      );
+    },
+  );
 
   test("bounded min >= max is rejected", () => {
     expectIssue(

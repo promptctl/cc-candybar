@@ -41,7 +41,7 @@ import {
   type VariableDecl,
 } from "./dsl-types.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
-import { type ResolvedDomain } from "./option-domain.js";
+import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
@@ -195,21 +195,31 @@ interface ChromeArtifacts {
 
 // [LAW:one-source-of-truth] The domain name every `+` picker ranges, consumed
 // two ways: here (by name, for every insertSegmentFrom action the splice
-// synthesizes) and by registerDslConfig/deriveConfigActionValidators (which
-// call `addableSegmentDomains` directly to populate `perConfigDomains` before
-// resolving `from`). Both read this one string, so a synthesized action's
-// domain name always resolves.
+// synthesizes) and by `configOptionDomains`, which every resolution of a
+// `from` reads. Both read this one string, so a synthesized action's domain
+// name always resolves.
+
+// [LAW:one-source-of-truth] Every option domain a config's actions may name
+// beyond the global registry: its styles and presets, and the addable
+// segments. The loader's refusal of an unknown name, the render's options,
+// and both click gates resolve against this one map, so a name the render
+// draws options from is never one the loader refuses or a gate cannot find.
+export function configOptionDomains(
+  config: DslConfig,
+): ReadonlyMap<string, ResolvedDomain> {
+  return new Map([
+    ...perConfigDomainsFor(config),
+    ...addableSegmentDomains(config),
+  ]);
+}
 export const ADDABLE_DOMAIN = `${EDIT_NS}addable`;
 
 // [LAW:one-source-of-truth] THE "what can `+` offer" set: every declared,
 // non-exempt segment name. A segment already on the bar is offered too — a
 // placement is an instance (brandon-segment-settings-i4n), so a second one is
 // a second instance with its own id and its own settings, minted when the
-// click lands (`mintPlacement`, layout-ops.ts). Exported so render.ts's
-// registerDslConfig and config-validators.ts's deriveConfigActionValidators —
-// the two sites that resolve `from` domains — merge this into
-// `perConfigDomainsFor`'s map without each re-deriving it
-// [LAW:locality-or-seam].
+// click lands (`mintPlacement`, layout-ops.ts). It joins the config's other
+// domains in `configOptionDomains`.
 export function addableSegmentDomains(
   config: DslConfig,
 ): ReadonlyMap<string, ResolvedDomain> {

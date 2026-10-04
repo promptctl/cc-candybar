@@ -635,6 +635,39 @@ function isSessionHistory(v: unknown): v is SessionHistory {
   );
 }
 
+// [LAW:types-are-the-program] A session change is a change to a SETTING key —
+// the only kind the journal records. A key that has left that set since the
+// file was written (brandon-menu-ia-q30.xuz renamed `look` and `progression`)
+// names nothing a render reads, so undoing it would spend a click restoring
+// nothing. Those changes alone leave, each one named in `retired`; every other
+// change, and every other session, stays undoable. A step left empty leaves
+// too, and the savepoint's `at` counts only the steps below it that remain.
+function withoutRetiredKeys(
+  history: SessionHistory,
+  retired: Set<string>,
+): SessionHistory {
+  const keep = (change: Change): boolean => {
+    if (change.kind === "file" || isSettingKey(change.key)) return true;
+    retired.add(change.key);
+    return false;
+  };
+  const steps = (list: readonly Step[]): Step[] =>
+    list.map((step) => step.filter(keep)).filter((step) => step.length > 0);
+  const { savepoint } = history;
+  const past = steps(history.past);
+  const future = steps(history.future);
+  if (savepoint === undefined) return { past, future };
+  return {
+    past,
+    future,
+    savepoint: {
+      at: steps(history.past.slice(0, savepoint.at)).length,
+      net: savepoint.net.filter(keep),
+      below: steps(savepoint.below),
+    },
+  };
+}
+
 // [LAW:no-silent-failure] A missing file is a first boot. An unreadable or
 // wrong-shaped one is logged and dropped WHOLE rather than salvaged entry by
 // entry. A write failure throws: the click's change landed, but saying it is
@@ -666,7 +699,20 @@ export function fileHistoryStorage(
           !Array.isArray(parsed) &&
           Object.values(parsed).every(isSessionHistory)
         ) {
-          return parsed as HistoryState;
+          const retired = new Set<string>();
+          const state = Object.fromEntries(
+            Object.entries(parsed as HistoryState).map(([sid, history]) => [
+              sid,
+              withoutRetiredKeys(history, retired),
+            ]),
+          );
+          if (retired.size > 0) {
+            logger(
+              "warn",
+              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
+            );
+          }
+          return state;
         }
       } catch {
         // reported below
