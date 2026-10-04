@@ -9,12 +9,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -51,10 +47,8 @@ function buildRuntime(src: string) {
       },
       { perSegmentSink: sink },
     );
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const ctx = testVerbContext(sessionState);
+  recordRender(sessionState, "s1");
+  const ctx = testVerbContext(sessionState, undefined, config);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -67,8 +61,7 @@ function buildRuntime(src: string) {
       .map((t) => t.plain)
       .join("")
       .trim();
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, sink, render, click, textOf, dispose };
+  return { config, sessionState, sink, render, click, textOf };
 }
 
 const SESSION = `'session.id': { kind: 'input', path: 'session_id', default: '' }`;
@@ -101,7 +94,6 @@ describe("a placement renders with its own settings", () => {
     expect(rt.textOf("clock")).toBe("hh:mm local x3");
     expect(rt.textOf("utcClock")).toBe("hh:mm:ss utc x3");
     expect(rt.textOf("wide")).toBe("hh:mm local x9");
-    rt.dispose();
   });
 
   test("a setting reaches the segment's `when`, `bg:` and `fg:` too", () => {
@@ -130,7 +122,6 @@ describe("a placement renders with its own settings", () => {
     expect(bgOf("quiet")).toBe("#000000");
     expect(bgOf("loud")).toBe("#ff0000");
     expect(rt.sink.has("gone")).toBe(false);
-    rt.dispose();
   });
 });
 
@@ -151,7 +142,6 @@ describe("a setting named like an Object member", () => {
     }`);
     rt.render();
     expect(rt.textOf("tag")).toBe("no");
-    rt.dispose();
   });
 });
 
@@ -193,7 +183,6 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.sessionState.get("s1", "menus.second.applyTheme")).toBe(
       "applyTheme",
     );
-    rt.dispose();
   });
 });
 
@@ -212,7 +201,6 @@ describe("a placement is named by its id", () => {
     const text = stripAnsi(rt.render());
     expect(rt.textOf("tag")).toBe("ok");
     expect(text).toContain("⚠ broken: ");
-    rt.dispose();
   });
 
   test("two presets may give one id to two different menu-hosting segments", () => {

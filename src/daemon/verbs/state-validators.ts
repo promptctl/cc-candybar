@@ -1,17 +1,17 @@
-// [LAW:single-enforcer] The SessionState instance of the shared keyed-
-// validator registry (validator-registry.ts): the click protocol's `set-state`
-// verb writes only what's registered here, paired with the per-key validator
+// [LAW:single-enforcer] The SessionState instance of the shared keyspace
+// (validator-registry.ts): the click protocol's `set-state` verb writes only
+// what the clicking session's gate holds, paired with the per-key validator
 // that decides whether a raw incoming string is a legal value for that key.
-// Adding a new state-writable key is one entry in this table — no new verb,
+// Adding a new state-writable key is one action in a config — no new verb,
 // no scattered string-matching, no defensive guard in the dispatcher.
 //
-// [LAW:one-source-of-truth] The registered keys ARE the schema for what
-// SessionState mutations the click protocol can perform. Unknown-key
+// [LAW:one-source-of-truth] A gate's keys ARE the schema for what
+// SessionState mutations a click in that session can perform. Unknown-key
 // rejection lists these names — operators see exactly the surface they're
 // allowed to write.
 //
 // [LAW:one-type-per-behavior] The spec algebra (DerivedValidatorSpec,
-// mergeKeySpecs, the registry's register/validate/dispose lifecycle) lives in
+// mergeKeySpecs, the keyspace and the gates it derives) lives in
 // validator-registry.ts, shared verbatim with config-validators.ts (the
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
@@ -29,17 +29,16 @@ import type { DslConfig } from "../../config/dsl-types";
 import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
 import { sessionSettingValue } from "../setting-drafts";
 import {
-  createValidatorRegistry,
+  createKeyspace,
   mergeContributions,
-  type DerivedValidatorSpec,
+  type Gate,
   type KeySpecContribution,
   type KeyValidator,
-  type RangeParams,
-  type ValidateResult,
 } from "./validator-registry";
 
 export type {
   DerivedValidatorSpec,
+  Gate,
   KeySpecContribution,
   KeyValidator,
   RangeParams,
@@ -101,36 +100,34 @@ const validateBoolean: KeyValidator = (raw) => {
   };
 };
 
-// [LAW:one-source-of-truth] THE SessionState instance of the shared registry.
-// Baseline keys (endcaps/theme/toolbar-expanded) are legacy widget-era targets
-// that predate the action-table-driven world and stay permanent; every other
-// SessionState key is fully derived from a config's action table.
-const registry = createValidatorRegistry({
+// [LAW:one-source-of-truth] The built-in keys (endcaps/theme/toolbar-expanded):
+// legacy widget-era targets that predate the action-table-driven world and
+// stay writable in every session; every other SessionState key is derived
+// from the session's config's action table.
+const BASELINE: Readonly<Record<string, KeyValidator>> = {
   endcaps: validateEndcaps,
   theme: validateTheme,
   "toolbar-expanded": validateBoolean,
-});
+};
 
-export function listStateKeys(): readonly string[] {
-  return registry.listKeys();
-}
+// THE SessionState instance of the shared keyspace.
+const keyspace = createKeyspace(BASELINE, "state", deriveActionValidators);
 
+// A key every session may write, whatever config it renders.
 export function registerStateValidator(
   key: string,
-  spec: DerivedValidatorSpec,
+  allowed: readonly string[],
 ): () => void {
-  return registry.register(key, spec);
+  return keyspace.register(key, allowed);
 }
 
-export function validateStateWrite(
-  key: string,
-  rawValue: string,
-): ValidateResult {
-  return registry.validate(key, rawValue);
-}
-
-export function rangeParamsFor(key: string): RangeParams | null {
-  return registry.rangeParamsFor(key);
+// [LAW:single-enforcer] The gate `set-state`, `step-state` and every write
+// that re-crosses them pass: the SessionState writes the sessions rendering
+// `config` may make — what its action table derives, over the built-in and
+// daemon-wide keys. An action table that cannot gate throws here, which is
+// how a config load refuses it.
+export function stateGate(config: DslConfig): Gate {
+  return keyspace.gateFor(config);
 }
 
 // [LAW:one-source-of-truth] The ONE place mapping a decoupled ACTION to the
@@ -171,22 +168,15 @@ function actionKeySpecs(
 }
 
 // [LAW:single-enforcer] A STRUCTURAL spec (menu int / stepper range) is
-// always kept — even on a baseline key — so a collision throws loudly at
-// registration rather than silently shadowing the permanent gate. Only an
-// ALLOW-LIST contribution to a baseline key is dropped (the click reuses the
-// baseline gate as intended).
-//
-// [LAW:one-source-of-truth] The baseline set is read from the registry that
-// owns it (registry.listBaselineKeys()), not re-declared here — the baseline
-// keys were passed to createValidatorRegistry above; a second hardcoded list
-// could silently drift from them if a future baseline key were added there
-// and forgotten here.
+// always kept — even on a built-in key — so a collision throws loudly when
+// the gate is built rather than silently shadowing the built-in gate. Only an
+// ALLOW-LIST contribution to a built-in key is dropped (the click reuses the
+// built-in gate as intended).
 function dropBaselineAllowLists(
   contributions: readonly KeySpecContribution[],
 ): KeySpecContribution[] {
-  const baseline = new Set(registry.listBaselineKeys());
   return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !baseline.has(c.key),
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key),
   );
 }
 
@@ -222,9 +212,9 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   );
 }
 
-// [LAW:single-enforcer] The SOLE install-site derivation: a config's
-// SessionState-writable-key surface is the merge of every `set` ACTION it
-// declares, through ONE coherence pass.
+// [LAW:single-enforcer] The SOLE derivation: what a config contributes to its
+// sessions' SessionState gate is the merge of every `set` ACTION it declares,
+// through ONE coherence pass.
 export function deriveActionValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {

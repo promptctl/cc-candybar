@@ -37,12 +37,13 @@ import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
+import {
+  clickUrl,
+  effectsOf,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
 
 type Rgb = readonly [number, number, number];
@@ -305,12 +306,10 @@ function forEachStage(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-    const ctx = testVerbContext(sessionState);
+    const ctx = testVerbContext(sessionState, undefined, config);
     const render = (colorCompatibility: ColorCompatibility) =>
       renderDsl(config, compiled, store, registry, PAYLOAD, { ...OPTS, colorCompatibility });
     for (const stage of STAGE_NAMES) {
@@ -319,7 +318,6 @@ function forEachStage(
       measure(stage, (colorCompatibility) => drawnChars(render(colorCompatibility)));
     }
   } finally {
-    disposers.forEach((d) => d());
     registry.dispose();
   }
 }

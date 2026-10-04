@@ -17,7 +17,7 @@ import { isSettingKey } from "./settings-history";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
 import { runInAction } from "mobx";
 import { recordingView, type SessionStateRW } from "./session-state";
-import { validateStateWrite } from "./verbs/state-validators";
+import type { Gate } from "./verbs/validator-registry";
 import { BadVerbArgs } from "./verb-error";
 
 export interface NavigationChange {
@@ -51,20 +51,22 @@ export class NavigationHistory {
 
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId: string, store: SessionStateRW): number {
-    return this.restorable(sessionId, store).length;
+  depth(sessionId: string, store: SessionStateRW, gate: Gate): number {
+    return this.restorable(sessionId, store, gate).length;
   }
 
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
   // while every key it changed still holds what it left there and every value
-  // it would write back passes that key's gate now. Any other step is over a
+  // it would write back passes `gate` — the session's config's, as it reads
+  // now. Any other step is over a
   // view that is gone — rewritten since (a layout edit releasing the placement
   // it configured), or no longer one the config admits (that placement
   // removed, a group renamed) — and is discarded rather than replayed.
   private restorable(
     sessionId: string,
     store: SessionStateRW,
+    gate: Gate,
   ): readonly NavigationStep[] {
     const state = new Map<string, string | null>();
     const read = (key: string): string | null =>
@@ -74,7 +76,7 @@ export class NavigationHistory {
       const holds = step.every(
         (c) =>
           read(c.key) === c.after &&
-          (c.before === null || validateStateWrite(c.key, c.before).ok),
+          (c.before === null || gate.validate(c.key, c.before).ok),
       );
       if (!holds) continue;
       kept.unshift(step);
@@ -123,9 +125,10 @@ export class NavigationHistory {
   back(
     sessionId: string,
     store: SessionStateRW,
+    gate: Gate,
   ): { readonly step: NavigationStep; readonly discarded: number } {
     const all = this.past.get(sessionId) ?? [];
-    const steps = this.restorable(sessionId, store);
+    const steps = this.restorable(sessionId, store, gate);
     const step = steps.at(-1);
     const discarded = all.length - steps.length;
     if (step === undefined) {

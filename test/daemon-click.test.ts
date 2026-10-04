@@ -8,7 +8,6 @@ import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
@@ -212,120 +211,122 @@ describe("toolbar toggle dataflow", () => {
 // per click and re-computes the absolute target, so the value moves once per
 // CLICK regardless of render cadence (the prior absolute-target write moved once
 // per RENDER). These exercise the real handler at the daemon boundary, against a
-// real SessionState and the real range registry.
+// real SessionState and the gate of the config the session renders.
 
 describe("step-state handler", () => {
   const KEY = "step-test-hue";
-  function setup() {
+  // A config whose stepper bounds KEY to [min,max]: the session's config holds
+  // both the bounds (its action) and what an unset key steps from (its `state`
+  // variable's default).
+  const stepper = (dflt: string, min = 0, max = 60): DslConfig => ({
+    ...EMPTY_DEFAULT,
+    variables: { hue: { kind: "state", key: KEY, default: dflt } },
+    actions: { nudge: { set: KEY, min, max, by: 2 } },
+  });
+  // A session rendering `config`, and its step click.
+  function session(config: DslConfig) {
     const sessionState = new SessionState();
-    // The range registry holds the bounds; the session's config holds what an
-    // unset key steps from — its `state` variable's default.
-    const config: DslConfig = {
-      ...EMPTY_DEFAULT,
-      variables: { hue: { kind: "state", key: KEY, default: "14" } },
-    };
     recordRender(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-    const dispose = registerStateValidator(KEY, {
-      kind: "range",
-      min: 0,
-      max: 60,
-    });
     const step = VERBS.get(VERB_STEP_STATE)!;
     const click = (by: number): void =>
       step(encodeSegments(["s1", KEY, String(by)]), ctx);
-    return { sessionState, click, dispose };
+    return { sessionState, ctx, click };
   }
+  const setup = () => session(stepper("14"));
 
   test("an unset key steps from its config's default, not min", () => {
-    const { sessionState, click, dispose } = setup();
+    const { sessionState, click } = setup();
     expect(sessionState.get("s1", KEY)).toBeNull();
     click(2);
     expect(sessionState.get("s1", KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
-    dispose();
   });
 
   test("N identical clicks accumulate N steps (idempotency gone)", () => {
-    const { sessionState, click, dispose } = setup();
+    const { sessionState, click } = setup();
     click(2);
     click(2);
     click(2);
     expect(sessionState.get("s1", KEY)).toBe("20"); // 14 → 16 → 18 → 20
-    dispose();
   });
 
   test("stepping past a bound WRAPS to the other end", () => {
-    const { sessionState, click, dispose } = setup();
+    const { sessionState, click } = setup();
     sessionState.set("s1", KEY, "60"); // max
     click(2);
     expect(sessionState.get("s1", KEY)).toBe("0"); // wrapped, not clamped to 60
-    dispose();
   });
 
   test("a negative delta steps down", () => {
-    const { sessionState, click, dispose } = setup();
+    const { sessionState, click } = setup();
     sessionState.set("s1", KEY, "10");
     click(-2);
     expect(sessionState.get("s1", KEY)).toBe("8");
-    dispose();
   });
 
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", () => {
-    const { dispose } = setup();
+    const { ctx } = setup();
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const ctx: VerbContext = testVerbContext(new SessionState());
     expect(() =>
       step(encodeSegments(["s1", KEY, "x"]), ctx),
     ).toThrow(BadVerbArgs);
-    dispose();
   });
 
-  // The registry merges every loaded config's specs into one gate per key, so
-  // what an unset key steps from cannot live there: two configs declaring the
-  // same stepper with different defaults would share whichever registered
-  // first. Each session steps from its own config's default.
+  // Two configs declaring the same stepper differently are two gates: each
+  // session steps from, and wraps at, what ITS config declares
+  // (brandon-state-gates-lbs — the bounds were once every loaded config's,
+  // merged to the widest).
   test("an unset key steps from the default of the config ITS session renders with", () => {
-    const stateVar = (dflt: string): DslConfig => ({
-      ...EMPTY_DEFAULT,
-      variables: { hue: { kind: "state", key: KEY, default: dflt } },
-    });
-    const range = { kind: "range", min: 0, max: 60 } as const;
-    const disposeA = registerStateValidator(KEY, range);
-    const disposeB = registerStateValidator(KEY, range);
-    const step = VERBS.get(VERB_STEP_STATE)!;
     const stepIn = (dflt: string): string | null => {
-      const sessionState = new SessionState();
-      recordRender(sessionState, "s1");
-      const ctx = testVerbContext(sessionState, undefined, stateVar(dflt));
-      step(encodeSegments(["s1", KEY, "2"]), ctx);
+      const { sessionState, click } = session(stepper(dflt));
+      click(2);
       return sessionState.get("s1", KEY);
     };
     expect(stepIn("14")).toBe("16");
     expect(stepIn("30")).toBe("32");
-    disposeA();
-    disposeB();
+  });
+
+  test("a step wraps at the bounds of the config ITS session renders with", () => {
+    const narrow = session(stepper("2", 0, 2));
+    const wide = session(stepper("2", 0, 8));
+    for (const s of [narrow, wide]) s.sessionState.set("s1", KEY, "2");
+    wide.click(2);
+    narrow.click(2);
+    // From its own max, the narrow session wraps to its min; the wide one,
+    // whose config declares room above 2, steps on.
+    expect(narrow.sessionState.get("s1", KEY)).toBe("0");
+    expect(wide.sessionState.get("s1", KEY)).toBe("4");
+  });
+
+  test("one key a word list in one config and a range in another gates each session by its own", () => {
+    const words = session({
+      ...EMPTY_DEFAULT,
+      actions: { pick: { set: KEY, from: ["warm", "cool"] } },
+    });
+    const range = session(stepper("14"));
+    const set = VERBS.get("set-state")!;
+    set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
+    expect(words.sessionState.get("s1", KEY)).toBe("cool");
+    range.click(2);
+    expect(range.sessionState.get("s1", KEY)).toBe("16");
+    // Each refuses what only the other's config declares.
+    expect(() => words.click(2)).toThrow(/not a bounded \(range\) state key/);
+    expect(() =>
+      set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
+    ).toThrow(/must be an integer, got "cool"/);
   });
 
   test("an unset key whose config shows a non-integer is refused, not stepped from min", () => {
-    const sessionState = new SessionState();
-    recordRender(sessionState, "s1");
-    const config: DslConfig = {
-      ...EMPTY_DEFAULT,
-      variables: { hue: { kind: "state", key: KEY, default: "wide" } },
-    };
-    const ctx = testVerbContext(sessionState, undefined, config);
-    const dispose = registerStateValidator(KEY, { kind: "range", min: 0, max: 60 });
-    const step = VERBS.get(VERB_STEP_STATE)!;
-    expect(() => step(encodeSegments(["s1", KEY, "2"]), ctx)).toThrow(
+    const { sessionState, click } = session(stepper("wide"));
+    expect(() => click(2)).toThrow(
       /"step-test-hue" shows "wide" before any click/,
     );
     expect(sessionState.get("s1", KEY)).toBeNull();
-    dispose();
   });
 
-  test("a key with no range registration is rejected, not silently stepped", () => {
+  test("a key the session's config declares no range for is rejected, not silently stepped", () => {
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const ctx: VerbContext = testVerbContext(new SessionState());
+    const { ctx } = setup();
     expect(() =>
       step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
     ).toThrow(BadVerbArgs);

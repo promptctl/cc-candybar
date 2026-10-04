@@ -51,13 +51,9 @@ import {
 
 // The variation the bundled config renders under.
 const BAR = VARIATIONS[DEFAULT_VARIATION];
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { definedStyle } from "../src/template-engine/cells.js";
@@ -169,10 +165,8 @@ function build(src: string, withDefault = false) {
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  recordRender(sessionState, SID);
+  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   // [LAW:no-silent-failure] A segment that throws renders a ⚠ cell and skips
   // the sink, which would read here as "did not render"; say what it was.
   const render = (): string => {
@@ -262,10 +256,7 @@ function build(src: string, withDefault = false) {
     openMenuIn,
     expectedTint,
     hueOf,
-    dispose: () => {
-      disposers.forEach((d) => d());
-      registry.dispose();
-    },
+    dispose: () => registry.dispose(),
   };
 }
 

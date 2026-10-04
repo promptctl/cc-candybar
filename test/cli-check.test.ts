@@ -78,6 +78,20 @@ describe("checkConfig — explicit target", () => {
     }
   });
 
+  it("refuses a key the daemon's own links write declared as another shape, as the daemon's load does", async () => {
+    const p = write(
+      "claims-dismissed.json5",
+      `{
+        actions: { page: { set: "update.dismissed", int: true } },
+        segments: { a: { template: 'a' } },
+        root: { h: ['a'] },
+      }`,
+    );
+    expect(expectFatal(await checkConfig(p, dir))).toMatch(
+      /key "update.dismissed" is written by the daemon's own links/,
+    );
+  });
+
   it("a source still running at the settle deadline is a warning naming it, not a hang or a failure", async () => {
     const p = write(
       "slow.json5",

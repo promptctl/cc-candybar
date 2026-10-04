@@ -27,10 +27,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
@@ -121,9 +117,6 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
       perSegmentSink: sink,
     });
   };
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
   // The session has rendered, as it always has before a click: edit mode's
   // `✓` runs the settings menu's `save`, which acts on the config the
   // session renders.
@@ -158,8 +151,7 @@ function buildRuntime(src: string, dflt: DslConfig = DEFAULT_DSL_CONFIG) {
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     click(url);
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, sink, render, click, clickWriting, dispose };
+  return { config, sessionState, sink, render, click, clickWriting };
 }
 
 const PAYLOAD = {
@@ -185,15 +177,14 @@ function segmentNames(node: LayoutNode): string[] {
 
 describe("the global settings menu is reachable from a user config", () => {
   test("a user root of one row of two segments still renders the menu", () => {
-    const { render, dispose } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
+    const { render } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
     // The user declared two segments; the bar shows three cells, and the first
     // is the door their `root` could not close.
     expect(stripAnsi(render())).toContain(DOOR_GLYPH);
-    dispose();
   });
 
   test("the toggle opens a body carrying preset switching and the tabs", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     const closed = stripAnsi(render());
@@ -210,13 +201,12 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(opened).toContain("📐 layout");
     clickWriting(render(), TAB_KEY, "layout");
     expect(stripAnsi(render())).toContain("✎ arrange");
-    dispose();
   });
 
   // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
   // bar's own rows as they were.
   test("the menu opens above the bar: two lines stacked over rows that do not change", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       userConfig(`{ v: [${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
     const closed = render().split("\n");
@@ -237,11 +227,10 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(line1.includes(DOOR_CLOSE_GLYPH)).toBe(true);
     expect(bar[0]).toBe(withoutDoor(stripAnsi(closed[0]!)));
     expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
-    dispose();
   });
 
   test("a door on a row of its own takes its row with it, every other row byte-identical", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       userConfig(`{ v: ['${SETTINGS_ANCHOR}', ${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
     const closed = render().split("\n");
@@ -250,11 +239,10 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
     expect(stripAnsi(opened[0]!)).toContain(DOOR_CLOSE_GLYPH);
     expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
-    dispose();
   });
 
   test("an open sibling's body stays open under the open menu", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       userConfig(
         `{ h: ['directory', { kind: 'group', name: 'g', label: 'more', children: ['model'] }] }`,
       ),
@@ -265,11 +253,10 @@ describe("the global settings menu is reachable from a user config", () => {
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
     expect(opened.slice(MENU_LINES)).toEqual(before.map(withoutDoor));
-    dispose();
   });
 
   test("a door placed deep in the tree lifts its menu over the whole bar", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       userConfig(
         `{ v: [{ h: ['context'] }, { h: [{ v: ['${SETTINGS_ANCHOR}', { h: ['directory'] }] }, 'model'] }] }`,
       ),
@@ -283,11 +270,10 @@ describe("the global settings menu is reachable from a user config", () => {
     // it moves up and zips with `model`.
     expect(opened.slice(MENU_LINES)).toHaveLength(closed.length - 1);
     expect(opened.slice(MENU_LINES).join("|")).toMatch(/t\/proj.*Opus/u);
-    dispose();
   });
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", () => {
-    const { render, clickWriting, sessionState, dispose } = buildRuntime(
+    const { render, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -307,11 +293,10 @@ describe("the global settings menu is reachable from a user config", () => {
     // top left, lands on the plain bar.
     clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
-    dispose();
   });
 
   test("the preset picker's click is admitted by the derived gate", () => {
-    const { render, click, clickWriting, sessionState, dispose } = buildRuntime(
+    const { render, click, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -327,7 +312,6 @@ describe("the global settings menu is reachable from a user config", () => {
     click(pickerUrl!);
     clickWriting(render(), "preset", "compact");
     expect(sessionState.get("s1", "preset")).toBe("compact");
-    dispose();
   });
 });
 
@@ -349,14 +333,11 @@ describe("placement is a position, not a mode", () => {
     expect(placedLines[0]).not.toContain(DOOR_GLYPH);
     expect(placedLines[1]).toContain(DOOR_GLYPH);
 
-    defaulted.dispose();
-    placed.dispose();
   });
 
   test("a bare-segment root grows the menu beside it", () => {
-    const { render, dispose } = buildRuntime(userConfig(`'directory'`));
+    const { render } = buildRuntime(userConfig(`'directory'`));
     expect(stripAnsi(render())).toContain(DOOR_GLYPH);
-    dispose();
   });
 
   test("the anchor appears exactly once in every resolved preset root", () => {
@@ -488,7 +469,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     [...walkNodes(node)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
   test("opening a tab closes the others, and the open one alone wears its state colour", () => {
-    const { render, clickWriting, sink, dispose } = buildRuntime(
+    const { render, clickWriting, sink } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -519,11 +500,10 @@ describe("the menu's second line is five tabs, one open at a time", () => {
         expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
       }
     }
-    dispose();
   });
 
   test("closing the menu folds everything in it: reopening finds it as a fresh session does", () => {
-    const { render, clickWriting, sessionState, dispose } = buildRuntime(
+    const { render, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -539,7 +519,6 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     const reopened = stripAnsi(render());
     expect(reopened).toContain("⎘ id");
     expect(reopened).not.toContain("🩺 doctor");
-    dispose();
   });
 
   test("every setting's control is in exactly one place: the door's first line or one tab", () => {
@@ -655,18 +634,17 @@ describe("the default placement never inherits an author's gate", () => {
   });
 
   test("a gated first row whose gate holds shares the door's line", () => {
-    const { render, dispose } = buildRuntime(
+    const { render } = buildRuntime(
       `{ globals: {}, root: { v: [{ h: ['directory','model'], when: '{{ eq "a" "a" }}' }] } }`,
     );
     const bar = stripAnsi(render());
     expect(bar.split("\n")).toHaveLength(1);
     expect(bar).toContain(DOOR_GLYPH);
     expect(bar).toContain("Opus");
-    dispose();
   });
 
   test("a gated stack keeps its rows under the open menu", () => {
-    const { render, clickWriting, dispose } = buildRuntime(
+    const { render, clickWriting } = buildRuntime(
       `{ globals: {}, root: { v: [{ v: [{ h: ['directory'] }, { h: ['model'] }], when: '{{ eq "a" "a" }}' }] } }`,
     );
     const closed = stripAnsi(render()).split("\n");
@@ -680,17 +658,15 @@ describe("the default placement never inherits an author's gate", () => {
     expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
     expect(opened[0]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
-    dispose();
   });
 
   test("a bar gated away entirely still renders its door", () => {
-    const { render, dispose } = buildRuntime(
+    const { render } = buildRuntime(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
     );
     const bar = stripAnsi(render());
     expect(bar).toContain(DOOR_GLYPH);
     expect(bar).not.toContain("Opus");
-    dispose();
   });
 
   test.each([
@@ -748,7 +724,7 @@ describe("the menu in a config that declares no variables", () => {
     );
 
   test("loads, renders the door, and opens every disclosure without a ⚠", () => {
-    const { config, render, click, dispose } = buildRuntime(BARE, EMPTY_DEFAULT);
+    const { config, render, click } = buildRuntime(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
     const first = stripAnsi(render());
     expect(first).toContain(DOOR_GLYPH);
@@ -778,7 +754,6 @@ describe("the menu in a config that declares no variables", () => {
     // The walk reached the menu's own disclosures, not just the door.
     expect([...opened].some((id) => id.startsWith(SETTINGS_ANCHOR))).toBe(true);
     expect(opened.size).toBeGreaterThan(3);
-    dispose();
   });
 
   test("an authored placement of the anchor loads", () => {
@@ -1006,21 +981,19 @@ describe("the menu is chrome-exempt", () => {
 
 describe("globals.menuGlyph", () => {
   test("a config's glyph is the closed door", () => {
-    const { render, dispose } = buildRuntime(
+    const { render } = buildRuntime(
       `{ globals: { menuGlyph: "🍬" }, root: ${TWO_SEGMENT_ROW} }`,
     );
     const out = stripAnsi(render());
     expect(out).toContain("🍬");
     expect(out).not.toContain(DOOR_GLYPH);
-    dispose();
   });
 
   test("a glyph spelling template syntax is text", () => {
-    const { render, dispose } = buildRuntime(
+    const { render } = buildRuntime(
       `{ globals: { menuGlyph: "🍬 .x}}" }, root: ${TWO_SEGMENT_ROW} }`,
     );
     expect(stripAnsi(render())).toContain("🍬 .x}}");
-    dispose();
   });
 
   test.each([

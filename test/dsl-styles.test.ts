@@ -8,8 +8,8 @@
 // (a name a prior config's vocabulary admitted) collapses to "none".
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, deriveActionValidators +
-// registerStateValidator + the real dispatch for the click, and the same
+// loader, registerDslConfig + renderDsl for rendering, the real dispatch for
+// the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
 import { ownValidators } from "./helpers/ambient-chrome";
@@ -18,8 +18,9 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import type { DslConfig } from "../src/config/dsl-types";
 import {
   ConfigError,
   mergeWithDefault,
@@ -28,10 +29,7 @@ import {
   validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
 import {
   decideStyleName,
   resolveThemeSelection,
@@ -327,11 +325,9 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-    // The daemon's cache installs the derived gate at config load; mirror it so
-    // the click below passes through the real validator.
-    const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
+    // A click is gated by the config its session renders: record the render
+    // the click below resolves that config from.
+    recordRender(sessionState, SID);
     const render = (): string => {
       const theme = resolveThemeSelection(
         undefined,
@@ -355,17 +351,18 @@ describe("style click — live whole-bar recolor over the active theme", () => {
         { theme, style: look },
       );
     };
-    const dispose = (): void => {
-      for (const d of disposers) d();
-      registry.dispose();
-    };
-    return { sessionState, render, dispose };
+    const dispose = (): void => registry.dispose();
+    return { config, sessionState, render, dispose };
   }
 
-  const clickStyle = (sessionState: SessionState, look: string): void => {
+  const clickStyle = (
+    config: DslConfig,
+    sessionState: SessionState,
+    look: string,
+  ): void => {
     clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]),
-      testVerbContext(sessionState),
+      testVerbContext(sessionState, undefined, config),
     );
   };
 
@@ -382,16 +379,16 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   };
 
   test("clicking a style recolors an ordinary segment; clicking none restores", () => {
-    const { sessionState, render, dispose } = buildRuntime();
+    const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "◆ here");
-      clickStyle(sessionState, "inverted");
+      clickStyle(config, sessionState, "inverted");
       const adapted = bgOf(render(), "◆ here");
       // The inverted style flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
       // "none" is the identity style, not a special case: byte-exact restore
       // (rich-js isIdentityKey fast-paths the identity transposition).
-      clickStyle(sessionState, "none");
+      clickStyle(config, sessionState, "none");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
       dispose();
@@ -399,10 +396,10 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   });
 
   test("an explicit per-segment palette: pin IGNORES the style", () => {
-    const { sessionState, render, dispose } = buildRuntime();
+    const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "▣ pinned");
-      clickStyle(sessionState, "inverted");
+      clickStyle(config, sessionState, "inverted");
       // The pinned segment's colors are frozen by author intent — the style
       // adapts everything else (the plain segment moved; asserted above).
       expect(bgOf(render(), "▣ pinned")).toBe(before);

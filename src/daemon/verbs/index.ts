@@ -20,19 +20,9 @@
 
 import { launchSync } from "../../proc/launch";
 import type { SessionStateRW } from "../session-state";
-import {
-  listStateKeys,
-  rangeParamsFor,
-  stateKeySeed,
-  validateStateWrite,
-} from "./state-validators";
-import {
-  configKeySeed,
-  listConfigKeys,
-  rangeParamsForConfig,
-  validateConfigWrite,
-} from "./config-validators";
-import type { RangeParams } from "./validator-registry";
+import { stateGate, stateKeySeed } from "./state-validators";
+import { configGate, configKeySeed } from "./config-validators";
+import type { Gate, RangeParams } from "./validator-registry";
 import {
   applyLayoutOp as applyLayoutOpToFile,
   deletePreset as deletePresetFromFile,
@@ -284,17 +274,18 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
   else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
 };
 
-// [LAW:single-enforcer] One verb writes SessionState — for every
-// registered key, for every pair in a batch. The per-key validator
-// registry in ./state-validators.ts is the single place that decides
-// what is a legal value for a given key; the body here is residue:
+// [LAW:single-enforcer] One verb writes SessionState — for every key the
+// session's gate holds, for every pair in a batch. That gate
+// (./state-validators.ts, derived from the config the session renders) is
+// the single place that decides what is a legal value for a given key; the
+// body here is residue:
 // split args into pairs, validate each, write atomically, log.
 //
 // [LAW:dataflow-not-control-flow] The key is data flowing across the
 // boundary, not a discriminator that selects between verb handlers.
 // The pair count is data too — N=1 (single write) is the degenerate
 // form of the N≥2 batch; the parser walks pairs uniformly. A new
-// state-writable key is a registry row, not a new verb; a multi-write
+// state-writable key is an action in a config, not a new verb; a multi-write
 // click (e.g. menu action that writes the chosen value AND collapses
 // the menu) is one URL with multiple pairs, not multiple URLs.
 //
@@ -325,16 +316,17 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // escape in any segment is bad input, not a handler failure (decodeWire).
   const [sessionId = "", ...rest] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId);
+  const gate = stateGate(sessionConfig(ctx, sid));
   if (rest.length === 0)
     throw new BadVerbArgs(
-      `set-state: <key>/<value> is required (have keys: ${listStateKeys().join(", ")})`,
+      `set-state: <key>/<value> is required (have keys: ${gate.listKeys().join(", ")})`,
     );
   // [LAW:dataflow-not-control-flow] The pair count emerges from the data. The
   // loop walks the same path for N=1 and N=K — no branch on "is this a batch."
   if (rest.length % 2 !== 0) {
     throw new BadVerbArgs(
       `set-state: expected even-count <key>/<value> pairs, got ${rest.length} ` +
-        `segment(s) after session id (have keys: ${listStateKeys().join(", ")})`,
+        `segment(s) after session id (have keys: ${gate.listKeys().join(", ")})`,
     );
   }
   // [LAW:types-are-the-program] Validate the entire batch before any
@@ -357,7 +349,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
           `(expected <sessionId>/<key>/<value>[/<key>/<value>...] segments)`,
       );
     }
-    const result = validateStateWrite(key, incoming);
+    const result = gate.validate(key, incoming);
     if (!result.ok) {
       throw new BadVerbArgs(`set-state: pair ${i / 2 + 1}: ${result.reason}`);
     }
@@ -406,9 +398,9 @@ function stepWithin(
 // re-read live state and accumulate — the idempotent absolute-write bug is gone.
 // The absolute target is computed HERE: read the live value (an unset key
 // steps from what the session's config shows, NOT silently from min), wrap by
-// the signed delta against the registry's bounds, then route the result through
-// validateStateWrite so the one range gate owns the [min,max] clamp and the
-// canonical decimal form that persists.
+// the signed delta against the bounds the session's own config declares, then
+// route the result through its gate so the one range gate owns the [min,max]
+// clamp and the canonical decimal form that persists.
 const stepState: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
     decodeSegments(rawValue),
@@ -425,13 +417,16 @@ const stepState: VerbHandler = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
-  // [LAW:no-silent-fallbacks] A key with no range registration is not a stepper —
-  // reject loudly rather than fabricate bounds or silently no-op.
-  const params = rangeParamsFor(key);
+  const config = sessionConfig(ctx, sid);
+  const gate = stateGate(config);
+  // [LAW:no-silent-fallbacks] A key the session's config declares no range for
+  // is not a stepper — reject loudly rather than fabricate bounds or silently
+  // no-op.
+  const params = gate.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
       `step-state: key "${key}" is not a bounded (range) state key ` +
-        `(have keys: ${listStateKeys().join(", ")})`,
+        `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
   const stored = ctx.sessionState.get(sid, key);
@@ -442,14 +437,10 @@ const stepState: VerbHandler = (rawValue, ctx) => {
           "step-state",
           key,
           params,
-          stateKeySeed(
-            ctx.configFor(sessionOrigin(ctx, sid)),
-            (k) => ctx.sessionState.get(sid, k),
-            key,
-          ),
+          stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key),
         );
   const next = stepWithin(clamped, by, params.min, params.max);
-  const result = validateStateWrite(key, String(next));
+  const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
@@ -473,7 +464,7 @@ function refuseDisorderedPicks(
   const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
-    ctx.configFor(sessionOrigin(ctx, sid)),
+    sessionConfig(ctx, sid),
     (k) => ctx.sessionState.get(sid, k),
     picks,
   );
@@ -488,8 +479,7 @@ function clampTo(params: RangeParams, n: number): number {
 
 // [LAW:no-defensive-null-guards] "unset" is a real state: an unset key steps
 // from the value its session's config shows before any click (`declared`,
-// resolved per session — the registry merges every config, so it cannot hold
-// it). A key whose config shows nothing steps from `min`; one that shows a
+// resolved from the session's picks). A key whose config shows nothing steps from `min`; one that shows a
 // non-integer is a stepper over a value that is no number, refused loudly
 // rather than stepped from a guess.
 function stepFrom(
@@ -587,6 +577,13 @@ function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
   }
 }
 
+// [LAW:one-source-of-truth] The config a session renders — what its clicks
+// read, and what gates them: a session's gate is its own config's, never a
+// merge of every config the daemon holds.
+function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
+  return ctx.configFor(sessionOrigin(ctx, sid));
+}
+
 function originConfigFile(origin: RenderOrigin): string {
   return durableConfigPath(
     origin.projectDir,
@@ -608,24 +605,26 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 // the click answers, as save's does, so the next render draws it
 // ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
 // [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
-// BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
-// derived from the SAME action table (deriveConfigActionValidators).
+// BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
+// derived from the SAME action table.
 const setConfig: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
     decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const config = ctx.configFor(origin);
+  const gate = configGate(config);
   if (!key) {
     throw new BadVerbArgs(
-      `set-config: <key>/<value> is required (have keys: ${listConfigKeys().join(", ")})`,
+      `set-config: <key>/<value> is required (have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const result = validateConfigWrite(key, incoming);
+  const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
   const landing = durableLanding(
-    ctx.configFor(origin),
+    config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
@@ -657,17 +656,19 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
-  const params = rangeParamsForConfig(key);
+  const origin = sessionOrigin(ctx, sid);
+  const config = ctx.configFor(origin);
+  const gate = configGate(config);
+  const params = gate.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
       `step-config: key "${key}" is not a bounded (range) config key ` +
-        `(have keys: ${listConfigKeys().join(", ")})`,
+        `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
   const landing = durableLanding(
-    ctx.configFor(origin),
+    config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
@@ -682,7 +683,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
           configKeySeed(landing.globals, key),
         );
   const next = stepWithin(current, by, params.min, params.max);
-  const result = validateConfigWrite(key, String(next));
+  const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
@@ -703,7 +704,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
 // hand edit, another session's save, a reset — instead of pinning over it. A
 // refused write throws before either, keeping every draft.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
-// session pick (validateStateWrite): a value the gate no longer admits is
+// session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
 const save: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
@@ -720,12 +721,13 @@ const save: VerbHandler = (value, ctx) => {
     ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
+  const gate = stateGate(config);
   const pairs = drafts.map((d): readonly [string, string] => {
-    const result = validateStateWrite(d.sessionKey, d.value);
+    const result = gate.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
     return [d.target, result.value];
   });
-  gatePlacements("save", placements);
+  gatePlacements("save", gate, placements);
   const file = originConfigFile(origin);
   writeDrafts(editStore(ctx, sid), file, pairs, placements);
   ctx.reloadConfig(origin);
@@ -751,10 +753,11 @@ const placementLog = (p: PlacementDraft): string =>
 
 function gatePlacements(
   verb: string,
+  gate: Gate,
   placements: readonly PlacementDraft[],
 ): void {
   for (const p of placements) {
-    const result = validateStateWrite(p.key, settingSpelling(p.value));
+    const result = gate.validate(p.key, settingSpelling(p.value));
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
@@ -772,15 +775,17 @@ const savePreset: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
-  const snapshot = presetSnapshot(ctx.configFor(origin), (key) =>
+  const config = ctx.configFor(origin);
+  const snapshot = presetSnapshot(config, (key) =>
     ctx.sessionState.get(sid, key),
   );
+  const gate = stateGate(config);
   const picks = snapshot.picks.map((d): readonly [keyof Globals, string] => {
-    const result = validateStateWrite(d.sessionKey, d.value);
+    const result = gate.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
     return [d.configKey, result.value];
   });
-  gatePlacements("save-preset", snapshot.placements);
+  gatePlacements("save-preset", gate, snapshot.placements);
   const file = originConfigFile(origin);
   const name = writePreset(
     editStore(ctx, sid),
@@ -829,7 +834,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
 // config file, as ONE write, and the session's own picks. A `do` over several
 // resets arrives here as one effect (batchAdjacentWrites), so reset all is one
 // write, one reload, and one undo step. Gated by key MEMBERSHIP
-// (listConfigKeys) rather than a value domain — there is no value to
+// (the session's configGate's keys) rather than a value domain — there is no value to
 // validate, only a legitimate target to clear — and every key is checked
 // before anything is written, so a batch lands whole or not at all.
 // [LAW:no-ambient-temporal-coupling] Save's order, for the same reason: the
@@ -838,7 +843,8 @@ const deletePreset: VerbHandler = (value, ctx) => {
 const resetConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const known = listConfigKeys();
+  const origin = sessionOrigin(ctx, sid);
+  const known = configGate(ctx.configFor(origin)).listKeys();
   const unknown =
     keys.length === 0 ? [""] : keys.filter((k) => !known.includes(k));
   if (unknown.length > 0) {
@@ -846,7 +852,6 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
@@ -907,7 +912,7 @@ function endedSessionKeys(
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
 // file IS the edited layout and its comments survive. Gated by the SAME
-// allow-list machinery setConfig uses (validateConfigWrite, derived from a
+// allow-list machinery setConfig uses (configGate, derived from the session's
 // config's declared removeSegment/insertSegment actions) — an op token no
 // action declares is a loud BAD_REQUEST. [LAW:parse-dont-validate] The
 // gate proves the VALUE is one an action allows; decodeLayoutOp stamps its
@@ -918,12 +923,15 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
     decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const before = ctx.configFor(origin);
+  const gate = configGate(before);
   if (!key) {
     throw new BadVerbArgs(
-      `apply-layout-op: <key>/<op> is required (have: ${listConfigKeys().join(", ")})`,
+      `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
     );
   }
-  const result = validateConfigWrite(key, opToken);
+  const result = gate.validate(key, opToken);
   if (!result.ok) throw new BadVerbArgs(`apply-layout-op: ${result.reason}`);
   const op = decodeLayoutOp(result.value);
   if (op === null) {
@@ -931,9 +939,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const origin = sessionOrigin(ctx, sid);
   const file = originConfigFile(origin);
-  const before = ctx.configFor(origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
   // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
@@ -974,7 +980,11 @@ const undo: VerbHandler = (value, ctx) => {
 // a navigation journal, so going back is not itself a step it could return to.
 const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const { step, discarded } = ctx.navigation.back(sid, ctx.sessionState);
+  const { step, discarded } = ctx.navigation.back(
+    sid,
+    ctx.sessionState,
+    stateGate(sessionConfig(ctx, sid)),
+  );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };

@@ -46,8 +46,7 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
   deriveConfigActionValidators,
-  registerConfigValidator,
-  validateConfigWrite,
+  configGate,
 } from "../src/daemon/verbs/config-validators";
 import { writeValues, type EditStore } from "../src/daemon/config-file-store";
 import {
@@ -236,22 +235,25 @@ describe("config-validators: segment-palette persist keys", () => {
     expect(contributions[0]!.spec.kind).toBe("allow-list");
   });
 
-  test("register→validate round trip over a segment-palette key", () => {
-    const dispose = registerConfigValidator("segments.sidebar.palette", {
-      kind: "allow-list",
-      allowed: ["nord", "gruvbox"],
+  test("derive→validate round trip over a segment-palette key", () => {
+    const gate = configGate(
+      parseAndValidate(
+        "<test>",
+        `{
+          globals: {},
+          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+          segments: { sidebar: { template: 'x', bg: 'surface', fg: 'foreground' } },
+          actions: { applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' } },
+          root: 'sidebar',
+        }`,
+        ALLOWED,
+      ),
+    );
+    expect(gate.validate("segments.sidebar.palette", "nord")).toEqual({
+      ok: true,
+      value: "nord",
     });
-    try {
-      expect(validateConfigWrite("segments.sidebar.palette", "nord")).toEqual({
-        ok: true,
-        value: "nord",
-      });
-      expect(validateConfigWrite("segments.sidebar.palette", "bogus").ok).toBe(
-        false,
-      );
-    } finally {
-      dispose();
-    }
+    expect(gate.validate("segments.sidebar.palette", "bogus").ok).toBe(false);
   });
 });
 
@@ -282,9 +284,6 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(width),
     );
-  const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
-    registerConfigValidator(key, spec),
-  );
   const ctx: VerbContext = testVerbContext(
     sessionState,
     durable.historyFor(sessionState),
@@ -300,8 +299,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       handler(e.value, ctx);
     }
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, dispose };
+  return { config, store, render, click };
 }
 
 describe("segment-palette persist action click → the config file", () => {
@@ -336,7 +334,7 @@ describe("segment-palette persist action click → the config file", () => {
   }`;
 
   test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", () => {
-    const { render, click, dispose } = buildRuntime(SRC);
+    const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const barBefore = fileSegments(durable).bar;
     const applyUrl = ownUrls(render())[0]!;
@@ -362,11 +360,10 @@ describe("segment-palette persist action click → the config file", () => {
     expect(durable.history().past).toEqual([
       durable.fileStep(original, written),
     ]);
-    dispose();
   });
 
   test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", () => {
-    const { render, click, dispose } = buildRuntime(SRC);
+    const { render, click } = buildRuntime(SRC);
     const [applyUrl, resetUrl] = ownUrls(render());
     click(applyUrl!);
     expect(fileSegments(durable).sidebar!.palette).toBe("nord");
@@ -381,17 +378,15 @@ describe("segment-palette persist action click → the config file", () => {
     expect(durable.text()).toContain(SIDEBAR_COMMENT);
     // The delete is its own history entry — one history over every shape.
     expect(durable.history().past).toHaveLength(2);
-    dispose();
   });
 
   test("reset over a palette the file never authored changes nothing and records nothing", () => {
-    const { render, click, dispose } = buildRuntime(SRC);
+    const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const resetUrl = ownUrls(render())[1]!;
     click(resetUrl);
     expect(durable.text()).toBe(original);
     expect(existsSync(durable.historyPath)).toBe(false);
-    dispose();
   });
 
   // [LAW:one-source-of-truth] `segments` merge by name then by FIELD, so
@@ -413,7 +408,7 @@ describe("segment-palette persist action click → the config file", () => {
       },
       root: { h: ['directory', 'bar'] },
     }`;
-    const { render, click, dispose } = buildRuntime(
+    const { render, click } = buildRuntime(
       SRC_BUNDLED,
       "s1",
       DEFAULT_DSL_CONFIG,
@@ -427,7 +422,6 @@ describe("segment-palette persist action click → the config file", () => {
 
     click(resetUrl!);
     expect(durable.text()).toBe(original);
-    dispose();
   });
 });
 

@@ -15,10 +15,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
@@ -27,7 +23,7 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   parseEffects,
@@ -95,9 +91,7 @@ function buildRuntime(tmux: TmuxHint | null) {
     );
   const renderRaw = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
+  recordRender(sessionState, "s1");
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
   const doctor: DoctorEdge = {
@@ -106,7 +100,10 @@ function buildRuntime(tmux: TmuxHint | null) {
       return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
     },
   };
-  const ctx: VerbContext = { ...testVerbContext(sessionState), doctor };
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, undefined, config),
+    doctor,
+  };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -137,7 +134,6 @@ function buildRuntime(tmux: TmuxHint | null) {
     clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     clickWriting(TAB_KEY, "tools");
   };
-  const dispose = (): void => disposers.forEach((d) => d());
   return {
     sessionState,
     settingsPath,
@@ -147,7 +143,6 @@ function buildRuntime(tmux: TmuxHint | null) {
     urlOfVerb,
     openTools,
     probes: () => probes,
-    dispose,
   };
 }
 
@@ -162,7 +157,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).not.toMatch(/[✓✗] tmux truecolor/);
     expect(rt.urlOfVerb(VERB_DOCTOR_RUN)).toBeDefined();
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
-    rt.dispose();
   });
 
   test("the doctor's report rows are the body's own rows under the tools trigger", () => {
@@ -182,7 +176,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const report = lines[toolsRow + 2]!;
     expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
     expect(report).toContain("✗ tmux truecolor");
-    rt.dispose();
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -212,7 +205,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
     expect(fixed).not.toContain("[fix]");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
-    rt.dispose();
   });
 
   // [LAW:no-silent-failure] A session the daemon never rendered has no client
@@ -223,7 +215,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
     expect(() => rt.click(url)).toThrow(BadVerbArgs);
     expect(() => rt.click(url)).toThrow(/never-rendered has not rendered yet/);
-    rt.dispose();
   });
 
   // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
@@ -237,7 +228,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const before = fs.readFileSync(rt.settingsPath, "utf8");
     expect(() => rt.click(fixUrl)).toThrow(BadVerbArgs);
     expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(before);
-    rt.dispose();
   });
 
   test("not in tmux: the check is ok", () => {
@@ -246,7 +236,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
-    rt.dispose();
   });
 
   test("closing 🍫 hides the tools body even when it was left open", () => {
@@ -258,6 +247,5 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const closed = rt.render();
     expect(closed).not.toContain("🩺 doctor");
     expect(closed).not.toContain("tmux truecolor");
-    rt.dispose();
   });
 });

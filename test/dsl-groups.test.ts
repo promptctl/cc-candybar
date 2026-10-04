@@ -22,12 +22,9 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -65,10 +62,8 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(),
     );
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const ctx: VerbContext = testVerbContext(sessionState);
+  recordRender(sessionState, sessionId);
+  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -88,8 +83,7 @@ function buildRuntime(src: string, sessionId = "s1") {
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     click(url);
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, sessionState, render, click, clickToggle, dispose };
+  return { config, store, sessionState, render, click, clickToggle };
 }
 
 // ─── The toggle round trip ───────────────────────────────────────────────────
@@ -111,16 +105,15 @@ const DETAILS_SRC = `{
 
 describe("2de.4 — group sugar: toggle round trip", () => {
   test("closed by default: toggle renders ▸, body absent (no blank line)", () => {
-    const { render, dispose } = buildRuntime(DETAILS_SRC);
+    const { render } = buildRuntime(DETAILS_SRC);
     const out = stripAnsi(render());
     expect(out).toContain("details ▸");
     expect(out).not.toContain("METRICS-BODY");
     expect(out.split("\n")).toHaveLength(1);
-    dispose();
   });
 
   test("click opens: ▾ + body rendered; second click closes", () => {
-    const { render, clickToggle, sessionState, dispose } =
+    const { render, clickToggle, sessionState } =
       buildRuntime(DETAILS_SRC);
     clickToggle(render(), "groups.details", "details");
     expect(sessionState.get("s1", "groups.details")).toBe("details");
@@ -129,7 +122,6 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     expect(open).toContain("METRICS-BODY");
     clickToggle(render(), "groups.details", "closed");
     expect(stripAnsi(render())).not.toContain("METRICS-BODY");
-    dispose();
   });
 
   test("open: true renders the body before any click", () => {
@@ -137,11 +129,10 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       "label: 'details',",
       "label: 'details', open: true,",
     );
-    const { render, dispose } = buildRuntime(src);
+    const { render } = buildRuntime(src);
     const out = stripAnsi(render());
     expect(out).toContain("details ▾");
     expect(out).toContain("METRICS-BODY");
-    dispose();
   });
 
   test("synthesizes var + cycle action + toggle segment under groups.*, and the gate derives", () => {
@@ -171,9 +162,8 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       "label: 'details',",
       `label: 'say "hi" \\\\ ok',`,
     );
-    const { render, dispose } = buildRuntime(src);
+    const { render } = buildRuntime(src);
     expect(stripAnsi(render())).toContain('say "hi" \\ ok ▸');
-    dispose();
   });
 });
 
@@ -200,7 +190,7 @@ const ACCORDION_SRC = `{
 
 describe("2de.4 — accordion (shared key)", () => {
   test("one key holds one open group: opening B auto-closes A", () => {
-    const { render, clickToggle, dispose } = buildRuntime(ACCORDION_SRC);
+    const { render, clickToggle } = buildRuntime(ACCORDION_SRC);
     clickToggle(render(), "menu", "files");
     let out = stripAnsi(render());
     expect(out).toContain("files ▾");
@@ -215,7 +205,6 @@ describe("2de.4 — accordion (shared key)", () => {
     expect(out).not.toContain("FILES-BODY");
     expect(out).toContain("tools ▾");
     expect(out).toContain("TOOLS-BODY");
-    dispose();
   });
 
   test("the shared key's gate is the union of the sibling cycles", () => {
@@ -262,7 +251,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
   });
 
   test("a closed parent hides the whole subtree; child state persists invisibly", () => {
-    const { render, clickToggle, dispose } = buildRuntime(SRC);
+    const { render, clickToggle } = buildRuntime(SRC);
     // Closed outer: inner toggle not rendered at all.
     expect(stripAnsi(render())).not.toContain("inner");
     clickToggle(render(), "groups.outer", "outer");
@@ -276,7 +265,6 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     expect(stripAnsi(render())).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.outer", "outer");
     expect(stripAnsi(render())).toContain("LEAF-BODY");
-    dispose();
   });
 });
 

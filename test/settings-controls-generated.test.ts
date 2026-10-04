@@ -16,11 +16,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-  validateStateWrite,
-} from "../src/daemon/verbs/state-validators";
+import { stateGate } from "../src/daemon/verbs/state-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   SETTINGS,
@@ -38,7 +34,12 @@ import {
 import { settingControl } from "../src/config/setting-control";
 import type { ActionDecl } from "../src/config/action";
 import type { ValidatedConfig as DslConfig } from "../src/config/dsl-types";
-import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
+import {
+  clickUrl,
+  effectsOf,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -54,17 +55,6 @@ const PAYLOAD = { session_id: "s1", workspace: { current_dir: "/tmp/proj" } };
 
 function load(src: string): DslConfig {
   return parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
-}
-
-function withGates<T>(config: DslConfig, body: () => T): T {
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  try {
-    return body();
-  } finally {
-    disposers.forEach((d) => d());
-  }
 }
 
 // The actions of a config that write `key` in the session.
@@ -140,30 +130,28 @@ describe("each controlled field's control is generated from its declared domain"
           (a) => "reset" in a && a.reset === row.configKey,
         ),
       ).toBe(true);
-      withGates(config, () => {
-        const admit = (value: string) =>
-          validateStateWrite(row.sessionKey, value);
-        if (domain === "bool") {
-          expect(admit("true").ok).toBe(true);
-          expect(admit("false").ok).toBe(true);
-          expect(admit("yes").ok).toBe(false);
-        } else if ("from" in domain) {
-          const { members } = resolveOptionDomain(domain.from, perConfig);
-          expect(members.length).toBeGreaterThan(0);
-          for (const member of members) expect(admit(member).ok).toBe(true);
-          expect(admit("no-such-member").ok).toBe(false);
-        } else {
-          // A range gate clamps a value past its bound into the range.
-          expect(admit(String(domain.max + 5))).toEqual({
-            ok: true,
-            value: String(domain.max),
-          });
-          expect(admit(String(domain.min))).toEqual({
-            ok: true,
-            value: String(domain.min),
-          });
-        }
-      });
+      const gate = stateGate(config);
+      const admit = (value: string) => gate.validate(row.sessionKey, value);
+      if (domain === "bool") {
+        expect(admit("true").ok).toBe(true);
+        expect(admit("false").ok).toBe(true);
+        expect(admit("yes").ok).toBe(false);
+      } else if ("from" in domain) {
+        const { members } = resolveOptionDomain(domain.from, perConfig);
+        expect(members.length).toBeGreaterThan(0);
+        for (const member of members) expect(admit(member).ok).toBe(true);
+        expect(admit("no-such-member").ok).toBe(false);
+      } else {
+        // A range gate clamps a value past its bound into the range.
+        expect(admit(String(domain.max + 5))).toEqual({
+          ok: true,
+          value: String(domain.max),
+        });
+        expect(admit(String(domain.min))).toEqual({
+          ok: true,
+          value: String(domain.min),
+        });
+      }
     });
   }
 });
@@ -199,16 +187,16 @@ describe("a global the menu has never seen gets its control from the generator",
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const render = () =>
       renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
-    withGates(config, () => {
-      expect(validateStateWrite("zoom", "high").ok).toBe(true);
-      expect(validateStateWrite("zoom", "max").ok).toBe(false);
-      const out = render();
-      expect(stripAnsi(out)).toMatch(/low ◀ mid ▶ high/);
-      const high = linkUrls(out).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
-      );
-      clickUrl(high!, testVerbContext(sessionState));
-      expect(sessionState.get("s1", "zoom")).toBe("high");
-    });
+    const gate = stateGate(config);
+    expect(gate.validate("zoom", "high").ok).toBe(true);
+    expect(gate.validate("zoom", "max").ok).toBe(false);
+    const out = render();
+    expect(stripAnsi(out)).toMatch(/low ◀ mid ▶ high/);
+    const high = linkUrls(out).find((u) =>
+      effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
+    );
+    recordRender(sessionState, "s1");
+    clickUrl(high!, testVerbContext(sessionState, undefined, config));
+    expect(sessionState.get("s1", "zoom")).toBe("high");
   });
 });

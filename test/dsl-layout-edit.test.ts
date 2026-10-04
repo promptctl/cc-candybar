@@ -67,8 +67,7 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
   deriveConfigActionValidators,
-  registerConfigValidator,
-  validateConfigWrite,
+  configGate,
 } from "../src/daemon/verbs/config-validators";
 import { RenderCache } from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
@@ -460,28 +459,43 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
   });
 
   test("a token no action declares is rejected by the derived gate", () => {
-    const dispose = registerConfigValidator("presets.default.root", {
-      kind: "allow-list",
-      allowed: [encodeLayoutOp({ op: "remove", target: "directory" })],
-    });
-    try {
-      const result = validateConfigWrite(
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory'] },
+        presets: {},
+      }`,
+      ALLOWED,
+    );
+    const gate = configGate(config);
+    // The declared op passes, so the rejection below is the token's, not the
+    // key's.
+    expect(
+      gate.validate(
         "presets.default.root",
-        encodeLayoutOp({ op: "remove", target: "git" }),
-      );
-      expect(result.ok).toBe(false);
-    } finally {
-      dispose();
-    }
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+      ).ok,
+    ).toBe(true);
+    const result = gate.validate(
+      "presets.default.root",
+      encodeLayoutOp({ op: "remove", target: "git" }),
+    );
+    expect(result.ok).toBe(false);
   });
 
   // brandon-layout-edit-2gc.5 PR review: a preset that declares NO
   // removeSegment/insertSegment/insertSegmentFrom action at all (e.g. one
   // edited down to zero non-exempt segments, so spliceContainer's loop never
-  // ran) must still register `presets.<name>.root` — otherwise its OWN
+  // ran) must still derive `presets.<name>.root` — otherwise its OWN
   // synthesized `reset` action's target is unknown to the gate the moment
   // it's needed most.
-  test("a preset's root key is registered even with zero layout-op actions targeting it", () => {
+  test("a preset's root key is derived even with zero layout-op actions targeting it", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -496,7 +510,7 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
     );
     const contributions = deriveConfigActionValidators(config);
     const rootEntry = contributions.find((c) => c.key === "presets.empty.root");
-    // The registration is the contract: a preset with no layout-op action of
+    // The contribution is the contract: a preset with no layout-op action of
     // its own still gets its root key, so its reset click is never orphaned.
     // Its members are whatever edit chrome minted for that preset's tree.
     expect(rootEntry).toBeDefined();
@@ -533,13 +547,10 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(),
     );
-  const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
-    registerConfigValidator(key, spec),
-  );
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
-    // The daemon's own lookup and reload: an insertion mints its id against
-    // the config as the last click left it.
+    // The daemon's own lookup and reload: a click is gated by the config as
+    // the last click left it, and an insertion mints its id against it.
     configFor: () => current,
     // A file that no longer loads keeps the last config that did, as the
     // render cache's reload does.
@@ -562,8 +573,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       handler(e.value, ctx);
     }
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, log, dispose };
+  return { config, store, render, click, log };
 }
 
 describe("apply-layout-op click → the config file", () => {
@@ -598,7 +608,7 @@ describe("apply-layout-op click → the config file", () => {
   }`;
 
   test("a click fires apply-layout-op and removes the segment from the file's root", () => {
-    const { render, click, dispose } = buildLayoutRuntime(SRC);
+    const { render, click } = buildLayoutRuntime(SRC);
     const original = durable.text()!;
     const urls = ownUrls(render());
     expect(effectsOf(urls[0]!)[0]!.verb).toBe("apply-layout-op");
@@ -617,11 +627,10 @@ describe("apply-layout-op click → the config file", () => {
     expect(durable.history().past).toEqual([
       durable.fileStep(original, written),
     ]);
-    dispose();
   });
 
   test("two clicks COMPOSE — the second edits the tree the first left behind", () => {
-    const { render, click, dispose } = buildLayoutRuntime(SRC);
+    const { render, click } = buildLayoutRuntime(SRC);
     const urls = ownUrls(render());
     click(urls[0]!); // remove directory
     click(urls[1]!); // insert gitPr after git
@@ -629,14 +638,13 @@ describe("apply-layout-op click → the config file", () => {
       v: [{ h: ["git", "gitPr"] }, "bar"],
     });
     expect(durable.history().past).toHaveLength(2);
-    dispose();
   });
 
   // A placement is an instance, so inserting a segment already on the bar
   // places a second one — under the next free id, minted against the tree the
   // previous click left, and named on the click's log line.
   test("inserting a segment already placed writes a second placement with a fresh id", () => {
-    const { render, click, log, dispose } = buildLayoutRuntime(
+    const { render, click, log } = buildLayoutRuntime(
       SRC.replace(
         "removeGit: {",
         "insertGitAgain: { persist: 'presets.default.root', insertSegment: 'git', anchor: 'git', relation: 'after' },\n      removeGit: {",
@@ -665,7 +673,6 @@ describe("apply-layout-op click → the config file", () => {
       expect.stringContaining(`placed={"seg":"git","id":"git-2"}`),
       expect.stringContaining(`placed={"seg":"git","id":"git-3"}`),
     ]);
-    dispose();
   });
 
   // [LAW:no-silent-failure] The bar that emitted the click was rendered
@@ -673,7 +680,7 @@ describe("apply-layout-op click → the config file", () => {
   // entry any more — the store refuses the edit, names the missing segment,
   // and touches neither the file nor the history.
   test("a stale target/anchor is a LOUD error from the store, and the file is untouched", () => {
-    const { render, click, dispose } = buildLayoutRuntime(SRC);
+    const { render, click } = buildLayoutRuntime(SRC);
     const urls = ownUrls(render());
     click(urls[0]!); // remove directory
     const afterFirst = durable.text()!;
@@ -688,7 +695,6 @@ describe("apply-layout-op click → the config file", () => {
     expect(() => click(urls[1]!)).toThrow(/holds no placement "git".*stale/);
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
-    dispose();
   });
 
   // [LAW:no-silent-failure] A custom preset the file declared at render time
@@ -713,7 +719,7 @@ describe("apply-layout-op click → the config file", () => {
       root: ${ROOT},
       presets: { mine: { root: { h: ['git', 'bar'] } } },
     }`;
-    const { render, click, dispose } = buildLayoutRuntime(SRC_CUSTOM);
+    const { render, click } = buildLayoutRuntime(SRC_CUSTOM);
     const urls = ownUrls(render());
     // The hand edit: the preset declaration vanishes; everything else stays.
     durable.write(SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"));
@@ -727,7 +733,6 @@ describe("apply-layout-op click → the config file", () => {
     expect(() => click(resetUrl)).toThrow(undeclared);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(durable.history().past).toHaveLength(0);
-    dispose();
   });
 
   // [LAW:one-source-of-truth] `restagesFragment` (the document) and
@@ -752,7 +757,7 @@ describe("apply-layout-op click → the config file", () => {
       root: ${ROOT},
       presets: { mine: { root: { rows: {}, distribution: 'monotonic' } } },
     }`;
-    const { render, click, dispose } = buildLayoutRuntime(SRC_PLACED);
+    const { render, click } = buildLayoutRuntime(SRC_PLACED);
     render();
     const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
     click(resetUrl);
@@ -760,14 +765,17 @@ describe("apply-layout-op click → the config file", () => {
     expect(durable.parsed().presets).toEqual({ mine: {} });
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(durable.history().past).toHaveLength(1);
-    dispose();
   });
 
   test("a hand-crafted click carrying an undeclared op token is rejected loudly", () => {
-    const { dispose } = buildLayoutRuntime(SRC);
+    const { config } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState));
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+    );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
     expect(() =>
@@ -779,7 +787,6 @@ describe("apply-layout-op click → the config file", () => {
       ),
     ).toThrow(/apply-layout-op/);
     expect(durable.text()).toBe(before);
-    dispose();
   });
 
   // [LAW:no-silent-failure] A click carries only a session id; WHICH file it
@@ -787,8 +794,12 @@ describe("apply-layout-op click → the config file", () => {
   // rendered has none — the verb refuses rather than guessing the daemon's
   // own XDG path.
   test("a click on a session with no recorded render origin is refused — no file to write", () => {
-    const { dispose } = buildLayoutRuntime(SRC);
-    const ctx: VerbContext = testVerbContext(new SessionState());
+    const { config } = buildLayoutRuntime(SRC);
+    const ctx: VerbContext = testVerbContext(
+      new SessionState(),
+      undefined,
+      config,
+    );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     expect(() =>
       applyLayoutOp(
@@ -801,7 +812,6 @@ describe("apply-layout-op click → the config file", () => {
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
     });
-    dispose();
   });
 });
 
@@ -1356,10 +1366,14 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
   // [LAW:one-source-of-truth] `presets.default.root: { rows: {} }` is the
   // merge identity: presetRoot reports the preset authored at `root`, so the
-  // store must edit `root` too — and name it when the click is stale.
+  // store must edit `root` too — and name it when the click is stale. The
+  // file declares the removal as an action of its own, so the reloaded
+  // config's gate still admits the token once `directory` is gone (edit
+  // chrome mints one only per placement still in the tree) and the stale
+  // click reaches the store.
   test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", () => {
     durable.write(
-      `{ globals: {}, segments: {}, presets: { default: { root: { rows: {} } } } }`,
+      `{ globals: {}, segments: {}, actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } }, presets: { default: { root: { rows: {} } } } }`,
     );
     const { cache, sessionState, cleanups } = makeCache();
     try {
@@ -1412,7 +1426,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(before.state.authoredRoots.has("default")).toBe(false);
 
       // Edit mode's own `-` beside gitaculous: the token its synthesized action
-      // declares, through the gate this cache entry registered for it.
+      // declares, through the gate this cache entry's config derives.
       fireVerb(
         "apply-layout-op",
         originCtx(cache, sessionState),
@@ -1560,7 +1574,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           namesBefore.filter((n) => n !== "directory"),
         );
         // The synthesized reset action targets the SAME key the +/-
-        // affordances already write — no second gate to register.
+        // affordances already write — no second gate to derive.
         const resetActionNames = Object.entries(
           customized.state.config.actions,
         )
@@ -1675,7 +1689,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(presetNamesOf(emptied, "compact")).toEqual([]);
 
       // Would throw BadVerbArgs("unknown config key") before the
-      // always-registered preset-root contribution.
+      // always-derived preset-root contribution.
       expect(() =>
         fireVerb(
           "reset-config",

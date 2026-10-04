@@ -31,15 +31,7 @@ import {
   VERB_UNDO,
 } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-  validateStateWrite,
-} from "../src/daemon/verbs/state-validators";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
+import { stateGate } from "../src/daemon/verbs/state-validators";
 import {
   configureMember,
   EDIT_MODE_ARRANGE,
@@ -138,14 +130,6 @@ function buildRuntime(
       undefined,
       { preset },
     );
-  const disposers = [
-    ...deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    ),
-    ...deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
-    ),
-  ];
   // The config a click reads, re-read from the file on a reload — as the
   // daemon's render cache does.
   let current = config;
@@ -175,8 +159,7 @@ function buildRuntime(
     expect(hits.size).toBe(1);
     return [...hits][0]!;
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, sessionState, render, click, urlWriting, ctx, dispose };
+  return { config, sessionState, render, click, urlWriting, ctx };
 }
 
 const draftKey = (id: string, setting: string): string =>
@@ -222,7 +205,6 @@ describe("configure mode: one placement's settings at a time", () => {
       ]),
     );
     expect(stripAnsi(rt.render())).toContain(CONFIGURE_GLYPH);
-    rt.dispose();
   });
 
   test("configuring keeps arrange's chrome, shows the live bar, and hangs only that placement's controls", () => {
@@ -265,7 +247,6 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(again).toContain("form ◀ short ▶");
     expect(again).not.toContain("form ◀ long ▶");
     expect(again.match(/☐ detail|☑ detail/g)).toHaveLength(1);
-    rt.dispose();
   });
 
   test("each generated control writes its setting's draft, and only its placement changes", () => {
@@ -288,39 +269,29 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(stripAnsi(rt.render())).toContain("D-short-1");
     rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "-1"));
     expect(stripAnsi(rt.render())).toContain("D-short-3");
-    rt.dispose();
   });
 
   test("a control's gate is its declared domain", () => {
     durable.write(SRC);
     const rt = buildRuntime(SRC);
+    const gate = stateGate(rt.config);
     // A range gate clamps into the declared range rather than refusing.
-    expect(validateStateWrite(draftKey("vcs2", "depth"), "4")).toEqual({
+    expect(gate.validate(draftKey("vcs2", "depth"), "4")).toEqual({
       ok: true,
       value: "3",
     });
-    expect(validateStateWrite(draftKey("vcs2", "form"), "medium").ok).toBe(
-      false,
-    );
-    expect(validateStateWrite(draftKey("vcs2", "detail"), "yes").ok).toBe(
-      false,
-    );
+    expect(gate.validate(draftKey("vcs2", "form"), "medium").ok).toBe(false);
+    expect(gate.validate(draftKey("vcs2", "detail"), "yes").ok).toBe(false);
     // The configure key admits closed and one member per placement — never
     // one naming no placement of this preset.
     expect(
-      validateStateWrite(EDIT_CONFIGURE_KEY, configureMember("default", "plain"))
-        .ok,
+      gate.validate(EDIT_CONFIGURE_KEY, configureMember("default", "plain")).ok,
     ).toBe(true);
-    expect(validateStateWrite(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED).ok).toBe(
-      true,
-    );
+    expect(gate.validate(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED).ok).toBe(true);
     expect(
-      validateStateWrite(
-        EDIT_CONFIGURE_KEY,
-        configureMember("default", "absent"),
-      ).ok,
+      gate.validate(EDIT_CONFIGURE_KEY, configureMember("default", "absent"))
+        .ok,
     ).toBe(false);
-    rt.dispose();
   });
 
   test("the body's ✕ returns to arranging", () => {
@@ -347,7 +318,6 @@ describe("configure mode: one placement's settings at a time", () => {
     const after = stripAnsi(rt.render());
     expect(after).not.toContain("form ◀");
     expect(after).toContain(CONFIGURE_GLYPH);
-    rt.dispose();
   });
 
   test("edit mode's ✓ save writes the configured placement's picks, then leaves", () => {
@@ -369,7 +339,6 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(durable.text()).toContain(`{ seg: "vcs", settings: { depth: 3 } }`);
     expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
     expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
-    rt.dispose();
   });
 
   test("✎ done leaves edit mode and closes the settings left open", () => {
@@ -389,7 +358,6 @@ describe("configure mode: one placement's settings at a time", () => {
     // Arranging again starts with nothing configured.
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(stripAnsi(rt.render())).not.toContain("form ◀");
-    rt.dispose();
   });
 
   test("a pick the declaration does not admit reads as no pick", () => {
@@ -401,7 +369,6 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(
       placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k)),
     ).toEqual([]);
-    rt.dispose();
   });
 });
 
@@ -465,8 +432,6 @@ describe("configure mode's drafts are saved into the placement", () => {
     const text = stripAnsi(after.render());
     expect(text).toContain("d-short-3");
     expect(text).toContain("D-long-2");
-    after.dispose();
-    rt.dispose();
   });
 });
 
@@ -500,7 +465,6 @@ describe("configure mode survives what a placement's settings do to it", () => {
     rt.sessionState.set(SID, draftKey("tag", "show"), "false");
     rt.sessionState.set(SID, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(stripAnsi(rt.render())).not.toContain("TAG");
-    rt.dispose();
   });
 
   test("a label is display text, however it is spelled", () => {
@@ -509,7 +473,6 @@ describe("configure mode survives what a placement's settings do to it", () => {
     const rt = buildRuntime(src);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
     expect(stripAnsi(rt.render())).toContain(`◀ max "items" {{ x }} 2 ▶`);
-    rt.dispose();
   });
 
   test("a preset named like edit mode's own state still renders its controls", () => {
@@ -523,7 +486,6 @@ describe("configure mode survives what a placement's settings do to it", () => {
     const text = stripAnsi(rt.render());
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text).not.toContain("⚠");
-    rt.dispose();
   });
 });
 
@@ -542,7 +504,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBe("true");
-    rt.dispose();
   });
 
   test("save as preset writes the placement's draft into the new preset and releases it", () => {
@@ -567,7 +528,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       )?.settings;
     expect(settingsIn("custom-1")).toEqual({ form: "long", detail: true });
     expect(settingsIn("p")).toEqual({ form: "long" });
-    rt.dispose();
   });
 
   // The layout a preset shares with others — the file's own `root`, as one
@@ -598,7 +558,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
         )?.settings;
       expect(settingsIn("custom-1")).toEqual({ form: "long", detail: true });
       expect(settingsIn("default")).toEqual({ form: "long" });
-      rt.dispose();
     },
   );
 
@@ -622,7 +581,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
-    rt.dispose();
   });
 
   test.each([
@@ -637,7 +595,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       const text = stripAnsi(rt.render());
       expect(text).toContain("vcs2");
       expect(text).not.toContain("d-short-2");
-      rt.dispose();
     },
   );
 
@@ -663,7 +620,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
         ),
       ).toBe(true);
     }
-    rt.dispose();
   });
 
   test("an enclosing row's gate does not hide the placement being configured", () => {
@@ -677,7 +633,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     expect(stripAnsi(rt.render())).not.toContain("d-long-2");
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
     expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
-    rt.dispose();
   });
 
   test("a preset whose name leads with a digit renders its stepper", () => {
@@ -691,7 +646,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const text = stripAnsi(rt.render());
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text).not.toContain("⚠");
-    rt.dispose();
   });
 
   test("configure mode names its preset: another preset's placement of the id stays closed", () => {
@@ -702,7 +656,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     expect(stripAnsi(rt.render())).not.toContain("form:");
     configurePlacement(rt.sessionState, SID, "b", "vcs2");
     expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
-    rt.dispose();
   });
 
   test("a removal from a row two presets share ends both presets' drafts, and says so", () => {
@@ -728,6 +681,5 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
     expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);
-    rt.dispose();
   });
 });

@@ -26,6 +26,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import {
+  recordRender,
   testVerbContext,
   effectsOf,
   clickUrl,
@@ -133,7 +134,7 @@ function buildRuntime() {
     };
     return { bar, bgOf };
   };
-  return { sessionState, render };
+  return { config, sessionState, render };
 }
 
 // Every truecolor background SGR in a rendered line — `48;2;r;g;b`. The set of
@@ -146,23 +147,28 @@ function bgColors(rendered: string): Set<string> {
   return out;
 }
 
-function clickTheme(sessionState: SessionState, theme: string): void {
+function clickTheme(
+  { config, sessionState }: ReturnType<typeof buildRuntime>,
+  theme: string,
+): void {
   // Drive the real wire end-to-end: emit the click URL the picker would, then
   // dispatch it exactly as the daemon does (parse → dispatch → set-state).
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
   ]);
-  clickUrl(url, testVerbContext(sessionState));
+  recordRender(sessionState, SID);
+  clickUrl(url, testVerbContext(sessionState, undefined, config));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   test("clicking a theme repaints the whole bar's background colors", () => {
-    const { sessionState, render } = buildRuntime();
+    const rt = buildRuntime();
+    const { sessionState, render } = rt;
 
     const beforeBgs = bgColors(render().bar);
     expect(beforeBgs.size).toBeGreaterThan(0);
 
-    clickTheme(sessionState, PICKED_THEME);
+    clickTheme(rt, PICKED_THEME);
 
     // [LAW:verifiable-goals] The coarse whole-bar claim: the set of backgrounds
     // the bar paints with must change. Blanket DISJOINTNESS is deliberately NOT
@@ -176,13 +182,14 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   });
 
   test("every cell the config declares repaints — the non-picker `plain` too", () => {
-    const { sessionState, render } = buildRuntime();
+    const rt = buildRuntime();
+    const { sessionState, render } = rt;
 
     const bgsOf = (painted: Painted): Record<string, string> =>
       Object.fromEntries(DECLARED.map((name) => [name, painted.bgOf(name)]));
 
     const before = bgsOf(render());
-    clickTheme(sessionState, PICKED_THEME);
+    clickTheme(rt, PICKED_THEME);
     const after = bgsOf(render());
 
     const unchanged = DECLARED.filter((name) => after[name] === before[name]);
@@ -190,7 +197,8 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   });
 
   test("active marking tracks the rendered theme: default marked, then the pick", () => {
-    const { sessionState, render } = buildRuntime();
+    const rt = buildRuntime();
+    const { sessionState, render } = rt;
 
     // Before any click, the state var defaults to the config palette, so the
     // base theme option is the single bold (active) region.
@@ -198,7 +206,7 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
       [{ verb: "set-state", args: [SID, "theme", BASE_THEME] }],
     ]);
 
-    clickTheme(sessionState, PICKED_THEME);
+    clickTheme(rt, PICKED_THEME);
 
     expect(boldUrls(render().bar).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: [SID, "theme", PICKED_THEME] }],

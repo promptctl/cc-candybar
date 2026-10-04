@@ -23,10 +23,6 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import {
   configureMember,
   EDIT_MODE_KEY,
 } from "../src/config/loader/edit-mode";
@@ -84,9 +80,6 @@ function buildRuntime(src: string, utilization: number) {
       undefined,
       { theme: resolveThemeSelection(undefined, null, THEME) },
     );
-  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
     configFor: () => config,
@@ -108,8 +101,7 @@ function buildRuntime(src: string, utilization: number) {
   };
   const pick = (id: string, setting: string): string | null =>
     sessionState.get(SID, placementDraftKey("default", id, setting));
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { sessionState, render, click, stepper, pick, dispose };
+  return { sessionState, render, click, stepper, pick };
 }
 
 // The `48;2;r;g;b` background SGR a palette role is drawn with.
@@ -129,7 +121,6 @@ describe("block's thresholds are settings configure mode steps", () => {
     rt.click(rt.stepper("block", "warnAt", -5));
     expect(rt.pick("block", "warnAt")).toBe("45");
     expect(rt.render()).toContain(bgSgr("warning"));
-    rt.dispose();
   });
 
   test("a step that would drop errorAt below warnAt is refused, naming both", () => {
@@ -149,7 +140,6 @@ describe("block's thresholds are settings configure mode steps", () => {
     const up = rt.stepper("block", "warnAt", 5);
     expect(() => rt.click(up)).toThrow(/"errorAt" \(50\) is below "warnAt" \(55\)/);
     expect(rt.pick("block", "warnAt")).toBeNull();
-    rt.dispose();
   });
 
   test("a set-state batch holding a descending pair is refused whole", () => {
@@ -169,7 +159,6 @@ describe("block's thresholds are settings configure mode steps", () => {
     setState(`${SID}/${warn}/85/${error}/90`, ctx);
     expect(rt.pick("block", "warnAt")).toBe("85");
     expect(rt.pick("block", "errorAt")).toBe("90");
-    rt.dispose();
   });
 });
 
@@ -188,7 +177,6 @@ describe("a stride wider than 1 reaches both ends", () => {
     expect(rt.pick("session", "budget")).toBe("0");
     rt.click(rt.stepper("session", "budget", -5));
     expect(rt.pick("session", "budget")).toBe("10000");
-    rt.dispose();
   });
 });
 

@@ -64,6 +64,7 @@ import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
 import { SettingsHistory, fileHistoryStorage } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
+import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
   BadVerbArgs,
@@ -1024,7 +1025,16 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       );
       const payload = await buildRenderPayload(
         req.hookData,
-        payloadDeps,
+        {
+          ...payloadDeps,
+          // Measured against the gate of the config this render draws with.
+          navigation: (sessionId: string) =>
+            navigationHistory.depth(
+              sessionId,
+              sessionState,
+              stateGate(entry.state.config),
+            ),
+        },
         req.cwd,
         entry.state.neededInputPaths(effective.preset),
         effective,
@@ -1365,8 +1375,6 @@ const payloadDeps = {
   // the rate-limit ETA projection and the template's reset countdown read.
   clock: () => new Date(),
   history: (sessionId: string) => settingsHistory.depth(sessionId),
-  navigation: (sessionId: string) =>
-    navigationHistory.depth(sessionId, sessionState),
 };
 
 function handleClick(verb: string, value: string): Response {

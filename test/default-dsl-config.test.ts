@@ -34,10 +34,11 @@ import {
   paletteForThemeName,
 } from "../src/themes";
 import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
-import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
+  recordRender,
+  testVerbContext,
+  clickUrl,
+  effectsOf,
+} from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
@@ -230,8 +231,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
   // ships a clickable theme/style picker, not just documentation describing how
   // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
-  // own applyTheme/applyStyle actions (deriveActionValidators →
-  // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
+  // own applyTheme/applyStyle actions (clickUrl → VERBS → the gate of the
+  // config the session renders, the same chain the daemon runs),
   // then re-renders with theme.effective/style.effective recomputed exactly as
   // server.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
@@ -242,12 +243,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
-    // The daemon's cache installs the derived click gate at config load
-    // (cache/render.ts); mirror it so the click below passes through the same
-    // validator applyTheme/applyStyle would in production.
-    const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
+    // A click is gated by the config its session renders: record the render
+    // and hand the click that config, so the clicks below pass through the
+    // same validator applyTheme/applyStyle would in production.
+    recordRender(sessionState, SID);
+    const ctx = testVerbContext(sessionState, undefined, parsed);
     const opts = {
       endcaps: "powerline" as const,
       colorCompatibility: "truecolor" as const,
@@ -302,7 +302,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
         ]),
-        testVerbContext(sessionState),
+        ctx,
       );
 
       const targetTheme = listResolvablePaletteNames().find(
@@ -322,7 +322,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] },
         ]),
-        testVerbContext(sessionState),
+        ctx,
       );
       const afterTheme = render();
       expect(afterTheme).toContain(targetTheme);
@@ -339,13 +339,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
       clickUrl(
         effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", targetStyle] }]),
-        testVerbContext(sessionState),
+        ctx,
       );
       const afterStyle = render();
       expect(afterStyle).toContain(targetStyle);
       expect(afterStyle).not.toBe(afterTheme);
     } finally {
-      disposers.forEach((dispose) => dispose());
       registry.dispose();
     }
   });
@@ -965,47 +964,40 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // through the same gate and verb table the daemon dispatches through.
     test("clicking the arrow expands, and clicking it again collapses", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
-        registerStateValidator(key, spec),
-      );
       const state = new SessionState();
+      recordRender(state, GIT_PAYLOAD.session_id);
+      const ctx = testVerbContext(state, undefined, parsed);
       const arrow = (line: string) => {
         const urls = linkUrls(line);
         expect(urls).toHaveLength(1);
         return urls[0]!;
       };
       const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
-      try {
-        const collapsed = renderSegment(
-          "gitaculous",
-          undefined,
-          GIT_PAYLOAD.git,
-          {},
-          state,
-        );
-        expect(strip(collapsed)).toMatch(/▸$/);
-        clickUrl(arrow(collapsed), testVerbContext(state));
-        expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe(
-          "expanded",
-        );
+      const collapsed = renderSegment(
+        "gitaculous",
+        undefined,
+        GIT_PAYLOAD.git,
+        {},
+        state,
+      );
+      expect(strip(collapsed)).toMatch(/▸$/);
+      clickUrl(arrow(collapsed), ctx);
+      expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe("expanded");
 
-        const expanded = renderSegment(
-          "gitaculous",
-          undefined,
-          GIT_PAYLOAD.git,
-          {},
-          state,
-        );
-        expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
-        clickUrl(arrow(expanded), testVerbContext(state));
-        expect(
-          strip(
-            renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),
-          ),
-        ).toBe(strip(collapsed));
-      } finally {
-        for (const dispose of disposers) dispose();
-      }
+      const expanded = renderSegment(
+        "gitaculous",
+        undefined,
+        GIT_PAYLOAD.git,
+        {},
+        state,
+      );
+      expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
+      clickUrl(arrow(expanded), ctx);
+      expect(
+        strip(
+          renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),
+        ),
+      ).toBe(strip(collapsed));
     });
 
     // brandon-segments-3eo.1.1: the one-line and full git segments

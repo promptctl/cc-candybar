@@ -342,9 +342,8 @@ export function childrenOf(node: LayoutNode): readonly LayoutNode[] {
 // daemon's own lifetime boundary made into a type.
 //
 // One RenderCache entry is keyed by (projectDir, cwd) and serves MANY sessions.
-// Its SourceRegistry (timers, fs watchers, git subscriptions) and its derived
-// click gate (registerStateValidator over deriveActionValidators) are built
-// ONCE, in buildState. A preset, by contrast, is a per-SESSION pick. So a
+// Its SourceRegistry (timers, fs watchers, git subscriptions) is built ONCE,
+// in buildState, and its click gate (stateGate) is derived once per config. A preset, by contrast, is a per-SESSION pick. So a
 // preset carrying `variables` would need a per-session registry, and one
 // carrying `actions` would need a per-session wire gate — or a gate that is the
 // union of every preset's actions anyway, at which point the preset scoped

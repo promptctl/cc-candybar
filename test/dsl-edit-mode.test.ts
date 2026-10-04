@@ -42,12 +42,6 @@ import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
-import {
-  deriveConfigActionValidators,
-  registerConfigValidator,
-} from "../src/daemon/verbs/config-validators";
-import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {
   EDIT_MODE_ARRANGE,
@@ -209,16 +203,10 @@ function buildEditRuntime(src: string, sessionId = "s1") {
       },
       opts(width),
     );
-  const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
-    registerStateValidator(key, spec),
-  );
-  const configDisposers = deriveConfigActionValidators(config).map(
-    ({ key, spec }) => registerConfigValidator(key, spec),
-  );
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, history),
-    // The config this bar rendered with, which an insertion mints its id
-    // against — the daemon's own lookup.
+    // The config this bar rendered with, which gates every click and which an
+    // insertion mints its id against — the daemon's own lookup.
     configFor: () => config,
   };
   const click = (url: string): void => {
@@ -231,11 +219,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
       handler(e.value, ctx);
     }
   };
-  const dispose = (): void => {
-    stateDisposers.forEach((d) => d());
-    configDisposers.forEach((d) => d());
-  };
-  return { config, store, render, click, dispose, ctx, history, sessionState };
+  return { config, store, render, click, ctx, history, sessionState };
 }
 
 // ─── loader: insertSegmentFrom's ActionDecl shape ─────────────────────────
@@ -477,7 +461,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
     );
-    const { render, click, dispose } = buildEditRuntime(src);
+    const { render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
@@ -490,12 +474,11 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(row).toMatch(
       new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH}`),
     );
-    dispose();
   });
 
   test("a segment that fails to render keeps its `-` beside its ⚠", () => {
     const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
-    const { render, click, dispose } = buildEditRuntime(src);
+    const { render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
@@ -507,7 +490,6 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       new RegExp(`${REMOVE_GLYPH}⚠ git: [^\n]*${CONFIGURE_GLYPH}`),
     );
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
-    dispose();
   });
 
   // The red `✖` is floored against the ground it is DRAWN on. A segment
@@ -525,7 +507,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
         "variables: {",
         "variables: {\n    pick: { kind: 'state', key: 'pick', default: 'a' },",
       );
-    const { render, click, dispose } = buildEditRuntime(src);
+    const { render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
@@ -537,13 +519,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(
       contrastRatio(parseRgbHex(fg), parseRgbHex(bg)),
     ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
-    dispose();
   });
 
   // An insertion point is drawn on no fill: its `✚` is green text on the
   // terminal's own ground, where `✖` sits inside its placement's cell.
   test("`✚` is drawn on no fill, `✖` on its segment's own cell", () => {
-    const { render, click, dispose } = buildEditRuntime(BASE);
+    const { render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
@@ -555,11 +536,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(add.fg).toBeDefined();
     expect(add.bg).toBeUndefined();
     expect(paintAt(out, REMOVE_GLYPH).bg).toBeDefined();
-    dispose();
   });
 
   test("edit mode leads with ✓ done, top left, and it leaves edit mode", () => {
-    const { render, click, dispose } = buildEditRuntime(BASE);
+    const { render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
@@ -577,14 +557,12 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(done).toBeDefined();
     click(done!);
     expect(stripAnsi(render())).not.toContain("✓ done");
-    dispose();
   });
 
   test("chrome segments are gated behind edit.mode — absent from render when closed", () => {
-    const { render, dispose } = buildEditRuntime(BASE);
+    const { render } = buildEditRuntime(BASE);
     const out = stripAnsi(render());
     expect(out).not.toContain(REMOVE_GLYPH); // no `-` rendered while closed
-    dispose();
   });
 
   test("no render-walk branch: renderDsl's own source never mentions edit mode", () => {
@@ -621,7 +599,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     );
 
   test("a segment its own `when` or its container's hides still shows its name and its `-`", () => {
-    const { render, click, dispose } = buildEditRuntime(HIDDEN);
+    const { render, click } = buildEditRuntime(HIDDEN);
     const closed = stripAnsi(render());
     expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     // A hidden segment that is a whole row leaves no blank line behind.
@@ -661,14 +639,13 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     expect(removesOf(shown)).not.toContain(
       encodeLayoutOp({ op: "remove", target: "idle" }),
     );
-    dispose();
   });
 
   // The settings menu's synthesis, not withTrailingCell, lifts a gated root
   // under an ungated wrapper row (the door's), so the tail lands outside the
   // gate; edit mode needs `session.id`, which always brings the menu.
   test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", () => {
-    const { render, click, ctx, dispose } = buildEditRuntime(
+    const { render, click, ctx } = buildEditRuntime(
       BASE.replace(
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
@@ -687,7 +664,6 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     // The way back survives the root hiding.
     click(liveToggle(live, "closed")!);
     expect(stripAnsi(render())).toMatch(/directory.*git/);
-    dispose();
   });
 
   test("only a name label stands for a segment in the arrangement, whatever the presets are called", () => {
@@ -712,7 +688,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
   test("toggling edit mode on makes the `-` chrome render; off hides it again", () => {
-    const { render, click, dispose } = buildEditRuntime(BASE);
+    const { render, click } = buildEditRuntime(BASE);
     const before = stripAnsi(render());
     expect(before).not.toContain(REMOVE_GLYPH);
 
@@ -744,11 +720,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     )!;
     click(closeUrl);
     expect(stripAnsi(render())).not.toContain("-");
-    dispose();
   });
 
   test("remove → insert (picked via menu) → undo × 2 returns the file to its original bytes", () => {
-    const { render, click, dispose, ctx } = buildEditRuntime(BASE);
+    const { render, click, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
 
     // Open edit mode.
@@ -816,7 +791,6 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // Byte-identical: the file IS the layout, so "back to the original
     // layout" and "back to the original bytes" are one fact.
     expect(durable.text()).toBe(original);
-    dispose();
   });
 });
 
@@ -824,7 +798,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 
 describe("a segment row's chrome rides its row", () => {
   test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", () => {
-    const { render, click, dispose } = buildEditRuntime(BASE);
+    const { render, click } = buildEditRuntime(BASE);
     const closed = stripAnsi(render()).split("\n");
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
@@ -837,7 +811,6 @@ describe("a segment row's chrome rides its row", () => {
     // One more line than the closed bar: edit mode's own top row, with
     // `✎ done`. The chrome itself adds none.
     expect(opened.length).toBe(closed.length + 1);
-    dispose();
   });
 });
 
@@ -922,7 +895,6 @@ describe("edit mode's save and cancel", () => {
     const rows = stripAnsi(rt.render()).split("\n");
     expect(rows.at(-1)).toContain("(?)");
     expect(rows.at(-1)).not.toContain("live");
-    rt.dispose();
   });
 
   test("cancel restores the file byte for byte, leaves edit mode, and leaves nothing to redo", () => {
@@ -942,7 +914,6 @@ describe("edit mode's save and cancel", () => {
       sinceEdit: 0,
     });
     expect(stripAnsi(rt.render())).not.toContain("✓ done");
-    rt.dispose();
   });
 
   test("save keeps the change; the next time edit mode opens it counts from there", () => {
@@ -961,7 +932,6 @@ describe("edit mode's save and cancel", () => {
     });
     open(rt);
     expect(topRow(rt)).toContain("✓ done");
-    rt.dispose();
   });
 
   test("cancel takes back only what edit mode did, and undoing afterwards does not resurrect it", () => {
@@ -988,7 +958,6 @@ describe("edit mode's save and cancel", () => {
       redo: 1,
       sinceEdit: 0,
     });
-    rt.dispose();
   });
 
   test("rewind says what it put back, and a session with no savepoint is refused loudly", () => {
@@ -1004,6 +973,5 @@ describe("edit mode's save and cancel", () => {
     expect(logs.join("\n")).toMatch(
       /rewind: put back .* as edit mode found it \(session=s1\)/,
     );
-    rt.dispose();
   });
 });

@@ -42,14 +42,8 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
   deriveConfigActionValidators,
-  listConfigKeys,
-  registerConfigValidator,
-  validateConfigWrite,
+  configGate,
 } from "../src/daemon/verbs/config-validators";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-} from "../src/daemon/verbs/state-validators";
 import { persistValueText, writeValues } from "../src/daemon/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -166,9 +160,25 @@ describe("persistValueText", () => {
 
 // ─── config-validators: the persistent-write gate ─────────────────────────────
 
-describe("config-validators registry", () => {
-  test("an unregistered key is rejected — no baseline keys exist", () => {
-    const result = validateConfigWrite("palette", "nord");
+describe("config-validators gate", () => {
+  // The gate of a config declaring exactly these actions.
+  const gateOf = (actions: string) =>
+    configGate(
+      parseAndValidate(
+        "<test>",
+        `{
+          globals: {},
+          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+          actions: ${actions},
+          segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
+          root: 's',
+        }`,
+        ALLOWED,
+      ),
+    );
+
+  test("a key no action persists is rejected — no baseline keys exist", () => {
+    const result = gateOf("{}").validate("palette", "nord");
     expect(result.ok).toBe(false);
   });
 
@@ -194,65 +204,65 @@ describe("config-validators registry", () => {
     expect(contributions.map((c) => c.key)).toEqual(["palette"]);
   });
 
-  test("register→validate round trip: rejects out-of-domain, accepts in-domain", () => {
-    const dispose = registerConfigValidator("padding", {
-      kind: "range",
-      min: 0,
-      max: 16,
-    });
-    try {
-      const bad = validateConfigWrite("padding", "999");
-      // range gate CLAMPS rather than rejects, mirroring the SessionState range gate
-      expect(bad.ok).toBe(true);
-      if (bad.ok) expect(bad.value).toBe("16");
-      const ok = validateConfigWrite("padding", "5");
-      expect(ok).toEqual({ ok: true, value: "5" });
-    } finally {
-      dispose();
-    }
+  test("derive→validate round trip: clamps out-of-range, accepts in-range", () => {
+    const gate = gateOf(
+      `{ bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 } }`,
+    );
+    const bad = gate.validate("padding", "999");
+    // range gate CLAMPS rather than rejects, mirroring the SessionState range gate
+    expect(bad.ok).toBe(true);
+    if (bad.ok) expect(bad.value).toBe("16");
+    const ok = gate.validate("padding", "5");
+    expect(ok).toEqual({ ok: true, value: "5" });
   });
 
-  test("listConfigKeys reflects live registrations", () => {
-    const dispose = registerConfigValidator("charset", {
-      kind: "allow-list",
-      allowed: ["unicode", "ascii"],
-    });
-    expect(listConfigKeys()).toContain("charset");
-    dispose();
-    expect(listConfigKeys()).not.toContain("charset");
+  test("a gate's keys are the ones its own config persists", () => {
+    const applyCharset = `{ applyCharset: { persist: 'charset', from: 'charsets' } }`;
+    expect(gateOf(applyCharset).listKeys()).toContain("charset");
+    expect(gateOf("{}").listKeys()).not.toContain("charset");
   });
 
-  // [LAW:one-type-per-behavior] The shared validator-registry algebra is one
+  // [LAW:one-type-per-behavior] The shared validator algebra is one
   // implementation instantiated twice — a rejection message from the CONFIG
   // keyspace must say "config", never the SessionState-era "state", or an
   // operator debugging a persist-action click is misled about which gate
   // rejected them.
   test("an out-of-domain rejection names the config keyspace, not state", () => {
-    const dispose = registerConfigValidator("charset", {
-      kind: "allow-list",
-      allowed: ["unicode", "ascii"],
-    });
-    try {
-      const result = validateConfigWrite("charset", "bogus");
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.reason).toContain("config");
-        expect(result.reason).not.toContain("state");
-      }
-    } finally {
-      dispose();
+    const result = gateOf(
+      `{ applyCharset: { persist: 'charset', from: 'charsets' } }`,
+    ).validate("charset", "bogus");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("config");
+      expect(result.reason).not.toContain("state");
     }
   });
 
   // [LAW:one-source-of-truth] A slash-bearing allow-list member is rejected
-  // at REGISTRATION (config-load) time, and the thrown message must name the
+  // when the config's gate is derived, and the thrown message must name the
   // wire the config keyspace actually crosses (set-config), not the
   // SessionState keyspace's set-state wire the shared factory defaults to.
+  // The loader refuses a slash-bearing persist value before any gate derives,
+  // so the action table is assembled past it — the gate's own refusal is what
+  // is under test.
   test("a slash-bearing config allow-list member's rejection names the set-config wire", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
+        root: 's',
+      }`,
+      ALLOWED,
+    );
     expect(() =>
-      registerConfigValidator("style", {
-        kind: "allow-list",
-        allowed: ["a/b"],
+      configGate({
+        ...config,
+        actions: {
+          ...config.actions,
+          applyStyle: { persist: "style", to: "a/b" },
+        },
       }),
     ).toThrow(/set-config wire/);
   });
@@ -390,9 +400,6 @@ function buildPersistRuntime(
       { session_id: sessionId, project_dir: "/tmp/proj" },
       opts(width),
     );
-  const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
-    registerConfigValidator(key, spec),
-  );
   const ctx: VerbContext = testVerbContext(
     sessionState,
     durable.historyFor(sessionState),
@@ -408,8 +415,7 @@ function buildPersistRuntime(
       handler(e.value, ctx);
     }
   };
-  const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, render, click, dispose, sessionState };
+  return { config, store, render, click, sessionState };
 }
 
 describe("persist action click → the config file", () => {
@@ -435,7 +441,7 @@ describe("persist action click → the config file", () => {
   }`;
 
   test("clicking a persist-option action writes globals.palette into the config file", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC);
+    const { render, click } = buildPersistRuntime(SRC);
     const original = durable.text()!;
     const out = render();
     const urls = ownUrls(out);
@@ -451,11 +457,10 @@ describe("persist action click → the config file", () => {
     expect(durable.history().past).toEqual([
       durable.fileStep(original, written),
     ]);
-    dispose();
   });
 
   test("clicking reset deletes the persisted key from the file", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC);
+    const { render, click } = buildPersistRuntime(SRC);
     const urls = ownUrls(render());
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ palette: "nord" });
@@ -464,7 +469,6 @@ describe("persist action click → the config file", () => {
     click(resetUrl);
     expect(globalsInFile()).toEqual({});
     expect(durable.text()).toContain(GLOBALS_COMMENT);
-    dispose();
   });
 
   // [LAW:verifiable-goals] brandon-presets-0yk.2: `preset` reuses persist/
@@ -486,17 +490,16 @@ describe("persist action click → the config file", () => {
   }`;
 
   test("clicking a persist-option action over preset writes globals.preset into the config file", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
+    const { render, click } = buildPersistRuntime(SRC_PRESET);
     const urls = ownUrls(render());
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ preset: "compact" });
-    dispose();
   });
 
   test("clicking reset deletes the persisted preset from the file", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
+    const { render, click } = buildPersistRuntime(SRC_PRESET);
     const urls = ownUrls(render());
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ preset: "compact" });
@@ -504,7 +507,6 @@ describe("persist action click → the config file", () => {
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
     click(resetUrl);
     expect(globalsInFile()).toEqual({});
-    dispose();
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.4 found this the hard
@@ -514,10 +516,10 @@ describe("persist action click → the config file", () => {
   // see docs/interaction-authoring.md's "Persisting the display globals",
   // which had ALREADY documented `{{ menu "applyCharset" "▸" "▾" }}` over a persist
   // action as the canonical pattern) threw at render the moment the menu was
-  // actually opened. `buildPersistRuntime` above only derives the CONFIG
-  // gate; a `{{ menu }}`'s own open/close disclosure is a SessionState write,
-  // so this test derives BOTH gates — the same combination a real daemon
-  // registers for any config mixing session and persist actions.
+  // actually opened. A `{{ menu }}`'s own open/close disclosure is a
+  // SessionState write and its option a config-file write, so this test's
+  // clicks cross BOTH of the config's gates — the combination any config
+  // mixing session and persist actions derives.
   test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", () => {
     const src = `{
       globals: {},
@@ -549,12 +551,6 @@ describe("persist action click → the config file", () => {
         { session_id: "s1", project_dir: "/tmp/proj" },
         opts(),
       );
-    const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
-      registerStateValidator(key, spec),
-    );
-    const configDisposers = deriveConfigActionValidators(config).map(
-      ({ key, spec }) => registerConfigValidator(key, spec),
-    );
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
@@ -597,8 +593,6 @@ describe("persist action click → the config file", () => {
       click(asciiUrl!);
       expect(globalsInFile()).toEqual({ charset: "ascii" });
     } finally {
-      stateDisposers.forEach((d) => d());
-      configDisposers.forEach((d) => d());
       registry.dispose();
     }
   });
@@ -623,17 +617,16 @@ describe("persist action click → the config file", () => {
   }`;
 
   test("clicking a persist-literal (to) action writes the fixed value durably", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[0]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[0]!);
     expect(globalsInFile()).toEqual({ style: "vivid" });
-    dispose();
   });
 
   test("clicking a persist-cycle action writes the successor member durably", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[1]!)[0]!;
     expect(effect.verb).toBe("set-config");
@@ -642,11 +635,10 @@ describe("persist action click → the config file", () => {
     // successor ("256") — same "unknown current counts as first" rule the
     // renderer's cycleIndex uses.
     expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
-    dispose();
   });
 
   test("clicking a persist-bounded action steps and persists via stepConfig", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
@@ -658,7 +650,6 @@ describe("persist action click → the config file", () => {
     click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
     click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
     expect(globalsInFile()).toEqual({ padding: 3 });
-    dispose();
   });
 
   // brandon-settings-2ov: a preset whose fragment names a field wins over
@@ -684,24 +675,22 @@ describe("persist action click → the config file", () => {
     );
 
   test("a persist stepper under a preset that pins its field steps and writes that preset's globals", () => {
-    const { render, click, dispose, sessionState } =
+    const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
     sessionState.set("s1", "preset", "roomy");
     const urls = ownUrls(render());
     click(urls[0]!); // seeds from roomy's 4, not the shadowed top-level 2
     expect(barUnder("roomy").padding).toBe(5);
     expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
-    dispose();
   });
 
   test("a persist cycle under a preset that pins its field writes that preset's globals", () => {
-    const { render, click, dispose, sessionState } =
+    const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
     sessionState.set("s1", "preset", "roomy");
     click(ownUrls(render())[1]!);
     expect(barUnder("roomy").autoWrap).toBe(false);
     expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
-    dispose();
   });
 
   // The ticket's repro: the pinning preset lives in the default the file
@@ -712,7 +701,7 @@ describe("persist action click → the config file", () => {
       ...EMPTY_DEFAULT,
       presets: { compact: { globals: { padding: 0 } } },
     };
-    const { render, click, dispose, sessionState } = buildPersistRuntime(
+    const { render, click, sessionState } = buildPersistRuntime(
       SRC2,
       "s1",
       withCompact,
@@ -721,16 +710,14 @@ describe("persist action click → the config file", () => {
     click(ownUrls(render())[2]!);
     expect(barUnder("compact", withCompact).padding).toBe(1);
     expect(globalsInFile()).toEqual({});
-    dispose();
   });
 
   test("a persist stepper under a preset silent on its field still writes top-level globals", () => {
-    const { render, click, dispose, sessionState } =
+    const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET.replace("padding: 4, ", ""));
     sessionState.set("s1", "preset", "roomy");
     click(ownUrls(render())[0]!);
     expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
-    dispose();
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: proves the NEW
@@ -742,7 +729,7 @@ describe("persist action click → the config file", () => {
   // back to the bare key "charset", which no variable projects, so readVar
   // would always see "".
   test("a persist-option action over a newly-exposed field (charset) marks the matching link active via its *.effective projection", () => {
-    const { render, dispose } = buildPersistRuntime(`{
+    const { render } = buildPersistRuntime(`{
       globals: {},
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
@@ -760,7 +747,6 @@ describe("persist action click → the config file", () => {
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
     expect(active[0]![0]!.args[2]).toBe("ascii");
-    dispose();
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
@@ -769,7 +755,7 @@ describe("persist action click → the config file", () => {
   // just its own unit test above) and lands as a real JSON5 boolean in the
   // file, not the string "false".
   test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {
-    const { render, click, dispose } = buildPersistRuntime(`{
+    const { render, click } = buildPersistRuntime(`{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { toggleWrap: { persist: 'autoWrap', cycle: ['true', 'false'] } },
@@ -779,7 +765,6 @@ describe("persist action click → the config file", () => {
     const urls = ownUrls(render());
     click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
     expect(globalsInFile()).toEqual({ autoWrap: false });
-    dispose();
   });
 
   test("an unknown config key is rejected loudly, not silently written", () => {
@@ -794,8 +779,8 @@ describe("persist action click → the config file", () => {
       }`,
       ALLOWED,
     );
-    void config;
     const sessionState = new SessionState();
+    durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
@@ -807,7 +792,7 @@ describe("persist action click → the config file", () => {
         `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
         ctx,
       ),
-    ).toThrow();
+    ).toThrow(/unknown config key "not-a-real-key"/);
   });
 });
 
@@ -853,9 +838,6 @@ describe("a durable click lands in the file the next reload reads", () => {
       }`,
       ALLOWED,
     );
-    const disposers = deriveConfigActionValidators(config).map(
-      ({ key, spec }) => registerConfigValidator(key, spec),
-    );
     const sessionState = new SessionState();
     const named = join(durable.projectDir, "named.json5");
     durable.seedOrigin(sessionState, "s1", named);
@@ -865,22 +847,18 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.historyFor(sessionState),
       config,
     );
-    try {
-      VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
-      expect(
-        (
-          JSON5.parse(readFileSync(named, "utf8")) as {
-            globals: { palette: unknown };
-          }
-        ).globals.palette,
-      ).toBe("nord");
-      expect(durable.parsed()).toEqual({
-        globals: { palette: "textual-dark" },
-      });
-      expect(existsSync(durable.xdgConfigPath)).toBe(false);
-    } finally {
-      for (const fn of disposers) fn();
-    }
+    VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
+    expect(
+      (
+        JSON5.parse(readFileSync(named, "utf8")) as {
+          globals: { palette: unknown };
+        }
+      ).globals.palette,
+    ).toBe("nord");
+    expect(durable.parsed()).toEqual({
+      globals: { palette: "textual-dark" },
+    });
+    expect(existsSync(durable.xdgConfigPath)).toBe(false);
   });
 
   // [LAW:one-source-of-truth] The render records the RESOLUTION INPUTS, not
@@ -899,9 +877,6 @@ describe("a durable click lands in the file the next reload reads", () => {
       }`,
       ALLOWED,
     );
-    const disposers = deriveConfigActionValidators(config).map(
-      ({ key, spec }) => registerConfigValidator(key, spec),
-    );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(
@@ -917,20 +892,16 @@ describe("a durable click lands in the file the next reload reads", () => {
           globals: { palette: unknown };
         }
       ).globals.palette;
-    try {
-      expect(durable.text()).toBeNull();
-      click("nord");
-      expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
-      expect(durable.text()).toBeNull();
+    expect(durable.text()).toBeNull();
+    click("nord");
+    expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
+    expect(durable.text()).toBeNull();
 
-      // The higher-precedence candidate appears between renders.
-      durable.write(`{ globals: { palette: "textual-dark" } }`);
-      click("dracula");
-      expect(paletteIn(durable.configPath)).toBe("dracula");
-      expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
-    } finally {
-      for (const fn of disposers) fn();
-    }
+    // The higher-precedence candidate appears between renders.
+    durable.write(`{ globals: { palette: "textual-dark" } }`);
+    click("dracula");
+    expect(paletteIn(durable.configPath)).toBe("dracula");
+    expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
   });
 });
 
