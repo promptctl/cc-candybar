@@ -1,3 +1,10 @@
+# [1.110.0](https://github.com/promptctl/cc-candybar/compare/v1.109.1...v1.110.0) (2026-10-04)
+
+
+### Features
+
+* **menu:** mark every setting that differs from its default ([#302](https://github.com/promptctl/cc-candybar/issues/302)) ([edd43aa](https://github.com/promptctl/cc-candybar/commit/edd43aa794b88a07c794f7225613dfeaf6459d3c))
+
 ## [1.109.1](https://github.com/promptctl/cc-candybar/compare/v1.109.0...v1.109.1) (2026-10-04)
 
 
