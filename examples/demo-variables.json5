@@ -235,29 +235,26 @@
     // Native git source. Covers 6 fields: branch, sha, dirty, ahead, behind, stash.
     // The default config uses kind:"input" instead for the full 12-field
     // GitInfo surface; kind:"git" is the lighter alternative when you only
-    // need one field and prefer the SourceRegistry's own cache/watcher.
+    // need one field. It takes no cache: the daemon's git cache watches the
+    // repository and republishes the value when it changes.
     "demo.git.branch": {
       kind: "git",
       field: "branch",
-      cache: { ttl: "10s" },
       default: "",
     },
     "demo.git.ahead": {
       kind: "git",
       field: "ahead",
-      cache: { ttl: "10s" },
       default: "0",
     },
     "demo.git.dirty": {
       kind: "git",
       field: "dirty",
-      cache: { ttl: "10s" },
       default: "false",
     },
     "demo.git.stash": {
       kind: "git",
       field: "stash",
-      cache: { ttl: "10s" },
       default: "0",
     },
 

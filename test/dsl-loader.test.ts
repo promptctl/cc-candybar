@@ -491,31 +491,35 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
-  test("git: field must be in closed set + cache required", () => {
+  test("git: field must be in closed set, and a cache is refused", () => {
     expectIssue(`{ variables: { b: { kind: "git" } } }`, {
       path: "variables.b.field",
       message:
         "git field must be one of: branch, sha, dirty, ahead, behind, stash",
     });
     expectIssue(
-      `{ variables: { b: { kind: "git", field: "not-a-field", cache: { ttl: "5s" } } } }`,
+      `{ variables: { b: { kind: "git", field: "not-a-field" } } }`,
       {
         path: "variables.b.field",
         message: "git field must be one of",
       },
     );
-    expectIssue(`{ variables: { b: { kind: "git", field: "branch" } } }`, {
-      path: "variables.b.cache",
-      message: "git variables must declare a cache policy",
-    });
+    // [LAW:no-silent-failure] The runtime never read a git variable's cache —
+    // the daemon's git cache follows the repository — so one is refused with
+    // that reason, once, rather than accepted and ignored.
+    const refused = expectError(
+      `{ variables: { b: { kind: "git", field: "branch", cache: { ttl: "1h" } } } }`,
+    ).issues.filter((i) => i.path === "variables.b.cache");
+    expect(refused.map((i) => i.message)).toEqual([
+      "variables.b.cache was removed: a git variable is refreshed by the daemon's own watch on the repository, so it takes no cache policy — delete the key",
+    ]);
     const ok = parseAndValidate(
       FILE,
-      `{ variables: { b: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" }, default: "(detached)" } } }`,
+      `{ variables: { b: { kind: "git", field: "branch", default: "(detached)" } } }`,
     );
     expect(ok.variables.b).toEqual({
       kind: "git",
       field: "branch",
-      cache: { watch_file: "/repo/.git/HEAD" },
       default: "(detached)",
     });
   });
@@ -591,7 +595,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
       `{ kind: "time", layout: "15:04", cache: { ttl: "1s" } }`,
-      `{ kind: "git", field: "branch", cache: { never: true } }`,
+      `{ kind: "git", field: "branch" }`,
       `{ kind: "state", key: "theme" }`,
     ]) {
       expect(
@@ -1645,7 +1649,7 @@ describe("loadDslConfig — cross-references", () => {
     const cfg = parseAndValidate(
       FILE,
       `{ variables: {
-        branch: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" } },
+        branch: { kind: "git", field: "branch" },
         recent: { kind: "shell", command: "echo", cache: { depends_on: ["branch"] } }
       }}`,
     );
@@ -1662,7 +1666,7 @@ describe("loadDslConfig — cross-references", () => {
         s: {
           template: "{{ .s.recent }}",
           vars: {
-            branch: { kind: "git", field: "branch", cache: { watch_file: "/repo/.git/HEAD" } },
+            branch: { kind: "git", field: "branch" },
             recent: { kind: "shell", command: "echo", cache: { depends_on: ["branch"] } }
           }
         }
@@ -2017,7 +2021,6 @@ describe("loadDslConfig — valid corpus", () => {
         now: { kind: "time", layout: "15:04", cache: { ttl: "1s" } },
         branch: {
           kind: "git", field: "branch",
-          cache: { watch_file: "/repo/.git/HEAD" },
           default: "(detached)",
         },
         constant: { kind: "literal", value: "hello" },

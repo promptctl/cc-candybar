@@ -242,21 +242,33 @@ export function record<T>(
     return null;
   }
 
-  const removed = Object.entries(schema.removed ?? {}).filter(
-    ([key]) => raw[key] !== undefined,
-  );
-  for (const [key, pointer] of removed) {
-    reject(ctx, `${path}.${key}`, `${path}.${key} was removed: ${pointer}`);
-  }
   rejectUnknownKeys(
     ctx,
     path,
     raw,
     schema.noun,
     new Set(Object.keys(schema.fields)),
-    new Set(removed.map(([key]) => `${path}.${key}`)),
+    refuseRemoved(ctx, schema.removed ?? {}, path, raw),
   );
   return fields(ctx, schema.fields, path, raw);
+}
+
+// [LAW:single-enforcer] The one refusal of a removed key, for a record and a
+// tagged-union arm alike: each key present is reported with its pointer, and the
+// paths reported come back so the unknown-key fallback stays silent about them.
+export function refuseRemoved(
+  ctx: ValidateCtx,
+  removed: Readonly<Record<string, string>>,
+  path: string,
+  raw: Record<string, unknown>,
+): ReadonlySet<string> {
+  const present = Object.entries(removed).filter(
+    ([key]) => raw[key] !== undefined,
+  );
+  for (const [key, pointer] of present) {
+    reject(ctx, `${path}.${key}`, `${path}.${key} was removed: ${pointer}`);
+  }
+  return new Set(present.map(([key]) => `${path}.${key}`));
 }
 
 // [LAW:decomposition] The field-assembly core: run each field spec against an

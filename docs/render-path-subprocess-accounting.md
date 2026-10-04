@@ -53,7 +53,7 @@ Spawns originate from cache-policy callbacks registered against the MobX store a
 | `kind: "shell"` | `depends_on` | MobX reaction: any listed var changes |
 | `kind: "shell"` | `key` | MobX reaction: rendered key template changes |
 | `kind: "shell"` | `never` | once, at declaration |
-| `kind: "git"` | (same set) | same — `src/segments/git.ts` |
+| `kind: "git"` | none of its own (a `cache:` is a load error) | the daemon's git cache watches the repository and refreshes it — `src/daemon/cache/git.ts`, `src/segments/git.ts` |
 | `kind: "tmux"` | (provider-internal cache) | `src/segments/tmux.ts` provider TTL |
 
 None of these run inside the render request lifecycle. They fire asynchronously on their own clocks/events and write into the store; the render request reads whatever value is already there.

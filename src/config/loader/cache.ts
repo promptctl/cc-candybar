@@ -6,7 +6,6 @@
 
 import {
   CACHE_KEYS,
-  SOURCES_REQUIRING_CACHE,
   type CacheDecl,
   type SourceKind,
   type TtlCacheDecl,
@@ -24,23 +23,23 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
+// [LAW:types-are-the-program] The kinds whose source the daemon re-reads on a
+// policy only the author can choose (no sensible default) — the field maps that
+// call requireCacheSpec are the whole list, so the parameter type is the set.
+type PolicySourceKind = Extract<SourceKind, "file" | "shell">;
+
 export function requireCache(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
-  kind: SourceKind,
+  kind: PolicySourceKind,
 ): CacheDecl | null {
   if (raw.cache === undefined) {
-    if (SOURCES_REQUIRING_CACHE.includes(kind)) {
-      ctx.issues.push({
-        path: `${path}.cache`,
-        message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-        line: findKeyLine(ctx.source, path.split(".")),
-      });
-      return null;
-    }
-    // For kinds where cache is optional and absent, this path is unreachable
-    // because callers use optionalCache; keep narrow.
+    ctx.issues.push({
+      path: `${path}.cache`,
+      message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
     return null;
   }
   return validateCache(ctx, `${path}.cache`, raw.cache);
@@ -58,11 +57,11 @@ export function optionalCache(
 
 // [LAW:dataflow-not-control-flow] The `cache` field as a record-field spec, so a
 // per-kind variable schema declares its cache policy as DATA. `kind` selects the
-// requiredness: file/shell/git require it (a missing cache reports the per-kind
+// requiredness: file/shell require it (a missing cache reports the per-kind
 // message and fails the arm); template leaves it optional; time is optional but
-// ttl-only (ttlOnlyCacheSpec below). The field key is conventionally "cache",
-// read directly by requireCache/optionalCache.
-export function requireCacheSpec(kind: SourceKind): FieldSpec<CacheDecl> {
+// ttl-only (ttlOnlyCacheSpec below); git takes none. The field key is
+// conventionally "cache", read directly by requireCache/optionalCache.
+export function requireCacheSpec(kind: PolicySourceKind): FieldSpec<CacheDecl> {
   return {
     required: true,
     json: cacheJson(),
