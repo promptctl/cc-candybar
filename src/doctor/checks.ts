@@ -191,14 +191,18 @@ const config: Check = {
   label: "config",
   probe: ({ config }) => {
     switch (config.kind) {
-      case "failed":
-        return problemsVerdict([
+      case "failed": {
+        // [LAW:no-silent-failure] A load that failed is never ok, even when
+        // the error it threw carries no text.
+        const [reason = "the config failed to load", ...more] = [
           ...config.error
             .split("\n")
             .map((line) => line.trim())
             .filter((line) => line !== ""),
           ...config.warnings,
-        ]);
+        ];
+        return { ok: false, reason, more };
+      }
       case "loaded":
         return problemsVerdict([
           ...config.warnings,
