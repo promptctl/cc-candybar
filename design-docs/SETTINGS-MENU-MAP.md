@@ -94,19 +94,16 @@ Every rename covers the label, the config key, the session key and the `.effecti
 
 ## Variation values
 
-Brandon asked for four variations in brandon-theme-picker-bgw.7g6: "allow choosing between B, C, D, and current as 4 variants". Only three shipped.
+Brandon asked for four variations in brandon-theme-picker-bgw.7g6: "allow choosing between B, C, D, and current as 4 variants".
 
 | Name | Was | Rows wear |
 |---|---|---|
 | `accent` (default) | B, `secondary-accent` | secondary, accent |
 | `duo` | current, `primary-secondary` | primary, secondary |
 | `mono` | D, `primary` | primary |
-| `alt` | C, not shipped | see below |
+| `alt` | C | secondary, accent, turning every three cells along the row |
 
-The variants page from brandon-theme-picker-bgw.8fp describes C as "base changes per cell, hue changes every few cells". 7g6 dropped it, because a variation can only choose a hue per row, and with the hue per row C came out identical to current. To ship `alt`, the hue has to be able to change partway along a row, which today's colour model can't do. Two constraints sit beside this:
-
-- Brandon rejected a hue change on every cell (8fp: neighbours alternating hue read as sports-team colours). C changes hue every few cells, not every cell.
-- A variation can list at most two row steps today, because the row hue is chosen by binning each row's van der Corput placement (`Progression`, `src/themes/decor.ts`). A variation with three or more row steps would need rows to be chosen sequentially first.
+C, from the 8fp variants page, is "base changes per cell, hue changes every few cells". A variation carries a `run`: how many cells along a row wear one hue. The first three keep one hue per row; `alt` turns after one cell per tone, and each row starts on its own step. The hue never changes at every cell: 8fp rejected neighbours alternating hue as sports-team colours.
 
 ## Removed from the menu
 
