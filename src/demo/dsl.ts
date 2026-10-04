@@ -6,19 +6,20 @@
 // pnpm runs scripts from the repo root, so a relative path resolves there,
 // not in the directory you typed the command in.
 //
-// [LAW:single-enforcer] One faked status-line request goes through the
+// [LAW:single-enforcer] One faked hook event, with the hints a statusline
+// client reports from this terminal (detectClientHints), goes through the
 // functions the daemon runs for a real one — parseClientHints,
 // buildRenderState, resolveEffectiveGlobals, buildRenderPayload, renderDsl —
 // over the providers the daemon builds (createPayloadProviders). There is no
-// demo-only render path and no demo-only payload: a field the daemon's
-// payload gains is in the demo's.
+// demo-only payload: a field the daemon's payload gains is in the demo's.
+// The config is the one file named here, loaded or refused; the daemon's
+// search for a config and its diagnostic strip are not part of the demo.
 //
 // [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
-// dispose. The config file and the request are data; swapping either changes
-// the output without changing this code. Rendering N frames over time is not
-// branching — it lets the asynchronous sources (shell, time, git) populate
-// and shows the line come alive, exactly as the daemon re-renders on each
-// status-line tick.
+// dispose. The config file and the hook event are data; swapping either
+// changes the output without changing this code. Rendering N frames over time
+// is not branching — it lets the config's own timed sources (shell, time)
+// populate, exactly as the daemon re-renders on each status-line tick.
 
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -26,15 +27,13 @@ import { tmpdir } from "node:os";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { detectClientHints } from "../client-hints.js";
+import { ConfigError } from "../config/loader/diagnostics.js";
 import { buildRenderState } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../daemon/log.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
-import {
-  PROTOCOL_VERSION,
-  parseClientHints,
-  type RenderRequest,
-} from "../daemon/protocol.js";
+import { parseClientHints } from "../daemon/protocol.js";
 import {
   buildRenderPayload,
   renderOptionsOf,
@@ -45,10 +44,8 @@ import { SessionState } from "../daemon/session-state.js";
 import { settingCounts } from "../daemon/setting-drafts.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { renderDsl } from "../dsl/render.js";
-import { detectClaudeConfigDir } from "../claude-settings.js";
-import { detectMementoEnv } from "../memento-hint.js";
-import { detectTmuxHint } from "../tmux-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
+import type { ClaudeHookData } from "../utils/claude.js";
 import { debug } from "../utils/logger.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
@@ -60,32 +57,21 @@ const cwd = process.cwd();
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
 const sessionId = "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 
-// The request a statusline client would send for this terminal: one Claude
-// Code hook event, faked, and the hints the client reads from its own
-// environment. A session that has never run has no transcript, so the path
-// names no file — a missing transcript is an empty session, not a failure.
-const request: RenderRequest = {
-  v: PROTOCOL_VERSION,
-  kind: "render",
-  hookData: {
-    hook_event_name: "Status",
-    session_id: sessionId,
-    transcript_path: join(tmpdir(), `cc-candybar-demo-${sessionId}.jsonl`),
-    cwd,
-    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-  },
-  args: ["cc-candybar", "--config", configPath],
+// One Claude Code hook event, faked. A session that has never run has no
+// transcript, so the path names no file — a missing transcript is an empty
+// session, not a failure.
+const hookData: ClaudeHookData = {
+  hook_event_name: "Status",
+  session_id: sessionId,
+  transcript_path: join(tmpdir(), `cc-candybar-demo-${sessionId}.jsonl`),
   cwd,
-  termCols: process.stdout.columns,
-  termRows: process.stdout.rows,
-  ssh: false,
-  tmux: detectTmuxHint(process.env),
-  claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
-  mementoEnv: detectMementoEnv(process.env, cwd),
+  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+  workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
 };
-const { hookData } = request;
-const hints = parseClientHints(request);
+// The demo's frames go to stdout, so stdout is the stream on the terminal.
+const hints = parseClientHints(
+  detectClientHints(process.env, cwd, process.stdout),
+);
 const width = applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 
 // [LAW:no-silent-failure] What the daemon writes to daemon.log, the demo says
@@ -95,6 +81,7 @@ const log: DaemonLogger = (level, message) =>
   level === "info"
     ? debug(message)
     : void process.stderr.write(`${level}: ${message}\n`);
+const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
 const providers = createPayloadProviders({ watchers, logger: log });
@@ -105,73 +92,92 @@ const sessionState = new SessionState();
 const sessionPick = (key: string): string | null =>
   sessionState.get(sessionId, key);
 
-const warnings: Array<string | null> = [];
-// A config that does not load throws here, with the loader's message: the demo
-// renders the file it was given or nothing.
-const state = buildRenderState(cwd, configPath, warnings, {
-  gitService: providers.gitProvider,
-  sessionState,
-});
-try {
-  for (const warning of warnings) {
-    if (warning !== null) process.stderr.write(`warning: ${warning}\n`);
+// The demo renders the file it was given or nothing. The advisories a file
+// earns are reported whether or not it goes on to load, as the daemon's strip
+// and `cc-candybar check` report them.
+function loadState(): ReturnType<typeof buildRenderState> {
+  const advisories: Array<string | null> = [];
+  try {
+    return buildRenderState(cwd, configPath, advisories, {
+      gitService: providers.gitProvider,
+      sessionState,
+    });
+  } catch (err) {
+    if (err instanceof ConfigError) advisories.push(...err.warnings);
+    throw err;
+  } finally {
+    advisories.filter((a) => a !== null).forEach(warn);
   }
-  const effective = resolveEffectiveGlobals(
-    state.config,
-    sessionPick,
-    (preset: string) => state.authoredRoots.has(preset),
-  );
+}
 
-  process.stdout.write(
-    `\n  DSL demo — ${configPath}\n` +
-      `  one faked status-line request, rendered by the daemon's own functions\n` +
-      `  watch the git branch segment appear and the clock tick:\n\n`,
-  );
-
-  for (let frame = 0; frame < FRAMES; frame++) {
-    const payload = await buildRenderPayload(
-      hookData,
-      {
-        ...providers,
-        history: () => EMPTY_HISTORY_DEPTH,
-        navigation: () => 0,
-      },
-      cwd,
-      state.neededInputPaths(effective.preset),
-      effective,
-      hints,
-      {
-        ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
-        configPath,
-      },
-    );
-    const line = renderDsl(
+async function renderFrames(): Promise<void> {
+  const state = loadState();
+  try {
+    const effective = resolveEffectiveGlobals(
       state.config,
-      state.compiled,
-      state.store,
-      state.registry,
-      payload,
-      renderOptionsOf(effective, width),
-      {
-        onRenderWarning: (message: string) =>
-          process.stderr.write(`warning: ${message}\n`),
-      },
-      renderSelectionOf(effective),
+      sessionPick,
+      (preset: string) => state.authoredRoots.has(preset),
     );
-    process.stdout.write(
-      line
-        .split("\n")
-        .map((row) => `  ${row}\n`)
-        .join(""),
-    );
-    if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
-  }
 
-  process.stdout.write("\n");
+    process.stdout.write(
+      `\n  DSL demo — ${configPath}\n` +
+        `  one faked status-line request, rendered by the daemon's own functions\n` +
+        `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`,
+    );
+
+    for (let frame = 0; frame < FRAMES; frame++) {
+      const payload = await buildRenderPayload(
+        hookData,
+        {
+          ...providers,
+          history: () => EMPTY_HISTORY_DEPTH,
+          navigation: () => 0,
+        },
+        cwd,
+        state.neededInputPaths(effective.preset),
+        effective,
+        hints,
+        {
+          ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
+          configPath,
+        },
+      );
+      const line = renderDsl(
+        state.config,
+        state.compiled,
+        state.store,
+        state.registry,
+        payload,
+        renderOptionsOf(effective, width),
+        { onRenderWarning: warn },
+        renderSelectionOf(effective),
+      );
+      process.stdout.write(
+        line
+          .split("\n")
+          .map((row) => `  ${row}\n`)
+          .join(""),
+      );
+      if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
+    }
+
+    process.stdout.write("\n");
+  } finally {
+    state.registry.dispose();
+  }
+}
+
+try {
+  await renderFrames();
+} catch (err) {
+  // A refused config is the demo's one expected failure: the loader's message
+  // is the whole report. Anything else is a defect and keeps its stack.
+  if (!(err instanceof ConfigError)) throw err;
+  process.stderr.write(`error: ${err.message}\n`);
+  process.exitCode = 1;
 } finally {
-  // The registry owns the config's timers and watchers, the providers their
-  // own; all of them are released so the process ends when the frames do.
-  state.registry.dispose();
+  // The providers own their timers and watchers; all of them are released so
+  // the process ends when the frames do.
   providers.gitProvider.close();
   providers.usageStore.close();
   watchers.closeAll();

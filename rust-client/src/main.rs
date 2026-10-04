@@ -458,7 +458,7 @@ fn detect_term_extent(env_value: Option<String>, tty_extent: u32) -> Option<u32>
 }
 
 // The env vars an SSH login shell inherits from sshd — mirrors SSH_ENV_VARS in
-// src/index.ts, diffed by scripts/check-protocol.mjs. Both runtimes must agree
+// src/client-hints.ts, diffed by scripts/check-protocol.mjs. Both runtimes must agree
 // on what "SSH" means, or the native fast path and the node fallback would
 // report the same session differently.
 const SSH_ENV_VARS: [&str; 3] = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];

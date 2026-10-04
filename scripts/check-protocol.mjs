@@ -97,7 +97,7 @@ function markers(relPath, patterns, description) {
 
 const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
-const TS_INDEX = "src/index.ts";
+const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
@@ -186,7 +186,7 @@ const CHECKS = [
   {
     label: "SSH env vocabulary",
     ts: memberSet(
-      TS_INDEX,
+      TS_CLIENT_HINTS,
       /const SSH_ENV_VARS = \[[\s\S]+?\] as const;/,
       /"(SSH_\w+)"/g,
     ),

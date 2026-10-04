@@ -26,14 +26,20 @@ describe("pnpm demo", () => {
       join(process.cwd(), "node_modules", ".bin", "tsx"),
       [join(process.cwd(), "src", "demo", "dsl.ts"), configPath],
       {
+        // The demo reports the hints a client reads from its environment, so
+        // the environment is stated here, not inherited: no tmux pane, no ssh
+        // login, and an empty Claude Code directory, whatever shell runs jest.
         env: {
-          ...process.env,
+          PATH: process.env.PATH ?? "",
           HOME: join(dir, "home"),
           XDG_STATE_HOME: join(dir, "state"),
+          CLAUDE_CONFIG_DIR: join(dir, "claude"),
           ...env,
         },
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
+        // spawnSync blocks the worker, so jest's own timeout cannot fire.
+        timeout: 25_000,
       },
     );
   };
@@ -82,7 +88,31 @@ describe("pnpm demo", () => {
 
   test("a config that does not load fails with the loader's message", () => {
     const r = runDemo(`{ root: "no-such-segment" }`);
-    expect(r.status).not.toBe(0);
+    expect(r.status).toBe(1);
     expect(r.stderr).toContain("no-such-segment");
+    expect(r.stderr).not.toContain("    at ");
+  });
+
+  test("a config that does not load still reports the advisories it earned", () => {
+    const r = runDemo(
+      `{ globals: { padding: 1, padding: 2 }, root: "no-such-segment" }`,
+    );
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('duplicate key "padding"');
+    expect(r.stderr).toContain("no-such-segment");
+  });
+
+  test("reports the session the client's environment describes", () => {
+    const probe = `{
+      variables: { ssh: { kind: "input", path: "host.ssh", default: "absent" } },
+      segments: { probe: { template: "ssh={{ .ssh }}" } },
+      root: "probe",
+    }`;
+    expect(stripAnsi(runDemo(probe).stdout)).toContain("ssh=false");
+    expect(
+      stripAnsi(
+        runDemo(probe, { SSH_CONNECTION: "1.2.3.4 5 6.7.8.9 22" }).stdout,
+      ),
+    ).toContain("ssh=true");
   });
 });

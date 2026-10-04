@@ -18,52 +18,11 @@ import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
-import { detectTermExtent } from "./term-extent";
-import { detectTmuxHint } from "./tmux-hint";
-import { detectConfigEnv } from "./config-hint";
-import { detectClaudeConfigDir } from "./claude-settings";
-import { detectMementoEnv } from "./memento-hint";
+import { detectClientHints } from "./client-hints";
 import { runDoctorCli } from "./doctor/cli";
-
-function detectTermCols(): number | undefined {
-  return detectTermExtent(process.env.COLUMNS, process.stderr.columns);
-}
-
-// The diagnostic strip's row cap reads this (src/render/diagnostic-strip.ts);
-// like termCols it is a client fact the detached daemon cannot observe.
-function detectTermRows(): number | undefined {
-  return detectTermExtent(process.env.LINES, process.stderr.rows);
-}
-
-// The env vars an SSH login shell inherits from sshd. Any one of them present
-// and non-empty means this session arrived over the network.
-//
-// [LAW:one-source-of-truth] This vocabulary is mirrored by the Rust client
-// (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs, which
-// anchors on the declaration below — keep it a named const holding string
-// literals, or repoint the CHECKS row in the same commit. Both runtimes must
-// agree on what "SSH" means or the fast path and the fallback path would
-// disagree about the same session.
-//
-// All three are checked, not just SSH_CONNECTION: SSH_CLIENT is what older
-// sshd builds (and the user's git-taculous zsh theme) key on, and SSH_TTY is
-// the one that survives some `sudo` env_keep policies. Extra names can only
-// widen recall of a fact that is otherwise reported as a plain `false`.
-const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
-
-// [LAW:dataflow-not-control-flow] A fold over the vocabulary, not a chain of
-// ifs — adding a name is a data edit.
-//
-// Unlike detectTermCols this is TOTAL: the client reads its own environment, so
-// "no SSH var set" is the affirmative answer "local", never a failure to
-// determine. It therefore always reports, and the daemon reads an ABSENT `ssh`
-// hint as "this client is too old to answer" rather than as "local".
-function detectSsh(): boolean {
-  return SSH_ENV_VARS.some((name) => (process.env[name] ?? "") !== "");
-}
 
 function showHelpText(): void {
   console.log(HELP_TEXT);
@@ -186,23 +145,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      {
-        termCols: detectTermCols(),
-        termRows: detectTermRows(),
-        ssh: detectSsh(),
-        // Total like ssh: `null` is the affirmative "not in tmux", so an
-        // absent hint on the daemon side means only "client too old".
-        tmux: detectTmuxHint(process.env),
-        // Conditional like termCols: absent IS "no override", so the daemon
-        // resolves the precedence chain. The daemon reads no env of its own.
-        configEnv: detectConfigEnv(process.env),
-        // Conditional too: absent is the default directory. The daemon reads
-        // settings.json from THIS session's Claude Code directory.
-        claudeConfigDir: detectClaudeConfigDir(process.env, process.cwd()),
-        // Total like tmux: always an object, so an absent hint means only
-        // "client too old". Memento's spawns run with THIS session's variables.
-        mementoEnv: detectMementoEnv(process.env, process.cwd()),
-      },
+      detectClientHints(process.env, process.cwd(), process.stderr),
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the

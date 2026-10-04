@@ -24,8 +24,7 @@ import {
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
-import type { DaemonLogger } from "../log";
-import { debug } from "../../utils/logger";
+import { quietLogger, type DaemonLogger } from "../log";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -130,8 +129,6 @@ const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // the same constant as the I/O it drives, so the once-a-day scan can never
 // re-create the unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
-
-const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
 const EMPTY_DAY: DayUsage = {
   cost: 0,
