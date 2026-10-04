@@ -1,10 +1,11 @@
 // The doctor's edge: where the facts are GATHERED and a fix is PERFORMED.
 //
 // [LAW:effects-at-boundaries] Every effect the doctor has — the tmux query,
-// the settings.json read, the settings.json write — lives in this module. The
-// tmux query sits behind the `DoctorEdge` record the daemon and the CLI both
-// construct with `productionEdge()` and a test fakes; the settings file is the
-// one the session's client hints name, so a test points it with a hint.
+// the config load, the settings.json read, the settings.json write — lives in
+// this module. The tmux query and the config load sit behind the `DoctorEdge`
+// record the daemon and the CLI both construct with `productionEdge()` and a
+// test fakes; the settings file is the one the session's client hints name,
+// so a test points it with a hint.
 // checks.ts never sees an effect; this file never decides a verdict.
 
 import fs from "node:fs";
@@ -20,12 +21,43 @@ import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { DoctorFacts, Fix, TermFeatures, TmuxFacts } from "./checks.js";
+import { shadowedConfigs } from "../config/dsl-loader.js";
+import type { UnusedDecl } from "../config/unused.js";
+import type {
+  ConfigFacts,
+  DoctorFacts,
+  Fix,
+  TermFeatures,
+  TmuxFacts,
+} from "./checks.js";
 
 export interface DoctorEdge {
   // tmux's own verdict on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
   readonly probeTmux: (hint: TmuxHint) => TermFeatures;
+  // What loading the config at an origin finds now — the daemon reloads the
+  // render-cache entry the session's bar is drawn from and answers from it
+  // (so the doctor and the bar's strip report one load), the CLI runs one
+  // load of its own. Both are the one `loadFromDisk`.
+  readonly loadConfig: (origin: ConfigOrigin) => ConfigLoad;
+}
+
+// The three inputs the config search takes (resolveDslConfig) — a session's
+// recorded render origin, or the CLI's own cwd and `$CC_CANDYBAR_CONFIG`.
+export interface ConfigOrigin {
+  readonly projectDir: string;
+  readonly cwd: string;
+  readonly configFile: string | null;
+}
+
+// One load's outcome, as both a cache entry and a fresh load carry it: the
+// file it resolved, the error that stopped it, the advisories it earned (one
+// per line), and — for the config last loaded — what its file left unused.
+export interface ConfigLoad {
+  readonly path: string | null;
+  readonly error: string | null;
+  readonly warning: string | null;
+  readonly unused: readonly UnusedDecl[];
 }
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
@@ -49,8 +81,33 @@ function probeTmux(hint: TmuxHint): TermFeatures {
   };
 }
 
-export function productionEdge(): DoctorEdge {
-  return { probeTmux };
+export function productionEdge(
+  loadConfig: DoctorEdge["loadConfig"],
+): DoctorEdge {
+  return { probeTmux, loadConfig };
+}
+
+// [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
+// two; the files behind the loaded one are a fact of the same origin, read
+// through the search's own enumerator.
+function configFacts(edge: DoctorEdge, origin: ConfigOrigin): ConfigFacts {
+  const load = edge.loadConfig(origin);
+  const base = {
+    path: load.path,
+    warnings: load.warning === null ? [] : load.warning.split("\n"),
+  };
+  return load.error !== null
+    ? { ...base, kind: "failed", error: load.error }
+    : {
+        ...base,
+        kind: "loaded",
+        shadowed: shadowedConfigs(
+          origin.projectDir,
+          origin.cwd,
+          origin.configFile ?? undefined,
+        ),
+        unused: load.unused,
+      };
 }
 
 // [LAW:no-silent-failure] The one reading of the settings document
@@ -77,15 +134,18 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
-// [LAW:single-enforcer] Both halves come from the facts the CLIENT saw: its
-// tmux, and the Claude Code directory its session runs with — never the
-// daemon's own env, which answers for whichever session spawned it.
+// [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
+// the Claude Code directory its session runs with, and the origin its config
+// resolves from — never the daemon's own env, which answers for whichever
+// session spawned it.
 export function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
+  origin: ConfigOrigin,
 ): DoctorFacts {
   return {
     tmux: tmuxFacts(edge, hints.tmux),
+    config: configFacts(edge, origin),
     claudeSettings: readClaudeSettingsEnv(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

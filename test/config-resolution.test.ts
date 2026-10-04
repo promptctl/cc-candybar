@@ -6,11 +6,13 @@
 //   - .json5 wins over .json at the same location (documented > legacy)
 //   - location precedence (project > cwd > XDG) overrides extension
 //   - detectConfigCollisions surfaces same-location duplicates
+//   - shadowedConfigs names the files behind the one the search stops at
 
 import {
   chmodSync,
   mkdtempSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   mkdirSync,
 } from "node:fs";
@@ -23,6 +25,7 @@ import {
   durableConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
+  shadowedConfigs,
 } from "../src/config/dsl-loader";
 
 // Root bypasses directory permissions, so the unsearchable-directory fixtures
@@ -468,5 +471,68 @@ describe("detectConfigCollisions", () => {
       restore();
       cleanup();
     }
+  });
+});
+
+describe("shadowedConfigs", () => {
+  // A project config in `dir`, a user config under the isolated XDG home.
+  function withBoth(run: (project: string, user: string) => void): void {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const xdgCfgDir = join(dir, "cc-candybar");
+      mkdirSync(xdgCfgDir);
+      const project = join(dir, ".cc-candybar.json5");
+      const user = join(xdgCfgDir, "config.json5");
+      writeFileSync(project, VALID_CFG);
+      writeFileSync(user, VALID_CFG);
+      run(dir, user);
+    } finally {
+      restore();
+      cleanup();
+    }
+  }
+
+  test("a config behind the one found first is named", () => {
+    withBoth((project, user) => {
+      expect(shadowedConfigs(project, project)).toEqual([user]);
+    });
+  });
+
+  test("the only config found shadows nothing", () => {
+    withBoth((project, user) => {
+      rmSync(join(project, ".cc-candybar.json5"));
+      expect(resolveDslConfig(project, project)).toMatchObject({ path: user });
+      expect(shadowedConfigs(project, project)).toEqual([]);
+    });
+  });
+
+  test("the winner's own .json sibling is the collision, not a shadowed location", () => {
+    withBoth((project, user) => {
+      writeFileSync(join(project, ".cc-candybar.json"), VALID_CFG);
+      expect(shadowedConfigs(project, project)).toEqual([user]);
+      expect(detectConfigCollisions(project, project)).not.toBeNull();
+    });
+  });
+
+  test("a shadowed location is named once, by the file the search would read there", () => {
+    withBoth((project, user) => {
+      writeFileSync(user.replace(/5$/, ""), VALID_CFG);
+      expect(shadowedConfigs(project, project)).toEqual([user]);
+    });
+  });
+
+  test("one directory spelled two ways is one location, never a file behind itself", () => {
+    withBoth((project, user) => {
+      const alias = join(project, "alias");
+      symlinkSync(project, alias);
+      expect(shadowedConfigs(alias, project)).toEqual([user]);
+    });
+  });
+
+  test("an explicit config file bypasses the search, so it shadows nothing", () => {
+    withBoth((project, user) => {
+      expect(shadowedConfigs(project, project, user)).toEqual([]);
+    });
   });
 });

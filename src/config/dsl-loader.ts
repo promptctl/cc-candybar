@@ -89,6 +89,7 @@ export {
   configResolutionNotice,
   durableConfigPath,
   detectConfigCollisions,
+  shadowedConfigs,
 } from "./loader/discovery.js";
 export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";

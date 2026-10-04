@@ -65,10 +65,13 @@ describe("{{ carousel }} with a centre action", () => {
     expect(writes("mid").some((e) => e.args[1] === "zoom")).toBe(false);
   });
 
-  test("a centre naming no declared action is refused", () => {
-    expect(stripAnsi(renderOf('{{ carousel "pick" 0 "nope" }}'))).toMatch(
-      /centre must name a declared action/,
+  test("a centre naming no declared action is refused: at load when spelled, at render when computed", () => {
+    expect(() => renderOf('{{ carousel "pick" 0 "nope" }}')).toThrow(
+      /template references unknown action "nope" \(in a picker, menu or carousel\)/,
     );
+    expect(
+      stripAnsi(renderOf('{{ carousel "pick" 0 (printf "no%s" "pe") }}')),
+    ).toMatch(/centre must name a declared action/);
   });
 
   test("a centre that writes a bound value is refused: the centre binds none", () => {

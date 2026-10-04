@@ -1274,7 +1274,26 @@ const verbCtx = {
   sessionState,
   dlog,
   applyUpdate: () => updateWatch.act(),
-  doctor: productionEdge(),
+  // The load the session's bar is drawn from: its cache entry's load
+  // outcome, and what the config that entry renders left unused.
+  // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
+  // doctor click is a verdict on the files as they are now, not on
+  // whether the fs watcher has caught up with an edit made a moment ago.
+  doctor: productionEdge((origin) => {
+    const at = [
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ] as const;
+    renderCache.reload(...at);
+    const entry = renderCache.getOrCreate(...at);
+    return {
+      path: entry.configFilePath,
+      error: entry.lastError,
+      warning: entry.lastWarning,
+      unused: entry.state.unused,
+    };
+  }),
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,

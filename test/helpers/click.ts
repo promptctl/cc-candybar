@@ -51,6 +51,9 @@ export function testVerbContext(
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },
+      loadConfig: () => {
+        throw new Error("doctor: no config edge in this test");
+      },
     },
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {

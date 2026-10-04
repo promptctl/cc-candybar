@@ -7,6 +7,7 @@ import {
   checkByName,
   runDoctor,
   TMUX_TRUECOLOR_VAR,
+  type ConfigFacts,
   type DoctorFacts,
   type TmuxFacts,
 } from "../src/doctor/checks";
@@ -23,11 +24,21 @@ const inside = (
   termfeatures: { kind: "ok", value: features },
 });
 
+const LOADED: ConfigFacts = {
+  kind: "loaded",
+  path: "/p/.cc-candybar.json5",
+  warnings: [],
+  shadowed: [],
+  unused: [],
+};
+
 const facts = (
   tmux: TmuxFacts,
   env: Record<string, unknown> = {},
+  config: ConfigFacts = LOADED,
 ): DoctorFacts => ({
   tmux,
+  config,
   claudeSettings: { path: "/home/u/.claude/settings.json", env },
 });
 
@@ -148,5 +159,84 @@ describe("detectTmuxHint (the client's tmux facts)", () => {
         CLAUDE_CODE_TMUX_TRUECOLOR: "",
       })!.truecolor,
     ).toBeNull();
+  });
+});
+
+// brandon-doctor-v62x.e91: "the config is correct" over fixture facts.
+describe("config probe", () => {
+  const config = (c: ConfigFacts) =>
+    checkByName("config")!.probe(facts({ kind: "outside" }, {}, c));
+
+  test("a config that loaded with nothing to say is ok — the bundled default included", () => {
+    expect(config(LOADED)).toEqual({ ok: true });
+    expect(config({ ...LOADED, path: null })).toEqual({ ok: true });
+  });
+
+  test("an advisory the load earned fails it, in the load's own words", () => {
+    const warning = '/p/.cc-candybar.json5:3: duplicate key "x"';
+    expect(config({ ...LOADED, warnings: [warning] })).toEqual({
+      ok: false,
+      reason: warning,
+      more: [],
+    });
+  });
+
+  test("a config behind the loaded one fails it, naming both files", () => {
+    expect(
+      config({ ...LOADED, shadowed: ["/home/u/.config/cc-candybar/config.json5"] }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "/home/u/.config/cc-candybar/config.json5 is never read — /p/.cc-candybar.json5 is found first",
+      more: [],
+    });
+  });
+
+  test("every unused declaration is a problem, each kind in its own words", () => {
+    expect(
+      config({
+        ...LOADED,
+        unused: [
+          { kind: "variable", name: "v" },
+          { kind: "action", name: "a" },
+          { kind: "helper", name: "h" },
+          { kind: "segment", name: "s" },
+        ],
+      }),
+    ).toEqual({
+      ok: false,
+      reason: 'variable "v" is never read',
+      more: [
+        'action "a" is never clicked',
+        'helper "h" is never called',
+        'segment "s" is in no preset',
+      ],
+    });
+  });
+
+  test("a config that did not load leads with the loader's headline, then its issues and advisories", () => {
+    expect(
+      config({
+        kind: "failed",
+        path: "/p/.cc-candybar.json5",
+        warnings: ["an advisory"],
+        error:
+          "Invalid config in /p/.cc-candybar.json5 (1 issue):\n  [line 2 • root] root references unknown segment",
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "Invalid config in /p/.cc-candybar.json5 (1 issue):",
+      more: ["[line 2 • root] root references unknown segment", "an advisory"],
+    });
+  });
+
+  test("config is a CHECKS entry, so the menu and the CLI both run it", () => {
+    expect(CHECKS.map((c) => c.name)).toContain("config");
+    expect(
+      runDoctor(facts({ kind: "outside" })).map((r) => [r.check.name, r.verdict.ok]),
+    ).toEqual([
+      ["config", true],
+      ["tmuxTruecolor", true],
+    ]);
   });
 });

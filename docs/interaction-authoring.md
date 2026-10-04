@@ -1255,15 +1255,22 @@ there is nothing to go back to), and the bar's row closes up where the door was.
 - **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). The
   menu stays open, so `◁ back` and the tabs stay in reach while you arrange.
 - **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
-  under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
-  probes your setup for a fault outside cc-candybar that makes the bar look
-  broken; `[fix]` repairs it in place (the first check writes
-  `CLAUDE_CODE_TMUX_TRUECOLOR=1` into the `env` of `~/.claude/settings.json`,
-  which takes effect for Claude Code sessions started afterwards, and the row
-  says so). The checks reason over the facts the statusline client reported on
-  the session's last render — not the daemon's own environment — and
-  `cc-candybar doctor` runs the same checks from a shell, with the exit code as
-  the verdict.
+  under it, `✓ <check>` or `✗ <check> — <reason>`, with a `[fix]` when the
+  doctor can repair it. A check probes your setup for something that is
+  silently wrong. `config` passes when your config file loads with no
+  warning, no other config file sits unread behind it in the search order,
+  and everything it declares is used: no variable nothing reads, no action
+  nothing clicks, no helper nothing calls, no segment absent from every
+  preset. `tmux truecolor` passes when Claude Code draws the bar in full
+  colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into
+  the `env` of `~/.claude/settings.json`, which takes effect for Claude Code
+  sessions started afterwards, and the row says so. The checks reason over
+  the facts the statusline client reported on the session's last render —
+  not the daemon's own environment. `cc-candybar doctor` runs the same checks
+  from a shell, with the exit code as the verdict; where the bar's row names
+  one problem and counts the rest, it lists every one. It checks the config a
+  session started in that directory would load; `cc-candybar doctor <file>`
+  checks the file a statusline command names with `--config`.
 
 Preset, theme, style, variation and endcaps are each `◀ value ▶`: `◀` and
 `▶` apply the previous and next value, so stepping through themes recolours the

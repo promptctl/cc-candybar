@@ -15,6 +15,7 @@
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
 import type { Outcome } from "../utils/outcome.js";
+import type { DeclKind, UnusedDecl } from "../config/unused.js";
 
 // [LAW:types-are-the-program] tmux's own verdict on the attached terminal's
 // features (`#{client_termfeatures}`), or why it could not be asked. No
@@ -40,8 +41,29 @@ export type TmuxFacts =
       readonly termfeatures: TermFeatures;
     };
 
+// [LAW:types-are-the-program] What loading the session's config found. The
+// two arms are the loader's own: a config that did not load has an error and
+// nothing to analyse (the bar is rendering an older config, or the bundled
+// default, under it), and one that loaded has no error. `path` null is the
+// bundled default — no file was found. `warnings` are the advisories the load
+// earned on the way, in either arm.
+export type ConfigFacts = {
+  readonly path: string | null;
+  readonly warnings: readonly string[];
+} & (
+  | { readonly kind: "failed"; readonly error: string }
+  | {
+      readonly kind: "loaded";
+      // Config files at later locations of the search order, never read.
+      readonly shadowed: readonly string[];
+      // What the file declares that nothing uses.
+      readonly unused: readonly UnusedDecl[];
+    }
+);
+
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
+  readonly config: ConfigFacts;
   // The session's Claude Code settings file and the `env` block read from it
   // — a second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
@@ -62,10 +84,22 @@ export interface Fix {
 }
 
 // A check never has a third state: the reason string and the optional fix
-// carry every difference between one failure and another.
+// carry every difference between one failure and another. A check that found
+// several problems leads with one as its `reason` and lists the rest in `more`:
+// the bar's row has room for one and counts the others, the CLI prints them all.
 export type Verdict =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string; readonly fix?: Fix };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly more?: readonly string[];
+      readonly fix?: Fix;
+    };
+
+function problemsVerdict(problems: readonly string[]): Verdict {
+  const [reason, ...more] = problems;
+  return reason === undefined ? { ok: true } : { ok: false, reason, more };
+}
 
 export interface Check {
   // camelCase: the name splices into state-variable and action names
@@ -139,7 +173,52 @@ const tmuxTruecolor: Check = {
   },
 };
 
-export const CHECKS: readonly Check[] = [tmuxTruecolor];
+const UNUSED: Readonly<Record<DeclKind, string>> = {
+  variable: "is never read",
+  action: "is never clicked",
+  helper: "is never called",
+  segment: "is in no preset",
+};
+
+// "The config is correct" (brandon-doctor-v62x.e91): it loads, the load earned
+// no advisory (a duplicate key, a `.json`/`.json5` collision, a location the
+// search could not check, a variable that failed to declare), no other config
+// file sits unread behind it, and everything the file declares is used. A
+// threshold whose knobs do not ascend is a load error, so it is the first of
+// those.
+const config: Check = {
+  name: "config",
+  label: "config",
+  probe: ({ config }) => {
+    switch (config.kind) {
+      case "failed": {
+        // [LAW:no-silent-failure] A load that failed is never ok, even when
+        // the error it threw carries no text.
+        const [reason = "the config failed to load", ...more] = [
+          ...config.error
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line !== ""),
+          ...config.warnings,
+        ];
+        return { ok: false, reason, more };
+      }
+      case "loaded":
+        return problemsVerdict([
+          ...config.warnings,
+          ...config.shadowed.map(
+            (file) =>
+              `${file} is never read — ${config.path ?? "another config"} is found first`,
+          ),
+          ...config.unused.map(
+            ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`,
+          ),
+        ]);
+    }
+  },
+};
+
+export const CHECKS: readonly Check[] = [config, tmuxTruecolor];
 
 // [LAW:single-enforcer] THE fold. The bar's 🩺 click and `cc-candybar doctor`
 // both call this over facts their own edge gathered, so the two surfaces

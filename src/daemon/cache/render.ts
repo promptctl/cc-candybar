@@ -22,6 +22,7 @@ import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
+import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
@@ -55,6 +56,14 @@ export interface RenderDeps {
   gitService: GitDataProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
+}
+
+// What building one config's state needs. The git provider is optional
+// because a SourceRegistry stands up its own when handed none — what a
+// one-shot load outside the daemon (`cc-candybar doctor`) wants.
+export interface StateDeps {
+  readonly gitService?: GitDataProvider;
+  readonly sessionState: SessionStateRW;
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
@@ -135,6 +144,9 @@ export interface DslRenderState {
   // The config keys the FILE holds a value for at a layer a reset clears
   // (fileHeldSettings) — from the same raw parse, for the same reason.
   readonly fileHeldSettings: ReadonlySet<string>;
+  // What the file declares that nothing uses (the doctor's config check) —
+  // from the same raw parse, for the same reason.
+  readonly unused: readonly UnusedDecl[];
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -270,7 +282,7 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 // both, never neither — so a caller folding it cannot see a "loaded but also
 // failed" entry. `warning` and `resolvedPath` are facts of the attempt
 // regardless of arm (collision detection runs on a broken file too).
-type LoadOutcome = {
+export type LoadOutcome = {
   readonly resolvedPath: string | null;
   readonly warning: string | null;
 } & (
@@ -290,7 +302,7 @@ export function buildRenderState(
   cwd: string,
   resolvedPath: string | null,
   warnings: Array<string | null>,
-  deps: Pick<RenderDeps, "gitService" | "sessionState">,
+  deps: StateDeps,
 ): DslRenderState {
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
   // straight-line composition. `loadConfig(null)` returns the bundled
@@ -364,6 +376,72 @@ export function buildRenderState(
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     authoredRoots: authoredRoots(merged, raw),
     fileHeldSettings: fileHeldSettings(raw),
+    unused: unusedDeclarations(raw, merged),
+  };
+}
+
+// [LAW:effects-at-boundaries] One attempt at the disk: resolve the path,
+// detect collisions, build the state. It touches no entry — the cache folds
+// the outcome onto a new entry (getOrCreate) or an existing one (reloadInto),
+// so the state it built is never constructed-then-discarded and the no-file
+// default is built once, not twice; `cc-candybar doctor`, which has no cache,
+// reads the outcome and disposes the state it was handed.
+export function loadFromDisk(
+  projectDir: string,
+  cwd: string,
+  configFile: string | undefined,
+  deps: StateDeps,
+): LoadOutcome {
+  const resolution = resolveDslConfig(projectDir, cwd, configFile);
+  // `file` loads; every other arm builds the bundled default — what
+  // distinguishes them is a notice, below, not a load path.
+  const resolvedPath = resolution.kind === "file" ? resolution.path : null;
+
+  // [LAW:dataflow-not-control-flow] Advisories run every load, independent
+  // of load success — even if the .json5 fails to parse, the user still
+  // wants to know they have a shadowed .json sibling; an explicit path to
+  // an absent file is named whatever the default then does. Pure
+  // file-existence checks, so cheap. The watcher already monitors every
+  // candidate path, so creating/removing a duplicate — or the named file
+  // appearing — triggers reload and re-detection automatically; nothing
+  // else needs to invalidate this.
+  const advisories = [
+    detectConfigCollisions(projectDir, cwd),
+    configResolutionNotice(resolution),
+  ];
+
+  // [LAW:dataflow-not-control-flow] A failure at any step — parse,
+  // registration, palette resolution — is the `error` arm; the caller's
+  // prior state stays untouched, so the daemon keeps rendering the
+  // last-known-good config — the bundled default until one has loaded —
+  // plus the error strip (composeWithDiagnostics reads `lastError` and
+  // `lastWarning`). The build appends the advisories it earns along the
+  // way (the file's editability notice, the register pass's partial-load
+  // warnings) to `advisories` as it goes, so every warning produced before
+  // a failure still reaches the strip beside the error — the same channel,
+  // the same ordering, that `cc-candybar check` reports.
+  let state: DslRenderState;
+  try {
+    state = buildRenderState(cwd, resolvedPath, advisories, deps);
+  } catch (err) {
+    if (err instanceof ConfigError) advisories.push(...err.warnings);
+    return {
+      resolvedPath,
+      warning: joinWarnings(advisories),
+      state: null,
+      error:
+        err instanceof ConfigError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err),
+    };
+  }
+  return {
+    resolvedPath,
+    warning: joinWarnings(advisories),
+    state,
+    error: null,
   };
 }
 
@@ -400,7 +478,7 @@ export class RenderCache {
       return existing;
     }
 
-    const loaded = this.loadFromDisk(projectDir, cwd, configFile);
+    const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -473,10 +551,11 @@ export class RenderCache {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry): void {
-    const loaded = this.loadFromDisk(
+    const loaded = loadFromDisk(
       entry.projectDir,
       entry.cwd,
       entry.configFile,
+      this.deps,
     );
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
@@ -491,69 +570,6 @@ export class RenderCache {
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded.resolvedPath);
     this.observers.onReload?.(entry);
-  }
-
-  // [LAW:effects-at-boundaries] One attempt at the disk: resolve the path,
-  // detect collisions, build the state. It touches no entry — the caller
-  // folds the outcome onto a new entry (getOrCreate) or an existing one
-  // (reloadInto), so the state it built is never constructed-then-discarded
-  // and the no-file default is built once, not twice.
-  private loadFromDisk(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-  ): LoadOutcome {
-    const resolution = resolveDslConfig(projectDir, cwd, configFile);
-    // `file` loads; every other arm builds the bundled default — what
-    // distinguishes them is a notice, below, not a load path.
-    const resolvedPath = resolution.kind === "file" ? resolution.path : null;
-
-    // [LAW:dataflow-not-control-flow] Advisories run every load, independent
-    // of load success — even if the .json5 fails to parse, the user still
-    // wants to know they have a shadowed .json sibling; an explicit path to
-    // an absent file is named whatever the default then does. Pure
-    // file-existence checks, so cheap. The watcher already monitors every
-    // candidate path, so creating/removing a duplicate — or the named file
-    // appearing — triggers reload and re-detection automatically; nothing
-    // else needs to invalidate this.
-    const advisories = [
-      detectConfigCollisions(projectDir, cwd),
-      configResolutionNotice(resolution),
-    ];
-
-    // [LAW:dataflow-not-control-flow] A failure at any step — parse,
-    // registration, palette resolution — is the `error` arm; the caller's
-    // prior state stays untouched, so the daemon keeps rendering the
-    // last-known-good config — the bundled default until one has loaded —
-    // plus the error strip (composeWithDiagnostics reads `lastError` and
-    // `lastWarning`). The build appends the advisories it earns along the
-    // way (the file's editability notice, the register pass's partial-load
-    // warnings) to `advisories` as it goes, so every warning produced before
-    // a failure still reaches the strip beside the error — the same channel,
-    // the same ordering, that `cc-candybar check` reports.
-    let state: DslRenderState;
-    try {
-      state = buildRenderState(cwd, resolvedPath, advisories, this.deps);
-    } catch (err) {
-      if (err instanceof ConfigError) advisories.push(...err.warnings);
-      return {
-        resolvedPath,
-        warning: joinWarnings(advisories),
-        state: null,
-        error:
-          err instanceof ConfigError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : String(err),
-      };
-    }
-    return {
-      resolvedPath,
-      warning: joinWarnings(advisories),
-      state,
-      error: null,
-    };
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
