@@ -25,8 +25,17 @@ import type {
   SettingRange,
   VariableDecl,
 } from "./dsl-types.js";
-import { PLACEMENT_THEMES, type OptionDomain } from "./option-domain.js";
-import { BOOLEAN_MEMBERS } from "../themes/policy.js";
+import {
+  PLACEMENT_THEMES,
+  resolveOptionDomain,
+  type OptionDomain,
+  type ResolvedDomain,
+} from "./option-domain.js";
+import {
+  BOOLEAN_MEMBERS,
+  parseSessionBoolean,
+  parseSessionInt,
+} from "../themes/policy.js";
 
 // [LAW:types-are-the-program] What a control can range: a flag, a bounded
 // integer, or the members of an option domain — a registered name ("themes",
@@ -64,6 +73,48 @@ export interface PickerList {
 export type Affordance =
   | (AffordanceParts & { readonly kind: "inline" })
   | (AffordanceParts & { readonly kind: "picker"; readonly list: PickerList });
+
+// [LAW:one-source-of-truth] Whether a control's domain holds `value`, spelled
+// as SessionState spells it. The flag and range arms ARE the session parses
+// the render resolves a pick with; an option domain's parse is membership of
+// the same list the domain names (isEndcaps, isVariationName, the installed
+// themes, this config's styles and presets), resolved here through the one
+// resolveOptionDomain with this config's own domains threaded in as data.
+export function controlDomainAdmits(
+  domain: ControlDomain,
+  value: string,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): boolean {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if ("from" in domain) {
+    return resolveOptionDomain(domain.from, perConfigDomains).members.includes(
+      value,
+    );
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+
+// A domain longer than this reads in a message as its name, its size and a
+// few of its members: an error naming every installed theme is a wall of text
+// that pushes the rest of the diagnostic strip off the screen.
+const LISTED_MEMBERS = 8;
+const SAMPLED_MEMBERS = 3;
+
+// How a control's domain reads in a message.
+export function describeControlDomain(
+  domain: ControlDomain,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): string {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if ("from" in domain) {
+    const { members } = resolveOptionDomain(domain.from, perConfigDomains);
+    const quoted = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+    const named = typeof domain.from === "string" ? ` "${domain.from}"` : "";
+    return `one of the ${members.length}${named} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
 
 // A placement setting's declaration as a control: a word list is an inline
 // option domain, and the placement's theme ranges the placement themes.

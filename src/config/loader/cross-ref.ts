@@ -34,9 +34,20 @@ import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
+  resolveOptionDomain,
+  type ResolvedDomain,
 } from "../option-domain.js";
-import { listGlobalsFieldNames } from "./globals.js";
-import { CONFIG_ONLY_KEYS } from "../setting-projections.js";
+import { listGlobalsFieldNames, settingControlDomain } from "./globals.js";
+import {
+  CONFIG_ONLY_KEYS,
+  SESSION_KEY_TO_SETTING,
+  SETTINGS,
+  type SettingName,
+} from "../setting-projections.js";
+import {
+  controlDomainAdmits,
+  describeControlDomain,
+} from "../setting-control.js";
 import {
   isExpression,
   isEndcaps,
@@ -194,21 +205,31 @@ export function validateCrossReferences(
   // "styles" isn't fully known until the user's styles: block has merged onto
   // the bundled stdlib.
   const optionDomains = perConfigDomainsFor(cfg);
+  const knownDomains = knownOptionDomainNames(optionDomains);
   for (const [name, a] of Object.entries(cfg.actions)) {
-    if ("set" in a && CONFIG_ONLY_KEYS.has(a.set)) {
+    if (!("set" in a)) continue;
+    if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
         path: `actions.${name}.set`,
         message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
         line: findKeyLine(ctx.source, ["actions", name, "set"]),
       });
     }
-    if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
-    if (!knownOptionDomainNames(optionDomains).includes(a.from)) {
+    if (
+      "from" in a &&
+      typeof a.from === "string" &&
+      !knownDomains.includes(a.from)
+    ) {
       ctx.issues.push({
         path: `actions.${name}.from`,
-        message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownOptionDomainNames(optionDomains).join(", ")})`,
+        message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownDomains.join(", ")})`,
         line: findKeyLine(ctx.source, ["actions", name, "from"]),
       });
+      continue;
+    }
+    const setting = SESSION_KEY_TO_SETTING.get(a.set);
+    if (setting !== undefined) {
+      checkSettingWrites(ctx, name, a, setting, optionDomains);
     }
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged
@@ -1038,4 +1059,121 @@ function checkHelperIssue(
     message,
     line: findKeyLine(ctx.source, ["helpers", helper]),
   });
+}
+
+// [LAW:no-silent-failure] A `set` on a setting's session key writes a pick the
+// render resolves only when it is a member of that setting's domain — any
+// other value derives a gate that admits it and a click that changes nothing
+// (brandon-config-dovk). Every value such a set can write is known at load, so
+// each is checked against the domain the setting's menu control is generated
+// from, and reported at the field that states it.
+function checkSettingWrites(
+  ctx: ValidateCtx,
+  name: string,
+  a: SetAction,
+  setting: SettingName,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): void {
+  const key = a.set;
+  const domain = settingControlDomain(SETTINGS[setting].configKey);
+  const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
+  // A stepper writes every integer between its ends, which only a range
+  // domain holds by construction; its ends stand for it there and nowhere else.
+  if ("min" in a && (domain === "bool" || "from" in domain)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"]),
+    });
+    return;
+  }
+  const writes = setWrites(a, optionDomains);
+  if (writes === ANY_INTEGER) {
+    ctx.issues.push({
+      path: `actions.${name}.int`,
+      message: `actions.${name}.int: an int cursor writes whatever integer the template binds, and a click outside the ${key} domain would change nothing; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, "int"]),
+    });
+    return;
+  }
+  const outside = writes.filter(
+    (w) => !controlDomainAdmits(domain, w.value, optionDomains),
+  );
+  if (outside.length === 0) return;
+  // An action writing nothing but endcaps shapes under `style` is the old
+  // name for `endcaps`: renaming its key is the whole fix.
+  if (
+    key === SETTINGS.style.sessionKey &&
+    writes.every((w) => isEndcaps(w.value))
+  ) {
+    const endcaps = SETTINGS.endcaps.sessionKey;
+    ctx.issues.push(
+      "to" in a
+        ? {
+            path: `actions.${name}.to`,
+            message: endcapsNameMessage(
+              `actions.${name}.to`,
+              a.to,
+              `set: "${endcaps}", to`,
+            ),
+            line: findKeyLine(ctx.source, ["actions", name, "to"]),
+          }
+        : {
+            path: `actions.${name}.set`,
+            message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles — endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
+            line: findKeyLine(ctx.source, ["actions", name, "set"]),
+          },
+    );
+    return;
+  }
+  for (const field of new Set(outside.map((w) => w.field))) {
+    const values = outside
+      .filter((w) => w.field === field)
+      .map((w) => JSON.stringify(w.value));
+    const shown =
+      values.length <= REPORTED_VALUES
+        ? values.join(", ")
+        : `${values.slice(0, REPORTED_VALUES).join(", ")} and ${values.length - REPORTED_VALUES} more`;
+    const where = `actions.${name}.${field}`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, field]),
+    });
+  }
+}
+
+const REPORTED_VALUES = 3;
+
+type SetAction = Extract<ActionDecl, { readonly set: string }>;
+
+// An `int` cursor writes whatever integer the template binds, so nothing
+// about its values is known at load.
+const ANY_INTEGER = Symbol("any integer");
+
+// [LAW:types-are-the-program] Every value a `set` can write, as known at load,
+// each with the field that states it: a literal its one value, a cycle its
+// members, an option domain its members, a stepper its two ends (checked only
+// against a range domain, which holds every integer between them).
+function setWrites(
+  a: SetAction,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+):
+  | ReadonlyArray<{ readonly field: string; readonly value: string }>
+  | typeof ANY_INTEGER {
+  if ("to" in a) return [{ field: "to", value: a.to }];
+  if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
+  if ("from" in a) {
+    return resolveOptionDomain(a.from, optionDomains).members.map((value) => ({
+      field: "from",
+      value,
+    }));
+  }
+  if ("min" in a) {
+    return [
+      { field: "min", value: String(a.min) },
+      { field: "max", value: String(a.max) },
+    ];
+  }
+  return ANY_INTEGER;
 }

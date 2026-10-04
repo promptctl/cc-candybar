@@ -24,7 +24,11 @@ import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { Axis, DistributionName, VariationName } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SegmentGroup } from "./segment-groups.js";
-import { FOLLOW_BAR, isPlacementThemeName } from "../themes/policy.js";
+import {
+  FOLLOW_BAR,
+  isPlacementThemeName,
+  parseSessionInt,
+} from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -989,6 +993,9 @@ export function parseSettingSpelling(
   raw: string,
 ): SettingValue | undefined {
   const { domain } = decl;
+  if (typeof domain === "object" && "min" in domain) {
+    return parseSessionInt(raw, domain) ?? undefined;
+  }
   const value: SettingValue =
     domain === "bool"
       ? raw === "true"
@@ -996,9 +1003,7 @@ export function parseSettingSpelling(
         : raw === "false"
           ? false
           : raw
-      : typeof domain === "object" && "min" in domain && /^-?\d+$/.test(raw)
-        ? Number(raw)
-        : raw;
+      : raw;
   return inSettingDomain(decl, value) ? value : undefined;
 }
 

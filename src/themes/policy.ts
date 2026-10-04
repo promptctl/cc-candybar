@@ -567,16 +567,30 @@ export function parseSessionBoolean(raw: string): boolean | null {
   return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
 }
 
-// [LAW:parse-dont-validate] A SessionState string to a padding value inside the
-// one declared range. The digits test comes first because `Number("")` is 0 and
-// `Number(" 3 ")` is 3 — an empty or padded entry would otherwise parse to a
-// value nobody wrote.
-function parsePadding(raw: string): number | null {
-  if (!/^\d+$/.test(raw)) return null;
+// [LAW:parse-dont-validate] A SessionState string to an integer inside a
+// range, or null. A session holds an integer in exactly the spelling
+// `String(n)` writes, so that spelling is the test: `""`, `" 3"`, `"1e1"`,
+// `"007"` and `"-0"` all coerce to numbers nobody wrote and are refused.
+//
+// [LAW:one-source-of-truth] Every reader of an integer session value parses it
+// here — the padding pick, a placement's range setting, and the loader's
+// check of what a `set` may write — so the three cannot admit different
+// strings.
+export function parseSessionInt(
+  raw: string,
+  range: { readonly min: number; readonly max: number },
+): number | null {
   const value = Number(raw);
-  return value >= PADDING_RANGE.min && value <= PADDING_RANGE.max
+  return Number.isInteger(value) &&
+    String(value) === raw &&
+    value >= range.min &&
+    value <= range.max
     ? value
     : null;
+}
+
+function parsePadding(raw: string): number | null {
+  return parseSessionInt(raw, PADDING_RANGE);
 }
 
 // Whether a render wraps over-wide rows, as data. The session's pick over the

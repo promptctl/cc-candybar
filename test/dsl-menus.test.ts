@@ -1273,13 +1273,14 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
 // address out of the decision for a COLOUR-valued domain, so a placement
 // property can only be stated over a domain that is still placed — which is
 // every domain but themes/styles. `WORDS_SRC` is MENU_SRC with its `from`
-// swapped, so the fixture differs from the one above in exactly that.
+// swapped (onto a plain key: a word list is no theme), so the fixture differs
+// from the one above in exactly that.
 describe("a menu's `distribution` option places its band", () => {
   const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
   const WITH = (dictEntry: string): string =>
     MENU_SRC.replace(
       "{ set: 'theme', from: 'themes' }",
-      `{ set: 'theme', from: ${JSON.stringify(WORDS)} }`,
+      `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,
     ).replace(
       '{{ menu "applyTheme" "▸" "▾" }}',
       `{{ menu "applyTheme" "▸" "▾" (dict ${dictEntry}) }}`,
@@ -1535,7 +1536,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     const { render, sink, compiled, palette, clickToggle } = buildRuntime(
       BOTH_PICKERS_SRC.replace(
         "{ set: 'theme', from: 'themes' }",
-        `{ set: 'theme', from: ${JSON.stringify(WORDS)} }`,
+        `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,
       ),
     );
     render();
