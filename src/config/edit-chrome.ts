@@ -366,23 +366,42 @@ function configureParts(
     };
     drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
-    // [LAW:one-type-per-behavior] The settings menu's generator: a ring gets
-    // the setting's label beside it, on the row it fills.
-    const control = settingControl(controlDeclOf(decl), key, variable, segName);
+    // [LAW:one-type-per-behavior] The settings menu's generator: a picker
+    // gets the setting's label beside it, and the lists of one placement's
+    // pickers share one accordion.
+    const control = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      `${prefix}.configure.${posIdent}`,
+    );
     Object.assign(ctx.artifacts.actions, control.actions);
+    Object.assign(ctx.artifacts.variables, control.variables);
+    if (control.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control.template };
+      return { kind: "segment", name: segName };
+    }
+    const listSeg = `${segName}.list`;
     ctx.artifacts.segments[segName] = {
-      template:
-        control.kind === "ring"
-          ? `{{ "${escapeTemplateLiteral(decl.label)}" }} ${control.template}`
-          : control.template,
+      template: `{{ "${escapeTemplateLiteral(decl.label)}" }} ${control.template}`,
     };
-    return { kind: "segment", name: segName };
+    ctx.artifacts.segments[listSeg] = { template: control.list.template };
+    return disclosureNode(
+      segName,
+      control.list.ref,
+      {
+        kind: "container",
+        direction: "vertical",
+        children: [{ kind: "segment", name: listSeg }],
+      },
+      "drop",
+    );
   });
   return {
     term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
     ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row: the theme carousel fills its row with the
-    // neighbours that fit, as the settings menu's own carousels do.
+    // One control per row, its list dropping below it when opened.
     body: { kind: "container", direction: "vertical", children: controls },
     drafts,
   };

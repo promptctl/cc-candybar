@@ -363,9 +363,12 @@ export function renderPicker(
       itemStyle({ index: i, count: apply.options.length }, option),
     );
   };
-  const nav: RichText[] = [
-    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false, closeStyle),
-  ];
+  // [LAW:dataflow-not-control-flow] No close writes, no close cell: a picker
+  // that is a row of a disclosure body is closed by the body's own ✕.
+  const nav: RichText[] =
+    close.length === 0
+      ? []
+      : [linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false, closeStyle)];
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
@@ -429,7 +432,7 @@ export function renderPicker(
 // (closeOnPick, paged). Returns T (RichText), the single fragment go-template-js
 // emits for `{{ picker … }}`.
 //
-// [LAW:no-mode-explosion] Both bools are OPTIONAL trailing values with a
+// [LAW:no-mode-explosion] The bools are OPTIONAL trailing values with a
 // documented default of `false`: `closeOnPick=false` is stay-open (a pick
 // recolors live and LEAVES THE MENU OPEN so themes can be tried in a row — the
 // baseline UX; the ✕ affordance closes), `closeOnPick=true` is the opt-in where a
@@ -437,8 +440,10 @@ export function renderPicker(
 // `paged=true` slices into ←/→ pages at the live width. Go spells an optional
 // tail as a variadic parameter, so the gate requires the two action names and
 // types every bool after them, an omitted bool arrives `undefined` and resolves
-// to the default here, and the body refuses a third. Authoring stay-open +
-// paged is `{{ picker "a" "p" false true }}`.
+// to the default here, and the body refuses a fourth. Authoring stay-open +
+// paged is `{{ picker "a" "p" false true }}`. `inBody=true` is a picker that
+// is a row of a disclosure body: the body's ✕ closes it, so it draws no ✕ of
+// its own (its ✕ would page to -1, which hides nothing there).
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the picker.
@@ -453,9 +458,14 @@ export function pickerFuncs(
         pageName: string,
         closeOnPick?: boolean,
         paged?: boolean,
+        inBody?: boolean,
         ...extra: boolean[]
       ) => {
-        refuseSurplus(`picker "${applyName}"`, ["closeOnPick", "paged"], extra);
+        refuseSurplus(
+          `picker "${applyName}"`,
+          ["closeOnPick", "paged", "inBody"],
+          extra,
+        );
         // [LAW:one-source-of-truth] The standalone picker's page cursor comes
         // from its NAMED set-int action (the documented desugaring surface);
         // closing means paging to -1, the when-gate idiom its host row reads
@@ -485,7 +495,7 @@ export function pickerFuncs(
         const [line] = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
-          [[page.key, "-1"]],
+          inBody === true ? [] : [[page.key, "-1"]],
           closeOnPick === true,
           paged === true,
           runtime,
@@ -498,6 +508,7 @@ export function pickerFuncs(
             runtime,
             apply.paletteOf,
             activeSegment.drawnAt(),
+            active.bg,
           ),
           closeOn(active.palette, active.bg, activeSegment.drawnAt()),
         );

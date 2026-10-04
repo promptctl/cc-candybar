@@ -153,6 +153,11 @@ function renderMenu(
   // convention), and CLOSING — the ✕ affordance or a closeOnPick pick — writes
   // the disclosure back to the closed sentinel and resets the page, the same
   // coupled pair the toggle glyph above writes. What the ▾ promised, ✕ delivers.
+  // [LAW:one-source-of-truth] The body's items and its ✕ sit on the band's
+  // plane: the band THIS segment opens, the same record the walk draws the
+  // trigger from.
+  const drawnAt = runtime.activeSegment.drawnAt();
+  const plane = bandFor(placement.palette, placement.disclosure, drawnAt).plane;
   placement.drops.push(
     ...(open
       ? renderPicker(
@@ -165,29 +170,20 @@ function renderMenu(
           options.closeOnPick,
           options.paged,
           action,
-          // [LAW:one-source-of-truth] The body's items are the band THIS
-          // segment opens — the same record the walk draws the trigger from —
-          // placed by THIS menu's distribution: the picker knows positions,
-          // the instance knows how it places them. Unless the menu's domain is
-          // colour-valued, in which case the OPTION colours its own cell; one
-          // call decides, the same one the standalone `{{ picker }}` makes.
+          // Placed by THIS menu's distribution: the picker knows positions,
+          // the instance knows how it places them. Unless the domain is
+          // colour-valued, in which case every option sits on the plane in
+          // its own text colour; one call decides, the same one the
+          // standalone `{{ picker }}` makes.
           optionItemStyle(
             placement,
             options.distribution,
             action,
             requireOptionKind(action, applyName, "menu").paletteOf,
-            runtime.activeSegment.drawnAt(),
+            drawnAt,
+            plane,
           ),
-          // The ✕ sits on the band's plane, as the body's items do.
-          closeOn(
-            placement.palette,
-            bandFor(
-              placement.palette,
-              placement.disclosure,
-              runtime.activeSegment.drawnAt(),
-            ).plane,
-            runtime.activeSegment.drawnAt(),
-          ),
+          closeOn(placement.palette, plane, drawnAt),
         )
       : []),
   );

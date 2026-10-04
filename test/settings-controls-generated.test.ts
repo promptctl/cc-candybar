@@ -164,6 +164,7 @@ describe("a global the menu has never seen gets its control from the generator",
     "zoom",
     "zoom",
     "apply.zoom",
+    "zoom.list",
   );
   const { actions } = control;
 

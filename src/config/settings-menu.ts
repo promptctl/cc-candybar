@@ -50,7 +50,6 @@ import {
 } from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
-  DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   DOOR_CLOSE_GLYPH,
   DOOR_CLOSE_ROLE,
@@ -59,7 +58,6 @@ import {
   disclosureNode,
   disclosureStateVar,
   disclosureTerm,
-  disclosureTrigger,
   disclosureTriggerCall,
   templateLiteral,
 } from "./disclosure.js";
@@ -70,7 +68,6 @@ import {
   VERDICT_UNRUN,
 } from "../doctor/report.js";
 import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
-import { menuActionName, menuMember, sharedMenuStateKey } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -222,16 +219,16 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // selected by a value, not a mode.
 const PICKER_KEY = `${SETTINGS_NS}pickers`;
 
-// The theme and style carousels share one preview: both choose the palette the
+// The theme and style pickers share one preview: both choose the palette the
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
 const PALETTE_PREVIEW: readonly SegmentDecl[] = [
   { template: "{{ themePreview }}" },
 ];
 const LAYOUT_PREVIEW: SegmentDecl = { template: "{{ layoutPreview }}" };
 
-// [LAW:types-are-the-program] What hangs under a control's carousel, beyond
-// the ring itself — each a row. A ring shows neighbours of the current value;
-// these show what picking one does to the bar.
+// [LAW:types-are-the-program] What hangs under a picker's list of options —
+// each a row, open while the list is. The list names the options; these show
+// what the current one does to the bar.
 const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
   // of it, one block per segment, named. Under it, while the ring is on a
@@ -259,10 +256,9 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
 const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
-const controlCarousel = (name: string): string =>
-  `${SETTINGS_NS}carousel.${name}`;
+const controlList = (name: string): string => `${SETTINGS_NS}list.${name}`;
 const controlBeneath = (name: string, row: number): string =>
-  `${controlCarousel(name)}.${row}`;
+  `${controlList(name)}.${row}`;
 // Whether the setting's reset would change anything (RenderPayload.resettable,
 // brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
 const controlResettable = (name: string): string =>
@@ -286,7 +282,7 @@ interface MenuControl extends SettingProjection {
 
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
-// shape — a toggle, a stepper, a carousel — decided by the domain the loader
+// shape — a toggle, a stepper, a picker — decided by the domain the loader
 // declares for the field beside its spec (`globalsControlDomain`), through the
 // same generator configure mode uses for a placement's settings. Every apply
 // action is a session `set`: a draft until the save cell commits it.
@@ -308,6 +304,7 @@ const CONTROLS: readonly MenuControl[] = (
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
+    PICKER_KEY,
   );
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
@@ -417,43 +414,29 @@ const disarms = (out: ReadonlyArray<(typeof CONFIRMS)[number]>): string[] =>
 const DOOR_DISARMS = disarms(CONFIRMS);
 const TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 
-// [LAW:one-source-of-truth] The one accordion every control's carousel joins,
-// as a disclosure ref per member, so two carousels are mutually exclusive
-// through one key, and a `{{ menu }}` given the same shared key (menuStateKey)
-// would join the same accordion rather than start a second convention.
-const PICKERS_STATE_KEY = sharedMenuStateKey(PICKER_KEY);
-const controlRef = (name: string): DisclosureRef => ({
-  variable: PICKERS_STATE_KEY,
-  key: PICKERS_STATE_KEY,
-  member: menuMember(controlApply(name)),
-});
-
 // [LAW:dataflow-not-control-flow] Every control takes one place in the tree,
 // decided by what the generator made of it: an inline control is its own
-// cell; a ring hangs its carousel and the rows beneath it on the control
-// through the one disclosure lowering, dropped below the row it sits in.
+// cell; a picker hangs its list of options, and the rows beneath it, on the
+// control through the one disclosure lowering, dropped below the row it sits
+// in. Every picker's list joins one accordion (PICKER_KEY).
 function controlNode(c: MenuControl): LayoutNode {
   const self = controlSeg(c.name);
-  return c.control.kind === "inline"
-    ? seg(self)
-    : disclosureNode(
-        self,
-        controlRef(c.name),
-        {
-          kind: "container",
-          direction: "vertical",
-          children: [
-            seg(controlCarousel(c.name)),
-            ...c.beneath.map(
-              (_, row): LayoutNode => ({
-                kind: "segment",
-                name: controlBeneath(c.name, row),
-              }),
-            ),
-          ],
-        },
-        "drop",
-      );
+  if (c.control.kind === "inline") return seg(self);
+  return disclosureNode(
+    self,
+    c.control.list.ref,
+    {
+      kind: "container",
+      direction: "vertical",
+      children: [
+        seg(controlList(c.name)),
+        ...c.beneath.map(
+          (_, row): LayoutNode => seg(controlBeneath(c.name, row)),
+        ),
+      ],
+    },
+    "drop",
+  );
 }
 
 // [LAW:single-enforcer] The one answer to "is this segment reference the global
@@ -847,14 +830,14 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // of the config file a save can write (resetLayers,
 // src/daemon/setting-drafts.ts), keyed by the config field a save writes so
 // the two can never name different settings — and its segments. An inline
-// control is one cell, the ↺ beside it; a ring is a trigger naming the value
-// the bar renders with (the control's `effectiveVar`, whatever rung produced
-// it), the toggle that opens its carousel on the shared accordion key, the ↺,
-// and the carousel's own rows as segments of their own.
+// control is one cell, the ↺ beside it; a picker is its setting's label, then
+// `◀ value ▶` naming the value the bar renders with (the control's
+// `effectiveVar`, whatever rung produced it) whose name opens its list on the
+// shared accordion key, then the ↺; the rows beneath it are segments of their
+// own.
 //
-// A pick leaves its carousel open, re-centred on what it applied
-// (brandon-theme-picker-bgw.etd): choosing a theme is trying several, so each
-// try must not cost a reopen; ✕ closes. That holds for a preset pick too,
+// A pick leaves the list open (brandon-theme-picker-bgw.etd): choosing a theme
+// is trying several, so each try must not cost a reopen; ✕ closes. That holds for a preset pick too,
 // whose click swaps the whole root — the menu survives it because every
 // preset root references this one anchor and both open states are session
 // keys, not tree positions.
@@ -872,32 +855,18 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       default: false,
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
-    if (c.control.kind === "inline") {
-      artifacts.segments[controlSeg(c.name)] = {
-        template: `${c.control.template}${resetCell}`,
-      };
-      continue;
-    }
-    const ref = controlRef(c.name);
-    const toggle = menuActionName(ref.key, ref.member);
-    artifacts.variables[ref.key] = disclosureStateVar(
-      ref.key,
-      DISCLOSURE_CLOSED,
-    );
-    artifacts.actions[toggle] = disclosureCycleAction(ref.key, ref.member);
+    Object.assign(artifacts.variables, c.control.variables);
+    // A picker names its setting before `◀ value ▶`; an inline control's own
+    // template already says what it is.
+    const label = c.control.kind === "picker" ? `${c.label} ` : "";
     artifacts.segments[controlSeg(c.name)] = {
-      template:
-        `${c.label} {{ .${c.effectiveVar} }} ` +
-        disclosureTrigger(
-          toggle,
-          DISCLOSURE_GLYPH_CLOSED,
-          DISCLOSURE_GLYPH_OPEN,
-        ) +
-        resetCell,
+      template: `${label}${c.control.template}${resetCell}`,
     };
-    artifacts.segments[controlCarousel(c.name)] = {
-      template: c.control.template,
-    };
+    if (c.control.kind === "picker") {
+      artifacts.segments[controlList(c.name)] = {
+        template: c.control.list.template,
+      };
+    }
     c.beneath.forEach((row, i) => {
       artifacts.segments[controlBeneath(c.name, i)] = row;
     });

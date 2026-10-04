@@ -102,22 +102,22 @@ export function bandItemStyle(
 }
 
 /**
- * The Style of one option cell in a picker — the ONE rule both a `{{ menu }}`
- * body and a bare `{{ picker }}` colour their grids by (brandon-picker-31z).
+ * The Style of one option cell in a picker — the ONE rule a `{{ menu }}` body,
+ * a bare `{{ picker }}` and a `{{ carousel }}` colour their options by
+ * (brandon-picker-31z, brandon-menu-ia-q30.jl1).
  *
  * Two rules, selected by one VALUE: the option domain's own `paletteOf`, or its
  * absence. A generic domain has none, and an option is coloured by where it sits
- * in the band, exactly as before. A COLOUR-VALUED domain has one, and the cell
- * wears the ground of the palette picking it would put in force — which is the
- * whole point: choosing a theme means reading names, and a name's colour was
- * previously its address in the band, a fact about the grid rather than about the
- * choice. Under the painter the address drops out of the decision entirely, so
- * the only thing that differs between two cells is the thing being chosen.
+ * in the band. A COLOUR-VALUED domain has one, and every option sits on the one
+ * `ground` the caller names — a menu body's plane, the segment's own background
+ * — with its TEXT in the palette picking it would put in force. Brandon: "Only
+ * the foreground should be in the themes colors, it looks like shit when the
+ * backgrounds are drawn differently, very messy." So the only thing that
+ * differs between two options is the thing being chosen, and the list reads as
+ * one menu.
  *
  * [LAW:dataflow-not-control-flow] The selection happens ONCE per picker, not per
  * cell — a picker is painted by whichever rule its domain handed in.
- *
- * The cell itself is `appliedCell` below.
  */
 export function optionItemStyle(
   active: ActiveSegment,
@@ -125,16 +125,18 @@ export function optionItemStyle(
   render: RenderPalettes,
   paletteOf: OptionPalette | undefined,
   drawnAt: ColorDepth,
+  ground: ColorRgba,
 ): (position: Position, option: string) => Style {
   if (paletteOf === undefined) {
     return (position) =>
       bandItemStyle(active, { ...position, distribution }, drawnAt);
   }
-  return (_position, option) => appliedCell(paletteOf(option, render), drawnAt);
+  return (_position, option) =>
+    appliedText(paletteOf(option, render), ground, drawnAt);
 }
 
 /**
- * The contrast an option label must clear against its own ground: WCAG AA body
+ * The contrast an option label must clear against its ground: WCAG AA body
  * text. An option is text you have to READ to pick it, so it is not the
  * deliberately-recessive case 3.0 exists for. [LAW:no-silent-failure] rich-js
  * refuses to default this, because the threshold is the whole decision.
@@ -142,27 +144,24 @@ export function optionItemStyle(
 const OPTION_TEXT_RATIO = 4.5;
 
 /**
- * The cell a colour-valued option wears: the applied palette's own `background`,
- * with its own `primary` as the text — hue preserved, OKLCH lightness slid by
- * rich-js until it clears AA on that ground.
- *
- * The ground alone would not be enough, and the style picker is what proves it:
- * `vivid` and `muted` scale CHROMA, which leaves a near-neutral background
- * exactly where it was, so three of the six bundled styles would have rendered
- * byte-identical cells while picking them genuinely changes the bar — the same
- * class of lie as colouring an option by its address. The hue carries what the
- * ground cannot, and it is also the more identifying half for a theme: a bar
- * under a theme is mostly that theme's hues over its bases.
+ * A colour-valued option: the shared ground, and the applied palette's own
+ * `primary` as the text — hue preserved, OKLCH lightness slid by rich-js until
+ * it clears AA on that ground. The hue is what identifies a theme (a bar under
+ * a theme is mostly its hues), and it is also what tells the styles apart:
+ * `vivid` and `muted` scale chroma, which moves a primary and leaves a
+ * near-neutral background where it was.
  *
  * [LAW:one-source-of-truth] The contrast math is rich-js's (`ensureContrast`,
- * the same function the `readableOn` binding is) — cc-candybar does no colour
- * arithmetic of its own. This is deliberately NOT `textOn`: that picks a theme
- * POLE for a decorative background, where the text says nothing; here the text
- * colour is itself information, so the hue must survive and only its lightness
- * may move.
+ * the same function the `readableOn` binding is). This is deliberately NOT
+ * `textOn`: that picks a theme POLE for a decorative background, where the text
+ * says nothing; here the text colour is itself information, so the hue must
+ * survive and only its lightness may move.
  */
-function appliedCell(applied: Palette, drawnAt: ColorDepth): Style {
-  const ground = paletteRole(applied, "background");
+function appliedText(
+  applied: Palette,
+  ground: ColorRgba,
+  drawnAt: ColorDepth,
+): Style {
   return new Style({
     bgcolor: ColorSpec.fromRgba(ground),
     color: ColorSpec.fromRgba(

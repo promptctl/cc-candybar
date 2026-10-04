@@ -20,7 +20,7 @@
 // [LAW:one-way-deps] Lives in render/ beside the picker, injected into the
 // engine by registerDslConfig as data; the generic engine never imports it.
 
-import type { RichText } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl } from "../click/wire.js";
 import { placedBy } from "../themes/decor.js";
@@ -85,6 +85,11 @@ export function renderCarousel(
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
   neighbours: number,
+  // What the centre cell is. Absent, it is the current option, applying
+  // itself again; given, it is the author's own fragment — the settings
+  // menu's controls put the trigger of the list of every option there, so a
+  // click on the name opens the choices and only the arrows step.
+  middleCell?: RichText,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
   // a structural insert (layout-op-option) holds none, and a key no variable
@@ -136,10 +141,11 @@ export function renderCarousel(
       itemStyle({ index: indexAt(offset), count }, ring(offset)),
     );
 
+  const middle = middleCell ?? option(0);
   const base =
     cellWidth(CAROUSEL_PREV) +
     1 +
-    cellWidth(ring(0)) +
+    middle.cellLength +
     1 +
     cellWidth(CAROUSEL_NEXT);
   const levels = neighbourLevels(
@@ -156,7 +162,7 @@ export function renderCarousel(
     [
       ...side(-1).reverse(),
       linkFragment(CAROUSEL_PREV, url(-1), false),
-      option(0),
+      middle,
       linkFragment(CAROUSEL_NEXT, url(1), false),
       ...side(1),
     ],
@@ -176,34 +182,59 @@ export function carouselFuncs(
       // `neighbours` caps how many options each side of the centre may show;
       // width still decides within the cap. `0` is the bare stepper
       // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
-      // neighbours are what makes it wide. Omitted = as many as fit.
+      // neighbours are what makes it wide. Omitted = as many as fit. `centre`
+      // replaces the current option's own cell with the author's fragment
+      // (`{{ carousel "a" 0 (menu "a" .x) }}`: arrows step, the name opens).
       //
-      // The `int` gate refuses a fractional cap; the body refuses a negative
-      // one and a surplus argument, since the engine repeats the trailing slot.
-      fn: (applyName: string, neighbours?: number, ...extra: number[]) => {
-        refuseSurplus(`carousel "${applyName}"`, ["neighbours"], extra);
-        if (neighbours !== undefined && neighbours < 0) {
+      // [LAW:parse-dont-validate] The slots differ in type and the engine
+      // repeats only the trailing one, so the tail arrives as values and is
+      // parsed here: a whole number ≥ 0, then one fragment, then nothing.
+      fn: (applyName: string, ...tail: unknown[]) => {
+        const [neighbours, centre, ...extra] = tail;
+        refuseSurplus(
+          `carousel "${applyName}"`,
+          ["neighbours", "centre"],
+          extra,
+        );
+        if (
+          neighbours !== undefined &&
+          !(Number.isInteger(neighbours) && (neighbours as number) >= 0)
+        ) {
           throw new Error(
             `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
           );
         }
-        const cap = neighbours ?? Infinity;
+        if (centre !== undefined && !(centre instanceof RichText)) {
+          throw new Error(
+            `carousel "${applyName}": centre must be a fragment such as (menu …) or (action …), got ${JSON.stringify(centre)}`,
+          );
+        }
+        const cap = (neighbours as number | undefined) ?? Infinity;
         const apply = requireOptionKind(runtime, applyName, "carousel");
+        const active = requireActiveSegment(activeSegment, "{{ carousel }}");
+        if (active.bg === undefined) {
+          throw new Error(
+            `{{ carousel }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a carousel is drawn on that background`,
+          );
+        }
         return renderCarousel(
           applyName,
           apply,
           runtime,
+          // Its options sit on the segment's own background, inline in it.
           optionItemStyle(
-            requireActiveSegment(activeSegment, "{{ carousel }}"),
+            active,
             placedBy(undefined),
             runtime,
             apply.paletteOf,
             activeSegment.drawnAt(),
+            active.bg,
           ),
           cap,
+          centre,
         );
       },
-      argTypes: ["string", "int"],
+      argTypes: ["string", "value"],
       arity: { kind: "variadic" },
       returnType: "T",
     },
