@@ -100,10 +100,7 @@ describe("state-validators contract", () => {
   });
 
   test("a daemon-wide key is writable in a session until its disposer runs", () => {
-    const disposer = registerStateValidator("mode", {
-      kind: "allow-list",
-      allowed: ["full", "compact"],
-    });
+    const disposer = registerStateValidator("mode", ["full", "compact"]);
     try {
       expect(bare().listKeys()).toContain("mode");
       expect(bare().validate("mode", "full")).toEqual({
@@ -127,7 +124,7 @@ describe("state-validators contract", () => {
     // `theme` collides loudly rather than silently hijacking the canonical
     // theme validator.
     expect(() =>
-      registerStateValidator("theme", { kind: "allow-list", allowed: ["x"] }),
+      registerStateValidator("theme", ["x"]),
     ).toThrow(/built-in state key/);
   });
 

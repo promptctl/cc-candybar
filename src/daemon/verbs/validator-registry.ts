@@ -295,13 +295,38 @@ export interface Gate {
 // (validate); a contribution that cannot be addressed, re-claims a built-in
 // key, or contradicts another on its key is a loud throw — never a silent
 // accept-and-store.
+//
+// [LAW:types-are-the-program] A daemon-wide key is a word list whose members
+// come and go while configs stay loaded. A config may add members to it and
+// may not give it another shape: refused here by the key alone, whatever the
+// list holds at the time, so a config that built its gate once builds it under
+// every later change to the members.
 function createGate(
   baseline: Readonly<Record<string, KeyValidator>>,
-  contributions: readonly KeySpecContribution[],
+  daemonWide: readonly DaemonWideKey[],
+  derived: readonly KeySpecContribution[],
   noun: string,
 ): Gate {
   const validators = new Map<string, KeyValidator>(Object.entries(baseline));
   const ranges = new Map<string, RangeParams>();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as ` +
+          `one of a list of values, and cannot be declared as ` +
+          `${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. ` +
+          `Use a distinct key.`,
+      );
+    }
+  }
+  const contributions: KeySpecContribution[] = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list" as const, allowed },
+    })),
+    ...derived,
+  ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
     if (!key) throw new Error(`${noun} gate: key is required`);
     // [LAW:types-are-the-program] The wire splits its tail on `/`, so a
@@ -340,10 +365,18 @@ function createGate(
   };
 }
 
+// Values every session may write to `key`, whatever config it renders.
+interface DaemonWideKey {
+  readonly key: string;
+  readonly allowed: readonly string[];
+}
+
 export interface Keyspace<C extends object> {
   // A key every session may write whatever config it renders — the daemon's
-  // own links (the update notice's), drawn above any config's bar.
-  register(key: string, spec: DerivedValidatorSpec): () => void;
+  // own links (the update notice's), drawn above any config's bar — and the
+  // values they write to it. An empty list holds the key with nothing
+  // writable yet; a later registration of the same key adds its members.
+  register(key: string, allowed: readonly string[]): () => void;
   // The gate of the sessions rendering `config`.
   gateFor(config: C): Gate;
 }
@@ -368,17 +401,16 @@ export function createKeyspace<C extends object>(
   noun: string,
   derive: (config: C) => readonly KeySpecContribution[],
 ): Keyspace<C> {
-  const daemonWide: KeySpecContribution[] = [];
+  const daemonWide: DaemonWideKey[] = [];
   let epoch = 0;
   const gates = new WeakMap<C, { epoch: number; gate: Gate }>();
 
   return {
-    register(key, spec) {
-      const contribution = { key, spec };
-      // Built before committing: a key the wire cannot address, a built-in
-      // re-claimed, or a spec no daemon-wide sibling can share its key with
-      // throws with the keyspace exactly as it was.
-      createGate(baseline, [...daemonWide, contribution], noun);
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      // Built before committing: a key the wire cannot address or a built-in
+      // re-claimed throws with the keyspace exactly as it was.
+      createGate(baseline, [contribution], [], noun);
       daemonWide.push(contribution);
       epoch++;
       let active = true;
@@ -393,11 +425,7 @@ export function createKeyspace<C extends object>(
     gateFor(config) {
       const held = gates.get(config);
       if (held?.epoch === epoch) return held.gate;
-      const gate = createGate(
-        baseline,
-        [...daemonWide, ...derive(config)],
-        noun,
-      );
+      const gate = createGate(baseline, daemonWide, derive(config), noun);
       gates.set(config, { epoch, gate });
       return gate;
     },

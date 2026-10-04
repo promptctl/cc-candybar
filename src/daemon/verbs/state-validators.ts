@@ -31,7 +31,6 @@ import { sessionSettingValue } from "../setting-drafts";
 import {
   createKeyspace,
   mergeContributions,
-  type DerivedValidatorSpec,
   type Gate,
   type KeySpecContribution,
   type KeyValidator,
@@ -117,9 +116,9 @@ const keyspace = createKeyspace(BASELINE, "state", deriveActionValidators);
 // A key every session may write, whatever config it renders.
 export function registerStateValidator(
   key: string,
-  spec: DerivedValidatorSpec,
+  allowed: readonly string[],
 ): () => void {
-  return keyspace.register(key, spec);
+  return keyspace.register(key, allowed);
 }
 
 // [LAW:single-enforcer] The gate `set-state`, `step-state` and every write

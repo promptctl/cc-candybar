@@ -48,6 +48,7 @@ import {
 } from "./dsl/render.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
+import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
 import {
   effectiveInputs,
@@ -424,10 +425,16 @@ async function loadRegisterRender(
   const prepared = await prepareConfig(configPath, cwd, warnings);
   const { config } = prepared;
   try {
-    // The gates the daemon derives when it loads this config: an action
-    // table that cannot gate fails here as it fails that load.
-    stateGate(config);
-    configGate(config);
+    // The gates the daemon derives when it loads this config, over the keys
+    // its own links hold: an action table that cannot gate fails here as it
+    // fails that load.
+    const releaseUpdateKeys = reserveUpdateKeys();
+    try {
+      stateGate(config);
+      configGate(config);
+    } finally {
+      releaseUpdateKeys();
+    }
 
     // Fresh session (no clicked theme/endcaps/style), so the session half of
     // each resolution is null — the config default over the floor, exactly

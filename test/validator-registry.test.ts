@@ -140,10 +140,7 @@ describe("a daemon-wide key", () => {
     const ks = keyspace();
     const a = declares({ key: "mode", spec: { kind: "int" } });
     const b = declares();
-    const dispose = ks.register("update.dismissed", {
-      kind: "allow-list",
-      allowed: ["1.2.3"],
-    });
+    const dispose = ks.register("update.dismissed", ["1.2.3"]);
     for (const config of [a, b]) {
       expect(ks.gateFor(config).validate("update.dismissed", "1.2.3").ok).toBe(
         true,
@@ -163,10 +160,7 @@ describe("a daemon-wide key", () => {
       key: "updateNotice",
       spec: { kind: "allow-list", allowed: ["true"] },
     });
-    const dispose = ks.register("updateNotice", {
-      kind: "allow-list",
-      allowed: ["false"],
-    });
+    const dispose = ks.register("updateNotice", ["false"]);
     const gate = ks.gateFor(config);
     expect(gate.validate("updateNotice", "true").ok).toBe(true);
     expect(gate.validate("updateNotice", "false").ok).toBe(true);
@@ -177,14 +171,8 @@ describe("a daemon-wide key", () => {
   test("two registrations of one key union, and each disposer removes only its own", () => {
     const ks = keyspace();
     const bare = declares();
-    const disposeRed = ks.register("mode", {
-      kind: "allow-list",
-      allowed: ["red"],
-    });
-    const disposeBlue = ks.register("mode", {
-      kind: "allow-list",
-      allowed: ["blue"],
-    });
+    const disposeRed = ks.register("mode", ["red"]);
+    const disposeBlue = ks.register("mode", ["blue"]);
     expect(ks.gateFor(bare).validate("mode", "red").ok).toBe(true);
     expect(ks.gateFor(bare).validate("mode", "blue").ok).toBe(true);
     disposeRed();
@@ -199,17 +187,38 @@ describe("a daemon-wide key", () => {
   test("a registration that cannot gate throws and leaves the keyspace as it was", () => {
     const ks = keyspace({ theme: (raw) => ({ ok: true, value: raw }) }, "state");
     const bare = declares();
-    const dispose = ks.register("cursor", { kind: "int" });
-    expect(() =>
-      ks.register("cursor", { kind: "allow-list", allowed: ["a"] }),
-    ).toThrow(/key "cursor" is an integer spec .* non-integer value\(s\) to it \(a\)/);
-    expect(() =>
-      ks.register("theme", { kind: "allow-list", allowed: ["x"] }),
-    ).toThrow(/built-in state key/);
-    expect(() => ks.register("", { kind: "int" })).toThrow(/key is required/);
-    expect(() => ks.register("a/b", { kind: "int" })).toThrow(/contains "\/"/);
-    expect(ks.gateFor(bare).listKeys()).toEqual(["theme", "cursor"]);
-    expect(ks.gateFor(bare).validate("cursor", "5").ok).toBe(true);
+    const dispose = ks.register("mode", ["red"]);
+    expect(() => ks.register("theme", ["x"])).toThrow(/built-in state key/);
+    expect(() => ks.register("", ["x"])).toThrow(/key is required/);
+    expect(() => ks.register("a/b", ["x"])).toThrow(/contains "\/"/);
+    expect(ks.gateFor(bare).listKeys()).toEqual(["theme", "mode"]);
+    expect(ks.gateFor(bare).validate("mode", "red").ok).toBe(true);
     dispose();
+  });
+
+  // The members of a daemon-wide key change while configs stay loaded (the
+  // update notice's dismissal gains its identity when a newer build appears),
+  // so the refusal cannot wait for a member that contradicts the config.
+  test("a config giving it another shape is refused while it holds no member", () => {
+    const ks = keyspace({}, "state");
+    ks.register("update.dismissed", []);
+    for (const spec of [
+      { kind: "int" },
+      { kind: "range", min: 0, max: 3 },
+    ] as const) {
+      expect(() =>
+        ks.gateFor(declares({ key: "update.dismissed", spec })),
+      ).toThrow(/key "update.dismissed" is written by the daemon's own links/);
+    }
+    // A config's own values join the list, and a later member cannot clash.
+    const words = declares({
+      key: "update.dismissed",
+      spec: { kind: "allow-list", allowed: ["mine"] },
+    });
+    expect(ks.gateFor(words).validate("update.dismissed", "mine").ok).toBe(true);
+    ks.register("update.dismissed", ["1.2.3"]);
+    expect(ks.gateFor(words).validate("update.dismissed", "1.2.3").ok).toBe(
+      true,
+    );
   });
 });

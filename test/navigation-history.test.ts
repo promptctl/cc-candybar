@@ -46,10 +46,7 @@ function setup() {
     configFor: () => config,
   };
   // The update notice's dismissal is the daemon's own key, not a config's.
-  const dispose = registerStateValidator(UPDATE_DISMISSED_KEY, {
-    kind: "allow-list",
-    allowed: ["1.2.3"],
-  });
+  const dispose = registerStateValidator(UPDATE_DISMISSED_KEY, ["1.2.3"]);
   const set = (...pairs: string[]): void =>
     VERBS.get(VERB_SET_STATE)!(encodeSegments(["s1", ...pairs]), ctx);
   const back = (): void => VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);

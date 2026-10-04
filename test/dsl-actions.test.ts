@@ -593,14 +593,8 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
       ALLOWED,
     );
     const validate = (v: string) => stateGate(config).validate("k", v);
-    const d1 = registerStateValidator("k", {
-      kind: "allow-list",
-      allowed: ["a", "b"],
-    });
-    const d2 = registerStateValidator("k", {
-      kind: "allow-list",
-      allowed: ["b", "c"],
-    });
+    const d1 = registerStateValidator("k", ["a", "b"]);
+    const d2 = registerStateValidator("k", ["b", "c"]);
     // Union of both registrations is accepted.
     for (const v of ["a", "b", "c"]) {
       expect(validate(v).ok).toBe(true);

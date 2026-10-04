@@ -27,7 +27,6 @@ import {
 import {
   createKeyspace,
   mergeContributions,
-  type DerivedValidatorSpec,
   type Gate,
   type KeySpecContribution,
 } from "./validator-registry";
@@ -39,9 +38,9 @@ const keyspace = createKeyspace({}, "config", deriveConfigActionValidators);
 // A config key every session may write, whatever config it renders.
 export function registerConfigValidator(
   key: string,
-  spec: DerivedValidatorSpec,
+  allowed: readonly string[],
 ): () => void {
-  return keyspace.register(key, spec);
+  return keyspace.register(key, allowed);
 }
 
 // [LAW:single-enforcer] The gate every durable write passes: the config-file

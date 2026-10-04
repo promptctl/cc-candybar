@@ -355,6 +355,20 @@ function failureReason(r: Extract<LaunchResult, { ok: false }>): string {
 // identity whenever it changes, so a stale dismissal simply stops matching)
 // and the disable allow-list (registered once; `false` is the only value a
 // click writes).
+// [LAW:one-source-of-truth] The keys the notice's links write, held from boot
+// so every config's gate is built against them: [disable]'s two, and
+// [dismiss]'s with no member until something newer exists (syncGate adds the
+// identity). `cc-candybar check` holds the same keys while it builds a
+// config's gates, so it refuses what the daemon's load refuses.
+export function reserveUpdateKeys(): () => void {
+  const disposers = [
+    registerConfigValidator(UPDATE_NOTICE_FIELD, ["false"]),
+    registerStateValidator(UPDATE_NOTICE_SESSION_KEY, ["false"]),
+    registerStateValidator(UPDATE_DISMISSED_KEY, []),
+  ];
+  return () => disposers.forEach((dispose) => dispose());
+}
+
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     entryUrl,
@@ -389,10 +403,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         ? null
         : {
             identity,
-            dispose: registerStateValidator(UPDATE_DISMISSED_KEY, {
-              kind: "allow-list",
-              allowed: [identity],
-            }),
+            dispose: registerStateValidator(UPDATE_DISMISSED_KEY, [identity]),
           };
   }
 
@@ -417,14 +428,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     arm() {
       // Daemon-lifetime registration: the disposer would only matter to a
       // watch that is torn down, and the daemon exits instead.
-      registerConfigValidator(UPDATE_NOTICE_FIELD, {
-        kind: "allow-list",
-        allowed: ["false"],
-      });
-      registerStateValidator(UPDATE_NOTICE_SESSION_KEY, {
-        kind: "allow-list",
-        allowed: ["false"],
-      });
+      reserveUpdateKeys();
       sampleBuild();
       setInterval(sampleBuild, intervalMs).unref();
       // The registry is a question only a published install asks: a checkout
