@@ -36,6 +36,7 @@
 //     not merely tidy.
 
 import { ident } from "./ident.js";
+import { sharedMenuStateKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
 import {
@@ -216,8 +217,9 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // one key holds one open member, so opening a theme picker closes the style
 // picker. The settings menu is a narrow panel — two open drop-downs would
 // overflow it — and this is the same shared-key mechanism group sugar uses,
-// selected by a value, not a mode.
-const PICKER_KEY = `${SETTINGS_NS}pickers`;
+// selected by a value, not a mode. Spelled as a shared `{{ menu }}` key, so a
+// `{{ menu }}` an author gives the same shared key joins this accordion.
+const PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 
 // The theme and style pickers share one preview: both choose the palette the
 // bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
