@@ -333,27 +333,42 @@ describe("the savepoint survives a restart", () => {
     expect(logs.join("\n")).toMatch(/unexpected shape/);
   });
 
-  test("a step on a key that is no longer a setting is a wrong-shaped file, dropped whole", () => {
+  test("changes to a key that is no longer a setting leave alone, named in the log", () => {
     // brandon-rename-sweep-x4yf: steps recorded under `look` before it was
-    // renamed `style`. Undoing one would restore a key nothing reads.
+    // renamed `style`. Undoing one would restore a key nothing reads; every
+    // other change, and every other session, stays undoable.
     const historyFile = path.join(dir, "history.json");
-    const step = (key: string) => [
-      { kind: "session", key, before: null, after: "vivid" },
-    ];
+    const change = (key: string) => ({
+      kind: "session",
+      key,
+      before: null,
+      after: "vivid",
+    });
+    const file = { kind: "file", file: "/c.json5", before: "a", after: "b" };
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({ [SID]: { past: [step("style"), step("look")], future: [] } }),
+      JSON.stringify({
+        [SID]: {
+          past: [[change("look")], [change("style"), change("progression")], [file]],
+          future: [[change("look")]],
+          savepoint: { at: 2, net: [change("look"), file], below: [[change("look")]] },
+        },
+        other: { past: [[file]], future: [] },
+      }),
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
-    expect(storage.load()).toEqual({});
-    expect(logs.join("\n")).toMatch(/unexpected shape/);
-
-    fs.writeFileSync(
-      historyFile,
-      JSON.stringify({ [SID]: { past: [step("style")], future: [] } }),
-    );
-    expect(Object.keys(storage.load())).toEqual([SID]);
+    expect(storage.load()).toEqual({
+      [SID]: {
+        past: [[change("style")], [file]],
+        future: [],
+        savepoint: { at: 1, net: [file], below: [] },
+      },
+      other: { past: [[file]], future: [] },
+    });
+    expect(logs).toEqual([
+      'settings-history load: dropped the changes to "look", "progression", no longer a setting',
+    ]);
   });
 
   test("a history written before savepoints existed loads with none", () => {

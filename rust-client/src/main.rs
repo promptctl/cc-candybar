@@ -138,8 +138,8 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
 // [LAW:one-source-of-truth] The Rust client is a fast relay for the render hot
 // path and delegates EVERY subcommand to Node — Node is the single authority on
 // what subcommands exist. A subcommand is structurally a positional first arg (a
-// word, not a flag); the render path is invoked with flags only (`--style=…`) or
-// no args, so it never has one. Discriminating on that shape — rather than a
+// word, not a flag); the render path is invoked with no args, or flags only,
+// so it never has one. Discriminating on that shape — rather than a
 // hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
 // works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
 // is injected so this is a pure, testable function.
@@ -1286,7 +1286,7 @@ mod tests {
     #[test]
     fn dispatch_keeps_render_invocation_local() {
         assert!(!should_dispatch_to_node(
-            &argv(&["cc-candybar", "--style=powerline"]),
+            &argv(&["cc-candybar", "--render-flag"]),
             false
         ));
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));

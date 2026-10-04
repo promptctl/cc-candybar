@@ -706,16 +706,21 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   });
 
   test.each([
-    ["looks", "styles"],
-    ["progressions", "variations"],
-  ])("a `from` naming the renamed domain %s points at %s", (old, renamed) => {
-    expectIssue(
-      base(`{ a: { set: 'k', from: '${old}' } }`),
-      new RegExp(
-        `unknown option domain "${old}" — it was renamed "${renamed}"; write from: "${renamed}"`,
-      ),
-    );
-  });
+    ["set: 'k'", "looks", "styles"],
+    ["set: 'k'", "progressions", "variations"],
+    ["persist: 'style'", "looks", "styles"],
+    ["persist: 'variation'", "progressions", "variations"],
+  ])(
+    "{ %s, from } naming the renamed domain %s points at %s",
+    (arm, old, renamed) => {
+      expectIssue(
+        base(`{ a: { ${arm}, from: '${old}' } }`),
+        new RegExp(
+          `unknown option domain "${old}" — it was renamed "${renamed}"; write from: "${renamed}"`,
+        ),
+      );
+    },
+  );
 
   test("bounded min >= max is rejected", () => {
     expectIssue(

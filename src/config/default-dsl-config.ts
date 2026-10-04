@@ -110,10 +110,9 @@ const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 // value flows through ascending stops and the cell wears the last stop it
 // passed, so "≥ threshold → hotter" is data, not an `if` chain, and the
 // colour transposes with the palette and style like any `color`. The
-// thresholds stay var refs a user overrides through the variables-merge-
-// by-name cascade in mergeWithDefault; a threshold set below its neighbour
-// is a loud render error (stops must ascend — the segment shows ⚠ and
-// `cc-candybar check` fails), never a silently reordered cascade.
+// thresholds are the placement's settings (`.settings.warnAt`, …), and the
+// loader refuses a pair that does not ascend, so a cascade is never silently
+// reordered.
 //
 // The calm arm of every cascade is `(tint)`, the decoration the cell's address
 // was dealt: a calm cell states nothing, so it wears what every cell that

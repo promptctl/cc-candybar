@@ -33,6 +33,7 @@ import {
 import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
+  unknownOptionDomain,
   perConfigDomainsFor,
   resolveOptionDomain,
   type ResolvedDomain,
@@ -207,6 +208,26 @@ export function validateCrossReferences(
   const optionDomains = perConfigDomainsFor(cfg);
   const knownDomains = knownOptionDomainNames(optionDomains);
   for (const [name, a] of Object.entries(cfg.actions)) {
+    // Every arm that draws from a domain — set, persist, insertSegmentFrom —
+    // names it here, so a stale name is refused at load whichever arm holds it.
+    const [field, from] =
+      "from" in a
+        ? (["from", a.from] as const)
+        : "insertSegmentFrom" in a
+          ? (["insertSegmentFrom", a.insertSegmentFrom] as const)
+          : [null, null];
+    if (
+      field !== null &&
+      typeof from === "string" &&
+      !knownDomains.includes(from)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${field}`,
+        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
+        line: findKeyLine(ctx.source, ["actions", name, field]),
+      });
+      continue;
+    }
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -214,18 +235,6 @@ export function validateCrossReferences(
         message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
         line: findKeyLine(ctx.source, ["actions", name, "set"]),
       });
-    }
-    if (
-      "from" in a &&
-      typeof a.from === "string" &&
-      !knownDomains.includes(a.from)
-    ) {
-      ctx.issues.push({
-        path: `actions.${name}.from`,
-        message: `actions.${name} from: references unknown option domain "${a.from}"${renamedDomainHint(a.from)} (have: ${knownDomains.join(", ")})`,
-        line: findKeyLine(ctx.source, ["actions", name, "from"]),
-      });
-      continue;
     }
     const setting = SESSION_KEY_TO_SETTING.get(a.set);
     if (setting !== undefined) {
@@ -1067,23 +1076,6 @@ function checkHelperIssue(
 // (brandon-config-dovk). Every value such a set can write is known at load, so
 // each is checked against the domain the setting's menu control is generated
 // from, and reported at the field that states it.
-// [LAW:no-silent-failure] The option domains brandon-menu-ia-q30.xuz renamed:
-// old name → current name. The third rename of that change, `styles` (the
-// endcaps shapes) → `endcaps`, has no row: `styles` is still a domain, so an
-// old `from: "styles"` resolves, and the write it feeds is checked against its
-// setting by checkSettingWrites. A Map, because an authored name is user data.
-const RENAMED_OPTION_DOMAINS: ReadonlyMap<string, string> = new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"],
-]);
-
-function renamedDomainHint(from: string): string {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  return renamed === undefined
-    ? ""
-    : ` — it was renamed "${renamed}"; write from: "${renamed}"`;
-}
-
 function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,

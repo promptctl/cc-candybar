@@ -267,7 +267,30 @@ export function resolveOptionDomain(
   if (local) return local;
   const entry = _GLOBAL_OPTION_DOMAINS.get(from);
   if (entry) return { members: entry.resolve(), paletteOf: entry.paletteOf };
-  throw new Error(
-    `unknown option domain "${from}" (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`,
-  );
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+
+// [LAW:one-source-of-truth] The option domains brandon-menu-ia-q30.xuz
+// renamed: old name → current name. The endcaps shapes' old domain name,
+// `styles`, has no row — it names the styles now, so it still resolves and no
+// load can tell which meaning an author intended. A Map, because an authored
+// name is user data.
+const RENAMED_OPTION_DOMAINS: ReadonlyMap<string, string> = new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"],
+]);
+
+// [LAW:no-silent-failure] The one spelling of a name no domain answers to —
+// the loader's refusal and the resolver's throw — so the rename pointer
+// reaches every path that can meet a stale name.
+export function unknownOptionDomain(
+  from: string,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): string {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint =
+    renamed === undefined
+      ? ""
+      : ` — it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
 }
