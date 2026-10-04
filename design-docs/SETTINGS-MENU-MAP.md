@@ -9,7 +9,7 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✖  ◁  ▦ default ▸  💾 save 3 ↶ ↷ ⟲
+✖  ◁  ▦ ◀ default ▶  💾 save 3 ↶ ↷ ⟲
    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
 host  directory  gitaculous             ← the bar, less the door
@@ -74,12 +74,12 @@ gitPr       The pull request open for this branch, as a link; `⚠ PR` when the 
 
 ```
 look
-◀ tokyo-night ▶  ◀ none ▶  ◀ accent ▶  ◀ powerline ▶
+🎨 ◀ tokyo-night ▶  ◐ ◀ none ▶  ✦ ◀ powerline ▶  🎼 ◀ accent ▶
 ```
 
-Each selector is one widget with two click regions. The arrows select the previous or next value, as the `themeSwitcher` segment does today. The name opens a menu. The selectors carry no label or glyph: "we won't actually see that in the menu".
+Each selector is one widget with two click regions. The arrows select the previous or next value, as the `themeSwitcher` segment does today. The value opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
 
-The menu a name opens is "a regular menu, no carousel": the full row of choices. Each choice shows its effect in its text colour only: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." Every choice sits on the same menu background. That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
+The menu a name opens is "a regular menu, no carousel": the full row of choices, paged to the width, with the preview rows under it. Each choice shows its effect in its text colour only: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." Every choice sits on the same menu background. That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
 
 ## Renames
 
