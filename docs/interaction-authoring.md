@@ -2106,7 +2106,8 @@ A `set` on a setting's key (`theme`, `style`, `preset`, `endcaps`,
 `variation`, `autoWrap`, `padding`, `updateNotice`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
-`from`'s options and a stepper's ends:
+`from`'s options and a stepper's ends, and refuses an `int` cursor, which
+writes whatever integer the template binds:
 
 ```json5 check:fail
 {
@@ -2118,7 +2119,8 @@ gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
 actions.round.to: "banana" is outside the endcaps domain — a click would write it and nothing would change; endcaps takes one of
 ```
 
-An endcaps shape under `style` is the old name for `endcaps`:
+A `style` action that writes only endcaps shapes is using the old name for
+`endcaps`:
 
 ```json5 check:fail
 {
