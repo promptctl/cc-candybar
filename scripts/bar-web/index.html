@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>cc-candybar live bar</title>
 <!-- xterm.js as rich-js's live terminals pin it (examples/_browser-shell/xterm.ts), plus two addons:
      fit sizes the terminal to its frame, unicode11 counts an emoji as the two cells the daemon lays out. -->
@@ -17,7 +18,7 @@
   /* rich-js's Powerline subset: arrows and caps without a patched font (FONT-LICENSE). */
   @font-face {
     font-family: "Rich Powerline";
-    src: url("/rich-powerline.woff2") format("woff2");
+    src: url("./rich-powerline.woff2") format("woff2");
     unicode-range: U+E0A0-E0D7;
     font-display: block;
   }
@@ -28,24 +29,34 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 system-ui, sans-serif; }
   header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 14px; margin: 0; font-weight: 600; }
-  header .group { display: flex; gap: 6px; align-items: center; }
-  header .label { color: var(--muted); }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .label { color: var(--muted); }
   button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3px 9px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   #size { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   main { padding: 16px; display: grid; gap: 12px; }
+  #about { margin: 0; max-width: 72ch; color: var(--muted); }
+  #about a { color: var(--accent); }
+  /* The scenario strip exists only when the transport plays one (the Pages build). */
+  #scenario { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+  #caption { font-size: 14px; }
+  #caption .turn { color: var(--accent); font-variant-numeric: tabular-nums; }
+  #track { position: relative; height: 6px; border-radius: 3px; background: var(--line); cursor: pointer; }
+  #progress { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); }
+  .tick { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--muted); }
   /* Drag the frame's right edge to change the columns the bar is rendered at. */
   #frame { resize: horizontal; overflow: hidden; width: 100%; max-width: 100%; min-width: 240px;
            border: 1px solid var(--line); border-radius: 4px; padding: 8px; background: var(--ground); }
   #term { width: 100%; }
   #status { font-family: var(--mono); min-height: 1.45em; white-space: pre-wrap; word-break: break-word; }
-  #status .bad { color: var(--bad); }
-  #status .muted { color: var(--muted); }
+  .bad { color: var(--bad); }
+  .muted { color: var(--muted); }
   details summary { cursor: pointer; color: var(--muted); }
   .links { overflow-x: auto; }
   table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
@@ -53,6 +64,7 @@
   td:first-child { white-space: nowrap; }
   td button { font-family: var(--mono); font-size: 12px; padding: 0 6px; }
   td.does { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { #progress { transition: none; } }
 </style>
 </head>
 <body>
@@ -70,31 +82,51 @@
   </div>
   <div class="group">
     <button type="button" id="redraw">↻ redraw</button>
-    <button type="button" id="restart" title="A fresh daemon, session and config copy">⟲ new session</button>
+    <button type="button" id="restart" title="A fresh session: nothing open, nothing saved">⟲ new session</button>
   </div>
   <span id="size"></span>
 </header>
 <main>
+  <p id="about" hidden></p>
+  <section id="scenario" hidden>
+    <div class="group">
+      <button type="button" id="play">⏸ pause</button>
+      <button type="button" id="replay">⟲ replay</button>
+      <span class="label">speed</span>
+      <button type="button" data-speed="1" aria-pressed="true">1×</button>
+      <button type="button" data-speed="2">2×</button>
+      <button type="button" data-speed="4">4×</button>
+    </div>
+    <div id="caption"></div>
+    <div id="track" title="Jump to a moment"><div id="progress"></div></div>
+  </section>
   <div id="frame"><div id="term"></div></div>
   <div id="status"><span class="muted">Click anything in the bar. Hover a link to see what it does.</span></div>
-  <details open>
+  <details>
     <summary>Every link on screen</summary>
     <div class="links"><table><tbody id="links"></tbody></table></div>
   </details>
 </main>
-<script>
-"use strict";
+<script type="module">
+// The page draws what a transport answers. `pnpm bar:web` serves an HTTP transport to an
+// isolated daemon; the Pages build serves one that runs the daemon in this page. Either:
+//   render(size), click(url, size), restart(size) → { ansi, links: [{ text, url, does }], refused }
+//   about?: string (HTML)   scenario?: see the scenario strip below
+import { transport } from "./transport.js";
+
 const GROUNDS = {
   dark: { background: "#16161e", foreground: "#c0caf5", cursor: "#16161e" },
   light: { background: "#f4f4f7", foreground: "#343b58", cursor: "#f4f4f7" },
 };
-const frame = document.getElementById("frame");
-const status = document.getElementById("status");
-const linksBody = document.getElementById("links");
+// The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
+// which is what caps its diagnostic strip.
+const REPORTED_ROWS = 40;
+const $ = (id) => document.getElementById(id);
+const frame = $("frame");
 let view = { ansi: "", links: [] };
 
 function say(text, cls) {
-  status.replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
+  $("status").replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
 }
 
 const term = new Terminal({
@@ -120,15 +152,8 @@ term.loadAddon(fit);
 term.loadAddon(new Unicode11Addon.Unicode11Addon());
 term.unicode.activeVersion = "11";
 
-// The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
-// which is what caps its diagnostic strip.
-const REPORTED_ROWS = 40;
-function size() {
-  return { width: term.cols, rows: REPORTED_ROWS };
-}
-function fitCols() {
-  return fit.proposeDimensions()?.cols ?? term.cols;
-}
+const size = () => ({ width: term.cols, rows: REPORTED_ROWS });
+const fitCols = () => fit.proposeDimensions()?.cols ?? term.cols;
 
 function draw(next) {
   view = next;
@@ -136,41 +161,54 @@ function draw(next) {
   term.resize(term.cols, Math.max(lines.length, 4));
   term.reset();
   term.write("\x1b[?25l" + lines.join("\n"));
-  document.getElementById("size").textContent = `${term.cols} columns`;
-  linksBody.replaceChildren(...next.links.map((l) => {
-    const row = document.createElement("tr");
+  $("size").textContent = `${term.cols} columns`;
+  $("links").replaceChildren(...next.links.map((l) => {
     const go = Object.assign(document.createElement("button"), { type: "button", textContent: l.text || "(blank)" });
     go.addEventListener("click", () => follow(l.url));
-    const button = document.createElement("td");
-    button.append(go);
-    row.append(button, Object.assign(document.createElement("td"), { className: "does", textContent: l.does }));
+    const cell = document.createElement("td");
+    cell.append(go);
+    const row = document.createElement("tr");
+    row.append(cell, Object.assign(document.createElement("td"), { className: "does", textContent: l.does }));
     return row;
   }));
 }
 
-// The server answers requests one at a time, in the order they were sent, so every answer is drawn.
-async function post(route, body) {
-  try {
-    const res = await fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...size(), ...body }) });
-    const answer = await res.json();
-    if (!res.ok) { say(answer.error, "bad"); return null; }
-    draw(answer);
-    return answer;
-  } catch (e) {
-    say(`the bar server did not answer: ${e.message}. Is pnpm bar:web still running?`, "bad");
-    return null;
-  }
+// One call at a time, each against the render the page last drew. A redraw asked for while
+// one is running is folded into a single redraw after it.
+let running = Promise.resolve();
+let redrawQueued = false;
+function call(work) {
+  const next = running.then(async () => {
+    try {
+      const answer = await work();
+      draw(answer);
+      return answer;
+    } catch (e) {
+      say(e.message, "bad");
+      return null;
+    }
+  });
+  running = next;
+  return next;
+}
+function redraw() {
+  if (redrawQueued) return;
+  redrawQueued = true;
+  running.then(() => {
+    redrawQueued = false;
+    call(() => transport.render(size()));
+  });
 }
 
 async function follow(url) {
-  // Links outside the bar's scheme are the terminal's: a page or a file opens here, never in the daemon.
+  // Links outside the bar's scheme are the terminal's: a page opens in a tab, never in the daemon.
   if (!url.startsWith("cc-candybar://")) {
     if (/^https?:/.test(url)) window.open(url, "_blank", "noopener");
     say(`opens ${url}`, "muted");
     return;
   }
   const link = view.links.find((l) => l.url === url);
-  const answer = await post("/click", { url });
+  const answer = await call(() => transport.click(url, size()));
   if (answer === null) return;
   say(answer.refused ? `${link?.text ?? url}: ${answer.refused}` : `clicked ${link?.text ?? url}`, answer.refused ? "bad" : "muted");
 }
@@ -182,7 +220,7 @@ function refit() {
     const cols = fitCols();
     if (cols === term.cols) return;
     term.resize(cols, term.rows);
-    post("/render", {});
+    redraw();
   }, 120);
 }
 
@@ -198,26 +236,66 @@ function setCols(cols) {
   }
 }
 
-document.getElementById("fit").addEventListener("click", () => { frame.style.width = "100%"; });
+const press = (selector, chosen) =>
+  document.querySelectorAll(selector).forEach((o) => o.setAttribute("aria-pressed", String(o === chosen)));
+$("fit").addEventListener("click", () => { frame.style.width = "100%"; });
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
-  document.querySelectorAll("[data-ground]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  press("[data-ground]", b);
 }));
+
+// The scenario strip: a transport that plays Claude turns over time says so with `scenario`:
+//   steps: [{ turn, caption }]   subscribe(({ index, playing, progress }) => …) — called whenever the world moves
+//   play() pause() replay() seek(fraction) setSpeed(n)
+function mountScenario(scenario) {
+  $("scenario").hidden = false;
+  const turns = Math.max(...scenario.steps.map((s) => s.turn));
+  $("track").append(...scenario.steps.map((s) => {
+    const tick = Object.assign(document.createElement("div"), { className: "tick", title: s.caption });
+    tick.style.left = `${s.at * 100}%`;
+    return tick;
+  }));
+  scenario.subscribe(({ index, playing, progress }) => {
+    const step = scenario.steps[index];
+    $("caption").replaceChildren(
+      Object.assign(document.createElement("span"), { className: "turn", textContent: step.turn === 0 ? "Before the first turn · " : `Turn ${step.turn} of ${turns} · ` }),
+      document.createTextNode(step.caption),
+    );
+    $("progress").style.width = `${progress * 100}%`;
+    $("play").textContent = playing ? "⏸ pause" : "▶ play";
+    redraw();
+  });
+  $("play").addEventListener("click", () => (scenario.playing() ? scenario.pause() : scenario.play()));
+  $("replay").addEventListener("click", () => scenario.replay());
+  $("track").addEventListener("click", (e) => {
+    const box = $("track").getBoundingClientRect();
+    scenario.seek(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
+  });
+  document.querySelectorAll("[data-speed]").forEach((b) => b.addEventListener("click", () => {
+    scenario.setSpeed(Number(b.dataset.speed));
+    press("[data-speed]", b);
+  }));
+}
 
 // Measure cells only once the Powerline face is loaded, or the arrows are measured in a fallback.
 document.fonts.load("14px 'Rich Powerline'", "").then(() => {
   frame.style.setProperty("--ground", GROUNDS.dark.background);
-  term.open(document.getElementById("term"));
+  term.open($("term"));
   term.resize(fitCols(), term.rows);
   new ResizeObserver(refit).observe(frame);
   // The controls that measure or draw the terminal exist only once it does.
   document.querySelectorAll("[data-cols]").forEach((b) => b.addEventListener("click", () => setCols(Number(b.dataset.cols))));
-  document.getElementById("redraw").addEventListener("click", () => post("/render", {}));
-  document.getElementById("restart").addEventListener("click", async () => {
-    if (await post("/restart", {})) say("new session", "muted");
+  $("redraw").addEventListener("click", redraw);
+  $("restart").addEventListener("click", async () => {
+    if (await call(() => transport.restart(size()))) say("new session", "muted");
   });
-  post("/render", {});
+  if (transport.about) {
+    $("about").innerHTML = transport.about;
+    $("about").hidden = false;
+  }
+  if (transport.scenario) mountScenario(transport.scenario);
+  redraw();
 });
 </script>
 </body>

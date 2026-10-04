@@ -820,7 +820,7 @@ const stay = (resp: Response): HandledRequest => ({
   exitAfterFlush: null,
 });
 
-async function handleRequest(req: Request): Promise<HandledRequest> {
+export async function handleRequest(req: Request): Promise<HandledRequest> {
   if (
     !req ||
     typeof req !== "object" ||

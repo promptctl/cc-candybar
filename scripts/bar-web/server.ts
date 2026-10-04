@@ -46,6 +46,7 @@ export interface BarWeb {
 const ASSETS: Readonly<Record<string, { file: string; type: string }>> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/rich-powerline.woff2": { file: "rich-powerline.woff2", type: "font/woff2" },
+  "/transport.js": { file: "transport.js", type: "text/javascript; charset=utf-8" },
 };
 
 const view = (ansi: string, refused: string | null): View => ({

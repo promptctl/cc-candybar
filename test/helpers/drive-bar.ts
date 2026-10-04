@@ -33,7 +33,6 @@ import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
 import {
-  URL_SCHEME,
   VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_OPEN_VSCODE,
@@ -44,8 +43,14 @@ import type { ClaudeHookData } from "../../src/utils/claude";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { renderRequest, sendClick } from "./daemon-e2e";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
-import { links, stripAnsi } from "./ansi";
+import { stripAnsi } from "./ansi";
 import { effectsOf } from "./click";
+import {
+  describeLink as describeWith,
+  drawnLinks,
+  isBarLink,
+  type DrawnLink,
+} from "./bar-links";
 
 const SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
 const REPLY_BUDGET_MS = 10_000;
@@ -72,12 +77,6 @@ export interface BarOptions extends TerminalSize {
   readonly cwd: string;
   /** Whether the client reports an ssh session (the host segment shows over ssh). */
   readonly ssh: boolean;
-}
-
-/** One link the bar drew: its visible text and every effect a click on it fires. */
-export interface DrawnLink {
-  readonly text: string;
-  readonly url: string;
 }
 
 /** A click on a URL the last render did not draw: the page is showing an older render. */
@@ -147,27 +146,11 @@ function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
   };
 }
 
-/** Every link `rendered` draws, by visible text. */
-export function drawnLinks(rendered: string): DrawnLink[] {
-  return links(rendered).map((l) => ({
-    text: stripAnsi(l.text).trim(),
-    url: l.url,
-  }));
-}
-
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
+export { drawnLinks, type DrawnLink };
 
 /** The effects a click on `link` fires, `verb arg…` each, `;` between. */
 export function describeLink(link: DrawnLink): string {
-  if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url)
-    .map(({ verb, args }) =>
-      [verb, ...args.map((a) => (a === SESSION_ID ? "<session>" : a))].join(" "),
-    )
-    .join(" ; ");
+  return describeWith(link, SESSION_ID);
 }
 
 export async function startBar(opts: BarOptions): Promise<Bar> {
