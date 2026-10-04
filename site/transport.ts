@@ -41,6 +41,7 @@ let t = 0; // scenario seconds
 let speed = 1;
 let playing = true;
 let serial = 0;
+let endedAt: number | null = null; // when the scenario reached its end, while it holds the last frame
 
 const nowSec = (): number => Date.now() / 1000;
 // A moment of the scenario on the clock: `at` seconds into it is `t - at` seconds ago.
@@ -90,6 +91,7 @@ function happen(step: Step): void {
 
 /** Put the session at `seconds` into the scenario: everything before it has happened. */
 function startAt(seconds: number): void {
+  endedAt = null;
   transcript = newTranscript(sessionId);
   moment = INITIAL_MOMENT;
   applied = 0;
@@ -192,7 +194,6 @@ const notify = (): void => {
 };
 
 let lastNotified = 0;
-let endedAt: number | null = null;
 // The scenario moves by the time that actually passed (a background tab's timers
 // are throttled), at the chosen speed; paused, it does not move.
 let lastTick = Date.now();

@@ -95,15 +95,18 @@ export function forgetConfig(): void {
 
 /**
  * A session's transcript file, empty, ready to be appended to. A file the
- * session already has is replaced, as /compact replaces it: a new file under
- * the same name, which the daemon reads as a rewrite and folds again from
- * nothing, so a replay starts the session's turns over without a new session.
+ * session already has is replaced, as /compact replaces it: a new file renamed
+ * over the old, so it has a new inode, which the daemon reads as a rewrite and
+ * folds again from nothing. A replay starts the session's turns over without a
+ * new session. (Deleting and recreating would not do: memfs hands the freed
+ * inode to the next file, and the daemon would read on from its old offset.)
  */
 export function newTranscript(sessionId: string): string {
-  const file = `${CLAUDE_DIR}/projects/-home-demo-code-tidepool/${sessionId}.jsonl`;
-  vol.mkdirSync(`${CLAUDE_DIR}/projects/-home-demo-code-tidepool`, { recursive: true });
-  if (vol.existsSync(file)) vol.unlinkSync(file);
-  vol.writeFileSync(file, "");
+  const dir = `${CLAUDE_DIR}/projects/-home-demo-code-tidepool`;
+  const file = `${dir}/${sessionId}.jsonl`;
+  vol.mkdirSync(dir, { recursive: true });
+  vol.writeFileSync(`${file}.next`, "");
+  vol.renameSync(`${file}.next`, file);
   return file;
 }
 
