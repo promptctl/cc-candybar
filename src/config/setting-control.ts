@@ -18,6 +18,7 @@ import {
   disclosureStateVar,
   escapeTemplateLiteral,
 } from "./disclosure.js";
+import { menuActionName, menuPageKey } from "./menu-keys.js";
 import type {
   DisclosureRef,
   SettingDecl,
@@ -108,7 +109,7 @@ export function settingControl(
     };
   }
   if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from);
+    return optionPicker(label, key, name, listKey, domain.from);
   }
   const step = (by: number): ActionDecl => ({
     set: key,
@@ -136,20 +137,25 @@ export function settingControl(
 // option — "a regular menu, no carousel" — paged to the width. The list is a
 // row of a disclosure body on `listKey`, so the body's ✕ is its close and the
 // picker draws none of its own. Opening it starts at the first page.
+// [LAW:one-source-of-truth] The toggle and the page cursor are named as a
+// shared-key `{{ menu }}` names its own (menu-keys.ts): the list IS a menu body
+// on an accordion key, so one cursor per key is exact, and the cursor lives in
+// the menu namespace, never under a setting's draft namespace.
 function optionPicker(
+  label: string,
   key: string,
   name: string,
   listKey: string,
   from: OptionDomain,
 ): Affordance {
   const ref: DisclosureRef = { variable: listKey, key: listKey, member: name };
-  const toggle = `${name}.toggle`;
+  const toggle = menuActionName(listKey, name);
   const open = `${name}.open`;
-  const page = `${name}.page`;
+  const page = menuPageKey(listKey);
   const firstPage = `${page}.first`;
   return {
     kind: "picker",
-    template: `{{ carousel "${name}" 0 "${open}" }}`,
+    template: `{{ "${label}" }} {{ carousel "${name}" 0 "${open}" }}`,
     actions: {
       [name]: { set: key, from },
       [toggle]: disclosureCycleAction(listKey, name),

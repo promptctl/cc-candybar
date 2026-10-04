@@ -156,37 +156,43 @@ function renderMenu(
   // [LAW:one-source-of-truth] The body's items and its ✕ sit on the band's
   // plane: the band THIS segment opens, the same record the walk draws the
   // trigger from.
-  const drawnAt = runtime.activeSegment.drawnAt();
-  const plane = bandFor(placement.palette, placement.disclosure, drawnAt).plane;
-  placement.drops.push(
-    ...(open
-      ? renderPicker(
-          applyName,
-          { key: pageKey, stateVar: pageKey },
-          [
-            [stateKey, DISCLOSURE_CLOSED],
-            [pageKey, "0"],
-          ],
-          options.closeOnPick,
-          options.paged,
-          action,
-          // Placed by THIS menu's distribution: the picker knows positions,
-          // the instance knows how it places them. Unless the domain is
-          // colour-valued, in which case every option sits on the plane in
-          // its own text colour; one call decides, the same one the
-          // standalone `{{ picker }}` makes.
-          optionItemStyle(
-            placement,
-            options.distribution,
-            action,
-            requireOptionKind(action, applyName, "menu").paletteOf,
-            drawnAt,
-            plane,
-          ),
-          closeOn(placement.palette, plane, drawnAt),
-        )
-      : []),
-  );
+  const body = (): readonly RichText[] => {
+    const drawnAt = runtime.activeSegment.drawnAt();
+    const plane = bandFor(
+      placement.palette,
+      placement.disclosure,
+      drawnAt,
+    ).plane;
+    return renderPicker(
+      applyName,
+      { key: pageKey, stateVar: pageKey },
+      {
+        kind: "own",
+        writes: [
+          [stateKey, DISCLOSURE_CLOSED],
+          [pageKey, "0"],
+        ],
+        onPick: options.closeOnPick,
+      },
+      options.paged,
+      action,
+      // Placed by THIS menu's distribution: the picker knows positions,
+      // the instance knows how it places them. Unless the domain is
+      // colour-valued, in which case every option sits on the plane in
+      // its own text colour; one call decides, the same one the
+      // standalone `{{ picker }}` makes.
+      optionItemStyle(
+        placement,
+        options.distribution,
+        action,
+        requireOptionKind(action, applyName, "menu").paletteOf,
+        drawnAt,
+        plane,
+      ),
+      closeOn(placement.palette, plane, drawnAt),
+    );
+  };
+  placement.drops.push(...(open ? body() : []));
   return glyph;
 }
 

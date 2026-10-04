@@ -181,7 +181,7 @@ describe("a global the menu has never seen gets its control from the generator",
       "set" in a ? [a.set] : [],
     );
     expect(new Set(writes)).toEqual(
-      new Set(["zoom", "zoom.list", "apply.zoom.page"]),
+      new Set(["zoom", "zoom.list", "zoom.list.page"]),
     );
   });
 

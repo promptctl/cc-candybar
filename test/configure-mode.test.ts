@@ -195,7 +195,11 @@ describe("configure mode: one placement's settings at a time", () => {
     // the label and the live view, so a placement's url shows up once per view
     // it is drawn in — one member per placement is what counts.
     const members = new Set(
-      urls.flatMap((u) => effectsOf(u).map((e) => e.args[2])),
+      urls.flatMap((u) =>
+        effectsOf(u)
+          .filter((e) => e.args[1] === EDIT_CONFIGURE_KEY)
+          .map((e) => e.args[2]),
+      ),
     );
     expect(members).toEqual(
       new Set([
@@ -205,6 +209,41 @@ describe("configure mode: one placement's settings at a time", () => {
       ]),
     );
     expect(stripAnsi(rt.render())).toContain(CONFIGURE_GLYPH);
+  });
+
+  test("a configure visit opens with every list closed, whatever the last one left open", () => {
+    durable.write(SRC);
+    const rt = buildRuntime(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const enter = (): void =>
+      rt.click(
+        configureUrls(rt.render()).find((u) =>
+          effectsOf(u).some(
+            (e) => e.args[2] === configureMember("default", "vcs"),
+          ),
+        )!,
+      );
+    // The theme picker's options: each a link writing the placement's draft.
+    const themeOptions = (): number =>
+      linkUrls(rt.render()).filter((u) =>
+        effectsOf(u).some((e) => e.args[1] === draftKey("vcs", "theme")),
+      ).length;
+    enter();
+    const closed = themeOptions();
+    // The control's name opens its list: the one link that writes a menu key
+    // and the list's first page together.
+    const opener = linkUrls(rt.render()).find((u) => {
+      const keys = effectsOf(u).flatMap((e) => e.args.slice(1));
+      return (
+        keys.some((k) => k.endsWith(".page")) &&
+        keys.some((k) => /\.setting\.\w+\.theme$/.test(k))
+      );
+    });
+    rt.click(opener!);
+    expect(themeOptions()).toBeGreaterThan(closed);
+    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    enter();
+    expect(themeOptions()).toBe(closed);
   });
 
   test("configuring keeps arrange's chrome, shows the live bar, and hangs only that placement's controls", () => {

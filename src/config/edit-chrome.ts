@@ -351,7 +351,20 @@ function configureParts(
   const member = configureMember(ctx.presetIdent, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${posIdent}`;
-  ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
+  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
+  // it is a template path no other variable owns. Named by position, so the
+  // placement configured there next would find a list left open; entering
+  // configure folds it, and each visit starts with every list closed.
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold],
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member,
+  };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
@@ -367,17 +380,14 @@ function configureParts(
     };
     drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${posIdent}.${name}`;
-    // [LAW:one-type-per-behavior] The settings menu's generator: a picker
-    // gets the setting's label beside it, and the lists of one placement's
-    // pickers share one accordion.
+    // [LAW:one-type-per-behavior] The settings menu's generator; the lists of
+    // one placement's pickers share one accordion.
     const control = settingControl(
       controlDeclOf(decl),
       key,
       variable,
       segName,
-      // A shared `{{ menu }}` key's spelling: `ident`-normalized under
-      // `menus.`, so it is a template path no other variable owns.
-      sharedMenuStateKey(`${prefix}.configure.${posIdent}`),
+      listKey,
     );
     Object.assign(ctx.artifacts.actions, control.actions);
     Object.assign(ctx.artifacts.variables, control.variables);
@@ -386,9 +396,7 @@ function configureParts(
       return { kind: "segment", name: segName };
     }
     const listSeg = `${segName}.list`;
-    ctx.artifacts.segments[segName] = {
-      template: `{{ "${escapeTemplateLiteral(decl.label)}" }} ${control.template}`,
-    };
+    ctx.artifacts.segments[segName] = { template: control.template };
     ctx.artifacts.segments[listSeg] = { template: control.list.template };
     return disclosureNode(
       segName,

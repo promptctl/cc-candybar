@@ -11,6 +11,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { links, stripAnsi } from "./helpers/ansi";
+import { cellWidth as cellLength } from "../src/render/picker";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -22,7 +23,12 @@ const OPTS = {
 };
 const PAYLOAD = { session_id: "s1", workspace: { current_dir: "/tmp/proj" } };
 
-function renderOf(template: string, current = "mid"): string {
+function renderOf(
+  template: string,
+  current = "mid",
+  width = 200,
+  host = "'s'",
+): string {
   const config = parseAndValidate(
     "<user>",
     `{
@@ -33,7 +39,7 @@ function renderOf(template: string, current = "mid"): string {
         hello: { copy: 'hi' },
       },
       segments: { s: { template: ${JSON.stringify(template)} } },
-      root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
+      root: { rows: { identity: { h: [${host}] }, status: { h: [] } } },
     }`,
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
@@ -41,7 +47,10 @@ function renderOf(template: string, current = "mid"): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  return renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
+  return renderDsl(config, compiled, store, registry, PAYLOAD, {
+    ...OPTS,
+    width,
+  });
 }
 
 describe("{{ carousel }} with a centre action", () => {
@@ -60,6 +69,14 @@ describe("{{ carousel }} with a centre action", () => {
     expect(stripAnsi(renderOf('{{ carousel "pick" 0 "nope" }}'))).toMatch(
       /centre must name a declared action/,
     );
+  });
+
+  test("a centre that writes a bound value is refused: the centre binds none", () => {
+    for (const centre of ["pick", "page"]) {
+      expect(
+        stripAnsi(renderOf(`{{ carousel "pick" 0 "${centre}" }}`)),
+      ).toMatch(/writes a value the template binds/);
+    }
   });
 
   test("an unknown current value centres on the first option, still clickable", () => {
@@ -83,5 +100,29 @@ describe("{{ picker }} inBody", () => {
     const out = renderOf('{{ picker "pick" "page" false true true }}');
     expect(closes(out)).toHaveLength(0);
     expect(stripAnsi(out)).toMatch(/low mid high/);
+  });
+
+  test("closeOnPick in a body is refused: the body's ✕ is not the picker's to fold", () => {
+    expect(
+      stripAnsi(renderOf('{{ picker "pick" "page" true true true }}')),
+    ).toMatch(/sets both closeOnPick and inBody/);
+  });
+
+  test("a picker in a body pages at the body row's whole width, wasting no column", () => {
+    // In an open body the ✕ is the body's cell, so the narrowest width at
+    // which the options stand on one page is the width their row fills.
+    const inBody = (width: number): string =>
+      renderOf(
+        '{{ picker "pick" "page" false true true }}',
+        "mid",
+        width,
+        "{ kind: 'group', name: 'g', label: 'G', open: true, children: ['s'] }",
+      );
+    let width = 1;
+    while (stripAnsi(inBody(width)).includes("→")) width++;
+    const row = stripAnsi(inBody(width))
+      .split("\n")
+      .find((line) => line.includes("low"))!;
+    expect(cellLength(row)).toBe(width);
   });
 });

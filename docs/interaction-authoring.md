@@ -1480,7 +1480,9 @@ and makes the name a different click, while the name shown is still the
 carousel's own current value. That is how the settings menu draws `◀ value ▶`
 with the value opening the list of every choice. A name that is not a declared
 action is a render error, `carousel "applyAction": centre must name a declared
-action…`.
+action…`, and so is one that writes a value the template binds (an option, an
+int cursor, a segment to insert), since the centre binds none:
+`carousel "applyAction": centre "x" writes a value the template binds…`.
 
 A carousel owns no state of its own — its centre is the action's current value —
 so the call is the whole declaration. It is a picker, not a disclosure: put it

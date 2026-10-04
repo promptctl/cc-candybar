@@ -25,6 +25,7 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl } from "../click/wire.js";
 import { placedBy } from "../themes/decor.js";
 import {
+  bindsTemplateValue,
   linkFragment,
   readVar,
   realize,
@@ -235,6 +236,16 @@ export function carouselFuncs(
         ) {
           throw new Error(
             `carousel "${applyName}": centre must name a declared action, got ${JSON.stringify(centre)}`,
+          );
+        }
+        // The centre fires with nothing bound, so an action that writes a
+        // bound value would write the centre's text instead.
+        if (
+          centre !== undefined &&
+          bindsTemplateValue(runtime.compiled.get(centre)!)
+        ) {
+          throw new Error(
+            `carousel "${applyName}": centre "${centre}" writes a value the template binds, and the centre binds none — name an action that writes a fixed value, a cycle, or a do of them`,
           );
         }
         const cap = (neighbours as number | undefined) ?? Infinity;

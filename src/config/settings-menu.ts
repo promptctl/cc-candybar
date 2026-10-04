@@ -858,11 +858,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    // A picker names its setting before `◀ value ▶`; an inline control's own
-    // template already says what it is.
-    const label = c.control.kind === "picker" ? `${c.label} ` : "";
     artifacts.segments[controlSeg(c.name)] = {
-      template: `${label}${c.control.template}${resetCell}`,
+      template: `${c.control.template}${resetCell}`,
     };
     if (c.control.kind === "picker") {
       artifacts.segments[controlList(c.name)] = {

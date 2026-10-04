@@ -136,16 +136,17 @@ export function paginate(
   return pages;
 }
 
-// ✕ is always present; ←/→ appear only on a multi-page grid. Reserve arrow
-// space only after a first pass proves it overflows — reserving it
-// unconditionally is self-fulfilling (a run that fits with just ✕ could be
-// forced to split, making arrows appear unnecessarily). At an infinite width
-// (the wrap case) paginate yields one page, so neither pass splits.
+// ←/→ appear only on a multi-page grid. Reserve arrow space only after a first
+// pass proves it overflows — reserving it unconditionally is self-fulfilling (a
+// run that fits could be forced to split, making arrows appear unnecessarily).
+// The ✕'s room is the caller's: a picker that draws one reserves it. At an
+// infinite width (the wrap case) paginate yields one page, so neither pass
+// splits.
 function gridPages(
   widths: readonly number[],
   available: number,
+  closeReserve: number,
 ): readonly LibraryPageLayout[] {
-  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
   const firstPass = paginate(widths, available, closeReserve);
   return (
@@ -190,6 +191,19 @@ export interface PickerPage {
 // closed sentinel and resetting its page cursor. The picker itself never
 // branches on which world it is in — the writes flow in.
 export type CloseWrites = ReadonlyArray<readonly [key: string, value: string]>;
+
+// [LAW:types-are-the-program] Who closes a picker. `own`: it draws its ✕,
+// which performs `writes`, and `onPick` folds the same writes into every
+// option click. `led`: it is a row of a disclosure body, which the body leads
+// with ITS ✕ — so the picker draws none, pages at the led row's width, and has
+// no close of its own to fold into a pick (closeOnPick there is unrepresentable).
+export type PickerClose =
+  | {
+      readonly kind: "own";
+      readonly writes: CloseWrites;
+      readonly onPick: boolean;
+    }
+  | { readonly kind: "led" };
 
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
@@ -268,8 +282,7 @@ export function requireOptionKind(
 export function renderPicker(
   applyName: string,
   page: PickerPage,
-  close: CloseWrites,
-  closeOnPick: boolean,
+  close: PickerClose,
   paged: boolean,
   runtime: ActionRuntime,
   itemStyle: ItemStyle,
@@ -295,14 +308,15 @@ export function renderPicker(
   const current =
     "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
 
-  // In wrap mode (available = Infinity) everything stands on one page. A
-  // picker that draws no ✕ of its own is a row of a disclosure body, which the
-  // body leads with ITS ✕ — so it pages at the led row's width.
+  // In wrap mode (available = Infinity) everything stands on one page. A led
+  // picker pages at the led row's width, and reserves no ✕ it does not draw.
   const available = !paged
     ? Infinity
-    : close.length === 0
+    : close.kind === "led"
       ? ledRowBudget(runtime)
       : rowBudget(runtime);
+  const closeReserve =
+    close.kind === "led" ? 0 : cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
 
   // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
   // domain's one section is the run of cells `paginate` fits to the width, and
@@ -317,7 +331,7 @@ export function renderPicker(
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
       ? libraryLayout(catalogue.entries, catalogue.groups, paged)
-      : gridPages(apply.options.map(cellWidth), available);
+      : gridPages(apply.options.map(cellWidth), available, closeReserve);
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
   // (the key was never written) — parse it at this trust boundary; an out-of-range
@@ -337,10 +351,15 @@ export function renderPicker(
   // CloseWrites); ✕ performs exactly them, and a closeOnPick option click folds
   // the same pairs into its apply write — one atomic set-state either way, so
   // "what closing means" cannot diverge between the two affordances.
-  const closeFlat = close.flatMap(([k, v]) => [k, v]);
-  const closeUrl = effectsUrl([
-    { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
-  ]);
+  const closeWrite =
+    close.kind === "led"
+      ? []
+      : [
+          {
+            verb: VERB_SET_STATE,
+            args: [sessionId, ...close.writes.flatMap(([k, v]) => [k, v])],
+          },
+        ];
   // [LAW:single-enforcer] A closeOnPick option click is the pick's own effects
   // followed by the close writes — concatenated, nothing more. The daemon's
   // dispatch joins adjacent session writes into one atomic batch, so a session
@@ -348,9 +367,7 @@ export function renderPicker(
   // op) keeps its own verb and its place before the close.
   // This is the same concatenation a `do` action's members get: one rule for
   // "several writes, one click", not one per producer.
-  const closeEffects = closeOnPick
-    ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
-    : [];
+  const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionUrl = (option: string): string =>
     effectsUrl([
       ...realize(declared, option, option, store, sessionId).effects,
@@ -369,12 +386,18 @@ export function renderPicker(
       itemStyle({ index: i, count: apply.options.length }, option),
     );
   };
-  // [LAW:dataflow-not-control-flow] No close writes, no close cell: a picker
-  // that is a row of a disclosure body is closed by the body's own ✕.
+  // [LAW:dataflow-not-control-flow] A led picker is closed by the body's ✕.
   const nav: RichText[] =
-    close.length === 0
+    close.kind === "led"
       ? []
-      : [linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false, closeStyle)];
+      : [
+          linkFragment(
+            DISCLOSURE_GLYPH_CLOSE,
+            effectsUrl(closeWrite),
+            false,
+            closeStyle,
+          ),
+        ];
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
@@ -482,6 +505,14 @@ export function pickerFuncs(
           "set-int",
           "an int action ({ set, int: true })",
         );
+        // [LAW:no-silent-failure] A body's ✕ closes a led picker, and the
+        // picker cannot know what that ✕ writes, so it has no close to fold
+        // into a pick.
+        if (inBody === true && closeOnPick === true) {
+          throw new Error(
+            `{{ picker "${applyName}" … }} sets both closeOnPick and inBody; a picker in a body is closed by the body's ✕, so it has no close to fold into a pick`,
+          );
+        }
         // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
         // one value, so it cannot carry a library's several rows; a menu body
         // is where a catalogue domain lays out. Refused by what the domain
@@ -501,8 +532,13 @@ export function pickerFuncs(
         const [line] = renderPicker(
           applyName,
           { key: page.key, stateVar: page.stateVar },
-          inBody === true ? [] : [[page.key, "-1"]],
-          closeOnPick === true,
+          inBody === true
+            ? { kind: "led" }
+            : {
+                kind: "own",
+                writes: [[page.key, "-1"]],
+                onPick: closeOnPick === true,
+              },
           paged === true,
           runtime,
           // A bare `{{ picker }}` authors no options dict, so it places by
