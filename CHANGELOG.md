@@ -1,3 +1,10 @@
+## [1.109.1](https://github.com/promptctl/cc-candybar/compare/v1.109.0...v1.109.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **daemon:** a session's click is gated and wrapped by the config it renders ([#301](https://github.com/promptctl/cc-candybar/issues/301)) ([46e5e39](https://github.com/promptctl/cc-candybar/commit/46e5e395fd3baf86dbc6a035b85c8cd34f7a946a))
+
 # [1.109.0](https://github.com/promptctl/cc-candybar/compare/v1.108.1...v1.109.0) (2026-10-04)
 
 
