@@ -3,7 +3,9 @@
 // handler over a simulated machine. This test builds the site and runs the
 // built bundle in a bare Node process, the bundle alone, nothing from src:
 // a render draws the bar of the simulated repository, a click on the door is
-// the daemon's click and opens the menu, and the scenario moves the bar.
+// the daemon's click and opens the menu, and the scenario moves the bar without
+// taking the session from the visitor (the menu they opened stays open). A
+// copy the page cannot make says so, with its text.
 
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -21,9 +23,11 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const first = await transport.render(size);
     const door = first.links.find((l) => l.text === "🍫");
     const opened = await transport.click(door.url, size);
+    const copy = opened.links.find((l) => l.does.startsWith("copy "));
+    const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
     const working = await transport.render(size);
-    console.log(JSON.stringify({ first: plain(first.ansi), refused: opened.refused, opened: plain(opened.ansi), working: plain(working.ansi) }));
+    console.log(JSON.stringify({ first: plain(first.ansi), refused: opened.refused, opened: plain(opened.ansi), working: plain(working.ansi), copied: copied.refused }));
     process.exit(0);
   `;
   const out = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
@@ -35,4 +39,7 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   // Turn 1, mid-work: the todo list and the tools the transcript says are running.
   expect(r.working).toMatch(/2\/3 Finding the race/);
   expect(r.working).toContain("Bash");
+  // The seek moved the scenario, not the session: the menu the click opened is still open.
+  expect(r.working).toContain("🎨 look");
+  expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
 });

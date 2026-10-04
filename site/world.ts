@@ -93,10 +93,16 @@ export function forgetConfig(): void {
   if (vol.existsSync(CONFIG_FILE)) vol.unlinkSync(CONFIG_FILE);
 }
 
-/** A session's transcript file, empty, ready to be appended to. */
+/**
+ * A session's transcript file, empty, ready to be appended to. A file the
+ * session already has is replaced, as /compact replaces it: a new file under
+ * the same name, which the daemon reads as a rewrite and folds again from
+ * nothing, so a replay starts the session's turns over without a new session.
+ */
 export function newTranscript(sessionId: string): string {
   const file = `${CLAUDE_DIR}/projects/-home-demo-code-tidepool/${sessionId}.jsonl`;
   vol.mkdirSync(`${CLAUDE_DIR}/projects/-home-demo-code-tidepool`, { recursive: true });
+  if (vol.existsSync(file)) vol.unlinkSync(file);
   vol.writeFileSync(file, "");
   return file;
 }

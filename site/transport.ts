@@ -6,13 +6,14 @@
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
-import { handleRequest } from "../src/daemon/server";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { VERB_COPY } from "../src/click/wire";
+import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
+import { handleRequest, reloadConfig } from "../src/daemon/server";
+import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
-import { describeLink, drawnLinks } from "../test/helpers/bar-links";
-import { effectsOf } from "../test/helpers/click";
-import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type Step } from "./scenario";
-import { CLAUDE_DIR, REPO, appendTranscript, forgetConfig, newTranscript, seedWorld, updateRepo } from "./world";
+import type { ClaudeHookData } from "../src/utils/claude";
+import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
+import { CLAUDE_DIR, REPO, appendTranscript, forgetConfig, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
 
 // The page's clipboard (this file is checked against Node's types, which have no `navigator`).
 declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
@@ -26,24 +27,33 @@ const CONTEXT_WINDOW = 200_000;
 const TICK_MS = 250;
 const PAUSE_AT_END_MS = 6000;
 
-seedWorld(INITIAL_REPO);
-
-// ── The session: its id, transcript, the hook's numbers, and the scenario clock ──
-let sessionId = "";
+// ── The session and the scenario clock ──
+//
+// One session for the life of the page: the scenario replaying, looping or
+// being seeked rewrites its transcript and moves its repository, as a session's
+// own turns would, but never takes away what the visitor did in the bar (an
+// open menu, a theme, a draft). Only "new session" starts another.
+let sessionId = crypto.randomUUID();
 let transcript = "";
 let moment: Required<Moment> = INITIAL_MOMENT;
 let applied = 0; // how many STEPS have happened
 let t = 0; // scenario seconds
-let wallStart = Date.now(); // the wall time of t = 0
 let speed = 1;
 let playing = true;
 let serial = 0;
 
-const stamp = (): string => new Date(wallStart + t * 1000).toISOString();
+const nowSec = (): number => Date.now() / 1000;
+// A moment of the scenario on the clock: `at` seconds into it is `t - at` seconds ago.
+const clockAt = (at: number): number => nowSec() - (t - at);
 const id = (prefix: string): string => `${prefix}_${(serial++).toString(36)}`;
 
-function lines(entry: Entry): object[] {
-  const base = { timestamp: stamp(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
+const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState> =>
+  headAt === undefined ? rest : { ...rest, headTime: Math.floor(clockAt(headAt)) };
+
+seedWorld(onClock(INITIAL_REPO) as RepoState);
+
+function lines(entry: Entry, at: number): object[] {
+  const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output: number) => ({
     input_tokens: 4,
     output_tokens: output,
@@ -74,24 +84,22 @@ function lines(entry: Entry): object[] {
 
 function happen(step: Step): void {
   moment = { ...moment, ...step.hook };
-  if (step.repo) updateRepo(step.repo);
-  appendTranscript(transcript, (step.transcript ?? []).flatMap(lines));
+  if (step.repo) updateRepo(onClock(step.repo));
+  appendTranscript(transcript, (step.transcript ?? []).flatMap((e) => lines(e, step.at)));
 }
 
-/** Start a session with the scenario at `seconds`: everything before it has happened. */
+/** Put the session at `seconds` into the scenario: everything before it has happened. */
 function startAt(seconds: number): void {
-  sessionId = crypto.randomUUID();
   transcript = newTranscript(sessionId);
   moment = INITIAL_MOMENT;
   applied = 0;
-  updateRepo(INITIAL_REPO);
   t = seconds;
-  wallStart = Date.now() - seconds * 1000;
+  updateRepo(onClock(INITIAL_REPO));
   while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
 }
 
-function hookData() {
-  const now = Math.floor(Date.now() / 1000);
+function hookData(): ClaudeHookData {
+  const now = Math.floor(nowSec());
   const used = Math.round((moment.context / CONTEXT_WINDOW) * 100);
   return {
     hook_event_name: "Status",
@@ -123,14 +131,15 @@ function hookData() {
   };
 }
 
-async function daemon(request: object): Promise<string> {
-  const { resp } = await handleRequest({ v: PROTOCOL_VERSION, ...request } as never);
+async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
+  const { resp } = await handleRequest(request);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
 }
 
 async function render(size: Size) {
   const ansi = await daemon({
+    v: PROTOCOL_VERSION,
     kind: "render",
     hookData: hookData(),
     args: ["cc-candybar"],
@@ -143,29 +152,31 @@ async function render(size: Size) {
   return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
 }
 
-// What the page does in place of a click that reaches outside the bar on a real
-// machine: a copy is the page's own clipboard; the rest cannot happen here.
-const ELSEWHERE: Readonly<Record<string, string>> = {
-  "open-vscode": "opens a file in VS Code on a real machine",
-  "apply-update": "rebuilds cc-candybar on a real machine",
-  "show-config-error": "copies the error on a real machine",
-  "show-config-warning": "copies the warning on a real machine",
-};
-
+// A click carrying a verb that acts on the machine (HOST_VERBS) is never sent
+// to the daemon, as on any bar driven outside a real session. A click that only
+// copies is the page's own to do: its clipboard. [LAW:no-silent-failure] A copy
+// the browser refuses says so, with the text it would have copied.
 async function click(url: string, size: Size) {
   const effects = effectsOf(url);
-  const copy = effects.find((e) => e.verb === "copy");
-  const elsewhere = effects.find((e) => ELSEWHERE[e.verb] !== undefined);
-  if (copy !== undefined) {
-    const text = copy.args[copy.args.length - 1] ?? "";
-    await navigator.clipboard.writeText(text).catch(() => undefined);
-    return { ...(await render(size)), refused: `copied to your clipboard: ${text}` };
+  if (effects.some((e) => e.verb in HOST_VERBS)) {
+    const copies = effects.filter((e) => e.verb === VERB_COPY);
+    if (copies.length === effects.length) {
+      const text = copies.map((e) => e.args.join("/")).join("\n");
+      const refused = await Promise.resolve()
+        .then(() => navigator.clipboard.writeText(text))
+        .then(
+          () => null,
+          (e: unknown) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
+        );
+      return { ...(await render(size)), refused };
+    }
+    const elsewhere = effects.flatMap((e) => (e.verb in HOST_VERBS ? [HOST_VERBS[e.verb]] : []));
+    return { ...(await render(size)), refused: `not sent: on a real machine this ${elsewhere.join(", ")}` };
   }
-  if (elsewhere !== undefined) return { ...(await render(size)), refused: `not here: this ${ELSEWHERE[elsewhere.verb]}` };
   const { verb, value } = parseHandlerUrl(url);
   let refused: string | null = null;
   try {
-    await daemon({ kind: "click", verb, value });
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }
@@ -182,22 +193,32 @@ const notify = (): void => {
 
 let lastNotified = 0;
 let endedAt: number | null = null;
-setInterval(() => {
-  if (!playing) return;
+// The scenario moves by the time that actually passed (a background tab's timers
+// are throttled), at the chosen speed; paused, it does not move.
+let lastTick = Date.now();
+// Playing, the scenario advances; at the end it holds the last frame, then goes round again.
+// Returns whether a step happened.
+function advance(elapsed: number): boolean {
   if (t >= DURATION) {
-    // Hold the last frame, then go round again.
     endedAt ??= Date.now();
-    if (Date.now() - endedAt < PAUSE_AT_END_MS) return;
+    if (Date.now() - endedAt < PAUSE_AT_END_MS) return false;
     endedAt = null;
     startAt(0);
-    notify();
-    return;
+    return true;
   }
-  t = Math.min(DURATION, t + (TICK_MS / 1000) * speed);
+  t = Math.min(DURATION, t + elapsed * speed);
   const before = applied;
   while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
-  // A step is drawn at once; between steps the clocks the bar shows still move, so redraw each second.
-  if (applied !== before || Date.now() - lastNotified > 1000) {
+  return applied !== before;
+}
+
+setInterval(() => {
+  const elapsed = (Date.now() - lastTick) / 1000;
+  lastTick = Date.now();
+  const stepped = playing && advance(elapsed);
+  // A step is drawn at once. Between steps, and while paused, the bar still moves (its clocks,
+  // and what the daemon's watchers see a moment after a step or a seek), so redraw each second.
+  if (stepped || Date.now() - lastNotified > 1000) {
     lastNotified = Date.now();
     notify();
   }
@@ -211,8 +232,12 @@ export const transport = {
     "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
   render,
   click,
+  // A new session over the bundled config: the file the settings menu saved is
+  // removed and the daemon re-reads it now, as a save's click does after it writes.
   restart: async (size: Size) => {
     forgetConfig();
+    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    sessionId = crypto.randomUUID();
     startAt(t);
     notify();
     return render(size);

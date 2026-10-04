@@ -1290,6 +1290,13 @@ const verbCtx = {
     ),
 };
 
+/**
+ * Re-read the config a render origin resolves to, now: what a durable click
+ * does after it writes. The page in site/, which runs this daemon in a browser,
+ * calls it after it resets its simulated machine's config file.
+ */
+export const reloadConfig = verbCtx.reloadConfig;
+
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`
 // is composed on top at the wire boundary (handleRequest("render")) and

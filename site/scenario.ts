@@ -8,6 +8,14 @@
 
 import type { RepoState } from "./world";
 
+/**
+ * The repository as the scenario describes it: HEAD's commit time is a moment
+ * of the scenario (seconds from its start, negative before it), which the
+ * player turns into a time on the clock when the step happens, so a replay's
+ * commit is as fresh as the first one's.
+ */
+export type ScenarioRepo = Omit<RepoState, "headTime"> & { readonly headAt: number };
+
 export interface Moment {
   /** Context tokens in use (of a 200K window). */
   readonly context?: number;
@@ -27,7 +35,7 @@ export interface Step {
   readonly caption: string;
   readonly hook?: Moment;
   readonly transcript?: readonly Entry[];
-  readonly repo?: Partial<RepoState>;
+  readonly repo?: Partial<ScenarioRepo>;
 }
 
 // What a transcript line says, before the player stamps it with a time and ids.
@@ -44,13 +52,13 @@ export interface Call {
   readonly input?: object;
 }
 
-export const INITIAL_REPO: RepoState = {
+export const INITIAL_REPO: ScenarioRepo = {
   branch: "fix-cache-timer",
   ahead: 0,
   behind: 0,
   modified: [],
   untracked: ["notes.md"],
-  headTime: Math.floor(Date.now() / 1000) - 3 * 3600,
+  headAt: -3 * 3600,
   head: "4f2c9e1b7a0d3c5e8f6a2b4d1c7e9f0a3b5d7c21",
 };
 
@@ -123,7 +131,7 @@ export const STEPS: readonly Step[] = [
     transcript: [{ kind: "tools", output: 80, calls: [{ id: "bash-3", name: "Bash", input: { command: "git commit -am 'fix(cache): read the clock once'" } }] }] },
   { at: 52, turn: 3, caption: "Clean, one commit ahead of origin", hook: { context: 18_000, costUsd: 0.68 },
     transcript: [{ kind: "results", ids: ["bash-3"] }],
-    repo: { modified: [], ahead: 1, head: "9b1e3d5f7a2c4e6b8d0f1a3c5e7b9d2f4a6c8e01", headTime: Math.floor(Date.now() / 1000) } },
+    repo: { modified: [], ahead: 1, head: "9b1e3d5f7a2c4e6b8d0f1a3c5e7b9d2f4a6c8e01", headAt: 50 } },
   { at: 54, turn: 3, caption: "Claude pushes", transcript: [{ kind: "tools", output: 60, calls: [{ id: "bash-4", name: "Bash", input: { command: "git push" } }] }] },
   { at: 58, turn: 3, caption: "Pushed: level with origin", hook: { context: 20_000, costUsd: 0.71, fiveHour: 48 },
     transcript: [{ kind: "results", ids: ["bash-4"] }, { kind: "reply", output: 120, text: "Committed and pushed." }],

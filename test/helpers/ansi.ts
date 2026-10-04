@@ -3,40 +3,14 @@
 // [LAW:one-source-of-truth] Every test reads rendered bytes through here, and
 // this reads them through rich-js's `osc8Sequences`, over the OSC 8 grammar — the same one the bytes are
 // written with — so a change to how a link is written is a change in one place,
-// not in a regex copied into every file that clicks something.
-import { decodeAnsi, osc8Sequences, type Osc8Sequence } from "@promptctl/rich-js";
+// not in a regex copied into every file that clicks something. `links` and
+// `stripAnsi` are src/click/read.ts's, which the page in site/ reads with too.
+import { decodeAnsi, osc8Sequences } from "@promptctl/rich-js";
 import { INVISIBLE } from "../../src/render/ansi.js";
+import { links, stripAnsi, type Link } from "../../src/click/read";
 
 /** SGR + OSC 8: every escape that occupies no columns. */
-export { INVISIBLE };
-export const stripAnsi = (s: string): string => s.replace(INVISIBLE, "");
-
-export interface Link {
-  readonly url: string;
-  /** The raw bytes the link wraps, SGR included. */
-  readonly text: string;
-}
-
-/** Each link in order: its URI and the bytes between its open and its close. */
-export function links(rendered: string): Link[] {
-  const out: Link[] = [];
-  let open: Osc8Sequence | undefined;
-  for (const seq of osc8Sequences(rendered)) {
-    if (seq.uri !== "") {
-      // Rendered bytes close every link before the next opens; an open over
-      // an open is the unclosed-link bleed, never a link to record.
-      if (open !== undefined) throw new Error(`OSC 8 open at ${seq.index} while ${open.uri} is still open`);
-      open = seq;
-      continue;
-    }
-    if (open === undefined) throw new Error(`OSC 8 close at ${seq.index} with no open link`);
-    const from = open.index + open.length;
-    out.push({ url: open.uri, text: rendered.slice(from, seq.index) });
-    open = undefined;
-  }
-  if (open !== undefined) throw new Error(`OSC 8 open at ${open.index} (${open.uri}) is never closed`);
-  return out;
-}
+export { INVISIBLE, links, stripAnsi, type Link };
 
 /** The bytes with every OSC 8 open and close removed, SGR kept: what a
  *  rendered line looks like, apart from where its clicks go (a link names the

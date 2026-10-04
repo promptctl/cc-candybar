@@ -32,38 +32,22 @@ import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import {
-  VERB_APPLY_UPDATE,
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
-} from "../../src/click/wire";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { renderRequest, sendClick } from "./daemon-e2e";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
-import { stripAnsi } from "./ansi";
-import { effectsOf } from "./click";
 import {
   describeLink as describeWith,
   drawnLinks,
+  effectsOf,
+  HOST_VERBS,
   isBarLink,
+  stripAnsi,
   type DrawnLink,
-} from "./bar-links";
+} from "../../src/click/read";
 
 const SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
 const REPLY_BUDGET_MS = 10_000;
-// The verbs whose handler acts outside the daemon on this machine: pbcopy,
-// `open -a "Visual Studio Code"`, `pnpm build` in the checkout.
-const MACHINE_VERBS: ReadonlySet<string> = new Set([
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
-  VERB_APPLY_UPDATE,
-]);
-
 /** The terminal the client reports: columns, and rows (which cap the diagnostic strip). */
 export interface TerminalSize {
   readonly width: number;
@@ -228,7 +212,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     if (!isBarLink(hit.url)) {
       throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    if (effectsOf(hit.url).some(({ verb }) => MACHINE_VERBS.has(verb))) {
+    if (effectsOf(hit.url).some(({ verb }) => verb in HOST_VERBS)) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
     const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);

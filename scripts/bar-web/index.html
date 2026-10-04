@@ -155,14 +155,25 @@ term.unicode.activeVersion = "11";
 const size = () => ({ width: term.cols, rows: REPORTED_ROWS });
 const fitCols = () => fit.proposeDimensions()?.cols ?? term.cols;
 
+// Only what changed is redrawn: a scenario redraws every second, and rewriting the
+// terminal or the table each time would drop a hover, a half-made click, or focus.
+let drawnAt = { ansi: null, cols: 0, links: "" };
 function draw(next) {
   view = next;
-  const lines = next.ansi.replace(/\n$/, "").split("\n");
-  term.resize(term.cols, Math.max(lines.length, 4));
-  term.reset();
-  term.write("\x1b[?25l" + lines.join("\n"));
   $("size").textContent = `${term.cols} columns`;
-  $("links").replaceChildren(...next.links.map((l) => {
+  if (next.ansi !== drawnAt.ansi || term.cols !== drawnAt.cols) {
+    const lines = next.ansi.replace(/\n$/, "").split("\n");
+    term.resize(term.cols, Math.max(lines.length, 4));
+    term.reset();
+    term.write("\x1b[?25l" + lines.join("\n"));
+  }
+  const links = JSON.stringify(next.links);
+  if (links !== drawnAt.links) drawLinks(next.links);
+  drawnAt = { ansi: next.ansi, cols: term.cols, links };
+}
+
+function drawLinks(links) {
+  $("links").replaceChildren(...links.map((l) => {
     const go = Object.assign(document.createElement("button"), { type: "button", textContent: l.text || "(blank)" });
     go.addEventListener("click", () => follow(l.url));
     const cell = document.createElement("td");
