@@ -133,12 +133,14 @@ const SRC = `{
     a: { template: 'A', fg: 'foreground' },
     b: { template: 'B', fg: 'foreground' },
     c: { template: 'C', fg: 'foreground' },
+    d: { template: 'D', fg: 'foreground' },
+    f: { template: 'F', fg: 'foreground' },
     meaning: { template: 'M', bg: 'error', fg: 'foreground' },
     echo: { template: 'E', fg: '{{ bgOf }}' },
   },
   root: { v: [
     { h: ['a', 'b', { seg: 'c', when: '{{ .show }}' }] },
-    { h: ['meaning', 'echo'] },
+    { h: ['meaning', 'echo', 'd', 'f'] },
   ] },
 }`;
 
@@ -206,7 +208,9 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
   // selection, not a constant of the colour model.
   test("the variation reaches every closed cell: row n wears step n of the one selected", () => {
     const rt = build(SRC);
-    const names = ["a", "b", "c", "echo"];
+    // Row 2 has four cells and no synthesized lead, so a variation that turns
+    // along the row is told apart by the row's own authored cells.
+    const names = ["a", "b", "c", "echo", "d", "f"];
     const seen = new Set<string>();
     for (const variation of Object.keys(VARIATIONS) as VariationName[]) {
       rt.render({}, variation);

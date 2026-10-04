@@ -82,25 +82,37 @@ export interface Variation {
    * where the bar changes row. [LAW:dataflow-not-control-flow] One value,
    * not a mode: ⌊index / ∞⌋ is 0 for every cell.
    */
-  readonly run: number;
+  readonly run: RunLength;
 }
 
+declare const wholeRow: unique symbol;
+type WholeRow = number & { readonly [wholeRow]: true };
+
 /** A run no row outlasts: the hue changes only where the bar changes row. */
-export const WHOLE_ROW = Infinity;
+export const WHOLE_ROW = Infinity as WholeRow;
+
+/**
+ * [LAW:types-are-the-program] A whole number of cells of at least two, or the
+ * whole row: a run of one is a hue per cell (the team colours 8fp rejected),
+ * and 0, a fraction, a negative or NaN would quietly turn the hue some other
+ * way, so none of them is a run.
+ */
+export type RunLength = 2 | 3 | 4 | 5 | 6 | 7 | 8 | WholeRow;
 
 /**
  * [LAW:one-type-per-behavior] Every variation a user can choose, named by
  * the roles it steps through. A new one is one row here: the option domain,
  * the loader's enum, the settings carousel and every floor derive from this
  * table. `alt` is variant C of 8fp ("base changes per cell, hue changes every
- * few cells"): the default's hues, stepping along the row after one cell per
- * tone, so a run walks the tone axis once before the hue turns.
+ * few cells"): the default's hues, turning every three cells along the row —
+ * short enough that both rows of the bundled bar turn, long enough that a hue
+ * holds across two seams before it does.
  */
 export const VARIATIONS = {
   accent: { hues: ["secondary", "accent"], run: WHOLE_ROW },
   duo: { hues: ["primary", "secondary"], run: WHOLE_ROW },
   mono: { hues: ["primary"], run: WHOLE_ROW },
-  alt: { hues: ["secondary", "accent"], run: DECOR_TONES.length },
+  alt: { hues: ["secondary", "accent"], run: 3 },
 } as const satisfies Record<string, Variation>;
 export type VariationName = keyof typeof VARIATIONS;
 
@@ -350,6 +362,11 @@ export const inBin: Quantize = (placement, size) =>
 export const nearestPoint: Quantize = (placement, size) =>
   Math.round(placement * size) % size;
 
+/** Where a step falls on the circle; an absent step (the root) at 0. */
+function placementOf(step: PlacedStep | undefined): number {
+  return step === undefined ? 0 : step.distribution(step.index, step.count);
+}
+
 /**
  * The entry of `vocabulary` that `step` selects under `quantize`. An absent
  * step is a node alone on that axis — a bar with no vertical container, a
@@ -366,9 +383,7 @@ export function vocabularySelect<T extends {}>(
   step: PlacedStep | undefined,
   quantize: Quantize,
 ): T {
-  const placement =
-    step === undefined ? 0 : step.distribution(step.index, step.count);
-  const entry = vocabulary[quantize(placement, vocabulary.length)];
+  const entry = vocabulary[quantize(placementOf(step), vocabulary.length)];
   if (entry === undefined)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -386,8 +401,10 @@ export function vocabularySelect<T extends {}>(
  * cell's hue and tone: a row's cells are what sit side by side, so they are
  * what must differ, and the loader refuses a `distribution` authored inside a
  * cell, where it could place nothing. A cell's run counts its position among
- * its row's siblings as authored, never what is visible, so hiding one
- * recolours none.
+ * its row's siblings in the tree the walk renders — authored, never what is
+ * visible, so hiding one recolours none — and a synthesized cell counts like
+ * an authored one: the settings door leading the first row takes that row's
+ * first slot.
  *
  * Rows alternate among SIBLINGS. A row that is itself a stack of rows restarts
  * the alternation inside it, so its last line can wear the hue of the row
@@ -403,17 +420,14 @@ export function decorEntryFor(
   const cell = address.findIndex((step) => step.axis === "cell");
   const rows = cell === -1 ? address : address.slice(0, cell);
   const cellStep = address[rows.length];
-  // The row's hues turned by how many runs precede this cell, so the row
-  // starts on its own step and advances one step per run along it.
+  // The row starts on its own step and advances one step per run along it.
   const { hues, run } = variation;
-  const turn =
-    cellStep === undefined ? 0 : Math.floor(cellStep.index / run) % hues.length;
+  const start = inBin(placementOf(rows.at(-1)), hues.length);
+  const turn = cellStep === undefined ? 0 : Math.floor(cellStep.index / run);
+  const hue = hues[(start + turn) % hues.length];
+  if (hue === undefined) throw new Error("decorEntryFor: empty variation");
   return {
-    hue: vocabularySelect(
-      [...hues.slice(turn), ...hues.slice(0, turn)],
-      rows.at(-1),
-      inBin,
-    ),
+    hue,
     tone: vocabularySelect(DECOR_TONES, cellStep, nearestPoint),
   };
 }

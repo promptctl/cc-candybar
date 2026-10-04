@@ -53,7 +53,7 @@ const THEME_FLOOR = 0.02;
 // `mono` variation paints every row in one hue, so two themes that share
 // a primary converge once a style narrows what else differs — rose-pine and
 // rose-pine-moon at .019 under `dim`, dracula and rose-pine-moon at .015 under
-// `bright`. Every other combination of the 3 variations × 6 styles clears it
+// `bright`. Every other combination of the variations × 6 styles clears it
 // (design-docs/COLOUR-FROM-THEME-VOCABULARY.md, "The variation"). Pinned
 // exactly, so a new convergence fails and a recovered one says to delete it.
 const CONVERGED: Readonly<Record<string, readonly string[]>> = {

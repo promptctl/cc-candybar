@@ -369,8 +369,9 @@ on a bar of your own:
 
 ### The bar's variation
 
-`globals.variation` names which theme role each ROW of the closed bar wears,
-in order: `"accent"` (the default: secondary, then accent), `"duo"` (primary,
+`globals.variation` names which theme roles the closed bar's cells wear: each
+row starts on its own step, in order, and a variation may turn along the row
+too. `"accent"` (the default: secondary, then accent), `"duo"` (primary,
 then secondary), `"mono"` (every row in primary), or `"alt"` (secondary and
 accent, also turning along the row every three cells, each row starting on
 its own). Cells side by side still differ by tone. It resolves like `endcaps` — the session's pick

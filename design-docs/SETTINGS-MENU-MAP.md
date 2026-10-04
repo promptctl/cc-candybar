@@ -103,7 +103,7 @@ Brandon asked for four variations in brandon-theme-picker-bgw.7g6: "allow choosi
 | `mono` | D, `primary` | primary |
 | `alt` | C | secondary, accent, turning every three cells along the row |
 
-C, from the 8fp variants page, is "base changes per cell, hue changes every few cells". A variation carries a `run`: how many cells along a row wear one hue. The first three keep one hue per row; `alt` turns after one cell per tone, and each row starts on its own step. The hue never changes at every cell: 8fp rejected neighbours alternating hue as sports-team colours.
+C, from the 8fp variants page, is "base changes per cell, hue changes every few cells". A variation carries a `run`: how many cells along a row wear one hue. The first three keep one hue per row; `alt` turns every three cells, and each row starts on its own step (the settings door counts as the first row's first cell). The hue never changes at every cell — a run is at least two cells by type: 8fp rejected neighbours alternating hue as sports-team colours.
 
 ## Removed from the menu
 
