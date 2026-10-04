@@ -50,12 +50,14 @@ import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
+import { perSetting } from "./config/setting-projections.js";
 import {
   effectiveInputs,
   renderOptionsOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
+  type RenderPayload,
 } from "./daemon/render-payload.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
@@ -158,13 +160,14 @@ export function checkPayload(
     // against the value it will actually show, never its declared default.
     ...effectiveInputs(effective),
     // One step each way, one change made since edit mode opened, one unsaved
-    // setting and one resettable one, so every part of the settings menu's
-    // save cell and edit mode's save and cancel cells, each gated on having
-    // something to do, renders and gets its template checked.
+    // setting and every setting resettable, so every part of the settings
+    // menu's save cell, each control's ↺, and edit mode's save and cancel
+    // cells, each gated on having something to do, renders and gets its
+    // template checked.
     history: { undo: 1, redo: 1, sinceEdit: 1 },
     navigation: { back: 1 },
     unsaved: 1,
-    resettable: 1,
+    resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
     // A resume command (the daemon's own projection) and a config file, so
     // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
     // and get checked.

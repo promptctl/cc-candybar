@@ -46,6 +46,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { FLOOR_STYLE } from "./helpers/floor-style";
+import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -308,7 +309,7 @@ describe("buildRenderPayload — speed lane", () => {
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
@@ -333,7 +334,7 @@ describe("buildRenderPayload — speed lane", () => {
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -365,7 +366,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.speed?.history).toBe("100,0,300");
   });
@@ -394,7 +395,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
@@ -418,7 +419,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -431,7 +432,7 @@ describe("buildRenderPayload — speed lane", () => {
       new Set(["session.tokens"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(payload.speed).toBeUndefined();
   });

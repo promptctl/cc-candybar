@@ -340,7 +340,7 @@ The control a setting gets, chosen from its domain. The same generator serves th
 | A range `{ min, max }` | [Stepper](#stepper) | `◀ padding 1 ▶ ↺`, `◀ warning at % 50 ▶` |
 | A word list or option domain | [Carousel](#carousel); in the settings menu, behind a ring row | `🎨 tokyo-night ▸ ↺`, `theme … ◀ bar ▶ …` |
 
-Every control writes a session draft. In the settings menu, every control also has a `↺`, which resets that setting at every layer (`reset-config`).
+Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here show every `↺`.
 
 - **Authored as:** `settingControl` in `src/config/setting-control.ts`. Which tab a global setting appears in is the `PLACE` table in `src/config/settings-menu.ts`.
 
@@ -735,6 +735,6 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
 6. **Four ways to choose one value.** A [menu](#menu)'s grid (`✕ asc desc`), a [carousel](#carousel) (`◀ none ▶`), a ring row that opens a carousel (`◐ none ▸`), and [library pages](#library-pages). The settings menu uses the ring row and carousel; edit mode uses the menu and library; nothing bundled uses a bare menu over a plain list.
 7. **No control names its field.** The settings rings and tabs are labelled by glyph (`🎨`, `◐`, `✦`, `🎼`, `🔣`, `🌈`), while configure mode labels controls with words (`theme`, `warning at %`). This is the proposal's state 1 complaint, and the two conventions differ today.
-8. **`↺` always shows; `⟲` shows only when it would do something.** Every control's `↺` is drawn on a fresh session with nothing to reset (`▦ default ▸ ↺`), while the save cell's `⟲` hides until a reset would change something.
+8. **Resolved (brandon-menu-ia-q30.nk8): `↺` shows only when it would do something**, as `⟲` does, and a tab holding one is marked `•`.
 9. **Two confirm phrasings.** `⟲ reset all? ✕` and `/clear ✓ confirm ✕` are the same [confirm step](#confirm-step) with different confirm labels.
 10. **Unused pieces.** The `toolbar-toggle` and `load-config` verbs are in the verb table but nothing emits them; `toolbar-toggle` writes a session key nothing reads. The bundled `copyDir` action is declared and never referenced. `{{ picker }}` written by hand and `{{ gauge }}` have no bundled caller (both are author-facing).

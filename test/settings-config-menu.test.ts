@@ -758,6 +758,106 @@ describe("reset returns settings to the bundled default", () => {
   });
 });
 
+// [LAW:verifiable-goals] brandon-menu-ia-q30.nk8: the drift marker is the
+// reset. A control shows `↺` only while its reset would change something — a
+// session draft or a value the config file holds — and a tab holding such a
+// control reads `•`. A value the active preset pins is neither.
+describe("the drift marker", () => {
+  let durable: DurableConfig;
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-settings-drift-");
+  });
+  afterEach(() => durable.dispose());
+
+  // Every setting whose ↺ the bar draws, read tab by tab (a control renders
+  // only while its tab is open; the preset's sits on the door's own line).
+  const marked = (r: ReturnType<typeof rig>): string[] =>
+    [
+      ...new Set(
+        ["look", "layout", "config"].flatMap((tab) => {
+          showTab(r, tab);
+          return links(r.render())
+            .filter((l) => stripAnsi(l.text) === "↺")
+            .flatMap((l) => effectsOf(l.url))
+            .filter((e) => e.verb === "reset-config")
+            .map((e) => e.args[1]!);
+        }),
+      ),
+    ].sort();
+  // The tabs the strip marks, read off what a reader sees.
+  const markedTabs = (r: ReturnType<typeof rig>): string[] =>
+    ["session", "look", "layout", "config", "tools"].filter((tab) =>
+      new RegExp(`${tab} •`).test(plain(r.render())),
+    );
+  const open = (source: string): ReturnType<typeof rig> => {
+    const r = rig(source, durable);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    return r;
+  };
+
+  test("nothing picked and nothing in the file: no ↺, no tab marked, no ⟲", () => {
+    const r = open(TWO_SEGMENT_ROOT);
+    try {
+      expect(marked(r)).toEqual([]);
+      expect(markedTabs(r)).toEqual([]);
+      expect(plain(r.render())).not.toContain("⟲");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("a draft marks its own control and its tab, and nothing else", () => {
+    const r = open(TWO_SEGMENT_ROOT);
+    try {
+      r.sessionState.set(SID, "padding", "5");
+      expect(marked(r)).toEqual(["padding"]);
+      expect(markedTabs(r)).toEqual(["layout"]);
+      expect(plain(r.render())).toContain("⟲");
+      // The open tab keeps its mark beside the open glyph.
+      showTab(r, "layout");
+      expect(plain(r.render())).toContain("▾ 📐 layout •");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("a value the file holds is marked with no draft", () => {
+    const r = open(CUSTOMIZED);
+    try {
+      // padding is held twice (globals and compact's fragment), endcaps once;
+      // narrow's pin is the user's own preset, which a reset leaves alone.
+      expect(marked(r)).toEqual(["endcaps", "padding", "palette"]);
+      expect(markedTabs(r)).toEqual(["look", "layout"]);
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("a value the active preset pins is not marked: a reset could not move it", () => {
+    // The user's preset pins endcaps; the file's own preset pick is marked.
+    const pinned = open(PINNING_PRESET_NAMED);
+    try {
+      expect(marked(pinned)).toEqual(["preset"]);
+      expect(markedTabs(pinned)).toEqual([]);
+    } finally {
+      pinned.dispose();
+    }
+  });
+
+  test("a bundled preset's pin is not marked either; picking the preset is", () => {
+    const r = open(TWO_SEGMENT_ROOT);
+    try {
+      r.sessionState.set(SID, "preset", "compact");
+      showTab(r, "layout");
+      expect(plain(r.render())).toContain("padding 0");
+      expect(marked(r)).toEqual(["preset"]);
+      expect(markedTabs(r)).toEqual([]);
+    } finally {
+      r.dispose();
+    }
+  });
+});
+
 // [LAW:verifiable-goals] brandon-theme-picker-bgw.etd: choosing a theme is
 // trying several, so a pick must leave the picker open with the new pick
 // current. Driven the way a user drives it: two clicks found in the rendered

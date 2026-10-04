@@ -157,6 +157,17 @@ export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
 
 export type SettingName = keyof typeof SETTINGS;
 
+// [LAW:types-are-the-program] A record total over SETTINGS, one value per
+// setting: the one place the totality `Object.fromEntries` cannot see is
+// asserted, so every caller's record is checked as total by construction.
+export function perSetting<T>(
+  value: (name: SettingName) => T,
+): Readonly<Record<SettingName, T>> {
+  return Object.fromEntries(
+    (Object.keys(SETTINGS) as SettingName[]).map((name) => [name, value(name)]),
+  ) as Record<SettingName, T>;
+}
+
 // The setting whose SessionState key a step click names.
 export const SESSION_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
   (Object.keys(SETTINGS) as SettingName[]).map((name) => [

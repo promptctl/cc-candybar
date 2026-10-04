@@ -61,6 +61,7 @@ import {
   disclosureTerm,
   disclosureTrigger,
   disclosureTriggerCall,
+  templateLiteral,
 } from "./disclosure.js";
 import { CHECKS } from "../doctor/checks.js";
 import {
@@ -147,7 +148,6 @@ const tabRef = (tab: TabName): DisclosureRef => ({
 // same count (src/config/edit-chrome.ts): the menu is in every config, and
 // is synthesized before edit chrome.
 export const SAVE_SEG = `${SETTINGS_NS}save`;
-export const UNSAVED_VAR = `${SETTINGS_NS}unsaved`;
 
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
@@ -194,8 +194,6 @@ const BACK_CELL: SegmentDecl = {
     `{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`,
 };
 const REDO_ACTION = `${SETTINGS_NS}redo`;
-// How many settings a reset all would change (RenderPayload.resettable).
-const RESETTABLE_VAR = `${SETTINGS_NS}resettable`;
 
 // ─── The doctor (brandon-doctor-b6a) ────────────────────────────────────────
 //
@@ -258,6 +256,18 @@ const controlCarousel = (name: string): string =>
   `${SETTINGS_NS}carousel.${name}`;
 const controlBeneath = (name: string, row: number): string =>
   `${controlCarousel(name)}.${row}`;
+// Whether the setting's reset would change anything (RenderPayload.resettable,
+// brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
+const controlResettable = (name: string): string =>
+  `${SETTINGS_NS}resettable.${name}`;
+// What a marked tab carries after its label.
+const DRIFT_MARK = " •";
+// A boolean `or` over the named controls' resettable flags — `false` over none,
+// so a tab holding no control is never marked.
+const anyResettable = (names: readonly string[]): string =>
+  names.length === 0
+    ? "false"
+    : `(or ${names.map((n) => `.${controlResettable(n)}`).join(" ")})`;
 
 // One control of the menu: its setting's row of SETTINGS and what the
 // generator made of that setting's declared domain.
@@ -310,8 +320,10 @@ const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
   padding: "layout",
   updateNotice: "config",
 };
+const controlsIn = (place: "door" | TabName): readonly MenuControl[] =>
+  CONTROLS.filter((c) => PLACE[c.name] === place);
 const controlsAt = (place: "door" | TabName): LayoutNode[] =>
-  CONTROLS.filter((c) => PLACE[c.name] === place).map(controlNode);
+  controlsIn(place).map(controlNode);
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -335,45 +347,36 @@ const RESET_ALL = confirmStep(
 // ─── The save cell ──────────────────────────────────────────────────────────
 //
 // [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside the preset,
-// each part present exactly while it has something to do, read from a count
-// the daemon publishes every render: save while there are drafts, undo and
-// redo while their stack has a step, `⟲` while a reset all would change
-// something (a draft, or a value the config file holds at a layer a reset
-// clears) or while it is armed, so its confirm is never hidden armed. So a
-// click on any part always does something.
+// each part present exactly while it has something to do, read from what the
+// daemon publishes every render: save while there are drafts, undo and redo
+// while their stack has a step, `⟲` while any control's reset would change
+// something (its `↺` shows) or while it is armed, so its confirm is never
+// hidden armed. So a click on any part always does something.
 interface SavePart {
-  readonly count: string;
-  readonly path: string;
   readonly body: string;
   readonly shown: string;
 }
-const counted = (count: string, path: string, body: string): SavePart => ({
-  count,
-  path,
+// The payload paths of the counts the save cell reads; each is read through
+// the input variable `saveCountVar(path)`.
+const SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"] as const;
+type SaveCount = (typeof SAVE_COUNTS)[number];
+const saveCountVar = (count: SaveCount): string => `${SETTINGS_NS}${count}`;
+// Exported for edit mode's `✓ save`, which reads the same count (see SAVE_SEG).
+export const UNSAVED_VAR = saveCountVar("unsaved");
+const counted = (count: SaveCount, body: string): SavePart => ({
   body,
-  shown: `(gt .${count} 0)`,
+  shown: `(gt .${saveCountVar(count)} 0)`,
 });
 const SAVE_PARTS: readonly SavePart[] = [
   counted(
-    UNSAVED_VAR,
     "unsaved",
     `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
   ),
-  counted(
-    `${SETTINGS_NS}history.undo`,
-    "history.undo",
-    `{{ action "${UNDO_ACTION}" "↶" }}`,
-  ),
-  counted(
-    `${SETTINGS_NS}history.redo`,
-    "history.redo",
-    `{{ action "${REDO_ACTION}" "↷" }}`,
-  ),
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "↶" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
-    count: RESETTABLE_VAR,
-    path: "resettable",
     body: RESET_ALL.template,
-    shown: `(or (gt .${RESETTABLE_VAR} 0) ${RESET_ALL.armed})`,
+    shown: `(or ${anyResettable(CONTROLS.map((c) => c.name))} ${RESET_ALL.armed})`,
   },
 ];
 // The parts present, one space between each: `$sep` is empty until the first
@@ -720,7 +723,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // every theme. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
-          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, doorGlyph, DOOR_CLOSE_GLYPH)} }}` +
+          `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
           `{{ fg (color "${DOOR_CLOSE_ROLE}") $door }}` +
           `{{ else }}{{ $door }}{{ end }}`,
@@ -746,11 +749,11 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     type: "number",
     default: 0,
   };
-  // The counts the daemon publishes every render, one per save-cell part.
-  for (const p of SAVE_PARTS) {
-    artifacts.variables[p.count] = {
+  // The counts the daemon publishes every render, read by the save cell.
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
       kind: "input",
-      path: p.path,
+      path: count,
       type: "number",
       default: 0,
     };
@@ -761,6 +764,9 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
   // face, and switching tabs drops a half-made confirm it took out of view.
   artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
+  // A tab holding a control whose reset would change something is marked `•`
+  // (brandon-menu-ia-q30.nk8), open or closed, so drift is findable from the
+  // strip without opening every tab. The mark rides inside the tab's link.
   for (const { member, label } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
       TAB_KEY,
@@ -769,12 +775,16 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     artifacts.actions[tabSeg(member)] = {
       do: [tabToggle(member), ...TAB_DISARMS],
     };
+    const marked = anyResettable(controlsIn(member).map((c) => c.name));
+    const mark = `(ternary ${templateLiteral(DRIFT_MARK)} "" ${marked})`;
+    const display = (text: string): string =>
+      `(print ${templateLiteral(text)} ${mark})`;
     artifacts.segments[tabSeg(member)] = {
-      template: disclosureTrigger(
+      template: `{{ ${disclosureTriggerCall(
         tabSeg(member),
-        label,
-        `${DISCLOSURE_GLYPH_OPEN} ${label}`,
-      ),
+        display(label),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label}`),
+      )} }}`,
     };
   }
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
@@ -834,10 +844,18 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
     artifacts.actions[reset] = { reset: c.configKey };
-    const resetCell = `{{ action "${reset}" "↺" }}`;
+    // The ↺ shows only while its reset would change something — a draft, or
+    // a value the file holds at a layer the reset clears (brandon-menu-ia-q30.nk8).
+    artifacts.variables[controlResettable(c.name)] = {
+      kind: "input",
+      path: `resettable.${c.name}`,
+      type: "boolean",
+      default: false,
+    };
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     if (c.control.kind === "inline") {
       artifacts.segments[controlSeg(c.name)] = {
-        template: `${c.control.template} ${resetCell}`,
+        template: `${c.control.template}${resetCell}`,
       };
       continue;
     }
@@ -851,7 +869,11 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     artifacts.segments[controlSeg(c.name)] = {
       template:
         `${c.label} {{ .${c.effectiveVar} }} ` +
-        `${disclosureTrigger(toggle, DISCLOSURE_GLYPH_CLOSED, DISCLOSURE_GLYPH_OPEN)} ` +
+        disclosureTrigger(
+          toggle,
+          DISCLOSURE_GLYPH_CLOSED,
+          DISCLOSURE_GLYPH_OPEN,
+        ) +
         resetCell,
     };
     artifacts.segments[controlCarousel(c.name)] = {

@@ -21,6 +21,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
+import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -211,7 +212,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS, PRESET_FLOOR),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
@@ -233,7 +234,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       buildNeededPrefixes(CONFIG_WITH_METRICS, PRESET_FLOOR),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
-      { unsaved: 0, resettable: 0, configPath: null },
+      NO_CONFIG_FILE,
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
