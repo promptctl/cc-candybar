@@ -1,3 +1,10 @@
+## [1.113.2](https://github.com/promptctl/cc-candybar/compare/v1.113.1...v1.113.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **demo:** the demo's payload is the daemon's, built from a faked hook event ([#309](https://github.com/promptctl/cc-candybar/issues/309)) ([1fa6825](https://github.com/promptctl/cc-candybar/commit/1fa6825e266bfedb91dd847c16ec68bce33eb9ea))
+
 ## [1.113.1](https://github.com/promptctl/cc-candybar/compare/v1.113.0...v1.113.1) (2026-10-04)
 
 
