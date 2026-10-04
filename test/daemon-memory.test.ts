@@ -76,7 +76,6 @@ let root: string;
 // [LAW:single-enforcer] Jest workers run files sequentially in one process;
 // restore the env we borrow so the scan root can't leak into another file.
 const savedEnv = {
-  config: process.env.CLAUDE_CONFIG_DIR,
   cache: process.env.XDG_CACHE_HOME,
 };
 
@@ -99,13 +98,11 @@ beforeAll(() => {
       writeFileSync(join(dir, `sess-${f}.jsonl`), line + "\n");
     }
   }
-  process.env.CLAUDE_CONFIG_DIR = root;
   process.env.XDG_CACHE_HOME = join(root, "cache");
 });
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
-  restoreEnv("CLAUDE_CONFIG_DIR", savedEnv.config);
   restoreEnv("XDG_CACHE_HOME", savedEnv.cache);
 });
 
@@ -143,7 +140,7 @@ async function measurePeakInFlight(renderConcurrency: number): Promise<number> {
   try {
     await Promise.all(
       Array.from({ length: renderConcurrency }, () =>
-        loadEntriesFromProjects(undefined, undefined, true),
+        loadEntriesFromProjects([root], undefined, undefined, true),
       ),
     );
   } finally {
@@ -194,7 +191,7 @@ describe("heap-analysis scripts", () => {
     // once it drains). Drain afterward so nothing bleeds into other tests.
     const burst = Promise.all(
       Array.from({ length: RENDER_CONCURRENCY }, () =>
-        loadEntriesFromProjects(undefined, undefined, true),
+        loadEntriesFromProjects([root], undefined, undefined, true),
       ),
     );
     await new Promise((r) => setImmediate(r));

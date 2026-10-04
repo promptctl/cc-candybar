@@ -17,8 +17,9 @@ import { launchSync } from "../src/proc/launch";
 
 // The host's own registry, read past test/setup.ts's CLAUDE_CONFIG_DIR, which
 // hides it from every test daemon.
+const HOST_CLAUDE_DIR = path.join(os.homedir(), ".claude");
 const located = locateIn(
-  path.join(os.homedir(), ".claude", "plugins", "installed_plugins.json"),
+  path.join(HOST_CLAUDE_DIR, "plugins", "installed_plugins.json"),
   "/nonexistent-project",
 );
 const root = located.kind === "ok" ? located.value : undefined;
@@ -34,9 +35,17 @@ suite(`memento at ${root ?? "(not installed — skipped)"}`, () => {
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-memento-home-"));
     project = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-memento-proj-"));
+    // The process's own variable plays the detached daemon's: another
+    // session's config home, which the scope's reported one must replace.
     saved = process.env.MEMENTO_CONFIG_HOME;
-    process.env.MEMENTO_CONFIG_HOME = home;
-    scope = { sessionId: "ccb-test-session", projectDir: project, cwd: project };
+    process.env.MEMENTO_CONFIG_HOME = path.join(home, "the-daemons-own");
+    scope = {
+      sessionId: "ccb-test-session",
+      projectDir: project,
+      cwd: project,
+      claudeConfigDir: HOST_CLAUDE_DIR,
+      env: { MEMENTO_CONFIG_HOME: home },
+    };
   });
   afterEach(() => {
     if (saved === undefined) delete process.env.MEMENTO_CONFIG_HOME;
@@ -62,6 +71,7 @@ suite(`memento at ${root ?? "(not installed — skipped)"}`, () => {
       cwd: project,
       env: {
         ...process.env,
+        MEMENTO_CONFIG_HOME: home,
         CLAUDE_CODE_SESSION_ID: scope.sessionId,
         CLAUDE_PROJECT_DIR: project,
       },
@@ -70,6 +80,10 @@ suite(`memento at ${root ?? "(not installed — skipped)"}`, () => {
     if (!r.ok) throw new Error(`ceiling show: ${r.stderr}`);
     return r.stdout;
   };
+
+  test("the edge finds the host's memento through the scope's Claude Code directory", () => {
+    expect(edge.locate(scope)).toEqual({ kind: "ok", value: root });
+  });
 
   test("raise, lower, off and clear land in the session layer, as memento reports them", async () => {
     const base = await reading();

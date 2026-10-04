@@ -4,6 +4,7 @@ import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
+import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
 import { expandHome } from "../config/dsl-loader";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
@@ -51,6 +52,7 @@ export interface RenderRequest {
   tmux?: TmuxHint | null;
   configEnv?: string;
   claudeConfigDir?: string;
+  mementoEnv?: MementoEnvHint;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -101,6 +103,12 @@ export interface RenderRequest {
 //     Present, it is the absolute directory the client resolved from it
 //     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
 //     settings.json that session's Claude Code reads.
+//   • `mementoEnv` absent — the client did not REPORT (too old, as with
+//     `ssh`), so memento's spawns inherit the daemon's own variables, as they
+//     did before the hint existed. Present, it is total: every variable of
+//     MEMENTO_ENV_VARS the client's environment sets, and a name left out is
+//     one it does not set — the daemon's own value for it is dropped, never
+//     inherited (src/memento/edge.ts).
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
@@ -108,6 +116,7 @@ export interface ClientHints {
   readonly tmux?: TmuxHint | null;
   readonly configEnv?: string;
   readonly claudeConfigDir?: string;
+  readonly mementoEnv?: MementoEnvHint;
 }
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
@@ -126,6 +135,7 @@ export function parseClientHints(
   const tmux = sanitizeTmux(req.tmux);
   const configEnv = sanitizeConfigPath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
+  const mementoEnv = sanitizeMementoEnv(req.mementoEnv);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
@@ -133,7 +143,22 @@ export function parseClientHints(
     ...(tmux !== undefined && { tmux }),
     ...(configEnv !== undefined && { configEnv }),
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+    ...(mementoEnv !== undefined && { mementoEnv }),
   };
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
+// sanitizeTmux. Only the variables of MEMENTO_ENV_VARS are read, each an
+// absolute path as both clients send it; one that is anything else makes the
+// whole hint unreported (`undefined`) — a malformed frame never becomes a
+// half-true environment for memento to resolve its config home from.
+export function sanitizeMementoEnv(v: unknown): MementoEnvHint | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const set = MEMENTO_ENV_VARS.filter((name) => o[name] !== undefined);
+  return set.every((name) => sanitizeAbsolutePath(o[name]) !== undefined)
+    ? Object.fromEntries(set.map((name) => [name, o[name] as string]))
+    : undefined;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary. Both clients

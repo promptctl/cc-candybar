@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildRenderPayload } from "../src/daemon/render-payload";
+import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type {
   EffectiveGlobals,
@@ -590,5 +591,68 @@ describe("buildRenderPayload — autocompact lane", () => {
         msg: "provider fetch failed: autocompact: cannot read /c/settings.json: nope",
       },
     ]);
+  });
+});
+
+// brandon-client-hints-7ua: the memento and today lanes answer for the Claude
+// Code THIS render's client runs under — its config directory and the
+// variables memento resolves its config home from — never the daemon's env.
+describe("buildRenderPayload — the lanes that read a session's Claude Code", () => {
+  const run = async (paths: string[], hints: ClientHints) => {
+    const scopes: unknown[] = [];
+    const seeded: unknown[] = [];
+    const deps = depsWith(ABSENT, [], {
+      mementoProvider: {
+        getCeiling: async (scope: unknown) => {
+          scopes.push(scope);
+          return ABSENT;
+        },
+      },
+      usageStore: {
+        getUsageInfo: async () => ABSENT,
+        getTodayInfo: async (_hook: unknown, claudeConfigDir: unknown) => {
+          seeded.push(claudeConfigDir);
+          return ABSENT;
+        },
+      },
+    });
+    await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      new Set(paths),
+      EFFECTIVE_GLOBALS,
+      hints,
+      { unsaved: 0, resettable: 0 },
+    );
+    return { scopes, seeded };
+  };
+  const ANCHOR = { sessionId: "test-session", projectDir: "/tmp", cwd: "/tmp" };
+
+  test("memento is asked under the client's directory and env", async () => {
+    const { scopes } = await run(["memento.ceiling"], {
+      claudeConfigDir: "/home/u/.claude.zai",
+      mementoEnv: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
+    });
+    expect(scopes).toEqual([
+      {
+        ...ANCHOR,
+        claudeConfigDir: "/home/u/.claude.zai",
+        env: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
+      },
+    ]);
+  });
+
+  test("a client that reports neither: the default directory, and the env left to the daemon's", async () => {
+    const { scopes } = await run(["memento.ceiling"], NO_HINTS);
+    expect(scopes).toEqual([
+      { ...ANCHOR, claudeConfigDir: claudeConfigDir(undefined), env: undefined },
+    ]);
+  });
+
+  test("today seeds the client's directory", async () => {
+    const zai = await run(["today.cost"], { claudeConfigDir: "/home/u/.claude.zai" });
+    expect(zai.seeded).toEqual(["/home/u/.claude.zai"]);
+    expect((await run(["today.cost"], NO_HINTS)).seeded).toEqual([undefined]);
   });
 });

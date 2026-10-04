@@ -20,6 +20,7 @@ import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_CEILING } from "../src/click/wire";
 import {
   VERBS,
+  SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,
 } from "../src/daemon/verbs";
@@ -27,6 +28,7 @@ import { encodeSegments } from "../src/click/wire";
 import {
   locateIn,
   parseReading,
+  productionMementoEdge,
   type CeilingMove,
   type CeilingReading,
   type CeilingScope,
@@ -50,6 +52,14 @@ const SCOPE: CeilingScope = {
   sessionId: "s1",
   projectDir: "/tmp/proj",
   cwd: "/tmp/proj/sub",
+  claudeConfigDir: "/home/u/.claude-work",
+  env: { MEMENTO_CONFIG_HOME: "/home/u/memento" },
+};
+// What the session's client reported on its last render — the hints SCOPE is
+// built from, recorded where a click reads them.
+const HINTS = {
+  claudeConfigDir: SCOPE.claudeConfigDir,
+  mementoEnv: SCOPE.env,
 };
 
 let dir: string;
@@ -73,6 +83,7 @@ function runtime(memento: Record<string, unknown> | undefined) {
     SESSION_RENDER_ORIGIN_KEY,
     encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj/sub", configFile: null }),
   );
+  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify(HINTS));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -138,18 +149,24 @@ describe("the ceiling segment", () => {
     expect(rt.moves.map((m) => m.move)).toEqual([{ kind: "clear" }]);
   });
 
-  test("a click moves the session's layer, anchored where its render was", () => {
+  test("a click moves the session's layer, anchored where its render was, under the Claude Code and memento env its client reported", () => {
     const rt = runtime({ ceiling: 350_000, off: false, session: "" });
     const plus = ceilingUrls(rt.raw())[1]!;
     clickUrl(plus, rt.ctx);
-    expect(rt.moves).toEqual([
-      {
-        scope: { sessionId: "s1", projectDir: "/tmp/proj", cwd: "/tmp/proj/sub" },
-        move: { kind: "set", to: "+100_000" },
-      },
-    ]);
-    // [LAW:nothing-unseen] The daemon log names the move and the session.
-    expect(rt.logged).toContain("ceiling: set +100_000 (session=s1)");
+    expect(rt.moves).toEqual([{ scope: SCOPE, move: { kind: "set", to: "+100_000" } }]);
+    // [LAW:nothing-unseen] The daemon log names the move, the session, and
+    // the Claude Code directory whose memento it ran.
+    expect(rt.logged).toContain(
+      "ceiling: set +100_000 (session=s1 claudeConfigDir=/home/u/.claude-work)",
+    );
+  });
+
+  test("a session that has not rendered has no client facts to move under: refused", () => {
+    const rt = runtime({ ceiling: 350_000, off: false, session: "" });
+    const plus = ceilingUrls(rt.raw())[1]!;
+    rt.ctx.sessionState.clear("s1", SESSION_CLIENT_HINTS_KEY);
+    expect(() => clickUrl(plus, rt.ctx)).toThrow(/has not rendered yet/);
+    expect(rt.moves).toEqual([]);
   });
 
   test("a move the config does not declare is refused before memento sees it", () => {
@@ -359,6 +376,41 @@ describe("MementoProvider", () => {
     // Not served from the stale read: memento is asked afresh.
     await p.getCeiling(SCOPE);
     expect(f.reads).toHaveLength(2);
+  });
+
+  // brandon-client-hints-7ua: two sessions of one project under different
+  // Claude Code directories are two scopes — each is located in its own
+  // registry and keeps its own reading.
+  test("memento is located per scope, and a scope under another Claude Code directory reads afresh", async () => {
+    const f = fakeEdge([A, B]);
+    const located: CeilingScope[] = [];
+    const edge: MementoEdge = {
+      ...f.edge,
+      locate: (scope) => {
+        located.push(scope);
+        return ok("/plugin");
+      },
+    };
+    const p = new MementoProvider(edge, () => 0);
+    const zai = { ...SCOPE, claudeConfigDir: "/home/u/.claude.zai", env: {} };
+    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    expect(await p.getCeiling(zai)).toEqual(B);
+    expect(located).toEqual([SCOPE, zai]);
+    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    expect(f.reads).toEqual([SCOPE, zai]);
+  });
+
+  test("the production edge finds memento in the scope's own registry, not the daemon's", () => {
+    const user = plugin("user");
+    const withMemento = path.join(dir, "claude-a");
+    fs.mkdirSync(path.join(withMemento, "plugins"), { recursive: true });
+    fs.writeFileSync(
+      path.join(withMemento, "plugins", "installed_plugins.json"),
+      JSON.stringify({ plugins: { "memento@memento": [{ scope: "user", installPath: user }] } }),
+    );
+    const edge = productionMementoEdge();
+    expect(edge.locate({ ...SCOPE, claudeConfigDir: withMemento })).toEqual(ok(user));
+    expect(edge.locate({ ...SCOPE, claudeConfigDir: path.join(dir, "claude-b") })).toEqual(ABSENT);
   });
 
   test("memento not installed: the reading is absent and a move refuses", async () => {

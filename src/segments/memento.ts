@@ -4,6 +4,7 @@ import type {
   CeilingScope,
   MementoEdge,
 } from "../memento/edge.js";
+import { MEMENTO_ENV_VARS } from "../memento-hint.js";
 import type { Outcome } from "../utils/outcome.js";
 
 // How long a session's reading stands before the next render asks memento
@@ -18,8 +19,18 @@ interface Entry {
   readonly at: number;
 }
 
+// Every field of the scope: a session whose client reports another Claude
+// Code directory or memento config home is reading different layers.
 const keyOf = (s: CeilingScope): string =>
-  `${s.sessionId}|${s.projectDir}|${s.cwd}`;
+  JSON.stringify([
+    s.sessionId,
+    s.projectDir,
+    s.cwd,
+    s.claudeConfigDir,
+    s.env === undefined
+      ? null
+      : MEMENTO_ENV_VARS.map((v) => s.env?.[v] ?? null),
+  ]);
 
 // The bar's view of memento's context ceiling, per session: the reading each
 // render shows, and the one way a click moves it.
@@ -63,7 +74,7 @@ export class MementoProvider {
     key: string,
     scope: CeilingScope,
   ): Promise<Outcome<CeilingReading>> {
-    const located = this.edge.locate(scope.projectDir);
+    const located = this.edge.locate(scope);
     const fetched: Promise<Outcome<CeilingReading>> = (
       located.kind === "ok"
         ? this.edge.read(located.value, scope)
@@ -88,7 +99,7 @@ export class MementoProvider {
   // [LAW:no-silent-failure] Memento absent is a refusal here, not a no-op: a
   // click that moved nothing must say so.
   move(scope: CeilingScope, m: CeilingMove): void {
-    const located = this.edge.locate(scope.projectDir);
+    const located = this.edge.locate(scope);
     if (located.kind !== "ok") {
       throw new Error(
         located.kind === "failed"

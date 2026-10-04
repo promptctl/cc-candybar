@@ -22,6 +22,7 @@ import { detectTermExtent } from "./term-extent";
 import { detectTmuxHint } from "./tmux-hint";
 import { detectConfigEnv } from "./config-hint";
 import { detectClaudeConfigDir } from "./claude-settings";
+import { detectMementoEnv } from "./memento-hint";
 import { runDoctorCli } from "./doctor/cli";
 
 function detectTermCols(): number | undefined {
@@ -198,6 +199,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         // Conditional too: absent is the default directory. The daemon reads
         // settings.json from THIS session's Claude Code directory.
         claudeConfigDir: detectClaudeConfigDir(process.env, process.cwd()),
+        // Total like tmux: always an object, so an absent hint means only
+        // "client too old". Memento's spawns run with THIS session's variables.
+        mementoEnv: detectMementoEnv(process.env, process.cwd()),
       },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
