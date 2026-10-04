@@ -62,8 +62,9 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // time-dependent evaluation in this engine reads from one seam. Defaulted here
 // so the default literal `() => new Date()` lives in exactly one place; callers
 // that omit it (and forwarders passing `undefined`) inherit it unchanged.
-// `drawnAt` is forwarded as given to rich-js `richTextFuncs`, whose own default
-// (truecolor) is the one default: the depth `readableOn` floors text at.
+// `drawnAt` is forwarded to rich-js `richTextFuncs` as the depth it reads, whose
+// own default (truecolor) is the one default: the depth `readableOn` floors text
+// at. It carries no terminal: the detached daemon cannot see the client's.
 export function createCcCandybarEngine(
   extraFuncs?: FuncMap,
   clock: () => Date = () => new Date(),
@@ -95,7 +96,7 @@ export function createCcCandybarEngine(
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...richTextFuncs(drawnAt),
+      ...richTextFuncs(drawnAt && (() => ({ depth: drawnAt() }))),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`

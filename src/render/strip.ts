@@ -13,6 +13,7 @@ import {
   type CapsuleJoinerOptions,
 } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import { RENDER_THEME } from "./rich-theme.js";
 
 export interface RenderedSegmentLike {
   type: string;
@@ -157,10 +158,10 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
     });
   const width = (cells: RichText[]): number =>
     new RichText(
-      renderToString(new Strip(cells, joiner), { colorSystem: null }).replace(
-        /\n$/,
-        "",
-      ),
+      renderToString(new Strip(cells, joiner), {
+        colorSystem: null,
+        theme: RENDER_THEME,
+      }).replace(/\n$/, ""),
     ).cellLength;
   const one = width([cell("#101010")]);
   const geometry = {
@@ -229,8 +230,12 @@ export function renderStripCells(
       ? renderToString(new FlexStrip([...cells], { joiner }), {
           width: options.width,
           colorSystem,
+          theme: RENDER_THEME,
         })
-      : renderToString(new Strip([...cells], joiner), { colorSystem });
+      : renderToString(new Strip([...cells], joiner), {
+          colorSystem,
+          theme: RENDER_THEME,
+        });
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

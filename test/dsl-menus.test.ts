@@ -65,7 +65,7 @@ import {
   textOn,
   type Address,
 } from "../src/themes/decor";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/template-engine/cells.js";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
@@ -118,7 +118,7 @@ function expectAppliedCell(style: Style, applied: Palette, ground: Ground): void
   );
 }
 // The ground a rendered line is drawn on: its own background.
-const groundOf = (line: RichText): Ground => definedStyle(line.style).bgcolor!.value!;
+const groundOf = (line: RichText): Ground => resolvedStyle(line.style).bgcolor!.value!;
 
 function opts() {
   return {
@@ -701,25 +701,24 @@ describe("toggle round trip + drop stacking", () => {
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
-    expect(definedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
-    expect(definedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
+    expect(resolvedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
+    expect(resolvedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
     // The dropped line is the band: its plane. The OPTION cells sit on that
     // plane too, every one — `themes` is a colour-valued domain, so each option
     // says what it is in its TEXT, the theme's own primary (brandon-menu-ia-
     // q30.jl1), rather than on a band item of its own (the next describe pins
     // that the band placement is still what a generic domain gets).
     const body = cells[1]!;
-    expect(definedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
+    expect(resolvedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
     const spans = body.spans.filter(
-      (s) => typeof s.style !== "string" && s.style.link !== undefined,
+      (s) => resolvedStyle(s.style).link !== undefined,
     );
     const optionSpans = spans.filter((s) => options.includes(body.plain.slice(s.start, s.end)));
     expect(optionSpans.length).toBeGreaterThan(1);
     for (const span of optionSpans) {
       const name = body.plain.slice(span.start, span.end);
-      const style = span.style;
-      if (typeof style === "string") throw new Error("span style is a name, not a Style");
+      const style = resolvedStyle(span.style);
       expectAppliedCell(style, paletteForThemeName(name), band.plane);
       // And it is NOT the band item it would have worn as a generic option:
       // the address is out of the decision.
@@ -744,7 +743,7 @@ describe("toggle round trip + drop stacking", () => {
       return new Map(
         [...sink.entries()].map(([name, cells]) => [
           name,
-          cells.map((c) => `${c.plain}|${definedStyle(c.style).bgcolor?.value?.hex}|${definedStyle(c.style).color?.value?.hex}`).join("\n"),
+          cells.map((c) => `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`).join("\n"),
         ]),
       );
     };
@@ -1299,16 +1298,14 @@ describe("a menu's `distribution` option places its band", () => {
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
       (s) =>
-        typeof s.style !== "string" &&
-        s.style.link !== undefined &&
+        resolvedStyle(s.style).link !== undefined &&
         options.includes(body.plain.slice(s.start, s.end)),
     );
     expect(optionSpans.length).toBeGreaterThan(1);
     let differsFromDefault = 0;
     for (const span of optionSpans) {
       const index = options.indexOf(body.plain.slice(span.start, span.end));
-      const style = span.style;
-      if (typeof style === "string") throw new Error("span style is a name, not a Style");
+      const style = resolvedStyle(span.style);
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
         bandItemFor(palette, disclosure, [{ ...step, distribution: DISTRIBUTIONS.monotonic }], ColorDepth.TRUECOLOR).hex,
@@ -1352,14 +1349,11 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   ): { name: string; bg: string | undefined; fg: string | undefined }[] {
     return body.spans
       .filter((span) => {
-        if (typeof span.style === "string" || span.style.link === undefined)
-          return false;
+        if (resolvedStyle(span.style).link === undefined) return false;
         return domain.includes(body.plain.slice(span.start, span.end));
       })
       .map((span) => {
-        const style = span.style;
-        if (typeof style === "string")
-          throw new Error("span style is a name, not a Style");
+        const style = resolvedStyle(span.style);
         return {
           name: body.plain.slice(span.start, span.end),
           bg: style.bgcolor?.value?.hex,
@@ -1480,7 +1474,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     floor.clickToggle(floor.render(), LKEY, "applyStyle");
     floor.render();
     const trigger = (cells: readonly RichText[]): string | undefined =>
-      definedStyle(cells[0]!.style).bgcolor?.value?.hex;
+      resolvedStyle(cells[0]!.style).bgcolor?.value?.hex;
     expect(trigger(sink.get("lookpicker")!)).not.toBe(
       trigger(floor.sink.get("lookpicker")!),
     );

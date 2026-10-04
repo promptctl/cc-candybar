@@ -16,7 +16,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { definedStyle } from "../src/template-engine/cells";
+import { resolvedStyle } from "../src/template-engine/cells";
 import { NO_FILL } from "../src/template-engine/colors";
 
 const THEME = "textual-dark";
@@ -60,7 +60,7 @@ function render() {
     },
     { perSegmentSink: sink },
   );
-  const style = (name: string) => definedStyle(sink.get(name)![0]!.style);
+  const style = (name: string) => resolvedStyle(sink.get(name)![0]!.style);
   return { out, style, dispose: () => registry.dispose() };
 }
 

@@ -9,7 +9,7 @@
 // spellings of a rule drift, so these tests hold them to the SAME behaviour on the
 // same inputs instead of asserting that they agree.
 
-import { ColorRamp, parseRgbHex } from "@promptctl/rich-js";
+import { ColorRamp, EASES, parseRgbHex } from "@promptctl/rich-js";
 import type { ColorRgba } from "@promptctl/rich-js";
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -92,7 +92,7 @@ describe("the same discipline as ColorRamp, on the same inputs", () => {
   const rgba = (hex: string): ColorRgba => parseRgbHex(hex.replace("#", ""));
   const colourRamp = (stops: ReadonlyArray<[number, string]>): ColorRamp =>
     new ColorRamp(
-      "step",
+      EASES.step,
       stops.map(([position, hex]) => ({ at: position, color: rgba(hex) })),
     );
 

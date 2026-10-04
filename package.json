@@ -72,7 +72,7 @@
     "@eslint/js": "^9.33.0",
     "@pkgjs/parseargs": "0.11.0",
     "@promptctl/go-template-js": "^0.10.0",
-    "@promptctl/rich-js": "^0.18.1",
+    "@promptctl/rich-js": "^0.19.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/exec": "^7.0.3",
     "@semantic-release/git": "^10.0.1",

@@ -15,9 +15,10 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { resolvedStyle } from "../src/template-engine/cells.js";
 import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
-import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
+import type { RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -288,7 +289,7 @@ describe("the carousel rotates by applying", () => {
     const ring = rt.sink.get("ring")!;
     const bold = ring.flatMap((cell) =>
       cell.spans
-        .filter((span) => typeof span.style === "object" && span.style.bold)
+        .filter((span) => resolvedStyle(span.style).bold)
         .map((span) => cell.plain.slice(span.start, span.end)),
     );
     expect(bold).toEqual([]);
@@ -681,8 +682,8 @@ describe("the preset control's list carries the layout beneath it", () => {
 });
 
 // A style's background, as hex, or undefined when it paints none.
-const bgHex = (style: string | Style | undefined): string | undefined =>
-  typeof style === "object" ? style.bgcolor?.value?.hex : undefined;
+const bgHex = (style: TextStyle | undefined): string | undefined =>
+  style === undefined ? undefined : resolvedStyle(style).bgcolor?.value?.hex;
 
 // The colours a rendered fragment list draws backgrounds in.
 const backgrounds = (cells: readonly RichText[]): Set<string> =>

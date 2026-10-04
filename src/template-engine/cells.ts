@@ -12,7 +12,8 @@
 // character styling via spans, and every layout op (truncate / align /
 // pad / slice) preserves spans by construction.
 
-import { RichText, Style } from "@promptctl/rich-js";
+import { RichText, type Style, type TextStyle } from "@promptctl/rich-js";
+import { RENDER_THEME } from "../render/rich-theme.js";
 
 /**
  * Convert template-engine fragments (`RichText[]`) into Strip cells
@@ -42,9 +43,11 @@ export function fragmentsToCells(
   };
 
   for (const frag of fragments) {
-    // definedStyle, not `frag.style.link`: a string style has a `.link` too —
-    // String.prototype.link, a function, which is always truthy.
-    if (definedStyle(frag.style).link) {
+    // Resolved, not `frag.style.link`: a string style has a `.link` too —
+    // String.prototype.link, a function, which is always truthy — and a style
+    // function over a named base keeps the link in a LayeredStyle until a
+    // theme says what the name stands for.
+    if (resolvedStyle(frag.style).link) {
       flush();
       const cell = buildCell([frag], baseStyle);
       if (cell.plain.length > 0) cells.push(cell);
@@ -86,16 +89,17 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
 
 function withBaseStyle(f: RichText, base: Style): RichText {
   const copy = f.copy();
-  copy.style = base.add(definedStyle(f.style));
+  copy.style = base.add(resolvedStyle(f.style));
   return copy;
 }
 
 /**
- * The `Style` a RichText's stored style stands for. RichText keeps a string as
- * given ("" for plain text, or a definition like "on blue"); Style.parse reads
- * definitions only, so a theme NAME throws here — cells are built before any
- * render exists to resolve a name against.
+ * The `Style` a RichText's stored style stands for, resolved through the theme
+ * every render draws with (`RENDER_THEME`): a definition parses, a theme name
+ * reads the theme, and a `LayeredStyle` is its name resolved with its addition
+ * on top. Cells are built before the render, so this is the render's own
+ * resolution asked early, never a second one.
  */
-export function definedStyle(style: string | Style): Style {
-  return style instanceof Style ? style : Style.parse(style);
+export function resolvedStyle(style: TextStyle): Style {
+  return RENDER_THEME.resolve(style);
 }

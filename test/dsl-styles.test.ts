@@ -12,6 +12,7 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -533,9 +534,9 @@ describe("globals.style as an expression — a style chosen by data", () => {
   test("style.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
     const { render, dispose } = buildRuntime();
     try {
-      expect(render(90)).toContain("L=inverted");
-      expect(render(50)).toContain("L=washed");
-      expect(render(10)).toContain("L=none");
+      expect(stripAnsi(render(90))).toContain("L=inverted");
+      expect(stripAnsi(render(50))).toContain("L=washed");
+      expect(stripAnsi(render(10))).toContain("L=none");
     } finally {
       dispose();
     }
@@ -550,7 +551,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     try {
       sessionState.set(SID, "style", "washed");
       expect(bgOf(render(90), "◆ here")).toBe(byName("washed"));
-      expect(render(90)).toContain("L=washed");
+      expect(stripAnsi(render(90))).toContain("L=washed");
       // The case a floor-equality test would get wrong: picking "none" is a
       // DECISION, not the absence of one, so a hot payload must not recolour.
       sessionState.set(SID, "style", "none");
@@ -579,7 +580,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     try {
       const out = render(90);
       expect(bgOf(out, "◆ here")).toBe(byName("none"));
-      expect(out).toContain("L=none");
+      expect(stripAnsi(out)).toContain("L=none");
     } finally {
       dispose();
     }
@@ -639,7 +640,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     );
     try {
       expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
-      expect(render(0)).toContain("L=inverted");
+      expect(stripAnsi(render(0))).toContain("L=inverted");
       // Still the floor on the NEXT render, not the previous render's answer —
       // the provisional is a constant, not a carried-over value.
       expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));

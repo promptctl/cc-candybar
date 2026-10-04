@@ -23,7 +23,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
-import { definedStyle } from "../src/template-engine/cells";
+import { resolvedStyle } from "../src/template-engine/cells";
 import { settingsOf } from "../src/config/dsl-types";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -103,7 +103,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
   const bgOf = (id: string): string => {
     const cell = sink.get(id)?.[0];
     if (cell === undefined) throw new Error(`placement "${id}" did not render`);
-    return definedStyle(cell.style).bgcolor!.value!.hex;
+    return resolvedStyle(cell.style).bgcolor!.value!.hex;
   };
   let current = config;
   const ctx: VerbContext = {

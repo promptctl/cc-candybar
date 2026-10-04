@@ -6,7 +6,7 @@ import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
 import { RichText, Style } from "@promptctl/rich-js";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/template-engine/cells.js";
 import { stripAnsi } from "./helpers/ansi";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
@@ -41,7 +41,7 @@ describe("single-cell segments", () => {
     const cells = evalCells("hello world");
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe("hello world");
-    expect(definedStyle(cells[0]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[0]!.style).link).toBeUndefined();
   });
 
   test("interpolated field produces one cell", () => {
@@ -67,11 +67,11 @@ describe("multi-cell toolbar shape", () => {
     // "leading joiner" test below.
     const cells = evalCells('{{ link "http://a" "A" }} {{ link "http://b" "B" }}');
     expect(cells).toHaveLength(3);
-    expect(definedStyle(cells[0]!.style).link).toBe("http://a");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("http://a");
     expect(cells[0]!.plain).toBe("A");
-    expect(definedStyle(cells[1]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[1]!.style).link).toBeUndefined();
     expect(cells[1]!.plain).toBe(" ");
-    expect(definedStyle(cells[2]!.style).link).toBe("http://b");
+    expect(resolvedStyle(cells[2]!.style).link).toBe("http://b");
     expect(cells[2]!.plain).toBe("B");
   });
 
@@ -79,7 +79,7 @@ describe("multi-cell toolbar shape", () => {
     const cells = evalCells('{{ link "http://x" "click me" }}');
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe("click me");
-    expect(definedStyle(cells[0]!.style).link).toBe("http://x");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("http://x");
   });
 
   test("three link calls separated by joiners produce link/plain/link/plain/link", () => {
@@ -90,11 +90,11 @@ describe("multi-cell toolbar shape", () => {
       '{{ link "u1" "A" }} {{ link "u2" "B" }} {{ link "u3" "C" }}'
     );
     expect(cells).toHaveLength(5);
-    expect(definedStyle(cells[0]!.style).link).toBe("u1");
-    expect(definedStyle(cells[1]!.style).link).toBeUndefined();
-    expect(definedStyle(cells[2]!.style).link).toBe("u2");
-    expect(definedStyle(cells[3]!.style).link).toBeUndefined();
-    expect(definedStyle(cells[4]!.style).link).toBe("u3");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("u1");
+    expect(resolvedStyle(cells[1]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[2]!.style).link).toBe("u2");
+    expect(resolvedStyle(cells[3]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[4]!.style).link).toBe("u3");
   });
 
   test("leading joiner becomes its own plain cell, separate from the link", () => {
@@ -106,24 +106,24 @@ describe("multi-cell toolbar shape", () => {
     const cells = evalCells('prefix {{ link "u" "item" }}');
     expect(cells).toHaveLength(2);
     expect(cells[0]!.plain).toBe("prefix ");
-    expect(definedStyle(cells[0]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[0]!.style).link).toBeUndefined();
     expect(cells[1]!.plain).toBe("item");
-    expect(definedStyle(cells[1]!.style).link).toBe("u");
+    expect(resolvedStyle(cells[1]!.style).link).toBe("u");
   });
 
   test("trailing plain text after last link becomes its own plain cell", () => {
     const cells = evalCells('{{ link "u" "item" }} suffix');
     expect(cells).toHaveLength(2);
-    expect(definedStyle(cells[0]!.style).link).toBe("u");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("u");
     expect(cells[1]!.plain).toBe(" suffix");
-    expect(definedStyle(cells[1]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[1]!.style).link).toBeUndefined();
   });
 
   test("link with field interpolation in label", () => {
     const cells = evalCells('{{ link "http://go" .label }}', { label: "Go" });
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe("Go");
-    expect(definedStyle(cells[0]!.style).link).toBe("http://go");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("http://go");
   });
 });
 
@@ -135,30 +135,30 @@ describe("nested style functions inside one cell", () => {
   test("bold wrapping text produces cell with bold style", () => {
     const cells = evalCells('{{ bold "hello" }}');
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.style.bold).toBe(true);
+    expect(resolvedStyle(cells[0]!.style).bold).toBe(true);
     expect(cells[0]!.plain).toBe("hello");
   });
 
   test("colored text produces cell with color set", () => {
     const cells = evalCells('{{ fg "red" "error" }}');
     expect(cells).toHaveLength(1);
-    expect(definedStyle(cells[0]!.style).color).toBeDefined();
+    expect(resolvedStyle(cells[0]!.style).color).toBeDefined();
     expect(cells[0]!.plain).toBe("error");
   });
 
   test("nested: bold inside a color — outer wins on color, bold carried", () => {
     const cells = evalCells('{{ fg "red" (bold "x") }}');
     expect(cells).toHaveLength(1);
-    expect(definedStyle(cells[0]!.style).color).toBeDefined(); // red
-    expect(cells[0]!.style.bold).toBe(true);
+    expect(resolvedStyle(cells[0]!.style).color).toBeDefined(); // red
+    expect(resolvedStyle(cells[0]!.style).bold).toBe(true);
     expect(cells[0]!.plain).toBe("x");
   });
 
   test("styled fragment inside link call preserves styling", () => {
     const cells = evalCells('{{ link "http://go" (bold "go!") }}');
     expect(cells).toHaveLength(1);
-    expect(definedStyle(cells[0]!.style).link).toBe("http://go");
-    expect(cells[0]!.style.bold).toBe(true);
+    expect(resolvedStyle(cells[0]!.style).link).toBe("http://go");
+    expect(resolvedStyle(cells[0]!.style).bold).toBe(true);
     expect(cells[0]!.plain).toBe("go!");
   });
 });
@@ -189,7 +189,22 @@ describe("fragmentsToCells — direct fragment input", () => {
     ]);
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe(" hello ");
-    expect(definedStyle(cells[0]!.style).link).toBeUndefined();
+    expect(resolvedStyle(cells[0]!.style).link).toBeUndefined();
+  });
+
+  test("a link over a theme-NAME base is its own cell, the name resolved by the render's theme", () => {
+    // rich-js keeps a style function's addition over a named base as a
+    // LayeredStyle until a theme says what the name stands for; the link lives
+    // in its `over`, so only resolution through the render's theme finds it.
+    const named = new RichText("go", {
+      style: { under: "repr.number", over: new Style({ link: "http://go" }) },
+    });
+    const cells = fragmentsToCells([new RichText("a "), named, new RichText(" b")]);
+    expect(cells.map((c) => c.plain)).toEqual(["a ", "go", " b"]);
+    const style = resolvedStyle(cells[1]!.style);
+    expect(style.link).toBe("http://go");
+    expect(style.color?.name).toBe("cyan");
+    expect(style.bold).toBe(true);
   });
 
   test("plain run preserves a styled fragment's fg in rendered output", () => {
@@ -241,7 +256,7 @@ describe("fragmentsToCells — direct fragment input", () => {
     rt.stylize("red on blue"); // stylize(style, start?, end?)
     const cells = fragmentsToCells([rt]);
     expect(cells).toHaveLength(1);
-    expect(definedStyle(cells[0]!.style).link).toBe("http://x");
+    expect(resolvedStyle(cells[0]!.style).link).toBe("http://x");
   });
 });
 
@@ -258,7 +273,7 @@ describe("baseStyle merge — fragment style wins on overlap", () => {
   test("unstyled fragment inherits baseStyle bg", () => {
     const baseStyle = new Style({ bgcolor: "blue" });
     const cells = fragmentsToCells([new RichText("text")], baseStyle);
-    expect(definedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
   });
 
   test("fragment's own bg wins over baseStyle bg", () => {
@@ -268,23 +283,23 @@ describe("baseStyle merge — fragment style wins on overlap", () => {
       baseStyle,
     );
     // A divergent bg must NOT be overridden by the segment default.
-    expect(definedStyle(cells[0]!.style).bgcolor?.name).toBe("red");
+    expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("red");
   });
 
   test("null baseStyle → fragments flow through unchanged", () => {
     const cells = fragmentsToCells([new RichText("text")], new Style());
-    expect(definedStyle(cells[0]!.style).isNull).toBe(true);
+    expect(resolvedStyle(cells[0]!.style).isNull).toBe(true);
   });
 
   test("no baseStyle → fragments flow through unchanged", () => {
     const cells = fragmentsToCells([new RichText("text")]);
-    expect(definedStyle(cells[0]!.style).isNull).toBe(true);
+    expect(resolvedStyle(cells[0]!.style).isNull).toBe(true);
   });
 
   test("baseStyle fg applied to fragment without fg", () => {
     const baseStyle = new Style({ color: "white" });
     const cells = fragmentsToCells([new RichText("text")], baseStyle);
-    expect(definedStyle(cells[0]!.style).color?.name).toBe("white");
+    expect(resolvedStyle(cells[0]!.style).color?.name).toBe("white");
   });
 
   test("fragment's own fg wins over baseStyle fg", () => {
@@ -293,7 +308,7 @@ describe("baseStyle merge — fragment style wins on overlap", () => {
       [new RichText("text", { style: "red" })],
       baseStyle,
     );
-    expect(definedStyle(cells[0]!.style).color?.name).toBe("red");
+    expect(resolvedStyle(cells[0]!.style).color?.name).toBe("red");
   });
 });
 
@@ -317,7 +332,7 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     // All fragments share the same bg (from baseStyle) → one cell.
     expect(cells).toHaveLength(1);
     // Cell-level bg survived.
-    expect(definedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
 
     // The per-fragment fg must reach the ANSI output as distinct SGR groups —
     // not collapsed into one fg. The serializer wraps each SGR-codes group
@@ -352,8 +367,8 @@ describe("RichText cell shape — uniform-style collapse", () => {
     );
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe(" main ");
-    expect(definedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
-    expect(definedStyle(cells[0]!.style).color?.name).toBe("white");
+    expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(cells[0]!.style).color?.name).toBe("white");
   });
 
   test("heterogeneous fg coalesces into one cell with spans for the divergent fg", () => {
@@ -366,9 +381,9 @@ describe("RichText cell shape — uniform-style collapse", () => {
       baseStyle,
     );
     expect(cells).toHaveLength(1);
-    expect(definedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
     // Base fg cascades over the cell; "err" segment overrides via a span.
-    expect(definedStyle(cells[0]!.style).color?.name).toBe("white");
+    expect(resolvedStyle(cells[0]!.style).color?.name).toBe("white");
     // Both edges still report the segment-level bg because spans without bg
     // inherit the cell's bg via the joiner protocol.
     expect(cells[0]!.edgeStyle("left", EDGE_OPTS).bgcolor?.name).toBe("blue");

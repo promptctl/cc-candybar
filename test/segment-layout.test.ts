@@ -11,7 +11,7 @@
 import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/template-engine/cells.js";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
 
@@ -306,8 +306,8 @@ describe("baseStyle on the merged cell", () => {
     // The cell-level style is the baseStyle, so padding chars (which have
     // no span overlay) render with that style — making the segment bg+fg
     // continuous across the padded gap.
-    expect(definedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
-    expect(definedStyle(result[0]!.style).color?.name).toBe("white");
+    expect(resolvedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(result[0]!.style).color?.name).toBe("white");
     // Edges report the same baseStyle since the kept text fragment carries
     // the same merged style.
     expect(result[0]!.edgeStyle("left", EDGE_OPTS).bgcolor?.name).toBe("blue");
@@ -324,7 +324,7 @@ describe("baseStyle on the merged cell", () => {
       baseStyle,
     });
     expect(result[0]!.plain).toBe("hello…");
-    expect(definedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
+    expect(resolvedStyle(result[0]!.style).bgcolor?.name).toBe("blue");
   });
 });
 
@@ -376,9 +376,7 @@ describe("truncation preserves per-character styling through the cut", () => {
     // The "world" span survives intact on the right.
     const spans = result[0]!.spans;
     const redSpan = spans.find((s) =>
-      typeof s.style === "string"
-        ? s.style.includes("red")
-        : s.style.color?.name === "red",
+      resolvedStyle(s.style).color?.name === "red",
     );
     expect(redSpan).toBeDefined();
     expect(result[0]!.plain.slice(redSpan!.start, redSpan!.end)).toBe("world");

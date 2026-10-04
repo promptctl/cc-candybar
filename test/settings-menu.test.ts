@@ -19,6 +19,7 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
+import { resolvedStyle } from "../src/template-engine/cells.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
@@ -468,7 +469,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   const tabSeg = (tab: string) => `${TAB_KEY}.${tab}`;
   const bgOf = (cells: readonly RichText[] | undefined): string | undefined => {
     const style = cells?.[0]?.style;
-    return typeof style === "object" ? style.bgcolor?.value?.hex : undefined;
+    return style === undefined ? undefined : resolvedStyle(style).bgcolor?.value?.hex;
   };
   // The segments a node renders, a disclosure's body included.
   const deepNames = (node: LayoutNode): string[] =>

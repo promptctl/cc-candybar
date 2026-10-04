@@ -15,7 +15,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
-import { INVISIBLE, links } from "./helpers/ansi";
+import { INVISIBLE, links, stripAnsi } from "./helpers/ansi";
 import { effectsOf } from "../src/click/read";
 import { VERB_COPY } from "../src/click/wire";
 
@@ -174,7 +174,7 @@ describe("clicking the directory copies the full path", () => {
       current_dir,
     });
     const cellLinks = links(rendered);
-    expect(cellLinks.map((l) => l.text.trim())).toEqual(["~/c/c/s/d/leaf"]);
+    expect(cellLinks.map((l) => stripAnsi(l.text).trim())).toEqual(["~/c/c/s/d/leaf"]);
     expect(effectsOf(cellLinks[0]!.url)).toEqual([
       { verb: VERB_COPY, args: [current_dir] },
     ]);

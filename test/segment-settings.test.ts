@@ -19,7 +19,7 @@ import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/template-engine/cells.js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -118,7 +118,7 @@ describe("a placement renders with its own settings", () => {
     }`);
     rt.render();
     const bgOf = (id: string) =>
-      definedStyle(rt.sink.get(id)![0]!.style).bgcolor?.value?.hex;
+      resolvedStyle(rt.sink.get(id)![0]!.style).bgcolor?.value?.hex;
     expect(bgOf("quiet")).toBe("#000000");
     expect(bgOf("loud")).toBe("#ff0000");
     expect(rt.sink.has("gone")).toBe(false);
