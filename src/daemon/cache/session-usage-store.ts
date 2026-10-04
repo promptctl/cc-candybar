@@ -304,8 +304,8 @@ export class SessionUsageStore {
   private readonly flight = new SingleFlight();
   // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
   // per set of Claude Code directories a session's client resolves to (keyed
-  // by the directories themselves, so the default and its explicit spelling
-  // share a scan). Unlike SingleFlight this RETAINS the resolved promise, so
+  // by the directories themselves, so a default that resolves to one directory
+  // shares a scan with that directory named outright). Unlike SingleFlight this RETAINS the resolved promise, so
   // after a seed completes every later read awaits an already-settled promise
   // — zero rescan. A rejected seed is dropped so the next read retries.
   private readonly seeded = new Map<string, Promise<void>>();
