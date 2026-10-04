@@ -18,13 +18,14 @@
 // moment it lands (no per-file edit).
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
-import { stripAnsi } from "./helpers/ansi";
+import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -68,6 +69,34 @@ describe("shipped example configs (examples/*.json5)", () => {
     const out = stripAnsi(await renderExample("demo-variables.json5"));
     expect(out).toContain("📦 cc-candybar · 3 deps");
   });
+
+  // brandon-demo-0iy4: the switcher's load-config links name the demo files
+  // beside the one this session loaded, so a copy of examples/ anywhere — a
+  // second worktree, a checkout outside ~/code — switches between ITS files.
+  test.each(["demo-variables.json5", "demo-actions.json5"])(
+    "%s's switcher links load its siblings wherever the directory is",
+    async (file) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "demo-switcher-"));
+      try {
+        for (const f of ["demo-variables.json5", "demo-actions.json5"]) {
+          fs.copyFileSync(path.join(examplesDir, f), path.join(dir, f));
+        }
+        const target = path.join(dir, file);
+        const loads = linkUrls(
+          expectClean(file, await checkConfig(target)).rendered,
+        )
+          .filter((url) => url.startsWith("cc-candybar://load-config/"))
+          .map((url) => decodeURIComponent(url.split("/").pop() ?? ""));
+        expect(loads).toEqual([
+          "",
+          path.join(dir, "demo-variables.json5"),
+          path.join(dir, "demo-actions.json5"),
+        ]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 // [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "the examples/

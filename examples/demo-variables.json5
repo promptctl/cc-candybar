@@ -391,11 +391,12 @@
     // ── Config switcher ───────────────────────────────────────────────────
     // Three OSC-8 links that send load-config clicks to the daemon.
     // "normal" clears the override (empty path); the other two load each
-    // demo config by absolute path. .home reads process.env.HOME.
+    // demo config by absolute path — the sibling of the file this session
+    // loaded (.config_path), so the links follow whichever checkout it is.
     // [LAW:effects-at-boundaries] the click writes daemon-global state;
     // the render pipeline reads it at the cache-lookup boundary.
     configSwitcher: {
-      template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-variables.json5" .home))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-actions.json5" .home))) "🎬 actions" }} ',
+      template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/demo-variables.json5" (dirname .config_path)))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/demo-actions.json5" (dirname .config_path)))) "🎬 actions" }} ',
       bg: "surface",
     },
   },

@@ -1506,7 +1506,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         compiled,
         store,
         registry,
-        withPayload(checkPayload(effective)),
+        withPayload(checkPayload(effective, null)),
         {
           endcaps: effective.endcaps,
           separator: effective.separator,

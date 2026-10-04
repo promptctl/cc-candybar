@@ -149,7 +149,7 @@ function render(theme: string, calm: boolean, { variation, look }: Variant): str
         key === "theme" ? theme : key === "variation" ? variation : key === "style" ? look : null,
       () => false,
     );
-    const hot = checkPayload(e) as Record<string, Record<string, unknown>>;
+    const hot = checkPayload(e, null) as Record<string, Record<string, unknown>>;
     const payload = calm
       ? Object.fromEntries(
           Object.entries(hot).map(([k, v]) => [
