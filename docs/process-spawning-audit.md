@@ -94,7 +94,7 @@ a new category here — that forces code review of the pattern.
 | Site | Category | Sync/Async | Detached? | Notes |
 |---|---|---|---|---|
 | `src/segments/git.ts` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
-| `src/segments/tmux.ts` (`getSessionId`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. Once per pane per daemon. 2000ms timeout. |
+| `src/segments/tmux.ts` (`getSessionName`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. At most once per pane per 30 s. 2000ms timeout. |
 | `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
 | `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
 | `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |

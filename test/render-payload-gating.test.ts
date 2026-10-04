@@ -91,7 +91,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
       },
     },
     tmuxService: {
-      getSessionId: async () => {
+      getSessionName: async () => {
         counts.tmux++;
         return ABSENT;
       },

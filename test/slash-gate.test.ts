@@ -85,7 +85,7 @@ async function bar(
     activityProvider: { getActivityInfo: async () => ABSENT },
     mementoProvider: { getCeiling: async () => ABSENT },
     tmuxService: {
-      getSessionId: async () => {
+      getSessionName: async () => {
         sessionLookups++;
         return ok("work");
       },

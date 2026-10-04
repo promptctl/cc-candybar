@@ -251,7 +251,7 @@ function depsWith(
     },
     contextProvider: { getContextInfo: async () => ABSENT },
     metricsProvider: { getMetricsInfo: async () => ABSENT },
-    tmuxService: { getSessionId: async () => ABSENT },
+    tmuxService: { getSessionName: async () => ABSENT },
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,

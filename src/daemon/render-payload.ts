@@ -1235,7 +1235,7 @@ export async function buildRenderPayload(
       (): Promise<Outcome<string>> =>
         tmuxPane === null
           ? Promise.resolve(ABSENT)
-          : deps.tmuxService.getSessionId(tmuxPane),
+          : deps.tmuxService.getSessionName(tmuxPane),
     ),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, so it runs alongside the other providers and stays in the shared

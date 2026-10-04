@@ -37,7 +37,7 @@ function depsWith(
     },
     contextProvider: { getContextInfo: async () => ABSENT },
     metricsProvider: { getMetricsInfo: async () => ABSENT },
-    tmuxService: { getSessionId: async () => ABSENT },
+    tmuxService: { getSessionName: async () => ABSENT },
     log: (level: string, msg: string) => logs.push({ level, msg }),
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -283,7 +283,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("ok lanes project values; absent lanes are missing with nothing logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      tmuxService: { getSessionId: async () => ok("main-session") },
+      tmuxService: { getSessionName: async () => ok("main-session") },
       usageStore: {
         getUsageInfo: async () =>
           ok({
@@ -319,7 +319,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
       tmuxService: {
-        getSessionId: async () => {
+        getSessionName: async () => {
           throw new Error("stub bug");
         },
       },
@@ -353,7 +353,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     let asked = 0;
     const deps = depsWith(ABSENT, logs, {
       tmuxService: {
-        getSessionId: async () => {
+        getSessionName: async () => {
           asked++;
           return ok("the-daemons-own-session");
         },
@@ -379,7 +379,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     const asked: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
       tmuxService: {
-        getSessionId: async (hint: unknown) => {
+        getSessionName: async (hint: unknown) => {
           asked.push(hint);
           return ABSENT;
         },
