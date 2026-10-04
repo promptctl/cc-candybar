@@ -35,7 +35,7 @@ import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { autocompactControl } from "./autocompact-control.js";
-import { FORMAT_TOKEN_COUNT } from "./format-token-count.js";
+import { formatTokenCount } from "./format-token-count.js";
 // [LAW:one-source-of-truth] The contrast floor coloured text is held to is the
 // same one the renderer holds chosen text to (textOn).
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
@@ -44,7 +44,10 @@ import { QUIET_TEXT } from "./quiet-text.js";
 // The bundled `commands` segment's instance, under names no user config
 // spells by accident.
 const COMMAND_TRAY = commandTray("commands.");
-const AUTOCOMPACT = autocompactControl("autocompact.");
+const AUTOCOMPACT = autocompactControl(
+  "autocompact.",
+  (n) => `{{ template "formatTokenCount" ${n} }}`,
+);
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -1531,7 +1534,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The single home of the K/M token-scale rule. >=1e6 → "X.YM", >=1e3 → "X.YK",
     // else the integer verbatim (0 and negatives fall through to this arm, exactly
     // as the retired JS did). No " tokens" suffix — that is formatTokens' job.
-    formatTokenCount: FORMAT_TOKEN_COUNT,
+    formatTokenCount: formatTokenCount("."),
     formatTokens: '{{ template "formatTokenCount" . }} tokens',
     // A tool tally — `"Bash:3,Read:1"`, the payload's one encoding for both
     // running and completed tools — read back as `Bash×3 Read`, capped at the

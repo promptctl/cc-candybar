@@ -6,15 +6,20 @@
 // and ↺ hands the window back to `auto`.
 
 import type { ActionDecl } from "./action.js";
-import { FORMAT_TOKEN_COUNT } from "./format-token-count.js";
 import { IN_TMUX } from "./payload-inputs.js";
 import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
 import { slashLine } from "../claude-input/slash-line.js";
 
 // [LAW:locality-or-seam] Instanced under any name prefix, like the command
 // tray: the bundled `autocompact` segment and the settings menu's
-// `candybar.autocompact` are two instances of this one control.
-export function autocompactControl(prefix: string): {
+// `candybar.autocompact` are two instances of this one control. `formatCount`
+// spells the window's token count from a template expression: the bundled
+// instance calls the config's overridable `formatTokenCount` helper, the
+// menu's inlines the rule (src/config/format-token-count.ts).
+export function autocompactControl(
+  prefix: string,
+  formatCount: (n: string) => string,
+): {
   readonly template: string;
   readonly bg: string;
   readonly when: string;
@@ -24,7 +29,7 @@ export function autocompactControl(prefix: string): {
     template:
       '{{ if ne .autocompact.error "" }}⇲ ⚠ {{ .autocompact.error }}{{ else }}' +
       "⇲ {{ if eq .autocompact.window 0 }}auto{{ else }}" +
-      `{{ with .autocompact.applied }}${FORMAT_TOKEN_COUNT}{{ end }}{{ end }}` +
+      `${formatCount(".autocompact.applied")}{{ end }}` +
       // The window reads anywhere; its controls show only where a click has a
       // pane to type into.
       `{{ if ${IN_TMUX} }}` +

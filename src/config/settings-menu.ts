@@ -75,6 +75,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { autocompactControl } from "./autocompact-control.js";
+import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import {
@@ -107,7 +108,10 @@ const TOOLBAR = quickActions(SETTINGS_NS);
 const COMMANDS_SEG = `${SETTINGS_NS}commands`;
 const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 const AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
-const AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`);
+const AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+
+// A reference to one of the menu's segments.
+const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 
 // ─── The tabs (brandon-menu-tabs-wnu.qqz) ───────────────────────────────────
 //
@@ -431,7 +435,7 @@ const controlRef = (name: string): DisclosureRef => ({
 function controlNode(c: MenuControl): LayoutNode {
   const self = controlSeg(c.name);
   return c.control.kind === "inline"
-    ? { kind: "segment", name: self }
+    ? seg(self)
     : disclosureNode(
         self,
         controlRef(c.name),
@@ -439,7 +443,7 @@ function controlNode(c: MenuControl): LayoutNode {
           kind: "container",
           direction: "vertical",
           children: [
-            { kind: "segment", name: controlCarousel(c.name) },
+            seg(controlCarousel(c.name)),
             ...c.beneath.map(
               (_, row): LayoutNode => ({
                 kind: "segment",
@@ -491,7 +495,7 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 // never inherits the author's gate. A gated row is led from outside its gate,
 // on the same line. A gated stack gets the door on its own row above it.
 function prependAnchor(node: LayoutNode): LayoutNode {
-  const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
+  const anchorRef: LayoutNode = seg(SETTINGS_ANCHOR);
   if (node.kind === "container" && node.direction === "vertical") {
     const [first, ...rest] = node.children;
     return node.when === undefined && first !== undefined
@@ -554,7 +558,6 @@ interface TabBody {
   readonly direction: ContainerNode["direction"];
   readonly content: readonly LayoutNode[];
 }
-const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
@@ -617,11 +620,7 @@ function doorBody(): ContainerNode {
       {
         kind: "container",
         direction: "horizontal",
-        children: [
-          { kind: "segment", name: BACK_SEG },
-          ...controlsAt("door"),
-          { kind: "segment", name: SAVE_SEG },
-        ],
+        children: [seg(BACK_SEG), ...controlsAt("door"), seg(SAVE_SEG)],
       },
       {
         kind: "container",

@@ -565,6 +565,27 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     ]);
   });
 
+  // Both instances spell the window by the one K/M rule, and the bundled one
+  // through the config's `formatTokenCount` helper, so an override reaches it
+  // exactly as it reaches the ceiling beside it; a window of 0 still reads.
+  test("the bundled autocompact honours a formatTokenCount override; the menu's keeps the rule", () => {
+    const { render, clickWriting, sink } = buildRuntime(
+      `{ helpers: { formatTokenCount: "{{ . }} tok" }, root: { h: ['autocompact'] } }`,
+      DEFAULT_DSL_CONFIG,
+      {
+        ...PAYLOAD,
+        autocompact: { window: 300_000, applied: 0, lower: 0, higher: 0, error: "" },
+      },
+    );
+    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    render();
+    const plain = (name: string): string =>
+      sink.get(name)!.map((c) => c.plain).join("");
+    expect(plain("autocompact")).toContain("⇲ 0 tok");
+    expect(plain("candybar.autocompact")).toContain("⇲ 0");
+    expect(plain("candybar.autocompact")).not.toContain("tok");
+  });
+
   test("closing the menu folds everything in it: reopening finds it as a fresh session does", () => {
     const { render, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
