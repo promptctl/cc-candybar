@@ -34,9 +34,19 @@ import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
+  resolveOptionDomain,
+  type ResolvedDomain,
 } from "../option-domain.js";
-import { listGlobalsFieldNames } from "./globals.js";
-import { CONFIG_ONLY_KEYS } from "../setting-projections.js";
+import { listGlobalsFieldNames, settingControlDomain } from "./globals.js";
+import {
+  CONFIG_ONLY_KEYS,
+  SESSION_KEY_TO_SETTING,
+  SETTINGS,
+} from "../setting-projections.js";
+import {
+  controlDomainAdmits,
+  describeControlDomain,
+} from "../setting-control.js";
 import {
   isExpression,
   isEndcaps,
@@ -210,6 +220,43 @@ export function validateCrossReferences(
         line: findKeyLine(ctx.source, ["actions", name, "from"]),
       });
     }
+  }
+  // [LAW:no-silent-failure] A `set` on a setting's session key writes a pick
+  // the render resolves only when it is a member of that setting's domain —
+  // any other value derives a gate that admits it and a click that changes
+  // nothing (brandon-config-dovk). Every value such a set can write is known
+  // at load, so each is checked against the domain the setting's menu control
+  // is generated from. A `from` naming an unknown domain was reported above.
+  for (const [name, a] of Object.entries(cfg.actions)) {
+    if (!("set" in a)) continue;
+    const setting = SESSION_KEY_TO_SETTING.get(a.set);
+    if (setting === undefined) continue;
+    if (
+      "from" in a &&
+      typeof a.from === "string" &&
+      !knownOptionDomainNames(optionDomains).includes(a.from)
+    )
+      continue;
+    const domain = settingControlDomain(SETTINGS[setting].configKey);
+    const [field, values] = setWrites(a, optionDomains);
+    const outside = values.filter(
+      (v) => !controlDomainAdmits(domain, v, optionDomains),
+    );
+    if (outside.length === 0) continue;
+    const where = `actions.${name}.${field}`;
+    const value = outside[0]!;
+    ctx.issues.push({
+      path: where,
+      message:
+        a.set === SETTINGS.style.sessionKey && isEndcaps(value)
+          ? endcapsNameMessage(
+              where,
+              value,
+              `set: "${SETTINGS.endcaps.sessionKey}", ${field}`,
+            )
+          : `${where}: ${outside.map((v) => JSON.stringify(v)).join(", ")} is outside the ${a.set} domain — a click would write it and nothing would change; ${a.set} takes ${describeControlDomain(domain, optionDomains)}`,
+      line: findKeyLine(ctx.source, ["actions", name, field]),
+    });
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged
   // action table, like every other action reference. Two shapes are refused
@@ -1038,4 +1085,21 @@ function checkHelperIssue(
     message,
     line: findKeyLine(ctx.source, ["helpers", helper]),
   });
+}
+
+// [LAW:types-are-the-program] Every value a `set` can write, as known at load,
+// with the field that states them: a literal its one value, a cycle its
+// members, an option domain its members, a stepper its two ends (a range
+// holds every integer between them). An `int` cursor writes whatever integer
+// the template binds, so nothing about it is known here.
+function setWrites(
+  a: Extract<ActionDecl, { readonly set: string }>,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): readonly [string, readonly string[]] {
+  if ("to" in a) return ["to", [a.to]];
+  if ("cycle" in a) return ["cycle", a.cycle];
+  if ("from" in a)
+    return ["from", resolveOptionDomain(a.from, optionDomains).members];
+  if ("min" in a) return ["min", [String(a.min), String(a.max)]];
+  return ["int", []];
 }

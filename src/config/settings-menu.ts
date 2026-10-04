@@ -83,7 +83,7 @@ import {
 } from "./setting-projections.js";
 import { synthesisInputs } from "./synthesis-inputs.js";
 import { BOOLEAN_TRUE } from "../themes/policy.js";
-import { globalsControlDomain } from "./loader/globals.js";
+import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
@@ -285,22 +285,16 @@ interface MenuControl extends SettingProjection {
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
 // shape — a toggle, a stepper, a picker — decided by the domain the loader
-// declares for the field beside its spec (`globalsControlDomain`), through the
+// declares for the field beside its spec (`settingControlDomain`), through the
 // same generator configure mode uses for a placement's settings. Every apply
 // action is a session `set`: a draft until the save cell commits it.
-//
-// [LAW:no-silent-failure] A row naming a field no control shape fits is a
-// programming error, refused the moment this module loads.
+// A row naming a field no control shape fits is refused the moment this
+// module loads (`settingControlDomain`).
 const CONTROLS: readonly MenuControl[] = (
   Object.keys(SETTINGS) as SettingName[]
 ).map((name) => {
   const row: SettingProjection = SETTINGS[name];
-  const domain = globalsControlDomain(row.configKey);
-  if (domain === "text") {
-    throw new Error(
-      `settings menu: globals.${row.configKey} is free text, which no control can change — list it in UNCONTROLLED_GLOBALS instead of SETTINGS`,
-    );
-  }
+  const domain = settingControlDomain(row.configKey);
   const control = settingControl(
     { label: row.label, domain },
     row.sessionKey,

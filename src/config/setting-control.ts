@@ -25,7 +25,12 @@ import type {
   SettingRange,
   VariableDecl,
 } from "./dsl-types.js";
-import { PLACEMENT_THEMES, type OptionDomain } from "./option-domain.js";
+import {
+  PLACEMENT_THEMES,
+  resolveOptionDomain,
+  type OptionDomain,
+  type ResolvedDomain,
+} from "./option-domain.js";
 import { BOOLEAN_MEMBERS } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] What a control can range: a flag, a bounded
@@ -64,6 +69,40 @@ export interface PickerList {
 export type Affordance =
   | (AffordanceParts & { readonly kind: "inline" })
   | (AffordanceParts & { readonly kind: "picker"; readonly list: PickerList });
+
+// [LAW:one-source-of-truth] Whether a control's domain holds `value`, spelled
+// as SessionState spells it — the test the render's session parse applies, so
+// the loader refuses exactly the literal writes a pick would ignore. Named
+// option domains resolve through the one resolveOptionDomain, with this
+// config's own domains (styles, presets) threaded in as data.
+export function controlDomainAdmits(
+  domain: ControlDomain,
+  value: string,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): boolean {
+  if (domain === "bool") return BOOLEAN_MEMBERS.some((m) => m === value);
+  if ("from" in domain) {
+    return resolveOptionDomain(domain.from, perConfigDomains).members.includes(
+      value,
+    );
+  }
+  if (!/^-?\d+$/.test(value)) return false;
+  const n = Number(value);
+  return n >= domain.min && n <= domain.max;
+}
+
+// How a control's domain reads in a message.
+export function describeControlDomain(
+  domain: ControlDomain,
+  perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+): string {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if ("from" in domain) {
+    const { members } = resolveOptionDomain(domain.from, perConfigDomains);
+    return `one of ${members.map((m) => JSON.stringify(m)).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
 
 // A placement setting's declaration as a control: a word list is an inline
 // option domain, and the placement's theme ranges the placement themes.

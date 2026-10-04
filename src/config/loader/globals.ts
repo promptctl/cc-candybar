@@ -205,6 +205,19 @@ export function globalsControlDomain(
   return GLOBALS[field].domain;
 }
 
+// [LAW:no-silent-failure] The domain of a setting the bar controls. A
+// SETTINGS row naming a free-text field is a programming error, refused here —
+// the one place the settings menu and the loader's action check both read it.
+export function settingControlDomain(field: keyof Globals): ControlDomain {
+  const domain = globalsControlDomain(field);
+  if (domain === "text") {
+    throw new Error(
+      `globals.${field} is free text, which no control can change — list it in UNCONTROLLED_GLOBALS instead of SETTINGS`,
+    );
+  }
+  return domain;
+}
+
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
 // config's own globals at render time — may not carry `preset`: which preset is
 // active has exactly one authority (session pick over globals.preset over the
