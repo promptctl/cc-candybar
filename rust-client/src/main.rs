@@ -517,14 +517,34 @@ fn detect_claude_config_dir(cwd: &std::path::Path) -> Option<String> {
 
 // [LAW:dataflow-not-control-flow] Total by construction, like
 // detect_config_env: unset, empty, or a blank first entry is the default
-// directory (`None`). `join` keeps an absolute entry as it is.
+// directory (`None`).
 fn claude_config_dir_hint(raw: Option<String>, cwd: &std::path::Path) -> Option<String> {
     let raw = raw?;
     let first = raw.split(',').next().unwrap_or("").trim();
     if first.is_empty() {
         return None;
     }
-    Some(cwd.join(first).to_string_lossy().into_owned())
+    Some(resolve_against(cwd, first))
+}
+
+// [LAW:one-source-of-truth] Node's `path.resolve(cwd, value)`, which both TS
+// hints above are spelled with: an absolute value stands as it is, a relative
+// one is joined to `cwd`, and the result is normalised lexically — `.`, a
+// repeated or trailing separator, and `..` (which pops, stopping at the root)
+// — so the two runtimes report one string for one environment.
+fn resolve_against(cwd: &std::path::Path, value: &str) -> String {
+    use std::path::Component;
+    let mut resolved = std::path::PathBuf::new();
+    for component in cwd.join(value).components() {
+        match component {
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::CurDir => {}
+            other => resolved.push(other),
+        }
+    }
+    resolved.to_string_lossy().into_owned()
 }
 
 // The variables that move where the memento plugin keeps its ceiling layers —
@@ -552,7 +572,7 @@ fn memento_env_hint(
         .iter()
         .filter_map(|name| {
             let value = raw(name).filter(|v| !v.is_empty())?;
-            let absolute = cwd.join(value).to_string_lossy().into_owned();
+            let absolute = resolve_against(cwd, &value);
             Some((name.to_string(), serde_json::Value::from(absolute)))
         })
         .collect::<serde_json::Map<String, serde_json::Value>>()
@@ -1106,6 +1126,7 @@ mod tests {
         assert_eq!(hint(Some("/home/u/.claude-work")), Some("/home/u/.claude-work".into()));
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
         assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
+        assert_eq!(hint(Some("../x/./y/")), Some("/work/x/y".into()));
     }
 
     // The same table as test/memento-hint.test.ts.
@@ -1131,6 +1152,14 @@ mod tests {
         assert_eq!(
             hint(Some("/m"), Some("cfg")),
             serde_json::json!({ "MEMENTO_CONFIG_HOME": "/m", "XDG_CONFIG_HOME": "/work/proj/cfg" })
+        );
+        assert_eq!(
+            hint(Some("./m/"), Some("../cfg//x/.")),
+            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/work/proj/m", "XDG_CONFIG_HOME": "/work/cfg/x" })
+        );
+        assert_eq!(
+            hint(Some("/m/../../.."), None),
+            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/" })
         );
     }
 

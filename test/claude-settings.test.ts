@@ -22,6 +22,7 @@ test("the first entry, absolute against the client's cwd; blank is the default",
   expect(hint("/home/u/.claude-work")).toBe("/home/u/.claude-work");
   expect(hint(" /a , /b")).toBe("/a");
   expect(hint(".claude-work")).toBe("/work/proj/.claude-work");
+  expect(hint("../x/./y/")).toBe("/work/x/y");
 });
 
 test("the daemon takes only an absolute directory; none is ~/.claude", () => {

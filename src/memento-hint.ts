@@ -9,8 +9,10 @@
 // reader and `ceiling` command in place of its own (src/memento/edge.ts).
 //
 // [LAW:one-source-of-truth] Memento owns the rule that folds these into its
-// config home (its lib/ceiling_config.py), so they cross RAW, by name; nothing
-// here resolves a directory from them. The names are mirrored by the Rust
+// config home (its lib/ceiling_config.py), so they cross by name, unfolded;
+// nothing here derives that home from them. The one thing done to a value is
+// anchoring a relative one to the client's cwd, which the daemon's spawn does
+// not stand in. The names are mirrored by the Rust
 // client (rust-client/src/main.rs, MEMENTO_ENV_VARS) and diffed by
 // scripts/check-protocol.mjs, which anchors on the declaration below.
 import path from "node:path";

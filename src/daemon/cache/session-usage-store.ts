@@ -107,6 +107,11 @@ interface DayUsage {
   cacheRead: number;
 }
 
+interface DirectorySeed {
+  readonly scan: Promise<void>;
+  readonly sessions: Set<string>;
+}
+
 interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
   // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
@@ -300,11 +305,14 @@ export class SessionUsageStore {
   // not a cache — the records map IS the cache).
   private readonly flight = new SingleFlight();
   // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
-  // per Claude Code directory a session's client has reported (keyed by
-  // seedKey). Unlike SingleFlight this RETAINS the resolved promise, so after a
-  // directory's seed completes every later read awaits an already-settled
-  // promise — zero rescan. A rejected seed is dropped so the next read retries.
-  private readonly seeded = new Map<string, Promise<void>>();
+  // per set of Claude Code directories a session's client resolves to (keyed
+  // by the directories themselves, so the default and its explicit spelling
+  // share a scan). Unlike SingleFlight this RETAINS the resolved promise, so
+  // after a seed completes every later read awaits an already-settled promise
+  // — zero rescan. A rejected seed is dropped so the next read retries.
+  // `sessions` is whose `today` it is: the sessions the scan found there plus
+  // every session that rendered from there since.
+  private readonly seeded = new Map<string, DirectorySeed>();
   private seededDay = "";
   // [LAW:one-source-of-truth] The recent tok/s observations per session, a
   // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
@@ -393,16 +401,18 @@ export class SessionUsageStore {
   // makes the whole projection `failed` — a total silently missing today's
   // main work would be a confident wrong number, worse than a loud gap.
   //
-  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint: its
-  // directory is seeded on first sight, so the sum spans every directory a
-  // session has reported today — the daemon's own env names none of them.
+  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
+  // the sum is over the sessions of THAT directory — the daemon's own env names
+  // none. [LAW:no-ambient-temporal-coupling] A sum over every directory seen so
+  // far would move with which other sessions happened to have rendered.
   async getTodayInfo(
     hookData: ClaudeHookData | undefined,
     claudeConfigDir: string | undefined,
   ): Promise<Outcome<TodayInfo>> {
     const today = dayKey(new Date());
+    let sessions: Set<string>;
     try {
-      await this.ensureSeeded(today, claudeConfigDir);
+      sessions = await this.ensureSeeded(today, claudeConfigDir);
     } catch (error) {
       return failed(
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
@@ -416,12 +426,14 @@ export class SessionUsageStore {
       hookData?.transcript_path,
     );
     if (active.kind === "failed") return active;
+    sessions.add(hookData?.session_id ?? "");
 
     const total: DayUsage = { ...EMPTY_DAY };
     let any = false;
-    for (const record of this.entries.values()) {
-      any = any || record.days.has(today);
-      const d = record.days.get(today) ?? EMPTY_DAY;
+    for (const sessionId of sessions) {
+      const days = this.entries.get(sessionId)?.days;
+      any = any || (days?.has(today) ?? false);
+      const d = days?.get(today) ?? EMPTY_DAY;
       total.cost += d.cost;
       total.input += d.input;
       total.output += d.output;
@@ -630,30 +642,33 @@ export class SessionUsageStore {
   private ensureSeeded(
     day: string,
     claudeConfigDir: string | undefined,
-  ): Promise<void> {
+  ): Promise<Set<string>> {
     // Drop other days' memos so the map holds only the current day's.
     if (this.seededDay !== day) {
       this.seeded.clear();
       this.seededDay = day;
     }
-    // "" is the default directory: a reported one is an absolute path.
-    const key = claudeConfigDir ?? "";
+    const claudePaths = getClaudePaths(claudeConfigDir);
+    const key = claudePaths.join("\0");
     const existing = this.seeded.get(key);
-    if (existing) return existing;
-    const promise = this.seed(claudeConfigDir);
-    this.seeded.set(key, promise);
-    promise.catch(() => {
-      if (this.seeded.get(key) === promise) this.seeded.delete(key);
+    if (existing) return existing.scan.then(() => existing.sessions);
+    const sessions = new Set<string>();
+    const seed = { scan: this.seed(claudePaths, sessions), sessions };
+    this.seeded.set(key, seed);
+    seed.scan.catch(() => {
+      if (this.seeded.get(key) === seed) this.seeded.delete(key);
     });
-    return promise;
+    return seed.scan.then(() => sessions);
   }
 
   // The one and only whole-tree scan: lazily, once per day and Claude Code
   // directory, ingest every session whose transcript was touched recently
-  // enough to hold a today entry.
-  private async seed(claudeConfigDir: string | undefined): Promise<void> {
+  // enough to hold a today entry, naming each in `sessions`.
+  private async seed(
+    claudePaths: string[],
+    sessions: Set<string>,
+  ): Promise<void> {
     const cutoff = seedCutoffMs();
-    const claudePaths = getClaudePaths(claudeConfigDir);
     const projectPaths = await findProjectPaths(claudePaths);
     const candidates: Array<{
       sessionId: string;
@@ -690,6 +705,7 @@ export class SessionUsageStore {
     // driven, no render boundary to carry the outcome to), so its per-session
     // parse failures are logged here.
     await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+      sessions.add(c.sessionId);
       const outcome = await this.ingest(c.sessionId, c.path, c.mtime);
       if (outcome.kind === "failed") {
         dlog("warn", `usageStore seed: ${outcome.reason}`);

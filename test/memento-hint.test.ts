@@ -20,6 +20,11 @@ test("the client reports each variable its environment sets, absolute against it
     MEMENTO_CONFIG_HOME: "/m",
     XDG_CONFIG_HOME: "/work/proj/cfg",
   });
+  expect(hint("./m/", "../cfg//x/.")).toEqual({
+    MEMENTO_CONFIG_HOME: "/work/proj/m",
+    XDG_CONFIG_HOME: "/work/cfg/x",
+  });
+  expect(hint("/m/../../..")).toEqual({ MEMENTO_CONFIG_HOME: "/" });
 });
 
 test("the checkpoint keeps the three wire states apart and refuses a malformed hint whole", () => {

@@ -256,8 +256,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
   // brandon-client-hints-7ua: the seed scans the directory each session's
   // client reported, never the daemon's own CLAUDE_CONFIG_DIR (test/setup.ts
-  // points that at an empty one), and `today` sums every directory seen.
-  test("a second session's directory is seeded on first sight and joins the sum", async () => {
+  // points that at an empty one), and `today` is the rendering session's own
+  // directory, whichever other directories have been seen.
+  test("a second session's directory is seeded on first sight and keeps its own sum", async () => {
     clearParseCache();
     const other = mkdtempSync(join(tmpdir(), "cc-candybar-store-other-"));
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
@@ -272,9 +273,11 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const first = await store.getTodayInfo(hook("sess-0-0", activePath), root);
       expect(first.kind === "ok" && first.value.cost).toBeCloseTo(all, 5);
       const second = await store.getTodayInfo(hook("other-0", opath), other);
-      expect(second.kind === "ok" && second.value.cost).toBeCloseTo(all + 12, 5);
-      // Each directory is scanned once; a later render of either re-scans none.
-      await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      expect(second.kind === "ok" && second.value.cost).toBeCloseTo(12, 5);
+      // Each directory is scanned once; a later render of either re-scans none
+      // and reads the sum it read before the other was seen.
+      const again = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      expect(again.kind === "ok" && again.value.cost).toBeCloseTo(all, 5);
       expect(store.getStats().seeds).toBe(2);
     } finally {
       store.close();
