@@ -33,7 +33,7 @@ export function fragmentsToCells(
   baseStyle?: Style,
 ): RichText[] {
   const cells: RichText[] = [];
-  let group: RichText[] = [];
+  let group: Resolved[] = [];
 
   const flush = () => {
     if (!group.length) return;
@@ -46,13 +46,15 @@ export function fragmentsToCells(
     // Resolved, not `frag.style.link`: a string style has a `.link` too —
     // String.prototype.link, a function, which is always truthy — and a style
     // function over a named base keeps the link in a LayeredStyle until a
-    // theme says what the name stands for.
-    if (resolvedStyle(frag.style).link) {
+    // theme says what the name stands for. Resolved once: the base merge
+    // below reads the same Style.
+    const item: Resolved = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
       flush();
-      const cell = buildCell([frag], baseStyle);
+      const cell = buildCell([item], baseStyle);
       if (cell.plain.length > 0) cells.push(cell);
     } else {
-      group.push(frag);
+      group.push(item);
     }
   }
   flush();
@@ -60,7 +62,13 @@ export function fragmentsToCells(
   return cells;
 }
 
-function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
+// A fragment beside the Style its stored style resolves to.
+interface Resolved {
+  readonly frag: RichText;
+  readonly style: Style;
+}
+
+function buildCell(items: Resolved[], baseStyle?: Style): RichText {
   // [LAW:types-are-the-program] Each fragment carries its own style (and
   // possibly spans). We merge baseStyle UNDER each fragment's style before
   // assembling so the segment-wide default flows through every character,
@@ -69,8 +77,8 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
   // are addressable as overlays.
   const layered =
     baseStyle !== undefined && !baseStyle.isNull
-      ? fragments.map((f) => withBaseStyle(f, baseStyle))
-      : fragments;
+      ? items.map((item) => withBaseStyle(item, baseStyle))
+      : items.map((item) => item.frag);
   const cell = RichText.fromFragments(layered);
   cell.end = "";
   cell.overflow = "ignore";
@@ -87,9 +95,9 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
   return cell;
 }
 
-function withBaseStyle(f: RichText, base: Style): RichText {
-  const copy = f.copy();
-  copy.style = base.add(resolvedStyle(f.style));
+function withBaseStyle(item: Resolved, base: Style): RichText {
+  const copy = item.frag.copy();
+  copy.style = base.add(item.style);
   return copy;
 }
 
