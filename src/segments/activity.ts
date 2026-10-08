@@ -1,6 +1,6 @@
 // What Claude is DOING, folded from the transcript (brandon-activity-ue7).
 //
-// Three facts, one record: the slash command that opened the current turn, the
+// Facts, one record: the lit ticket the session is working, the slash command that opened the current turn, the
 // todo list, and the tools in flight plus the ones that finished this turn.
 // They are the only class of fact the payload had no shape for — everything else
 // it carries is a quantity.
@@ -23,6 +23,12 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
+import type {
+  EntryLit,
+  LitClaim,
+  LitEpic,
+  LitSaid,
+} from "../utils/transcript-lit";
 import { TranscriptFold } from "../utils/transcript-fold";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
@@ -40,6 +46,7 @@ export interface ToolTally {
 // shape because they are one question asked at two moments, so one encoder and
 // one template helper serve both.
 export interface ActivityInfo {
+  readonly ticket: WorkTicket | null;
   readonly command: string | null;
   readonly todos: readonly TodoItem[];
   readonly running: readonly ToolTally[];
@@ -49,14 +56,89 @@ export interface ActivityInfo {
 // The fold state differs from the report in exactly one way: it keeps tool ids,
 // because pairing a `tool_result` to its call is the only thing they are for.
 // Reporting tallies them away, so no id crosses the payload seam.
-interface ActivityState {
+interface ActivityState extends TicketState {
   readonly command: string | null;
   readonly todos: readonly TodoItem[];
   readonly pending: readonly ToolCall[];
   readonly done: readonly ToolTally[];
 }
 
+// The lit ticket this session started, where its workflow is, and its epic's
+// progress as lit last printed it (null until a lit command reports it). Not
+// per-turn: it holds until the session starts another ticket or closes it.
+export interface WorkTicket {
+  readonly id: string;
+  readonly phase: string;
+  readonly epic: LitEpic | null;
+  // The newest `lit:state` line this reader could not parse — lit's format and
+  // this reader disagree, which the bar says rather than hiding the epic.
+  readonly unread: string | null;
+}
+
+interface TicketState {
+  readonly ticket: WorkTicket | null;
+  // Every lit start/done/close whose result has not come back yet — parallel
+  // calls are common, so each waits for its own result.
+  readonly claims: readonly LitClaim[];
+}
+
+// One settled claim onto the ticket: lit's own words in that call's result
+// accept it or not — an accepted start replaces the ticket (keeping the epic
+// when it is the same ticket again), an accepted close of the ticket in hand
+// clears it, anything else changes nothing.
+function settle(
+  ticket: WorkTicket | null,
+  claim: LitClaim,
+  said: readonly LitSaid[],
+): WorkTicket | null {
+  const accepted = said.some(
+    (s) => s.call === claim.call && s.id === claim.id && s.status === claim.to,
+  );
+  if (!accepted) return ticket;
+  if (claim.to === "closed") return ticket?.id === claim.id ? null : ticket;
+  return {
+    id: claim.id,
+    phase: "prep",
+    epic: ticket?.id === claim.id ? ticket.epic : null,
+    unread: null,
+  };
+}
+
+// [LAW:dataflow-not-control-flow] A lit start/done/close is a claim that its
+// own result settles (see `settle`), in the order the calls were made. A phase
+// moves the ticket in hand; a sentinel about it updates its epic. Before any
+// accepted start there is no ticket for a phase or sentinel to land on.
+function stepTicket(
+  state: TicketState,
+  lit: EntryLit | undefined,
+  finished: readonly string[],
+): TicketState {
+  const open = [...state.claims, ...(lit?.claims ?? [])];
+  const done = (c: LitClaim): boolean => finished.includes(c.call);
+  const held = open
+    .filter(done)
+    .reduce((t, c) => settle(t, c, lit?.said ?? []), state.ticket);
+  const claims = open.filter((c) => !done(c));
+  if (held === null || lit === undefined) return { claims, ticket: held };
+  const sentinels = lit.sentinels ?? [];
+  const sentinel = sentinels.findLast(
+    (s) => s.kind === "state" && s.id === held.id,
+  );
+  const unread = sentinels.findLast((s) => s.kind === "unreadable");
+  return {
+    claims,
+    ticket: {
+      id: held.id,
+      phase: lit.phase ?? held.phase,
+      epic: sentinel?.kind === "state" ? sentinel.epic : held.epic,
+      unread: unread?.kind === "unreadable" ? unread.line : held.unread,
+    },
+  };
+}
+
 const EMPTY: ActivityState = {
+  ticket: null,
+  claims: [],
   command: null,
   todos: [],
   pending: [],
@@ -113,11 +195,13 @@ function step(state: ActivityState, entry: ParsedEntry): ActivityState {
     pending,
     done,
     todos: activity.todos ?? turn.todos,
+    ...stepTicket(turn, activity.lit, activity.finished ?? []),
   };
 }
 
 function report(state: ActivityState): ActivityInfo {
   return {
+    ticket: state.ticket,
     command: state.command,
     todos: state.todos,
     running: state.pending.reduce<readonly ToolTally[]>(

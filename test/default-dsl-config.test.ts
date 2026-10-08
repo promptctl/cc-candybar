@@ -151,6 +151,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "host",
         "directory",
         "gitaculous",
+        // When-gated on the session having run `lit start`, so it is absent
+        // outside lit-tracked work (brandon-lit-widget-3xo.btb).
+        "ticket",
         "model",
         "context",
         // Nested with `context` as one cell unit, when-gated on memento being
