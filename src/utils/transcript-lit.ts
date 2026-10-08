@@ -79,8 +79,9 @@ const LIT_START = new RegExp(`${SH}lit\\s+start\\s+([A-Za-z0-9][\\w.-]*)`);
 
 // A started ticket enters at `prep` (see `stepTicket`), so no rule names it.
 export function phaseOf(call: ToolSubject): string | undefined {
-  return WORK_PHASES.find((r) => r.tool === call.tool && r.match.test(call.subject))
-    ?.phase;
+  return WORK_PHASES.find(
+    (r) => r.tool === call.tool && r.match.test(call.subject),
+  )?.phase;
 }
 
 export function startedTicket(call: ToolSubject): string | undefined {
