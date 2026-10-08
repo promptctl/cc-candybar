@@ -1,3 +1,10 @@
+# [1.117.0](https://github.com/promptctl/cc-candybar/compare/v1.116.1...v1.117.0) (2026-10-08)
+
+
+### Features
+
+* **segments:** show the lit ticket this session is working, its phase and epic progress ([#317](https://github.com/promptctl/cc-candybar/issues/317)) ([01bcfef](https://github.com/promptctl/cc-candybar/commit/01bcfefbb6575bcbe5cd599ea22d7e911cd049e4))
+
 ## [1.116.1](https://github.com/promptctl/cc-candybar/compare/v1.116.0...v1.116.1) (2026-10-04)
 
 
