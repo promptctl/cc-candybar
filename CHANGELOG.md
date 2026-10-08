@@ -1,3 +1,10 @@
+## [1.117.1](https://github.com/promptctl/cc-candybar/compare/v1.117.0...v1.117.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **render:** read a fragment's style through the render's theme on rich-js 0.19.0 ([#316](https://github.com/promptctl/cc-candybar/issues/316)) ([ec9e56d](https://github.com/promptctl/cc-candybar/commit/ec9e56dab1567780f93a4e4b48a5c090b568eda8))
+
 # [1.117.0](https://github.com/promptctl/cc-candybar/compare/v1.116.1...v1.117.0) (2026-10-08)
 
 
