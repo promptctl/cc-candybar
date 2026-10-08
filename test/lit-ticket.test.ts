@@ -238,6 +238,27 @@ describe("the ticket a session is working", () => {
     expect(t?.id).toBe("t-1");
   });
 
+  test("parallel lit calls each settle on their own result", async () => {
+    const a = bash("lit start a-1");
+    const aCall = lastCall;
+    const t = await ticketOf(
+      a,
+      bash("lit start b-2"),
+      result("error (code=1): claimed here: /elsewhere"),
+      JSON.stringify({
+        timestamp: "2023-11-14T22:13:20.000Z",
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: aCall, content: "a-1 [in_progress/bug/x/normal] A" },
+          ],
+        },
+      }),
+    );
+    expect(t?.id).toBe("a-1");
+  });
+
   test("flags may sit between `lit start` and the id", async () => {
     const t = await ticketOf(start("lit start --take t-9"));
     expect(t?.id).toBe("t-9");

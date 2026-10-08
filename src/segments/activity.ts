@@ -23,7 +23,12 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
-import type { EntryLit, LitClaim, LitEpic } from "../utils/transcript-lit";
+import type {
+  EntryLit,
+  LitClaim,
+  LitEpic,
+  LitSaid,
+} from "../utils/transcript-lit";
 import { TranscriptFold } from "../utils/transcript-fold";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
@@ -72,50 +77,56 @@ export interface WorkTicket {
 
 interface TicketState {
   readonly ticket: WorkTicket | null;
-  // The newest lit start/done/close whose result has not come back yet.
-  readonly claim: LitClaim | null;
+  // Every lit start/done/close whose result has not come back yet — parallel
+  // calls are common, so each waits for its own result.
+  readonly claims: readonly LitClaim[];
 }
 
-// [LAW:dataflow-not-control-flow] A lit start/done/close is a claim; lit's own
-// words in that call's result settle it — an accepted start replaces the ticket
-// (keeping the epic when it is the same ticket again), an accepted close of the
-// ticket in hand clears it, and anything else drops the claim. A phase moves
-// the ticket in hand; a sentinel about it updates its epic. Before any accepted
-// start there is no ticket for a phase or sentinel to land on.
+// One settled claim onto the ticket: lit's own words in that call's result
+// accept it or not — an accepted start replaces the ticket (keeping the epic
+// when it is the same ticket again), an accepted close of the ticket in hand
+// clears it, anything else changes nothing.
+function settle(
+  ticket: WorkTicket | null,
+  claim: LitClaim,
+  said: readonly LitSaid[],
+): WorkTicket | null {
+  const accepted = said.some(
+    (s) => s.call === claim.call && s.id === claim.id && s.status === claim.to,
+  );
+  if (!accepted) return ticket;
+  if (claim.to === "closed") return ticket?.id === claim.id ? null : ticket;
+  return {
+    id: claim.id,
+    phase: "prep",
+    epic: ticket?.id === claim.id ? ticket.epic : null,
+    unread: null,
+  };
+}
+
+// [LAW:dataflow-not-control-flow] A lit start/done/close is a claim that its
+// own result settles (see `settle`), in the order the calls were made. A phase
+// moves the ticket in hand; a sentinel about it updates its epic. Before any
+// accepted start there is no ticket for a phase or sentinel to land on.
 function stepTicket(
   state: TicketState,
   lit: EntryLit | undefined,
   finished: readonly string[],
 ): TicketState {
-  const claim = lit?.claim ?? state.claim;
-  const settled = claim !== null && finished.includes(claim.call);
-  const accepted =
-    settled &&
-    (lit?.said ?? []).some(
-      (s) =>
-        s.call === claim.call && s.id === claim.id && s.status === claim.to,
-    );
-  const held: WorkTicket | null = !accepted
-    ? state.ticket
-    : claim.to === "closed"
-      ? state.ticket?.id === claim.id
-        ? null
-        : state.ticket
-      : {
-          id: claim.id,
-          phase: "prep",
-          epic: state.ticket?.id === claim.id ? state.ticket.epic : null,
-          unread: null,
-        };
-  const next = { claim: settled ? null : claim };
-  if (held === null || lit === undefined) return { ...next, ticket: held };
+  const open = [...state.claims, ...(lit?.claims ?? [])];
+  const done = (c: LitClaim): boolean => finished.includes(c.call);
+  const held = open
+    .filter(done)
+    .reduce((t, c) => settle(t, c, lit?.said ?? []), state.ticket);
+  const claims = open.filter((c) => !done(c));
+  if (held === null || lit === undefined) return { claims, ticket: held };
   const sentinels = lit.sentinels ?? [];
   const sentinel = sentinels.findLast(
     (s) => s.kind === "state" && s.id === held.id,
   );
   const unread = sentinels.findLast((s) => s.kind === "unreadable");
   return {
-    ...next,
+    claims,
     ticket: {
       id: held.id,
       phase: lit.phase ?? held.phase,
@@ -127,7 +138,7 @@ function stepTicket(
 
 const EMPTY: ActivityState = {
   ticket: null,
-  claim: null,
+  claims: [],
   command: null,
   todos: [],
   pending: [],

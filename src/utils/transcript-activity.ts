@@ -114,7 +114,7 @@ export function entryActivity(
   // shapes cannot end up under two different rules.
   let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
-  let claim: LitClaim | undefined;
+  const claims: LitClaim[] = [];
   const said: LitSaid[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
@@ -131,7 +131,8 @@ export function entryActivity(
           if (typeof id !== "string" || typeof name !== "string") break;
           started.push({ id, name });
           const call = toolSubject(name, b.input);
-          claim = litClaim(id, call) ?? claim;
+          const claim = litClaim(id, call);
+          if (claim !== undefined) claims.push(claim);
           phase = phaseOf(call) ?? phase;
           // The todo list rides its own tool call's input. A later block in the
           // same entry supersedes an earlier one: it is the newer state.
@@ -160,13 +161,13 @@ export function entryActivity(
 
   const command = isUser ? slashCommand(turnText) : undefined;
   const lit: EntryLit | undefined =
-    claim === undefined &&
+    claims.length === 0 &&
     phase === undefined &&
     sentinels.length === 0 &&
     said.length === 0
       ? undefined
       : {
-          ...(claim !== undefined && { claim }),
+          ...(claims.length > 0 && { claims }),
           ...(phase !== undefined && { phase }),
           ...(sentinels.length > 0 && { sentinels }),
           ...(said.length > 0 && { said }),

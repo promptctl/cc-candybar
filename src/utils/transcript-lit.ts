@@ -53,7 +53,7 @@ export interface LitSaid {
 // [LAW:types-are-the-program] Independently optional, like `EntryActivity`: one
 // entry can make a claim, name a phase, and carry lit's answers at once.
 export interface EntryLit {
-  readonly claim?: LitClaim;
+  readonly claims?: readonly LitClaim[];
   readonly said?: readonly LitSaid[];
   readonly phase?: string;
   readonly sentinels?: readonly LitSentinel[];
