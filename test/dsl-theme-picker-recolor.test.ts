@@ -34,7 +34,7 @@ import {
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveThemeSelection } from "../src/themes";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";

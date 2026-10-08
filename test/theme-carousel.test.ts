@@ -15,7 +15,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";

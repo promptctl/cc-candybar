@@ -11,7 +11,7 @@
 import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
 

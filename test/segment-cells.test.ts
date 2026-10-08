@@ -6,7 +6,7 @@ import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
 import { RichText, Style } from "@promptctl/rich-js";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { stripAnsi } from "./helpers/ansi";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };

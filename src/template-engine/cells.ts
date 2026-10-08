@@ -12,8 +12,8 @@
 // character styling via spans, and every layout op (truncate / align /
 // pad / slice) preserves spans by construction.
 
-import { RichText, type Style, type TextStyle } from "@promptctl/rich-js";
-import { RENDER_THEME } from "../render/rich-theme.js";
+import { RichText, type Style } from "@promptctl/rich-js";
+import { resolvedStyle } from "../render/rich-theme.js";
 
 /**
  * Convert template-engine fragments (`RichText[]`) into Strip cells
@@ -75,10 +75,14 @@ function buildCell(items: Resolved[], baseStyle?: Style): RichText {
   // with the fragment's own style winning on overlap. That merged style
   // then lands as a span on the assembled RichText, so per-fragment styles
   // are addressable as overlays.
-  const layered =
-    baseStyle !== undefined && !baseStyle.isNull
-      ? items.map((item) => withBaseStyle(item, baseStyle))
-      : items.map((item) => item.frag);
+  // [LAW:one-source-of-truth] Every fragment lands carrying the Style it was
+  // resolved to here, base or no base, so a cell's style is always a `Style`
+  // and the render never resolves a name the splitter already resolved.
+  const base =
+    baseStyle !== undefined && !baseStyle.isNull ? baseStyle : undefined;
+  const layered = items.map((item) =>
+    withStyle(item.frag, base ? base.add(item.style) : item.style),
+  );
   const cell = RichText.fromFragments(layered);
   cell.end = "";
   cell.overflow = "ignore";
@@ -89,25 +93,14 @@ function buildCell(items: Resolved[], baseStyle?: Style): RichText {
   // and matches the old per-cell-style contract.
   if (layered.length === 1) {
     cell.style = layered[0]!.style;
-  } else if (baseStyle !== undefined && !baseStyle.isNull) {
-    cell.style = baseStyle;
+  } else if (base !== undefined) {
+    cell.style = base;
   }
   return cell;
 }
 
-function withBaseStyle(item: Resolved, base: Style): RichText {
-  const copy = item.frag.copy();
-  copy.style = base.add(item.style);
+function withStyle(frag: RichText, style: Style): RichText {
+  const copy = frag.copy();
+  copy.style = style;
   return copy;
-}
-
-/**
- * The `Style` a RichText's stored style stands for, resolved through the theme
- * every render draws with (`RENDER_THEME`): a definition parses, a theme name
- * reads the theme, and a `LayeredStyle` is its name resolved with its addition
- * on top. Cells are built before the render, so this is the render's own
- * resolution asked early, never a second one.
- */
-export function resolvedStyle(style: TextStyle): Style {
-  return RENDER_THEME.resolve(style);
 }

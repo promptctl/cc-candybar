@@ -6,7 +6,7 @@
 
 import { RichText, Style } from "@promptctl/rich-js";
 import { splitCellsIntoLines } from "../src/render/split-lines";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // Join a line group's cell texts so assertions read in terms of content.
 const text = (group: RichText[]): string => group.map((c) => c.plain).join("");

@@ -19,7 +19,7 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";

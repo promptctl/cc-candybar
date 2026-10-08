@@ -23,7 +23,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
-import { resolvedStyle } from "../src/template-engine/cells";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { settingsOf } from "../src/config/dsl-types";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";

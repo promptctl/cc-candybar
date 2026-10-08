@@ -38,7 +38,7 @@ import {
   resolveThemeSelection,
   THEME_FLOOR,
 } from "../src/themes";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 
 const SID = "s-theme-expr";

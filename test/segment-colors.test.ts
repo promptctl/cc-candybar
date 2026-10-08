@@ -37,7 +37,7 @@ import {
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 

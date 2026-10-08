@@ -65,7 +65,7 @@ import {
   textOn,
   type Address,
 } from "../src/themes/decor";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */

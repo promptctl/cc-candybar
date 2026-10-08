@@ -56,7 +56,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";

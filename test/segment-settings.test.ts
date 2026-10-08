@@ -19,7 +19,7 @@ import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
-import { resolvedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

@@ -25,7 +25,16 @@ function draw(
   renderable: Renderable,
   options: Omit<RenderToStringOptions, "theme">,
 ): string {
-  return renderToString(renderable, { ...options, theme: RENDER_THEME });
+  return renderToString(renderable, {
+    ...options,
+    theme: RENDER_THEME,
+    // [LAW:no-silent-fallbacks] rich-js would draw a style it cannot resolve
+    // as no style at all; a name the theme lacks is a broken config, so it
+    // throws here exactly as the cell splitter throws on it.
+    onStyleError: (error) => {
+      throw error;
+    },
+  });
 }
 
 export interface RenderedSegmentLike {

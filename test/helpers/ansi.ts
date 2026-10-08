@@ -5,7 +5,7 @@
 // written with — so a change to how a link is written is a change in one place,
 // not in a regex copied into every file that clicks something. `links` and
 // `stripAnsi` are src/click/read.ts's, which the page in site/ reads with too.
-import { resolvedStyle } from "../../src/template-engine/cells.js";
+import { resolvedStyle } from "../../src/render/rich-theme.js";
 import { decodeAnsi, osc8Sequences } from "@promptctl/rich-js";
 import { INVISIBLE } from "../../src/render/ansi.js";
 import { links, stripAnsi, type Link } from "../../src/click/read";
