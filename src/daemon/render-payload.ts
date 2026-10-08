@@ -642,6 +642,8 @@ export interface ActivityTicketPayload {
     readonly done: number;
     readonly total: number;
   };
+  // A `lit:state` line the reader could not parse, verbatim.
+  readonly unread?: string;
 }
 
 // `total`/`completed` are the whole list; `position`/`active` describe the ONE
@@ -1575,6 +1577,7 @@ function projectActivity(info: ActivityInfo): ActivityPayload | undefined {
           id: info.ticket.id,
           phase: info.ticket.phase,
           ...(info.ticket.epic !== null && { epic: info.ticket.epic }),
+          ...(info.ticket.unread !== null && { unread: info.ticket.unread }),
         };
   if (
     ticket === undefined &&

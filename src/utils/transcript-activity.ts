@@ -10,17 +10,17 @@
 // parse site, in exactly the shape `firstContentType` already established:
 // project the bounded scalars, never the array. A tool call keeps its id and
 // name (29 + ~8 bytes), a tool result keeps the id it answers plus what lit
-// said in it — sentinels and the tickets it holds (src/utils/transcript-lit.ts), a TodoWrite keeps its
-// list (bounded by the list), and a slash command keeps its name. The
+// said in it (src/utils/transcript-lit.ts), a TodoWrite keeps its list (bounded by the list), and a slash command keeps its name. The
 // content arrays stay unreachable from here on, as before.
 
 import {
   phaseOf,
+  litClaim,
   resultLit,
-  startedTicket,
   toolSubject,
   type EntryLit,
-  type LitHeld,
+  type LitClaim,
+  type LitSaid,
   type LitSentinel,
 } from "./transcript-lit";
 
@@ -114,8 +114,8 @@ export function entryActivity(
   // shapes cannot end up under two different rules.
   let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
-  let litStarted: EntryLit["started"];
-  const held: LitHeld[] = [];
+  let claim: LitClaim | undefined;
+  const said: LitSaid[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
 
@@ -131,8 +131,7 @@ export function entryActivity(
           if (typeof id !== "string" || typeof name !== "string") break;
           started.push({ id, name });
           const call = toolSubject(name, b.input);
-          const ticket = startedTicket(call);
-          if (ticket !== undefined) litStarted = { call: id, id: ticket };
+          claim = litClaim(id, call) ?? claim;
           phase = phaseOf(call) ?? phase;
           // The todo list rides its own tool call's input. A later block in the
           // same entry supersedes an earlier one: it is the newer state.
@@ -141,11 +140,11 @@ export function entryActivity(
         }
         case "tool_result": {
           const id = b.tool_use_id;
-          const said = resultLit(b.content);
-          sentinels.push(...said.sentinels);
+          const answer = resultLit(b.content);
+          sentinels.push(...answer.sentinels);
           if (typeof id === "string") {
             finished.push(id);
-            if (said.held.length > 0) held.push({ call: id, ids: said.held });
+            for (const t of answer.said) said.push({ call: id, ...t });
           }
           break;
         }
@@ -161,16 +160,16 @@ export function entryActivity(
 
   const command = isUser ? slashCommand(turnText) : undefined;
   const lit: EntryLit | undefined =
-    litStarted === undefined &&
+    claim === undefined &&
     phase === undefined &&
     sentinels.length === 0 &&
-    held.length === 0
+    said.length === 0
       ? undefined
       : {
-          ...(litStarted !== undefined && { started: litStarted }),
+          ...(claim !== undefined && { claim }),
           ...(phase !== undefined && { phase }),
           ...(sentinels.length > 0 && { sentinels }),
-          ...(held.length > 0 && { held }),
+          ...(said.length > 0 && { said }),
         };
 
   // [LAW:polishing-by-subtraction] Undefined when there is nothing to say, so

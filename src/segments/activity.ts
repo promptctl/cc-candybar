@@ -23,7 +23,7 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
-import type { EntryLit, LitEpic } from "../utils/transcript-lit";
+import type { EntryLit, LitClaim, LitEpic } from "../utils/transcript-lit";
 import { TranscriptFold } from "../utils/transcript-fold";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
@@ -60,58 +60,67 @@ interface ActivityState extends TicketState {
 
 // The lit ticket this session started, where its workflow is, and its epic's
 // progress as lit last printed it (null until a lit command reports it). Not
-// per-turn: it holds until the session starts another ticket.
+// per-turn: it holds until the session starts another ticket or closes it.
 export interface WorkTicket {
   readonly id: string;
   readonly phase: string;
   readonly epic: LitEpic | null;
-}
-
-// A `lit start` the session has made but whose result has not come back yet:
-// lit may still refuse it (a bogus id, a ticket another session holds).
-interface TicketClaim {
-  readonly call: string;
-  readonly id: string;
+  // The newest `lit:state` line this reader could not parse — lit's format and
+  // this reader disagree, which the bar says rather than hiding the epic.
+  readonly unread: string | null;
 }
 
 interface TicketState {
   readonly ticket: WorkTicket | null;
-  readonly claim: TicketClaim | null;
+  // The newest lit start/done/close whose result has not come back yet.
+  readonly claim: LitClaim | null;
 }
 
-// [LAW:dataflow-not-control-flow] A `lit start` is a claim; its own result
-// settles it — lit saying it holds the id replaces the ticket (keeping the epic
-// when it is the same ticket again), anything else drops the claim. A phase moves the ticket in
-// hand; a sentinel about the ticket in hand updates its epic. Before any
-// accepted start there is no ticket for a phase or sentinel to land on.
+// [LAW:dataflow-not-control-flow] A lit start/done/close is a claim; lit's own
+// words in that call's result settle it — an accepted start replaces the ticket
+// (keeping the epic when it is the same ticket again), an accepted close of the
+// ticket in hand clears it, and anything else drops the claim. A phase moves
+// the ticket in hand; a sentinel about it updates its epic. Before any accepted
+// start there is no ticket for a phase or sentinel to land on.
 function stepTicket(
   state: TicketState,
   lit: EntryLit | undefined,
   finished: readonly string[],
 ): TicketState {
-  const claim = lit?.started ?? state.claim;
+  const claim = lit?.claim ?? state.claim;
   const settled = claim !== null && finished.includes(claim.call);
   const accepted =
     settled &&
-    (lit?.held ?? []).some(
-      (h) => h.call === claim.call && h.ids.includes(claim.id),
+    (lit?.said ?? []).some(
+      (s) =>
+        s.call === claim.call && s.id === claim.id && s.status === claim.to,
     );
-  const held: WorkTicket | null = accepted
-    ? {
-        id: claim.id,
-        phase: "prep",
-        epic: state.ticket?.id === claim.id ? state.ticket.epic : null,
-      }
-    : state.ticket;
+  const held: WorkTicket | null = !accepted
+    ? state.ticket
+    : claim.to === "closed"
+      ? state.ticket?.id === claim.id
+        ? null
+        : state.ticket
+      : {
+          id: claim.id,
+          phase: "prep",
+          epic: state.ticket?.id === claim.id ? state.ticket.epic : null,
+          unread: null,
+        };
   const next = { claim: settled ? null : claim };
   if (held === null || lit === undefined) return { ...next, ticket: held };
-  const sentinel = (lit.sentinels ?? []).findLast((s) => s.id === held.id);
+  const sentinels = lit.sentinels ?? [];
+  const sentinel = sentinels.findLast(
+    (s) => s.kind === "state" && s.id === held.id,
+  );
+  const unread = sentinels.findLast((s) => s.kind === "unreadable");
   return {
     ...next,
     ticket: {
       id: held.id,
       phase: lit.phase ?? held.phase,
-      epic: sentinel === undefined ? held.epic : sentinel.epic,
+      epic: sentinel?.kind === "state" ? sentinel.epic : held.epic,
+      unread: unread?.kind === "unreadable" ? unread.line : held.unread,
     },
   };
 }

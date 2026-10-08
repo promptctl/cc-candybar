@@ -620,6 +620,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+    "activity.ticket.unread": {
+      kind: "input",
+      path: "activity.ticket.unread",
+      type: "string",
+      default: "",
+    },
     "ticket.detail": {
       kind: "state",
       key: "ticket-detail",
@@ -1040,6 +1046,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '🎫 {{ action "copyTicket" .activity.ticket.id }}' +
         '{{ if eq .ticket.detail "expanded" }} · {{ .activity.ticket.phase }}' +
         "{{ if .activity.ticket.epic.total }} · epic {{ .activity.ticket.epic.done }}/{{ .activity.ticket.epic.total }}{{ end }}" +
+        "{{ if .activity.ticket.unread }} · ⚠ unreadable {{ abbrev 40 .activity.ticket.unread }}{{ end }}" +
         '{{ end }} {{ action "ticketDetail" "▸" "◂" }}',
       when: '{{ ne .activity.ticket.id "" }}',
     },

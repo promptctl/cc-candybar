@@ -58,7 +58,7 @@ const result = (content: unknown, isError = false): string =>
 // A `lit start` lit accepted: the call and lit's own acceptance line.
 const start = (command: string): string => {
   const line = bash(command);
-  const id = /lit\s+start\s+(\S+)/.exec(command)?.[1];
+  const id = /lit\s+start\s+(?:--?\S+\s+)*(\S+)/.exec(command)?.[1];
   return [line, result(`${id} [in_progress/feature/x/normal] T\nmore`)].join("\n");
 };
 
@@ -95,7 +95,7 @@ describe("the ticket a session is working", () => {
   test("`lit start <id>` names the ticket, in prep, with no epic yet", async () => {
     expect(
       await ticketOf(start("cd /r && lit start proj-ab1.c2 2>&1 | tail -3")),
-    ).toEqual({ id: "proj-ab1.c2", phase: "prep", epic: null });
+    ).toEqual({ id: "proj-ab1.c2", phase: "prep", epic: null, unread: null });
   });
 
   test("a later `lit start` replaces the ticket", async () => {
@@ -128,17 +128,17 @@ describe("the ticket a session is working", () => {
       await ticketOf(
         start("lit start t-1"),
         result(
-          `t-1 [in_progress]\n${sentinel({ id: "t-1", epic: { id: "e", done: 4, total: 10 } })}\nmore`,
+          `t-1 [in_progress]\n${sentinel({ id: "t-1", status: "in_progress", epic: { id: "e", done: 4, total: 10 } })}\nmore`,
         ),
       ),
-    ).toEqual({ id: "t-1", phase: "prep", epic: { id: "e", done: 4, total: 10 } });
+    ).toEqual({ id: "t-1", phase: "prep", epic: { id: "e", done: 4, total: 10 }, unread: null });
   });
 
   test("a sentinel in a text-block result reads the same", async () => {
     const t = await ticketOf(
       start("lit start t-1"),
       result([
-        { type: "text", text: sentinel({ id: "t-1", epic: { id: "e", done: 1, total: 2 } }) },
+        { type: "text", text: sentinel({ id: "t-1", status: "in_progress", epic: { id: "e", done: 1, total: 2 } }) },
       ]),
     );
     expect(t?.epic).toEqual({ id: "e", done: 1, total: 2 });
@@ -147,14 +147,15 @@ describe("the ticket a session is working", () => {
   test("a sentinel about another ticket does not move this one", async () => {
     const t = await ticketOf(
       start("lit start t-1"),
-      result(sentinel({ id: "other", epic: { id: "e", done: 9, total: 9 } })),
+      result(sentinel({ id: "other", status: "in_progress", epic: { id: "e", done: 9, total: 9 } })),
     );
     expect(t?.epic).toBeNull();
   });
 
-  test("a line claiming the prefix that does not parse is not a sentinel", async () => {
+  test("a line claiming the prefix that does not parse is carried as unreadable", async () => {
     const t = await ticketOf(start("lit start t-1"), result("lit:state {nope}"));
     expect(t?.epic).toBeNull();
+    expect(t?.unread).toBe("lit:state {nope}");
   });
 
   test("a start lit refused claims nothing, whatever the exit status", async () => {
@@ -186,15 +187,15 @@ describe("the ticket a session is working", () => {
   test("the sentinel lit prints on start settles the epic at once", async () => {
     const t = await ticketOf(
       bash("lit start t-1"),
-      result(sentinel({ id: "t-1", epic: { id: "e", done: 2, total: 5 } })),
+      result(sentinel({ id: "t-1", status: "in_progress", epic: { id: "e", done: 2, total: 5 } })),
     );
-    expect(t).toEqual({ id: "t-1", phase: "prep", epic: { id: "e", done: 2, total: 5 } });
+    expect(t).toEqual({ id: "t-1", phase: "prep", epic: { id: "e", done: 2, total: 5 }, unread: null });
   });
 
   test("starting the ticket in hand again keeps its epic", async () => {
     const t = await ticketOf(
       bash("lit start t-1"),
-      result(sentinel({ id: "t-1", epic: { id: "e", done: 3, total: 7 } })),
+      result(sentinel({ id: "t-1", status: "in_progress", epic: { id: "e", done: 3, total: 7 } })),
       start("lit start t-1"),
     );
     expect(t?.epic).toEqual({ id: "e", done: 3, total: 7 });
@@ -208,7 +209,53 @@ describe("the ticket a session is working", () => {
       start("gh pr view --body 'then lit done x'"),
       start("cat <<'EOF' > n.md\nlit start nope\nEOF"),
     );
-    expect(t).toEqual({ id: "t-1", phase: "impl", epic: null });
+    expect(t).toEqual({ id: "t-1", phase: "impl", epic: null, unread: null });
+  });
+
+  test("`lit done` / `lit close` of the ticket in hand clears it, once lit says so", async () => {
+    expect(
+      await ticketOf(
+        start("lit start t-1"),
+        bash("lit done t-1 2>&1 | tail -5"),
+        result("Ticket t-1 has been closed. Before moving on, review related tickets."),
+      ),
+    ).toBeNull();
+    expect(
+      await ticketOf(
+        start("lit start t-1"),
+        bash("lit close --reason 'dup' t-1"),
+        result("t-1 [closed/bug/x/normal] T"),
+      ),
+    ).toBeNull();
+    // Refused, or a different ticket closed: the ticket in hand stays.
+    const t = await ticketOf(
+      start("lit start t-1"),
+      bash("lit done t-1"),
+      result("error (code=1): not in progress", true),
+      bash("lit done other-2"),
+      result("Ticket other-2 has been closed."),
+    );
+    expect(t?.id).toBe("t-1");
+  });
+
+  test("flags may sit between `lit start` and the id", async () => {
+    const t = await ticketOf(start("lit start --take t-9"));
+    expect(t?.id).toBe("t-9");
+  });
+
+  test("a sentinel about the id in another status does not settle a start", async () => {
+    const t = await ticketOf(
+      bash("lit start x-1 || lit show x-1"),
+      result(sentinel({ id: "x-1", status: "open", epic: null })),
+    );
+    expect(t).toBeNull();
+  });
+
+  test("a namespaced review skill and MultiEdit name their phases", async () => {
+    const t = (...s: string[]) => ticketOf(start("lit start t-1"), ...s);
+    expect((await t(call("MultiEdit", { file_path: "/f" })))?.phase).toBe("impl");
+    expect((await t(skill("plugin:code-review")))?.phase).toBe("review");
+    expect((await t(skill("x-groom-backlog")))?.phase).toBe("prep");
   });
 
   test("a phase before any `lit start` lands on nothing", async () => {
@@ -260,7 +307,7 @@ describe("the bundled ticket segment", () => {
     }
   };
 
-  const T = { id: "t-1", phase: "impl", epic: { id: "e", done: 4, total: 10 } };
+  const T = { id: "t-1", phase: "impl", epic: { id: "e", done: 4, total: 10 }, unread: null };
 
   test("no ticket renders no cell", () => {
     expect(render(undefined)).toBe("");
