@@ -37,7 +37,7 @@ import {
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 
@@ -395,7 +395,7 @@ describe("segment color functions in the engine", () => {
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
     openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT);
     const fragments = tpl.evaluate({});
-    expect(definedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
+    expect(resolvedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
     expect(fragments[0]?.plain).toBe("hello");
   });
 

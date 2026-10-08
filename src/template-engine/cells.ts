@@ -12,7 +12,8 @@
 // character styling via spans, and every layout op (truncate / align /
 // pad / slice) preserves spans by construction.
 
-import { RichText, Style } from "@promptctl/rich-js";
+import { RichText, type Style } from "@promptctl/rich-js";
+import { resolvedStyle } from "../render/rich-theme.js";
 
 /**
  * Convert template-engine fragments (`RichText[]`) into Strip cells
@@ -32,7 +33,7 @@ export function fragmentsToCells(
   baseStyle?: Style,
 ): RichText[] {
   const cells: RichText[] = [];
-  let group: RichText[] = [];
+  let group: Resolved[] = [];
 
   const flush = () => {
     if (!group.length) return;
@@ -42,14 +43,18 @@ export function fragmentsToCells(
   };
 
   for (const frag of fragments) {
-    // definedStyle, not `frag.style.link`: a string style has a `.link` too —
-    // String.prototype.link, a function, which is always truthy.
-    if (definedStyle(frag.style).link) {
+    // Resolved, not `frag.style.link`: a string style has a `.link` too —
+    // String.prototype.link, a function, which is always truthy — and a style
+    // function over a named base keeps the link in a LayeredStyle until a
+    // theme says what the name stands for. Resolved once: the base merge
+    // below reads the same Style.
+    const item: Resolved = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
       flush();
-      const cell = buildCell([frag], baseStyle);
+      const cell = buildCell([item], baseStyle);
       if (cell.plain.length > 0) cells.push(cell);
     } else {
-      group.push(frag);
+      group.push(item);
     }
   }
   flush();
@@ -57,17 +62,27 @@ export function fragmentsToCells(
   return cells;
 }
 
-function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
+// A fragment beside the Style its stored style resolves to.
+interface Resolved {
+  readonly frag: RichText;
+  readonly style: Style;
+}
+
+function buildCell(items: Resolved[], baseStyle?: Style): RichText {
   // [LAW:types-are-the-program] Each fragment carries its own style (and
   // possibly spans). We merge baseStyle UNDER each fragment's style before
   // assembling so the segment-wide default flows through every character,
   // with the fragment's own style winning on overlap. That merged style
   // then lands as a span on the assembled RichText, so per-fragment styles
   // are addressable as overlays.
-  const layered =
-    baseStyle !== undefined && !baseStyle.isNull
-      ? fragments.map((f) => withBaseStyle(f, baseStyle))
-      : fragments;
+  // [LAW:one-source-of-truth] Every fragment lands carrying the Style it was
+  // resolved to here, base or no base, so a cell's style is always a `Style`
+  // and the render never resolves a name the splitter already resolved.
+  const base =
+    baseStyle !== undefined && !baseStyle.isNull ? baseStyle : undefined;
+  const layered = items.map((item) =>
+    withStyle(item.frag, base ? base.add(item.style) : item.style),
+  );
   const cell = RichText.fromFragments(layered);
   cell.end = "";
   cell.overflow = "ignore";
@@ -78,24 +93,14 @@ function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
   // and matches the old per-cell-style contract.
   if (layered.length === 1) {
     cell.style = layered[0]!.style;
-  } else if (baseStyle !== undefined && !baseStyle.isNull) {
-    cell.style = baseStyle;
+  } else if (base !== undefined) {
+    cell.style = base;
   }
   return cell;
 }
 
-function withBaseStyle(f: RichText, base: Style): RichText {
-  const copy = f.copy();
-  copy.style = base.add(definedStyle(f.style));
+function withStyle(frag: RichText, style: Style): RichText {
+  const copy = frag.copy();
+  copy.style = style;
   return copy;
-}
-
-/**
- * The `Style` a RichText's stored style stands for. RichText keeps a string as
- * given ("" for plain text, or a definition like "on blue"); Style.parse reads
- * definitions only, so a theme NAME throws here — cells are built before any
- * render exists to resolve a name against.
- */
-export function definedStyle(style: string | Style): Style {
-  return style instanceof Style ? style : Style.parse(style);
 }

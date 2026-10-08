@@ -96,11 +96,11 @@ function expectBodyLedBy(
   if (head === undefined) throw new Error("no body rows");
   const first = links(head)[0];
   if (first === undefined) throw new Error(`no link on: ${JSON.stringify(head)}`);
-  expect(first.text).toBe(glyph);
+  expect(stripAnsi(first.text)).toBe(glyph);
   expect(closes(first, key)).toBe(true);
   const closing = rows
     .flatMap(links)
-    .filter((l) => l.text === glyph && closes(l, key));
+    .filter((l) => stripAnsi(l.text) === glyph && closes(l, key));
   expect(closing).toHaveLength(1);
   for (const row of rest) expect(stripAnsi(row)).toMatch(/^\W*? +\S/u);
 }
@@ -174,7 +174,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     const closedBar = stripAnsi(lines[0]!);
     expect(closedBar).toMatch(/proj.*Opus/);
     // The bar row carries no row ✕: only the door itself, which is a trigger.
-    expect(links(lines[0]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(links(lines[0]!).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     // The door opens ABOVE and rises with its body: the door itself, wearing
     // ✖, leads the first of two menu lines stacked over the bar, then the
@@ -191,7 +191,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     }
     const bar = (): string => lines[lines.length - 1]!;
     expect(links(bar()).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
-    expect(links(bar()).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(links(bar()).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     expect(stripAnsi(bar())).toBe(withoutDoor(closedBar));
 
     // 🎨 look open: its one row replaces the session tab's two below the
@@ -238,7 +238,7 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     rt.click(links(lines[0]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(1);
-    expect(links(lines[0]!)[0]?.text).toBe(DOOR_GLYPH);
+    expect(stripAnsi(links(lines[0]!)[0]!.text)).toBe(DOOR_GLYPH);
     expect(stripAnsi(lines[0]!)).toBe(closedBar);
     rt.dispose();
   });
@@ -265,7 +265,7 @@ describe("brandon-disclosure-43z — a group body", () => {
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
-    expect(lines.flatMap(links).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(lines.flatMap(links).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
@@ -273,10 +273,10 @@ describe("brandon-disclosure-43z — a group body", () => {
     expect(lines).toHaveLength(6);
     expectBodyLedBy(lines.slice(2, 5), "acc");
     // The first row is led once — by the container, not per cell.
-    expect(links(lines[2]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
+    expect(links(lines[2]!).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
     // Rows outside the body carry none.
     for (const row of [lines[0]!, lines[1]!, lines[5]!]) {
-      expect(links(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+      expect(links(row).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
     rt.click(links(lines[2]!)[0]!.url);
@@ -307,7 +307,7 @@ const DROPS = `{
 }`;
 
 const closeLinks = (line: string): Link[] =>
-  links(line).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
+  links(line).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE);
 
 describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
   test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", () => {

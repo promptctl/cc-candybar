@@ -22,6 +22,7 @@
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
+import { stripAnsi } from "./helpers/ansi";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -37,7 +38,7 @@ import {
   resolveThemeSelection,
   THEME_FLOOR,
 } from "../src/themes";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 
 const SID = "s-theme-expr";
@@ -129,7 +130,7 @@ function buildRuntime(source = src(RULE)): Runtime {
     const bgs = new Map(
       [...sink].map(([name, cells]) => [
         name,
-        (cells[0] && definedStyle(cells[0].style).bgcolor?.value?.hex) ?? "(no bg)",
+        (cells[0] && resolvedStyle(cells[0].style).bgcolor?.value?.hex) ?? "(no bg)",
       ]),
     );
     return {
@@ -175,8 +176,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("theme.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
     const { render, dispose } = buildRuntime();
     try {
-      expect(render(90).text).toContain("T=dracula");
-      expect(render(10).text).toContain("T=nord");
+      expect(stripAnsi(render(90).text)).toContain("T=dracula");
+      expect(stripAnsi(render(10).text)).toContain("T=nord");
     } finally {
       dispose();
     }
@@ -188,7 +189,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       sessionState.set(SID, "theme", "tokyo-night");
       // pct 90 would have chosen dracula; the session pick holds at every value.
       expect(render(90).bg("plain")).toBe(byName("tokyo-night"));
-      expect(render(90).text).toContain("T=tokyo-night");
+      expect(stripAnsi(render(90).text)).toContain("T=tokyo-night");
     } finally {
       dispose();
     }
@@ -203,7 +204,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     try {
       sessionState.set(SID, "theme", THEME_FLOOR);
       expect(render(90).bg("plain")).toBe(byName(THEME_FLOOR));
-      expect(render(90).text).toContain(`T=${THEME_FLOOR}`);
+      expect(stripAnsi(render(90).text)).toContain(`T=${THEME_FLOOR}`);
     } finally {
       dispose();
     }
@@ -260,7 +261,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       // in the floor theme, and reports once, naming the slot and the bad name.
       const bad = rt.render(90);
       expect(bad.bg("plain")).toBe(byName(THEME_FLOOR));
-      expect(bad.text).toContain(`T=${THEME_FLOOR}`);
+      expect(stripAnsi(bad.text)).toContain(`T=${THEME_FLOOR}`);
       expect(rt.warnings).toHaveLength(1);
       expect(rt.warnings[0]).toContain("globals.palette");
       expect(rt.warnings[0]).toContain("gruvbux-dark");
@@ -281,7 +282,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       expect(rt.render(0).bg("plain")).toBe(byName("dracula"));
       // Twice, to prove the second render does not read the first's answer.
       expect(rt.render(0).bg("plain")).toBe(byName("dracula"));
-      expect(rt.render(0).text).toContain("T=dracula");
+      expect(stripAnsi(rt.render(0).text)).toContain("T=dracula");
     } finally {
       rt.dispose();
     }
@@ -328,9 +329,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         OPTS,
         { perSegmentSink: sink },
       );
-      const plainBg = definedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
-      expect(out).toContain("T=nord");
+      expect(stripAnsi(out)).toContain("T=nord");
     } finally {
       registry.dispose();
     }
@@ -357,7 +358,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         OPTS,
         { perSegmentSink: sink },
       );
-      const plainBg = definedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
       registry.dispose();
@@ -563,10 +564,10 @@ describe("a rule inside a preset's globals", () => {
           { theme: effective.theme, style: effective.style },
         );
         const cells = sink.get("plain")!;
-        return { text, bg: definedStyle(cells[0]!.style).bgcolor!.value!.hex };
+        return { text, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
       };
       const hot = render(90);
-      expect(hot.text).toContain("T=dracula L=hot");
+      expect(stripAnsi(hot.text)).toContain("T=dracula L=hot");
       expect(hot.bg).toBe(
         transposePalette(getThemePalette("dracula"), {
           hueShift: 180,
@@ -575,7 +576,7 @@ describe("a rule inside a preset's globals", () => {
           lightnessShift: 0,
         }).get("surface")!.hex,
       );
-      expect(render(10).text).toContain("T=nord L=none");
+      expect(stripAnsi(render(10).text)).toContain("T=nord L=none");
       expect(render(10).bg).toBe(byName("nord"));
     });
   });
@@ -604,7 +605,7 @@ describe("a rule inside a preset's globals", () => {
         {},
         { preset: "ruled" },
       );
-      expect(text).toContain("T=dracula");
+      expect(stripAnsi(text)).toContain("T=dracula");
     });
   });
 

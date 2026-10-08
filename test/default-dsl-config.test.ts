@@ -1416,7 +1416,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // [LAW:one-source-of-truth] The knob is the placement's `budget`
       // setting. cost 8.5 / budget 10 = 85% ≥ warn 80 → " !85%".
       const line = renderSession(PAYLOAD, undefined, { budget: 10 });
-      expect(line).toContain("!85%");
+      expect(stripAnsi(line)).toContain("!85%");
     });
 
     test("a placement's warnAt setting reclassifies the suffix", () => {
@@ -1430,8 +1430,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         budget: 10,
         warnAt: 50,
       });
-      expect(defaultWarn).toContain("+60%");
-      expect(tightWarn).toContain("!60%");
+      expect(stripAnsi(defaultWarn)).toContain("+60%");
+      expect(stripAnsi(tightWarn)).toContain("!60%");
     });
   });
 });

@@ -9,10 +9,33 @@ import {
   FlexStrip,
   renderToString,
   type Joiner,
+  type Renderable,
+  type RenderToStringOptions,
   type PowerlineJoinerOptions,
   type CapsuleJoinerOptions,
 } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import { RENDER_THEME } from "./rich-theme.js";
+
+// [LAW:single-enforcer] Every renderable this module serializes is drawn here,
+// with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
+// through before the render — so the two agree by construction rather than by
+// each call site remembering the option.
+function draw(
+  renderable: Renderable,
+  options: Omit<RenderToStringOptions, "theme">,
+): string {
+  return renderToString(renderable, {
+    ...options,
+    theme: RENDER_THEME,
+    // [LAW:no-silent-fallbacks] rich-js would draw a style it cannot resolve
+    // as no style at all; a name the theme lacks is a broken config, so it
+    // throws here exactly as the cell splitter throws on it.
+    onStyleError: (error) => {
+      throw error;
+    },
+  });
+}
 
 export interface RenderedSegmentLike {
   type: string;
@@ -157,10 +180,7 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
     });
   const width = (cells: RichText[]): number =>
     new RichText(
-      renderToString(new Strip(cells, joiner), { colorSystem: null }).replace(
-        /\n$/,
-        "",
-      ),
+      draw(new Strip(cells, joiner), { colorSystem: null }).replace(/\n$/, ""),
     ).cellLength;
   const one = width([cell("#101010")]);
   const geometry = {
@@ -226,11 +246,11 @@ export function renderStripCells(
   const colorSystem = options.colorCompatibility;
   const out =
     options.wrap && Number.isFinite(options.width)
-      ? renderToString(new FlexStrip([...cells], { joiner }), {
+      ? draw(new FlexStrip([...cells], { joiner }), {
           width: options.width,
           colorSystem,
         })
-      : renderToString(new Strip([...cells], joiner), { colorSystem });
+      : draw(new Strip([...cells], joiner), { colorSystem });
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

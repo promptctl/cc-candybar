@@ -56,7 +56,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
-import { definedStyle } from "../src/template-engine/cells.js";
+import { resolvedStyle } from "../src/render/rich-theme.js";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -189,9 +189,9 @@ function build(src: string, withDefault = false) {
     return cells;
   };
   const bgOf = (name: string): string =>
-    definedStyle(cellsOf(name)[0]!.style).bgcolor?.value?.hex ?? "(no bg)";
+    resolvedStyle(cellsOf(name)[0]!.style).bgcolor?.value?.hex ?? "(no bg)";
   const fgOf = (name: string): string =>
-    definedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
+    resolvedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -206,8 +206,8 @@ function build(src: string, withDefault = false) {
   const urlsIn = (name: string): string[] =>
     cellsOf(name).flatMap((cell) =>
       cell.spans.flatMap((s) =>
-        typeof s.style !== "string" && s.style.link !== undefined
-          ? [s.style.link]
+        resolvedStyle(s.style).link !== undefined
+          ? [resolvedStyle(s.style).link!]
           : [],
       ),
     );
@@ -380,7 +380,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       // `when`s enclose it — and the trigger wears that band's state.
       const band = bandFor(rt.palette, { hue: rt.hueOf("m"), depth: 0 }, ColorDepth.TRUECOLOR);
       expect(rt.bgOf("m")).toBe(band.state.hex);
-      expect(definedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
+      expect(resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
       return out;
     });

@@ -5,6 +5,7 @@
 // written with — so a change to how a link is written is a change in one place,
 // not in a regex copied into every file that clicks something. `links` and
 // `stripAnsi` are src/click/read.ts's, which the page in site/ reads with too.
+import { resolvedStyle } from "../../src/render/rich-theme.js";
 import { decodeAnsi, osc8Sequences } from "@promptctl/rich-js";
 import { INVISIBLE } from "../../src/render/ansi.js";
 import { links, stripAnsi, type Link } from "../../src/click/read";
@@ -49,7 +50,7 @@ export function boldUrls(rendered: string): string[] {
   const out: string[] = [];
   let run: { link: string; end: number } | undefined;
   for (const { start, end, style } of decodeAnsi(rendered).spans) {
-    const link = typeof style === "string" ? undefined : style.link;
+    const { link, bold } = resolvedStyle(style);
     if (link === undefined) {
       run = undefined;
       continue;
@@ -57,7 +58,7 @@ export function boldUrls(rendered: string): string[] {
     // A link whose cells change style decodes as adjacent spans; the first
     // decides, as the open's own SGR did.
     const continues = run?.link === link && run.end === start;
-    if (!continues && typeof style !== "string" && style.bold === true) out.push(link);
+    if (!continues && bold === true) out.push(link);
     run = { link, end };
   }
   return out;
