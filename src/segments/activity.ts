@@ -23,6 +23,7 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
+import type { EntryLit, LitEpic } from "../utils/transcript-lit";
 import { TranscriptFold } from "../utils/transcript-fold";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
@@ -40,6 +41,7 @@ export interface ToolTally {
 // shape because they are one question asked at two moments, so one encoder and
 // one template helper serve both.
 export interface ActivityInfo {
+  readonly ticket: WorkTicket | null;
   readonly command: string | null;
   readonly todos: readonly TodoItem[];
   readonly running: readonly ToolTally[];
@@ -50,13 +52,44 @@ export interface ActivityInfo {
 // because pairing a `tool_result` to its call is the only thing they are for.
 // Reporting tallies them away, so no id crosses the payload seam.
 interface ActivityState {
+  readonly ticket: WorkTicket | null;
   readonly command: string | null;
   readonly todos: readonly TodoItem[];
   readonly pending: readonly ToolCall[];
   readonly done: readonly ToolTally[];
 }
 
+// The lit ticket this session started, where its workflow is, and its epic's
+// progress as lit last printed it (null until a lit command reports it). Not
+// per-turn: it holds until the session starts another ticket.
+export interface WorkTicket {
+  readonly id: string;
+  readonly phase: string;
+  readonly epic: LitEpic | null;
+}
+
+// [LAW:dataflow-not-control-flow] `lit start` replaces the ticket; a phase moves
+// the one in hand; a sentinel about the ticket in hand updates its epic. Before
+// any `lit start` there is no ticket for a phase or sentinel to land on.
+function stepTicket(
+  ticket: WorkTicket | null,
+  lit: EntryLit,
+): WorkTicket | null {
+  const started: WorkTicket | null =
+    lit.started === undefined
+      ? ticket
+      : { id: lit.started, phase: "prep", epic: null };
+  if (started === null) return null;
+  const sentinel = (lit.sentinels ?? []).findLast((s) => s.id === started.id);
+  return {
+    id: started.id,
+    phase: lit.phase ?? started.phase,
+    epic: sentinel === undefined ? started.epic : sentinel.epic,
+  };
+}
+
 const EMPTY: ActivityState = {
+  ticket: null,
   command: null,
   todos: [],
   pending: [],
@@ -113,11 +146,16 @@ function step(state: ActivityState, entry: ParsedEntry): ActivityState {
     pending,
     done,
     todos: activity.todos ?? turn.todos,
+    ticket:
+      activity.lit === undefined
+        ? turn.ticket
+        : stepTicket(turn.ticket, activity.lit),
   };
 }
 
 function report(state: ActivityState): ActivityInfo {
   return {
+    ticket: state.ticket,
     command: state.command,
     todos: state.todos,
     running: state.pending.reduce<readonly ToolTally[]>(

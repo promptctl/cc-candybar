@@ -594,6 +594,37 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "string",
       default: "",
     },
+    // The lit ticket this session started (brandon-lit-widget-3xo.btb):
+    // absent until a `lit start`; the epic counts until lit prints them.
+    "activity.ticket.id": {
+      kind: "input",
+      path: "activity.ticket.id",
+      type: "string",
+      default: "",
+    },
+    "activity.ticket.phase": {
+      kind: "input",
+      path: "activity.ticket.phase",
+      type: "string",
+      default: "",
+    },
+    "activity.ticket.epic.done": {
+      kind: "input",
+      path: "activity.ticket.epic.done",
+      type: "number",
+      default: 0,
+    },
+    "activity.ticket.epic.total": {
+      kind: "input",
+      path: "activity.ticket.epic.total",
+      type: "number",
+      default: 0,
+    },
+    "ticket.detail": {
+      kind: "state",
+      key: "ticket-detail",
+      default: "collapsed",
+    },
 
     // No page-cursor var: a {{ menu }} synthesizes its own page
     // cursor (state var + int action, named by menuPageKey) under the reserved
@@ -996,6 +1027,22 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // not. `completed` (not `position`) is what distinguishes a finished list
     // from an all-pending one — `☑ 7/7` and `☑ 0/7` are both true statements.
     // `abbrev` bounds the task text, since an `activeForm` is a sentence.
+    // The lit ticket this session is working (brandon-lit-widget-3xo.btb),
+    // read from the session's own `lit start` — lit cannot say whose claim is
+    // whose, and is too slow to poll. Clicking the id copies it; the arrow
+    // opens the workflow phase and the epic's progress, the counts only once
+    // lit has printed them.
+    ticket: {
+      group: "activity",
+      description:
+        "The lit ticket this session started; expands to its workflow phase and its epic's done/total.",
+      template:
+        '🎫 {{ action "copyTicket" .activity.ticket.id }}' +
+        '{{ if eq .ticket.detail "expanded" }} · {{ .activity.ticket.phase }}' +
+        "{{ if .activity.ticket.epic.total }} · epic {{ .activity.ticket.epic.done }}/{{ .activity.ticket.epic.total }}{{ end }}" +
+        '{{ end }} {{ action "ticketDetail" "▸" "◂" }}',
+      when: '{{ ne .activity.ticket.id "" }}',
+    },
     activity: {
       group: "activity",
       description:
@@ -1058,6 +1105,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "host" },
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
+          { kind: "segment", name: "ticket" },
         ],
       },
       status: {
@@ -1113,6 +1161,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     stepTheme: { set: "theme", from: "themes" },
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
+    ticketDetail: { set: "ticket-detail", cycle: ["collapsed", "expanded"] },
+    copyTicket: { copy: "{{ .activity.ticket.id }}" },
     // The `ceiling` segment's controls: memento's own value grammar, handed to
     // its `ceiling set session` (or `clear session`) for the clicked session.
     // These declarations are also the only moves the ceiling verb accepts.

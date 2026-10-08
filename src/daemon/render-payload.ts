@@ -625,9 +625,23 @@ export interface MetricsPayload {
 // drop-the-field-rather-than-emit-zeros policy as every family above, so an
 // author sees their declared `default`.
 export interface ActivityPayload {
+  readonly ticket?: ActivityTicketPayload;
   readonly command?: string;
   readonly todo?: ActivityTodoPayload;
   readonly tool?: ActivityToolPayload;
+}
+
+// The lit ticket the session started. `epic` is absent until a lit command has
+// printed its sentinel, and when the ticket has no epic — the bar shows no
+// count rather than a made-up one.
+export interface ActivityTicketPayload {
+  readonly id: string;
+  readonly phase: string;
+  readonly epic?: {
+    readonly id: string;
+    readonly done: number;
+    readonly total: number;
+  };
 }
 
 // `total`/`completed` are the whole list; `position`/`active` describe the ONE
@@ -1554,10 +1568,24 @@ function projectActivity(info: ActivityInfo): ActivityPayload | undefined {
           ...(running !== undefined && { running }),
           ...(done !== undefined && { done }),
         };
-  if (info.command === null && todo === undefined && tool === undefined) {
+  const ticket: ActivityTicketPayload | undefined =
+    info.ticket === null
+      ? undefined
+      : {
+          id: info.ticket.id,
+          phase: info.ticket.phase,
+          ...(info.ticket.epic !== null && { epic: info.ticket.epic }),
+        };
+  if (
+    ticket === undefined &&
+    info.command === null &&
+    todo === undefined &&
+    tool === undefined
+  ) {
     return undefined;
   }
   return {
+    ...(ticket !== undefined && { ticket }),
     ...(info.command !== null && { command: info.command }),
     ...(todo !== undefined && { todo }),
     ...(tool !== undefined && { tool }),

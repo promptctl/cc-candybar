@@ -36,7 +36,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
 
-Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous) over a status row (model, context, ceiling, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
+Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous, ticket) over a status row (model, context, ceiling, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
 ## Customization
 
@@ -119,6 +119,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `ceiling` | `⌈` the [memento](https://github.com/promptctl/memento) context ceiling this session hands off at; `−`/`+` move it by 100K, `∞` lifts it, `↺` drops the session's own setting (memento's `ceiling set/clear session`). Placed beside `context` | when memento is installed |
 | `autocompact` | `⇲` Claude Code's auto-compact window — `auto`, or the tokens `/autocompact` last set; `−`/`+` move it by 100K up to the model's context window, `↺` returns it to `auto`. Each click types `/autocompact` into the session, so the controls show only inside tmux. Placed beside `ceiling` | always |
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
+| `ticket` | `🎫` the lit ticket this session started with `lit start` (click copies the id); the `▸` expands it to the workflow phase (`prep`, `impl`, `review`, `groom`, `handoff`) and the epic's `done/total` once lit has printed it | after a `lit start` in this session |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
 Each segment is a DSL declaration with a `template` (text + interpolation + style functions), a `bg`/`fg` palette spec, and optional `when` predicate. Templates compose freely — every formatter in the bundled function library (`formatCost`, `formatTokens`, `formatLongTimeRemaining`, `budgetStatus`, `link`, `urlEncode`, the sprig string/list/dict library, …) is available in every segment.
