@@ -80,8 +80,8 @@ interface TicketState {
 }
 
 // [LAW:dataflow-not-control-flow] A `lit start` is a claim; its own result
-// settles it — accepted replaces the ticket (keeping the epic when it is the
-// same ticket again), refused drops the claim. A phase moves the ticket in
+// settles it — lit saying it holds the id replaces the ticket (keeping the epic
+// when it is the same ticket again), anything else drops the claim. A phase moves the ticket in
 // hand; a sentinel about the ticket in hand updates its epic. Before any
 // accepted start there is no ticket for a phase or sentinel to land on.
 function stepTicket(
@@ -91,7 +91,11 @@ function stepTicket(
 ): TicketState {
   const claim = lit?.started ?? state.claim;
   const settled = claim !== null && finished.includes(claim.call);
-  const accepted = settled && !(lit?.refused ?? []).includes(claim.call);
+  const accepted =
+    settled &&
+    (lit?.held ?? []).some(
+      (h) => h.call === claim.call && h.ids.includes(claim.id),
+    );
   const held: WorkTicket | null = accepted
     ? {
         id: claim.id,

@@ -29,10 +29,16 @@ export interface EntryLit {
   // A `lit start` call: the id it claims and the tool call whose result decides
   // whether the claim held — lit refuses a bogus or already-claimed id.
   readonly started?: { readonly call: string; readonly id: string };
-  // Tool calls whose result came back `is_error`.
-  readonly refused?: readonly string[];
+  // The tickets each tool result says lit holds in progress, by the call it
+  // answers — what settles a `lit start`. Absent for a result that names none.
+  readonly held?: readonly LitHeld[];
   readonly phase?: string;
   readonly sentinels?: readonly LitSentinel[];
+}
+
+export interface LitHeld {
+  readonly call: string;
+  readonly ids: readonly string[];
 }
 
 // What one tool call is, for phase matching: the tool's name and the one
@@ -147,20 +153,39 @@ export function shellCode(command: string): string {
   return command.replace(HEREDOC, "$1").replace(QUOTED, "''");
 }
 
-// The lit sentinels in a tool_result, whichever shape it arrived in. Nearly no
-// result carries one, so a block without the prefix is never joined or scanned —
-// this runs over every result of every transcript the daemon parses.
-export function resultSentinels(content: unknown): readonly LitSentinel[] {
-  if (typeof content === "string") {
-    return content.includes(SENTINEL_PREFIX) ? litSentinels(content) : [];
-  }
+// A tool_result's text blocks, whichever shape it arrived in.
+function resultTexts(content: unknown): readonly string[] {
+  if (typeof content === "string") return [content];
   if (!Array.isArray(content)) return [];
   return content.flatMap((b) =>
-    typeof b === "object" &&
-    b !== null &&
-    typeof b.text === "string" &&
-    (b.text as string).includes(SENTINEL_PREFIX)
-      ? litSentinels(b.text as string)
+    typeof b === "object" && b !== null && typeof b.text === "string"
+      ? [b.text as string]
       : [],
   );
+}
+
+// lit's own word that it holds a ticket: the `<id> [in_progress/…` line it
+// prints on an accepted start (and on any show of an in-progress ticket). The
+// command's exit status cannot say this — `lit start x | tail -3` exits with
+// tail's status, and `lit start x && git checkout -b x` with git's.
+const IN_PROGRESS_MARK = " [in_progress/";
+const IN_PROGRESS = /^(\S+) \[in_progress\//gm;
+
+// What lit said in one tool_result: its sentinels, and the tickets it says it
+// holds in progress (a sentinel's id counts — lit printed it about that ticket).
+// Nearly no result carries either, so a block without the marker is never
+// scanned — this runs over every result of every transcript the daemon parses.
+export function resultLit(content: unknown): {
+  readonly sentinels: readonly LitSentinel[];
+  readonly held: readonly string[];
+} {
+  const sentinels: LitSentinel[] = [];
+  const held: string[] = [];
+  for (const text of resultTexts(content)) {
+    if (text.includes(SENTINEL_PREFIX)) sentinels.push(...litSentinels(text));
+    if (text.includes(IN_PROGRESS_MARK)) {
+      for (const [, id] of text.matchAll(IN_PROGRESS)) held.push(id!);
+    }
+  }
+  return { sentinels, held: [...held, ...sentinels.map((s) => s.id)] };
 }

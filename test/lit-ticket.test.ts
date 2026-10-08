@@ -55,9 +55,12 @@ const result = (content: unknown, isError = false): string =>
     },
   });
 
-// A `lit start` lit accepted: the call and its ok result.
-const start = (command: string): string =>
-  [bash(command), result("Claimed.")].join("\n");
+// A `lit start` lit accepted: the call and lit's own acceptance line.
+const start = (command: string): string => {
+  const line = bash(command);
+  const id = /lit\s+start\s+(\S+)/.exec(command)?.[1];
+  return [line, result(`${id} [in_progress/feature/x/normal] T\nmore`)].join("\n");
+};
 
 const sentinel = (state: unknown): string => `lit:state ${JSON.stringify(state)}`;
 
@@ -154,16 +157,25 @@ describe("the ticket a session is working", () => {
     expect(t?.epic).toBeNull();
   });
 
-  test("a start lit refused claims nothing; the ticket in hand stays", async () => {
+  test("a start lit refused claims nothing, whatever the exit status", async () => {
     expect(
       await ticketOf(bash("lit start bogus"), result("no such ticket", true)),
     ).toBeNull();
+    // `| tail -3` masks lit's exit: the result is not an error, lit still refused.
     const t = await ticketOf(
       start("lit start t-1"),
-      bash("lit start taken-2"),
-      result("claimed by another session", true),
+      bash("lit start taken-2 2>&1 | tail -3"),
+      result("error (code=1): claimed here: /elsewhere · a minute ago"),
     );
     expect(t?.id).toBe("t-1");
+  });
+
+  test("an accepted start holds though a later command in the call failed", async () => {
+    const t = await ticketOf(
+      bash("lit start t-2 && git checkout -b t-2"),
+      result("Exit code 128\nt-2 [in_progress/bug/x/normal] T\nfatal: exists", true),
+    );
+    expect(t?.id).toBe("t-2");
   });
 
   test("a start whose result has not come back is not yet the ticket", async () => {

@@ -9,17 +9,18 @@
 // text the pruning exists to drop. So this module is a PROJECTION run at the one
 // parse site, in exactly the shape `firstContentType` already established:
 // project the bounded scalars, never the array. A tool call keeps its id and
-// name (29 + ~8 bytes), a tool result keeps the id it answers plus any lit
-// sentinel lines it printed (src/utils/transcript-lit.ts), a TodoWrite keeps its
+// name (29 + ~8 bytes), a tool result keeps the id it answers plus what lit
+// said in it — sentinels and the tickets it holds (src/utils/transcript-lit.ts), a TodoWrite keeps its
 // list (bounded by the list), and a slash command keeps its name. The
 // content arrays stay unreachable from here on, as before.
 
 import {
   phaseOf,
-  resultSentinels,
+  resultLit,
   startedTicket,
   toolSubject,
   type EntryLit,
+  type LitHeld,
   type LitSentinel,
 } from "./transcript-lit";
 
@@ -114,7 +115,7 @@ export function entryActivity(
   let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
   let litStarted: EntryLit["started"];
-  const refused: string[] = [];
+  const held: LitHeld[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
 
@@ -140,11 +141,12 @@ export function entryActivity(
         }
         case "tool_result": {
           const id = b.tool_use_id;
+          const said = resultLit(b.content);
+          sentinels.push(...said.sentinels);
           if (typeof id === "string") {
             finished.push(id);
-            if (b.is_error === true) refused.push(id);
+            if (said.held.length > 0) held.push({ call: id, ids: said.held });
           }
-          sentinels.push(...resultSentinels(b.content));
           break;
         }
         case "text": {
@@ -162,13 +164,13 @@ export function entryActivity(
     litStarted === undefined &&
     phase === undefined &&
     sentinels.length === 0 &&
-    refused.length === 0
+    held.length === 0
       ? undefined
       : {
           ...(litStarted !== undefined && { started: litStarted }),
           ...(phase !== undefined && { phase }),
           ...(sentinels.length > 0 && { sentinels }),
-          ...(refused.length > 0 && { refused }),
+          ...(held.length > 0 && { held }),
         };
 
   // [LAW:polishing-by-subtraction] Undefined when there is nothing to say, so
