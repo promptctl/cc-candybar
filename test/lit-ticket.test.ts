@@ -25,28 +25,39 @@ let dir: string;
 const stamp = (): string =>
   new Date(1_700_000_000_000 + clock++ * 1000).toISOString();
 
-const call = (name: string, input: Record<string, unknown>): string =>
-  JSON.stringify({
+let lastCall = "";
+
+const call = (name: string, input: Record<string, unknown>): string => {
+  lastCall = `c${clock}`;
+  return JSON.stringify({
     timestamp: stamp(),
     type: "assistant",
     message: {
       role: "assistant",
-      content: [{ type: "tool_use", id: `c${clock}`, name, input }],
+      content: [{ type: "tool_use", id: lastCall, name, input }],
     },
   });
+};
 
 const bash = (command: string): string => call("Bash", { command });
 const skill = (name: string): string => call("Skill", { skill: name });
 
-const result = (content: unknown): string =>
+// The result of the newest call, so a `lit start` settles the way lit answers.
+const result = (content: unknown, isError = false): string =>
   JSON.stringify({
     timestamp: stamp(),
     type: "user",
     message: {
       role: "user",
-      content: [{ type: "tool_result", tool_use_id: "x", content }],
+      content: [
+        { type: "tool_result", tool_use_id: lastCall, content, is_error: isError },
+      ],
     },
   });
+
+// A `lit start` lit accepted: the call and its ok result.
+const start = (command: string): string =>
+  [bash(command), result("Claimed.")].join("\n");
 
 const sentinel = (state: unknown): string => `lit:state ${JSON.stringify(state)}`;
 
@@ -80,12 +91,12 @@ describe("the ticket a session is working", () => {
 
   test("`lit start <id>` names the ticket, in prep, with no epic yet", async () => {
     expect(
-      await ticketOf(bash("cd /r && lit start proj-ab1.c2 2>&1 | tail -3")),
+      await ticketOf(start("cd /r && lit start proj-ab1.c2 2>&1 | tail -3")),
     ).toEqual({ id: "proj-ab1.c2", phase: "prep", epic: null });
   });
 
   test("a later `lit start` replaces the ticket", async () => {
-    const t = await ticketOf(bash("lit start a-1"), bash("lit start b-2"));
+    const t = await ticketOf(start("lit start a-1"), start("lit start b-2"));
     expect(t?.id).toBe("b-2");
   });
 
@@ -95,7 +106,7 @@ describe("the ticket a session is working", () => {
 
   test("the phase follows the work: impl, review, groom, handoff", async () => {
     const steps = [
-      bash("lit start t-1"),
+      start("lit start t-1"),
       call("Edit", { file_path: "/f" }),
     ];
     expect((await ticketOf(...steps))?.phase).toBe("impl");
@@ -112,7 +123,7 @@ describe("the ticket a session is working", () => {
   test("lit's sentinel for the ticket in hand carries its epic", async () => {
     expect(
       await ticketOf(
-        bash("lit start t-1"),
+        start("lit start t-1"),
         result(
           `t-1 [in_progress]\n${sentinel({ id: "t-1", epic: { id: "e", done: 4, total: 10 } })}\nmore`,
         ),
@@ -122,7 +133,7 @@ describe("the ticket a session is working", () => {
 
   test("a sentinel in a text-block result reads the same", async () => {
     const t = await ticketOf(
-      bash("lit start t-1"),
+      start("lit start t-1"),
       result([
         { type: "text", text: sentinel({ id: "t-1", epic: { id: "e", done: 1, total: 2 } }) },
       ]),
@@ -132,15 +143,60 @@ describe("the ticket a session is working", () => {
 
   test("a sentinel about another ticket does not move this one", async () => {
     const t = await ticketOf(
-      bash("lit start t-1"),
+      start("lit start t-1"),
       result(sentinel({ id: "other", epic: { id: "e", done: 9, total: 9 } })),
     );
     expect(t?.epic).toBeNull();
   });
 
   test("a line claiming the prefix that does not parse is not a sentinel", async () => {
-    const t = await ticketOf(bash("lit start t-1"), result("lit:state {nope}"));
+    const t = await ticketOf(start("lit start t-1"), result("lit:state {nope}"));
     expect(t?.epic).toBeNull();
+  });
+
+  test("a start lit refused claims nothing; the ticket in hand stays", async () => {
+    expect(
+      await ticketOf(bash("lit start bogus"), result("no such ticket", true)),
+    ).toBeNull();
+    const t = await ticketOf(
+      start("lit start t-1"),
+      bash("lit start taken-2"),
+      result("claimed by another session", true),
+    );
+    expect(t?.id).toBe("t-1");
+  });
+
+  test("a start whose result has not come back is not yet the ticket", async () => {
+    const t = await ticketOf(start("lit start t-1"), bash("lit start t-2"));
+    expect(t?.id).toBe("t-1");
+  });
+
+  test("the sentinel lit prints on start settles the epic at once", async () => {
+    const t = await ticketOf(
+      bash("lit start t-1"),
+      result(sentinel({ id: "t-1", epic: { id: "e", done: 2, total: 5 } })),
+    );
+    expect(t).toEqual({ id: "t-1", phase: "prep", epic: { id: "e", done: 2, total: 5 } });
+  });
+
+  test("starting the ticket in hand again keeps its epic", async () => {
+    const t = await ticketOf(
+      bash("lit start t-1"),
+      result(sentinel({ id: "t-1", epic: { id: "e", done: 3, total: 7 } })),
+      start("lit start t-1"),
+    );
+    expect(t?.epic).toEqual({ id: "e", done: 3, total: 7 });
+  });
+
+  test("lit named inside quoted text or a heredoc runs nothing", async () => {
+    const t = await ticketOf(
+      start("lit start t-1"),
+      call("Edit", { file_path: "/f" }),
+      start('git commit -m "show it after a lit start in this session"'),
+      start("gh pr view --body 'then lit done x'"),
+      start("cat <<'EOF' > n.md\nlit start nope\nEOF"),
+    );
+    expect(t).toEqual({ id: "t-1", phase: "impl", epic: null });
   });
 
   test("a phase before any `lit start` lands on nothing", async () => {

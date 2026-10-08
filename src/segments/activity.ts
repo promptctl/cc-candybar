@@ -1,6 +1,6 @@
 // What Claude is DOING, folded from the transcript (brandon-activity-ue7).
 //
-// Three facts, one record: the slash command that opened the current turn, the
+// Facts, one record: the lit ticket the session is working, the slash command that opened the current turn, the
 // todo list, and the tools in flight plus the ones that finished this turn.
 // They are the only class of fact the payload had no shape for — everything else
 // it carries is a quantity.
@@ -51,8 +51,7 @@ export interface ActivityInfo {
 // The fold state differs from the report in exactly one way: it keeps tool ids,
 // because pairing a `tool_result` to its call is the only thing they are for.
 // Reporting tallies them away, so no id crosses the payload seam.
-interface ActivityState {
-  readonly ticket: WorkTicket | null;
+interface ActivityState extends TicketState {
   readonly command: string | null;
   readonly todos: readonly TodoItem[];
   readonly pending: readonly ToolCall[];
@@ -68,28 +67,54 @@ export interface WorkTicket {
   readonly epic: LitEpic | null;
 }
 
-// [LAW:dataflow-not-control-flow] `lit start` replaces the ticket; a phase moves
-// the one in hand; a sentinel about the ticket in hand updates its epic. Before
-// any `lit start` there is no ticket for a phase or sentinel to land on.
+// A `lit start` the session has made but whose result has not come back yet:
+// lit may still refuse it (a bogus id, a ticket another session holds).
+interface TicketClaim {
+  readonly call: string;
+  readonly id: string;
+}
+
+interface TicketState {
+  readonly ticket: WorkTicket | null;
+  readonly claim: TicketClaim | null;
+}
+
+// [LAW:dataflow-not-control-flow] A `lit start` is a claim; its own result
+// settles it — accepted replaces the ticket (keeping the epic when it is the
+// same ticket again), refused drops the claim. A phase moves the ticket in
+// hand; a sentinel about the ticket in hand updates its epic. Before any
+// accepted start there is no ticket for a phase or sentinel to land on.
 function stepTicket(
-  ticket: WorkTicket | null,
-  lit: EntryLit,
-): WorkTicket | null {
-  const started: WorkTicket | null =
-    lit.started === undefined
-      ? ticket
-      : { id: lit.started, phase: "prep", epic: null };
-  if (started === null) return null;
-  const sentinel = (lit.sentinels ?? []).findLast((s) => s.id === started.id);
+  state: TicketState,
+  lit: EntryLit | undefined,
+  finished: readonly string[],
+): TicketState {
+  const claim = lit?.started ?? state.claim;
+  const settled = claim !== null && finished.includes(claim.call);
+  const accepted = settled && !(lit?.refused ?? []).includes(claim.call);
+  const held: WorkTicket | null = accepted
+    ? {
+        id: claim.id,
+        phase: "prep",
+        epic: state.ticket?.id === claim.id ? state.ticket.epic : null,
+      }
+    : state.ticket;
+  const next = { claim: settled ? null : claim };
+  if (held === null || lit === undefined) return { ...next, ticket: held };
+  const sentinel = (lit.sentinels ?? []).findLast((s) => s.id === held.id);
   return {
-    id: started.id,
-    phase: lit.phase ?? started.phase,
-    epic: sentinel === undefined ? started.epic : sentinel.epic,
+    ...next,
+    ticket: {
+      id: held.id,
+      phase: lit.phase ?? held.phase,
+      epic: sentinel === undefined ? held.epic : sentinel.epic,
+    },
   };
 }
 
 const EMPTY: ActivityState = {
   ticket: null,
+  claim: null,
   command: null,
   todos: [],
   pending: [],
@@ -146,10 +171,7 @@ function step(state: ActivityState, entry: ParsedEntry): ActivityState {
     pending,
     done,
     todos: activity.todos ?? turn.todos,
-    ticket:
-      activity.lit === undefined
-        ? turn.ticket
-        : stepTicket(turn.ticket, activity.lit),
+    ...stepTicket(turn, activity.lit, activity.finished ?? []),
   };
 }
 

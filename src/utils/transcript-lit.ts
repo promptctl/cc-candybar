@@ -26,7 +26,11 @@ export interface LitSentinel {
 // [LAW:types-are-the-program] Independently optional, like `EntryActivity`: one
 // entry can start a ticket and name a phase at once (`lit start` is both).
 export interface EntryLit {
-  readonly started?: string;
+  // A `lit start` call: the id it claims and the tool call whose result decides
+  // whether the claim held — lit refuses a bogus or already-claimed id.
+  readonly started?: { readonly call: string; readonly id: string };
+  // Tool calls whose result came back `is_error`.
+  readonly refused?: readonly string[];
   readonly phase?: string;
   readonly sentinels?: readonly LitSentinel[];
 }
@@ -41,8 +45,7 @@ export interface ToolSubject {
 
 // [LAW:dataflow-not-control-flow] The workflow vocabulary is DATA: an ordered
 // rule list, first match per tool call wins, and the newest matching call since
-// the ticket started names the phase. The vocabulary is open — a new phase is a
-// new row, never a code edit.
+// the ticket started names the phase.
 export interface PhaseRule {
   readonly phase: string;
   readonly tool: string;
@@ -54,7 +57,6 @@ export interface PhaseRule {
 const SH = String.raw`(?:^|[\s;&|(])`;
 
 export const WORK_PHASES: readonly PhaseRule[] = [
-  { phase: "prep", tool: "Bash", match: new RegExp(`${SH}lit\\s+start\\s`) },
   { phase: "impl", tool: "Edit", match: /^/ },
   { phase: "impl", tool: "Write", match: /^/ },
   { phase: "impl", tool: "NotebookEdit", match: /^/ },
@@ -75,11 +77,9 @@ export const WORK_PHASES: readonly PhaseRule[] = [
 
 const LIT_START = new RegExp(`${SH}lit\\s+start\\s+([A-Za-z0-9][\\w.-]*)`);
 
-export function phaseOf(
-  call: ToolSubject,
-  rules: readonly PhaseRule[] = WORK_PHASES,
-): string | undefined {
-  return rules.find((r) => r.tool === call.tool && r.match.test(call.subject))
+// A started ticket enters at `prep` (see `stepTicket`), so no rule names it.
+export function phaseOf(call: ToolSubject): string | undefined {
+  return WORK_PHASES.find((r) => r.tool === call.tool && r.match.test(call.subject))
     ?.phase;
 }
 
@@ -87,6 +87,7 @@ export function startedTicket(call: ToolSubject): string | undefined {
   return call.tool === "Bash" ? LIT_START.exec(call.subject)?.[1] : undefined;
 }
 
+const SENTINEL_PREFIX = "lit:state ";
 const SENTINEL = /^lit:state (\{.*\})$/gm;
 
 // [LAW:parse-dont-validate] The sentinel crossing: a line either parses into a
@@ -128,22 +129,37 @@ export function toolSubject(name: string, input: unknown): ToolSubject {
   const i = (input ?? {}) as Record<string, unknown>;
   const subject =
     name === "Bash" && typeof i.command === "string"
-      ? i.command
+      ? shellCode(i.command)
       : name === "Skill" && typeof i.skill === "string"
         ? i.skill
         : name;
   return { tool: name, subject };
 }
 
-// A tool_result's text, whichever shape it arrived in.
-export function resultText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((b) =>
-      typeof b === "object" && b !== null && typeof b.text === "string"
-        ? (b.text as string)
-        : "",
-    )
-    .join("\n");
+// A heredoc body and a quoted string are DATA to the shell — a commit message
+// saying "after a lit start" runs no lit — so they are blanked before any rule
+// reads the command. Approximate shell lexing, erring toward blanking.
+const HEREDOC = /(<<-?\s*(['"]?)(\w+)\2[^\n]*\n)[\s\S]*?\n\s*\3(?=\n|$)/g;
+const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g;
+
+export function shellCode(command: string): string {
+  return command.replace(HEREDOC, "$1").replace(QUOTED, "''");
+}
+
+// The lit sentinels in a tool_result, whichever shape it arrived in. Nearly no
+// result carries one, so a block without the prefix is never joined or scanned —
+// this runs over every result of every transcript the daemon parses.
+export function resultSentinels(content: unknown): readonly LitSentinel[] {
+  if (typeof content === "string") {
+    return content.includes(SENTINEL_PREFIX) ? litSentinels(content) : [];
+  }
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((b) =>
+    typeof b === "object" &&
+    b !== null &&
+    typeof b.text === "string" &&
+    (b.text as string).includes(SENTINEL_PREFIX)
+      ? litSentinels(b.text as string)
+      : [],
+  );
 }

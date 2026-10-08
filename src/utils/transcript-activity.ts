@@ -9,9 +9,19 @@
 // text the pruning exists to drop. So this module is a PROJECTION run at the one
 // parse site, in exactly the shape `firstContentType` already established:
 // project the bounded scalars, never the array. A tool call keeps its id and
-// name (29 + ~8 bytes), a tool result keeps only the id it answers, a TodoWrite
-// keeps its list (bounded by the list), and a slash command keeps its name. The
+// name (29 + ~8 bytes), a tool result keeps the id it answers plus any lit
+// sentinel lines it printed (src/utils/transcript-lit.ts), a TodoWrite keeps its
+// list (bounded by the list), and a slash command keeps its name. The
 // content arrays stay unreachable from here on, as before.
+
+import {
+  phaseOf,
+  resultSentinels,
+  startedTicket,
+  toolSubject,
+  type EntryLit,
+  type LitSentinel,
+} from "./transcript-lit";
 
 // One tool call, as the transcript names it. The id is retained for exactly one
 // reason: it is the only thing that pairs a `tool_result` back to the call it
@@ -51,16 +61,6 @@ export interface EntryActivity {
   readonly command?: string;
   readonly lit?: EntryLit;
 }
-
-import {
-  litSentinels,
-  phaseOf,
-  resultText,
-  startedTicket,
-  toolSubject,
-  type EntryLit,
-  type LitSentinel,
-} from "./transcript-lit";
 
 // Claude Code writes a slash command into the transcript as the user turn's own
 // text, wrapped in a `<command-name>` tag (verified against ~300 real
@@ -113,7 +113,8 @@ export function entryActivity(
   // shapes cannot end up under two different rules.
   let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
-  let litStarted: string | undefined;
+  let litStarted: EntryLit["started"];
+  const refused: string[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
 
@@ -129,7 +130,8 @@ export function entryActivity(
           if (typeof id !== "string" || typeof name !== "string") break;
           started.push({ id, name });
           const call = toolSubject(name, b.input);
-          litStarted = startedTicket(call) ?? litStarted;
+          const ticket = startedTicket(call);
+          if (ticket !== undefined) litStarted = { call: id, id: ticket };
           phase = phaseOf(call) ?? phase;
           // The todo list rides its own tool call's input. A later block in the
           // same entry supersedes an earlier one: it is the newer state.
@@ -138,8 +140,11 @@ export function entryActivity(
         }
         case "tool_result": {
           const id = b.tool_use_id;
-          if (typeof id === "string") finished.push(id);
-          sentinels.push(...litSentinels(resultText(b.content)));
+          if (typeof id === "string") {
+            finished.push(id);
+            if (b.is_error === true) refused.push(id);
+          }
+          sentinels.push(...resultSentinels(b.content));
           break;
         }
         case "text": {
@@ -154,12 +159,16 @@ export function entryActivity(
 
   const command = isUser ? slashCommand(turnText) : undefined;
   const lit: EntryLit | undefined =
-    litStarted === undefined && phase === undefined && sentinels.length === 0
+    litStarted === undefined &&
+    phase === undefined &&
+    sentinels.length === 0 &&
+    refused.length === 0
       ? undefined
       : {
           ...(litStarted !== undefined && { started: litStarted }),
           ...(phase !== undefined && { phase }),
           ...(sentinels.length > 0 && { sentinels }),
+          ...(refused.length > 0 && { refused }),
         };
 
   // [LAW:polishing-by-subtraction] Undefined when there is nothing to say, so
