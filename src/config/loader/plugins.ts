@@ -169,9 +169,17 @@ export function applyPlugins(
         dropped: [...layer.dropped, { path: file, plugin, reason }],
       });
       if (path.basename(file) !== DEFINITION_FILE) {
+        const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+        // Named by its folder like any drop, so it tombstones its namespace.
         return drop(
-          `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`,
-          layer.config,
+          reason,
+          plugin === undefined
+            ? layer.config
+            : tombstone(withoutPlugin(layer.config, plugin), plugin, {
+                path: file,
+                plugin,
+                reason,
+              }),
         );
       }
       if (plugin === undefined) {
@@ -374,10 +382,15 @@ export function withDroppedPlacements(
           actionStandIns.map((name) => [name, { copy: reads(name) }]),
         ),
       },
+      // A helper is called with the caller's dot, so its stand-in cannot
+      // read the tombstone by path: the drop's notice is baked in.
       helpers: {
         ...config.helpers,
         ...Object.fromEntries(
-          helperStandIns.map((name) => [name, reads(name)]),
+          helperStandIns.map((name) => [
+            name,
+            `{{ fail ${JSON.stringify(tombstoned(name))} }}`,
+          ]),
         ),
       },
     },

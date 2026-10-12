@@ -561,15 +561,18 @@ function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   );
 }
 
-// The home's own layer merged over the bundled default, and the whole
+// The home's own layer merged over the chain's base, and the whole
 // chain's merge — what the file says, and what the bar draws.
 function homeConfig(home: ConfigHome, chain: LoadedChain): DslConfig {
   const [bottom] = chain.layers;
-  return bottom?.path === home.path ? bottom.config : DEFAULT_DSL_CONFIG;
+  return bottom?.path === home.path ? bottom.config : chain.base;
 }
 
+// An absent home reads as the chain's base — installed plugins included —
+// never the bare bundled default, or an installed plugin's names would read
+// as a change the home's write is hidden behind.
 function topConfig(chain: LoadedChain): DslConfig {
-  return chain.layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
+  return chain.layers.at(-1)?.config ?? chain.base;
 }
 
 // [LAW:dataflow-not-control-flow] The dotted paths at which two configs

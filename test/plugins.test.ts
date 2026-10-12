@@ -501,7 +501,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } }, helpers: { state: "x" } }`);
     const p = write(
       "config.json5",
-      `{ segments: { calls: { template: '{{ template "plugins.deploy.state" . }}' } }, root: { h: ["calls"] } }`,
+      `{ segments: { calls: { template: '{{ template "plugins.deploy.state" .session }}' } }, root: { h: ["calls"] } }`,
     );
     const message = fatal(await checkConfig(p, dir));
     const line = message.split("\n").find((l) => l.includes(`segment "calls"`));
@@ -596,6 +596,22 @@ test("a listed definition that is not a folder's plugin.json5 is refused, naming
   );
   const message = fatal(await checkConfig(p, dir));
   expect(message).toContain(`move this file to <dir>/<name>/plugin.json5`);
+});
+
+test("a placement under a refused loose definition's folder stands in naming the fix", async () => {
+  write("deploy/state.json5", `{ data: "./d.json", segments: { s: { template: "x" } } }`);
+  const p = write(
+    "config.json5",
+    `{ plugins: ["./deploy/state.json5"], root: { h: ["plugins.deploy.s"] } }`,
+  );
+  const message = fatal(await checkConfig(p, dir));
+  expect(message).not.toContain("unknown segment");
+  const prepared = await prepareConfig([p], dir, []);
+  try {
+    expect(prepared.config.segments["plugins.deploy.s"]!.template).toContain("move this file to");
+  } finally {
+    prepared.registry.dispose();
+  }
 });
 
 test("a tombstone has no cache field", () => {

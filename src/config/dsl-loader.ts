@@ -305,6 +305,7 @@ export function loadConfigChain(
   if (top === undefined) {
     return {
       layers,
+      base,
       installed,
       config: validateConfig(
         loadConfig(null, base, NO_PROJECT),
@@ -316,6 +317,7 @@ export function loadConfigChain(
   try {
     return {
       layers,
+      base,
       installed,
       config: validateConfig(top, top.path, allowedPalettes),
     };
@@ -343,6 +345,9 @@ export interface LoadedChain {
   >;
   // The installed plugins under every layer: the roots searched (each is
   // watched), the definitions merged, and those dropped (also `warned`).
+  // What the first file merges over: the bundled default and the installed
+  // plugins — the config an absent file reads as.
+  readonly base: DslConfig;
   readonly installed: LoadedFile["plugins"] & {
     readonly roots: readonly string[];
     // Installed drops no layer reaches: logged, never a warning.
