@@ -9,7 +9,11 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, validateConfig } from "../src/config/dsl-loader";
+import {
+  loadConfig,
+  NO_PROJECT,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -46,7 +50,7 @@ describe("shipped examples load and render through the real cascade", () => {
     // merges ON TOP of the bundled default, with the default's own segment
     // names as the delta-able set.
     const config = validateConfig(
-      loadConfig(path, DEFAULT_DSL_CONFIG, ALLOWED),
+      loadConfig(path, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED),
       path,
       ALLOWED,
     );

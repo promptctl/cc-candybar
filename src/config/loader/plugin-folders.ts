@@ -23,17 +23,18 @@ export function pluginRoots(projectDir: string | null): readonly string[] {
     .filter((d) => d !== "");
   const dataHome =
     process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-  return [
-    ...new Set([
-      ...[...dataDirs]
-        .reverse()
-        .map((d) => path.join(d, "cc-candybar", "plugins")),
-      path.join(dataHome, "cc-candybar", "plugins"),
-      ...(projectDir === null
-        ? []
-        : [path.join(projectDir, ".cc-candybar", "plugins")]),
-    ]),
+  const roots = [
+    ...[...dataDirs]
+      .reverse()
+      .map((d) => path.join(d, "cc-candybar", "plugins")),
+    path.join(dataHome, "cc-candybar", "plugins"),
+    ...(projectDir === null
+      ? []
+      : [path.join(projectDir, ".cc-candybar", "plugins")]),
   ];
+  // A root listed twice keeps its NEAREST position: `$XDG_DATA_HOME` named in
+  // `$XDG_DATA_DIRS` too still outranks every package manager's root.
+  return roots.filter((r, i) => roots.lastIndexOf(r) === i);
 }
 
 export interface InstalledPlugins {
@@ -73,6 +74,8 @@ function listFolders(
     return {
       folders: fs
         .readdirSync(root, { withFileTypes: true })
+        // A dot-folder (`.git`, an editor's) is never an install.
+        .filter((e) => !e.name.startsWith("."))
         .filter((e) => e.isDirectory() || isDirectoryLink(root, e))
         .map((e) => e.name)
         .sort(),

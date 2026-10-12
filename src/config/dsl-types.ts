@@ -787,12 +787,13 @@ export type VariableDeclWithCache =
   | TimeVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
+  // [LAW:types-are-the-program] Named positively: a kind added to the union
+  // (a tombstone's `dropped`) has no cache until it is listed here.
   return (
-    v.kind !== "literal" &&
-    v.kind !== "input" &&
-    v.kind !== "env" &&
-    v.kind !== "git" &&
-    v.kind !== "state"
+    v.kind === "file" ||
+    v.kind === "shell" ||
+    v.kind === "template" ||
+    v.kind === "time"
   );
 }
 

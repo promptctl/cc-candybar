@@ -1,6 +1,10 @@
 import v8 from "node:v8";
 import vm from "node:vm";
-import { loadConfig, validateConfig } from "../src/config/dsl-loader";
+import {
+  loadConfig,
+  NO_PROJECT,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -28,7 +32,7 @@ function heapUsed(): number {
 
 function registerStdlib() {
   const config = validateConfig(
-    loadConfig(null, DEFAULT_DSL_CONFIG),
+    loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT),
     "<default>",
   );
   const store = new VariableStore();

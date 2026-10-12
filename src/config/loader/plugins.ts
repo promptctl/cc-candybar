@@ -40,7 +40,7 @@ import {
   type SettingValue,
 } from "../dsl-types.js";
 import { presetNames, presetRoot } from "../presets.js";
-import { templateActionRefs } from "./refs.js";
+import { templateActionRefs, templateHelperCalls } from "./refs.js";
 
 // A plugin that could not be loaded: its definition's path, its name (its
 // folder's, undefined when the folder's name cannot be one), and why. The rest of the config renders without it.
@@ -168,6 +168,12 @@ export function applyPlugins(
         config,
         dropped: [...layer.dropped, { path: file, plugin, reason }],
       });
+      if (path.basename(file) !== DEFINITION_FILE) {
+        return drop(
+          `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`,
+          layer.config,
+        );
+      }
       if (plugin === undefined) {
         return drop(
           `its folder "${path.basename(path.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
@@ -262,6 +268,9 @@ function pluginOf(name: string): string | undefined {
 // belongs to no drop.
 export function dropsOwning(
   layer: PluginLayer,
+  // The drops of the layers beneath this one, whose own tombstones `layer`
+  // already carries — only those without a name have none.
+  beneath: readonly DroppedPlugin[],
 ): (name: string) => readonly string[] {
   const owners = new Set(
     [
@@ -269,7 +278,7 @@ export function dropsOwning(
       ...Object.keys(layer.config.segments),
     ].map(pluginOf),
   );
-  const unnamed = layer.dropped
+  const unnamed = [...beneath, ...layer.dropped]
     .filter((d) => d.plugin === undefined)
     .map(droppedPluginNotice);
   return (name) => {
@@ -285,13 +294,14 @@ export function dropsOwning(
  * Every segment of a dropped plugin the user's file still names — a placement,
  * or a by-field retune — stands in as a cell saying the plugin did not load,
  * rather than failing the whole config. The stand-in declares each setting
- * its placements set, so they still validate.
+ * its placements set, so they still validate. `reached` is every drop notice
+ * a stand-in carries: the drops this config actually asks for.
  */
 export function withDroppedPlacements(
   config: DslConfig,
   layer: DslConfig,
   owning: (name: string) => readonly string[],
-): DslConfig {
+): { readonly config: DslConfig; readonly reached: ReadonlySet<string> } {
   const placements = presetNames(config.presets)
     .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
     .flatMap((node) => (node.kind === "segment" ? [node] : []));
@@ -299,49 +309,79 @@ export function withDroppedPlacements(
     ...placements.map((n) => n.name),
     ...Object.keys(config.segments),
   ]);
+  const caused = [...names]
+    .filter((name) => !(name in layer.segments))
+    .map((name) => ({ name, cause: owning(name) }))
+    .filter(({ cause }) => cause.length > 0);
   const standIns = Object.fromEntries(
-    [...names]
-      .filter((name) => !(name in layer.segments))
-      .flatMap((name) => {
-        const cause = owning(name);
-        return cause.length === 0
-          ? []
-          : [
-              [
-                name,
-                standIn(
-                  name,
-                  cause,
-                  placements.filter((n) => n.name === name),
-                ),
-              ],
-            ];
-      }),
+    caused.map(({ name, cause }) => [
+      name,
+      standIn(
+        name,
+        cause,
+        placements.filter((n) => n.name === name),
+      ),
+    ]),
   );
-  // An action of a dropped plugin a template binds stands in as one whose
-  // copy reads the tombstone: the cell binding it renders ⚠ with the drop.
-  const actionStandIns = Object.fromEntries(
-    Object.values(config.segments)
-      .flatMap((seg) =>
+  // An action or helper of a dropped plugin a template reaches stands in as
+  // one reading the tombstone: the cell reaching it renders ⚠ with the drop.
+  // No tombstone, nothing to stand in for — the common load skips the walk.
+  const tombstoned = (name: string): string | undefined => {
+    const plugin = pluginOf(name);
+    const data =
+      plugin === undefined
+        ? undefined
+        : config.variables[pluginDataVar(plugin)];
+    return data?.kind === "dropped" ? data.reason : undefined;
+  };
+  const anyTombstone = Object.values(config.variables).some(
+    (v) => v.kind === "dropped",
+  );
+  const templates = anyTombstone
+    ? Object.values(config.segments).flatMap((seg) =>
         (["template", "bg", "fg", "when"] as const).flatMap((f) =>
-          seg[f] === undefined
-            ? []
-            : templateActionRefs(seg[f], config.helpers).map((r) => r.name),
+          seg[f] === undefined ? [] : [seg[f]],
         ),
       )
-      .filter((name) => !(name in config.actions))
-      .flatMap((name) => {
-        const plugin = pluginOf(name);
-        return plugin !== undefined &&
-          config.variables[pluginDataVar(plugin)]?.kind === "dropped"
-          ? [[name, { copy: `{{ .${pluginDataVar(plugin)} }}` }] as const]
-          : [];
-      }),
-  );
+    : [];
+  const reads = (name: string): string =>
+    `{{ .${pluginDataVar(pluginOf(name) ?? "")} }}`;
+  const actionStandIns = [
+    ...new Set(
+      templates.flatMap((t) =>
+        templateActionRefs(t, config.helpers).map((r) => r.name),
+      ),
+    ),
+  ].filter((name) => !(name in config.actions) && tombstoned(name));
+  const helperStandIns = [
+    ...new Set(
+      templates.flatMap((t) => [...templateHelperCalls(t, config.helpers)]),
+    ),
+  ].filter((name) => !(name in config.helpers) && tombstoned(name));
+  const reached = new Set([
+    ...caused.flatMap(({ cause }) => cause),
+    ...[...actionStandIns, ...helperStandIns].flatMap(
+      (name) => tombstoned(name) ?? [],
+    ),
+  ]);
   return {
-    ...config,
-    segments: { ...config.segments, ...standIns },
-    actions: { ...config.actions, ...actionStandIns },
+    config: {
+      ...config,
+      segments: { ...config.segments, ...standIns },
+      actions: {
+        ...config.actions,
+        ...Object.fromEntries(
+          actionStandIns.map((name) => [name, { copy: reads(name) }]),
+        ),
+      },
+      helpers: {
+        ...config.helpers,
+        ...Object.fromEntries(
+          helperStandIns.map((name) => [name, reads(name)]),
+        ),
+      },
+    },
+    reached,
   };
 }
 

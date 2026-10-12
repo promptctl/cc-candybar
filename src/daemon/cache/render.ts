@@ -5,7 +5,7 @@ import { neededPrefixesByPreset } from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
   loadConfigChain,
-  type LoadedFile,
+  type LoadedChain,
   resolveDslConfig,
   configResolutionNotice,
   dslConfigCandidatePaths,
@@ -18,6 +18,7 @@ import type {
   ValidatedConfig,
 } from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
+import { pluginNameOf } from "../../config/loader/plugins.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
@@ -154,9 +155,15 @@ export interface DslRenderState {
 
 // The installed roots searched (every one watched), and the definitions —
 // installed and listed — merged and dropped.
-type LoadedPlugins = LoadedFile["plugins"] & {
-  readonly roots: readonly string[];
-};
+type LoadedPlugins = LoadedChain["installed"];
+
+// The definitions that render, of those merged lowest first: a nearer layer's
+// plugin replaces a farther one's of the same name, so only the last of each
+// name is loaded.
+function rendering(merged: readonly string[]): readonly string[] {
+  const names = merged.map(pluginNameOf);
+  return merged.filter((_, i) => names.lastIndexOf(names[i]) === i);
+}
 
 // The files a config is merged from, lowest first, and the one durable
 // clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
@@ -174,13 +181,14 @@ export interface ConfigChain {
 // else. The daemon's own sink — buildRenderState is shared with the demo.
 function logPlugins(
   layers: readonly string[],
-  { loaded, dropped }: LoadedPlugins,
+  { loaded, dropped, unreached }: LoadedPlugins,
 ): void {
   dlog(
     "info",
-    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length}` +
+    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length}` +
       loaded.map((p) => ` +${p}`).join("") +
-      dropped.map((d) => ` -${d.path} (${d.reason})`).join(""),
+      dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
+      unreached.map((d) => ` ~${d.path} (${d.reason})`).join(""),
   );
 }
 
@@ -273,12 +281,12 @@ function watchTargetsFor(
   const byDir = new Map<string, Set<string> | null>();
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
-  const { roots, loaded, dropped } = entry.state.plugins;
+  const { roots, loaded, dropped, unreached } = entry.state.plugins;
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
     ...roots,
     ...loaded,
-    ...dropped.map((d) => d.path),
+    ...[...dropped, ...unreached].map((d) => d.path),
   ]) {
     const { dir, name } = nearestWatchTarget(candidate);
     const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
@@ -435,11 +443,16 @@ export function buildRenderState(
     ],
     plugins: {
       roots: installed.roots,
-      loaded: [...installed.loaded, ...layers.flatMap((l) => l.plugins.loaded)],
+      loaded: rendering([
+        ...installed.loaded,
+        ...layers.flatMap((l) => l.plugins.loaded),
+      ]),
       dropped: [
         ...installed.dropped,
         ...layers.flatMap((l) => l.plugins.dropped),
       ],
+      unreached: installed.unreached,
+      reached: installed.reached,
     },
   };
 }
@@ -575,7 +588,9 @@ export class RenderCache {
         loaded.state ??
         buildRenderState(
           cwd,
-          { layers: [], home: "", projectDir: null },
+          // The entry's own project: the seed watches its repo's plugin
+          // root, so a plugin installed there after the failed load reloads.
+          { layers: [], home: "", projectDir },
           [],
           this.deps,
         ),

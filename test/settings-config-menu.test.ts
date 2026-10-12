@@ -18,7 +18,11 @@
 
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { ConfigError, loadConfigSource } from "../src/config/dsl-loader";
+import {
+  ConfigError,
+  loadConfigSource,
+  NO_PROJECT,
+} from "../src/config/dsl-loader";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -100,7 +104,7 @@ function rig(
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
-      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, ALLOWED).raw,
+      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED).raw,
     );
     return { config, store, registry, compiled, fileHeld };
   };

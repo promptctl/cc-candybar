@@ -9,7 +9,10 @@ import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
-import { loadFromDisk } from "../src/daemon/cache/render";
+import { loadFromDisk, RenderCache } from "../src/daemon/cache/render";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { pluginRoots } from "../src/config/loader/plugin-folders";
+import { hasCacheField } from "../src/config/dsl-types";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 
@@ -470,17 +473,131 @@ describe("an installed plugin", () => {
     }
   });
 
-  test("a folder holding no definition is a drop naming its path", async () => {
+  test("a folder holding no definition is a drop naming its path, once a config reaches it", async () => {
     fs.mkdirSync(path.join(dir, "data/cc-candybar/plugins/empty"), { recursive: true });
+    const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/empty/plugin.json5")} was not loaded`;
+    const message = fatal(await checkConfig(placing("plugins.empty.s"), dir));
+    expect(message).toContain("1 plugin did not load");
+    expect(message).toContain(notice);
+  });
+
+  // Nobody asked for a plugin nothing places: a broken one a package manager
+  // dropped is no config's problem.
+  test("a broken one nothing reaches is no warning and passes check", async () => {
+    install("share", "foo", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const warnings: string[] = [];
     const prepared = await prepareConfig([], dir, warnings);
     try {
-      expect(prepared.droppedPlugins.map((d) => d.plugin)).toEqual(["empty"]);
-      expect(warnings.join("\n")).toContain(
-        `plugin ${path.join(dir, "data/cc-candybar/plugins/empty/plugin.json5")} was not loaded`,
-      );
+      expect(prepared.droppedPlugins).toEqual([]);
+      expect(warnings).toEqual([]);
+    } finally {
+      prepared.registry.dispose();
+    }
+    const p = write("config.json5", `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`);
+    expect(clean(await checkConfig(p, dir)).warnings).toEqual([]);
+  });
+
+  test("a call to a dropped plugin's helper is ⚠ naming the drop", async () => {
+    install("data", "deploy", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } }, helpers: { state: "x" } }`);
+    const p = write(
+      "config.json5",
+      `{ segments: { calls: { template: '{{ template "plugins.deploy.state" . }}' } }, root: { h: ["calls"] } }`,
+    );
+    const message = fatal(await checkConfig(p, dir));
+    const line = message.split("\n").find((l) => l.includes(`segment "calls"`));
+    expect(line).toContain(
+      `plugin ${path.join(dir, "data/cc-candybar/plugins/deploy/plugin.json5")} was not loaded`,
+    );
+  });
+
+  test("a dot-folder is never a plugin", async () => {
+    fs.mkdirSync(path.join(dir, "repo/.cc-candybar/plugins/.git"), { recursive: true });
+    const warnings: string[] = [];
+    const prepared = await prepareConfig([], path.join(dir, "repo"), warnings);
+    try {
+      expect(prepared.droppedPlugins).toEqual([]);
+      expect(warnings).toEqual([]);
     } finally {
       prepared.registry.dispose();
     }
   });
+
+  test("a folder whose name is no plugin's stands in for the names nothing owns", async () => {
+    install("data", "my-plugin", `{ data: "./d.json", segments: { s: { template: "x" } } }`);
+    const message = fatal(await checkConfig(placing("plugins.myplugin.s"), dir));
+    expect(message).toContain(`its folder "my-plugin" is not a plugin name`);
+    expect(message).not.toContain("unknown segment");
+  });
+
+  test("the daemon's load reports only the definition that renders of a replaced name", () => {
+    install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
+    write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
+    const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    try {
+      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
+      expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
+      loaded.state?.registry.dispose();
+    } finally {
+      gitService.close();
+    }
+  });
+
+  // A config that fails its first load still renders the seeded default; the
+  // seed searches the entry's repo, so the plugin that would fix it reloads.
+  test("a failed first load still watches the repo's plugin root", () => {
+    const watchers = new WatcherRegistry({
+      counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
+      logger: () => {},
+    });
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    try {
+      const repo = path.join(dir, "repo");
+      fs.mkdirSync(repo);
+      const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
+      const cache = new RenderCache({ gitService, sessionState: new SessionState(), watchers });
+      const entry = cache.getOrCreate(repo, repo, p);
+      expect(entry.lastError).not.toBeNull();
+      expect(entry.state.plugins.roots).toContain(path.join(repo, ".cc-candybar", "plugins"));
+      entry.state.registry.dispose();
+    } finally {
+      watchers.closeAll();
+      gitService.close();
+    }
+  });
+});
+
+describe("plugin roots", () => {
+  let saved: { home?: string; dirs?: string };
+  beforeEach(() => {
+    saved = { home: process.env.XDG_DATA_HOME, dirs: process.env.XDG_DATA_DIRS };
+  });
+  afterEach(() => {
+    process.env.XDG_DATA_HOME = saved.home;
+    process.env.XDG_DATA_DIRS = saved.dirs;
+  });
+
+  test("the user's data home outranks package managers even when listed among them", () => {
+    process.env.XDG_DATA_HOME = "/home/u/.local/share";
+    process.env.XDG_DATA_DIRS = "/usr/share:/home/u/.local/share:/opt/share";
+    expect(pluginRoots(null)).toEqual([
+      "/opt/share/cc-candybar/plugins",
+      "/usr/share/cc-candybar/plugins",
+      "/home/u/.local/share/cc-candybar/plugins",
+    ]);
+  });
+});
+
+test("a listed definition that is not a folder's plugin.json5 is refused, naming the fix", async () => {
+  write("plugins/deploy.json5", `{ data: "./d.json", segments: {} }`);
+  const p = write(
+    "config.json5",
+    `{ plugins: ["./plugins/deploy.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
+  );
+  const message = fatal(await checkConfig(p, dir));
+  expect(message).toContain(`move this file to <dir>/<name>/plugin.json5`);
+});
+
+test("a tombstone has no cache field", () => {
+  expect(hasCacheField({ kind: "dropped", reason: "r" })).toBe(false);
 });
