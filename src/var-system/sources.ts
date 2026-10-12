@@ -537,9 +537,11 @@ class WatchManager {
         const aboutName = changed === null || name === null || changed === name;
         // The watched directory's own removal or rename reports its own name.
         if (!aboutName && changed !== self) return;
+        const wasLeaf = entry.target.leaf;
         this.rearm(filePath, entry);
-        // Ancestor churn on the way down is not a change to the path.
-        if (!entry.target.leaf) return;
+        // Ancestor churn on the way DOWN is not a change to the path; a move
+        // up from the leaf is its removal, which the subscribers must read.
+        if (!wasLeaf && !entry.target.leaf) return;
         for (const cb of entry.subscribers.keys()) cb();
       });
     } catch (e) {
@@ -676,6 +678,10 @@ function zeroValue(type: VarType): VarValue {
 export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
+  // A watch the OS refused is a STANDING fault, not a read's outcome: a read
+  // that succeeds afterwards says nothing about whether writes will be seen,
+  // so no outcome clears it. It lives until the registry does.
+  private readonly watchFaults = new Map<string, LastError>();
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -1276,7 +1282,15 @@ export class SourceRegistry {
   // Returns the recorded error for a variable, or undefined if the last
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
-    return this.lastErrors.get(name);
+    const read = this.lastErrors.get(name);
+    const fault = this.watchFaults.get(name);
+    if (fault === undefined) return read;
+    return read === undefined
+      ? fault
+      : {
+          timestamp: read.timestamp,
+          message: `${fault.message}; ${read.message}`,
+        };
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -1322,7 +1336,7 @@ export class SourceRegistry {
 
       case "watch_file": {
         const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.recordError(name, message),
+          this.watchFaults.set(name, { timestamp: Date.now(), message }),
         );
         this.cleanups.push(unsub);
         break;

@@ -26,22 +26,23 @@ export function nearestWatchTarget(candidate: string): {
 } {
   let name = path.basename(candidate);
   let dir = path.dirname(candidate);
-  while (!isDirectory(dir)) {
+  for (;;) {
+    const real = canonicalDirectory(dir);
+    if (real !== null)
+      return { dir: real, name, leaf: dir === path.dirname(candidate) };
     name = path.basename(dir);
     dir = path.dirname(dir);
   }
-  return {
-    dir: fs.realpathSync(dir),
-    name,
-    leaf: dir === path.dirname(candidate),
-  };
 }
 
-function isDirectory(p: string): boolean {
+// The directory's canonical path, or null when it is not one the walk can
+// stop at — absent, unreadable, a file, or removed mid-walk (the walk runs
+// inside watcher callbacks, during exactly the churn that races it, so one
+// call answers both questions and nothing here can throw).
+function canonicalDirectory(p: string): string | null {
   try {
-    return fs.statSync(p).isDirectory();
+    return fs.statSync(p).isDirectory() ? fs.realpathSync(p) : null;
   } catch {
-    // Absent or unreadable: not a directory the walk can stop at.
-    return false;
+    return null;
   }
 }

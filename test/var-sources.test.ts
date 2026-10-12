@@ -758,7 +758,30 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
-  it("a watch the OS refuses is the source's error, not a throw", () => {
+  it("removing the watched file's directory is read as the file's removal", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "state", "data");
+      fs.mkdirSync(path.dirname(f));
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareFile("val", f, {
+        parse: text("(none)"),
+        cache: { kind: "watch_file", path: f },
+      });
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+      fs.rmSync(path.dirname(f), { recursive: true });
+      for (let i = 0; i < 40 && store.read("val") !== "(none)"; i++)
+        await settle(50);
+      expect(store.read("val")).toBe("(none)");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a watch the OS refuses is the source's error, not a throw", async () => {
     const { dir, cleanup } = makeTmpDir();
     const locked = path.join(dir, "locked");
     fs.mkdirSync(locked);
@@ -770,6 +793,11 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: text("(none)"),
         cache: { kind: "watch_file", path: f },
       });
+      expect(registry.getLastError("val")?.message).toMatch(
+        /watch_file .*cannot watch/,
+      );
+      // The first read's outcome lands later and does not clear the fault.
+      await settle(100);
       expect(registry.getLastError("val")?.message).toMatch(
         /watch_file .*cannot watch/,
       );
