@@ -1,3 +1,10 @@
+## [1.119.1](https://github.com/promptctl/cc-candybar/compare/v1.119.0...v1.119.1) (2026-10-12)
+
+
+### Performance Improvements
+
+* **plugins:** check each plugin by its own declarations, not a full validateConfig ([#323](https://github.com/promptctl/cc-candybar/issues/323)) ([a9ce67f](https://github.com/promptctl/cc-candybar/commit/a9ce67f932fca88291003f5f699f2dcff6795519))
+
 # [1.119.0](https://github.com/promptctl/cc-candybar/compare/v1.118.2...v1.119.0) (2026-10-12)
 
 
