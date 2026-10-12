@@ -151,6 +151,12 @@ describe("a plugin that does not load is dropped alone", () => {
   test("a template naming something nothing declares", () =>
     dropped(`{ data: "./d.json", segments: { s: { template: "{{ .nope.y }}" } } }`, "nope"));
 
+  test("an action whose do names an action nothing declares", () =>
+    dropped(
+      `{ data: "./d.json", actions: { a: { set: "k", to: "1" }, go: { do: ["plugins.x.a", "nope"] } }, segments: { s: { template: "x" } } }`,
+      `references unknown action "nope"`,
+    ));
+
   test("a segment declaring vars of its own (a source)", () =>
     dropped(
       `{ data: "./d.json", segments: { s: { template: "x", vars: { p: { kind: "shell", command: "true", cache: { never: true } } } } } }`,

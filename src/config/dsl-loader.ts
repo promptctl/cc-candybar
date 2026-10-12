@@ -68,10 +68,15 @@ import { validateActions } from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
-import { validateCrossReferences } from "./loader/cross-ref.js";
+import {
+  validateCrossReferences,
+  validateDeclarations,
+} from "./loader/cross-ref.js";
+import { templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import {
   applyPlugins,
+  ownedBy,
   listedPlugins,
   droppedPluginNotice,
   type PluginContext,
@@ -209,7 +214,7 @@ export function loadConfigSource(
       listedPlugins(refs, path),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c) => validateConfig(unauthored(c), path, allowedPalettes),
+      (c, plugin) => checkPlugin(c, plugin, path, allowedPalettes),
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -242,7 +247,7 @@ export function loadConfigSource(
 // [LAW:one-source-of-truth] The installed layer is a function of the
 // definitions' bytes, the project, the base and the palettes, so it is
 // memoised on exactly those: a load with nothing installed changed pays one
-// stat per definition, not one validateConfig per plugin. Per-plugin
+// stat per definition, not one reference check per plugin. Per-plugin
 // validation stays — it is what lets one plugin drop alone.
 const installedMemo = new WeakMap<
   DslConfig,
@@ -268,8 +273,8 @@ function installedLayer(
     definitions,
     ctx,
     { config: dflt, rendering: new Map() },
-    (c) =>
-      validateConfig(unauthored(c), "<installed plugins>", allowedPalettes),
+    (c, plugin) =>
+      checkPlugin(c, plugin, "<installed plugins>", allowedPalettes),
   );
   byProject.set(slot, { key, layer });
   return layer;
@@ -453,6 +458,26 @@ export interface AuthoredConfig {
   readonly source: string;
 }
 
+/**
+ * A plugin over the layer it joins: every reference its own declarations make
+ * resolves there, and nothing cycles. The layer beneath was checked where it
+ * was written, and a plugin edits no `root` or `presets` and declares only
+ * under its own namespace, so its declarations are all a check can find new —
+ * the full validateConfig of the file listing it still runs over the result.
+ */
+function checkPlugin(
+  config: DslConfig,
+  plugin: string,
+  filePath: string,
+  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+): void {
+  const issues: ConfigIssue[] = [];
+  const ctx: ValidateCtx = { source: "", issues, allowedPalettes, groups: [] };
+  validateDeclarations(ctx, config, templateScopeOf(config), ownedBy(plugin));
+  validateNoCycles(ctx, config);
+  if (issues.length > 0) throw new ConfigError(filePath, issues);
+}
+
 // A config no file was merged into (the bundled default validated on its own,
 // a test's hand-built tree) authored every layout it carries, so its own root
 // and presets are what the layout checks walk.
@@ -478,16 +503,6 @@ const NO_FILE: LoadedFile = {
   },
 };
 
-/**
- * Promote a merged DslConfig to a ValidatedConfig by running cross-references
- * and cycle detection. Sole producer of ValidatedConfig in the codebase — the
- * phantom brand makes "the renderer never receives an unvalidated config" a
- * compile-time invariant, not a runtime convention.
- *
- * Throws ConfigError aggregating every issue.
- *
- * [LAW:single-enforcer] One cast site, here, exclusive.
- */
 export function validateConfig(
   { config, raw, source }: AuthoredConfig,
   filePath = "<config>",

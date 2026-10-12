@@ -197,165 +197,6 @@ export function validateCrossReferences(
     });
   }
   presetIdentCollisions(ctx, cfg.presets);
-  // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
-  // against this config's per-config domains ("styles", the merged styles:
-  // block) plus the global registry (themes/styles, and any future
-  // registration), the SAME set resolveOptionDomain consults at render and
-  // gate-derivation time. An inline array `from` is its own domain — nothing
-  // to resolve. Runs post-merge for the same reason globals.style does above:
-  // "styles" isn't fully known until the user's styles: block has merged onto
-  // the bundled stdlib.
-  const optionDomains = configOptionDomains(cfg);
-  const knownDomains = knownOptionDomainNames(optionDomains);
-  for (const [name, a] of Object.entries(cfg.actions)) {
-    // Every arm that draws from a domain — set, persist, insertSegmentFrom —
-    // names it here, so a stale name is refused at load whichever arm holds it.
-    const [field, from] =
-      "from" in a
-        ? (["from", a.from] as const)
-        : "insertSegmentFrom" in a
-          ? (["insertSegmentFrom", a.insertSegmentFrom] as const)
-          : [null, null];
-    if (
-      field !== null &&
-      typeof from === "string" &&
-      !knownDomains.includes(from)
-    ) {
-      ctx.issues.push({
-        path: `actions.${name}.${field}`,
-        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
-        line: findKeyLine(ctx.source, ["actions", name, field]),
-      });
-      continue;
-    }
-    if (!("set" in a)) continue;
-    if (CONFIG_ONLY_KEYS.has(a.set)) {
-      ctx.issues.push({
-        path: `actions.${name}.set`,
-        message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
-        line: findKeyLine(ctx.source, ["actions", name, "set"]),
-      });
-    }
-    const setting = SESSION_KEY_TO_SETTING.get(a.set);
-    if (setting !== undefined) {
-      checkSettingWrites(ctx, name, a, setting, optionDomains);
-    }
-  }
-  // [LAW:no-silent-failure] A `do` action's members resolve against the merged
-  // action table, like every other action reference. Two shapes are refused
-  // here rather than realized wrongly. A member that is itself a `do` gains
-  // nothing a flat list would not say, and admitting it would admit a cycle.
-  // A follower that takes its value from the template would be handed the
-  // head's display as that value, since only the head is bound one. A member
-  // listed twice is a typo either way: a cycle realized twice against one
-  // render's state toggles once, a stepper twice steps twice.
-  for (const [name, a] of Object.entries(cfg.actions)) {
-    if (!("do" in a)) continue;
-    a.do.forEach((member, i) => {
-      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member)
-        ? cfg.actions[member]!
-        : undefined;
-      const problem =
-        target === undefined
-          ? `references unknown action "${member}"`
-          : "do" in target
-            ? `"${member}" is itself a do action — list its members here instead`
-            : a.do.indexOf(member) !== i
-              ? `"${member}" is listed twice — each member fires once per click`
-              : i > 0 && actionBindsTemplateValue(target)
-                ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
-                : undefined;
-      if (problem !== undefined) {
-        ctx.issues.push({
-          path: `actions.${name}.do`,
-          message: `actions.${name} do: ${problem}`,
-          line: findKeyLine(ctx.source, ["actions", name, "do"]),
-        });
-      }
-    });
-  }
-  // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
-  // Globals field OR a declared segment's `palette` (candybar-config-engine-
-  // 71o.6 — `segments.<name>.palette`, parsed by the one shared authority in
-  // persist-target.ts) — the loader's structural pass (loader/actions.ts)
-  // only proves the key is non-empty/slash-free, the same shape a `set` key
-  // needs for the wire, but a persist/reset key additionally has to land
-  // somewhere real. Catching a typo (`persist: "pallete"`) or a dangling
-  // segment name here turns a confusing click-time "registration invariant
-  // broken" error into a clear load-time one naming the actual allowed
-  // targets — the same species of fix as the `from` domain check just above.
-  for (const [name, a] of Object.entries(cfg.actions)) {
-    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
-    if (key === null) continue;
-    const discriminator = "persist" in a ? "persist" : "reset";
-    const target = parsePersistTarget(key);
-    if (target === null) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, or a "presets.<name>.root" target`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    // [LAW:single-enforcer] The arm-pairing check in both directions: a
-    // tree op names a preset-root target (checkPresetRootTarget rejects the
-    // absence), and only a preset-root target takes a tree op — otherwise
-    // the click's own "not a presets.<name>.root target" is the first sign.
-    const treeOps = TREE_OP_ARMS.filter((arm) => arm in a);
-    if (target.scope !== "preset-root" && treeOps.length > 0) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target — ${treeOps.map((arm) => `"${arm}"`).join("/")} is a tree op and applies only to one`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    if (target.scope === "preset-root") {
-      checkPresetRootTarget(
-        ctx,
-        cfg,
-        name,
-        discriminator,
-        key,
-        target.preset,
-        a,
-      );
-      continue;
-    }
-    if (
-      target.scope === "preset-globals" &&
-      !presetNames(cfg.presets).includes(target.preset)
-    ) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    if (target.scope !== "segment-palette") continue;
-    if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
-    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
-    // Globals field where nothing today enforces value/field-kind agreement
-    // either way. Rejecting it here (rather than tolerating a numeric-string
-    // palette name that only fails later at `paletteForThemeName`) keeps
-    // the failure at load time, next to the typo it actually is.
-    if ("min" in a) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-    }
-  }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
   // src/dsl/render.ts registers globals under their bare names and segment
@@ -534,104 +375,7 @@ export function validateCrossReferences(
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
   }
 
-  // For each variable's template/cache.key, every dotted ref must exist
-  // (full path OR a prefix that matches an existing variable's namespace).
-  for (const [name, v] of Object.entries(cfg.variables)) {
-    checkVarRefs(ctx, `variables.${name}`, v, templateScope);
-    const retired = retiredVariableMessage(name);
-    if (retired !== undefined) {
-      ctx.issues.push({
-        path: `variables.${name}`,
-        message: retired,
-        line: findKeyLine(ctx.source, ["variables", name]),
-      });
-    }
-  }
-
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    // [LAW:one-source-of-truth] Segment templates check against the SAME
-    // templateScope as everything else — segment locals resolve via the
-    // namespaced segName.varName form only, exactly as the runtime store
-    // keys them. The segment name is passed purely as a diagnostic hint: a
-    // bare ref to an own local is rejected with a message naming the
-    // namespaced form the author should write.
-    if (seg.vars) {
-      for (const [vName, vDecl] of Object.entries(seg.vars)) {
-        checkVarRefs(
-          ctx,
-          `segments.${segName}.vars.${vName}`,
-          vDecl,
-          templateScope,
-          segName,
-        );
-      }
-    }
-    // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs
-    // are checked across EVERY template-bearing field, not just `template` —
-    // bg/fg/when are templates too, so an unknown ref in them is a load error, not
-    // a render-time surprise. Same existence-check shape as layout→segments; runs
-    // on the merged config so a segment can reference a default-provided action.
-    // [LAW:one-source-of-truth] A segment's own templates also read
-    // `.settings.<name>` — the placement's value for each setting the
-    // segment declares, and nothing else under that name.
-    const settings = settingsOf(seg);
-    checkSettingOrder(ctx, segName, settings);
-    const segScope = withSettingsScope(templateScope, settings);
-    for (const field of ["template", "bg", "fg", "when"] as const) {
-      const tpl = seg[field];
-      if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
-        segCtx: segName,
-        settings,
-      });
-      // [LAW:locality-or-seam] `{{ action "name" … }}` refs, and the option
-      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}` lays out, resolve
-      // against the action table on the merged config — so a segment can
-      // reference a default-provided action — through every helper the field
-      // calls, exactly as its variable reads do.
-      for (const { name: aref, site, via } of templateActionRefs(
-        tpl,
-        cfg.helpers,
-      )) {
-        if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
-        const inOptions =
-          site === "options" ? " (in a picker, menu or carousel)" : "";
-        if (via !== null) {
-          checkHelperIssue(
-            ctx,
-            via,
-            `Template references unknown action "${aref}"${inOptions}`,
-          );
-          continue;
-        }
-        ctx.issues.push({
-          path: `segments.${segName}.${field}`,
-          message: `${field} references unknown action "${aref}"${inOptions}`,
-          line: findKeyLine(ctx.source, ["segments", segName, field]),
-        });
-      }
-    }
-  }
-
-  // depends_on lists must point at declared variables — checked against the
-  // SAME templateScope as template refs, since both resolve against the one
-  // runtime store. The segment name is a diagnostic hint only, never a
-  // resolution rule, exactly as for templates.
-  for (const [name, v] of Object.entries(cfg.variables)) {
-    checkDependsOn(ctx, `variables.${name}`, v, templateScope);
-  }
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      checkDependsOn(
-        ctx,
-        `segments.${segName}.vars.${vName}`,
-        vDecl,
-        templateScope,
-        segName,
-      );
-    }
-  }
+  validateDeclarations(ctx, cfg, templateScope, () => true);
 }
 
 // [LAW:no-silent-failure] brandon-layout-edit-2gc.1's structural-edit target
@@ -1185,4 +929,287 @@ function setWrites(
     ];
   }
   return ANY_INTEGER;
+}
+
+// A predicate naming the declarations a check is about: every one for a whole
+// config, a plugin's own for a plugin joining a layer that was checked.
+export type Subject = (name: string) => boolean;
+
+// The names of `record` a check is about.
+function subjects<T>(
+  record: Readonly<Record<string, T>>,
+  subject: Subject,
+): Array<[string, T]> {
+  return Object.entries(record).filter(([name]) => subject(name));
+}
+
+/**
+ * Every reference a declaration makes — an action's domain, members and
+ * target, a variable's or segment's template reads, actions and depends_on —
+ * resolves in the merged `cfg`. Checked for the declarations `subject` names,
+ * so a plugin joining a checked layer pays for its own declarations alone.
+ */
+export function validateDeclarations(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  templateScope: TemplateScope,
+  subject: Subject,
+): void {
+  // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
+  // against this config's per-config domains ("styles", the merged styles:
+  // block) plus the global registry (themes/styles, and any future
+  // registration), the SAME set resolveOptionDomain consults at render and
+  // gate-derivation time. An inline array `from` is its own domain — nothing
+  // to resolve. Runs post-merge for the same reason globals.style does above:
+  // "styles" isn't fully known until the user's styles: block has merged onto
+  // the bundled stdlib.
+  const optionDomains = configOptionDomains(cfg);
+  const knownDomains = knownOptionDomainNames(optionDomains);
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    // Every arm that draws from a domain — set, persist, insertSegmentFrom —
+    // names it here, so a stale name is refused at load whichever arm holds it.
+    const [field, from] =
+      "from" in a
+        ? (["from", a.from] as const)
+        : "insertSegmentFrom" in a
+          ? (["insertSegmentFrom", a.insertSegmentFrom] as const)
+          : [null, null];
+    if (
+      field !== null &&
+      typeof from === "string" &&
+      !knownDomains.includes(from)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${field}`,
+        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
+        line: findKeyLine(ctx.source, ["actions", name, field]),
+      });
+      continue;
+    }
+    if (!("set" in a)) continue;
+    if (CONFIG_ONLY_KEYS.has(a.set)) {
+      ctx.issues.push({
+        path: `actions.${name}.set`,
+        message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
+        line: findKeyLine(ctx.source, ["actions", name, "set"]),
+      });
+    }
+    const setting = SESSION_KEY_TO_SETTING.get(a.set);
+    if (setting !== undefined) {
+      checkSettingWrites(ctx, name, a, setting, optionDomains);
+    }
+  }
+  // [LAW:no-silent-failure] A `do` action's members resolve against the merged
+  // action table, like every other action reference. Two shapes are refused
+  // here rather than realized wrongly. A member that is itself a `do` gains
+  // nothing a flat list would not say, and admitting it would admit a cycle.
+  // A follower that takes its value from the template would be handed the
+  // head's display as that value, since only the head is bound one. A member
+  // listed twice is a typo either way: a cycle realized twice against one
+  // render's state toggles once, a stepper twice steps twice.
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    if (!("do" in a)) continue;
+    a.do.forEach((member, i) => {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member)
+        ? cfg.actions[member]!
+        : undefined;
+      const problem =
+        target === undefined
+          ? `references unknown action "${member}"`
+          : "do" in target
+            ? `"${member}" is itself a do action — list its members here instead`
+            : a.do.indexOf(member) !== i
+              ? `"${member}" is listed twice — each member fires once per click`
+              : i > 0 && actionBindsTemplateValue(target)
+                ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
+                : undefined;
+      if (problem !== undefined) {
+        ctx.issues.push({
+          path: `actions.${name}.do`,
+          message: `actions.${name} do: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "do"]),
+        });
+      }
+    });
+  }
+  // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
+  // Globals field OR a declared segment's `palette` (candybar-config-engine-
+  // 71o.6 — `segments.<name>.palette`, parsed by the one shared authority in
+  // persist-target.ts) — the loader's structural pass (loader/actions.ts)
+  // only proves the key is non-empty/slash-free, the same shape a `set` key
+  // needs for the wire, but a persist/reset key additionally has to land
+  // somewhere real. Catching a typo (`persist: "pallete"`) or a dangling
+  // segment name here turns a confusing click-time "registration invariant
+  // broken" error into a clear load-time one naming the actual allowed
+  // targets — the same species of fix as the `from` domain check just above.
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
+    if (key === null) continue;
+    const discriminator = "persist" in a ? "persist" : "reset";
+    const target = parsePersistTarget(key);
+    if (target === null) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, or a "presets.<name>.root" target`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    // [LAW:single-enforcer] The arm-pairing check in both directions: a
+    // tree op names a preset-root target (checkPresetRootTarget rejects the
+    // absence), and only a preset-root target takes a tree op — otherwise
+    // the click's own "not a presets.<name>.root target" is the first sign.
+    const treeOps = TREE_OP_ARMS.filter((arm) => arm in a);
+    if (target.scope !== "preset-root" && treeOps.length > 0) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target — ${treeOps.map((arm) => `"${arm}"`).join("/")} is a tree op and applies only to one`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    if (target.scope === "preset-root") {
+      checkPresetRootTarget(
+        ctx,
+        cfg,
+        name,
+        discriminator,
+        key,
+        target.preset,
+        a,
+      );
+      continue;
+    }
+    if (
+      target.scope === "preset-globals" &&
+      !presetNames(cfg.presets).includes(target.preset)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    if (target.scope !== "segment-palette") continue;
+    if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
+    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
+    // Globals field where nothing today enforces value/field-kind agreement
+    // either way. Rejecting it here (rather than tolerating a numeric-string
+    // palette name that only fails later at `paletteForThemeName`) keeps
+    // the failure at load time, next to the typo it actually is.
+    if ("min" in a) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+    }
+  }
+  // For each variable's template/cache.key, every dotted ref must exist
+  // (full path OR a prefix that matches an existing variable's namespace).
+  for (const [name, v] of subjects(cfg.variables, subject)) {
+    checkVarRefs(ctx, `variables.${name}`, v, templateScope);
+    const retired = retiredVariableMessage(name);
+    if (retired !== undefined) {
+      ctx.issues.push({
+        path: `variables.${name}`,
+        message: retired,
+        line: findKeyLine(ctx.source, ["variables", name]),
+      });
+    }
+  }
+
+  for (const [segName, seg] of subjects(cfg.segments, subject)) {
+    // [LAW:one-source-of-truth] Segment templates check against the SAME
+    // templateScope as everything else — segment locals resolve via the
+    // namespaced segName.varName form only, exactly as the runtime store
+    // keys them. The segment name is passed purely as a diagnostic hint: a
+    // bare ref to an own local is rejected with a message naming the
+    // namespaced form the author should write.
+    if (seg.vars) {
+      for (const [vName, vDecl] of Object.entries(seg.vars)) {
+        checkVarRefs(
+          ctx,
+          `segments.${segName}.vars.${vName}`,
+          vDecl,
+          templateScope,
+          segName,
+        );
+      }
+    }
+    // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs
+    // are checked across EVERY template-bearing field, not just `template` —
+    // bg/fg/when are templates too, so an unknown ref in them is a load error, not
+    // a render-time surprise. Same existence-check shape as layout→segments; runs
+    // on the merged config so a segment can reference a default-provided action.
+    // [LAW:one-source-of-truth] A segment's own templates also read
+    // `.settings.<name>` — the placement's value for each setting the
+    // segment declares, and nothing else under that name.
+    const settings = settingsOf(seg);
+    checkSettingOrder(ctx, segName, settings);
+    const segScope = withSettingsScope(templateScope, settings);
+    for (const field of ["template", "bg", "fg", "when"] as const) {
+      const tpl = seg[field];
+      if (typeof tpl !== "string") continue;
+      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
+        segCtx: segName,
+        settings,
+      });
+      // [LAW:locality-or-seam] `{{ action "name" … }}` refs, and the option
+      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}` lays out, resolve
+      // against the action table on the merged config — so a segment can
+      // reference a default-provided action — through every helper the field
+      // calls, exactly as its variable reads do.
+      for (const { name: aref, site, via } of templateActionRefs(
+        tpl,
+        cfg.helpers,
+      )) {
+        if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
+        const inOptions =
+          site === "options" ? " (in a picker, menu or carousel)" : "";
+        if (via !== null) {
+          checkHelperIssue(
+            ctx,
+            via,
+            `Template references unknown action "${aref}"${inOptions}`,
+          );
+          continue;
+        }
+        ctx.issues.push({
+          path: `segments.${segName}.${field}`,
+          message: `${field} references unknown action "${aref}"${inOptions}`,
+          line: findKeyLine(ctx.source, ["segments", segName, field]),
+        });
+      }
+    }
+  }
+
+  // depends_on lists must point at declared variables — checked against the
+  // SAME templateScope as template refs, since both resolve against the one
+  // runtime store. The segment name is a diagnostic hint only, never a
+  // resolution rule, exactly as for templates.
+  for (const [name, v] of subjects(cfg.variables, subject)) {
+    checkDependsOn(ctx, `variables.${name}`, v, templateScope);
+  }
+  for (const [segName, seg] of subjects(cfg.segments, subject)) {
+    if (!seg.vars) continue;
+    for (const [vName, vDecl] of Object.entries(seg.vars)) {
+      checkDependsOn(
+        ctx,
+        `segments.${segName}.vars.${vName}`,
+        vDecl,
+        templateScope,
+        segName,
+      );
+    }
+  }
 }

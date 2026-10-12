@@ -172,7 +172,7 @@ export function applyPlugins(
   definitions: readonly string[],
   ctx: PluginContext,
   base: PluginBase,
-  validate: (config: DslConfig) => unknown,
+  validate: (config: DslConfig, plugin: string) => unknown,
 ): PluginLayer {
   // [LAW:dataflow-not-control-flow] One fold, every definition: each step
   // either merges its plugin or records why not, and the next step sees the
@@ -232,7 +232,7 @@ export function applyPlugins(
           ),
           under,
         );
-        validate(config);
+        validate(config, plugin);
         return config;
       });
       if (merged.ok) {
@@ -250,13 +250,18 @@ export function applyPlugins(
   );
 }
 
+// Whether a declared name is the plugin's: everything under
+// `plugins.<plugin>.`.
+export function ownedBy(plugin: string): (name: string) => boolean {
+  const prefix = `${PLUGIN_NS}${plugin}.`;
+  return (name) => name.startsWith(prefix);
+}
+
 // The config with nothing left under `plugins.<plugin>.`.
 function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
-  const prefix = `${PLUGIN_NS}${plugin}.`;
+  const owned = ownedBy(plugin);
   const keep = <T>(r: Readonly<Record<string, T>>): Record<string, T> =>
-    Object.fromEntries(
-      Object.entries(r).filter(([name]) => !name.startsWith(prefix)),
-    );
+    Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
   return {
     ...config,
     variables: keep(config.variables),
