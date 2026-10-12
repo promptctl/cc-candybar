@@ -703,6 +703,33 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
+  it("a watched directory fires on a change to an entry inside it", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const watchedDir = path.join(dir, "refs");
+      const dataFile = path.join(dir, "data");
+      fs.mkdirSync(watchedDir);
+      fs.writeFileSync(dataFile, "v1");
+      const { store, registry } = make();
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "watch_file", path: watchedDir },
+      });
+      await settle(100);
+      fs.writeFileSync(dataFile, "v2");
+      // fs.watch attaches with no ready signal: repeat the idempotent change.
+      for (let i = 0; i < 40 && store.read("val") !== "v2"; i++) {
+        fs.writeFileSync(path.join(watchedDir, "main"), String(i));
+        await settle(50);
+      }
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
   it("multiple subscribers on one watch_file path both update", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {

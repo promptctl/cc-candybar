@@ -13,6 +13,7 @@ import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import path from "path";
+import { statSync } from "fs";
 import { setInterval, clearInterval } from "timers";
 import { observable, reaction, type IReactionDisposer } from "mobx";
 import { ColorDepth } from "@promptctl/rich-js";
@@ -418,10 +419,19 @@ function projectGitField(
 // [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
 // count.  Multiple shell/file variables can share one watcher on the same path.
 //
-// The handle watches the path's DIRECTORY, filtered to its name: a watch on
+// A file is watched through its DIRECTORY, filtered to its name: a watch on
 // the file itself binds its inode, so it never sees a file created after it
 // (an app that has not written yet) and goes deaf after the first atomic
 // rename (write-then-rename, the safe way to rewrite a file).
+function isDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    // Absent (or unreadable): watched as a file that may appear.
+    return false;
+  }
+}
+
 class WatchManager {
   private readonly watchers = new Map<
     string,
@@ -432,14 +442,19 @@ class WatchManager {
     let entry = this.watchers.get(filePath);
     if (!entry) {
       const callbacks = new Set<() => void>();
-      const name = path.basename(filePath);
+      const fire = () => {
+        for (const cb of callbacks) cb();
+      };
       let watcher: FSWatcher;
       try {
-        watcher = fsWatch(path.dirname(filePath), (_event, changed) => {
-          // A platform that reports no name could be reporting this file.
-          if (changed !== null && changed !== name) return;
-          for (const cb of callbacks) cb();
-        });
+        // A directory is watched itself: its entries' changes are the point.
+        const name = path.basename(filePath);
+        watcher = isDirectory(filePath)
+          ? fsWatch(filePath, fire)
+          : fsWatch(path.dirname(filePath), (_event, changed) => {
+              // A platform that reports no name could be reporting this file.
+              if (changed === null || changed === name) fire();
+            });
       } catch {
         // [LAW:no-silent-failure] exception: the directory does not exist,
         // so there is nothing to watch; the source still reads on its other

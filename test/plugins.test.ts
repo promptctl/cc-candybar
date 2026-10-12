@@ -212,6 +212,21 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
     expect(message).not.toContain("render error");
   });
 
+  test("a by-field retune and placement settings still load", async () => {
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5"],
+         segments: { "deploy.status": { palette: "nord" } },
+         root: { h: [{ seg: "deploy.status", settings: { compact: true } }, { seg: "deploy.status", id: "two", settings: { compact: false } }] } }`,
+    );
+    const prepared = await prepareConfig(p, dir, []);
+    try {
+      expect(prepared.config.segments["deploy.status"]!.template).toContain("plugin not loaded");
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
   test("a misspelt name under a plugin that loaded is still a load error", async () => {
     write("p/plugin.json5", DEFINITION);
     const p = write("config.json5", `{ plugins: ["./p/plugin.json5"], root: { h: ["deploy.statsu"] } }`);

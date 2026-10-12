@@ -757,7 +757,7 @@ What the definition can say, and what follows from it:
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing
 declares — drops **that plugin only**: the rest of your config renders, a
-segment of it you placed shows as a `⚠ … plugin not loaded` cell, the bar's
+segment of it you placed or retuned shows as a `⚠ … plugin not loaded` cell, the bar's
 diagnostic strip names the definition and the reason, and `check` fails. A
 definition is watched like your config file, so fixing or installing it
 reloads the bar:

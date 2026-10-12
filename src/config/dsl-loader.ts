@@ -74,6 +74,7 @@ import {
   applyPlugins,
   droppedPluginNotice,
   withDroppedPlacements,
+  dropsOwning,
   type DroppedPlugin,
 } from "./loader/plugins.js";
 
@@ -174,11 +175,19 @@ export function loadConfigSource(
   // the layer it joins, so a definition that would not load drops itself
   // rather than the config that lists it. The names the file may author as a
   // delta are the segments of that very layer.
-  const parsed = parseDslFile(path, source, allowedPalettes, (refs) => {
+  // A name a dropped plugin owns is a delta too: its stand-in is the base.
+  const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(refs, path, dflt, (c) =>
       validateConfig(unauthored(c), path, allowedPalettes),
     );
-    return { inherited: inheritableSegmentNames(layer.config), layer };
+    const owned = dropsOwning(layer);
+    return {
+      inherited: new Set([
+        ...inheritableSegmentNames(layer.config),
+        ...names.filter((n) => owned(n).length > 0),
+      ]),
+      layer,
+    };
   });
   const plugins = parsed.layer;
   return {
@@ -188,7 +197,7 @@ export function loadConfigSource(
     plugins: { loaded: plugins.loaded, dropped: plugins.dropped },
     config: withDroppedPlacements(
       mergeWithDefault(parsed.raw, plugins.config),
-      plugins.dropped,
+      plugins,
     ),
   };
 }
@@ -322,7 +331,10 @@ function parseDslFile<L>(
   allowedPalettes: ReadonlySet<string> | undefined,
   // The layer the file merges over, built from the plugins it lists, and the
   // segment names that layer lets the file author as a delta.
-  under: (plugins: readonly string[]) => {
+  under: (
+    plugins: readonly string[],
+    segmentNames: readonly string[],
+  ) => {
     readonly inherited: ReadonlySet<string>;
     readonly layer: L;
   },
@@ -364,6 +376,7 @@ function parseDslFile<L>(
     json.plugins === undefined
       ? []
       : (validatePluginRefs({ ...ctx, issues: [] }, json.plugins) ?? []),
+    isPlainObject(json.segments) ? Object.keys(json.segments) : [],
   );
   const raw = validateTopLevel(ctx, json, inherited);
 

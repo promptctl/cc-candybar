@@ -34,7 +34,12 @@ import { validateActions } from "./actions.js";
 import { validateVariables } from "./variables.js";
 import { isReservedName } from "./reserved-namespace.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
-import { walkNodes } from "../dsl-types.js";
+import {
+  walkNodes,
+  type SegmentNode,
+  type SettingDecl,
+  type SettingValue,
+} from "../dsl-types.js";
 import { presetNames, presetRoot } from "../presets.js";
 
 // A plugin that could not be loaded: the definition path it was listed as,
@@ -163,39 +168,61 @@ function namespaceOf(json: unknown): string | undefined {
     : undefined;
 }
 
+// The drops a segment name belongs to: the plugin that would have declared
+// it is under `<plugin>.`, or — when a drop could not even be read for its
+// name — it sits under a namespace no layer declares. Empty for every other
+// name, which keeps whatever error it earns on its own.
+export function dropsOwning(
+  layer: PluginLayer,
+): (name: string) => readonly DroppedPlugin[] {
+  const heads = new Set(
+    Object.keys(layer.config.segments).map((n) => n.split(".")[0]),
+  );
+  return (name) => {
+    if (!name.includes(".")) return [];
+    const head = name.split(".")[0];
+    const named = layer.dropped.filter((d) => d.plugin === head);
+    return named.length > 0 || heads.has(head)
+      ? named
+      : layer.dropped.filter((d) => d.plugin === undefined);
+  };
+}
+
 /**
- * A placement of a segment no layer declares, where a dropped plugin is the
- * reason, stands in as a cell saying so rather than failing the whole config:
- * the plugin that would have declared it is under `<plugin>.`, or — when a
- * drop could not even be read for its name — under a namespace nothing
- * declares. Any other undeclared placement stays the load error it was.
+ * Every segment of a dropped plugin the user's file still names — a placement,
+ * or a by-field retune — stands in as a cell saying the plugin did not load,
+ * rather than failing the whole config. The stand-in declares each setting
+ * its placements set, so they still validate.
  */
 export function withDroppedPlacements(
   config: DslConfig,
-  dropped: readonly DroppedPlugin[],
+  layer: PluginLayer,
 ): DslConfig {
-  const declaredHeads = new Set(
-    Object.keys(config.segments).map((n) => n.split(".")[0]),
-  );
-  const causeOf = (name: string): readonly DroppedPlugin[] => {
-    const head = name.includes(".") ? name.split(".")[0] : undefined;
-    if (head === undefined) return [];
-    const named = dropped.filter((d) => d.plugin === head);
-    return named.length > 0 || declaredHeads.has(head)
-      ? named
-      : dropped.filter((d) => d.plugin === undefined);
-  };
+  const owning = dropsOwning(layer);
+  const placements = presetNames(config.presets)
+    .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
+    .flatMap((node) => (node.kind === "segment" ? [node] : []));
+  const names = new Set([
+    ...placements.map((n) => n.name),
+    ...Object.keys(config.segments),
+  ]);
   const standIns = Object.fromEntries(
-    presetNames(config.presets)
-      .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
-      .flatMap((node) =>
-        node.kind === "segment" && !(node.name in config.segments)
-          ? [node.name]
-          : [],
-      )
+    [...names]
+      .filter((name) => !(name in layer.config.segments))
       .flatMap((name) => {
-        const cause = causeOf(name);
-        return cause.length === 0 ? [] : [[name, standIn(name, cause)]];
+        const cause = owning(name);
+        return cause.length === 0
+          ? []
+          : [
+              [
+                name,
+                standIn(
+                  name,
+                  cause,
+                  placements.filter((n) => n.name === name),
+                ),
+              ],
+            ];
       }),
   );
   return { ...config, segments: { ...config.segments, ...standIns } };
@@ -204,13 +231,54 @@ export function withDroppedPlacements(
 function standIn(
   name: string,
   cause: readonly DroppedPlugin[],
+  placements: readonly SegmentNode[],
 ): DslConfig["segments"][string] {
   const text = `⚠ ${name}: plugin not loaded (${cause.map((d) => d.path).join(", ")})`;
+  const values = new Map<string, NonEmpty<SettingValue>>();
+  for (const n of placements) {
+    for (const [key, value] of Object.entries(n.settings ?? {})) {
+      const prev = values.get(key);
+      values.set(key, prev === undefined ? [value] : [...prev, value]);
+    }
+  }
+  const settings = Object.fromEntries(
+    [...values].map(([key, vs]) => [key, settingFor(key, vs)]),
+  );
   return {
     template: `{{ ${JSON.stringify(text)} }}`,
     bg: "error",
-    description: "stands in for a placed segment whose plugin did not load",
+    description: "stands in for a segment whose plugin did not load",
+    settings,
   };
+}
+
+type NonEmpty<T> = readonly [T, ...T[]];
+
+// The narrowest declaration every value the placements set is a member of,
+// typed by the first; a placement setting another type still fails the load.
+function settingFor(
+  label: string,
+  values: NonEmpty<SettingValue>,
+): SettingDecl {
+  const [first] = values;
+  const numbers = values.filter((v) => typeof v === "number");
+  return typeof first === "boolean"
+    ? { label, domain: "bool", default: first }
+    : typeof first === "number"
+      ? {
+          label,
+          domain: {
+            min: Math.min(...numbers),
+            max: Math.max(...numbers),
+            step: 1,
+          },
+          default: first,
+        }
+      : {
+          label,
+          domain: [...new Set(values.map(String))],
+          default: first,
+        };
 }
 
 // The raw fragment one parsed definition contributes, every name under its
