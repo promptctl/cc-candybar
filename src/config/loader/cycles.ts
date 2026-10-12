@@ -19,13 +19,15 @@ interface NodeInfo {
   readonly linePathParts: readonly string[];
 }
 
-// `from` names the nodes a new cycle must pass through: a plugin joining an
-// acyclic layer can only close a cycle through its own variables, so its check
-// walks from those alone and never blames it for one the layer already held.
+// `within` names the nodes a reported cycle may run through. A plugin joining a
+// layer that held nothing under its name adds variables nothing beneath can
+// read, so any cycle through them lies wholly among them: its check walks them
+// alone and never reports a cycle the layer already held, even one its own
+// variables read into.
 export function validateNoCycles(
   ctx: ValidateCtx,
   cfg: DslConfig,
-  from: (name: string) => boolean = () => true,
+  within: (name: string) => boolean = () => true,
 ): void {
   const { graph, nodeInfo } = buildTemplateGraph(cfg);
 
@@ -38,7 +40,7 @@ export function validateNoCycles(
   for (const node of graph.keys()) color.set(node, WHITE);
 
   for (const start of graph.keys()) {
-    if (!from(start) || color.get(start) !== WHITE) continue;
+    if (!within(start) || color.get(start) !== WHITE) continue;
     if (dfs(start)) return; // first cycle is enough — report and stop walking
   }
 
@@ -46,6 +48,7 @@ export function validateNoCycles(
     color.set(node, GRAY);
     stack.push(node);
     for (const next of graph.get(node) ?? []) {
+      if (!within(next)) continue;
       const c = color.get(next);
       if (c === GRAY) {
         const cycleStart = stack.indexOf(next);
