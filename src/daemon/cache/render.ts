@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
+import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
 import { neededPrefixesByPreset } from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
@@ -233,29 +232,6 @@ function authoredRoots(
         : raw.presets?.[name]?.root !== undefined,
     ),
   );
-}
-
-// [LAW:dataflow-not-control-flow] Every candidate yields ONE (dir, name) watch
-// tuple: the nearest EXISTING ancestor directory, and the path component
-// directly beneath it. A candidate whose parent exists watches that parent
-// for the file's basename; one whose parent does not exist yet (a fresh
-// install, before ~/.config/cc-candybar/ is created) watches the deepest
-// ancestor that does, for the missing directory's name — so the mkdir a
-// first-ever durable write performs is itself a reload trigger, and that
-// reload's rebind descends to watch the new directory. One rule; no "does
-// the XDG dir exist" branch, no location the chain consults but nobody
-// watches.
-function nearestWatchTarget(candidate: string): {
-  readonly dir: string;
-  readonly name: string;
-} {
-  let name = path.basename(candidate);
-  let dir = path.dirname(candidate);
-  while (!fs.existsSync(dir)) {
-    name = path.basename(dir);
-    dir = path.dirname(dir);
-  }
-  return { dir, name };
 }
 
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher

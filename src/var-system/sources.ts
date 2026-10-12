@@ -12,8 +12,9 @@ import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
-import path from "path";
 import { realpathSync, statSync } from "fs";
+import path from "path";
+import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import { observable, reaction, type IReactionDisposer } from "mobx";
 import { ColorDepth } from "@promptctl/rich-js";
@@ -426,7 +427,10 @@ function projectGitField(
 // A file is watched through its DIRECTORY, filtered to its name: a watch on
 // the file itself binds its inode, so it never sees a file created after it
 // (an app that has not written yet) and goes deaf after the first atomic
-// rename (write-then-rename, the safe way to rewrite a file).
+// rename (write-then-rename, the safe way to rewrite a file). A directory
+// that does not exist yet is watched through its nearest existing ancestor
+// (`nearestWatchTarget`), and each directory that appears re-arms the watch
+// one level deeper.
 function resolvedPath(p: string): string {
   try {
     return realpathSync(p);
@@ -445,56 +449,121 @@ function isDirectory(p: string): boolean {
   }
 }
 
-class WatchManager {
-  private readonly watchers = new Map<
-    string,
-    { watcher: FSWatcher; callbacks: Set<() => void> }
-  >();
+// What one subscription watches right now: the directory itself when the
+// path is one, else the (dir, name) tuple of its nearest existing ancestor.
+// `leaf` is true once the watch reaches the path's own directory — only then
+// can an event be about the path itself.
+interface WatchTarget {
+  readonly dir: string;
+  readonly name: string | null;
+  readonly leaf: boolean;
+}
 
-  subscribe(filePath: string, callback: () => void): () => void {
-    let entry = this.watchers.get(filePath);
-    if (!entry) {
-      const callbacks = new Set<() => void>();
-      const fire = () => {
-        for (const cb of callbacks) cb();
-      };
-      let watcher: FSWatcher;
-      try {
-        // A directory is watched itself: its entries' changes are the point.
-        // A symlink is followed: the writes land on its target.
-        const target = resolvedPath(filePath);
-        const name = path.basename(target);
-        watcher = isDirectory(target)
-          ? fsWatch(target, fire)
-          : fsWatch(path.dirname(target), (_event, changed) => {
-              // A platform that reports no name could be reporting this file.
-              if (changed === null || changed === name) fire();
-            });
-      } catch {
-        // [LAW:no-silent-failure] exception: the directory does not exist,
-        // so there is nothing to watch; the source still reads on its other
-        // triggers (pre-existing behaviour for a missing path).
-        return () => {};
-      }
-      entry = { watcher, callbacks };
-      this.watchers.set(filePath, entry);
-    }
-    entry.callbacks.add(callback);
+function watchTargetOf(filePath: string): WatchTarget {
+  // A symlink is followed: the writes land on its target.
+  const target = resolvedPath(filePath);
+  return isDirectory(target)
+    ? { dir: target, name: null, leaf: true }
+    : nearestWatchTarget(target);
+}
+
+const targetKey = (t: WatchTarget): string => `${t.dir}\0${t.name ?? ""}`;
+
+// A watch the OS refused (ENOSPC on inotify, EMFILE, EACCES, the directory
+// removed under the walk): reported to every subscriber, never thrown — a
+// throw out of a watcher callback would take the daemon down.
+type WatchFailed = (message: string) => void;
+
+interface WatchEntry {
+  // null while the OS refuses the watch; `failure` then says why.
+  watcher: FSWatcher | null;
+  failure: string;
+  target: WatchTarget;
+  // Each subscriber's update, and where its watch failures are recorded.
+  readonly subscribers: Map<() => void, WatchFailed>;
+}
+
+class WatchManager {
+  private readonly watchers = new Map<string, WatchEntry>();
+
+  subscribe(
+    filePath: string,
+    callback: () => void,
+    onFailed: WatchFailed,
+  ): () => void {
+    const entry = this.watchers.get(filePath) ?? this.arm(filePath);
+    entry.subscribers.set(callback, onFailed);
+    if (entry.watcher === null) onFailed(entry.failure);
     return () => this.unsubscribe(filePath, callback);
+  }
+
+  private arm(filePath: string): WatchEntry {
+    const entry: WatchEntry = {
+      watcher: null,
+      failure: "",
+      target: watchTargetOf(filePath),
+      subscribers: new Map(),
+    };
+    entry.watcher = this.open(filePath, entry, entry.target);
+    this.watchers.set(filePath, entry);
+    return entry;
+  }
+
+  // An event under the watched ancestor may mean a missing directory
+  // appeared (or the watched one vanished): re-derive the target ONCE, and
+  // move the watch when it moved. The new watch opens before the old one
+  // closes, so a refusal leaves the old watch listening for the next event.
+  private rearm(filePath: string, entry: WatchEntry): void {
+    const target = watchTargetOf(filePath);
+    if (entry.watcher !== null && targetKey(target) === targetKey(entry.target))
+      return;
+    const watcher = this.open(filePath, entry, target);
+    if (watcher === null) return;
+    entry.watcher?.close();
+    entry.watcher = watcher;
+    entry.target = target;
+  }
+
+  private open(
+    filePath: string,
+    entry: WatchEntry,
+    target: WatchTarget,
+  ): FSWatcher | null {
+    const { dir, name } = target;
+    const self = path.basename(dir);
+    try {
+      return fsWatch(dir, (_event, changed) => {
+        // A platform that reports no name could be reporting anything here.
+        const aboutName = changed === null || name === null || changed === name;
+        // The watched directory's own removal or rename reports its own name.
+        if (!aboutName && changed !== self) return;
+        const wasLeaf = entry.target.leaf;
+        this.rearm(filePath, entry);
+        // Ancestor churn on the way DOWN is not a change to the path; a move
+        // up from the leaf is its removal, which the subscribers must read.
+        if (!wasLeaf && !entry.target.leaf) return;
+        for (const cb of entry.subscribers.keys()) cb();
+      });
+    } catch (e) {
+      const message = `watch_file ${filePath}: cannot watch ${dir} — ${e instanceof Error ? e.message : String(e)}`;
+      entry.failure = message;
+      for (const report of entry.subscribers.values()) report(message);
+      return null;
+    }
   }
 
   private unsubscribe(filePath: string, callback: () => void): void {
     const entry = this.watchers.get(filePath);
     if (!entry) return;
-    entry.callbacks.delete(callback);
-    if (entry.callbacks.size === 0) {
-      entry.watcher.close();
+    entry.subscribers.delete(callback);
+    if (entry.subscribers.size === 0) {
+      entry.watcher?.close();
       this.watchers.delete(filePath);
     }
   }
 
   dispose(): void {
-    for (const { watcher } of this.watchers.values()) watcher.close();
+    for (const { watcher } of this.watchers.values()) watcher?.close();
     this.watchers.clear();
   }
 
@@ -609,6 +678,10 @@ function zeroValue(type: VarType): VarValue {
 export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
+  // A watch the OS refused is a STANDING fault, not a read's outcome: a read
+  // that succeeds afterwards says nothing about whether writes will be seen,
+  // so no outcome clears it. It lives until the registry does.
+  private readonly watchFaults = new Map<string, LastError>();
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -1209,7 +1282,15 @@ export class SourceRegistry {
   // Returns the recorded error for a variable, or undefined if the last
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
-    return this.lastErrors.get(name);
+    const read = this.lastErrors.get(name);
+    const fault = this.watchFaults.get(name);
+    if (fault === undefined) return read;
+    return read === undefined
+      ? fault
+      : {
+          timestamp: read.timestamp,
+          message: `${fault.message}; ${read.message}`,
+        };
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -1254,7 +1335,9 @@ export class SourceRegistry {
       }
 
       case "watch_file": {
-        const unsub = this.watchMgr.subscribe(policy.path, update);
+        const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
+          this.watchFaults.set(name, { timestamp: Date.now(), message }),
+        );
         this.cleanups.push(unsub);
         break;
       }
