@@ -565,6 +565,91 @@ describe("an installed plugin", () => {
       gitService.close();
     }
   });
+  test("a `do` member naming a dropped plugin's action stands in", async () => {
+    install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } }, actions: { open: { copy: "x" } } }`);
+    const p = write(
+      "config.json5",
+      `{ actions: { mark: { set: "m", to: "1" }, both: { do: ["mark", "plugins.lit.open"] } }, variables: { m: { kind: "state", key: "m", default: "0" } }, segments: { b: { template: '{{ action "both" "go" }}' } }, root: { h: ["b"] } }`,
+    );
+    const prepared = await prepareConfig([p], dir, []);
+    try {
+      expect(prepared.config.actions["plugins.lit.open"]).toBeDefined();
+      expect(prepared.droppedPlugins.map((d) => d.plugin)).toEqual(["lit"]);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test("a nearer layer's placement widens the stand-in's settings", async () => {
+    install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
+    const user = write("user.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { a: true } }] } }`);
+    const project = write("project.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { b: 3 } }] } }`);
+    const prepared = await prepareConfig([user, project], dir, []);
+    try {
+      expect(Object.keys(prepared.config.segments["plugins.lit.s"]!.settings ?? {})).toContain("b");
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test("a listed plugin that drops reports nothing rendering in place of the installed one it replaced", () => {
+    install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
+    write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
+    const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    try {
+      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
+      expect(loaded.state?.plugins.loaded).toEqual([]);
+      loaded.state?.registry.dispose();
+    } finally {
+      gitService.close();
+    }
+  });
+
+  test("an unnamed drop listed by a lower layer stands in for an upper layer's placement", async () => {
+    write("a.b/plugin.json5", `{ data: "./d.json", segments: {} }`);
+    const user = write("user.json5", `{ plugins: ["./a.b/plugin.json5"] }`);
+    const project = write("project.json5", `{ root: { h: ["plugins.zzz.s"] } }`);
+    const prepared = await prepareConfig([user, project], dir, []);
+    try {
+      expect(prepared.config.segments["plugins.zzz.s"]!.template).toContain(`its folder \\"a.b\\" is not a plugin name`);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test.each(["../escape.json", "/abs/data.json", "~/data.json"])(
+    "data.project %s is refused, naming the fix",
+    async (rel) => {
+      write("x/plugin.json5", `{ data: { project: "${rel}" }, segments: {} }`);
+      const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
+      expect(fatal(await checkConfig(p, dir))).toContain("must be a path inside the project");
+    },
+  );
+
+  test("a file directly in a root is a drop naming where it belongs; a dot-file is nothing", async () => {
+    write("data/cc-candybar/plugins/deploy.json5", "{}");
+    write("data/cc-candybar/plugins/.DS_Store", "");
+    const message = fatal(await checkConfig(placing("plugins.deploy.s"), dir));
+    expect(message).toContain(
+      `move this file to ${path.join(dir, "data/cc-candybar/plugins/<name>/plugin.json5")}`,
+    );
+    expect(message).not.toContain(".DS_Store");
+  });
+
+  test("a drop is reached by its definition, not by its notice", () => {
+    const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
+    const p = placing("plugins.lit.s");
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    try {
+      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
+      expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
+      expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([def]);
+      loaded.state?.registry.dispose();
+    } finally {
+      gitService.close();
+    }
+  });
 });
 
 describe("plugin roots", () => {
@@ -615,5 +700,5 @@ test("a placement under a refused loose definition's folder stands in naming the
 });
 
 test("a tombstone has no cache field", () => {
-  expect(hasCacheField({ kind: "dropped", reason: "r" })).toBe(false);
+  expect(hasCacheField({ kind: "dropped", reason: "r", definition: "/d" })).toBe(false);
 });

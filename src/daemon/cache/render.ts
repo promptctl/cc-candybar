@@ -18,7 +18,6 @@ import type {
   ValidatedConfig,
 } from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
-import { pluginNameOf } from "../../config/loader/plugins.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
@@ -156,14 +155,6 @@ export interface DslRenderState {
 // The installed roots searched (every one watched), and the definitions —
 // installed and listed — merged and dropped.
 type LoadedPlugins = LoadedChain["installed"];
-
-// The definitions that render, of those merged lowest first: a nearer layer's
-// plugin replaces a farther one's of the same name, so only the last of each
-// name is loaded.
-function rendering(merged: readonly string[]): readonly string[] {
-  const names = merged.map(pluginNameOf);
-  return merged.filter((_, i) => names.lastIndexOf(names[i]) === i);
-}
 
 // The files a config is merged from, lowest first, and the one durable
 // clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
@@ -443,16 +434,16 @@ export function buildRenderState(
     ],
     plugins: {
       roots: installed.roots,
-      loaded: rendering([
-        ...installed.loaded,
-        ...layers.flatMap((l) => l.plugins.loaded),
-      ]),
+      // What renders, as the loader decided it: a nearer layer's load or
+      // drop replaces a farther one's of the same name.
+      loaded: [...installed.rendering.values()],
       dropped: [
         ...installed.dropped,
         ...layers.flatMap((l) => l.plugins.dropped),
       ],
       unreached: installed.unreached,
       reached: installed.reached,
+      rendering: installed.rendering,
     },
   };
 }

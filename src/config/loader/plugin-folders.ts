@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFINITION_FILE } from "./plugins.js";
+import { DEFINITION_FILE, type DroppedPlugin } from "./plugins.js";
 import type { Unchecked } from "./discovery.js";
 
 /**
@@ -18,7 +18,7 @@ import type { Unchecked } from "./discovery.js";
  * Read from the daemon's environment, as the XDG config location is.
  */
 export function pluginRoots(projectDir: string | null): readonly string[] {
-  const dataDirs = (process.env.XDG_DATA_DIRS || "/usr/local/share:/usr/share")
+  const dataDirs = (process.env.XDG_DATA_DIRS || defaultDataDirs())
     .split(":")
     .filter((d) => d !== "");
   const dataHome =
@@ -37,6 +37,16 @@ export function pluginRoots(projectDir: string | null): readonly string[] {
   return roots.filter((r, i) => roots.lastIndexOf(r) === i);
 }
 
+// The XDG default, and on macOS Homebrew's share/ first — Apple-silicon
+// Homebrew lives outside `/usr/local` (`$HOMEBREW_PREFIX`, set by its shellenv,
+// else its default `/opt/homebrew`).
+function defaultDataDirs(): string {
+  const xdg = "/usr/local/share:/usr/share";
+  return process.platform === "darwin"
+    ? `${path.join(process.env.HOMEBREW_PREFIX || "/opt/homebrew", "share")}:${xdg}`
+    : xdg;
+}
+
 export interface InstalledPlugins {
   // The roots searched, lowest first — every one is watched, so a plugin
   // installed into any of them, or a root created, reloads.
@@ -45,6 +55,9 @@ export interface InstalledPlugins {
   readonly definitions: readonly string[];
   // Roots a listing could not see into (anything but absence).
   readonly unchecked: readonly Unchecked[];
+  // Files sitting directly in a root: a plugin is a folder, so each is a drop
+  // naming where it belongs.
+  readonly strays: readonly DroppedPlugin[];
 }
 
 // [LAW:types-are-the-program] A root that does not exist holds no plugins;
@@ -53,6 +66,7 @@ export function installedPlugins(projectDir: string | null): InstalledPlugins {
   const roots = pluginRoots(projectDir);
   const byName = new Map<string, string>();
   const unchecked: Unchecked[] = [];
+  const strays: DroppedPlugin[] = [];
   for (const root of roots) {
     const listed = listFolders(root);
     if ("error" in listed) {
@@ -63,26 +77,37 @@ export function installedPlugins(projectDir: string | null): InstalledPlugins {
       byName.delete(name);
       byName.set(name, path.join(root, name, DEFINITION_FILE));
     }
+    for (const file of listed.files) {
+      strays.push({
+        path: path.join(root, file),
+        plugin: undefined,
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(root, "<name>", DEFINITION_FILE)}`,
+      });
+    }
   }
-  return { roots, definitions: [...byName.values()], unchecked };
+  return { roots, definitions: [...byName.values()], unchecked, strays };
 }
 
 function listFolders(
   root: string,
-): { readonly folders: readonly string[] } | Unchecked {
+):
+  | { readonly folders: readonly string[]; readonly files: readonly string[] }
+  | Unchecked {
   try {
+    // A dot-entry (`.git`, `.DS_Store`, an editor's) is never an install.
+    const entries = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((e) => !e.name.startsWith("."))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const isFolder = (e: fs.Dirent): boolean =>
+      e.isDirectory() || isDirectoryLink(root, e);
     return {
-      folders: fs
-        .readdirSync(root, { withFileTypes: true })
-        // A dot-folder (`.git`, an editor's) is never an install.
-        .filter((e) => !e.name.startsWith("."))
-        .filter((e) => e.isDirectory() || isDirectoryLink(root, e))
-        .map((e) => e.name)
-        .sort(),
+      folders: entries.filter(isFolder).map((e) => e.name),
+      files: entries.filter((e) => !isFolder(e)).map((e) => e.name),
     };
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "ENOENT"
-      ? { folders: [] }
+      ? { folders: [], files: [] }
       : { path: root, error: (e as Error).message };
   }
 }

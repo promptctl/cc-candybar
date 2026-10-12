@@ -600,6 +600,8 @@ export type AuthoredVariableDecl =
 export interface DroppedVarDecl {
   readonly kind: "dropped";
   readonly reason: string;
+  // The path of the definition that dropped: the drop's identity.
+  readonly definition: string;
 }
 
 export interface LiteralVarDecl {

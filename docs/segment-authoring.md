@@ -794,11 +794,16 @@ a plugin root:
 - `$XDG_DATA_HOME/cc-candybar/plugins/<name>/` (default
   `~/.local/share/cc-candybar/plugins/`) — the user's;
 - `<dir>/cc-candybar/plugins/<name>/` for each `$XDG_DATA_DIRS` entry — a
-  package manager's (Homebrew's `share/`);
+  package manager's. Unset, that is `/usr/local/share` and `/usr/share`, and
+  on macOS Homebrew's `share/` before them (`$HOMEBREW_PREFIX/share`, else
+  `/opt/homebrew/share`);
 - `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
   sessions working in that repo.
 
-A nearer root replaces a farther one's plugin of the same name (repo over
+A plugin is a folder: a file sitting directly in a root is a drop naming
+where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A
+`data: { project }` path stays inside the project — an absolute path, `~` or
+a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
 user over package manager). An installed plugin's segments are in the
 add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads

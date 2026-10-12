@@ -56,6 +56,24 @@ export interface PluginLayer {
   readonly config: DslConfig;
   readonly loaded: readonly string[];
   readonly dropped: readonly DroppedPlugin[];
+  // Each plugin name the config renders, and the definition rendering it —
+  // the layers beneath this one included, a nearer load or drop replacing a
+  // farther one.
+  readonly rendering: ReadonlyMap<string, string>;
+}
+
+// What a list of definitions lays itself over: a config, and the plugins it
+// already renders.
+export interface PluginBase {
+  readonly config: DslConfig;
+  readonly rendering: ReadonlyMap<string, string>;
+}
+
+// Why a name under `plugins.` names nothing: a drop, by its definition's path
+// (its identity), and the notice a stand-in shows.
+export interface DropCause {
+  readonly definition: string;
+  readonly notice: string;
 }
 
 // What a definition's paths resolve against beyond its own directory.
@@ -153,7 +171,7 @@ export function listedPlugins(
 export function applyPlugins(
   definitions: readonly string[],
   ctx: PluginContext,
-  base: DslConfig,
+  base: PluginBase,
   validate: (config: DslConfig) => unknown,
 ): PluginLayer {
   // [LAW:dataflow-not-control-flow] One fold, every definition: each step
@@ -163,11 +181,17 @@ export function applyPlugins(
   return definitions.reduce<PluginLayer>(
     (layer, file) => {
       const plugin = pluginNameOf(file);
-      const drop = (reason: string, config: DslConfig): PluginLayer => ({
-        ...layer,
-        config,
-        dropped: [...layer.dropped, { path: file, plugin, reason }],
-      });
+      const drop = (reason: string, config: DslConfig): PluginLayer => {
+        const rendering = new Map(layer.rendering);
+        if (plugin !== undefined && config !== layer.config)
+          rendering.delete(plugin);
+        return {
+          ...layer,
+          config,
+          rendering,
+          dropped: [...layer.dropped, { path: file, plugin, reason }],
+        };
+      };
       if (path.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         // Named by its folder like any drop, so it tombstones its namespace.
@@ -204,7 +228,6 @@ export function applyPlugins(
             file,
             plugin,
             { source, json: JSON5.parse(source) as unknown },
-            under,
             ctx,
           ),
           under,
@@ -217,12 +240,13 @@ export function applyPlugins(
           ...layer,
           config: merged.value,
           loaded: [...layer.loaded, file],
+          rendering: new Map([...layer.rendering, [plugin, file]]),
         };
       }
       const dropped = { path: file, plugin, reason: merged.reason };
       return drop(merged.reason, tombstone(under, plugin, dropped));
     },
-    { config: base, loaded: [], dropped: [] },
+    { config: base.config, rendering: base.rendering, loaded: [], dropped: [] },
   );
 }
 
@@ -257,6 +281,7 @@ function tombstone(
       [pluginDataVar(plugin)]: {
         kind: "dropped",
         reason: droppedPluginNotice(dropped),
+        definition: dropped.path,
       },
     },
   };
@@ -276,10 +301,11 @@ function pluginOf(name: string): string | undefined {
 // belongs to no drop.
 export function dropsOwning(
   layer: PluginLayer,
-  // The drops of the layers beneath this one, whose own tombstones `layer`
-  // already carries — only those without a name have none.
+  // Every drop of the layers beneath this one. A named one's tombstone is
+  // already in `layer`; the unnamed ones (a folder whose name is not a
+  // plugin's) are known only from here.
   beneath: readonly DroppedPlugin[],
-): (name: string) => readonly string[] {
+): (name: string) => readonly DropCause[] {
   const owners = new Set(
     [
       ...Object.keys(layer.config.variables),
@@ -288,27 +314,30 @@ export function dropsOwning(
   );
   const unnamed = [...beneath, ...layer.dropped]
     .filter((d) => d.plugin === undefined)
-    .map(droppedPluginNotice);
+    .map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   return (name) => {
     const plugin = pluginOf(name);
     if (plugin === undefined) return [];
     const data = layer.config.variables[pluginDataVar(plugin)];
-    if (data?.kind === "dropped") return [data.reason];
+    if (data?.kind === "dropped")
+      return [{ definition: data.definition, notice: data.reason }];
     return owners.has(plugin) ? [] : unnamed;
   };
 }
 
 /**
- * Every segment of a dropped plugin the user's file still names — a placement,
- * or a by-field retune — stands in as a cell saying the plugin did not load,
+ * Every segment of a dropped plugin the config still names — a placement, or
+ * a by-field retune — stands in as a cell saying the plugin did not load,
  * rather than failing the whole config. The stand-in declares each setting
- * its placements set, so they still validate. `reached` is every drop notice
- * a stand-in carries: the drops this config actually asks for.
+ * its placements set, so they still validate; it is re-derived on every
+ * layer, so a nearer layer's placement widens it. An action or helper of a
+ * dropped plugin the config reaches — a template's binding or call, a `do`
+ * member — stands in the same way. `reached` is the definition path of every
+ * drop a stand-in stands for: the drops this config actually asks for.
  */
 export function withDroppedPlacements(
   config: DslConfig,
-  layer: DslConfig,
-  owning: (name: string) => readonly string[],
+  owning: (name: string) => readonly DropCause[],
 ): { readonly config: DslConfig; readonly reached: ReadonlySet<string> } {
   const placements = presetNames(config.presets)
     .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
@@ -317,8 +346,9 @@ export function withDroppedPlacements(
     ...placements.map((n) => n.name),
     ...Object.keys(config.segments),
   ]);
+  // A name a drop owns has no declaration but a stand-in (the drop removed
+  // the plugin's own), so each layer derives it afresh.
   const caused = [...names]
-    .filter((name) => !(name in layer.segments))
     .map((name) => ({ name, cause: owning(name) }))
     .filter(({ cause }) => cause.length > 0);
   const standIns = Object.fromEntries(
@@ -326,22 +356,22 @@ export function withDroppedPlacements(
       name,
       standIn(
         name,
-        cause,
+        cause.map((c) => c.notice),
         placements.filter((n) => n.name === name),
       ),
     ]),
   );
-  // An action or helper of a dropped plugin a template reaches stands in as
-  // one reading the tombstone: the cell reaching it renders ⚠ with the drop.
-  // No tombstone, nothing to stand in for — the common load skips the walk.
-  const tombstoned = (name: string): string | undefined => {
+  const tombstoned = (name: string): DropCause | undefined => {
     const plugin = pluginOf(name);
     const data =
       plugin === undefined
         ? undefined
         : config.variables[pluginDataVar(plugin)];
-    return data?.kind === "dropped" ? data.reason : undefined;
+    return data?.kind === "dropped"
+      ? { definition: data.definition, notice: data.reason }
+      : undefined;
   };
+  // No tombstone, nothing to stand in for — the common load skips the walk.
   const anyTombstone = Object.values(config.variables).some(
     (v) => v.kind === "dropped",
   );
@@ -352,34 +382,47 @@ export function withDroppedPlacements(
         ),
       )
     : [];
-  const reads = (name: string): string =>
-    `{{ .${pluginDataVar(pluginOf(name) ?? "")} }}`;
-  const actionStandIns = [
-    ...new Set(
-      templates.flatMap((t) =>
+  const doMembers = anyTombstone
+    ? Object.values(config.actions).flatMap((a) => ("do" in a ? [...a.do] : []))
+    : [];
+  const missing = (
+    names: readonly string[],
+    declared: Readonly<Record<string, unknown>>,
+  ): ReadonlyArray<readonly [string, DropCause]> =>
+    [...new Set(names)].flatMap((name) => {
+      const cause = name in declared ? undefined : tombstoned(name);
+      return cause === undefined ? [] : [[name, cause] as const];
+    });
+  const actionStandIns = missing(
+    [
+      ...templates.flatMap((t) =>
         templateActionRefs(t, config.helpers).map((r) => r.name),
       ),
-    ),
-  ].filter((name) => !(name in config.actions) && tombstoned(name));
-  const helperStandIns = [
-    ...new Set(
-      templates.flatMap((t) => [...templateHelperCalls(t, config.helpers)]),
-    ),
-  ].filter((name) => !(name in config.helpers) && tombstoned(name));
+      ...doMembers,
+    ],
+    config.actions,
+  );
+  const helperStandIns = missing(
+    templates.flatMap((t) => [...templateHelperCalls(t, config.helpers)]),
+    config.helpers,
+  );
   const reached = new Set([
-    ...caused.flatMap(({ cause }) => cause),
-    ...[...actionStandIns, ...helperStandIns].flatMap(
-      (name) => tombstoned(name) ?? [],
-    ),
+    ...caused.flatMap(({ cause }) => cause.map((c) => c.definition)),
+    ...[...actionStandIns, ...helperStandIns].map(([, c]) => c.definition),
   ]);
   return {
     config: {
       ...config,
       segments: { ...config.segments, ...standIns },
+      // An action's copy reads the tombstone: the cell binding it renders ⚠
+      // with the drop.
       actions: {
         ...config.actions,
         ...Object.fromEntries(
-          actionStandIns.map((name) => [name, { copy: reads(name) }]),
+          actionStandIns.map(([name]) => [
+            name,
+            { copy: `{{ .${pluginDataVar(pluginOf(name) ?? "")} }}` },
+          ]),
         ),
       },
       // A helper is called with the caller's dot, so its stand-in cannot
@@ -387,9 +430,9 @@ export function withDroppedPlacements(
       helpers: {
         ...config.helpers,
         ...Object.fromEntries(
-          helperStandIns.map((name) => [
+          helperStandIns.map(([name, c]) => [
             name,
-            `{{ fail ${JSON.stringify(tombstoned(name))} }}`,
+            `{{ fail ${JSON.stringify(c.notice)} }}`,
           ]),
         ),
       },
@@ -458,7 +501,6 @@ function fragmentOf(
   file: string,
   ns: string,
   { source, json }: { readonly source: string; readonly json: unknown },
-  base: DslConfig,
   { projectDir }: PluginContext,
 ): RawDslConfig {
   const issues: ConfigIssue[] = [];
@@ -528,22 +570,6 @@ function fragmentOf(
     helpers: prefixed(ns, validateHelpers(ctx, json.helpers)),
     actions: prefixed(ns, validateActions(ctx, json.actions)),
   };
-  // A plugin adds names; it never replaces one the layers under it declared.
-  for (const [section, names] of [
-    ["variables", Object.keys(fragment.variables ?? {})],
-    ["segments", Object.keys(fragment.segments ?? {})],
-    ["helpers", Object.keys(fragment.helpers ?? {})],
-    ["actions", Object.keys(fragment.actions ?? {})],
-  ] as const) {
-    for (const name of names) {
-      if (name in base[section]) {
-        issues.push({
-          path: section,
-          message: `"${name}" is already declared by the config this plugin loads into`,
-        });
-      }
-    }
-  }
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
   for (const [where, template] of fragmentTemplates(fragment)) {
@@ -608,6 +634,20 @@ function dataPathOf(
     typeof data.project === "string" &&
     data.project !== ""
   ) {
+    // Inside the project, always: one installed definition reads every
+    // repo's own file, never a path that leaves the repo.
+    const rel = data.project;
+    if (
+      path.isAbsolute(rel) ||
+      rel.startsWith("~") ||
+      path.normalize(rel).split(path.sep)[0] === ".."
+    ) {
+      issues.push({
+        path: "data.project",
+        message: `data.project "${rel}" must be a path inside the project, relative to its root (like ".lit/candybar.json"): no absolute path, "~" or ".."`,
+      });
+      return undefined;
+    }
     if (projectDir === null) {
       issues.push({
         path: "data.project",
@@ -615,7 +655,7 @@ function dataPathOf(
       });
       return undefined;
     }
-    return path.resolve(projectDir, data.project);
+    return path.resolve(projectDir, rel);
   }
   issues.push({
     path: "data",
