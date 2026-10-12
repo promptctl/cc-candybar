@@ -12,9 +12,15 @@
 // developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
 // it is a client hint, composed into the render origin, brandon-config-5g8.)
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import JSON5 from "json5";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import {
@@ -32,10 +38,10 @@ import {
 export interface DurableConfig {
   /** The session's projectDir AND cwd — the temp root. */
   readonly projectDir: string;
-  /** `<projectDir>/.cc-candybar.json5` — the file a write lands in once it exists. */
+  /** The user's XDG `config.json5` — the file every durable write lands in. */
   readonly configPath: string;
-  /** Where a write lands while `configPath` does NOT exist: the XDG tail. */
-  readonly xdgConfigPath: string;
+  /** `<projectDir>/.cc-candybar.json5` — a project layer over `configPath`. */
+  readonly projectPath: string;
   readonly historyPath: string;
   write(text: string): void;
   /** The file's current text, or null when it does not exist. */
@@ -80,7 +86,8 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     Object.keys(isolated).map((name) => [name, process.env[name]]),
   );
   assignEnv(isolated);
-  const configPath = join(root, ".cc-candybar.json5");
+  const configPath = join(root, "xdg-config", "cc-candybar", "config.json5");
+  mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
     try {
       return readFileSync(file, "utf8");
@@ -93,7 +100,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   return {
     projectDir: root,
     configPath,
-    xdgConfigPath: join(root, "xdg-config", "cc-candybar", "config.json5"),
+    projectPath: join(root, ".cc-candybar.json5"),
     historyPath: settingsHistoryPath(),
     write: (text) => writeFileSync(configPath, text),
     text: readText,

@@ -4,9 +4,9 @@
 // under test:
 //   - .json5 and .json are both accepted at every location
 //   - .json5 wins over .json at the same location (documented > legacy)
-//   - location precedence (project > cwd > XDG) overrides extension
+//   - every location's file is a layer: XDG < cwd < project
 //   - detectConfigCollisions surfaces same-location duplicates
-//   - shadowedConfigs names the files behind the one the search stops at
+//   - durableConfig names the user's file and the layers above it
 
 import {
   chmodSync,
@@ -22,10 +22,9 @@ import { join } from "node:path";
 import {
   resolveDslConfig,
   configResolutionNotice,
-  durableConfigPath,
+  durableConfig,
   dslConfigCandidatePaths,
   detectConfigCollisions,
-  shadowedConfigs,
 } from "../src/config/dsl-loader";
 
 // Root bypasses directory permissions, so the unsearchable-directory fixtures
@@ -159,7 +158,12 @@ describe("resolveDslConfig", () => {
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
       const resolved = resolveDslConfig(undefined, dir);
-      expect(resolved).toEqual({ kind: "file", path: jsonPath, unchecked: [] });
+      expect(resolved).toEqual({
+        kind: "chain",
+        layers: [jsonPath],
+        home: jsonPath,
+        unchecked: [],
+      });
     } finally {
       restore();
       cleanup();
@@ -179,8 +183,9 @@ describe("resolveDslConfig", () => {
       const resolved = resolveDslConfig(undefined, dir);
       // Documented format outranks the legacy compatibility tail.
       expect(resolved).toEqual({
-        kind: "file",
-        path: json5Path,
+        kind: "chain",
+        layers: [json5Path],
+        home: json5Path,
         unchecked: [],
       });
     } finally {
@@ -189,7 +194,7 @@ describe("resolveDslConfig", () => {
     }
   });
 
-  test("location precedence: project-local .json outranks XDG .json5", () => {
+  test("each location is a layer: project-local .json over XDG .json5", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
@@ -203,34 +208,47 @@ describe("resolveDslConfig", () => {
       writeFileSync(projJson, VALID_CFG);
       writeFileSync(xdgJson5, VALID_CFG);
 
-      // Location dominates extension: project-local .json beats global .json5.
+      // Location orders the layers; the user's file stays the home.
       const resolved = resolveDslConfig(proj, dir);
-      expect(resolved).toEqual({ kind: "file", path: projJson, unchecked: [] });
+      expect(resolved).toEqual({
+        kind: "chain",
+        layers: [xdgJson5, projJson],
+        home: xdgJson5,
+        unchecked: [],
+      });
+      expect(durableConfig(proj, dir)).toEqual({
+        path: xdgJson5,
+        above: [projJson],
+      });
     } finally {
       restore();
       cleanup();
     }
   });
 
-  test("is `default` when no candidate exists — with nothing to say", () => {
+  test("is an empty chain when no candidate exists — with nothing to say", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
       // No files written anywhere — XDG dir doesn't even exist.
       const resolved = resolveDslConfig(undefined, dir);
-      expect(resolved).toEqual({ kind: "default", unchecked: [] });
+      const home = join(dir, "cc-candybar", "config.json5");
+      expect(resolved).toEqual({
+        kind: "chain",
+        layers: [],
+        home,
+        unchecked: [],
+      });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(durableConfigPath(undefined, dir)).toBe(
-        join(dir, "cc-candybar", "config.json5"),
-      );
+      expect(durableConfig(undefined, dir)).toEqual({ path: home, above: [] });
     } finally {
       restore();
       cleanup();
     }
   });
 
-  test("an explicit file that exists is `file`, whatever the chain holds", () => {
+  test("an explicit file that exists is the whole chain, whatever else exists", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
@@ -239,11 +257,12 @@ describe("resolveDslConfig", () => {
       writeFileSync(named, VALID_CFG);
       writeFileSync(local, VALID_CFG);
       expect(resolveDslConfig(dir, dir, named)).toEqual({
-        kind: "file",
-        path: named,
+        kind: "chain",
+        layers: [named],
+        home: named,
         unchecked: [],
       });
-      expect(durableConfigPath(dir, dir, named)).toBe(named);
+      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [] });
     } finally {
       restore();
       cleanup();
@@ -262,12 +281,12 @@ describe("resolveDslConfig", () => {
       const named = join(dir, "absent.json5");
       writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
       const resolved = resolveDslConfig(dir, dir, named);
-      expect(resolved).toEqual({ kind: "missing", path: named });
+      expect(resolved).toEqual({ kind: "missing", path: named, home: named });
       expect(configResolutionNotice(resolved)).toBe(
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
-      expect(durableConfigPath(dir, dir, named)).toBe(named);
+      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [] });
     } finally {
       restore();
       cleanup();
@@ -294,6 +313,7 @@ describe("resolveDslConfig", () => {
         expect(resolved).toEqual({
           kind: "unreadable",
           path: named,
+          home: named,
           error: expect.stringContaining("EACCES"),
         });
         expect(configResolutionNotice(resolved)).toMatch(
@@ -329,8 +349,9 @@ describe("resolveDslConfig", () => {
       try {
         const resolved = resolveDslConfig(locked, cwd);
         expect(resolved).toEqual({
-          kind: "file",
-          path: cwdFile,
+          kind: "chain",
+          layers: [cwdFile],
+          home: join(dir, "cc-candybar", "config.json5"),
           unchecked: [
             {
               path: join(locked, ".cc-candybar.json5"),
@@ -347,11 +368,11 @@ describe("resolveDslConfig", () => {
         expect(notice).toContain(join(locked, ".cc-candybar.json5"));
         expect(notice).toContain(join(locked, ".cc-candybar.json"));
         expect(notice?.split("\n")).toHaveLength(2);
-        expect(durableConfigPath(locked, cwd)).toBe(cwdFile);
+        expect(durableConfig(locked, cwd).above).toEqual([cwdFile]);
         // The same directory as both project and cwd is still ONE location:
         // two unchecked entries (one per extension), two notice lines.
         const sameDir = resolveDslConfig(locked, locked);
-        expect(sameDir.kind).toBe("default");
+        expect(sameDir).toHaveProperty("layers", []);
         expect(sameDir).toHaveProperty("unchecked.length", 2);
         expect(configResolutionNotice(sameDir)?.split("\n")).toHaveLength(2);
       } finally {
@@ -474,7 +495,7 @@ describe("detectConfigCollisions", () => {
   });
 });
 
-describe("shadowedConfigs", () => {
+describe("the layer chain", () => {
   // A project config in `dir`, a user config under the isolated XDG home.
   function withBoth(run: (project: string, user: string) => void): void {
     const { dir, cleanup } = mkdir();
@@ -492,47 +513,43 @@ describe("shadowedConfigs", () => {
       cleanup();
     }
   }
+  const layersOf = (...at: Parameters<typeof resolveDslConfig>) => {
+    const r = resolveDslConfig(...at);
+    return r.kind === "chain" ? r.layers : null;
+  };
 
-  test("a config behind the one found first is named", () => {
+  test("the user's file is the bottom layer, the project's on top", () => {
     withBoth((project, user) => {
-      expect(shadowedConfigs(project, project)).toEqual([user]);
+      expect(layersOf(project, project)).toEqual([
+        user,
+        join(project, ".cc-candybar.json5"),
+      ]);
     });
   });
 
-  test("the only config found shadows nothing", () => {
-    withBoth((project, user) => {
-      rmSync(join(project, ".cc-candybar.json5"));
-      expect(resolveDslConfig(project, project)).toMatchObject({ path: user });
-      expect(shadowedConfigs(project, project)).toEqual([]);
-    });
-  });
-
-  test("the winner's own .json sibling is the collision, not a shadowed location", () => {
+  test("a location's .json sibling is the collision, not a second layer", () => {
     withBoth((project, user) => {
       writeFileSync(join(project, ".cc-candybar.json"), VALID_CFG);
-      expect(shadowedConfigs(project, project)).toEqual([user]);
+      expect(layersOf(project, project)).toEqual([
+        user,
+        join(project, ".cc-candybar.json5"),
+      ]);
       expect(detectConfigCollisions(project, project)).not.toBeNull();
     });
   });
 
-  test("a shadowed location is named once, by the file the search would read there", () => {
-    withBoth((project, user) => {
-      writeFileSync(user.replace(/5$/, ""), VALID_CFG);
-      expect(shadowedConfigs(project, project)).toEqual([user]);
-    });
-  });
-
-  test("one directory spelled two ways is one location, never a file behind itself", () => {
+  test("one directory spelled two ways is one layer, never a file over itself", () => {
     withBoth((project, user) => {
       const alias = join(project, "alias");
       symlinkSync(project, alias);
-      expect(shadowedConfigs(alias, project)).toEqual([user]);
+      expect(layersOf(alias, project)).toHaveLength(2);
+      expect(layersOf(alias, project)?.[0]).toBe(user);
     });
   });
 
-  test("an explicit config file bypasses the search, so it shadows nothing", () => {
+  test("an explicit config file bypasses the search: it is the only layer", () => {
     withBoth((project, user) => {
-      expect(shadowedConfigs(project, project, user)).toEqual([]);
+      expect(layersOf(project, project, user)).toEqual([user]);
     });
   });
 });

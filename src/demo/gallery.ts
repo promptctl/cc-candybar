@@ -34,7 +34,7 @@ const warnings: string[] = [];
 // demo switcher's sibling links) names the file absolutely.
 const target = process.argv[2];
 const prepared = await prepareConfig(
-  target === undefined ? null : path.resolve(expandHome(target)),
+  target === undefined ? [] : [path.resolve(expandHome(target))],
   process.cwd(),
   warnings,
 );

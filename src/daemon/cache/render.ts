@@ -3,8 +3,8 @@ import type { RichText } from "@promptctl/rich-js";
 import { neededPrefixesByPreset } from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
-  loadConfig,
-  validateConfig,
+  loadConfigChain,
+  type LoadedFile,
   resolveDslConfig,
   configResolutionNotice,
   dslConfigCandidatePaths,
@@ -98,7 +98,8 @@ export type ReloadedEntry = Readonly<
     | "projectDir"
     | "cwd"
     | "configFile"
-    | "configFilePath"
+    | "configLayers"
+    | "failedFile"
     | "lastError"
     | "lastWarning"
   >
@@ -150,18 +151,26 @@ export interface DslRenderState {
   readonly plugins: LoadedPlugins;
 }
 
-type LoadedPlugins = ReturnType<typeof loadConfig>["plugins"];
+type LoadedPlugins = LoadedFile["plugins"];
+
+// The files a config is merged from, lowest first, and the one durable
+// clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
+// one.
+export interface ConfigChain {
+  readonly layers: readonly string[];
+  readonly home: string;
+}
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged and which it
 // dropped: a drop is also on the strip, but the merged set is said nowhere
 // else. The daemon's own sink — buildRenderState is shared with the demo.
 function logPlugins(
-  path: string | null,
+  layers: readonly string[],
   { loaded, dropped }: LoadedPlugins,
 ): void {
   dlog(
     "info",
-    `config load ${path ?? "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length}` +
+    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length}` +
       loaded.map((p) => ` +${p}`).join("") +
       dropped.map((d) => ` -${d.path} (${d.reason})`).join(""),
   );
@@ -190,7 +199,11 @@ export interface CacheEntry {
   projectDir: string;
   cwd: string;
   configFile: string | undefined;
-  configFilePath: string | null;
+  // The files the state was merged from, lowest first, as the last load
+  // resolved them (empty: the bundled default), and the one whose load
+  // failed when the last load did.
+  configLayers: readonly string[];
+  failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
@@ -237,13 +250,13 @@ function authoredRoots(
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
 // covers the exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. The resolved file (when one exists) is ALSO watched by inode, so
+// in full. Every layer of the chain is ALSO watched by inode, so
 // an in-place write fires as well as an atomic rename. Directories are
 // deduped with their filename filters unioned, and the whole set is sorted
 // so equal sets spell equal signatures.
 function watchTargetsFor(
   entry: CacheEntry,
-  resolvedPath: string | null,
+  layers: readonly string[],
 ): WatchTargets {
   const byDir = new Map<string, Set<string>>();
   // A plugin definition is part of the config it is listed in: installing,
@@ -259,7 +272,7 @@ function watchTargetsFor(
     byDir.get(dir)!.add(name);
   }
   return {
-    files: resolvedPath !== null ? [resolvedPath] : [],
+    files: layers,
     dirs: [...byDir.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dirPath, names]) => ({
@@ -278,14 +291,21 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 // [LAW:types-are-the-program] One attempt at loading a config from disk. The
 // two arms are exclusive by construction: a state XOR an error message, never
 // both, never neither — so a caller folding it cannot see a "loaded but also
-// failed" entry. `warning` and `resolvedPath` are facts of the attempt
+// failed" entry. `warning` and `layers` are facts of the attempt
 // regardless of arm (collision detection runs on a broken file too).
 export type LoadOutcome = {
-  readonly resolvedPath: string | null;
+  readonly layers: readonly string[];
   readonly warning: string | null;
 } & (
   | { readonly state: DslRenderState; readonly error: null }
-  | { readonly state: null; readonly error: string }
+  | {
+      readonly state: null;
+      readonly error: string;
+      // The layer whose load threw — the file the strip links to. Null when
+      // the throw was not a file's (the bundled default by program
+      // invariant never is).
+      readonly failedFile: string | null;
+    }
 );
 
 // [LAW:single-enforcer] Construct the full new state — parsed config,
@@ -298,9 +318,10 @@ export type LoadOutcome = {
 // them past the rethrow.
 export function buildRenderState(
   cwd: string,
-  resolvedPath: string | null,
+  chain: ConfigChain,
   warnings: Array<string | null>,
   deps: StateDeps,
+  entered: (path: string) => void = () => {},
 ): DslRenderState {
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
   // straight-line composition. `loadConfig(null)` returns the bundled
@@ -308,15 +329,17 @@ export function buildRenderState(
   // sole producer of `ValidatedConfig`. The renderer accepts only
   // `ValidatedConfig`, so the compiler enforces the chain — there is no
   // "skip validate" path that typechecks downstream.
-  // [LAW:one-source-of-truth] Hand validateConfig the whole read, so
-  // cross-ref diagnostics on the daemon path name the file's own paths and
-  // lines — the file is read once inside loadConfig, not re-read here.
-  const loaded = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
-  const { config: merged, raw } = loaded;
-  // Appended before validation so a cross-ref failure still carries the
-  // file's own advisory (a duplicate key names its line beside the error).
-  warnings.push(...loaded.warnings);
-  const config = validateConfig(loaded, resolvedPath ?? "<default>");
+  // [LAW:one-source-of-truth] The chain's one load: each layer validated
+  // over the layers it joins, so cross-ref diagnostics name the failing
+  // file's own paths and lines. A layer's advisories are appended before its
+  // validation, so a cross-ref failure still carries them (a duplicate key
+  // names its line beside the error).
+  const { layers, config } = loadConfigChain(chain.layers, DEFAULT_DSL_CONFIG, {
+    entered,
+    warned: (w) => warnings.push(...w),
+  });
+  const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
+  const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 
   const store = new VariableStore();
   // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
@@ -372,10 +395,16 @@ export function buildRenderState(
     compiled,
     neededInputPaths: neededPrefixesByPreset(config),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-    authoredRoots: authoredRoots(merged, raw),
-    fileHeldSettings: fileHeldSettings(raw),
-    unused: unusedDeclarations(raw, merged),
-    plugins: loaded.plugins,
+    authoredRoots: new Set(
+      layers.flatMap((l) => [...authoredRoots(merged, l.raw)]),
+    ),
+    // What a reset clears is the home's: resets write nowhere else.
+    fileHeldSettings: fileHeldSettings(homeRaw),
+    unused: layers.flatMap((l) => unusedDeclarations(l.raw, merged)),
+    plugins: {
+      loaded: layers.flatMap((l) => l.plugins.loaded),
+      dropped: layers.flatMap((l) => l.plugins.dropped),
+    },
   };
 }
 
@@ -392,9 +421,12 @@ export function loadFromDisk(
   deps: StateDeps,
 ): LoadOutcome {
   const resolution = resolveDslConfig(projectDir, cwd, configFile);
-  // `file` loads; every other arm builds the bundled default — what
-  // distinguishes them is a notice, below, not a load path.
-  const resolvedPath = resolution.kind === "file" ? resolution.path : null;
+  // `chain` loads its layers; `missing`/`unreadable` build the bundled
+  // default — what distinguishes them is a notice, below, not a load path.
+  const chain: ConfigChain = {
+    layers: resolution.kind === "chain" ? resolution.layers : [],
+    home: resolution.home,
+  };
 
   // [LAW:dataflow-not-control-flow] Advisories run every load, independent
   // of load success — even if the .json5 fails to parse, the user still
@@ -420,12 +452,16 @@ export function loadFromDisk(
   // a failure still reaches the strip beside the error — the same channel,
   // the same ordering, that `cc-candybar check` reports.
   let state: DslRenderState;
+  let failing: string | null = null;
   try {
-    state = buildRenderState(cwd, resolvedPath, advisories, deps);
+    state = buildRenderState(cwd, chain, advisories, deps, (path) => {
+      failing = path;
+    });
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
     return {
-      resolvedPath,
+      layers: chain.layers,
+      failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
       error:
@@ -437,7 +473,7 @@ export function loadFromDisk(
     };
   }
   return {
-    resolvedPath,
+    layers: chain.layers,
     warning: joinWarnings(advisories),
     state,
     error: null,
@@ -478,8 +514,7 @@ export class RenderCache {
     }
 
     const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
-    if (loaded.state !== null)
-      logPlugins(loaded.resolvedPath, loaded.state.plugins);
+    if (loaded.state !== null) logPlugins(loaded.layers, loaded.state.plugins);
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -490,12 +525,15 @@ export class RenderCache {
       projectDir,
       cwd,
       configFile,
-      configFilePath: null,
+      configLayers: [],
+      failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       // The seed's own advisories go nowhere: the strip already carries the
       // failed load's, and the default earns none by program invariant.
-      state: loaded.state ?? buildRenderState(cwd, null, [], this.deps),
+      state:
+        loaded.state ??
+        buildRenderState(cwd, { layers: [], home: "" }, [], this.deps),
       watcher: null,
       watcherKey: null,
     };
@@ -519,7 +557,7 @@ export class RenderCache {
         this.entries.delete(oldestKey);
       }
     }
-    this.refreshWatcher(entry, loaded.resolvedPath);
+    this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry);
 
     return entry;
@@ -561,7 +599,7 @@ export class RenderCache {
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
-      logPlugins(loaded.resolvedPath, loaded.state.plugins);
+      logPlugins(loaded.layers, loaded.state.plugins);
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
       // timers, fs watchers, MobX reactions, and git subscriptions — dropping
       // the reference without disposing would leak them.
@@ -570,7 +608,7 @@ export class RenderCache {
     }
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
-    this.refreshWatcher(entry, loaded.resolvedPath);
+    this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry);
   }
 
@@ -581,9 +619,10 @@ export class RenderCache {
   // (including null↔non-null) is one way the set changes; a candidate's
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
-  private refreshWatcher(entry: CacheEntry, resolvedPath: string | null): void {
-    entry.configFilePath = resolvedPath;
-    const targets = watchTargetsFor(entry, resolvedPath);
+  private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
+    entry.configLayers = loaded.layers;
+    entry.failedFile = loaded.error === null ? null : loaded.failedFile;
+    const targets = watchTargetsFor(entry, loaded.layers);
     // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps
     // the FIRST acquire's targets, so the key must name the target set —
     // the signature is the key, and "rebind when the set changed" and "the

@@ -19,7 +19,7 @@ const NO_TMUX: DoctorEdge = {
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
-  loadConfig: () => ({ path: null, error: null, warning: null, unused: [] }),
+  loadConfig: () => ({ layers: [], error: null, warning: null, unused: [] }),
 };
 const ORIGIN = { projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null };
 

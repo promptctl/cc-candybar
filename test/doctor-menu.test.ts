@@ -69,7 +69,7 @@ afterEach(() => {
 });
 
 const CLEAN_LOAD: ConfigLoad = {
-  path: null,
+  layers: [],
   error: null,
   warning: null,
   unused: [],
@@ -198,7 +198,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   test("a config with problems: its row names the first and counts the rest, with no [fix]", () => {
     const rt = buildRuntime(null, {
       ...CLEAN_LOAD,
-      path: "/p/.cc-candybar.json5",
+      layers: ["/p/.cc-candybar.json5"],
       unused: [
         { kind: "variable", name: "v" },
         { kind: "action", name: "a" },

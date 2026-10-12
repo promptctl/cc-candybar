@@ -25,7 +25,7 @@
 // releases the picks. Asserted on the wire and the file — not on the compiled
 // action — so the draft/save split is proven where it actually happens.
 
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -62,7 +62,13 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
     const projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-config-e2e-project-"),
     );
-    const userConfigPath = path.join(projectDir, ".cc-candybar.json5");
+    // The user's own file — the one durable clicks write.
+    const userConfigPath = path.join(
+      env.XDG_CONFIG_HOME!,
+      "cc-candybar",
+      "config.json5",
+    );
+    mkdirSync(path.dirname(userConfigPath), { recursive: true });
     // No hand-authored actions — proves the epic acceptance bullet against
     // the BUNDLED DEFAULT, not a config built to exercise the mechanism. The
     // two fields the clicks below write are authored explicitly, at the

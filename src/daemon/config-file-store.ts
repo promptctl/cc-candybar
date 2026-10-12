@@ -32,16 +32,20 @@ import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
 } from "../config/default-dsl-config.js";
-import { loadConfigSource, validateConfig } from "../config/dsl-loader.js";
+import {
+  loadConfigChain,
+  type ConfigHome,
+  type LoadedChain,
+} from "../config/dsl-loader.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
+  DslConfig,
   Globals,
   LayoutNode,
   PresetDecl,
   Root,
   RootFragment,
   SettingValue,
-  ValidatedConfig,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
@@ -462,29 +466,89 @@ export interface EditStore {
 // and its record in one place, so recording cannot drift from mutation. The
 // file is the truth, so it goes first.
 // [LAW:single-enforcer] THE gate on what a click may write: text the loader
-// accepts, proved by the loader itself before the file changes. A write that
-// would not load (a copied group declared twice, a preset an action still
-// targets) is refused with the loader's own diagnosis, and the file — and
-// everything the verb does after its write — stays as it was.
+// accepts, proved by the loader itself — over the whole chain the file is
+// the bottom of — before the file changes. A write that would not load (a
+// copied group declared twice, a preset an action still targets, a segment a
+// project layer places removed) is refused with the loader's own diagnosis,
+// and so is one a layer above the home would hide: it would change the file
+// and not the bar. Either way the file — and everything the verb does after
+// its write — stays as it was.
 function commit(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   before: string | null,
   after: string,
 ): void {
-  loadOrRefuse(file, after);
-  writeConfigText(file, after, store.logger);
-  store.record(file, before, after);
+  const will = loadOrRefuse(home, after);
+  // Nothing above the home, nothing to hide — and a home that does not load
+  // now is one a click may still repair.
+  const hidden = home.above.length === 0 ? [] : hiddenBy(home, before, will);
+  if (hidden.length > 0) {
+    throw new BadVerbArgs(
+      `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
+    );
+  }
+  writeConfigText(home.path, after, store.logger);
+  store.record(home.path, before, after);
 }
 
-// The config `text` loads to as `file`, or the click's refusal naming why it
-// does not load.
-function loadOrRefuse(file: string, text: string): ValidatedConfig {
+// What the home's change would say that the chain above it would not draw.
+function hiddenBy(
+  home: ConfigHome,
+  before: string | null,
+  will: LoadedChain,
+): string[] {
+  const was = chainOver(home, before);
+  const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
+  return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
+    (p) => !drawn.has(p),
+  );
+}
+
+// The chain the home's text — or its absence — loads to, read from disk
+// above it. A blank file is no layer, as the loader reads none.
+function chainOver(home: ConfigHome, text: string | null): LoadedChain {
+  const own = text !== null && !/^\s*$/.test(text);
+  return loadConfigChain(
+    own ? [home.path, ...home.above] : home.above,
+    DEFAULT_DSL_CONFIG,
+    { entered: () => {}, warned: () => {} },
+    (p) => (p === home.path && own ? text : fs.readFileSync(p, "utf8")),
+  );
+}
+
+// The home's own layer merged over the bundled default, and the whole
+// chain's merge — what the file says, and what the bar draws.
+function homeConfig(home: ConfigHome, chain: LoadedChain): DslConfig {
+  const [bottom] = chain.layers;
+  return bottom?.path === home.path ? bottom.config : DEFAULT_DSL_CONFIG;
+}
+
+function topConfig(chain: LoadedChain): DslConfig {
+  return chain.layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
+}
+
+// [LAW:dataflow-not-control-flow] The dotted paths at which two configs
+// differ, down to the first level where one side is not a plain object —
+// one walk over the data, total over any pair.
+function changedPaths(a: unknown, b: unknown, at = ""): string[] {
+  if (!isPlainObject(a) || !isPlainObject(b)) {
+    return JSON.stringify(a) === JSON.stringify(b) ? [] : [at];
+  }
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) =>
+    changedPaths(a[k], b[k], at === "" ? k : `${at}.${k}`),
+  );
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// The config `text` loads to as the home, or the click's refusal naming why
+// it does not load.
+function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
   try {
-    return validateConfig(
-      loadConfigSource(file, text, DEFAULT_DSL_CONFIG),
-      file,
-    );
+    return chainOver(home, text);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -511,10 +575,10 @@ export function readValue(
  */
 export function writeValues(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
-  writeDrafts(store, file, pairs, []);
+  writeDrafts(store, home, pairs, []);
 }
 
 // One placement's setting as a save writes it: the value, and the placement
@@ -529,11 +593,11 @@ export interface PlacementValue {
 /** `save`'s write: every value key and every placement setting, as ONE tracked write. */
 export function writeDrafts(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = readConfigText(file);
+  const before = readConfigText(home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -546,9 +610,9 @@ export function writeDrafts(
   );
   commit(
     store,
-    file,
+    home,
     before,
-    withPlacements(valued, file, placements, (text) => text),
+    withPlacements(valued, home.path, placements, (text) => text),
   );
 }
 
@@ -630,18 +694,18 @@ function deleteAtPath(text: string, path: ConfigPath): string {
  */
 export function deleteValues(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = readConfigText(file);
+  const before = readConfigText(home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
     before,
   );
   if (after === before) return;
-  commit(store, file, before, after);
+  commit(store, home, before, after);
 }
 
 const SAVED_PRESET_PREFIX = "custom-";
@@ -677,13 +741,13 @@ function freePresetName(doc: Node | null): string {
  */
 export function writePreset(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = readConfigText(file);
+  const before = readConfigText(home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc);
   const own: ConfigPath = ["presets", name];
@@ -718,11 +782,11 @@ export function writePreset(
   // owns — never in a layer the preset it was copied from renders too.
   const placed = withPlacements(
     after,
-    file,
+    home.path,
     placements.map((p) => ({ ...p, preset: name })),
     ownRow,
   );
-  commit(store, file, before, placed);
+  commit(store, home, before, placed);
   return name;
 }
 
@@ -736,7 +800,7 @@ export function writePreset(
  */
 export function deletePreset(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   name: string,
 ): void {
   if (isBundledPreset(name)) {
@@ -745,11 +809,11 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = readConfigText(file);
+  const before = readConfigText(home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": ${file} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
+      `cannot delete preset "${name}": ${home.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   const selected = nodeAt(doc, ["globals", "preset"]);
@@ -761,7 +825,7 @@ export function deletePreset(
   ];
   commit(
     store,
-    file,
+    home,
     before,
     paths.reduce((text, at) => deleteAtPath(text, at), before),
   );
@@ -776,7 +840,7 @@ export function deletePreset(
  */
 export function applyLayoutOp(
   store: EditStore,
-  file: string,
+  home: ConfigHome,
   key: string,
   op: LayoutOp,
 ): NewPlacement | null {
@@ -784,7 +848,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = readConfigText(file);
+  const before = readConfigText(home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = layoutPlacementOf(
     docOf(before ?? ""),
@@ -796,17 +860,17 @@ export function applyLayoutOp(
     // [LAW:no-ambient-temporal-coupling] Minted over the text this click
     // splices, never a cached render of it: a hand edit, or a click an
     // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(file, authored);
+    const config = loadOrRefuse(home, authored).config;
     return presetNames(config.presets).map(
       (preset) => presetRoot(config, preset).node,
     );
   });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${file} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+      `${placement.path.join(".")} in ${home.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  commit(store, file, before, after);
+  commit(store, home, before, after);
   return placed;
 }
 

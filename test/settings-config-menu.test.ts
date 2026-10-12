@@ -36,6 +36,7 @@ import {
   settingCounts,
 } from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
+import { dirname } from "node:path";
 import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
@@ -430,11 +431,11 @@ describe("the config menu, reached from a user config whose root is one row", ()
     r.click(wrapUrl());
     r.click(paddingUp());
     const before = durable.text();
-    chmodSync(durable.projectDir, 0o500);
+    chmodSync(dirname(durable.configPath), 0o500);
     try {
       expect(() => r.click(saveUrl()!)).toThrow(/config write failed/);
     } finally {
-      chmodSync(durable.projectDir, 0o755);
+      chmodSync(dirname(durable.configPath), 0o755);
     }
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "autoWrap")).toBe("false");

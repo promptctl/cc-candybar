@@ -98,10 +98,15 @@ const sessionPick = (key: string): string | null =>
 function loadState(): ReturnType<typeof buildRenderState> {
   const advisories: Array<string | null> = [];
   try {
-    return buildRenderState(cwd, configPath, advisories, {
-      gitService: providers.gitProvider,
-      sessionState,
-    });
+    return buildRenderState(
+      cwd,
+      { layers: [configPath], home: configPath },
+      advisories,
+      {
+        gitService: providers.gitProvider,
+        sessionState,
+      },
+    );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
     throw err;

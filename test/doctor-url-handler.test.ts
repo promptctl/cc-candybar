@@ -34,9 +34,8 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
     tmux: { kind: "outside" },
     config: {
       kind: "loaded",
-      path: null,
+      layers: [],
       warnings: [],
-      shadowed: [],
       unused: [],
     },
     claudeSettings: { path: "/s.json", env: {} },
@@ -410,7 +409,7 @@ describe("the daemon's side of the round trip", () => {
       doctor: {
         probeTmux: () => ({ kind: "ok", value: [] }),
         loadConfig: () => ({
-          path: null,
+          layers: [],
           error: null,
           warning: null,
           unused: [],

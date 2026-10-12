@@ -73,7 +73,7 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
-      expect(outcome.configPath).toBe(p);
+      expect(outcome.layers).toEqual([p]);
       expect(outcome.rendered.length).toBeGreaterThan(0);
     }
   });
@@ -653,7 +653,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     const outcome = await checkConfig(undefined, emptyCwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
-      expect(outcome.configPath).toBeNull();
+      expect(outcome.layers).toEqual([]);
       expect(outcome.rendered.length).toBeGreaterThan(0);
     }
   });
@@ -666,7 +666,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     );
     const outcome = await checkConfig(undefined, cwd);
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
@@ -684,11 +684,11 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     // The resolver itself is blind to the variable...
     const blind = await checkConfig(undefined, cwd);
     expect(blind.kind).toBe("clean");
-    if (blind.kind === "clean") expect(blind.configPath).toBeNull();
+    if (blind.kind === "clean") expect(blind.layers).toEqual([]);
     // ...the CLI edge lifts it into the target.
     const viaEnv = await checkConfig(detectConfigEnv(process.env), cwd);
     expect(viaEnv.kind).toBe("clean");
-    if (viaEnv.kind === "clean") expect(viaEnv.configPath).toBe(p);
+    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([p]);
     process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
     const absent = await checkConfig(detectConfigEnv(process.env), cwd);
     expect(absent.kind).toBe("unreadable");
@@ -718,7 +718,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean → exit 0 with the verdict on stdout", async () => {
     const plan = checkPlan({
       kind: "clean",
-      configPath: "/tmp/x.json5",
+      layers: ["/tmp/x.json5"],
       warnings: [],
       rendered: "line",
     });
@@ -730,7 +730,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean-with-warnings → exit 0 with warnings visible on stderr", async () => {
     const plan = checkPlan({
       kind: "clean",
-      configPath: null,
+      layers: [],
       warnings: ["something advisory"],
       rendered: "line",
     });
@@ -742,7 +742,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps fatal → exit 1 with the diagnostic on stderr", async () => {
     const plan = checkPlan({
       kind: "fatal",
-      configPath: "/tmp/x.json5",
+      layers: ["/tmp/x.json5"],
       message: "broken here",
       warnings: [],
     });
@@ -768,7 +768,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
-      configPath: "/tmp/x.json5",
+      layers: ["/tmp/x.json5"],
       warnings: [],
       rendered: " ~/c/x \n Opus 4.8 ",
     };
@@ -790,7 +790,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       checkPlan(
         {
           kind: "fatal",
-          configPath: "/tmp/x.json5",
+          layers: ["/tmp/x.json5"],
           message: "broken",
           warnings: [],
         },

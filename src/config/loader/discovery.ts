@@ -66,8 +66,8 @@ export function expandHome(p: string): string {
  * one-per-user, so its env answers for whichever shell spawned it, not for
  * the session being rendered ([LAW:no-ambient-temporal-coupling]).
  *
- * [LAW:single-enforcer] One enumerator; `resolveDslConfig` finds the
- * first that exists, watchers listen on all of them, no second list.
+ * [LAW:single-enforcer] One enumerator; `resolveDslConfig` layers the
+ * files that exist, watchers listen on all of them, no second list.
  *
  * [LAW:dataflow-not-control-flow] Location is the dominant precedence axis;
  * extension breaks ties within a location. Encoded as a nested flat-map: each
@@ -108,8 +108,7 @@ export function dslConfigCandidatePaths(
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
-// appends each accepted extension; `durableConfigPath` appends the
-// documented one.
+// appends each accepted extension; `userHome` appends the documented one.
 function xdgConfigBase(): string {
   const xdgConfigHome =
     process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
@@ -117,20 +116,23 @@ function xdgConfigBase(): string {
 }
 
 /**
- * What the config search found. Four outcomes, and the three that render the
- * bundled default are NOT the same fact:
- *   • `file` — a verified candidate; load it.
- *   • `default` — the precedence chain named no explicit file and none of
- *     its locations exist. The bundled default is what the user asked for.
+ * What the config search found. Three outcomes:
+ *   • `chain` — the files the config is merged from, lowest precedence
+ *     first: the user's XDG file, then `<cwd>`'s, then `<projectDir>`'s, each
+ *     layered over the ones before it through the same merge the bundled
+ *     default takes (brandon-plugins-ktag.8th) — so a project file declares
+ *     only what differs from the user's config, never a replacement of it.
+ *     An explicit `configFile` is a chain of exactly that file. An empty
+ *     chain is the bundled default, which is what the user asked for.
  *   • `missing` — an explicit file was named (`configFile`) and it is
  *     absent. The bundled default renders so a long-running bar
  *     stays live and the watcher recovers when the file appears — but it is
  *     not what the user asked for, and the render says so.
  *   • `unreadable` — an explicit file was named and stat could not see it
  *     (an unsearchable directory, a symlink loop); the errno rides the arm.
- * `file` and `default` carry `unchecked`: chain locations stat could not see
- * past on the way. A lower, verified candidate still wins — the search never
- * stops on a guess — and the notice names each location it had to skip.
+ * Every arm carries `home`: the one file a durable click writes
+ * (`durableConfig`). `chain` carries `unchecked`: locations stat could not
+ * see past; the search never stops on a guess, and the notice names each.
  *
  * [LAW:types-are-the-program] `string | null` collapsed `default` and
  * `missing` into one null, which is how an explicit path to a nonexistent
@@ -140,34 +142,38 @@ function xdgConfigBase(): string {
  */
 export type ConfigResolution =
   | {
-      readonly kind: "file";
-      readonly path: string;
+      readonly kind: "chain";
+      readonly layers: readonly string[];
+      readonly home: string;
       readonly unchecked: readonly Unchecked[];
     }
-  | { readonly kind: "default"; readonly unchecked: readonly Unchecked[] }
-  | { readonly kind: "missing"; readonly path: string }
+  | { readonly kind: "missing"; readonly path: string; readonly home: string }
   | {
       readonly kind: "unreadable";
       readonly path: string;
+      readonly home: string;
       readonly error: string;
     };
 
 /**
- * Resolution order for the user's DSL config file:
+ * The search, over the locations of `dslConfigCandidatePaths`:
  *   1. `configFile` — the session's explicit path (load-config pick >
- *      `--config` > `configEnv` hint, composed literal in server.ts)
- *   2. `<projectDir>/.cc-candybar.json5`
- *   3. `<projectDir>/.cc-candybar.json`
- *   4. `<cwd>/.cc-candybar.json5`
- *   5. `<cwd>/.cc-candybar.json`
- *   6. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
- *      (defaulting to `~/.config/cc-candybar/config.json5`)
- *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
+ *      `--config` > `configEnv` hint, composed literal in server.ts); the
+ *      sole candidate when present
+ *   2. `<projectDir>/.cc-candybar.json5`, then `.json`
+ *   3. `<cwd>/.cc-candybar.json5`, then `.json`
+ *   4. `$XDG_CONFIG_HOME/cc-candybar/config.json5`, then `.json`
+ *      (defaulting to `~/.config/cc-candybar/`)
+ * Each LOCATION contributes its first existing file (`.json5` wins a tie;
+ * the sibling is the collision notice), and the chain is those files in
+ * reverse — the user's at the bottom, the project's on top. A location is
+ * its directory as the filesystem resolves it, so a project directory and a
+ * cwd that spell one directory two ways (a symlinked checkout, macOS's
+ * `/tmp`) contribute one layer, never a file over itself.
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
  * one fold over `presence`. Adding a layer is a new array entry, not a new
- * branch. Extension support is a property of the candidate list, not the
- * search.
+ * branch.
  *
  * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
  * precedence list lives in one place.
@@ -178,41 +184,78 @@ export function resolveDslConfig(
   configFile?: string,
 ): ConfigResolution {
   const unchecked: Unchecked[] = [];
-  for (const path of dslConfigCandidatePaths(projectDir, cwd, configFile)) {
-    const p = presence(path);
-    if (p === "present") return { kind: "file", path, unchecked };
-    if (p !== "absent") unchecked.push(p);
+  const atLocation = new Map<string, string>();
+  for (const candidate of dslConfigCandidatePaths(
+    projectDir,
+    cwd,
+    configFile,
+  )) {
+    const p = presence(candidate);
+    if (p === "absent") continue;
+    if (p !== "present") {
+      unchecked.push(p);
+      continue;
+    }
+    const location = fs.realpathSync(path.dirname(candidate));
+    if (!atLocation.has(location)) atLocation.set(location, candidate);
   }
-  if (configFile === undefined) return { kind: "default", unchecked };
+  const layers = [...atLocation.values()].reverse();
+  if (configFile === undefined) {
+    return { kind: "chain", layers, home: userHome(layers), unchecked };
+  }
   // An explicit path is the sole candidate: its one probe is the verdict.
   const [own] = unchecked;
+  const home = configFile;
+  if (layers.length > 0) return { kind: "chain", layers, home, unchecked };
   return own === undefined
-    ? { kind: "missing", path: configFile }
-    : { kind: "unreadable", ...own };
+    ? { kind: "missing", path: configFile, home }
+    : { kind: "unreadable", ...own, home };
+}
+
+// The user's file: the XDG layer when the chain holds one, else the file a
+// first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
+// format, the one that wins a same-location tie.
+function userHome(layers: readonly string[]): string {
+  const base = xdgConfigBase();
+  return (
+    layers.find((l) => CONFIG_EXTENSIONS.some((e) => l === `${base}.${e}`)) ??
+    `${base}.${CONFIG_EXTENSIONS[0]}`
+  );
 }
 
 /**
- * The file a DURABLE write lands in (candybar-config-dqe): the config file
- * the session's render resolved, or — when no candidate exists yet — the
- * file a first-ever write creates: the explicit path if the client named
- * one, else the XDG `config.json5` at the tail of the same precedence chain.
+ * The file a DURABLE write lands in, and the layers above it.
+ *
+ * The home is the user's own file (or the session's explicit one), never a
+ * project's: a project file is checked into somebody's repository, and a
+ * theme picked from the bar is the user's taste, not the project's. A value
+ * a layer ABOVE the home holds wins over anything the home says, so a write
+ * the home takes but the chain hides is refused by the writer, naming the
+ * layer that holds it (`config-file-store`'s commit) — never a click that
+ * silently does nothing.
  *
  * [LAW:one-source-of-truth] A projection of the same resolution the render
- * runs, so the file a click writes is the file the next reload reads — by
- * construction, not by two lists agreeing. `missing` carries its path, so a
- * first write under an explicit override creates exactly the file the bar
- * is waiting for. The `.json5` spelling is CONFIG_EXTENSIONS' head: the
- * documented format, the one that wins a same-location tie.
+ * runs, so the file a click writes is a layer the next reload reads — by
+ * construction, not by two lists agreeing.
  */
-export function durableConfigPath(
+export interface ConfigHome {
+  readonly path: string;
+  // The chain's layers over `path`, lowest first. The home is the chain's
+  // bottom, so a layer is either the home or above it.
+  readonly above: readonly string[];
+}
+
+export function durableConfig(
   projectDir?: string,
   cwd?: string,
   configFile?: string,
-): string {
+): ConfigHome {
   const resolved = resolveDslConfig(projectDir, cwd, configFile);
-  return resolved.kind === "default"
-    ? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
-    : resolved.path;
+  const layers = resolved.kind === "chain" ? resolved.layers : [];
+  return {
+    path: resolved.home,
+    above: layers.filter((l) => l !== resolved.home),
+  };
 }
 
 /**
@@ -235,8 +278,7 @@ export function configResolutionNotice(
 
 function noticeLines(resolution: ConfigResolution): readonly string[] {
   switch (resolution.kind) {
-    case "file":
-    case "default":
+    case "chain":
       return resolution.unchecked.map(
         (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
       );
@@ -249,40 +291,6 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
         `Config file could not be read: ${resolution.path} — ${resolution.error} — rendering the bundled default until it can be`,
       ];
   }
-}
-
-/**
- * The config files that exist at a LATER location of the search order than
- * the one the search stops at: a user config behind a project one, say. Only
- * the first file found is read — files never merge with each other — so each
- * of these is a config the bar ignores entirely (brandon-doctor-v62x.e91).
- * One file per LOCATION, the one the search would read there: a location's
- * other extension is the collision below, not a second shadowed config, and
- * an explicit `configFile` bypasses the chain, so it shadows nothing.
- *
- * A location is its directory as the filesystem resolves it, so a project
- * directory and a cwd that spell one directory two ways (a symlinked
- * checkout, macOS's `/tmp`) are one location, never a file behind itself.
- *
- * [LAW:single-enforcer] The same enumerator and the same presence probe the
- * resolver folds over, so "found first" here is the file the resolver loads.
- */
-export function shadowedConfigs(
-  projectDir?: string,
-  cwd?: string,
-  configFile?: string,
-): readonly string[] {
-  const firstAt = new Map<string, string>();
-  for (const candidate of dslConfigCandidatePaths(
-    projectDir,
-    cwd,
-    configFile,
-  )) {
-    if (presence(candidate) !== "present") continue;
-    const location = fs.realpathSync(path.dirname(candidate));
-    if (!firstAt.has(location)) firstAt.set(location, candidate);
-  }
-  return [...firstAt.values()].slice(1);
 }
 
 /**

@@ -24,6 +24,7 @@
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { chmodSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -474,7 +475,7 @@ describe("settings history: a step lands whole, and records only what landed", (
     durable = durableConfig("cc-candybar-undoredo-atomic-");
   });
   afterEach(() => {
-    chmodSync(durable.projectDir, 0o700);
+    chmodSync(dirname(durable.configPath), 0o700);
     durable.dispose();
   });
 
@@ -488,13 +489,13 @@ describe("settings history: a step lands whole, and records only what landed", (
     journal.file("s1", file, "{ before: 1 }", "{ after: 1 }");
     journal.commit();
 
-    chmodSync(durable.projectDir, 0o500); // the file write cannot land
+    chmodSync(dirname(durable.configPath), 0o500); // the file write cannot land
     expect(() => history.undo("s1")).toThrow(/config write failed/);
     expect(sessionState.get("s1", "theme")).toBe("nord");
     expect(durable.text()).toBe("{ after: 1 }");
     expect(history.depth("s1")).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
-    chmodSync(durable.projectDir, 0o700); // and once it can, the step is intact
+    chmodSync(dirname(durable.configPath), 0o700); // and once it can, the step is intact
     history.undo("s1");
     expect(sessionState.get("s1", "theme")).toBeNull();
     expect(durable.text()).toBe("{ before: 1 }");

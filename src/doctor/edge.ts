@@ -21,7 +21,6 @@ import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import { shadowedConfigs } from "../config/dsl-loader.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type {
   ConfigFacts,
@@ -56,7 +55,7 @@ export interface ConfigOrigin {
 // file it resolved, the error that stopped it, the advisories it earned (one
 // per line), and — for the config last loaded — what its file left unused.
 export interface ConfigLoad {
-  readonly path: string | null;
+  readonly layers: readonly string[];
   readonly error: string | null;
   readonly warning: string | null;
   readonly unused: readonly UnusedDecl[];
@@ -90,12 +89,11 @@ export function productionEdge(
 }
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
-// two; the files behind the loaded one are a fact of the same origin, read
-// through the search's own enumerator.
+// two.
 function configFacts(edge: DoctorEdge, origin: ConfigOrigin): ConfigFacts {
   const load = edge.loadConfig(origin);
   const base = {
-    path: load.path,
+    layers: load.layers,
     warnings: load.warning === null ? [] : load.warning.split("\n"),
   };
   return load.error !== null
@@ -103,11 +101,6 @@ function configFacts(edge: DoctorEdge, origin: ConfigOrigin): ConfigFacts {
     : {
         ...base,
         kind: "loaded",
-        shadowed: shadowedConfigs(
-          origin.projectDir,
-          origin.cwd,
-          origin.configFile ?? undefined,
-        ),
         unused: load.unused,
       };
 }

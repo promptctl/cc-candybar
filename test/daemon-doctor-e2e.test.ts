@@ -9,7 +9,6 @@ import {
   mkdtempSync,
   mkdirSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -77,15 +76,15 @@ test("the doctor's config row reports the session's own config load", async () =
     expect(run).toBeDefined();
     await click(sockPath, run!);
 
+    // The project layer's unused helper, read over the user's file.
     expect(flat(await render(sockPath, SID, projectDir))).toContain(
-      `✗ config — ${userConfig} is never read — ${projectConfig} is found first (+1 more — run \`cc-candybar doctor\`)`,
+      `✗ config — helper "idle" is never called`,
     );
 
-    // Fixing both — the helper removed, the unread file gone — turns the row
-    // over on the very next run: the click reloads the entry, so it never
-    // reports the load from before the edit while the fs watcher catches up.
+    // Fixing it turns the row over on the very next run: the click reloads
+    // the entry, so it never reports the load from before the edit while
+    // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
-    rmSync(userConfig);
     await click(sockPath, run!);
     expect(flat(await render(sockPath, SID, projectDir))).toContain("✓ config");
   } finally {
