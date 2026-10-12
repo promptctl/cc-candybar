@@ -100,7 +100,7 @@ function loadState(): ReturnType<typeof buildRenderState> {
   try {
     return buildRenderState(
       cwd,
-      { layers: [configPath], home: configPath },
+      { layers: [configPath], home: configPath, projectDir: null },
       advisories,
       {
         gitService: providers.gitProvider,

@@ -40,10 +40,10 @@ import {
   type SettingValue,
 } from "../dsl-types.js";
 import { presetNames, presetRoot } from "../presets.js";
+import { templateActionRefs } from "./refs.js";
 
-// A plugin that could not be loaded: the definition path it was listed as,
-// the name it declares when that much could be read (a missing file names
-// none), and why. The rest of the config renders without it.
+// A plugin that could not be loaded: its definition's path, its name (its
+// folder's, undefined when the folder's name cannot be one), and why. The rest of the config renders without it.
 export interface DroppedPlugin {
   readonly path: string;
   readonly plugin: string | undefined;
@@ -51,10 +51,18 @@ export interface DroppedPlugin {
 }
 
 export interface PluginLayer {
-  // The base with every plugin that loaded merged over it, in listed order.
+  // The base with every plugin that loaded merged over it, in listed order,
+  // and a tombstone for every named one that did not.
   readonly config: DslConfig;
   readonly loaded: readonly string[];
   readonly dropped: readonly DroppedPlugin[];
+}
+
+// What a definition's paths resolve against beyond its own directory.
+export interface PluginContext {
+  // The session's project, for a `data: { project }` path; null where no
+  // project is known.
+  readonly projectDir: string | null;
 }
 
 // The spelling of a drop, shared by the diagnostic strip and `check`.
@@ -66,18 +74,24 @@ export function droppedPluginNotice(d: DroppedPlugin): string {
 // load error naming the field: a definition declares no sources of its own
 // (no shell), so loading one from a cloned repo runs nothing, and it never
 // edits `root` — placing its segments is the user's choice.
-const DEFINITION_KEYS = new Set([
-  "plugin",
-  "data",
-  "segments",
-  "helpers",
-  "actions",
-]);
+const DEFINITION_KEYS = new Set(["data", "segments", "helpers", "actions"]);
+
+// The file a plugin folder holds its definition in.
+export const DEFINITION_FILE = "plugin.json5";
 
 // A plugin name prefixes every name it declares, so it is one identifier
 // segment: no dot (it would forge another plugin's namespace), nothing a
 // template path cannot spell.
 const PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
+
+// [LAW:one-source-of-truth] A plugin's name is the name of the folder its
+// definition sits in — installed or listed alike — so even a definition that
+// cannot be read has one, and nothing inside the file can disagree with it.
+// Undefined when the folder's name cannot be a plugin's.
+export function pluginNameOf(definition: string): string | undefined {
+  const name = path.basename(path.dirname(definition));
+  return PLUGIN_NAME.test(name) ? name : undefined;
+}
 
 // [LAW:one-source-of-truth] Every name a plugin declares lives under
 // `plugins.<plugin>.`: no plugin can collide with a name the bar or the user
@@ -118,79 +132,152 @@ function reasonOf(err: unknown): string {
 }
 
 /**
- * Lay every listed plugin over `base`, in order. `from` is the file that
- * lists them: a relative path resolves against its directory, `~` against the
- * home directory.
+ * The definition paths a config lists under `plugins:`, absolute: a relative
+ * path resolves against the directory of `from`, the file listing it, and `~`
+ * against the home directory.
  */
-export function applyPlugins(
+export function listedPlugins(
   refs: readonly string[],
   from: string,
+): readonly string[] {
+  return refs.map((ref) => path.resolve(path.dirname(from), expandHome(ref)));
+}
+
+/**
+ * Lay every definition over `base`, in order. A plugin replaces whatever a
+ * layer beneath it declared under its name — a listed plugin replaces an
+ * installed one, a project's installed plugin a machine's — so the nearest
+ * declaration wins whole and two copies never merge; within one list a name
+ * is taken once.
+ */
+export function applyPlugins(
+  definitions: readonly string[],
+  ctx: PluginContext,
   base: DslConfig,
   validate: (config: DslConfig) => unknown,
 ): PluginLayer {
-  const dir = path.dirname(from);
-  // [LAW:dataflow-not-control-flow] One fold, every ref: each step either
-  // merges its plugin or records why not, and the next step sees the result.
-  return refs.reduce<PluginLayer>(
-    (layer, ref) => {
-      const file = path.resolve(dir, expandHome(ref));
-      const read = attempt(() => {
-        const source = fs.readFileSync(file, "utf-8");
-        return { source, json: JSON5.parse(source) as unknown };
+  // [LAW:dataflow-not-control-flow] One fold, every definition: each step
+  // either merges its plugin or records why not, and the next step sees the
+  // result.
+  const taken = new Map<string, string>();
+  return definitions.reduce<PluginLayer>(
+    (layer, file) => {
+      const plugin = pluginNameOf(file);
+      const drop = (reason: string, config: DslConfig): PluginLayer => ({
+        ...layer,
+        config,
+        dropped: [...layer.dropped, { path: file, plugin, reason }],
       });
-      const plugin = read.ok ? namespaceOf(read.value.json) : undefined;
-      const merged = read.ok
-        ? attempt(() => {
-            const config = mergeWithDefault(
-              fragmentOf(file, read.value, layer.config),
-              layer.config,
-            );
-            validate(config);
-            return config;
-          })
-        : read;
-      return merged.ok
-        ? { ...layer, config: merged.value, loaded: [...layer.loaded, file] }
-        : {
-            ...layer,
-            dropped: [
-              ...layer.dropped,
-              { path: file, plugin, reason: merged.reason },
-            ],
-          };
+      if (plugin === undefined) {
+        return drop(
+          `its folder "${path.basename(path.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          layer.config,
+        );
+      }
+      const first = taken.get(plugin);
+      if (first !== undefined) {
+        return drop(
+          `plugin "${plugin}" is already listed, from ${first}`,
+          layer.config,
+        );
+      }
+      taken.set(plugin, file);
+      const under = withoutPlugin(layer.config, plugin);
+      const merged = attempt(() => {
+        const source = fs.readFileSync(file, "utf-8");
+        const config = mergeWithDefault(
+          fragmentOf(
+            file,
+            plugin,
+            { source, json: JSON5.parse(source) as unknown },
+            under,
+            ctx,
+          ),
+          under,
+        );
+        validate(config);
+        return config;
+      });
+      if (merged.ok) {
+        return {
+          ...layer,
+          config: merged.value,
+          loaded: [...layer.loaded, file],
+        };
+      }
+      const dropped = { path: file, plugin, reason: merged.reason };
+      return drop(merged.reason, tombstone(under, plugin, dropped));
     },
     { config: base, loaded: [], dropped: [] },
   );
 }
 
-// The name a definition declares, when it declares a usable one.
-function namespaceOf(json: unknown): string | undefined {
-  return isPlainObject(json) &&
-    typeof json.plugin === "string" &&
-    PLUGIN_NAME.test(json.plugin)
-    ? json.plugin
+// The config with nothing left under `plugins.<plugin>.`.
+function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
+  const prefix = `${PLUGIN_NS}${plugin}.`;
+  const keep = <T>(r: Readonly<Record<string, T>>): Record<string, T> =>
+    Object.fromEntries(
+      Object.entries(r).filter(([name]) => !name.startsWith(prefix)),
+    );
+  return {
+    ...config,
+    variables: keep(config.variables),
+    segments: keep(config.segments),
+    helpers: keep(config.helpers),
+    actions: keep(config.actions),
+  };
+}
+
+// [LAW:no-silent-failure] A dropped plugin still owns its namespace: its data
+// variable is a document that IS the drop, so a template reading it — the
+// user's own, a stand-in's — renders ⚠ naming why.
+function tombstone(
+  config: DslConfig,
+  plugin: string,
+  dropped: DroppedPlugin,
+): DslConfig {
+  return {
+    ...config,
+    variables: {
+      ...config.variables,
+      [pluginDataVar(plugin)]: {
+        kind: "dropped",
+        reason: droppedPluginNotice(dropped),
+      },
+    },
+  };
+}
+
+// The plugin a name is declared under, if any.
+function pluginOf(name: string): string | undefined {
+  return name.startsWith(PLUGIN_NS)
+    ? name.slice(PLUGIN_NS.length).split(".")[0]
     : undefined;
 }
 
-// The drops a segment name belongs to: a name under `plugins.<plugin>.` is
-// that plugin's, so it belongs to the drop that named itself `<plugin>` — or,
-// when no loaded plugin is `<plugin>`, to the drops that could not even be
-// read for their name. A name outside `plugins.` belongs to no drop.
+// Why a name under `plugins.` names nothing: the drop notice of the plugin
+// whose namespace it is — its tombstone — or, when no plugin owns that
+// namespace at all, every drop that has no name (a folder whose name is not
+// a plugin's). A name outside `plugins.`, or under a plugin that loaded,
+// belongs to no drop.
 export function dropsOwning(
   layer: PluginLayer,
-): (name: string) => readonly DroppedPlugin[] {
-  const pluginOf = (name: string): string | undefined =>
-    name.startsWith(PLUGIN_NS)
-      ? name.slice(PLUGIN_NS.length).split(".")[0]
-      : undefined;
-  const loaded = new Set(Object.keys(layer.config.segments).map(pluginOf));
+): (name: string) => readonly string[] {
+  const owners = new Set(
+    [
+      ...Object.keys(layer.config.variables),
+      ...Object.keys(layer.config.segments),
+    ].map(pluginOf),
+  );
+  const unnamed = layer.dropped
+    .filter((d) => d.plugin === undefined)
+    .map(droppedPluginNotice);
   return (name) => {
     const plugin = pluginOf(name);
     if (plugin === undefined) return [];
-    const named = layer.dropped.filter((d) => d.plugin === plugin);
-    return named.length > 0 || loaded.has(plugin)
-      ? named
-      : layer.dropped.filter((d) => d.plugin === undefined);
+    const data = layer.config.variables[pluginDataVar(plugin)];
+    if (data?.kind === "dropped") return [data.reason];
+    return owners.has(plugin) ? [] : unnamed;
   };
 }
 
@@ -203,7 +290,7 @@ export function dropsOwning(
 export function withDroppedPlacements(
   config: DslConfig,
   layer: DslConfig,
-  owning: (name: string) => readonly DroppedPlugin[],
+  owning: (name: string) => readonly string[],
 ): DslConfig {
   const placements = presetNames(config.presets)
     .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
@@ -231,15 +318,39 @@ export function withDroppedPlacements(
             ];
       }),
   );
-  return { ...config, segments: { ...config.segments, ...standIns } };
+  // An action of a dropped plugin a template binds stands in as one whose
+  // copy reads the tombstone: the cell binding it renders ⚠ with the drop.
+  const actionStandIns = Object.fromEntries(
+    Object.values(config.segments)
+      .flatMap((seg) =>
+        (["template", "bg", "fg", "when"] as const).flatMap((f) =>
+          seg[f] === undefined
+            ? []
+            : templateActionRefs(seg[f], config.helpers).map((r) => r.name),
+        ),
+      )
+      .filter((name) => !(name in config.actions))
+      .flatMap((name) => {
+        const plugin = pluginOf(name);
+        return plugin !== undefined &&
+          config.variables[pluginDataVar(plugin)]?.kind === "dropped"
+          ? [[name, { copy: `{{ .${pluginDataVar(plugin)} }}` }] as const]
+          : [];
+      }),
+  );
+  return {
+    ...config,
+    segments: { ...config.segments, ...standIns },
+    actions: { ...config.actions, ...actionStandIns },
+  };
 }
 
 function standIn(
   name: string,
-  cause: readonly DroppedPlugin[],
+  cause: readonly string[],
   placements: readonly SegmentNode[],
 ): DslConfig["segments"][string] {
-  const text = `⚠ ${name}: plugin not loaded (${cause.map((d) => d.path).join(", ")})`;
+  const text = `⚠ ${name}: ${cause.join("; ")}`;
   const values = new Map<string, NonEmpty<SettingValue>>();
   for (const n of placements) {
     for (const [key, value] of Object.entries(n.settings ?? {})) {
@@ -292,8 +403,10 @@ function settingFor(
 // into a drop.
 function fragmentOf(
   file: string,
+  ns: string,
   { source, json }: { readonly source: string; readonly json: unknown },
   base: DslConfig,
+  { projectDir }: PluginContext,
 ): RawDslConfig {
   const issues: ConfigIssue[] = [];
   const fail = (): never => {
@@ -310,33 +423,22 @@ function fragmentOf(
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`,
+        message:
+          key === "plugin"
+            ? `a plugin definition does not name itself: its name is its folder's ("${ns}") — remove "plugin"`
+            : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`,
       });
     }
   }
-  const { plugin, data } = json;
-  if (typeof plugin !== "string" || !PLUGIN_NAME.test(plugin)) {
-    issues.push({
-      path: "plugin",
-      message: `"plugin" must be a name matching ${PLUGIN_NAME} (it prefixes every name the plugin declares)`,
-    });
-  }
-  if (typeof data !== "string" || data === "") {
-    issues.push({
-      path: "data",
-      message: `"data" must be the path of the plugin's JSON data file, relative to this definition`,
-    });
-  }
+  const dataPath = dataPathOf(json.data, file, projectDir, issues);
   if (!isPlainObject(json.segments)) {
     issues.push({
       path: "segments",
       message: `"segments" must be an object naming the plugin's segments`,
     });
   }
-  if (issues.length > 0) fail();
+  if (issues.length > 0 || dataPath === undefined) return fail();
 
-  const ns = plugin as string;
-  const dataPath = path.resolve(path.dirname(file), expandHome(data as string));
   const ctx: ValidateCtx = {
     source,
     issues,
@@ -432,4 +534,39 @@ function prefixed<T>(
   return Object.fromEntries(
     Object.entries(decls).map(([name, d]) => [`${PLUGIN_NS}${ns}.${name}`, d]),
   );
+}
+
+// [LAW:types-are-the-program] Where a plugin's data lives: a path relative to
+// its definition (an app that keeps one state file), or `{ project }`, a path
+// relative to the session's project — one installed definition, a data file
+// per repo (lit writes `<repo>/.lit/candybar.json`).
+function dataPathOf(
+  data: unknown,
+  file: string,
+  projectDir: string | null,
+  issues: ConfigIssue[],
+): string | undefined {
+  if (typeof data === "string" && data !== "") {
+    return path.resolve(path.dirname(file), expandHome(data));
+  }
+  if (
+    isPlainObject(data) &&
+    Object.keys(data).length === 1 &&
+    typeof data.project === "string" &&
+    data.project !== ""
+  ) {
+    if (projectDir === null) {
+      issues.push({
+        path: "data.project",
+        message: `data is read from the session's project, and this load has none`,
+      });
+      return undefined;
+    }
+    return path.resolve(projectDir, data.project);
+  }
+  issues.push({
+    path: "data",
+    message: `"data" must be the path of the plugin's JSON data file relative to this definition, or { project: "<path>" } relative to the session's project`,
+  });
+  return undefined;
 }

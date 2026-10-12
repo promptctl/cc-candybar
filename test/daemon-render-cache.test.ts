@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  renameSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -775,6 +776,36 @@ describe("RenderCache", () => {
       expect(r!.rangeParamsFor("k")).toEqual({ min: 1, max: 9 });
       expect(n!.rangeParamsFor("k")).toEqual({ min: 1, max: 3 });
     } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // brandon-plugins-ktag.5zv: an app installs a plugin by dropping a folder
+  // into a plugin root, with no config edit — the root is watched for every
+  // child, so the install reloads the entry and the segment is there.
+  test("a plugin folder installed into a repo's plugin root reloads the entry", async () => {
+    const { cache, cleanups, reloads } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const root = join(dir, ".cc-candybar", "plugins");
+      mkdirSync(root, { recursive: true });
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.state.config.segments["plugins.deploy.status"]).toBeUndefined();
+      // Staged then renamed in, so every repetition is an event in the root.
+      const staging = join(dir, "staging");
+      await reloads.after(entry, () => {
+        mkdirSync(staging, { recursive: true });
+        writeFileSync(
+          join(staging, "plugin.json5"),
+          `{ data: "./d.json", segments: { status: { template: "up" } } }`,
+        );
+        rmSync(join(root, "deploy"), { recursive: true, force: true });
+        renameSync(staging, join(root, "deploy"));
+      });
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.config.segments["plugins.deploy.status"]).toBeDefined();
+    } finally {
+      cleanup();
       for (const fn of cleanups) fn();
     }
   });

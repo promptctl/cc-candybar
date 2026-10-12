@@ -72,11 +72,14 @@ import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import {
   applyPlugins,
+  listedPlugins,
   droppedPluginNotice,
+  type PluginContext,
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
 } from "./loader/plugins.js";
+import { installedPlugins } from "./loader/plugin-folders.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
 // [LAW:locality-or-seam] Consumers import from `dsl-loader`; the internal split
@@ -151,6 +154,7 @@ export function loadConfig(
   path: string | null,
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
+  ctx: PluginContext = NO_PROJECT,
 ): LoadedFile & { config: DslConfig } {
   return path === null
     ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) }
@@ -159,8 +163,13 @@ export function loadConfig(
         fs.readFileSync(path, "utf-8"),
         dflt,
         allowedPalettes,
+        ctx,
       );
 }
+
+// A load with no session project: a `data: { project }` plugin drops, naming
+// why.
+export const NO_PROJECT: PluginContext = { projectDir: null };
 
 /**
  * loadConfig over text already in hand — the file as it WOULD read, for a
@@ -172,6 +181,7 @@ export function loadConfigSource(
   source: string,
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
+  ctx: PluginContext = NO_PROJECT,
 ): LoadedFile & { config: DslConfig } {
   // [LAW:one-source-of-truth] The plugins the file lists are one layer of the
   // same merge: bundled < plugins < this file. Each plugin is validated over
@@ -180,7 +190,7 @@ export function loadConfigSource(
   // delta are the segments of that very layer.
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(refs, path, dflt, (c) =>
+    const layer = applyPlugins(listedPlugins(refs, path), ctx, dflt, (c) =>
       validateConfig(unauthored(c), path, allowedPalettes),
     );
     const owning = dropsOwning(layer);
@@ -230,17 +240,39 @@ export function loadConfigChain(
   paths: readonly string[],
   dflt: DslConfig,
   trace: ChainTrace,
+  ctx: PluginContext,
   read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
+  // [LAW:one-source-of-truth] Installed plugins are the layer every file
+  // merges over: bundled < installed < the chain's files (and what each
+  // lists). A file names an installed plugin's segment exactly as it names a
+  // bundled one.
+  const found = installedPlugins(ctx.projectDir);
+  const plugins = applyPlugins(found.definitions, ctx, dflt, (c) =>
+    validateConfig(unauthored(c), "<installed plugins>", allowedPalettes),
+  );
+  const installed = {
+    roots: found.roots,
+    loaded: plugins.loaded,
+    dropped: plugins.dropped,
+  };
+  trace.warned([
+    ...found.unchecked.map(
+      (u) => `Plugin folder could not be listed: ${u.path} — ${u.error}`,
+    ),
+    ...plugins.dropped.map(droppedPluginNotice),
+  ]);
+  const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
   for (const path of paths) {
     trace.entered(path);
     const loaded = loadConfigSource(
       path,
       read(path),
-      layers.at(-1)?.config ?? dflt,
+      layers.at(-1)?.config ?? base,
       allowedPalettes,
+      ctx,
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
@@ -249,15 +281,20 @@ export function loadConfigChain(
   if (top === undefined) {
     return {
       layers,
+      installed,
       config: validateConfig(
-        loadConfig(null, dflt),
+        loadConfig(null, base),
         "<default>",
         allowedPalettes,
       ),
     };
   }
   try {
-    return { layers, config: validateConfig(top, top.path, allowedPalettes) };
+    return {
+      layers,
+      installed,
+      config: validateConfig(top, top.path, allowedPalettes),
+    };
   } catch (e) {
     for (const layer of layers.slice(0, -1)) {
       trace.entered(layer.path);
@@ -280,6 +317,11 @@ export interface LoadedChain {
   readonly layers: ReadonlyArray<
     LoadedFile & { readonly path: string; readonly config: DslConfig }
   >;
+  // The installed plugins under every layer: the roots searched (each is
+  // watched), the definitions merged, and those dropped (also `warned`).
+  readonly installed: LoadedFile["plugins"] & {
+    readonly roots: readonly string[];
+  };
   readonly config: ValidatedConfig;
 }
 

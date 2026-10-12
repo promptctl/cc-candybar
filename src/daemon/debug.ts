@@ -25,7 +25,7 @@
 
 import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
-import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
+import type { DslConfig, VariableDecl } from "../config/dsl-types";
 import { placementId, walkNodes } from "../config/dsl-types";
 import { presetNames, presetRoot } from "../config/presets";
 import { rootNode } from "../config/root";
@@ -166,8 +166,8 @@ function ageFromNode(lastUpdatedMs: number | null): number | null {
 // shape registerDslConfig uses to declare them).
 function buildSourceKindIndex(
   config: DslConfig,
-): ReadonlyMap<string, SourceKind> {
-  const index = new Map<string, SourceKind>();
+): ReadonlyMap<string, VariableDecl["kind"]> {
+  const index = new Map<string, VariableDecl["kind"]>();
   for (const [name, decl] of Object.entries(config.variables)) {
     index.set(name, sourceKindOf(decl));
   }
@@ -180,7 +180,7 @@ function buildSourceKindIndex(
   return index;
 }
 
-function sourceKindOf(decl: VariableDecl): SourceKind {
+function sourceKindOf(decl: VariableDecl): VariableDecl["kind"] {
   return decl.kind;
 }
 

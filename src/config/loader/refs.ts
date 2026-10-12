@@ -364,6 +364,7 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
 
 function isDocumentDecl(v: VariableDecl): boolean {
   return (
-    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
+    v.kind === "dropped" ||
+    ((v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json")
   );
 }

@@ -59,3 +59,14 @@ process.env.CLAUDE_CONFIG_DIR = path.join(
   os.tmpdir(),
   `cc-candybar-jest-claude-${crypto.randomUUID()}`,
 );
+
+// [LAW:single-enforcer] No test load finds the host's installed cc-candybar
+// plugins (src/config/loader/plugin-folders.ts): both data locations name a
+// directory that does not exist. A test installing a plugin points them at
+// its own.
+const noPlugins = path.join(
+  os.tmpdir(),
+  `cc-candybar-jest-data-${crypto.randomUUID()}`,
+);
+process.env.XDG_DATA_HOME = noPlugins;
+process.env.XDG_DATA_DIRS = noPlugins;

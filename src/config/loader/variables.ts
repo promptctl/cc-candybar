@@ -1,4 +1,4 @@
-// [LAW:types-are-the-program] The variable schema: a VariableDecl is discriminated
+// [LAW:types-are-the-program] The variable schema: a AuthoredVariableDecl is discriminated
 // by `kind` (literal / input / env / file / shell / template / time / git / state),
 // declared as DATA (VARIABLE_SCHEMA) and interpreted by the tag-by-field-value
 // engine (taggedUnion). Each arm is a `fields` schema over its member's non-`kind`
@@ -20,7 +20,7 @@ import {
   type StateVarDecl,
   type TemplateVarDecl,
   type TimeVarDecl,
-  type VariableDecl,
+  type AuthoredVariableDecl,
 } from "../dsl-types.js";
 import type { JsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
@@ -60,7 +60,7 @@ export function validateVariables(
   ctx: ValidateCtx,
   pathPrefix: string,
   raw: unknown,
-): Record<string, VariableDecl> {
+): Record<string, AuthoredVariableDecl> {
   if (raw === undefined) return {};
   if (!isPlainObject(raw)) {
     ctx.issues.push({
@@ -71,7 +71,7 @@ export function validateVariables(
     return {};
   }
 
-  const out: Record<string, VariableDecl> = {};
+  const out: Record<string, AuthoredVariableDecl> = {};
   for (const [name, decl] of Object.entries(raw)) {
     const parsed = taggedUnion(
       ctx,
@@ -394,13 +394,13 @@ const VARIABLE_TAG = "kind";
 // rejects against — are `armFacets` over the SAME field map `fields` validates,
 // so a field added here reaches all three interpreters at once.
 function arm<
-  K extends VariableDecl["kind"],
-  M extends Omit<Extract<VariableDecl, { kind: K }>, "kind">,
+  K extends AuthoredVariableDecl["kind"],
+  M extends Omit<Extract<AuthoredVariableDecl, { kind: K }>, "kind">,
 >(
   kind: K,
   fieldMap: FieldSpecMap<M>,
   removed: Readonly<Record<string, string>> = {},
-): TaggedArm<Extract<VariableDecl, { kind: K }>> {
+): TaggedArm<Extract<AuthoredVariableDecl, { kind: K }>> {
   return {
     ...armFacets(VARIABLE_TAG, kind, fieldMap),
     parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
@@ -412,12 +412,15 @@ function arm<
       // generic K, hence the cast — the call-site check carries the real guarantee.
       return body === null
         ? null
-        : ({ kind, ...body } as unknown as Extract<VariableDecl, { kind: K }>);
+        : ({ kind, ...body } as unknown as Extract<
+            AuthoredVariableDecl,
+            { kind: K }
+          >);
     },
   };
 }
 
-const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
+const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
   tag: VARIABLE_TAG,
   noun: "source kind",
   // `Unknown shell variable key "readMode". Expected one of: kind, command,
@@ -442,14 +445,14 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
   },
 };
 
-// [LAW:one-source-of-truth] One VariableDecl's schema, derived from the SAME
+// [LAW:one-source-of-truth] One AuthoredVariableDecl's schema, derived from the SAME
 // VARIABLE_SCHEMA the validator interprets — the tag-by-kind anyOf.
 export function variableDeclJson(): JsonNode {
   return taggedUnionJson(VARIABLE_SCHEMA);
 }
 
 // [LAW:one-source-of-truth] The `variables` block (and a segment's nested `vars`)
-// is a name → VariableDecl map; both surfaces emit this one shape, symmetric to
+// is a name → AuthoredVariableDecl map; both surfaces emit this one shape, symmetric to
 // both calling `validateVariables`.
 export function variablesMapJson(): JsonNode {
   return { type: "object", additionalProperties: variableDeclJson() };

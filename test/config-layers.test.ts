@@ -78,7 +78,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = durableConfig(project, project);
-  expect(home).toEqual({ path: userFile, above: [projectFile] });
+  expect(home).toEqual({ path: userFile, above: [projectFile], projectDir: project });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");

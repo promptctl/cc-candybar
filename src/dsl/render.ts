@@ -257,6 +257,10 @@ function declareOne(
       registry.declareLiteral(name, decl.value as string | number | boolean);
       break;
 
+    case "dropped":
+      registry.declareFailedDocument(name, decl.reason);
+      break;
+
     case "input":
       // [LAW:types-are-the-program] The loader validated that `decl.type` is
       // one of "string"|"number"|"boolean" and that `decl.default` (if
