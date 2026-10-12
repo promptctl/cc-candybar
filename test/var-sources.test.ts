@@ -730,6 +730,34 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
+  it("a file whose directories appear after load is read when it is written", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "state", "deep", "data");
+      const { store, registry } = make();
+      registry.declareFile("val", f, {
+        parse: text("(none)"),
+        cache: { kind: "watch_file", path: f },
+      });
+      await settle(100);
+      expect(store.read("val")).toBe("(none)");
+      // Each directory that appears re-arms the watch one level deeper; the
+      // watch attaches with no ready signal, so the idempotent write repeats.
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      // Let the mkdir's own event land first, so only a write can deliver v1.
+      await settle(500);
+      expect(store.read("val")).toBe("(none)");
+      for (let i = 0; i < 60 && store.read("val") !== "v1"; i++) {
+        await settle(50);
+        fs.writeFileSync(f, "v1");
+      }
+      expect(store.read("val")).toBe("v1");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
   it("a watched symlink fires on a write to its target", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {

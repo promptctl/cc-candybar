@@ -12,8 +12,8 @@ import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
-import path from "path";
 import { realpathSync, statSync } from "fs";
+import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import { observable, reaction, type IReactionDisposer } from "mobx";
 import { ColorDepth } from "@promptctl/rich-js";
@@ -426,7 +426,10 @@ function projectGitField(
 // A file is watched through its DIRECTORY, filtered to its name: a watch on
 // the file itself binds its inode, so it never sees a file created after it
 // (an app that has not written yet) and goes deaf after the first atomic
-// rename (write-then-rename, the safe way to rewrite a file).
+// rename (write-then-rename, the safe way to rewrite a file). A directory
+// that does not exist yet is watched through its nearest existing ancestor
+// (`nearestWatchTarget`), and each directory that appears re-arms the watch
+// one level deeper.
 function resolvedPath(p: string): string {
   try {
     return realpathSync(p);
@@ -445,42 +448,74 @@ function isDirectory(p: string): boolean {
   }
 }
 
+// What one subscription watches right now: the directory itself when the
+// path is one, else the (dir, name) tuple of its nearest existing ancestor.
+function watchTargetOf(filePath: string): {
+  readonly dir: string;
+  readonly name: string | null;
+} {
+  // A symlink is followed: the writes land on its target.
+  const target = resolvedPath(filePath);
+  return isDirectory(target)
+    ? { dir: target, name: null }
+    : nearestWatchTarget(target);
+}
+
+interface WatchEntry {
+  watcher: FSWatcher;
+  armedAt: string;
+  readonly callbacks: Set<() => void>;
+}
+
 class WatchManager {
-  private readonly watchers = new Map<
-    string,
-    { watcher: FSWatcher; callbacks: Set<() => void> }
-  >();
+  private readonly watchers = new Map<string, WatchEntry>();
 
   subscribe(filePath: string, callback: () => void): () => void {
-    let entry = this.watchers.get(filePath);
-    if (!entry) {
-      const callbacks = new Set<() => void>();
-      const fire = () => {
-        for (const cb of callbacks) cb();
-      };
-      let watcher: FSWatcher;
-      try {
-        // A directory is watched itself: its entries' changes are the point.
-        // A symlink is followed: the writes land on its target.
-        const target = resolvedPath(filePath);
-        const name = path.basename(target);
-        watcher = isDirectory(target)
-          ? fsWatch(target, fire)
-          : fsWatch(path.dirname(target), (_event, changed) => {
-              // A platform that reports no name could be reporting this file.
-              if (changed === null || changed === name) fire();
-            });
-      } catch {
-        // [LAW:no-silent-failure] exception: the directory does not exist,
-        // so there is nothing to watch; the source still reads on its other
-        // triggers (pre-existing behaviour for a missing path).
-        return () => {};
-      }
-      entry = { watcher, callbacks };
-      this.watchers.set(filePath, entry);
-    }
+    const entry = this.watchers.get(filePath) ?? this.arm(filePath);
     entry.callbacks.add(callback);
     return () => this.unsubscribe(filePath, callback);
+  }
+
+  private arm(filePath: string): WatchEntry {
+    const callbacks = new Set<() => void>();
+    const entry: WatchEntry = {
+      watcher: this.watch(filePath, callbacks, () => this.rearm(filePath)),
+      armedAt: JSON.stringify(watchTargetOf(filePath)),
+      callbacks,
+    };
+    this.watchers.set(filePath, entry);
+    return entry;
+  }
+
+  // An event under the watched ancestor may mean a missing directory
+  // appeared: re-derive the target, and descend when it moved.
+  private rearm(filePath: string): void {
+    const entry = this.watchers.get(filePath);
+    if (entry === undefined) return;
+    const target = JSON.stringify(watchTargetOf(filePath));
+    if (target === entry.armedAt) return;
+    entry.watcher.close();
+    entry.watcher = this.watch(filePath, entry.callbacks, () =>
+      this.rearm(filePath),
+    );
+    entry.armedAt = target;
+  }
+
+  private watch(
+    filePath: string,
+    callbacks: ReadonlySet<() => void>,
+    rearm: () => void,
+  ): FSWatcher {
+    const { dir, name } = watchTargetOf(filePath);
+    const fire = () => {
+      for (const cb of callbacks) cb();
+    };
+    return fsWatch(dir, (_event, changed) => {
+      // A platform that reports no name could be reporting this path.
+      if (name !== null && changed !== null && changed !== name) return;
+      rearm();
+      fire();
+    });
   }
 
   private unsubscribe(filePath: string, callback: () => void): void {
