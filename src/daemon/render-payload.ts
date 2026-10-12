@@ -404,10 +404,9 @@ export interface RenderPayload extends ClaudeHookData {
   // so each control's `↺`, each tab's `•`, and the menu's `⟲` show exactly
   // while they would do something.
   readonly resettable: Readonly<Record<SettingName, boolean>>;
-  // The config file this session's bar renders from (the render cache
-  // entry's resolved path); absent when it renders the bundled default
-  // because no file exists, so the menu's `↗ config` shows exactly while
-  // there is a file to open.
+  // The config file this session's saves and resets edit (the render cache
+  // entry's home); absent while that file does not exist, so the menu's
+  // `↗ config` shows exactly while there is a file to open.
   readonly configPath?: string;
   // The shell command that resumes this session (src/claude-resume.ts) —
   // what the menu's `⎘ resume` copies.
@@ -1139,8 +1138,8 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
 export type SettingCounts = Pick<RenderPayload, "unsaved" | "resettable">;
 
 // Facts about the config the session renders with: the save cell's counts
-// (that config against the session's picks) and the config's file path,
-// `null` under the bundled default.
+// (that config against the session's picks) and the home file's path,
+// `null` while it does not exist.
 export type ConfigFileFacts = SettingCounts & {
   readonly configPath: string | null;
 };

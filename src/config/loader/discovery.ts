@@ -196,7 +196,13 @@ export function resolveDslConfig(
       unchecked.push(p);
       continue;
     }
-    const location = fs.realpathSync(path.dirname(candidate));
+    // A location is a directory AND a base name: `.cc-candybar` and the XDG
+    // `config` may share a directory and are two layers; `.json5`/`.json`
+    // at one location are one, the first enumerated winning.
+    const location = path.join(
+      fs.realpathSync(path.dirname(candidate)),
+      path.basename(candidate).replace(/\.(json5|json)$/, ""),
+    );
     if (!atLocation.has(location)) atLocation.set(location, candidate);
   }
   const layers = [...atLocation.values()].reverse();

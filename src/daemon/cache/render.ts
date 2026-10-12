@@ -203,6 +203,8 @@ export interface CacheEntry {
   // resolved them (empty: the bundled default), and the one whose load
   // failed when the last load did.
   configLayers: readonly string[];
+  // The file durable clicks write (resolveDslConfig's home).
+  configHome: string;
   failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
@@ -295,6 +297,7 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 // regardless of arm (collision detection runs on a broken file too).
 export type LoadOutcome = {
   readonly layers: readonly string[];
+  readonly home: string;
   readonly warning: string | null;
 } & (
   | { readonly state: DslRenderState; readonly error: null }
@@ -321,7 +324,7 @@ export function buildRenderState(
   chain: ConfigChain,
   warnings: Array<string | null>,
   deps: StateDeps,
-  entered: (path: string) => void = () => {},
+  entered: (path: string | null) => void = () => {},
 ): DslRenderState {
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
   // straight-line composition. `loadConfig(null)` returns the bundled
@@ -338,6 +341,8 @@ export function buildRenderState(
     entered,
     warned: (w) => warnings.push(...w),
   });
+  // Past the chain no one file is to blame for what fails.
+  entered(null);
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 
@@ -395,12 +400,17 @@ export function buildRenderState(
     compiled,
     neededInputPaths: neededPrefixesByPreset(config),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-    authoredRoots: new Set(
-      layers.flatMap((l) => [...authoredRoots(merged, l.raw)]),
-    ),
     // What a reset clears is the home's: resets write nowhere else.
+    authoredRoots: authoredRoots(merged, homeRaw),
     fileHeldSettings: fileHeldSettings(homeRaw),
-    unused: layers.flatMap((l) => unusedDeclarations(l.raw, merged)),
+    // One entry per declaration, however many layers declare it.
+    unused: [
+      ...new Map(
+        layers
+          .flatMap((l) => unusedDeclarations(l.raw, merged))
+          .map((u) => [`${u.kind}:${u.name}`, u] as const),
+      ).values(),
+    ],
     plugins: {
       loaded: layers.flatMap((l) => l.plugins.loaded),
       dropped: layers.flatMap((l) => l.plugins.dropped),
@@ -461,6 +471,7 @@ export function loadFromDisk(
     if (err instanceof ConfigError) advisories.push(...err.warnings);
     return {
       layers: chain.layers,
+      home: chain.home,
       failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
@@ -474,6 +485,7 @@ export function loadFromDisk(
   }
   return {
     layers: chain.layers,
+    home: chain.home,
     warning: joinWarnings(advisories),
     state,
     error: null,
@@ -526,6 +538,7 @@ export class RenderCache {
       cwd,
       configFile,
       configLayers: [],
+      configHome: "",
       failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
@@ -621,6 +634,7 @@ export class RenderCache {
   // there is no separate "did the path change" test to drift from it.
   private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
     entry.configLayers = loaded.layers;
+    entry.configHome = loaded.home;
     entry.failedFile = loaded.error === null ? null : loaded.failedFile;
     const targets = watchTargetsFor(entry, loaded.layers);
     // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps

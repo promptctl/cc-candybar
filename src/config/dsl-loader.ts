@@ -211,9 +211,11 @@ export function loadConfigSource(
  * layer merges over the config the layers below it built (the bundled
  * default at the bottom), through the very merge the bundled default takes —
  * so a layer may declare only what differs, a segment the user declared
- * included (brandon-plugins-ktag.8th). Every layer is validated over the
- * layers it joins, so a broken file fails naming ITS path and line, never the
- * file above it; the top layer's validation is the config that renders.
+ * included (brandon-plugins-ktag.8th). The top layer's validation is the
+ * config that renders, and the only one a good chain pays for; when it fails,
+ * the layers below are validated over the layers they join, lowest first, and
+ * the first that fails is the error — so a broken file fails naming ITS path
+ * and line, never the file above it.
  *
  * `read` is the one content read of each file — a writer proving the text it
  * is about to write passes that text for its own layer. `trace` hears each
@@ -232,7 +234,6 @@ export function loadConfigChain(
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
-  let validated: ValidatedConfig | null = null;
   for (const path of paths) {
     trace.entered(path);
     const loaded = loadConfigSource(
@@ -242,18 +243,33 @@ export function loadConfigChain(
       allowedPalettes,
     );
     trace.warned(loaded.warnings);
-    validated = validateConfig(loaded, path, allowedPalettes);
     layers.push({ ...loaded, path });
   }
-  return {
-    layers,
-    config:
-      validated ??
-      validateConfig(loadConfig(null, dflt), "<default>", allowedPalettes),
-  };
+  const top = layers.at(-1);
+  if (top === undefined) {
+    return {
+      layers,
+      config: validateConfig(
+        loadConfig(null, dflt),
+        "<default>",
+        allowedPalettes,
+      ),
+    };
+  }
+  try {
+    return { layers, config: validateConfig(top, top.path, allowedPalettes) };
+  } catch (e) {
+    for (const layer of layers.slice(0, -1)) {
+      trace.entered(layer.path);
+      validateConfig(layer, layer.path, allowedPalettes);
+    }
+    trace.entered(top.path);
+    throw e;
+  }
 }
 
 export interface ChainTrace {
+  // The file a throw is to be blamed on, as the chain learns it.
   readonly entered: (path: string) => void;
   readonly warned: (warnings: readonly string[]) => void;
 }

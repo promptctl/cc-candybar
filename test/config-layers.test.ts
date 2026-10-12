@@ -8,7 +8,12 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { durableConfig } from "../src/config/dsl-loader";
-import { writeValues } from "../src/daemon/config-file-store";
+import {
+  deleteValues,
+  writePreset,
+  writeValues,
+} from "../src/daemon/config-file-store";
+import { resolveDslConfig } from "../src/config/loader/discovery";
 
 let dir: string;
 let project: string;
@@ -86,4 +91,45 @@ test("a click a project layer would hide is refused, naming the layer", () => {
     writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]),
   ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
+});
+
+test("a reset the project layer hides still clears the user's file", () => {
+  fs.writeFileSync(
+    userFile,
+    `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
+  );
+  fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
+  deleteValues(noRecord, durableConfig(project, project), ["palette"]);
+  expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
+});
+
+test("a click that repairs a broken user file is not refused under a project layer", () => {
+  fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
+  fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
+  writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]);
+  expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
+});
+
+test("save-as-preset never mints a name a project layer declares", () => {
+  fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
+  const name = writePreset(
+    noRecord,
+    durableConfig(project, project),
+    "default",
+    {},
+    [],
+    [],
+  );
+  expect(name).toBe("custom-2");
+});
+
+test("the user's file is a layer even when the session's cwd is its directory", () => {
+  const xdgDir = path.dirname(userFile);
+  const local = path.join(xdgDir, ".cc-candybar.json5");
+  fs.writeFileSync(local, `{}`);
+  const resolved = resolveDslConfig(undefined, xdgDir);
+  expect(resolved.kind === "chain" && resolved.layers).toEqual([
+    userFile,
+    local,
+  ]);
 });

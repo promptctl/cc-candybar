@@ -1041,7 +1041,10 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
             entry.state.fileHeldSettings,
             sessionPick,
           ),
-          configPath: entry.configLayers.at(-1) ?? null,
+          // The file the menu's saves and resets edit, once it exists.
+          configPath: entry.configLayers.includes(entry.configHome)
+            ? entry.configHome
+            : null,
         },
       );
       // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself

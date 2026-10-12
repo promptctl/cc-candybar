@@ -406,11 +406,13 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      // The home (here the explicit file) is what authors a root: a reset
+      // writes nowhere else.
+      const cfg = join(dir, ".cc-candybar.json5");
+      const entry = cache.getOrCreate(dir, dir, cfg);
       const bundledRows = Object.keys(entry.state.config.root.rows);
       expect(entry.state.authoredRoots.has(PRESET_FLOOR)).toBe(false);
 
-      const cfg = join(dir, ".cc-candybar.json5");
       await reloads.after(entry, () =>
         writeFileSync(
           cfg,
