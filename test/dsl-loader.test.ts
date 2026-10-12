@@ -13,6 +13,7 @@ import {
   templateReads,
   findKeyLine,
   loadConfig,
+  NO_PROJECT,
   parseDslConfig,
 } from "../src/config/dsl-loader";
 import {
@@ -2273,7 +2274,7 @@ describe("loadConfig — editability advisory", () => {
 
   test("a duplicate key loads with the last value and earns one advisory naming the file, key and line", () => {
     const file = write("dup.json5", DUPLICATE);
-    const { config, warnings } = loadConfig(file, DEFAULT_DSL_CONFIG);
+    const { config, warnings } = loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     expect(config.globals.padding).toBe(2);
     expect(warnings).toEqual([
       `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
@@ -2293,14 +2294,14 @@ describe("loadConfig — editability advisory", () => {
   test("a document the editor accepts earns no advisory", () => {
     const clean = `{ globals: { padding: 1 } }`;
     const file = write("clean.json5", clean);
-    expect(loadConfig(file, DEFAULT_DSL_CONFIG).warnings).toEqual([]);
+    expect(loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
     expect(setValue(clean, ["globals", "padding"], "3", JSON5_DIALECT)).toBe(
       `{ globals: { padding: 3 } }`,
     );
   });
 
   test("no file earns no advisory", () => {
-    expect(loadConfig(null, DEFAULT_DSL_CONFIG).warnings).toEqual([]);
+    expect(loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
   });
 });
 
@@ -2332,7 +2333,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     );
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG);
+      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }
@@ -2348,7 +2349,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     const file = write("syntax.json5", `{ globals: { padding: 1, padding: `);
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG);
+      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }

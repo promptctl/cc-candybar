@@ -578,7 +578,10 @@ export interface Globals {
 // [LAW:one-type-per-behavior] One discriminated union covers every source
 // kind. Adding a new kind = code change here + matching runtime support in
 // var-system. There is no "extension" path that bypasses this list.
-export type VariableDecl =
+export type VariableDecl = AuthoredVariableDecl | DroppedVarDecl;
+
+// What a config may write under `variables:`.
+export type AuthoredVariableDecl =
   | LiteralVarDecl
   | InputVarDecl
   | EnvVarDecl
@@ -588,6 +591,18 @@ export type VariableDecl =
   | TimeVarDecl
   | GitVarDecl
   | StateVarDecl;
+
+// [LAW:no-silent-failure] A plugin's data variable when the plugin did not
+// load: a DOCUMENT whose one outcome is the drop, so every template reading
+// `.plugins.<plugin>.data…` renders ⚠ naming why rather than failing the
+// config that reads it. Synthesized by the plugin loader, never authored —
+// the variable loader accepts no `kind: "dropped"`.
+export interface DroppedVarDecl {
+  readonly kind: "dropped";
+  readonly reason: string;
+  // The path of the definition that dropped: the drop's identity.
+  readonly definition: string;
+}
 
 export interface LiteralVarDecl {
   readonly kind: "literal";
@@ -774,12 +789,13 @@ export type VariableDeclWithCache =
   | TimeVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
+  // [LAW:types-are-the-program] Named positively: a kind added to the union
+  // (a tombstone's `dropped`) has no cache until it is listed here.
   return (
-    v.kind !== "literal" &&
-    v.kind !== "input" &&
-    v.kind !== "env" &&
-    v.kind !== "git" &&
-    v.kind !== "state"
+    v.kind === "file" ||
+    v.kind === "shell" ||
+    v.kind === "template" ||
+    v.kind === "time"
   );
 }
 

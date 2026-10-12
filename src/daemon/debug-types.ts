@@ -14,7 +14,7 @@
 // pull each other in.
 
 import type { VarType, VarValue } from "../var-system/types";
-import type { DslConfig, SourceKind } from "../config/dsl-types";
+import type { DslConfig, VariableDecl } from "../config/dsl-types";
 
 // [LAW:one-source-of-truth] DEBUG_WHATS is the canonical list; DebugWhat is
 // *derived* from it via indexed access on the `as const` tuple type. Adding
@@ -47,7 +47,7 @@ export interface VarSnapshot {
   // null when a variable exists in the store but was not declared via DSL —
   // present for completeness so a programmatic-only var still shows up in
   // introspection rather than being silently invisible.
-  readonly source: SourceKind | null;
+  readonly source: VariableDecl["kind"] | null;
   // A scalar's declared type, or "document" for a `parse: { json }` source
   // (its `value` is then the document's JSON text, or the state a template
   // read would surface: not yet scanned / the scan's failure reason).

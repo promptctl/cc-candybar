@@ -696,7 +696,6 @@ writes a DEFINITION once:
 
 ```json5 file:deploy/plugin.json5
 {
-  plugin: "deploy",
   data: "./state.json",
   segments: {
     status: {
@@ -730,12 +729,16 @@ places its segment like any other:
 
 What the definition can say, and what follows from it:
 
+- **The folder is the name.** A definition is `<name>/plugin.json5`, and
+  `<name>` — one lowercase identifier — is the plugin's name; the file does
+  not repeat it.
 - **Every name is the plugin's, under `plugins.`.** A segment, helper or
   action declared as `status` is `plugins.deploy.status` everywhere else — in `root`, in edit mode's
   add-segment library (where the plugin's segments appear with their
   `description`), and in templates, which is why the segment above calls
-  `{{ template "plugins.deploy.state" }}`. A name another layer already declares is
-  refused, not replaced.
+  `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
+  plugin of its name beneath it (a listed one replaces an installed one);
+  listing one name twice is refused.
 - **The data is `.plugins.<plugin>.data`.** It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
@@ -743,25 +746,34 @@ What the definition can say, and what follows from it:
   blank data reads the same way, and data that is not JSON is a `⚠` on every
   segment reading it. The app may create the file late and rewrite it any
   way it likes: a read caught mid-rewrite keeps the last document showing.
-- **Only `plugin`, `data`, `segments`, `helpers` and `actions`.** A definition
+  `data: { project: ".lit/candybar.json" }` reads it relative to the
+  session's project instead, so one installed definition shows each repo's
+  own data.
+- **Only `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
   nothing) and never edits `root` — placing a segment is your choice. A
   segment declares no `vars` for the same reason. The plugin name is one
   lowercase identifier.
-- **Merge order is bundled < plugins < your file**, so your file can
+- **Merge order is bundled < installed plugins < listed plugins < your
+  file**, so your file can
   retune a plugin's segment by its full name, one field at a time
   (`segments: { "plugins.deploy.status": { bg: "error" } }`).
 
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing
 declares — drops **that plugin only**: the rest of your config renders, a
-segment of it you placed or retuned shows as a `⚠ … plugin not loaded` cell, the bar's
-diagnostic strip names the definition and the reason, and `check` fails. A
-definition is watched like your config file, so fixing or installing it
+template reading its data, calling its helper or binding its action shows `⚠` naming the
+drop — a segment of it you placed or retuned stands in as that cell — the
+bar's diagnostic strip names the definition and the reason, and `check`
+fails. An INSTALLED plugin that does not load is your config's problem only
+where it reaches it (a placement, a retune, a helper call or an action
+binding): one nothing reaches is neither on the strip nor in `check`. A
+listed definition is a folder's `plugin.json5`, the folder naming the plugin.
+A definition is watched like your config file, so fixing or installing it
 reloads the bar:
 
 ```json file:broken/plugin.json5
-{ "plugin": "broken", "data": "./state.json", "segments": {}, "variables": {} }
+{ "data": "./state.json", "segments": {}, "variables": {} }
 ```
 
 ```json5 check:fail
@@ -773,6 +785,29 @@ reloads the bar:
 ```error
 was not loaded: a plugin definition may not declare "variables"
 ```
+
+### Installing a plugin instead of listing it
+
+An app can install its plugin with no config edit, by putting the folder in
+a plugin root:
+
+- `$XDG_DATA_HOME/cc-candybar/plugins/<name>/` (default
+  `~/.local/share/cc-candybar/plugins/`) — the user's;
+- `<dir>/cc-candybar/plugins/<name>/` for each `$XDG_DATA_DIRS` entry — a
+  package manager's. Unset, that is `/usr/local/share` and `/usr/share`, and
+  on macOS Homebrew's `share/` before them (`$HOMEBREW_PREFIX/share`, else
+  `/opt/homebrew/share`);
+- `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
+  sessions working in that repo.
+
+A plugin is a folder: a file sitting directly in a root is a drop naming
+where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A
+`data: { project }` path stays inside the project — an absolute path, `~` or
+a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
+user over package manager). An installed plugin's segments are in the
+add-segment library; it draws something only once a segment of it is
+placed. The roots are watched, so installing or removing a folder reloads
+the bar.
 
 ## Mistakes and the errors they produce
 

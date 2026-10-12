@@ -72,11 +72,15 @@ import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import {
   applyPlugins,
+  listedPlugins,
   droppedPluginNotice,
+  type PluginContext,
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
+  type PluginLayer,
 } from "./loader/plugins.js";
+import { installedPlugins } from "./loader/plugin-folders.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
 // [LAW:locality-or-seam] Consumers import from `dsl-loader`; the internal split
@@ -150,6 +154,7 @@ export type { DroppedPlugin } from "./loader/plugins.js";
 export function loadConfig(
   path: string | null,
   dflt: DslConfig,
+  ctx: LoadContext,
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   return path === null
@@ -158,9 +163,28 @@ export function loadConfig(
         path,
         fs.readFileSync(path, "utf-8"),
         dflt,
+        ctx,
         allowedPalettes,
       );
 }
+
+// What one file's load needs from beyond the file: the session's project, and
+// the plugins of the layers beneath it — every drop (a name under `plugins.`
+// that no plugin owns stands in naming the unnamed ones), and which definition
+// renders each plugin name.
+export interface LoadContext extends PluginContext {
+  readonly beneath: {
+    readonly dropped: readonly DroppedPlugin[];
+    readonly rendering: ReadonlyMap<string, string>;
+  };
+}
+
+// A load with no session project and nothing beneath the bundled default: a
+// `data: { project }` plugin drops, naming why.
+export const NO_PROJECT: LoadContext = {
+  projectDir: null,
+  beneath: { dropped: [], rendering: new Map() },
+};
 
 /**
  * loadConfig over text already in hand — the file as it WOULD read, for a
@@ -171,6 +195,7 @@ export function loadConfigSource(
   path: string,
   source: string,
   dflt: DslConfig,
+  ctx: LoadContext,
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   // [LAW:one-source-of-truth] The plugins the file lists are one layer of the
@@ -180,10 +205,13 @@ export function loadConfigSource(
   // delta are the segments of that very layer.
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(refs, path, dflt, (c) =>
-      validateConfig(unauthored(c), path, allowedPalettes),
+    const layer = applyPlugins(
+      listedPlugins(refs, path),
+      ctx,
+      { config: dflt, rendering: ctx.beneath.rendering },
+      (c) => validateConfig(unauthored(c), path, allowedPalettes),
     );
-    const owning = dropsOwning(layer);
+    const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
       inherited: new Set([
         ...inheritableSegmentNames(layer.config),
@@ -193,17 +221,69 @@ export function loadConfigSource(
     };
   });
   const { plugins, owning } = parsed.layer;
+  const standing = withDroppedPlacements(
+    mergeWithDefault(parsed.raw, plugins.config),
+    owning,
+  );
   return {
     source,
     raw: parsed.raw,
     warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
-    plugins: { loaded: plugins.loaded, dropped: plugins.dropped },
-    config: withDroppedPlacements(
-      mergeWithDefault(parsed.raw, plugins.config),
-      plugins.config,
-      owning,
-    ),
+    plugins: {
+      loaded: plugins.loaded,
+      dropped: plugins.dropped,
+      reached: standing.reached,
+      rendering: plugins.rendering,
+    },
+    config: standing.config,
   };
+}
+
+// [LAW:one-source-of-truth] The installed layer is a function of the
+// definitions' bytes, the project, the base and the palettes, so it is
+// memoised on exactly those: a load with nothing installed changed pays one
+// stat per definition, not one validateConfig per plugin. Per-plugin
+// validation stays — it is what lets one plugin drop alone.
+const installedMemo = new WeakMap<
+  DslConfig,
+  Map<string, { readonly key: string; readonly layer: PluginLayer }>
+>();
+
+function installedLayer(
+  definitions: readonly string[],
+  ctx: PluginContext,
+  dflt: DslConfig,
+  allowedPalettes: ReadonlySet<string> | undefined,
+): PluginLayer {
+  const key = JSON.stringify([
+    [...(allowedPalettes ?? [])].sort(),
+    definitions.map((d) => [d, statKey(d)]),
+  ]);
+  const byProject = installedMemo.get(dflt) ?? new Map();
+  installedMemo.set(dflt, byProject);
+  const slot = String(ctx.projectDir);
+  const hit = byProject.get(slot);
+  if (hit?.key === key) return hit.layer;
+  const layer = applyPlugins(
+    definitions,
+    ctx,
+    { config: dflt, rendering: new Map() },
+    (c) =>
+      validateConfig(unauthored(c), "<installed plugins>", allowedPalettes),
+  );
+  byProject.set(slot, { key, layer });
+  return layer;
+}
+
+// What a definition's bytes are, as cheaply as a stat says: a rewrite moves
+// its mtime, size or inode; one that cannot be seen is its own state.
+function statKey(file: string): string {
+  try {
+    const st = fs.statSync(file);
+    return `${st.ino}:${st.size}:${st.mtimeMs}`;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code ?? "unreadable";
+  }
 }
 
 /**
@@ -230,34 +310,86 @@ export function loadConfigChain(
   paths: readonly string[],
   dflt: DslConfig,
   trace: ChainTrace,
+  ctx: PluginContext,
   read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
+  // [LAW:one-source-of-truth] Installed plugins are the layer every file
+  // merges over: bundled < installed < the chain's files (and what each
+  // lists). A file names an installed plugin's segment exactly as it names a
+  // bundled one.
+  const found = installedPlugins(ctx.projectDir);
+  const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
+  const plugins = {
+    ...merged,
+    dropped: [...merged.dropped, ...found.strays],
+  };
+  trace.warned(
+    found.unchecked.map(
+      (u) => `Plugin folder could not be listed: ${u.path} — ${u.error}`,
+    ),
+  );
+  const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
   for (const path of paths) {
     trace.entered(path);
+    const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
       read(path),
-      layers.at(-1)?.config ?? dflt,
+      layers.at(-1)?.config ?? base,
+      {
+        ...ctx,
+        beneath: {
+          dropped: [
+            ...plugins.dropped,
+            ...layers.flatMap((l) => l.plugins.dropped),
+          ],
+          rendering: below?.rendering ?? plugins.rendering,
+        },
+      },
       allowedPalettes,
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
   }
+  // [LAW:no-silent-failure] An installed plugin is on only where a config
+  // places it, so its drop is the config's problem only where the config
+  // reaches it (a stand-in carries it); one nothing reaches is said in the
+  // daemon log alone — nobody asked for it.
+  const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
+  const isReached = (d: DroppedPlugin): boolean => reached.has(d.path);
+  const surfaced = plugins.dropped.filter(isReached);
+  const unreached = plugins.dropped.filter((d) => !isReached(d));
+  trace.warned(surfaced.map(droppedPluginNotice));
+  const installed = {
+    roots: found.roots,
+    loaded: plugins.loaded,
+    dropped: surfaced,
+    unreached,
+    reached,
+    rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering,
+  };
   const top = layers.at(-1);
   if (top === undefined) {
     return {
       layers,
+      base,
+      installed,
       config: validateConfig(
-        loadConfig(null, dflt),
+        loadConfig(null, base, NO_PROJECT),
         "<default>",
         allowedPalettes,
       ),
     };
   }
   try {
-    return { layers, config: validateConfig(top, top.path, allowedPalettes) };
+    return {
+      layers,
+      base,
+      installed,
+      config: validateConfig(top, top.path, allowedPalettes),
+    };
   } catch (e) {
     for (const layer of layers.slice(0, -1)) {
       trace.entered(layer.path);
@@ -280,6 +412,16 @@ export interface LoadedChain {
   readonly layers: ReadonlyArray<
     LoadedFile & { readonly path: string; readonly config: DslConfig }
   >;
+  // The installed plugins under every layer: the roots searched (each is
+  // watched), the definitions merged, and those dropped (also `warned`).
+  // What the first file merges over: the bundled default and the installed
+  // plugins — the config an absent file reads as.
+  readonly base: DslConfig;
+  readonly installed: LoadedFile["plugins"] & {
+    readonly roots: readonly string[];
+    // Installed drops no layer reaches: logged, never a warning.
+    readonly unreached: readonly DroppedPlugin[];
+  };
   readonly config: ValidatedConfig;
 }
 
@@ -293,6 +435,11 @@ export interface LoadedFile {
   readonly plugins: {
     readonly loaded: readonly string[];
     readonly dropped: readonly DroppedPlugin[];
+    // The definition path of every drop a stand-in in this file's config
+    // stands for.
+    readonly reached: ReadonlySet<string>;
+    // Each plugin name rendering at this layer, and its definition.
+    readonly rendering: ReadonlyMap<string, string>;
   };
 }
 
@@ -323,7 +470,12 @@ const NO_FILE: LoadedFile = {
   raw: {},
   source: "",
   warnings: [],
-  plugins: { loaded: [], dropped: [] },
+  plugins: {
+    loaded: [],
+    dropped: [],
+    reached: new Set(),
+    rendering: new Map(),
+  },
 };
 
 /**

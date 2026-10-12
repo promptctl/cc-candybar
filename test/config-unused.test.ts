@@ -5,12 +5,16 @@
 // [LAW:behavior-not-structure] Every case is a config file's text through the
 // real loader; the expectation is the names an author would have to remove.
 
-import { loadConfigSource, validateConfig } from "../src/config/dsl-loader";
+import {
+  loadConfigSource,
+  NO_PROJECT,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unusedDeclarations } from "../src/config/unused";
 
 function unusedIn(source: string): string[] {
-  const loaded = loadConfigSource("/cfg.json5", source, DEFAULT_DSL_CONFIG);
+  const loaded = loadConfigSource("/cfg.json5", source, DEFAULT_DSL_CONFIG, NO_PROJECT);
   // The file must be one the bar would load: an unused name is an advisory
   // about a config that works, never a second spelling of a load error.
   validateConfig(loaded, "/cfg.json5");

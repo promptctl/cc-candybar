@@ -301,11 +301,22 @@ export function templateHelperRefs(
   template: string,
   helpers: Readonly<Record<string, string>>,
 ): ReadonlySet<string> {
+  return new Set(
+    [...templateHelperCalls(template, helpers)].filter((name) =>
+      Object.hasOwn(helpers, name),
+    ),
+  );
+}
+
+// Every helper name a template calls, declared or not — a call to a dropped
+// plugin's helper names nothing until it stands in.
+export function templateHelperCalls(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): ReadonlySet<string> {
   const called = new Set<string>();
   for (const { code, dot, root } of callGraphBlocks(template, helpers)) {
-    for (const { name } of helperCalls(code, dot, root)) {
-      if (Object.hasOwn(helpers, name)) called.add(name);
-    }
+    for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
 }
@@ -364,6 +375,7 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
 
 function isDocumentDecl(v: VariableDecl): boolean {
   return (
-    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
+    v.kind === "dropped" ||
+    ((v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json")
   );
 }

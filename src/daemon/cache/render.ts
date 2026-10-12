@@ -1,10 +1,11 @@
+import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
 import { neededPrefixesByPreset } from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
   loadConfigChain,
-  type LoadedFile,
+  type LoadedChain,
   resolveDslConfig,
   configResolutionNotice,
   dslConfigCandidatePaths,
@@ -151,7 +152,9 @@ export interface DslRenderState {
   readonly plugins: LoadedPlugins;
 }
 
-type LoadedPlugins = LoadedFile["plugins"];
+// The installed roots searched (every one watched), and the definitions —
+// installed and listed — merged and dropped.
+type LoadedPlugins = LoadedChain["installed"];
 
 // The files a config is merged from, lowest first, and the one durable
 // clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
@@ -159,6 +162,9 @@ type LoadedPlugins = LoadedFile["plugins"];
 export interface ConfigChain {
   readonly layers: readonly string[];
   readonly home: string;
+  // The session's project: where its repo-shipped plugins live, and what a
+  // plugin's `data: { project }` path is relative to.
+  readonly projectDir: string | null;
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged and which it
@@ -166,13 +172,14 @@ export interface ConfigChain {
 // else. The daemon's own sink — buildRenderState is shared with the demo.
 function logPlugins(
   layers: readonly string[],
-  { loaded, dropped }: LoadedPlugins,
+  { loaded, dropped, unreached }: LoadedPlugins,
 ): void {
   dlog(
     "info",
-    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length}` +
+    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length}` +
       loaded.map((p) => ` +${p}`).join("") +
-      dropped.map((d) => ` -${d.path} (${d.reason})`).join(""),
+      dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
+      unreached.map((d) => ` ~${d.path} (${d.reason})`).join(""),
   );
 }
 
@@ -260,27 +267,38 @@ function watchTargetsFor(
   entry: CacheEntry,
   layers: readonly string[],
 ): WatchTargets {
-  const byDir = new Map<string, Set<string>>();
+  // [LAW:types-are-the-program] A directory watched for named children, or
+  // for every child (`null`): a plugin root holds folders no load has seen.
+  const byDir = new Map<string, Set<string> | null>();
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
-  const { loaded, dropped } = entry.state.plugins;
+  const { roots, loaded, dropped, unreached } = entry.state.plugins;
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+    ...roots,
     ...loaded,
-    ...dropped.map((d) => d.path),
+    ...[...dropped, ...unreached].map((d) => d.path),
   ]) {
     const { dir, name } = nearestWatchTarget(candidate);
-    if (!byDir.has(dir)) byDir.set(dir, new Set());
-    byDir.get(dir)!.add(name);
+    const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
+    names?.add(name);
+    byDir.set(dir, names);
+  }
+  // An existing root is watched for every child: a folder created in it is a
+  // plugin installed.
+  for (const root of roots) {
+    const { dir, name, leaf } = nearestWatchTarget(path.join(root, "_"));
+    if (leaf && name === "_") byDir.set(dir, null);
   }
   return {
     files: layers,
     dirs: [...byDir.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dirPath, names]) => ({
-        path: dirPath,
-        filenames: [...names].sort(),
-      })),
+      .map(([dirPath, names]) =>
+        names === null
+          ? { path: dirPath }
+          : { path: dirPath, filenames: [...names].sort() },
+      ),
   };
 }
 
@@ -337,10 +355,12 @@ export function buildRenderState(
   // file's own paths and lines. A layer's advisories are appended before its
   // validation, so a cross-ref failure still carries them (a duplicate key
   // names its line beside the error).
-  const { layers, config } = loadConfigChain(chain.layers, DEFAULT_DSL_CONFIG, {
-    entered,
-    warned: (w) => warnings.push(...w),
-  });
+  const { layers, config, installed } = loadConfigChain(
+    chain.layers,
+    DEFAULT_DSL_CONFIG,
+    { entered, warned: (w) => warnings.push(...w) },
+    { projectDir: chain.projectDir },
+  );
   // Past the chain, a failure is the one file's when there is one, and no
   // file's when several merged into what failed.
   entered(layers.length === 1 ? layers[0]!.path : null);
@@ -413,8 +433,17 @@ export function buildRenderState(
       ).values(),
     ],
     plugins: {
-      loaded: layers.flatMap((l) => l.plugins.loaded),
-      dropped: layers.flatMap((l) => l.plugins.dropped),
+      roots: installed.roots,
+      // What renders, as the loader decided it: a nearer layer's load or
+      // drop replaces a farther one's of the same name.
+      loaded: [...installed.rendering.values()],
+      dropped: [
+        ...installed.dropped,
+        ...layers.flatMap((l) => l.plugins.dropped),
+      ],
+      unreached: installed.unreached,
+      reached: installed.reached,
+      rendering: installed.rendering,
     },
   };
 }
@@ -437,6 +466,7 @@ export function loadFromDisk(
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
+    projectDir,
   };
 
   // [LAW:dataflow-not-control-flow] Advisories run every load, independent
@@ -547,7 +577,14 @@ export class RenderCache {
       // failed load's, and the default earns none by program invariant.
       state:
         loaded.state ??
-        buildRenderState(cwd, { layers: [], home: "" }, [], this.deps),
+        buildRenderState(
+          cwd,
+          // The entry's own project: the seed watches its repo's plugin
+          // root, so a plugin installed there after the failed load reloads.
+          { layers: [], home: "", projectDir },
+          [],
+          this.deps,
+        ),
       watcher: null,
       watcherKey: null,
     };

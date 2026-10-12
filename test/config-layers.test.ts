@@ -78,7 +78,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = durableConfig(project, project);
-  expect(home).toEqual({ path: userFile, above: [projectFile] });
+  expect(home).toEqual({ path: userFile, above: [projectFile], projectDir: project });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -142,4 +142,23 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
   expect(
     writePreset(noRecord, durableConfig(project, project), "default", {}, [], []),
   ).toBe("custom-2");
+});
+
+// An absent user file reads as the chain's base, installed plugins included:
+// an installed plugin's names are not a change the first write is hidden by.
+test("a first durable write with no user file succeeds beside an installed plugin", () => {
+  const saved = process.env.XDG_DATA_HOME;
+  process.env.XDG_DATA_HOME = path.join(dir, "data");
+  try {
+    fs.rmSync(userFile);
+    const def = path.join(dir, "data/cc-candybar/plugins/deploy/plugin.json5");
+    fs.mkdirSync(path.dirname(def), { recursive: true });
+    fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
+    fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
+    writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]);
+    expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
+  } finally {
+    if (saved === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = saved;
+  }
 });

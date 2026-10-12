@@ -791,6 +791,11 @@ export class SourceRegistry {
     this.store.defineBox(name, typeOf(value), value);
   }
 
+  // A document that is a known failure for as long as it is declared.
+  declareFailedDocument(name: string, reason: string): void {
+    this.store.defineDocument(name, failed(reason));
+  }
+
   // input: per-render box; initial value from fallback chain (path not yet resolved).
   // At each render, applyInput resolves path against the payload and updates the box.
   declareInput(

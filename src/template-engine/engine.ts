@@ -42,6 +42,7 @@ import {
   sprigMath,
   sprigDatetime,
   sprigConversions,
+  sprigFlow,
   sprigDicts,
 } from "@promptctl/go-template-js";
 import { RichText, type ColorDepth } from "@promptctl/rich-js";
@@ -90,6 +91,8 @@ export function createCcCandybarEngine(
       // [LAW:single-enforcer] one clock seam: the same source createEngine holds.
       ...sprigDatetime(clock),
       ...sprigConversions(),
+      // `fail` is how a stand-in for a dropped plugin's helper says why.
+      ...sprigFlow(),
       // [LAW:types-are-the-program] `dict` is the substrate primitive a helper
       // uses to receive more than one input through its single dot arg:
       // `{{ template "budgetStatus" (dict "cost" .x "budget" .y "warn" .z) }}`.

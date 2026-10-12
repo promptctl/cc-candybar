@@ -348,10 +348,12 @@ export async function prepareConfig(
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
-  const loaded = loadConfigChain(layers, DEFAULT_DSL_CONFIG, {
-    entered: () => {},
-    warned: (w) => warnings.push(...w),
-  });
+  const loaded = loadConfigChain(
+    layers,
+    DEFAULT_DSL_CONFIG,
+    { entered: () => {}, warned: (w) => warnings.push(...w) },
+    { projectDir: cwd },
+  );
   const { config } = loaded;
 
   const store = new VariableStore();
@@ -379,7 +381,10 @@ export async function prepareConfig(
     }
     return {
       layers,
-      droppedPlugins: loaded.layers.flatMap((l) => l.plugins.dropped),
+      droppedPlugins: [
+        ...loaded.installed.dropped,
+        ...loaded.layers.flatMap((l) => l.plugins.dropped),
+      ],
       config,
       compiled,
       store,
@@ -541,7 +546,7 @@ async function loadRegisterRender(
     const failures = [
       ...(drops > 0
         ? [
-            `${drops} listed plugin${drops === 1 ? "" : "s"} did not load (named in the warnings)`,
+            `${drops} plugin${drops === 1 ? "" : "s"} did not load (named in the warnings)`,
           ]
         : []),
       ...(errors.length > 0 || bar === undefined
