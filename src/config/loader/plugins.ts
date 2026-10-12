@@ -7,7 +7,7 @@
 //
 // [LAW:one-type-per-behavior] A plugin is not a new kind of anything. Its data
 // is the existing `file` source with `parse: { json: true }`, watched, read in
-// templates as `.<plugin>.data.*`; its segments, helpers and actions are parsed
+// templates as `.plugins.<plugin>.data.*`; its segments, helpers and actions are parsed
 // by the same validators a config's are; it joins the config through the same
 // `mergeWithDefault` the user's file does.
 //
@@ -32,7 +32,6 @@ import { validateSegments } from "./segments.js";
 import { validateHelpers } from "./helpers.js";
 import { validateActions } from "./actions.js";
 import { validateVariables } from "./variables.js";
-import { isReservedName } from "./reserved-namespace.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import {
   walkNodes,
@@ -80,9 +79,15 @@ const DEFINITION_KEYS = new Set([
 // template path cannot spell.
 const PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 
-// The variable a plugin's data file publishes, read as `.<plugin>.data.*`.
+// [LAW:one-source-of-truth] Every name a plugin declares lives under
+// `plugins.<plugin>.`: no plugin can collide with a name the bar or the user
+// declares, and nothing outside it is ever a plugin's.
+export const PLUGIN_NS = "plugins.";
+
+// The variable a plugin's data file publishes, read as
+// `.plugins.<plugin>.data.*`.
 export function pluginDataVar(plugin: string): string {
-  return `${plugin}.data`;
+  return `${PLUGIN_NS}${plugin}.data`;
 }
 
 type Attempt<T> =
@@ -162,27 +167,28 @@ export function applyPlugins(
 function namespaceOf(json: unknown): string | undefined {
   return isPlainObject(json) &&
     typeof json.plugin === "string" &&
-    PLUGIN_NAME.test(json.plugin) &&
-    !isReservedName(`${json.plugin}.`)
+    PLUGIN_NAME.test(json.plugin)
     ? json.plugin
     : undefined;
 }
 
-// The drops a segment name belongs to: the plugin that would have declared
-// it is under `<plugin>.`, or — when a drop could not even be read for its
-// name — it sits under a namespace no layer declares. Empty for every other
-// name, which keeps whatever error it earns on its own.
+// The drops a segment name belongs to: a name under `plugins.<plugin>.` is
+// that plugin's, so it belongs to the drop that named itself `<plugin>` — or,
+// when no loaded plugin is `<plugin>`, to the drops that could not even be
+// read for their name. A name outside `plugins.` belongs to no drop.
 export function dropsOwning(
   layer: PluginLayer,
 ): (name: string) => readonly DroppedPlugin[] {
-  const heads = new Set(
-    Object.keys(layer.config.segments).map((n) => n.split(".")[0]),
-  );
+  const pluginOf = (name: string): string | undefined =>
+    name.startsWith(PLUGIN_NS)
+      ? name.slice(PLUGIN_NS.length).split(".")[0]
+      : undefined;
+  const loaded = new Set(Object.keys(layer.config.segments).map(pluginOf));
   return (name) => {
-    if (!name.includes(".")) return [];
-    const head = name.split(".")[0];
-    const named = layer.dropped.filter((d) => d.plugin === head);
-    return named.length > 0 || heads.has(head)
+    const plugin = pluginOf(name);
+    if (plugin === undefined) return [];
+    const named = layer.dropped.filter((d) => d.plugin === plugin);
+    return named.length > 0 || loaded.has(plugin)
       ? named
       : layer.dropped.filter((d) => d.plugin === undefined);
   };
@@ -196,9 +202,9 @@ export function dropsOwning(
  */
 export function withDroppedPlacements(
   config: DslConfig,
-  layer: PluginLayer,
+  layer: DslConfig,
+  owning: (name: string) => readonly DroppedPlugin[],
 ): DslConfig {
-  const owning = dropsOwning(layer);
   const placements = presetNames(config.presets)
     .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
     .flatMap((node) => (node.kind === "segment" ? [node] : []));
@@ -208,7 +214,7 @@ export function withDroppedPlacements(
   ]);
   const standIns = Object.fromEntries(
     [...names]
-      .filter((name) => !(name in layer.config.segments))
+      .filter((name) => !(name in layer.segments))
       .flatMap((name) => {
         const cause = owning(name);
         return cause.length === 0
@@ -314,11 +320,6 @@ function fragmentOf(
       path: "plugin",
       message: `"plugin" must be a name matching ${PLUGIN_NAME} (it prefixes every name the plugin declares)`,
     });
-  } else if (isReservedName(`${plugin}.`)) {
-    issues.push({
-      path: "plugin",
-      message: `"plugin" may not be "${plugin}": the bar's own synthesized names live under "${plugin}."`,
-    });
   }
   if (typeof data !== "string" || data === "") {
     issues.push({
@@ -356,6 +357,16 @@ function fragmentOf(
       default: {},
     },
   });
+  // A segment's own `vars` are sources (a shell among them): a definition
+  // declares none, so loading one runs nothing.
+  for (const [name, seg] of Object.entries(json.segments as object)) {
+    if (isPlainObject(seg) && "vars" in seg) {
+      issues.push({
+        path: `segments.${name}.vars`,
+        message: `a plugin segment may not declare "vars": a plugin's only source is its data file`,
+      });
+    }
+  }
   const fragment: RawDslConfig = {
     variables,
     segments: prefixed(ns, validateSegments(ctx, json.segments, new Set())),
@@ -419,6 +430,6 @@ function prefixed<T>(
   decls: Readonly<Record<string, T>>,
 ): Record<string, T> {
   return Object.fromEntries(
-    Object.entries(decls).map(([name, d]) => [`${ns}.${name}`, d]),
+    Object.entries(decls).map(([name, d]) => [`${PLUGIN_NS}${ns}.${name}`, d]),
   );
 }

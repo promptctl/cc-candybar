@@ -701,8 +701,8 @@ writes a DEFINITION once:
   segments: {
     status: {
       description: "The current deploy: its environment and state",
-      when: '{{ hasKey .deploy.data "env" }}',
-      template: '⇪ {{ .deploy.data.env }} {{ template "deploy.state" .deploy.data }}',
+      when: '{{ hasKey .plugins.deploy.data "env" }}',
+      template: '⇪ {{ .plugins.deploy.data.env }} {{ template "plugins.deploy.state" .plugins.deploy.data }}',
     },
   },
   helpers: {
@@ -724,35 +724,33 @@ places its segment like any other:
 ```json5 check:pass
 {
   plugins: ["./deploy/plugin.json5"],
-  root: { rows: { status: { h: ["model", "context", "deploy.status"] } } },
+  root: { rows: { status: { h: ["model", "context", "plugins.deploy.status"] } } },
 }
 ```
 
 What the definition can say, and what follows from it:
 
-- **Every name is the plugin's.** A segment, helper or action declared as
-  `status` is `deploy.status` everywhere else — in `root`, in edit mode's
+- **Every name is the plugin's, under `plugins.`.** A segment, helper or
+  action declared as `status` is `plugins.deploy.status` everywhere else — in `root`, in edit mode's
   add-segment library (where the plugin's segments appear with their
   `description`), and in templates, which is why the segment above calls
-  `{{ template "deploy.state" }}`. A name another layer already declares is
+  `{{ template "plugins.deploy.state" }}`. A name another layer already declares is
   refused, not replaced.
-- **The data is `.<plugin>.data`.** It is a `file` source with
+- **The data is `.plugins.<plugin>.data`.** It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
-  so gate the segment with `when: '{{ hasKey .<plugin>.data "<field>" }}'`;
-  data that is not JSON is a `⚠` on every segment reading it. The watch
-  follows the file's name, so the app can create it late; write it by
-  writing a temporary file and renaming it over the old one, since a reader
-  that lands between an in-place truncate and its write sees an empty file,
-  which is not JSON.
+  so gate the segment with `when: '{{ hasKey .plugins.<plugin>.data "<field>" }}'`;
+  blank data reads the same way, and data that is not JSON is a `⚠` on every
+  segment reading it. The app may create the file late and rewrite it any
+  way it likes: a read caught mid-rewrite keeps the last document showing.
 - **Only `plugin`, `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
-  nothing) and never edits `root` — placing a segment is your choice. The
-  plugin name is one lowercase identifier, and not one of the bar's own
-  namespaces (`candybar`, `edit`, `groups`, `menus`).
+  nothing) and never edits `root` — placing a segment is your choice. A
+  segment declares no `vars` for the same reason. The plugin name is one
+  lowercase identifier.
 - **Merge order is bundled < plugins < your file**, so your file can
   retune a plugin's segment by its full name, one field at a time
-  (`segments: { "deploy.status": { bg: "error" } }`).
+  (`segments: { "plugins.deploy.status": { bg: "error" } }`).
 
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing

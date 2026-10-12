@@ -730,6 +730,31 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
+  it("a watched symlink fires on a write to its target", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(dir, "real"));
+      const real = path.join(dir, "real", "state");
+      const link = path.join(dir, "state");
+      fs.writeFileSync(real, "v1");
+      fs.symlinkSync(real, link);
+      const { store, registry } = make();
+      registry.declareFile("val", link, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: link },
+      });
+      await settle(100);
+      for (let i = 0; i < 40 && store.read("val") !== "v2"; i++) {
+        fs.writeFileSync(real, "v2");
+        await settle(50);
+      }
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
   it("multiple subscribers on one watch_file path both update", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -1926,6 +1951,55 @@ describe("SourceRegistry — parse seam", () => {
     await registry.settled(2000);
     expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
     expect(() => doc(store, "doc")).toThrow(/^variable "doc": JSON parse failed: /);
+    registry.dispose();
+  });
+
+  it("a file caught mid-rewrite keeps its document; one that stays broken shows the failure", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "state.json");
+      fs.writeFileSync(f, `{ "state": "one" }`);
+      const { store, registry } = make();
+      registry.declareFile("doc", f, { parse: json({}), cache: { kind: "watch_file", path: f } });
+      await registry.settled(2000);
+      expect(readDoc(store, "doc")).toEqual({ state: "one" });
+      // fs.watch attaches with no ready signal: repeat the idempotent write.
+      const until = async (done: () => boolean, write: () => void) => {
+        for (let i = 0; i < 60 && !done(); i++) {
+          write();
+          await settle(50);
+        }
+      };
+      // In place: a truncate, then a partial write — the document holds.
+      await until(
+        () => registry.getLastError("doc") !== undefined,
+        () => fs.writeFileSync(f, `{ "sta`),
+      );
+      expect(readDoc(store, "doc")).toEqual({ state: "one" });
+      await until(
+        () => store.readDocument("doc").kind === "ok" && doc(store, "doc").state === "two",
+        () => fs.writeFileSync(f, `{ "state": "two" }`),
+      );
+      expect(readDoc(store, "doc")).toEqual({ state: "two" });
+      // Left broken past the settle: the failure shows.
+      fs.writeFileSync(f, `{ "sta`);
+      await until(() => store.readDocument("doc").kind === "failed", () => undefined);
+      expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("blank output with a default reads the default", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `printf '  \\n'`, {
+      cwd: process.cwd(),
+      parse: json({ state: "none" }),
+      cache: { kind: "never" },
+    });
+    await registry.settled(2000);
+    expect(readDoc(store, "doc")).toEqual({ state: "none" });
     registry.dispose();
   });
 

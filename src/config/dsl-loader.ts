@@ -180,16 +180,16 @@ export function loadConfigSource(
     const layer = applyPlugins(refs, path, dflt, (c) =>
       validateConfig(unauthored(c), path, allowedPalettes),
     );
-    const owned = dropsOwning(layer);
+    const owning = dropsOwning(layer);
     return {
       inherited: new Set([
         ...inheritableSegmentNames(layer.config),
-        ...names.filter((n) => owned(n).length > 0),
+        ...names.filter((n) => owning(n).length > 0),
       ]),
-      layer,
+      layer: { plugins: layer, owning },
     };
   });
-  const plugins = parsed.layer;
+  const { plugins, owning } = parsed.layer;
   return {
     source,
     raw: parsed.raw,
@@ -197,7 +197,8 @@ export function loadConfigSource(
     plugins: { loaded: plugins.loaded, dropped: plugins.dropped },
     config: withDroppedPlacements(
       mergeWithDefault(parsed.raw, plugins.config),
-      plugins,
+      plugins.config,
+      owning,
     ),
   };
 }

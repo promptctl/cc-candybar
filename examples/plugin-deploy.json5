@@ -2,5 +2,5 @@
 // segment on the bundled status row.
 {
   plugins: ["./plugins/deploy/plugin.json5"],
-  root: { rows: { status: { h: ["model", "context", "deploy.status"] } } },
+  root: { rows: { status: { h: ["model", "context", "plugins.deploy.status"] } } },
 }
