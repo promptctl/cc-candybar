@@ -1,3 +1,10 @@
+# [1.118.0](https://github.com/promptctl/cc-candybar/compare/v1.117.1...v1.118.0) (2026-10-12)
+
+
+### Features
+
+* **plugins:** apps ship segments as plugin definitions a config lists ([#319](https://github.com/promptctl/cc-candybar/issues/319)) ([b60ebc1](https://github.com/promptctl/cc-candybar/commit/b60ebc139b48709ec85c78114a1b898771c021db))
+
 ## [1.117.1](https://github.com/promptctl/cc-candybar/compare/v1.117.0...v1.117.1) (2026-10-08)
 
 
