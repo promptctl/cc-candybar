@@ -12,6 +12,8 @@ import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
+import path from "path";
+import { realpathSync, statSync } from "fs";
 import { setInterval, clearInterval } from "timers";
 import { observable, reaction, type IReactionDisposer } from "mobx";
 import { ColorDepth } from "@promptctl/rich-js";
@@ -39,6 +41,10 @@ import {
 import type { JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
+
+// How long text that is not a document may be a write still in progress
+// before it shows as the failure it is (documentPublisher).
+export const TORN_WRITE_SETTLE_MS = 250;
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
 
@@ -416,6 +422,29 @@ function projectGitField(
 
 // [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
 // count.  Multiple shell/file variables can share one watcher on the same path.
+//
+// A file is watched through its DIRECTORY, filtered to its name: a watch on
+// the file itself binds its inode, so it never sees a file created after it
+// (an app that has not written yet) and goes deaf after the first atomic
+// rename (write-then-rename, the safe way to rewrite a file).
+function resolvedPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    // Absent: watched by name until it appears.
+    return p;
+  }
+}
+
+function isDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    // Absent (or unreadable): watched as a file that may appear.
+    return false;
+  }
+}
+
 class WatchManager {
   private readonly watchers = new Map<
     string,
@@ -426,13 +455,25 @@ class WatchManager {
     let entry = this.watchers.get(filePath);
     if (!entry) {
       const callbacks = new Set<() => void>();
+      const fire = () => {
+        for (const cb of callbacks) cb();
+      };
       let watcher: FSWatcher;
       try {
-        watcher = fsWatch(filePath, () => {
-          for (const cb of callbacks) cb();
-        });
+        // A directory is watched itself: its entries' changes are the point.
+        // A symlink is followed: the writes land on its target.
+        const target = resolvedPath(filePath);
+        const name = path.basename(target);
+        watcher = isDirectory(target)
+          ? fsWatch(target, fire)
+          : fsWatch(path.dirname(target), (_event, changed) => {
+              // A platform that reports no name could be reporting this file.
+              if (changed === null || changed === name) fire();
+            });
       } catch {
-        // File may not exist yet; silently skip watch setup.
+        // [LAW:no-silent-failure] exception: the directory does not exist,
+        // so there is nothing to watch; the source still reads on its other
+        // triggers (pre-existing behaviour for a missing path).
         return () => {};
       }
       entry = { watcher, callbacks };
@@ -797,6 +838,20 @@ export class SourceRegistry {
   // failed with its reason after a bad one), which the scope proxy surfaces
   // as an error naming the variable [LAW:no-silent-failure] — a document has
   // no honest empty value the way a string has "".
+  //
+  // The default stands in for a run that had nothing to READ — a missing
+  // file, a command that failed, blank output — never for text that was read and is not a
+  // document: that is a broken writer, and reads as its failure (⚠) whatever
+  // the default says (brandon-plugins-ktag.8fv).
+  //
+  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
+  // (truncate, then write) is caught mid-update by any read that lands
+  // between the two, and the text it sees is not a document. Text that does
+  // not parse is therefore PENDING while a document is showing: the document
+  // stays, and the failure is published only if no read replaces it within
+  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
+  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
+  // that settle; a document that was never good shows it at once.
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
@@ -805,13 +860,32 @@ export class SourceRegistry {
     const fallback: Outcome<JsonValue> =
       varDefault === undefined ? ABSENT : ok(varDefault);
     this.store.defineDocument(name, fallback);
-    return (read) => {
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    // Whether the document showing was READ (not the default standing in).
+    let showingRead = false;
+    this.cleanups.push(() => clearTimeout(pending));
+    return (raw) => {
+      clearTimeout(pending);
+      // Blank text is nothing to read — a command that printed nothing, a
+      // file only touched — exactly as a missing file is.
+      const read: Outcome<string> =
+        raw.kind === "ok" && raw.value.trim() === "" ? ABSENT : raw;
       const outcome = parsed(read, jsonParser, where);
       this.noteOutcome(name, outcome);
-      this.store.setDocument(
-        name,
-        outcome.kind === "ok" || varDefault === undefined ? outcome : fallback,
-      );
+      const next =
+        outcome.kind === "ok" || read.kind === "ok" || varDefault === undefined
+          ? outcome
+          : fallback;
+      const torn = showingRead && read.kind === "ok" && outcome.kind !== "ok";
+      const show = () => {
+        showingRead = outcome.kind === "ok";
+        this.store.setDocument(name, next);
+      };
+      if (torn) {
+        pending = setTimeout(show, TORN_WRITE_SETTLE_MS);
+      } else {
+        show();
+      }
     };
   }
 

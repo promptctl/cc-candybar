@@ -147,6 +147,25 @@ export interface DslRenderState {
   // What the file declares that nothing uses (the doctor's config check) —
   // from the same raw parse, for the same reason.
   readonly unused: readonly UnusedDecl[];
+  // The plugin definitions this load merged, and those it dropped.
+  readonly plugins: LoadedPlugins;
+}
+
+type LoadedPlugins = ReturnType<typeof loadConfig>["plugins"];
+
+// [LAW:nothing-unseen] Which plugins a daemon load merged and which it
+// dropped: a drop is also on the strip, but the merged set is said nowhere
+// else. The daemon's own sink — buildRenderState is shared with the demo.
+function logPlugins(
+  path: string | null,
+  { loaded, dropped }: LoadedPlugins,
+): void {
+  dlog(
+    "info",
+    `config load ${path ?? "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length}` +
+      loaded.map((p) => ` +${p}`).join("") +
+      dropped.map((d) => ` -${d.path} (${d.reason})`).join(""),
+  );
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -251,11 +270,14 @@ function watchTargetsFor(
   resolvedPath: string | null,
 ): WatchTargets {
   const byDir = new Map<string, Set<string>>();
-  for (const candidate of dslConfigCandidatePaths(
-    entry.projectDir,
-    entry.cwd,
-    entry.configFile,
-  )) {
+  // A plugin definition is part of the config it is listed in: installing,
+  // fixing or editing one reloads the config as an edit to the file would.
+  const { loaded, dropped } = entry.state.plugins;
+  for (const candidate of [
+    ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+    ...loaded,
+    ...dropped.map((d) => d.path),
+  ]) {
     const { dir, name } = nearestWatchTarget(candidate);
     if (!byDir.has(dir)) byDir.set(dir, new Set());
     byDir.get(dir)!.add(name);
@@ -377,6 +399,7 @@ export function buildRenderState(
     authoredRoots: authoredRoots(merged, raw),
     fileHeldSettings: fileHeldSettings(raw),
     unused: unusedDeclarations(raw, merged),
+    plugins: loaded.plugins,
   };
 }
 
@@ -479,6 +502,8 @@ export class RenderCache {
     }
 
     const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
+    if (loaded.state !== null)
+      logPlugins(loaded.resolvedPath, loaded.state.plugins);
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -560,6 +585,7 @@ export class RenderCache {
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
+      logPlugins(loaded.resolvedPath, loaded.state.plugins);
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
       // timers, fs watchers, MobX reactions, and git subscriptions — dropping
       // the reference without disposing would leak them.

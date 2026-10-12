@@ -1,0 +1,21 @@
+// A plugin DEFINITION: written once by the app that ships it. The app rewrites
+// `deploy.json` beside it as its state changes; the bar redraws from the new
+// data without anything being rebuilt. Listed from a config as
+//   plugins: ["./plugins/deploy/plugin.json5"]
+// and placed like any segment, as `plugins.deploy.status`.
+{
+  plugin: "deploy",
+  data: "./deploy.json",
+  segments: {
+    status: {
+      description: "The current deploy: its environment and state",
+      // A missing data file reads as no fields: the segment hides until the
+      // app writes one.
+      when: '{{ hasKey .plugins.deploy.data "env" }}',
+      template: '⇪ {{ .plugins.deploy.data.env }} {{ template "plugins.deploy.state" .plugins.deploy.data }}',
+    },
+  },
+  helpers: {
+    state: '{{ if eq .state "live" }}✓ live{{ else }}… {{ .state }}{{ end }}',
+  },
+}

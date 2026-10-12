@@ -61,6 +61,12 @@ export function emitConfigSchema(
       presets: presetsJson(),
       editGlobals: editGlobalsJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },
+      plugins: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        description:
+          "Plugin definition files (json5), relative to this file; each merges its `<plugin>.`-named segments, helpers and actions between the bundled default and this file",
+      },
     },
     definitions: {
       ...segmentDefinitions(),

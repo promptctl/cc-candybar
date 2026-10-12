@@ -1,0 +1,6 @@
+// A config that loads a plugin (examples/plugins/deploy) and places its
+// segment on the bundled status row.
+{
+  plugins: ["./plugins/deploy/plugin.json5"],
+  root: { rows: { status: { h: ["model", "context", "plugins.deploy.status"] } } },
+}
