@@ -257,34 +257,35 @@ describe("DEFAULT_DSL_CONFIG", () => {
           workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
           ...(effort ? { effort } : {}),
         };
-        return stripAnsi(
-          renderDsl(parsed, compiled, store, registry, payload, {
-            endcaps: "powerline",
-            colorCompatibility: "truecolor",
-            wrap: true,
-            padding: 1,
-            charset: "unicode",
-            width: Number.POSITIVE_INFINITY,
-          }),
-        );
+        return renderDsl(parsed, compiled, store, registry, payload, {
+          endcaps: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        });
       } finally {
         registry.dispose();
       }
     };
-    // Low and medium share the single arrow (low is the quiet colour); the
-    // segment boundary after the glyph pins that nothing follows it.
+    // Two pairs share a glyph and are told apart by colour alone: low is the
+    // quiet single chevron, max the filled triple. The segment boundary after
+    // the glyph pins that nothing follows it.
     const gauge: Record<string, string> = {
-      low: "↑",
-      medium: "↑",
-      high: "⇈",
-      xhigh: "⤊",
-      max: "⤊⤊",
+      low: "\u{F0143}",
+      medium: "\u{F0143}",
+      high: "\u{F013F}",
+      xhigh: "\u{F0DBC}",
+      max: "\u{F0DBC}",
       "something-new": "?",
     };
     for (const [level, glyph] of Object.entries(gauge)) {
-      expect(render({ level })).toContain(`Opus 4.7 ${glyph} `);
+      expect(stripAnsi(render({ level }))).toContain(`Opus 4.7 ${glyph} `);
     }
-    const none = render(undefined);
+    expect(render({ level: "low" })).not.toBe(render({ level: "medium" }));
+    expect(render({ level: "xhigh" })).not.toBe(render({ level: "max" }));
+    const none = stripAnsi(render(undefined));
     expect(none).toContain("Opus 4.7 ");
     for (const glyph of Object.values(gauge)) expect(none).not.toContain(glyph);
   });
