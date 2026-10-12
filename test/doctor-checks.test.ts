@@ -26,9 +26,8 @@ const inside = (
 
 const LOADED: ConfigFacts = {
   kind: "loaded",
-  path: "/p/.cc-candybar.json5",
+  layers: ["/p/.cc-candybar.json5"],
   warnings: [],
-  shadowed: [],
   unused: [],
 };
 
@@ -170,7 +169,7 @@ describe("config probe", () => {
 
   test("a config that loaded with nothing to say is ok — the bundled default included", () => {
     expect(config(LOADED)).toEqual({ ok: true });
-    expect(config({ ...LOADED, path: null })).toEqual({ ok: true });
+    expect(config({ ...LOADED, layers: [] })).toEqual({ ok: true });
   });
 
   test("an advisory the load earned fails it, in the load's own words", () => {
@@ -178,17 +177,6 @@ describe("config probe", () => {
     expect(config({ ...LOADED, warnings: [warning] })).toEqual({
       ok: false,
       reason: warning,
-      more: [],
-    });
-  });
-
-  test("a config behind the loaded one fails it, naming both files", () => {
-    expect(
-      config({ ...LOADED, shadowed: ["/home/u/.config/cc-candybar/config.json5"] }),
-    ).toEqual({
-      ok: false,
-      reason:
-        "/home/u/.config/cc-candybar/config.json5 is never read — /p/.cc-candybar.json5 is found first",
       more: [],
     });
   });
@@ -219,7 +207,7 @@ describe("config probe", () => {
     expect(
       config({
         kind: "failed",
-        path: "/p/.cc-candybar.json5",
+        layers: ["/p/.cc-candybar.json5"],
         warnings: ["an advisory"],
         error:
           "Invalid config in /p/.cc-candybar.json5 (1 issue):\n  [line 2 • root] root references unknown segment",

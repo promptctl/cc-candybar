@@ -151,7 +151,7 @@ describe("persistValueText", () => {
     expect(() =>
       writeValues(
         { record: () => {}, logger: () => {} },
-        impossiblePath,
+        { path: impossiblePath, above: [] },
         [["palette", "nord"]],
       ),
     ).toThrow();
@@ -858,17 +858,14 @@ describe("a durable click lands in the file the next reload reads", () => {
     expect(durable.parsed()).toEqual({
       globals: { palette: "textual-dark" },
     });
-    expect(existsSync(durable.xdgConfigPath)).toBe(false);
   });
 
   // [LAW:one-source-of-truth] The render records the RESOLUTION INPUTS, not
   // a resolved path, and the click re-runs the same chain over them
-  // (durableConfigPath). That is the contract, pinned here because it is
-  // easy to mis-read as "the file the last render read": a candidate that
-  // appears after the render is exactly what RenderCache re-resolves to on
-  // its watcher, so the click must land THERE — a write to the superseded
-  // file would be invisible to every render after it.
-  test("no file yet creates the XDG tail; a project file appearing afterwards takes the next click", () => {
+  // (durableConfig) — the user's file, whatever project layer has appeared
+  // over it since: a project file is somebody's repository, never where a
+  // click lands (brandon-plugins-ktag.8th).
+  test("no file yet creates the user's file; a project file appearing afterwards does not take the next click", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -886,22 +883,16 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const click = (palette: string): void =>
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
-    const paletteIn = (file: string): unknown =>
-      (
-        JSON5.parse(readFileSync(file, "utf8")) as {
-          globals: { palette: unknown };
-        }
-      ).globals.palette;
     expect(durable.text()).toBeNull();
     click("nord");
-    expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
-    expect(durable.text()).toBeNull();
+    expect(durable.parsed()).toEqual({ globals: { palette: "nord" } });
 
-    // The higher-precedence candidate appears between renders.
-    durable.write(`{ globals: { palette: "textual-dark" } }`);
+    // A project layer appears between renders.
+    const project = `{ globals: { menuGlyph: "P" } }`;
+    writeFileSync(durable.projectPath, project);
     click("dracula");
-    expect(paletteIn(durable.configPath)).toBe("dracula");
-    expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
+    expect(durable.parsed()).toEqual({ globals: { palette: "dracula" } });
+    expect(readFileSync(durable.projectPath, "utf8")).toBe(project);
   });
 });
 

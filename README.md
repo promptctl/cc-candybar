@@ -40,12 +40,14 @@ Restart Claude Code. The statusline appears with the bundled default layout — 
 
 ## Customization
 
-Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations (highest precedence first):
+Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations:
 
 1. `$CC_CANDYBAR_CONFIG` in the statusline command's environment (literal path, supports `~` expansion). It is read by the client on every render and carried to the daemon, so it can differ per session. A path that names no file renders the bundled default under a `Config file not found` warning, and one the daemon cannot stat (behind an unsearchable directory, say) under `Config file could not be read` with the error — either way the bar stays live and loads the file once it can.
 2. `<project>/.cc-candybar.json5` (then `.json` at the same location)
 3. `<cwd>/.cc-candybar.json5` (then `.json`)
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
+
+Without `$CC_CANDYBAR_CONFIG`, every file found is a layer: your user file merges over the bundled default, the cwd's over that, and the project's on top. So a project file declares only what that project adds or changes — a segment placed in a row, a plugin listed — and keeps the rest of your own config. `$CC_CANDYBAR_CONFIG` names the one file the session loads, and the others are not read. A change made from the bar (a theme picked and saved, a segment added in edit mode) is written to your user file, never to a project's; when a project file sets the same value, the click is refused and names that file.
 
 JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 

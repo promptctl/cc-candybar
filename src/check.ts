@@ -26,8 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import {
-  loadConfig,
-  validateConfig,
+  loadConfigChain,
   resolveDslConfig,
   configResolutionNotice,
   detectConfigCollisions,
@@ -188,18 +187,19 @@ export function checkPayload(
 // maps it to (streams, exit), so the contract is testable without spawning a
 // process or stubbing process.exit.
 //
-// `configPath` null means the bundled default was checked (no config file
-// found — the daemon renders the same default in that state).
+// `layers` are the files checked, lowest first; none means the bundled
+// default was checked (no config file found — the daemon renders the same
+// default in that state).
 export type CheckOutcome =
   | {
       readonly kind: "clean";
-      readonly configPath: string | null;
+      readonly layers: readonly string[];
       readonly warnings: readonly string[];
       readonly rendered: string;
     }
   | {
       readonly kind: "fatal";
-      readonly configPath: string | null;
+      readonly layers: readonly string[];
       readonly message: string;
       readonly warnings: readonly string[];
     }
@@ -212,15 +212,15 @@ export type CheckOutcome =
 // The no-target search: the daemon's own resolver over (cwd, cwd), so the
 // file this checks IS the file the daemon would load from this directory.
 // It names no explicit file, so `missing`/`unreadable` are unreachable and
-// the projection is file-or-default — but either arm may carry chain
-// locations the search could not check, and that advisory is the SAME
+// the projection is the chain's layers — which may carry locations the
+// search could not check, and that advisory is the SAME
 // notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
 // what the bar would, never a re-derivation of it.
-function searchedFile(cwd: string, warnings: string[]): string | null {
+function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
   const resolution = resolveDslConfig(cwd, cwd);
   const notice = configResolutionNotice(resolution);
   if (notice !== null) warnings.push(notice);
-  return resolution.kind === "file" ? resolution.path : null;
+  return resolution.kind === "chain" ? resolution.layers : [];
 }
 
 // Run the daemon's load-and-render pipeline against one config target.
@@ -255,10 +255,10 @@ export async function checkConfig(
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
   const configPath =
-    target !== undefined
-      ? path.resolve(expandHome(target))
-      : searchedFile(cwd, warnings);
-  if (target !== undefined && configPath !== null) {
+    target === undefined ? null : path.resolve(expandHome(target));
+  const layers =
+    configPath === null ? searchedLayers(cwd, warnings) : [configPath];
+  if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
     // the named file" — same outcome, not an uncaught stack.
@@ -288,8 +288,8 @@ export async function checkConfig(
   if (collision !== null) warnings.push(collision);
 
   try {
-    const rendered = await loadRegisterRender(configPath, cwd, warnings);
-    return { kind: "clean", configPath, warnings, rendered };
+    const rendered = await loadRegisterRender(layers, cwd, warnings);
+    return { kind: "clean", layers, warnings, rendered };
   } catch (e) {
     // A filesystem error on the config file itself (ENOENT/EACCES from
     // loadConfig's read — errno errors carry the failing `.path`, which is the
@@ -300,14 +300,14 @@ export async function checkConfig(
     // a realm boundary (jest/graceful-fs), where instanceof lies.
     const errno = e as Partial<NodeJS.ErrnoException> | null;
     if (
-      configPath !== null &&
       typeof errno === "object" &&
       errno !== null &&
       typeof errno.code === "string" &&
-      errno.path === configPath &&
+      typeof errno.path === "string" &&
+      layers.includes(errno.path) &&
       typeof errno.message === "string"
     ) {
-      return { kind: "unreadable", path: configPath, message: errno.message };
+      return { kind: "unreadable", path: errno.path, message: errno.message };
     }
     // Same classification RenderCache.reloadInto applies: ConfigError and
     // register/render throws (template parse, MissingFieldError, action arity)
@@ -320,7 +320,7 @@ export async function checkConfig(
         : e instanceof Error
           ? e.message
           : String(e);
-    return { kind: "fatal", configPath, message, warnings };
+    return { kind: "fatal", layers, message, warnings };
   }
 }
 
@@ -332,7 +332,7 @@ export async function checkConfig(
 // declaration failures) and any source still running at the deadline land in
 // `warnings` — the same channel RenderCache merges them into.
 export interface PreparedConfig {
-  readonly configPath: string | null;
+  readonly layers: readonly string[];
   // Plugins the config lists that did not load; each fails the verdict.
   readonly droppedPlugins: readonly DroppedPlugin[];
   readonly config: ValidatedConfig;
@@ -342,15 +342,17 @@ export interface PreparedConfig {
 }
 
 export async function prepareConfig(
-  configPath: string | null,
+  layers: readonly string[],
   cwd: string,
   warnings: string[],
 ): Promise<PreparedConfig> {
-  const loaded = loadConfig(configPath, DEFAULT_DSL_CONFIG);
-  // The file's own advisories (an editability notice naming a duplicate key)
-  // land before validation, so a fatal outcome still carries them.
-  warnings.push(...loaded.warnings);
-  const config = validateConfig(loaded, configPath ?? "<default>");
+  // Each file's own advisories (an editability notice naming a duplicate key)
+  // land before its validation, so a fatal outcome still carries them.
+  const loaded = loadConfigChain(layers, DEFAULT_DSL_CONFIG, {
+    entered: () => {},
+    warned: (w) => warnings.push(...w),
+  });
+  const { config } = loaded;
 
   const store = new VariableStore();
   const registry = new SourceRegistry(
@@ -376,8 +378,8 @@ export async function prepareConfig(
       );
     }
     return {
-      configPath,
-      droppedPlugins: loaded.plugins.dropped,
+      layers,
+      droppedPlugins: loaded.layers.flatMap((l) => l.plugins.dropped),
       config,
       compiled,
       store,
@@ -398,7 +400,7 @@ export async function prepareConfig(
 // render could not honour (brandon-themes-dzl) — and fails the verdict, so
 // exit 0 never blesses a bar the daemon would render a complaint on.
 export function renderEffective(
-  { configPath, config, compiled, store, registry }: PreparedConfig,
+  { layers, config, compiled, store, registry }: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
 ): { rendered: string; failures: Map<string, string> } {
@@ -415,7 +417,7 @@ export function renderEffective(
     compiled,
     store,
     registry,
-    checkPayload(effective, configPath),
+    checkPayload(effective, layers.at(-1) ?? null),
     renderOptionsOf(effective, width),
     {
       onSegmentError: (placementId: string, message: string) =>
@@ -436,11 +438,11 @@ export function renderEffective(
 // The verdict: the prepared config rendered under every preset, every render
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
-  configPath: string | null,
+  layers: readonly string[],
   cwd: string,
   warnings: string[],
 ): Promise<string> {
-  const prepared = await prepareConfig(configPath, cwd, warnings);
+  const prepared = await prepareConfig(layers, cwd, warnings);
   const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys
@@ -595,7 +597,8 @@ function warningLines(warnings: readonly string[]): string {
 export function checkPlan(o: CheckOutcome, render = false): CliPlan {
   switch (o.kind) {
     case "clean": {
-      const where = o.configPath ?? "bundled default (no config file found)";
+      const where =
+        o.layers.join(" < ") || "bundled default (no config file found)";
       const count =
         o.warnings.length > 0
           ? ` (${o.warnings.length} warning${o.warnings.length === 1 ? "" : "s"})`
@@ -612,7 +615,7 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
         stdout: "",
         stderr:
           warningLines(o.warnings) +
-          `✗ ${o.configPath ?? "<default>"}\n${o.message}\n`,
+          `✗ ${o.layers.join(" < ") || "<default>"}\n${o.message}\n`,
         code: EXIT_FATAL,
       };
     case "unreadable":

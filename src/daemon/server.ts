@@ -170,7 +170,7 @@ const renderCache = new RenderCache(
       onReload: (entry) =>
         dlog(
           "info",
-          `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} file=${entry.configFilePath ?? "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
+          `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
         ),
     },
   },
@@ -1041,7 +1041,10 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
             entry.state.fileHeldSettings,
             sessionPick,
           ),
-          configPath: entry.configFilePath,
+          // The file the menu's saves and resets edit, once it exists.
+          configPath: entry.configLayers.includes(entry.configHome)
+            ? entry.configHome
+            : null,
         },
       );
       // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
@@ -1111,7 +1114,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // the file when our own click path may be the thing that is broken.
       // Null when the error is not a load error, or no file resolved.
       const failedConfigFile =
-        entry.lastError === null ? null : entry.configFilePath;
+        entry.lastError === null ? null : entry.failedFile;
       // [LAW:one-source-of-truth] One warning channel: the load-time warning this
       // config carries and whatever this render could not honour, joined into the
       // one string collectDiagnostics splits into rows. A second channel would be a
@@ -1298,7 +1301,7 @@ const verbCtx = {
     renderCache.reload(...at);
     const entry = renderCache.getOrCreate(...at);
     return {
-      path: entry.configFilePath,
+      layers: entry.configLayers,
       error: entry.lastError,
       warning: entry.lastWarning,
       unused: entry.state.unused,

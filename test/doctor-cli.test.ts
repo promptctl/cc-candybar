@@ -26,7 +26,7 @@ afterEach(() => {
 
 const EDGE: DoctorEdge = {
   probeTmux: () => ({ kind: "ok", value: ["osc7", "RGB", "sixel"] }),
-  loadConfig: () => ({ path: null, error: null, warning: null, unused: [] }),
+  loadConfig: () => ({ layers: [], error: null, warning: null, unused: [] }),
 };
 // A platform with no URL handler: the probe has nothing to send, and these
 // tests are about the other checks (test/doctor-url-handler.test.ts has it).
@@ -152,10 +152,10 @@ describe("doctorPlan over a real config", () => {
     });
   });
 
-  test("every problem is listed: the advisory, the shadowed file, each unused name", async () => {
+  test("every problem is listed: the advisory and each unused name, the user layer behind the project's included", async () => {
     const user = path.join(dir, "xdg", "cc-candybar", "config.json5");
     fs.mkdirSync(path.dirname(user), { recursive: true });
-    fs.writeFileSync(user, "{}");
+    fs.writeFileSync(user, `{ helpers: { h: "x" } }`);
     fs.writeFileSync(
       projectConfig(),
       `{
@@ -166,7 +166,7 @@ describe("doctorPlan over a real config", () => {
     expect(await plan()).toEqual({
       stdout:
         `✗ config — ${projectConfig()}:2: duplicate key "v" — the settings menu cannot edit this file until it is fixed\n` +
-        `    ${user} is never read — ${projectConfig()} is found first\n` +
+        `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
         "✓ URL handler\n✓ tmux truecolor\n",

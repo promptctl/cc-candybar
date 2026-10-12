@@ -40,7 +40,7 @@ import {
   type Step,
 } from "../settings-history";
 import type { NavigationHistory } from "../navigation-history";
-import { durableConfigPath } from "../../config/loader/discovery";
+import { durableConfig, type ConfigHome } from "../../config/loader/discovery";
 import {
   placementId,
   settingSpelling,
@@ -519,7 +519,7 @@ function stepFrom(
 // (candybar-config-dqe). A click carries only a session id, so the render
 // records — under this daemon-internal key, the SESSION_CONFIG_OVERRIDE_KEY
 // precedent — the INPUTS its config resolution ran on, and a durable verb
-// runs the same resolution over them at click time (durableConfigPath). The
+// runs the same resolution over them at click time (durableConfig). The
 // file it lands in is the one the NEXT reload reads, not a snapshot of the
 // one the last render read: RenderCache re-resolves the same chain whenever
 // a candidate appears (a higher-precedence file supersedes a lower one), so
@@ -587,8 +587,8 @@ function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   if (raw === null) return;
   const origin = parseRenderOrigin(raw);
-  const file = originConfigFile(origin);
-  if (step.some((c) => c.kind === "file" && c.file === file)) {
+  const { path } = originHome(origin);
+  if (step.some((c) => c.kind === "file" && c.file === path)) {
     ctx.reloadConfig(origin);
   }
 }
@@ -600,8 +600,8 @@ function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 
-function originConfigFile(origin: RenderOrigin): string {
-  return durableConfigPath(
+function originHome(origin: RenderOrigin): ConfigHome {
+  return durableConfig(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
@@ -638,17 +638,17 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const file = originConfigFile(origin);
+  const home = originHome(origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
-    `set-config: ${landing.key}=${result.value} → ${file} (session=${sid})`,
+    `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
   );
 };
 
@@ -682,13 +682,13 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const file = originConfigFile(origin);
+  const home = originHome(origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  const stored = readValue(file, landing.key);
+  const stored = readValue(home.path, landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -701,11 +701,11 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), file, [[landing.key, result.value]]);
+  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.dlog(
     "info",
-    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
   );
 };
 
@@ -744,8 +744,8 @@ const save: VerbHandler = (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const file = originConfigFile(origin);
-  writeDrafts(editStore(ctx, sid), file, pairs, placements);
+  const home = originHome(origin);
+  writeDrafts(editStore(ctx, sid), home, pairs, placements);
   ctx.reloadConfig(origin);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
@@ -758,7 +758,7 @@ const save: VerbHandler = (value, ctx) => {
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
       ...placements.map(placementLog),
-    ].join(" ")} → ${file} (session=${sid})`,
+    ].join(" ")} → ${home.path} (session=${sid})`,
   );
 };
 
@@ -802,10 +802,10 @@ const savePreset: VerbHandler = (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const file = originConfigFile(origin);
+  const home = originHome(origin);
   const name = writePreset(
     editStore(ctx, sid),
-    file,
+    home,
     snapshot.from,
     snapshot.globals,
     picks,
@@ -821,7 +821,7 @@ const savePreset: VerbHandler = (value, ctx) => {
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.dlog(
     "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${file} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
   );
 };
 
@@ -837,12 +837,12 @@ const deletePreset: VerbHandler = (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const file = originConfigFile(origin);
-  deletePresetFromFile(editStore(ctx, sid), file, name);
+  const home = originHome(origin);
+  deletePresetFromFile(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} ← ${file} (session=${sid})`);
+  ctx.dlog("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
@@ -868,16 +868,16 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const file = originConfigFile(origin);
+  const home = originHome(origin);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
-  deleteValues(editStore(ctx, sid), file, fileKeys);
+  deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.dlog(
     "info",
-    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${file} (session=${sid})`,
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${home.path} (session=${sid})`,
   );
 };
 
@@ -955,8 +955,8 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const file = originConfigFile(origin);
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), file, key, op);
+  const home = originHome(origin);
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
   // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
   // its undo brings the placement and its drafts back.
@@ -971,7 +971,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   // the one fact of the edit the op token does not already carry.
   ctx.dlog(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${file} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
 };
 

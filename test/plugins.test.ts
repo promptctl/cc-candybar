@@ -84,7 +84,7 @@ describe("a listed plugin", () => {
 
   test("its segments join the add-segment library", async () => {
     const warnings: string[] = [];
-    const prepared = await prepareConfig(config(), dir, warnings);
+    const prepared = await prepareConfig([config()], dir, warnings);
     try {
       const members = [...addableSegmentDomains(prepared.config).values()][0]!.members;
       expect(members).toContain("plugins.deploy.status");
@@ -96,7 +96,7 @@ describe("a listed plugin", () => {
   test("a data rewrite changes what the bar reads, without a reload", async () => {
     const p = config();
     const data = write("p/state.json", `{ "env": "prod", "state": "rolling" }`);
-    const prepared = await prepareConfig(p, dir, []);
+    const prepared = await prepareConfig([p], dir, []);
     try {
       const read = () => prepared.store.readDocument("plugins.deploy.data");
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "rolling" } });
@@ -168,7 +168,7 @@ test("the user's config still renders beside a dropped plugin", async () => {
     `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] } }`,
   );
   const warnings: string[] = [];
-  const prepared = await prepareConfig(p, dir, warnings);
+  const prepared = await prepareConfig([p], dir, warnings);
   try {
     expect(prepared.config.segments.mine).toBeDefined();
     expect(prepared.droppedPlugins).toHaveLength(1);
@@ -192,7 +192,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine", "plugins.deploy.status"] } }`,
     );
     const warnings: string[] = [];
-    const prepared = await prepareConfig(p, dir, warnings);
+    const prepared = await prepareConfig([p], dir, warnings);
     try {
       expect(prepared.droppedPlugins).toHaveLength(1);
       return prepared.config.segments["plugins.deploy.status"]!.template!;
@@ -228,7 +228,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "plugins.deploy.status": { palette: "nord" } },
          root: { h: [{ seg: "plugins.deploy.status", settings: { compact: true } }, { seg: "plugins.deploy.status", id: "two", settings: { compact: false } }] } }`,
     );
-    const prepared = await prepareConfig(p, dir, []);
+    const prepared = await prepareConfig([p], dir, []);
     try {
       expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("plugin not loaded");
     } finally {
@@ -243,7 +243,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "my.clock": { template: "tick" } },
          root: { h: [{ kind: "group", name: "extra", label: "x", children: ["my.clock"] }] } }`,
     );
-    const prepared = await prepareConfig(p, dir, []);
+    const prepared = await prepareConfig([p], dir, []);
     try {
       expect(prepared.config.segments["my.clock"]!.template).toBe("tick");
       expect(prepared.config.segments["groups.extra"]!.template).not.toContain("plugin not loaded");
@@ -266,7 +266,7 @@ test("the user's file retunes a plugin segment by field", async () => {
     "config.json5",
     `{ plugins: ["./p/plugin.json5"], segments: { "plugins.deploy.status": { bg: "error" } }, root: { h: ["plugins.deploy.status"] } }`,
   );
-  const prepared = await prepareConfig(p, dir, []);
+  const prepared = await prepareConfig([p], dir, []);
   try {
     expect(prepared.config.segments["plugins.deploy.status"]).toMatchObject({ bg: "error" });
     expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("⇪");
@@ -277,7 +277,7 @@ test("the user's file retunes a plugin segment by field", async () => {
 
 test("a data file written after load, and replaced by rename, is read", async () => {
   const p = config();
-  const prepared = await prepareConfig(p, dir, []);
+  const prepared = await prepareConfig([p], dir, []);
   try {
     const read = () => (prepared.store.readDocument("plugins.deploy.data") as { value?: { state?: string } }).value?.state;
     // fs.watch attaches asynchronously with no ready signal: repeat the
@@ -306,7 +306,7 @@ test("a plugin whose names another layer already declares is dropped; the first 
   const p = config();
   write("p/state.json", `{ "env": "prod", "state": "live" }`);
   fs.writeFileSync(p, `{ plugins: ["./p/plugin.json5", "./p/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-  const prepared = await prepareConfig(p, dir, []);
+  const prepared = await prepareConfig([p], dir, []);
   try {
     expect(prepared.droppedPlugins.map((d) => d.reason).join()).toContain(
       `"plugins.deploy.data" is already declared`,

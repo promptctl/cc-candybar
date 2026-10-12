@@ -71,7 +71,6 @@ beforeAll(() => {
 interface Scratch {
   readonly root: string;
   readonly projectDir: string;
-  readonly configFile: string;
   remove(): void;
 }
 
@@ -105,13 +104,11 @@ function scratchLayout(source: Source): Scratch {
     bumpMtimes(src);
   }
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-proj-"));
-  const configFile = path.join(projectDir, ".cc-candybar.json5");
-  fs.writeFileSync(configFile, "{}");
+  fs.writeFileSync(path.join(projectDir, ".cc-candybar.json5"), "{}");
   fs.writeFileSync(path.join(projectDir, ".cc-candybar.json"), "{}");
   return {
     root,
     projectDir,
-    configFile,
     remove: () => {
       fs.rmSync(root, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
@@ -184,13 +181,16 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     });
   });
 
-  test("[disable] writes updateNotice: false into the session's config file, and the notice is gone once it reloads", async () => {
+  test("[disable] writes updateNotice: false into the user's config file, and the notice is gone once it reloads", async () => {
     const s = scratchLayout("edited");
-    await withDaemon(s, {}, async (sock) => {
+    // The user's file — where durable clicks land, under the project's layer.
+    const xdg = path.join(s.root, "xdg");
+    const userFile = path.join(xdg, "cc-candybar", "config.json5");
+    await withDaemon(s, { XDG_CONFIG_HOME: xdg }, async (sock) => {
       const before = await render(sock, "bc-disable", s.projectDir);
       expect(hasNotice(before)).toBe(true);
       await click(sock, affordance(before, "set-config", UPDATE_NOTICE_FIELD));
-      expect(fs.readFileSync(s.configFile, "utf8")).toMatch(/updateNotice:\s*false/);
+      expect(fs.readFileSync(userFile, "utf8")).toMatch(/updateNotice:\s*false/);
       await renderUntil(
         sock,
         "bc-disable",

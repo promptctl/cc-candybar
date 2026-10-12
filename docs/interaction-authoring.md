@@ -217,14 +217,14 @@ since they are part of what you wrote. The reset also clears the session's
 own pick of that setting, so the bar moves. A path your file never authored is
 left alone, and a reset that changes nothing enters no undo history.
 
-The file a click writes is the config file your session's config search
-resolves to at the moment of the click — the same search the render runs
-(an explicit path — a load-config pick, `--config`, or `$CC_CANDYBAR_CONFIG` —
-else a project `.cc-candybar.json5`, else the cwd `.cc-candybar.json5`, else
-the XDG `config.json5`), so it is the
-file the next render reads. When no config file exists yet, the first `persist`
-creates one — at the explicit path if one is set, else
-`$XDG_CONFIG_HOME/cc-candybar/config.json5`. A click from a session that
+The file a click writes is your own config file, resolved at the moment of the
+click by the same search the render runs: an explicit path (a load-config pick,
+`--config`, or `$CC_CANDYBAR_CONFIG`) if one is set, else the XDG
+`config.json5` — never a project or cwd `.cc-candybar.json5`, which are
+layers merged over it. When the file does not exist yet, the first `persist`
+creates it. A click whose change a project or cwd file would hide (that file
+sets the same value) is refused, naming the file, rather than writing a value
+the bar would not show. A click from a session that
 has not rendered yet has no file to write and fails loudly (`has not rendered
 yet — no config file to write`) rather than guessing.
 

@@ -44,18 +44,16 @@ export type TmuxFacts =
 // [LAW:types-are-the-program] What loading the session's config found. The
 // two arms are the loader's own: a config that did not load has an error and
 // nothing to analyse (the bar is rendering an older config, or the bundled
-// default, under it), and one that loaded has no error. `path` null is the
-// bundled default — no file was found. `warnings` are the advisories the load
-// earned on the way, in either arm.
+// default, under it), and one that loaded has no error. `layers` are the
+// files merged, lowest first — none is the bundled default. `warnings` are
+// the advisories the load earned on the way, in either arm.
 export type ConfigFacts = {
-  readonly path: string | null;
+  readonly layers: readonly string[];
   readonly warnings: readonly string[];
 } & (
   | { readonly kind: "failed"; readonly error: string }
   | {
       readonly kind: "loaded";
-      // Config files at later locations of the search order, never read.
-      readonly shadowed: readonly string[];
       // What the file declares that nothing uses.
       readonly unused: readonly UnusedDecl[];
     }
@@ -213,9 +211,8 @@ const UNUSED: Readonly<Record<DeclKind, string>> = {
 
 // "The config is correct" (brandon-doctor-v62x.e91): it loads, the load earned
 // no advisory (a duplicate key, a `.json`/`.json5` collision, a location the
-// search could not check, a variable that failed to declare), no other config
-// file sits unread behind it, and everything the file declares is used. A
-// threshold whose knobs do not ascend is a load error, so it is the first of
+// search could not check, a variable that failed to declare), and everything
+// the files declare is used. A threshold whose knobs do not ascend is a load error, so it is the first of
 // those.
 const config: Check = {
   name: "config",
@@ -237,10 +234,6 @@ const config: Check = {
       case "loaded":
         return problemsVerdict([
           ...config.warnings,
-          ...config.shadowed.map(
-            (file) =>
-              `${file} is never read — ${config.path ?? "another config"} is found first`,
-          ),
           ...config.unused.map(
             ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`,
           ),

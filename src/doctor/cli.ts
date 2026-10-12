@@ -64,7 +64,7 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   );
   loaded.state?.registry.dispose();
   return {
-    path: loaded.resolvedPath,
+    layers: loaded.layers,
     error: loaded.error,
     warning: loaded.warning,
     unused: loaded.state?.unused ?? [],

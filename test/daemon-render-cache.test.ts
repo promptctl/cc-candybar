@@ -132,7 +132,7 @@ describe("RenderCache", () => {
       try {
         const entry = cache.getOrCreate(dir, dir, cfg);
         expect(entry.lastError).toBeNull();
-        expect(entry.configFilePath).toBeNull();
+        expect(entry.configLayers).toEqual([]);
         expect(entry.lastWarning).toContain(
           `Config file could not be read: ${cfg}`,
         );
@@ -158,7 +158,7 @@ describe("RenderCache", () => {
       const cfg = join(dir, "named.json5");
       const entry = cache.getOrCreate(dir, dir, cfg);
       expect(entry.lastError).toBeNull();
-      expect(entry.configFilePath).toBeNull();
+      expect(entry.configLayers).toEqual([]);
       expect(entry.lastWarning).toContain(`Config file not found: ${cfg}`);
       // The state beneath the warning is the bundled default's.
       expect(entry.state.config.root).toEqual(
@@ -175,7 +175,7 @@ describe("RenderCache", () => {
         ),
       );
       expect(entry.lastWarning).toBeNull();
-      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.configLayers).toEqual([cfg]);
       expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
     } finally {
       for (const fn of cleanups) fn();
@@ -248,7 +248,7 @@ describe("RenderCache", () => {
       expect(
         layoutSegments(rootNode(entry.state.config.root)).length,
       ).toBeGreaterThan(0);
-      expect(entry.configFilePath).toBeNull();
+      expect(entry.configLayers).toEqual([]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -282,7 +282,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       // The error is loud AND names the file...
       expect(entry.lastError).toMatch(/trigger needs a display/);
-      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.configLayers).toEqual([cfg]);
       // ...while the state is the bundled default's: the same tree a
       // no-file entry builds, settings menu included — one synthesis, not a
       // second "safe mode" config.
@@ -362,7 +362,7 @@ describe("RenderCache", () => {
     try {
       // First call: no file exists, falls back to default.
       const entry = cache.getOrCreate(dir, dir, undefined);
-      expect(entry.configFilePath).toBeNull();
+      expect(entry.configLayers).toEqual([]);
       // The bundled default's layout is non-empty. Use the flat segment
       // count (across all rows) because the user fixture below uses one
       // row of one segment — matching the default's row count of 1 — so
@@ -390,7 +390,7 @@ describe("RenderCache", () => {
           }),
         ),
       );
-      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.configLayers).toEqual([cfg]);
       expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
       // Sanity: was actually different from the default.
       expect(layoutSegments(rootNode(entry.state.config.root)).length).not.toBe(
@@ -406,11 +406,13 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      // The home (here the explicit file) is what authors a root: a reset
+      // writes nowhere else.
+      const cfg = join(dir, ".cc-candybar.json5");
+      const entry = cache.getOrCreate(dir, dir, cfg);
       const bundledRows = Object.keys(entry.state.config.root.rows);
       expect(entry.state.authoredRoots.has(PRESET_FLOOR)).toBe(false);
 
-      const cfg = join(dir, ".cc-candybar.json5");
       await reloads.after(entry, () =>
         writeFileSync(
           cfg,
@@ -428,7 +430,7 @@ describe("RenderCache", () => {
           }),
         ),
       );
-      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.configLayers).toEqual([cfg]);
       expect(Object.keys(entry.state.config.root.rows)).toEqual([
         ...bundledRows,
         "extra",
@@ -465,7 +467,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
-      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.configLayers).toEqual([cfg]);
       expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
     } finally {
       for (const fn of cleanups) fn();
@@ -495,7 +497,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       // Load succeeded — .json5 won; warning is the advisory.
       expect(entry.lastError).toBeNull();
-      expect(entry.configFilePath).toBe(cfgJson5);
+      expect(entry.configLayers).toEqual([cfgJson5]);
       expect(entry.lastWarning).not.toBeNull();
       expect(entry.lastWarning).toContain(cfgJson5);
       expect(entry.lastWarning).toContain(cfgJson);
@@ -510,7 +512,7 @@ describe("RenderCache", () => {
       });
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.
-      expect(entry.configFilePath).toBe(cfgJson5);
+      expect(entry.configLayers).toEqual([cfgJson5]);
       expect(entry.lastError).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
