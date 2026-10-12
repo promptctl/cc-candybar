@@ -1,3 +1,10 @@
+## [1.118.2](https://github.com/promptctl/cc-candybar/compare/v1.118.1...v1.118.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **config:** a project config layers over the user config instead of replacing it ([#321](https://github.com/promptctl/cc-candybar/issues/321)) ([2bec939](https://github.com/promptctl/cc-candybar/commit/2bec939922deb328f1d51f0315c39785734d5c5b))
+
 ## [1.118.1](https://github.com/promptctl/cc-candybar/compare/v1.118.0...v1.118.1) (2026-10-12)
 
 
