@@ -13,6 +13,7 @@ import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import { realpathSync, statSync } from "fs";
+import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import { observable, reaction, type IReactionDisposer } from "mobx";
@@ -450,86 +451,117 @@ function isDirectory(p: string): boolean {
 
 // What one subscription watches right now: the directory itself when the
 // path is one, else the (dir, name) tuple of its nearest existing ancestor.
-function watchTargetOf(filePath: string): {
+// `leaf` is true once the watch reaches the path's own directory — only then
+// can an event be about the path itself.
+interface WatchTarget {
   readonly dir: string;
   readonly name: string | null;
-} {
+  readonly leaf: boolean;
+}
+
+function watchTargetOf(filePath: string): WatchTarget {
   // A symlink is followed: the writes land on its target.
   const target = resolvedPath(filePath);
   return isDirectory(target)
-    ? { dir: target, name: null }
+    ? { dir: target, name: null, leaf: true }
     : nearestWatchTarget(target);
 }
 
+const targetKey = (t: WatchTarget): string => `${t.dir}\0${t.name ?? ""}`;
+
+// A watch the OS refused (ENOSPC on inotify, EMFILE, EACCES, the directory
+// removed under the walk): reported to every subscriber, never thrown — a
+// throw out of a watcher callback would take the daemon down.
+type WatchFailed = (message: string) => void;
+
 interface WatchEntry {
-  watcher: FSWatcher;
-  armedAt: string;
-  readonly callbacks: Set<() => void>;
+  // null while the OS refuses the watch; `failure` then says why.
+  watcher: FSWatcher | null;
+  failure: string;
+  target: WatchTarget;
+  // Each subscriber's update, and where its watch failures are recorded.
+  readonly subscribers: Map<() => void, WatchFailed>;
 }
 
 class WatchManager {
   private readonly watchers = new Map<string, WatchEntry>();
 
-  subscribe(filePath: string, callback: () => void): () => void {
+  subscribe(
+    filePath: string,
+    callback: () => void,
+    onFailed: WatchFailed,
+  ): () => void {
     const entry = this.watchers.get(filePath) ?? this.arm(filePath);
-    entry.callbacks.add(callback);
+    entry.subscribers.set(callback, onFailed);
+    if (entry.watcher === null) onFailed(entry.failure);
     return () => this.unsubscribe(filePath, callback);
   }
 
   private arm(filePath: string): WatchEntry {
-    const callbacks = new Set<() => void>();
     const entry: WatchEntry = {
-      watcher: this.watch(filePath, callbacks, () => this.rearm(filePath)),
-      armedAt: JSON.stringify(watchTargetOf(filePath)),
-      callbacks,
+      watcher: null,
+      failure: "",
+      target: watchTargetOf(filePath),
+      subscribers: new Map(),
     };
+    entry.watcher = this.open(filePath, entry, entry.target);
     this.watchers.set(filePath, entry);
     return entry;
   }
 
   // An event under the watched ancestor may mean a missing directory
-  // appeared: re-derive the target, and descend when it moved.
-  private rearm(filePath: string): void {
-    const entry = this.watchers.get(filePath);
-    if (entry === undefined) return;
-    const target = JSON.stringify(watchTargetOf(filePath));
-    if (target === entry.armedAt) return;
-    entry.watcher.close();
-    entry.watcher = this.watch(filePath, entry.callbacks, () =>
-      this.rearm(filePath),
-    );
-    entry.armedAt = target;
+  // appeared (or the watched one vanished): re-derive the target ONCE, and
+  // move the watch when it moved. The new watch opens before the old one
+  // closes, so a refusal leaves the old watch listening for the next event.
+  private rearm(filePath: string, entry: WatchEntry): void {
+    const target = watchTargetOf(filePath);
+    if (entry.watcher !== null && targetKey(target) === targetKey(entry.target))
+      return;
+    const watcher = this.open(filePath, entry, target);
+    if (watcher === null) return;
+    entry.watcher?.close();
+    entry.watcher = watcher;
+    entry.target = target;
   }
 
-  private watch(
+  private open(
     filePath: string,
-    callbacks: ReadonlySet<() => void>,
-    rearm: () => void,
-  ): FSWatcher {
-    const { dir, name } = watchTargetOf(filePath);
-    const fire = () => {
-      for (const cb of callbacks) cb();
-    };
-    return fsWatch(dir, (_event, changed) => {
-      // A platform that reports no name could be reporting this path.
-      if (name !== null && changed !== null && changed !== name) return;
-      rearm();
-      fire();
-    });
+    entry: WatchEntry,
+    target: WatchTarget,
+  ): FSWatcher | null {
+    const { dir, name } = target;
+    const self = path.basename(dir);
+    try {
+      return fsWatch(dir, (_event, changed) => {
+        // A platform that reports no name could be reporting anything here.
+        const aboutName = changed === null || name === null || changed === name;
+        // The watched directory's own removal or rename reports its own name.
+        if (!aboutName && changed !== self) return;
+        this.rearm(filePath, entry);
+        // Ancestor churn on the way down is not a change to the path.
+        if (!entry.target.leaf) return;
+        for (const cb of entry.subscribers.keys()) cb();
+      });
+    } catch (e) {
+      const message = `watch_file ${filePath}: cannot watch ${dir} — ${e instanceof Error ? e.message : String(e)}`;
+      entry.failure = message;
+      for (const report of entry.subscribers.values()) report(message);
+      return null;
+    }
   }
 
   private unsubscribe(filePath: string, callback: () => void): void {
     const entry = this.watchers.get(filePath);
     if (!entry) return;
-    entry.callbacks.delete(callback);
-    if (entry.callbacks.size === 0) {
-      entry.watcher.close();
+    entry.subscribers.delete(callback);
+    if (entry.subscribers.size === 0) {
+      entry.watcher?.close();
       this.watchers.delete(filePath);
     }
   }
 
   dispose(): void {
-    for (const { watcher } of this.watchers.values()) watcher.close();
+    for (const { watcher } of this.watchers.values()) watcher?.close();
     this.watchers.clear();
   }
 
@@ -1289,7 +1321,9 @@ export class SourceRegistry {
       }
 
       case "watch_file": {
-        const unsub = this.watchMgr.subscribe(policy.path, update);
+        const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
+          this.recordError(name, message),
+        );
         this.cleanups.push(unsub);
         break;
       }

@@ -758,6 +758,28 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
+  it("a watch the OS refuses is the source's error, not a throw", () => {
+    const { dir, cleanup } = makeTmpDir();
+    const locked = path.join(dir, "locked");
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0);
+    try {
+      const f = path.join(locked, "data");
+      const { registry } = make();
+      registry.declareFile("val", f, {
+        parse: text("(none)"),
+        cache: { kind: "watch_file", path: f },
+      });
+      expect(registry.getLastError("val")?.message).toMatch(
+        /watch_file .*cannot watch/,
+      );
+      registry.dispose();
+    } finally {
+      fs.chmodSync(locked, 0o700);
+      cleanup();
+    }
+  });
+
   it("a watched symlink fires on a write to its target", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
