@@ -230,6 +230,63 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
+  // The model segment's effort gauge: one ladder rung per level,
+  // present exactly when Claude Code sends an effort level, and `?` for a
+  // level the gauge does not know — visible, never silently blank.
+  test("model segment shows the effort gauge glyph for the session's effort level", () => {
+    const parsed = parseAndValidate("<default>", SERIALIZED);
+    const render = (effort: { level: string } | undefined): string => {
+      const store = new VariableStore();
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
+      try {
+        const compiled = registerDslConfig(parsed, registry, {
+          cwd: process.cwd(),
+        });
+        const payload = {
+          hook_event_name: "Status",
+          session_id: "deadbeef-1234-5678-9abc-def012345678",
+          cwd: "/tmp",
+          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+          ...(effort ? { effort } : {}),
+        };
+        return stripAnsi(
+          renderDsl(parsed, compiled, store, registry, payload, {
+            endcaps: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          }),
+        );
+      } finally {
+        registry.dispose();
+      }
+    };
+    // Low and medium share the single arrow (low is the quiet colour); the
+    // segment boundary after the glyph pins that nothing follows it.
+    const gauge: Record<string, string> = {
+      low: "↑",
+      medium: "↑",
+      high: "⇈",
+      xhigh: "⤊",
+      max: "⤊⤊",
+      "something-new": "?",
+    };
+    for (const [level, glyph] of Object.entries(gauge)) {
+      expect(render({ level })).toContain(`Opus 4.7 ${glyph} `);
+    }
+    const none = render(undefined);
+    expect(none).toContain("Opus 4.7 ");
+    for (const glyph of Object.values(gauge)) expect(none).not.toContain(glyph);
+  });
+
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
   // ships a clickable theme/style picker, not just documentation describing how
   // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
