@@ -68,10 +68,15 @@ import { validateActions } from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
-import { validateCrossReferences } from "./loader/cross-ref.js";
+import {
+  validateCrossReferences,
+  validateDeclarations,
+} from "./loader/cross-ref.js";
+import { templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import {
   applyPlugins,
+  ownedBy,
   listedPlugins,
   droppedPluginNotice,
   type PluginContext,
@@ -209,7 +214,8 @@ export function loadConfigSource(
       listedPlugins(refs, path),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c) => validateConfig(unauthored(c), path, allowedPalettes),
+      (c, plugin, replaces) =>
+        checkPlugin(c, plugin, replaces, path, allowedPalettes),
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -242,7 +248,7 @@ export function loadConfigSource(
 // [LAW:one-source-of-truth] The installed layer is a function of the
 // definitions' bytes, the project, the base and the palettes, so it is
 // memoised on exactly those: a load with nothing installed changed pays one
-// stat per definition, not one validateConfig per plugin. Per-plugin
+// stat per definition, not one reference check per plugin. Per-plugin
 // validation stays — it is what lets one plugin drop alone.
 const installedMemo = new WeakMap<
   DslConfig,
@@ -268,8 +274,8 @@ function installedLayer(
     definitions,
     ctx,
     { config: dflt, rendering: new Map() },
-    (c) =>
-      validateConfig(unauthored(c), "<installed plugins>", allowedPalettes),
+    (c, plugin, replaces) =>
+      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
   );
   byProject.set(slot, { key, layer });
   return layer;
@@ -451,6 +457,41 @@ export interface AuthoredConfig {
   readonly config: DslConfig;
   readonly raw: RawDslConfig;
   readonly source: string;
+}
+
+/**
+ * A plugin over the layer it joins. A plugin edits no `root` or `presets` and
+ * declares only under its own namespace, so when the layer held nothing there
+ * its declarations are all a check can find new: every reference they make
+ * resolves, and no cycle runs through them. A plugin REPLACING one the layer
+ * held is checked whole — the layer's own references and placements into that
+ * namespace were checked against the plugin it replaces, and only a full check
+ * sees them break, so the replacement drops alone rather than failing the file.
+ * The full validateConfig of the file listing it still runs over the result.
+ */
+function checkPlugin(
+  config: DslConfig,
+  plugin: string,
+  replaces: boolean,
+  filePath: string,
+  allowedPalettes: ReadonlySet<string> | undefined,
+): void {
+  if (replaces) {
+    validateConfig(unauthored(config), filePath, allowedPalettes);
+    return;
+  }
+  const owned = ownedBy(plugin);
+  const issues: ConfigIssue[] = [];
+  // Neither check below reads a palette name: only the structural pass does.
+  const ctx: ValidateCtx = {
+    source: "",
+    issues,
+    allowedPalettes: new Set(),
+    groups: [],
+  };
+  validateDeclarations(ctx, config, templateScopeOf(config), owned);
+  validateNoCycles(ctx, config, owned);
+  if (issues.length > 0) throw new ConfigError(filePath, issues);
 }
 
 // A config no file was merged into (the bundled default validated on its own,
