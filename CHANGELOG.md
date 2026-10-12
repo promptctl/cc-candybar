@@ -1,3 +1,10 @@
+# [1.119.0](https://github.com/promptctl/cc-candybar/compare/v1.118.2...v1.119.0) (2026-10-12)
+
+
+### Features
+
+* **plugins:** installed plugins are discovered from plugin folders, data relative to the project ([#322](https://github.com/promptctl/cc-candybar/issues/322)) ([2d3943e](https://github.com/promptctl/cc-candybar/commit/2d3943e9f60fb55254485a8c50bdf8ce2b8660b2))
+
 ## [1.118.2](https://github.com/promptctl/cc-candybar/compare/v1.118.1...v1.118.2) (2026-10-12)
 
 
