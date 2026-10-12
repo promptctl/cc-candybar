@@ -270,11 +270,14 @@ function watchTargetsFor(
   resolvedPath: string | null,
 ): WatchTargets {
   const byDir = new Map<string, Set<string>>();
-  for (const candidate of dslConfigCandidatePaths(
-    entry.projectDir,
-    entry.cwd,
-    entry.configFile,
-  )) {
+  // A plugin definition is part of the config it is listed in: installing,
+  // fixing or editing one reloads the config as an edit to the file would.
+  const { loaded, dropped } = entry.state.plugins;
+  for (const candidate of [
+    ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+    ...loaded,
+    ...dropped.map((d) => d.path),
+  ]) {
     const { dir, name } = nearestWatchTarget(candidate);
     if (!byDir.has(dir)) byDir.set(dir, new Set());
     byDir.get(dir)!.add(name);

@@ -740,17 +740,27 @@ What the definition can say, and what follows from it:
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
   so gate the segment with `when: '{{ hasKey .<plugin>.data "<field>" }}'`;
-  data that is not JSON is a `⚠` on every segment reading it.
+  data that is not JSON is a `⚠` on every segment reading it. The watch
+  follows the file's name, so the app can create it late; write it by
+  writing a temporary file and renaming it over the old one, since a reader
+  that lands between an in-place truncate and its write sees an empty file,
+  which is not JSON.
 - **Only `plugin`, `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
-  nothing) and never edits `root` — placing a segment is your choice.
+  nothing) and never edits `root` — placing a segment is your choice. The
+  plugin name is one lowercase identifier, and not one of the bar's own
+  namespaces (`candybar`, `edit`, `groups`, `menus`).
 - **Merge order is bundled < plugins < your file**, so your file can
-  redeclare a plugin's segment by its full name.
+  retune a plugin's segment by its full name, one field at a time
+  (`segments: { "deploy.status": { bg: "error" } }`).
 
-A definition that does not load — a syntax error, a field it may not declare,
-a template naming something nothing declares — drops **that plugin only**: the
-rest of your config renders, the bar's diagnostic strip names the definition
-and the reason, and `check` fails:
+A definition that does not load — a missing file, a syntax error, a field it
+may not declare, a template that does not parse or names something nothing
+declares — drops **that plugin only**: the rest of your config renders, a
+segment of it you placed shows as a `⚠ … plugin not loaded` cell, the bar's
+diagnostic strip names the definition and the reason, and `check` fails. A
+definition is watched like your config file, so fixing or installing it
+reloads the bar:
 
 ```json file:broken/plugin.json5
 { "plugin": "broken", "data": "./state.json", "segments": {}, "variables": {} }
@@ -763,7 +773,7 @@ and the reason, and `check` fails:
 ```
 
 ```error
-was not loaded: variables: a plugin definition may not declare "variables"
+was not loaded: a plugin definition may not declare "variables"
 ```
 
 ## Mistakes and the errors they produce

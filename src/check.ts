@@ -33,7 +33,6 @@ import {
   detectConfigCollisions,
   ConfigError,
   expandHome,
-  droppedPluginNotice,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
@@ -532,17 +531,28 @@ async function loadRegisterRender(
       );
       return `${line} (under ${where.join("; ")})`;
     });
+    const bar = primary.rendered;
     // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, so
     // only the verdict can say the config asked for something it did not get.
-    errors.unshift(...prepared.droppedPlugins.map(droppedPluginNotice));
-    const bar = primary.rendered;
-    if (errors.length > 0 || bar === undefined) {
-      throw new Error(
-        `config renders with ${errors.length} render error${
-          errors.length === 1 ? "" : "s"
-        } (the daemon would show them on the bar):\n` +
-          errors.map((m) => `  ${m}`).join("\n"),
-      );
+    // Each drop is already a warning line; the verdict counts them.
+    const drops = prepared.droppedPlugins.length;
+    const failures = [
+      ...(drops > 0
+        ? [
+            `${drops} listed plugin${drops === 1 ? "" : "s"} did not load (named in the warnings)`,
+          ]
+        : []),
+      ...(errors.length > 0 || bar === undefined
+        ? [
+            `config renders with ${errors.length} render error${
+              errors.length === 1 ? "" : "s"
+            } (the daemon would show them on the bar):\n` +
+              errors.map((m) => `  ${m}`).join("\n"),
+          ]
+        : []),
+    ];
+    if (failures.length > 0 || bar === undefined) {
+      throw new Error(failures.join("\n"));
     }
     return bar;
   } finally {

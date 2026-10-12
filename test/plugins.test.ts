@@ -145,6 +145,15 @@ describe("a plugin that does not load is dropped alone", () => {
   test("a template naming something nothing declares", () =>
     dropped(`{ plugin: "x", data: "./d.json", segments: { s: { template: "{{ .nope.y }}" } } }`, "nope"));
 
+  test("a plugin named for the bar's own namespace", () =>
+    dropped(`{ plugin: "candybar", data: "./d.json", segments: {} }`, `may not be "candybar"`));
+
+  test("a template that does not parse", () =>
+    dropped(
+      `{ plugin: "x", data: "./d.json", segments: { s: { template: "{{ if .x.data }}x" } } }`,
+      "Template parse error in segments.x.s.template",
+    ));
+
   test("a definition that is not there", () =>
     dropped(`{ plugin: "x", data: "./d.json", segments: {} }`.replace(/.*/s, "{ "), "JSON5"));
 });
@@ -161,6 +170,93 @@ test("the user's config still renders beside a dropped plugin", async () => {
     expect(prepared.config.segments.mine).toBeDefined();
     expect(prepared.droppedPlugins).toHaveLength(1);
     expect(warnings.join("\n")).toContain("was not loaded");
+  } finally {
+    prepared.registry.dispose();
+  }
+});
+
+describe("a placed segment of a dropped plugin stands in as a cell, not a broken config", () => {
+  async function placed(definition: string | null): Promise<string> {
+    if (definition !== null) write("p/plugin.json5", definition);
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine", "deploy.status"] } }`,
+    );
+    const warnings: string[] = [];
+    const prepared = await prepareConfig(p, dir, warnings);
+    try {
+      expect(prepared.droppedPlugins).toHaveLength(1);
+      return prepared.config.segments["deploy.status"]!.template!;
+    } finally {
+      prepared.registry.dispose();
+    }
+  }
+
+  test("when the definition named itself", async () => {
+    expect(await placed(`{ plugin: "deploy", data: "./d.json", segments: { status: { template: "{{ if }}" } } }`)).toContain(
+      "deploy.status: plugin not loaded",
+    );
+  });
+
+  test("when the definition could not be read at all", async () => {
+    expect(await placed(null)).toContain("deploy.status: plugin not loaded");
+  });
+
+  test("and check still fails, naming the drop", async () => {
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5"], root: { h: ["deploy.status"] } }`,
+    );
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain("1 listed plugin did not load");
+    expect(message).not.toContain("render error");
+  });
+
+  test("a misspelt name under a plugin that loaded is still a load error", async () => {
+    write("p/plugin.json5", DEFINITION);
+    const p = write("config.json5", `{ plugins: ["./p/plugin.json5"], root: { h: ["deploy.statsu"] } }`);
+    expect(fatal(await checkConfig(p, dir))).toContain(`"deploy.statsu" does not match any declared segment`);
+  });
+});
+
+test("the user's file retunes a plugin segment by field", async () => {
+  write("p/plugin.json5", DEFINITION);
+  write("p/state.json", `{ "env": "prod", "state": "live" }`);
+  const p = write(
+    "config.json5",
+    `{ plugins: ["./p/plugin.json5"], segments: { "deploy.status": { bg: "error" } }, root: { h: ["deploy.status"] } }`,
+  );
+  const prepared = await prepareConfig(p, dir, []);
+  try {
+    expect(prepared.config.segments["deploy.status"]).toMatchObject({ bg: "error" });
+    expect(prepared.config.segments["deploy.status"]!.template).toContain("⇪");
+  } finally {
+    prepared.registry.dispose();
+  }
+});
+
+test("a data file written after load, and replaced by rename, is read", async () => {
+  const p = config();
+  const prepared = await prepareConfig(p, dir, []);
+  try {
+    const read = () => (prepared.store.readDocument("deploy.data") as { value?: { state?: string } }).value?.state;
+    // fs.watch attaches asynchronously with no ready signal: repeat the
+    // (idempotent) write until the watcher delivers it.
+    const until = async (state: string, write: () => void) => {
+      for (let i = 0; i < 100 && read() !== state; i++) {
+        write();
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(read()).toBe(state);
+    };
+    const data = path.join(dir, "p/state.json");
+    await until("first", () => fs.writeFileSync(data, `{ "state": "first" }`));
+    for (const state of ["second", "third"]) {
+      await until(state, () => {
+        fs.writeFileSync(`${data}.tmp`, `{ "state": "${state}" }`);
+        fs.renameSync(`${data}.tmp`, data);
+      });
+    }
   } finally {
     prepared.registry.dispose();
   }

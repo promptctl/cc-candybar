@@ -73,6 +73,7 @@ import { validateNoCycles } from "./loader/cycles.js";
 import {
   applyPlugins,
   droppedPluginNotice,
+  withDroppedPlacements,
   type DroppedPlugin,
 } from "./loader/plugins.js";
 
@@ -168,27 +169,27 @@ export function loadConfigSource(
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
-  // [LAW:one-source-of-truth] The names a file may author as a delta are the
-  // segments of the very default the merge lays the file over.
-  const parsed = parseDslFile(
-    path,
-    source,
-    allowedPalettes,
-    inheritableSegmentNames(dflt),
-  );
   // [LAW:one-source-of-truth] The plugins the file lists are one layer of the
   // same merge: bundled < plugins < this file. Each plugin is validated over
   // the layer it joins, so a definition that would not load drops itself
-  // rather than the config that lists it.
-  const plugins = applyPlugins(parsed.raw.plugins ?? [], path, dflt, (c) =>
-    validateConfig(unauthored(c), path, allowedPalettes),
-  );
+  // rather than the config that lists it. The names the file may author as a
+  // delta are the segments of that very layer.
+  const parsed = parseDslFile(path, source, allowedPalettes, (refs) => {
+    const layer = applyPlugins(refs, path, dflt, (c) =>
+      validateConfig(unauthored(c), path, allowedPalettes),
+    );
+    return { inherited: inheritableSegmentNames(layer.config), layer };
+  });
+  const plugins = parsed.layer;
   return {
     source,
     raw: parsed.raw,
     warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
     plugins: { loaded: plugins.loaded, dropped: plugins.dropped },
-    config: mergeWithDefault(parsed.raw, plugins.config),
+    config: withDroppedPlacements(
+      mergeWithDefault(parsed.raw, plugins.config),
+      plugins.dropped,
+    ),
   };
 }
 
@@ -303,7 +304,10 @@ export function parseDslConfig(
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
   inheritedSegments: ReadonlySet<string> = NO_INHERITED_SEGMENTS,
 ): RawDslConfig {
-  return parseDslFile(filePath, source, allowedPalettes, inheritedSegments).raw;
+  return parseDslFile(filePath, source, allowedPalettes, () => ({
+    inherited: inheritedSegments,
+    layer: null,
+  })).raw;
 }
 
 // The same parse, keeping the advisories the source earns between its two
@@ -312,12 +316,17 @@ export function parseDslConfig(
 // the same defect) and BEFORE structural validation, whose ConfigError
 // carries it — a duplicate key beside an unknown top-level key is named on
 // the strip beside that error, not after it is fixed.
-function parseDslFile(
+function parseDslFile<L>(
   filePath: string,
   source: string,
   allowedPalettes: ReadonlySet<string> | undefined,
-  inheritedSegments: ReadonlySet<string>,
-): { raw: RawDslConfig; warnings: readonly string[] } {
+  // The layer the file merges over, built from the plugins it lists, and the
+  // segment names that layer lets the file author as a delta.
+  under: (plugins: readonly string[]) => {
+    readonly inherited: ReadonlySet<string>;
+    readonly layer: L;
+  },
+): { raw: RawDslConfig; warnings: readonly string[]; layer: L } {
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
   // passes that need a parsed structure to inspect.
@@ -348,13 +357,21 @@ function parseDslFile(
     );
   }
 
-  const raw = validateTopLevel(ctx, json, inheritedSegments);
+  // The plugin list is read ahead of the rest: the layer it builds decides
+  // which segment names the file may author as a delta. Its own issues are
+  // reported once, by validateTopLevel.
+  const { inherited, layer } = under(
+    json.plugins === undefined
+      ? []
+      : (validatePluginRefs({ ...ctx, issues: [] }, json.plugins) ?? []),
+  );
+  const raw = validateTopLevel(ctx, json, inherited);
 
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues, warnings);
   }
 
-  return { raw, warnings };
+  return { raw, warnings, layer };
 }
 
 // ─── Internals ───────────────────────────────────────────────────────────────

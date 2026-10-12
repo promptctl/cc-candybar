@@ -32,11 +32,17 @@ import { validateSegments } from "./segments.js";
 import { validateHelpers } from "./helpers.js";
 import { validateActions } from "./actions.js";
 import { validateVariables } from "./variables.js";
+import { isReservedName } from "./reserved-namespace.js";
+import { SYNTAX_ENGINE } from "./syntax-engine.js";
+import { walkNodes } from "../dsl-types.js";
+import { presetNames, presetRoot } from "../presets.js";
 
 // A plugin that could not be loaded: the definition path it was listed as,
-// and why. The rest of the config renders without it.
+// the name it declares when that much could be read (a missing file names
+// none), and why. The rest of the config renders without it.
 export interface DroppedPlugin {
   readonly path: string;
+  readonly plugin: string | undefined;
   readonly reason: string;
 }
 
@@ -74,6 +80,33 @@ export function pluginDataVar(plugin: string): string {
   return `${plugin}.data`;
 }
 
+type Attempt<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly reason: string };
+
+function attempt<T>(run: () => T): Attempt<T> {
+  try {
+    return { ok: true, value: run() };
+  } catch (err) {
+    return { ok: false, reason: reasonOf(err) };
+  }
+}
+
+// A validator's message usually names its own path already; prefixing it
+// again would print it twice.
+function reasonOf(err: unknown): string {
+  if (err instanceof ConfigError) {
+    return err.issues
+      .map((i) =>
+        i.path === "" || i.message.includes(i.path)
+          ? i.message
+          : `${i.path}: ${i.message}`,
+      )
+      .join("; ");
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * Lay every listed plugin over `base`, in order. `from` is the file that
  * lists them: a relative path resolves against its directory, `~` against the
@@ -91,40 +124,103 @@ export function applyPlugins(
   return refs.reduce<PluginLayer>(
     (layer, ref) => {
       const file = path.resolve(dir, expandHome(ref));
-      try {
-        const config = mergeWithDefault(
-          loadPlugin(file, layer.config),
-          layer.config,
-        );
-        validate(config);
-        return { ...layer, config, loaded: [...layer.loaded, file] };
-      } catch (err) {
-        const reason =
-          err instanceof ConfigError
-            ? err.issues
-                .map((i) =>
-                  i.path === "" ? i.message : `${i.path}: ${i.message}`,
-                )
-                .join("; ")
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        return {
-          ...layer,
-          dropped: [...layer.dropped, { path: file, reason }],
-        };
-      }
+      const read = attempt(() => {
+        const source = fs.readFileSync(file, "utf-8");
+        return { source, json: JSON5.parse(source) as unknown };
+      });
+      const plugin = read.ok ? namespaceOf(read.value.json) : undefined;
+      const merged = read.ok
+        ? attempt(() => {
+            const config = mergeWithDefault(
+              fragmentOf(file, read.value, layer.config),
+              layer.config,
+            );
+            validate(config);
+            return config;
+          })
+        : read;
+      return merged.ok
+        ? { ...layer, config: merged.value, loaded: [...layer.loaded, file] }
+        : {
+            ...layer,
+            dropped: [
+              ...layer.dropped,
+              { path: file, plugin, reason: merged.reason },
+            ],
+          };
     },
     { config: base, loaded: [], dropped: [] },
   );
 }
 
-// Read and parse one definition into the raw fragment it contributes, every
-// name under its `<plugin>.` namespace. Throws on any problem; the fold above
-// turns the throw into a drop.
-function loadPlugin(file: string, base: DslConfig): RawDslConfig {
-  const source = fs.readFileSync(file, "utf-8");
-  const json: unknown = JSON5.parse(source);
+// The name a definition declares, when it declares a usable one.
+function namespaceOf(json: unknown): string | undefined {
+  return isPlainObject(json) &&
+    typeof json.plugin === "string" &&
+    PLUGIN_NAME.test(json.plugin) &&
+    !isReservedName(`${json.plugin}.`)
+    ? json.plugin
+    : undefined;
+}
+
+/**
+ * A placement of a segment no layer declares, where a dropped plugin is the
+ * reason, stands in as a cell saying so rather than failing the whole config:
+ * the plugin that would have declared it is under `<plugin>.`, or — when a
+ * drop could not even be read for its name — under a namespace nothing
+ * declares. Any other undeclared placement stays the load error it was.
+ */
+export function withDroppedPlacements(
+  config: DslConfig,
+  dropped: readonly DroppedPlugin[],
+): DslConfig {
+  const declaredHeads = new Set(
+    Object.keys(config.segments).map((n) => n.split(".")[0]),
+  );
+  const causeOf = (name: string): readonly DroppedPlugin[] => {
+    const head = name.includes(".") ? name.split(".")[0] : undefined;
+    if (head === undefined) return [];
+    const named = dropped.filter((d) => d.plugin === head);
+    return named.length > 0 || declaredHeads.has(head)
+      ? named
+      : dropped.filter((d) => d.plugin === undefined);
+  };
+  const standIns = Object.fromEntries(
+    presetNames(config.presets)
+      .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
+      .flatMap((node) =>
+        node.kind === "segment" && !(node.name in config.segments)
+          ? [node.name]
+          : [],
+      )
+      .flatMap((name) => {
+        const cause = causeOf(name);
+        return cause.length === 0 ? [] : [[name, standIn(name, cause)]];
+      }),
+  );
+  return { ...config, segments: { ...config.segments, ...standIns } };
+}
+
+function standIn(
+  name: string,
+  cause: readonly DroppedPlugin[],
+): DslConfig["segments"][string] {
+  const text = `⚠ ${name}: plugin not loaded (${cause.map((d) => d.path).join(", ")})`;
+  return {
+    template: `{{ ${JSON.stringify(text)} }}`,
+    bg: "error",
+    description: "stands in for a placed segment whose plugin did not load",
+  };
+}
+
+// The raw fragment one parsed definition contributes, every name under its
+// `<plugin>.` namespace. Throws on any problem; the fold above turns the throw
+// into a drop.
+function fragmentOf(
+  file: string,
+  { source, json }: { readonly source: string; readonly json: unknown },
+  base: DslConfig,
+): RawDslConfig {
   const issues: ConfigIssue[] = [];
   const fail = (): never => {
     throw new ConfigError(file, issues);
@@ -149,6 +245,11 @@ function loadPlugin(file: string, base: DslConfig): RawDslConfig {
     issues.push({
       path: "plugin",
       message: `"plugin" must be a name matching ${PLUGIN_NAME} (it prefixes every name the plugin declares)`,
+    });
+  } else if (isReservedName(`${plugin}.`)) {
+    issues.push({
+      path: "plugin",
+      message: `"plugin" may not be "${plugin}": the bar's own synthesized names live under "${plugin}."`,
     });
   }
   if (typeof data !== "string" || data === "") {
@@ -209,8 +310,40 @@ function loadPlugin(file: string, base: DslConfig): RawDslConfig {
       }
     }
   }
+  // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
+  // compile, after every plugin has merged — too late to drop just this one.
+  for (const [where, template] of fragmentTemplates(fragment)) {
+    try {
+      SYNTAX_ENGINE.parse(template);
+    } catch (e) {
+      issues.push({
+        path: where,
+        message: `Template parse error in ${where}: ${(e as Error).message}`,
+      });
+    }
+  }
   if (issues.length > 0) fail();
   return fragment;
+}
+
+function* fragmentTemplates(
+  fragment: RawDslConfig,
+): IterableIterator<readonly [string, string]> {
+  for (const [name, seg] of Object.entries(fragment.segments ?? {})) {
+    for (const field of ["template", "bg", "fg", "when"] as const) {
+      const t = seg[field];
+      if (t !== undefined) yield [`segments.${name}.${field}`, t];
+    }
+  }
+  for (const [name, body] of Object.entries(fragment.helpers ?? {})) {
+    yield [`helpers.${name}`, `{{ define "${name}" }}${body}{{ end }}`];
+  }
+  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
+    if ("copy" in a) yield [`actions.${name}.copy`, a.copy];
+    if ("open" in a) yield [`actions.${name}.open`, a.open];
+    if ("preset" in a && a.preset === "delete")
+      yield [`actions.${name}.name`, a.name];
+  }
 }
 
 function prefixed<T>(
