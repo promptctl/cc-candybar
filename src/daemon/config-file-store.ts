@@ -26,6 +26,7 @@
 
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
+import JSON5 from "json5";
 import { writeAtomic } from "../utils/atomic-write.js";
 import path from "node:path";
 import {
@@ -654,7 +655,9 @@ export function writeDrafts(
     store,
     home,
     before,
-    withPlacements(valued, home.path, placements, (text) => text),
+    homeOnly(home, () =>
+      withPlacements(valued, home.path, placements, (text) => text),
+    ),
     refuseHidden,
   );
 }
@@ -767,10 +770,15 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
   const taken = new Set(
     [
       ...BUNDLED_PRESETS,
-      ...[
-        doc,
-        ...home.above.map((p) => docOf(fs.readFileSync(p, "utf8"))),
-      ].flatMap(presetKeys),
+      ...presetKeys(doc),
+      // Each layer above as the loader reads it (JSON5, duplicate keys and
+      // all) — the editor refuses files the loader renders.
+      ...home.above.flatMap((p) =>
+        Object.keys(
+          (JSON5.parse(fs.readFileSync(p, "utf8")) as { presets?: object })
+            .presets ?? {},
+        ),
+      ),
     ].map(ident),
   );
   // One more candidate than there are names, so one is always free.
@@ -829,11 +837,13 @@ export function writePreset(
   );
   // The placements the session configured, each in a row the new preset
   // owns — never in a layer the preset it was copied from renders too.
-  const placed = withPlacements(
-    after,
-    home.path,
-    placements.map((p) => ({ ...p, preset: name })),
-    ownRow,
+  const placed = homeOnly(home, () =>
+    withPlacements(
+      after,
+      home.path,
+      placements.map((p) => ({ ...p, preset: name })),
+      ownRow,
+    ),
   );
   commit(store, home, before, placed, refuseHidden);
   return name;

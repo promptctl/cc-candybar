@@ -341,8 +341,9 @@ export function buildRenderState(
     entered,
     warned: (w) => warnings.push(...w),
   });
-  // Past the chain no one file is to blame for what fails.
-  entered(null);
+  // Past the chain, a failure is the one file's when there is one, and no
+  // file's when several merged into what failed.
+  entered(layers.length === 1 ? layers[0]!.path : null);
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 

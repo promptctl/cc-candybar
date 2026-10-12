@@ -133,3 +133,13 @@ test("the user's file is a layer even when the session's cwd is its directory", 
     local,
   ]);
 });
+
+test("save-as-preset reads a layer above that the editor would refuse", () => {
+  fs.writeFileSync(
+    projectFile,
+    `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
+  );
+  expect(
+    writePreset(noRecord, durableConfig(project, project), "default", {}, [], []),
+  ).toBe("custom-2");
+});
