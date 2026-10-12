@@ -1,3 +1,10 @@
+## [1.118.1](https://github.com/promptctl/cc-candybar/compare/v1.118.0...v1.118.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **sources:** a watched file whose directories appear after load is read when written ([#320](https://github.com/promptctl/cc-candybar/issues/320)) ([e0146e9](https://github.com/promptctl/cc-candybar/commit/e0146e93f7e8b8851f9437037f23ce1ead936d60))
+
 # [1.118.0](https://github.com/promptctl/cc-candybar/compare/v1.117.1...v1.118.0) (2026-10-12)
 
 
