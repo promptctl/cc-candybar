@@ -449,6 +449,32 @@ describe("an installed plugin", () => {
     expect(rendered).not.toContain("installed");
   });
 
+  test("a replacement that breaks a lower layer's reference into the name it replaces drops alone", async () => {
+    install("data", "deploy", `{ data: "./d.json", actions: { go: { set: "k", to: "1" } }, segments: { status: { template: "installed" } } }`);
+    const user = write("user.json5", `{ segments: { mine: { template: '{{ action "plugins.deploy.go" "go" }}' } } }`);
+    write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
+    const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["mine", "plugins.deploy.status"] } }`);
+    const warnings: string[] = [];
+    const prepared = await prepareConfig([user, project], dir, warnings);
+    try {
+      expect(warnings.join("\n")).toContain(`references unknown action "plugins.deploy.go"`);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test("a cycle the layer already held is not blamed on a plugin joining it", async () => {
+    const user = write(
+      "user.json5",
+      `{ variables: { a: { kind: "template", template: "{{ .b }}" }, b: { kind: "template", template: "{{ .a }}" } } }`,
+    );
+    write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "x" } } }`);
+    const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"] }`);
+    const warnings: string[] = [];
+    await expect(prepareConfig([user, project], dir, warnings)).rejects.toThrow("Dependency cycle");
+    expect(warnings.join("\n")).not.toContain("was not loaded");
+  });
+
   test("a broken one leaves the config rendering; every reference into it is ⚠ naming the drop", async () => {
     install("data", "lit", `{ data: "./d.json", segments: { ticket: { template: "{{ if }}" } } }`);
     const p = write(

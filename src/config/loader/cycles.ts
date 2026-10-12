@@ -19,7 +19,14 @@ interface NodeInfo {
   readonly linePathParts: readonly string[];
 }
 
-export function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
+// `from` names the nodes a new cycle must pass through: a plugin joining an
+// acyclic layer can only close a cycle through its own variables, so its check
+// walks from those alone and never blames it for one the layer already held.
+export function validateNoCycles(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  from: (name: string) => boolean = () => true,
+): void {
   const { graph, nodeInfo } = buildTemplateGraph(cfg);
 
   const WHITE = 0;
@@ -31,7 +38,7 @@ export function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
   for (const node of graph.keys()) color.set(node, WHITE);
 
   for (const start of graph.keys()) {
-    if (color.get(start) !== WHITE) continue;
+    if (!from(start) || color.get(start) !== WHITE) continue;
     if (dfs(start)) return; // first cycle is enough — report and stop walking
   }
 

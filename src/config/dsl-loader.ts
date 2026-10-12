@@ -214,7 +214,8 @@ export function loadConfigSource(
       listedPlugins(refs, path),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin) => checkPlugin(c, plugin, path, allowedPalettes),
+      (c, plugin, replaces) =>
+        checkPlugin(c, plugin, replaces, path, allowedPalettes),
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -273,8 +274,8 @@ function installedLayer(
     definitions,
     ctx,
     { config: dflt, rendering: new Map() },
-    (c, plugin) =>
-      checkPlugin(c, plugin, "<installed plugins>", allowedPalettes),
+    (c, plugin, replaces) =>
+      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
   );
   byProject.set(slot, { key, layer });
   return layer;
@@ -459,22 +460,37 @@ export interface AuthoredConfig {
 }
 
 /**
- * A plugin over the layer it joins: every reference its own declarations make
- * resolves there, and nothing cycles. The layer beneath was checked where it
- * was written, and a plugin edits no `root` or `presets` and declares only
- * under its own namespace, so its declarations are all a check can find new —
- * the full validateConfig of the file listing it still runs over the result.
+ * A plugin over the layer it joins. A plugin edits no `root` or `presets` and
+ * declares only under its own namespace, so when the layer held nothing there
+ * its declarations are all a check can find new: every reference they make
+ * resolves, and no cycle runs through them. A plugin REPLACING one the layer
+ * held is checked whole — the layer's own references and placements into that
+ * namespace were checked against the plugin it replaces, and only a full check
+ * sees them break, so the replacement drops alone rather than failing the file.
+ * The full validateConfig of the file listing it still runs over the result.
  */
 function checkPlugin(
   config: DslConfig,
   plugin: string,
+  replaces: boolean,
   filePath: string,
-  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+  allowedPalettes: ReadonlySet<string> | undefined,
 ): void {
+  if (replaces) {
+    validateConfig(unauthored(config), filePath, allowedPalettes);
+    return;
+  }
+  const owned = ownedBy(plugin);
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source: "", issues, allowedPalettes, groups: [] };
-  validateDeclarations(ctx, config, templateScopeOf(config), ownedBy(plugin));
-  validateNoCycles(ctx, config);
+  // Neither check below reads a palette name: only the structural pass does.
+  const ctx: ValidateCtx = {
+    source: "",
+    issues,
+    allowedPalettes: new Set(),
+    groups: [],
+  };
+  validateDeclarations(ctx, config, templateScopeOf(config), owned);
+  validateNoCycles(ctx, config, owned);
   if (issues.length > 0) throw new ConfigError(filePath, issues);
 }
 
@@ -503,6 +519,16 @@ const NO_FILE: LoadedFile = {
   },
 };
 
+/**
+ * Promote a merged DslConfig to a ValidatedConfig by running cross-references
+ * and cycle detection. Sole producer of ValidatedConfig in the codebase — the
+ * phantom brand makes "the renderer never receives an unvalidated config" a
+ * compile-time invariant, not a runtime convention.
+ *
+ * Throws ConfigError aggregating every issue.
+ *
+ * [LAW:single-enforcer] One cast site, here, exclusive.
+ */
 export function validateConfig(
   { config, raw, source }: AuthoredConfig,
   filePath = "<config>",

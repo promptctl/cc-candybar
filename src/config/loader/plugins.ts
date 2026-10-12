@@ -172,7 +172,8 @@ export function applyPlugins(
   definitions: readonly string[],
   ctx: PluginContext,
   base: PluginBase,
-  validate: (config: DslConfig, plugin: string) => unknown,
+  // `replaces`: the layer held declarations under this plugin's name.
+  validate: (config: DslConfig, plugin: string, replaces: boolean) => unknown,
 ): PluginLayer {
   // [LAW:dataflow-not-control-flow] One fold, every definition: each step
   // either merges its plugin or records why not, and the next step sees the
@@ -232,7 +233,7 @@ export function applyPlugins(
           ),
           under,
         );
-        validate(config, plugin);
+        validate(config, plugin, under !== layer.config);
         return config;
       });
       if (merged.ok) {
@@ -258,10 +259,18 @@ export function ownedBy(plugin: string): (name: string) => boolean {
 }
 
 // The config with nothing left under `plugins.<plugin>.`.
+// The config itself when it held nothing there, so a caller can tell.
 function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
   const owned = ownedBy(plugin);
   const keep = <T>(r: Readonly<Record<string, T>>): Record<string, T> =>
     Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
+  const held = [
+    config.variables,
+    config.segments,
+    config.helpers,
+    config.actions,
+  ].some((r) => Object.keys(r).some(owned));
+  if (!held) return config;
   return {
     ...config,
     variables: keep(config.variables),
