@@ -1889,7 +1889,7 @@ describe("SourceRegistry — parse seam", () => {
     registry.dispose();
   });
 
-  it("malformed JSON with a default: the default document reads, the error is recorded", async () => {
+  it("malformed JSON with a default: still the failure — a default covers nothing to read, not a broken writer", async () => {
     const { store, registry } = make();
     registry.declareShell("doc", `echo '{not json'`, {
       cwd: process.cwd(),
@@ -1897,9 +1897,21 @@ describe("SourceRegistry — parse seam", () => {
       cache: { kind: "never" },
     });
     await registry.settled(2000);
-    expect(readDoc(store, "doc")).toEqual({ spent: 0, label: "?" });
-    expect(doc(store, "doc").label).toBe("?");
-    expect(registry.getLastError("doc")!.message).toMatch(/JSON parse failed/);
+    expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
+    expect(() => doc(store, "doc")).toThrow(/^variable "doc": JSON parse failed: /);
+    registry.dispose();
+  });
+
+  it("a failed command with a default reads the default", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `exit 3`, {
+      cwd: process.cwd(),
+      parse: json({ spent: 0 }),
+      cache: { kind: "never" },
+    });
+    await registry.settled(2000);
+    expect(readDoc(store, "doc")).toEqual({ spent: 0 });
+    expect(registry.getLastError("doc")!.message).toMatch(/exited with code 3/);
     registry.dispose();
   });
 

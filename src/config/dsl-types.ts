@@ -406,6 +406,10 @@ export interface RawDslConfig {
   // defined ONCE and callable from any segment/predicate, never re-inlined per
   // segment. Absent ≡ no helpers; merges by-name (user overrides a helper).
   readonly helpers?: Readonly<Record<string, string>>;
+  // Plugin definition paths (loader/plugins.ts), relative to the file that
+  // lists them. Consumed by the load, which merges each plugin between the
+  // bundled default and this file; absent from the merged DslConfig.
+  readonly plugins?: readonly string[];
 }
 
 export interface DslConfig {

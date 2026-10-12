@@ -33,6 +33,8 @@ import {
   detectConfigCollisions,
   ConfigError,
   expandHome,
+  droppedPluginNotice,
+  type DroppedPlugin,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
 import { autoCompactControls } from "./segments/autocompact.js";
@@ -332,6 +334,8 @@ export async function checkConfig(
 // `warnings` — the same channel RenderCache merges them into.
 export interface PreparedConfig {
   readonly configPath: string | null;
+  // Plugins the config lists that did not load; each fails the verdict.
+  readonly droppedPlugins: readonly DroppedPlugin[];
   readonly config: ValidatedConfig;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
@@ -372,7 +376,14 @@ export async function prepareConfig(
         `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
-    return { configPath, config, compiled, store, registry };
+    return {
+      configPath,
+      droppedPlugins: loaded.plugins.dropped,
+      config,
+      compiled,
+      store,
+      registry,
+    };
   } catch (e) {
     registry.dispose();
     throw e;
@@ -521,6 +532,9 @@ async function loadRegisterRender(
       );
       return `${line} (under ${where.join("; ")})`;
     });
+    // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, so
+    // only the verdict can say the config asked for something it did not get.
+    errors.unshift(...prepared.droppedPlugins.map(droppedPluginNotice));
     const bar = primary.rendered;
     if (errors.length > 0 || bar === undefined) {
       throw new Error(

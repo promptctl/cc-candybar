@@ -7,6 +7,8 @@
     ```error              — block must quote a substring of check's actual stderr.
     ```sh stub:<name>     — an executable named <name>, written verbatim onto PATH
                             before any snippet runs; a `shell` snippet may run it.
+    ```json5 file:<path>  — a file written verbatim at <path>, relative to every
+    ```json file:<path>     config snippet, before any snippet runs.
     ```render             — the bar the check:pass config ABOVE it renders, as
                             `cc-candybar check --render` prints it minus the
                             colour escapes; asserted byte for byte.
@@ -135,7 +137,7 @@ The complete shape of a `shell` variable:
 | `command` | the command line, run by `/bin/sh -c` |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes), `{ depends_on: ["otherVar"] }` (re-run when a declared variable changes), `{ key: "{{ .otherVar }}" }` (re-run when the key template's value changes), `{ never: true }` (run once) |
-| `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values |
+| `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A `file` variable is the same declaration with `path` (absolute — `~` and
 relative paths are refused at load, like a relative `watch_file`; write the
@@ -162,9 +164,10 @@ the parser sees. A file that does not exist yet reads as its `default`:
 ```
 
 The `default` is not optional in practice. A `json` source with no `default`
-whose run fails — the script is missing, exits non-zero, prints something that
-is not JSON — has no document to read, and every segment reading it renders a
-`⚠` cell that `check` fails on. A `text`/`regex` source with no `default`
+whose run fails — the script is missing, exits non-zero — has no document to
+read, and every segment reading it renders a `⚠` cell that `check` fails on.
+Output that is not JSON is that `⚠` even with a `default`: a broken writer
+is not an empty one. A `text`/`regex` source with no `default`
 reads as the empty string instead, silently. Give every source a `default`,
 and give a document default **every field a template reads**: a field that
 exists in the script's output but not in the default is a `⚠` from daemon
@@ -684,6 +687,85 @@ retunes one copy.
 }
 ```
 
+## A segment another program ships: plugins
+
+When the program whose data you show is someone else's — a deploy tool, a
+ticket tracker — the segment can ship WITH that program as a **plugin**: two
+files the program owns, and one line in your config. The program's developer
+writes a DEFINITION once:
+
+```json5 file:deploy/plugin.json5
+{
+  plugin: "deploy",
+  data: "./state.json",
+  segments: {
+    status: {
+      description: "The current deploy: its environment and state",
+      when: '{{ hasKey .deploy.data "env" }}',
+      template: '⇪ {{ .deploy.data.env }} {{ template "deploy.state" .deploy.data }}',
+    },
+  },
+  helpers: {
+    state: '{{ if eq .state "live" }}✓ live{{ else }}… {{ .state }}{{ end }}',
+  },
+}
+```
+
+and the running program rewrites the DATA file — plain JSON — whenever its
+state changes:
+
+```json file:deploy/state.json
+{ "env": "staging", "state": "rolling" }
+```
+
+Your config lists the definition (relative to the config file; `~` works) and
+places its segment like any other:
+
+```json5 check:pass
+{
+  plugins: ["./deploy/plugin.json5"],
+  root: { rows: { status: { h: ["model", "context", "deploy.status"] } } },
+}
+```
+
+What the definition can say, and what follows from it:
+
+- **Every name is the plugin's.** A segment, helper or action declared as
+  `status` is `deploy.status` everywhere else — in `root`, in edit mode's
+  add-segment library (where the plugin's segments appear with their
+  `description`), and in templates, which is why the segment above calls
+  `{{ template "deploy.state" }}`. A name another layer already declares is
+  refused, not replaced.
+- **The data is `.<plugin>.data`.** It is a `file` source with
+  `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
+  re-read per render. A data file that does not exist yet reads as no fields,
+  so gate the segment with `when: '{{ hasKey .<plugin>.data "<field>" }}'`;
+  data that is not JSON is a `⚠` on every segment reading it.
+- **Only `plugin`, `data`, `segments`, `helpers` and `actions`.** A definition
+  declares no sources of its own (so loading one from a cloned repository runs
+  nothing) and never edits `root` — placing a segment is your choice.
+- **Merge order is bundled < plugins < your file**, so your file can
+  redeclare a plugin's segment by its full name.
+
+A definition that does not load — a syntax error, a field it may not declare,
+a template naming something nothing declares — drops **that plugin only**: the
+rest of your config renders, the bar's diagnostic strip names the definition
+and the reason, and `check` fails:
+
+```json file:broken/plugin.json5
+{ "plugin": "broken", "data": "./state.json", "segments": {}, "variables": {} }
+```
+
+```json5 check:fail
+{
+  plugins: ["./broken/plugin.json5"],
+}
+```
+
+```error
+was not loaded: variables: a plugin definition may not declare "variables"
+```
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The
@@ -879,7 +961,7 @@ directory for the daemon and another for the session's shell commands:
 variables.budget.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
 ```
 
-### A `json` source whose script prints something that is not JSON, with no `default`
+### A `json` source whose script prints something that is not JSON
 
 The stand-in for a script that has broken:
 
@@ -892,9 +974,10 @@ Every segment reading the document renders `⚠` naming the variable, then the
 reason: `JSON parse failed: Unexpected token 'b', "budget: unavailable` for
 this script (each followed by ` in output of "<command>" in <cwd>`),
 `shell "budget-broken" exited with code 127 in <cwd>` for one the shell
-cannot find, `file unreadable: <path>` for a `file` source. A
-`default` would render instead, quietly — which is what you want in the bar,
-and why the mistake to avoid is the missing `default`, not the broken script:
+cannot find, `file unreadable: <path>` for a `file` source. A `default`
+renders in place of the last two — there was nothing to read — but never in
+place of the first: a script that printed something that is not JSON is
+broken, and the bar says so whatever its `default` is:
 
 ```json5 check:fail
 {
@@ -918,8 +1001,8 @@ segment "budget": variable "budget": JSON parse failed
 ### A `default` missing a field the template reads
 
 Whenever the default is what reads — before the first run, after a failed
-one — a template reaching a field the default lacks throws. Here the script
-is the broken one, so the default renders under `check`; with a working
+one — a template reaching a field the default lacks throws. Here the command
+does not exist, so the default renders under `check`; with a working
 script this passes `check` and fails at daemon start instead. A typo in a
 field name (`.budget.spentPercent`) prints the same text:
 
@@ -928,7 +1011,7 @@ field name (`.budget.spentPercent`) prints the same text:
   variables: {
     budget: {
       kind: "shell",
-      command: "budget-broken",
+      command: "budget-missing",
       parse: { json: true },
       cache: { ttl: "60s" },
       default: { spentPct: 0 },

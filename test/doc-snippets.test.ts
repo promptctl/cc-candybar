@@ -33,6 +33,11 @@
 //                          prefix before any snippet runs, so a `shell` source
 //                          in a doc depends on the doc, never on the CI box's
 //                          tools (brandon-custom-segments-g5z.3).
+//   ```json5 file:<path>  — a file a snippet reads (a plugin definition, its
+//   ```json file:<path>     data): written verbatim at <path> in the snippet
+//                          directory before any snippet runs, so a config
+//                          snippet lists it by that relative path
+//                          (brandon-plugins-ktag.8fv).
 // Every ```json5 block must carry one of the two annotations — an unannotated
 // config snippet is an untested claim, which this suite rejects.
 
@@ -54,11 +59,14 @@ type Snippet =
   | { readonly kind: "error" }
   | { readonly kind: "render" }
   | { readonly kind: "stub"; readonly name: string }
+  | { readonly kind: "file"; readonly path: string }
   | { readonly kind: "other" };
 
 // A stub's name is a bare executable name: what `command: "budget-status"`
 // spells, and nothing a shell would interpret.
 const STUB_INFO = /^sh stub:([a-z][a-z0-9-]*)$/;
+// A file's path is relative and stays inside the snippet directory.
+const FILE_INFO = /^json5? file:([a-z0-9_-]+(?:\/[a-z0-9_-]+)*\.json5?)$/;
 
 function parseInfo(info: string): Snippet {
   if (info === "json5 check:pass") return { kind: "pass" };
@@ -67,6 +75,8 @@ function parseInfo(info: string): Snippet {
   if (info === "render") return { kind: "render" };
   const stub = STUB_INFO.exec(info);
   if (stub !== null) return { kind: "stub", name: stub[1]! };
+  const file = FILE_INFO.exec(info);
+  if (file !== null) return { kind: "file", path: file[1]! };
   return { kind: "other" };
 }
 
@@ -77,6 +87,7 @@ const FAMILIES = [
   "pass",
   "fail",
   "stub",
+  "file",
   "render",
 ] as const satisfies readonly Family[];
 
@@ -88,13 +99,16 @@ interface Doc {
 const DOCS: readonly Doc[] = [
   {
     path: "docs/interaction-authoring.md",
-    floors: { pass: 4, fail: 10, stub: 0, render: 0 },
+    floors: { pass: 4, fail: 10, stub: 0, file: 0, render: 0 },
   },
   {
     path: "docs/segment-authoring.md",
-    floors: { pass: 6, fail: 8, stub: 1, render: 1 },
+    floors: { pass: 7, fail: 9, stub: 1, file: 2, render: 1 },
   },
-  { path: "README.md", floors: { pass: 1, fail: 0, stub: 0, render: 0 } },
+  {
+    path: "README.md",
+    floors: { pass: 1, fail: 0, stub: 0, file: 0, render: 0 },
+  },
 ];
 
 interface Fence {
@@ -190,6 +204,17 @@ beforeAll(() => {
     fs.writeFileSync(path.join(bin, name), f.body, { mode: 0o755 });
   }
   process.env.PATH = `${bin}${path.delimiter}${SAVED_PATH ?? ""}`;
+  for (const f of fences) {
+    if (f.snippet.kind !== "file") continue;
+    const target = path.join(dir, f.snippet.path);
+    // [LAW:no-silent-failure] One path, one body: a second fence at the same
+    // path would leave whichever was written last for every snippet to read.
+    if (fs.existsSync(target)) {
+      throw new Error(`file "${f.snippet.path}" is declared twice (${f.doc} line ${f.line})`);
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, f.body);
+  }
 });
 afterAll(() => {
   if (SAVED_PATH === undefined) delete process.env.PATH;

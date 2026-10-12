@@ -70,6 +70,11 @@ import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
+import {
+  applyPlugins,
+  droppedPluginNotice,
+  type DroppedPlugin,
+} from "./loader/plugins.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
 // [LAW:locality-or-seam] Consumers import from `dsl-loader`; the internal split
@@ -95,6 +100,8 @@ export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";
 export { templateReads } from "./loader/refs.js";
+export { droppedPluginNotice } from "./loader/plugins.js";
+export type { DroppedPlugin } from "./loader/plugins.js";
 
 // ─── Three-stage pipeline ────────────────────────────────────────────────────
 
@@ -163,22 +170,39 @@ export function loadConfigSource(
 ): LoadedFile & { config: DslConfig } {
   // [LAW:one-source-of-truth] The names a file may author as a delta are the
   // segments of the very default the merge lays the file over.
-  const loaded: LoadedFile = {
+  const parsed = parseDslFile(
+    path,
     source,
-    ...parseDslFile(
-      path,
-      source,
-      allowedPalettes,
-      inheritableSegmentNames(dflt),
-    ),
+    allowedPalettes,
+    inheritableSegmentNames(dflt),
+  );
+  // [LAW:one-source-of-truth] The plugins the file lists are one layer of the
+  // same merge: bundled < plugins < this file. Each plugin is validated over
+  // the layer it joins, so a definition that would not load drops itself
+  // rather than the config that lists it.
+  const plugins = applyPlugins(parsed.raw.plugins ?? [], path, dflt, (c) =>
+    validateConfig(unauthored(c), path, allowedPalettes),
+  );
+  return {
+    source,
+    raw: parsed.raw,
+    warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
+    plugins: { loaded: plugins.loaded, dropped: plugins.dropped },
+    config: mergeWithDefault(parsed.raw, plugins.config),
   };
-  return { ...loaded, config: mergeWithDefault(loaded.raw, dflt) };
 }
 
 interface LoadedFile {
   readonly raw: RawDslConfig;
   readonly source: string;
   readonly warnings: readonly string[];
+  // The plugin definitions the file listed: those merged, and those dropped
+  // with why. A drop is also a `warnings` line (the strip shows it); `check`
+  // reads this to fail its verdict.
+  readonly plugins: {
+    readonly loaded: readonly string[];
+    readonly dropped: readonly DroppedPlugin[];
+  };
 }
 
 // [LAW:one-source-of-truth] What validation needs from one read: the merged
@@ -204,7 +228,12 @@ export function unauthored(config: DslConfig): AuthoredConfig {
 
 // "No user file exists": a uniform merge against an empty raw, no text, no
 // advisories to earn.
-const NO_FILE: LoadedFile = { raw: {}, source: "", warnings: [] };
+const NO_FILE: LoadedFile = {
+  raw: {},
+  source: "",
+  warnings: [],
+  plugins: { loaded: [], dropped: [] },
+};
 
 /**
  * Promote a merged DslConfig to a ValidatedConfig by running cross-references
@@ -422,6 +451,8 @@ function validateTopLevel(
     out.editGlobals = validateEditGlobals(ctx, "editGlobals", raw.editGlobals);
   if (raw.helpers !== undefined)
     out.helpers = validateHelpers(ctx, raw.helpers);
+  if (raw.plugins !== undefined)
+    out.plugins = validatePluginRefs(ctx, raw.plugins);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
   // parsed: each group collected during the root walk emits its state var +
   // cycle action + toggle segment into the raw sections (so they merge over the
@@ -468,4 +499,25 @@ const TOP_LEVEL_KEYS = new Set([
   "presets",
   "editGlobals",
   "helpers",
+  "plugins",
 ]);
+
+// `plugins:` is a list of definition paths. Loading them is applyPlugins'
+// job, after the parse: a definition that fails drops itself, never the file.
+function validatePluginRefs(
+  ctx: ValidateCtx,
+  raw: unknown,
+): readonly string[] | undefined {
+  if (
+    Array.isArray(raw) &&
+    raw.every((p) => typeof p === "string" && p !== "")
+  ) {
+    return raw as string[];
+  }
+  ctx.issues.push({
+    path: "plugins",
+    message: `"plugins" must be a list of plugin definition paths, got ${describeType(raw)}`,
+    line: findKeyLine(ctx.source, ["plugins"]),
+  });
+  return undefined;
+}

@@ -797,6 +797,11 @@ export class SourceRegistry {
   // failed with its reason after a bad one), which the scope proxy surfaces
   // as an error naming the variable [LAW:no-silent-failure] — a document has
   // no honest empty value the way a string has "".
+  //
+  // The default stands in for a run that had nothing to READ — a missing
+  // file, a command that failed — never for text that was read and is not a
+  // document: that is a broken writer, and reads as its failure (⚠) whatever
+  // the default says (brandon-plugins-ktag.8fv).
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
@@ -810,7 +815,9 @@ export class SourceRegistry {
       this.noteOutcome(name, outcome);
       this.store.setDocument(
         name,
-        outcome.kind === "ok" || varDefault === undefined ? outcome : fallback,
+        outcome.kind === "ok" || read.kind === "ok" || varDefault === undefined
+          ? outcome
+          : fallback,
       );
     };
   }
