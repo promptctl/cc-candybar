@@ -149,7 +149,7 @@ describe("git spawns per cache miss", () => {
     const info = await svc.getGitInfo(empty, { showTimeSinceCommit: true });
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
-    expect(info.value.timeSinceCommit).toEqual({ kind: "absent" });
+    expect(info.value.committedAt).toEqual({ kind: "absent" });
     expect(svc.invocations).toEqual(["status --porcelain=v2 --branch"]);
   });
 

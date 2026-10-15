@@ -25,7 +25,7 @@ import {
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object = {}): string {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
@@ -45,27 +45,27 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
   test("int accepts a bigint within safe-integer range", () => {
     // Engine encodes ambiguous Go-template numeric literals as bigint; values
     // inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) round-trip safely.
-    const tpl = createCcCandybarEngine().parse("{{ formatInteger 1000000000 }}");
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse("{{ formatInteger 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
   test("int rejects a bigint above MAX_SAFE_INTEGER", () => {
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ formatInteger ${huge} }}`);
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse(`{{ formatInteger ${huge} }}`);
     expect(() => tpl.evaluate({})).toThrow();
   });
 
   test("int rejects a bigint below MIN_SAFE_INTEGER", () => {
     const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ formatInteger ${tiny} }}`);
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse(`{{ formatInteger ${tiny} }}`);
     expect(() => tpl.evaluate({})).toThrow();
   });
 
   test("int accepts the safe-integer boundaries themselves", () => {
-    const maxTpl = createCcCandybarEngine().parse(
+    const maxTpl = createCcCandybarEngine({ clock: () => new Date() }).parse(
       `{{ formatInteger ${Number.MAX_SAFE_INTEGER} }}`,
     );
-    const minTpl = createCcCandybarEngine().parse(
+    const minTpl = createCcCandybarEngine({ clock: () => new Date() }).parse(
       `{{ formatInteger ${Number.MIN_SAFE_INTEGER} }}`,
     );
     expect(() => maxTpl.evaluate({})).not.toThrow();
@@ -74,7 +74,7 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
 
   test("float (round) accepts a large finite value without a precision guard", () => {
     // float is intentionally lossy-tolerant — a big literal converts, not throws.
-    const tpl = createCcCandybarEngine().parse("{{ round 1000000000 }}");
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse("{{ round 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 });
@@ -156,7 +156,7 @@ describe("shortenModelName wrapper", () => {
 
 describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
-    const funcs = formatterFuncs();
+    const funcs = formatterFuncs(() => new Date(0));
     expect(Object.keys(funcs).sort()).toEqual([
       "formatInteger",
       "formatModelName",
@@ -167,7 +167,7 @@ describe("formatterFuncs registry", () => {
   });
 
   test("all entries have argTypes arrays", () => {
-    for (const [, entry] of Object.entries(formatterFuncs())) {
+    for (const [, entry] of Object.entries(formatterFuncs(() => new Date(0)))) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
   });
@@ -177,8 +177,8 @@ describe("formatterFuncs registry", () => {
   // but throws FuncNotFoundError at eval time. This regression test catches
   // an engine.ts refactor that drops the spread.
   test("each registered name is callable from the engine", () => {
-    const engine = createCcCandybarEngine();
-    for (const name of Object.keys(formatterFuncs())) {
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
+    for (const name of Object.keys(formatterFuncs(() => new Date(0)))) {
       // Parse-only smoke: a missing func is reported at evaluate time, but the
       // engine pre-validates that referenced names exist in the registry.
       // Calling parse alone doesn't trigger the check (Go templates resolve

@@ -18,6 +18,7 @@ import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { instantOf } from "../src/utils/instant";
 
 // [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
 // each render a single line so substring assertions are stable.
@@ -62,6 +63,7 @@ function render(source: string, payload: unknown, dflt?: DslConfig): string {
     store,
     registry,
     payload,
+    instantOf(new Date()),
     OPTS,
   );
 }

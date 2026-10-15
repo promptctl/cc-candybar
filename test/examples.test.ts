@@ -20,6 +20,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const EXAMPLES_DIR = join(__dirname, "..", "examples");
@@ -69,6 +70,7 @@ describe("shipped examples load and render through the real cascade", () => {
       store,
       registry,
       PAYLOAD,
+      instantOf(new Date()),
       {
         endcaps: "powerline",
         colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,

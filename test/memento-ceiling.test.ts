@@ -38,6 +38,7 @@ import { MementoProvider } from "../src/segments/memento";
 import { projectMemento } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -93,7 +94,7 @@ function runtime(memento: Record<string, unknown> | undefined) {
     ...(memento !== undefined && { memento }),
   };
   const raw = (): string =>
-    renderDsl(config, compiled, store, registry, payload, OPTS);
+    renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
   const moves: { scope: CeilingScope; move: CeilingMove }[] = [];
   const logged: string[] = [];
   const ctx = {

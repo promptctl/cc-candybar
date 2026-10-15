@@ -82,6 +82,7 @@ import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { VariationName } from "../themes/decor.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
 
@@ -687,11 +688,6 @@ export interface RenderPayloadDeps {
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
   readonly log: DaemonLogger;
-  // [LAW:single-enforcer] The one clock the projection math reads "now" from —
-  // the same seam threaded to the template engine's `minutesUntilReset`, so
-  // an ETA and the reset countdown beside it agree on the instant. Omitted ⇒
-  // wall clock; tests inject a frozen clock for determinism.
-  readonly clock?: () => Date;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth — NavigationHistory.depth in the daemon.
@@ -1147,6 +1143,10 @@ export type ConfigFileFacts = SettingCounts & {
 
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
+  // [LAW:one-source-of-truth] The instant the render this payload feeds is
+  // drawn at — the one renderDsl publishes to the template engine, so an ETA
+  // here and the `minutesUntilReset` countdown beside it agree on "now".
+  at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
   // [LAW:single-enforcer] The cache pre-computes the closure once at
@@ -1179,7 +1179,7 @@ export async function buildRenderPayload(
   // [LAW:single-enforcer] One clock read feeds every projection this render —
   // the ETA extrapolations below AND the tok/s sample window in the speed lane,
   // so an ETA, a reset countdown, and a throughput figure all agree on "now".
-  const nowMs = (deps.clock ?? (() => new Date()))().getTime();
+  const nowMs = dateOf(at).getTime();
 
   // The hint's three states fold to two here: a pane to address, or none
   // ("not in tmux" and "client too old to say" both leave nothing to ask tmux
@@ -1230,7 +1230,7 @@ export async function buildRenderPayload(
       () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
     ),
     lane("today", wants("today"), () =>
-      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir),
+      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir, at),
     ),
     // autocompact's controls are capped to the model's context window, so
     // the lane runs for either family, as metrics runs for burn.
@@ -1308,7 +1308,7 @@ export async function buildRenderPayload(
     return oc.kind === "ok" ? oc.value : undefined;
   };
 
-  const gitProjection = projectGitInfo(gitOutcome);
+  const gitProjection = projectGitInfo(gitOutcome, nowMs);
   failures.push(...gitProjection.failures);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
@@ -1644,7 +1644,10 @@ function posixify(s: string | undefined): string | undefined {
 // fallback chain fills the declared default and records a last_error), and
 // every `failed` contributes a description for the boundary to log — this
 // function performs no effect itself ([LAW:effects-at-boundaries]).
-function projectGitInfo(outcome: Outcome<GitInfo>): {
+function projectGitInfo(
+  outcome: Outcome<GitInfo>,
+  nowMs: number,
+): {
   readonly git?: GitPayload;
   readonly failures: readonly string[];
 } {
@@ -1668,7 +1671,13 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
   const aheadBehind = field("aheadBehind", info.aheadBehind);
   const sha = field("sha", info.sha);
   const operation = field("operation", info.operation);
-  const timeSinceCommit = field("timeSinceCommit", info.timeSinceCommit);
+  // [LAW:one-source-of-truth] The age is the commit's date subtracted from the
+  // render's instant — the "now" every other time read in this render sees.
+  const committedAt = field("timeSinceCommit", info.committedAt);
+  const timeSinceCommit =
+    committedAt === undefined
+      ? undefined
+      : Math.floor((nowMs - committedAt) / 1000);
   const stash = field("stash", info.stashCount);
   const upstream = field("upstream", info.upstream);
   const repoName = field("repoName", info.repoName);

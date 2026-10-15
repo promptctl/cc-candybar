@@ -23,6 +23,7 @@ import {
   paletteForThemeName,
   ENDCAPS_SHAPES,
 } from "../src/themes";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-reshape";
 const BASE_THEME = "textual-dark";
@@ -61,7 +62,7 @@ function buildRuntime() {
   // reshapes. (server.ts: renderOpts.style = effectiveEndcaps(undefined, 
   // sessionState.get(sid,'endcaps'), globals.style)).
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, { session_id: SID }, {
+    renderDsl(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
       endcaps: effectiveEndcaps(undefined, 
         sessionState.get(SID, "endcaps"),
         config.globals.endcaps,

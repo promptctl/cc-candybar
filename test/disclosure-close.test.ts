@@ -43,6 +43,7 @@ import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { links, stripAnsi, type Link } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -126,7 +127,7 @@ function build(src: string, withDefault: boolean) {
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string[] => {
     const errors: string[] = [];
-    const out = renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
+    const out = renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
     });

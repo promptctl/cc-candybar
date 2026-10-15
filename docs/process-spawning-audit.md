@@ -133,7 +133,7 @@ These are timers that can drive subprocess work over time:
 | `src/daemon/server.ts:armBinaryWatch` (`BIN_CHECK_INTERVAL_MS = 60s`) | every 60s | `statSync` the daemon binary; if mtime changed → `shutdown(0)`. No spawn directly; but a rebuild that changes the bundle triggers the dies-and-respawns cycle. |
 | `src/daemon/limits.ts:arm` (`DEFAULT_CHECK_INTERVAL = 60s`) | every 60s | Sample RSS; if > 512MB (default; override via `CC_CANDYBAR_RSS_LIMIT_MB`) → heap snapshot + `shutdown(0)`. |
 | `src/daemon/cache/git.ts:runSanityCheck` (`SANITY_INTERVAL_MS = 5min`) | every 5min | mtime walk of cached `gitDir`s; invalidates entries where the watcher missed a change. Drives a refresh that may spawn `git` per active subscriber. |
-| `src/var-system/sources.ts` (TTL bucket) | per-bucket | One `setInterval` per unique TTL duration, shared across variables. Drives `declareShell` / `declareTime` / `declareFile` refreshes. **No `unref()`** — see **F8**. |
+| `src/var-system/sources.ts` (TTL bucket) | per-bucket | One `setInterval` per unique TTL duration, shared across variables. Drives `declareShell` / `declareFile` refreshes (a `time` variable has no timer: it reads the instant each render publishes). **No `unref()`** — see **F8**. |
 
 ---
 

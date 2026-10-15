@@ -39,6 +39,7 @@ import {
   presetRoot,
 } from "../src/config/presets";
 import { checkConfig } from "../src/check";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-presets";
 const THEME = "textual-dark";
@@ -321,6 +322,7 @@ describe("preset selection — the arrangement the bar renders", () => {
         store,
         registry,
         { session_id: SID, preset: { effective: preset } },
+        instantOf(new Date()),
         { ...OPTS, padding },
         undefined,
         { preset },

@@ -50,6 +50,7 @@ import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
 import { resumeCommand } from "./claude-resume.js";
+import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
@@ -99,9 +100,12 @@ const SOURCE_SETTLE_MS = 5000;
 export function checkPayload(
   effective: EffectiveGlobals,
   configPath: string | null,
+  // The instant the render this payload feeds is drawn at, so its reset times
+  // sit where the render's own countdowns measure them from.
+  at: Instant,
 ): Record<string, unknown> {
   const home = "/home/tester";
-  const nowSec = Math.floor(Date.now() / 1000);
+  const nowSec = Math.floor(at);
   const sessionId = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
   const workspace = {
     current_dir: `${home}/code/cc-candybar/src`,
@@ -408,6 +412,7 @@ export function renderEffective(
   { layers, config, compiled, store, registry }: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
+  at: Instant,
 ): { rendered: string; failures: Map<string, string> } {
   // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
   // appended to a list — each can fail at most once per pass, so this is the
@@ -422,7 +427,8 @@ export function renderEffective(
     compiled,
     store,
     registry,
-    checkPayload(effective, layers.at(-1) ?? null),
+    checkPayload(effective, layers.at(-1) ?? null, at),
+    at,
     renderOptionsOf(effective, width),
     {
       onSegmentError: (placementId: string, message: string) =>
@@ -449,6 +455,9 @@ async function loadRegisterRender(
 ): Promise<string> {
   const prepared = await prepareConfig(layers, cwd, warnings);
   const { config } = prepared;
+  // [LAW:effects-at-boundaries] One instant for every pass, so the passes
+  // differ only in the preset they render.
+  const at = instantOf(new Date());
   try {
     // The gates the daemon derives when it loads this config, over the keys
     // its own links hold: an action table that cannot gate fails here as it
@@ -491,7 +500,7 @@ async function loadRegisterRender(
       );
       let pass: { rendered?: string; failures: Map<string, string> };
       try {
-        pass = renderEffective(prepared, effective, CHECK_WIDTH);
+        pass = renderEffective(prepared, effective, CHECK_WIDTH, at);
       } catch (e) {
         pass = {
           failures: new Map([

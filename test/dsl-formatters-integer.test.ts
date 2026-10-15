@@ -34,6 +34,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { formatInteger } from "../src/utils/formatters";
+import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -65,6 +66,7 @@ function render(n: number): string {
     store,
     registry,
     { n },
+    instantOf(new Date()),
     OPTS,
   );
   return stripAnsi(out);

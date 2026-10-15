@@ -67,6 +67,7 @@ import {
 } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -165,6 +166,7 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(),
       { perSegmentSink: sink },
       // The style is resolved by the CALLER (the daemon does it over staged/

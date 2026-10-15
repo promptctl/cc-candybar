@@ -36,6 +36,7 @@ import {
   resolveThemeSelection,
   resolveStyleSelection,
 } from "../src/themes";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-looks";
 const THEME = "textual-dark";
@@ -300,6 +301,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
         store,
         registry,
         { session_id: SID },
+        instantOf(new Date()),
         OPTS,
       );
       // Each style name appears as a clickable region writing itself to `style` —
@@ -362,6 +364,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
         store,
         registry,
         { session_id: SID },
+        instantOf(new Date()),
         OPTS,
         undefined,
         { theme, style: look },
@@ -494,6 +497,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct }, style: { effective: "none" } },
+        instantOf(new Date()),
         OPTS,
         undefined,
         {

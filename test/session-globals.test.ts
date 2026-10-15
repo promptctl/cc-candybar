@@ -33,6 +33,7 @@ import {
 } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { instantOf } from "../src/utils/instant";
 
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
@@ -75,6 +76,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       store,
       registry,
       { session_id: sid },
+      instantOf(new Date()),
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,

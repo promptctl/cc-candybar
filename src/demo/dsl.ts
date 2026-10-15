@@ -48,6 +48,7 @@ import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug } from "../utils/logger.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
+import { instantOf } from "../utils/instant.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -131,8 +132,12 @@ async function renderFrames(): Promise<void> {
     );
 
     for (let frame = 0; frame < FRAMES; frame++) {
+      // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
+      // instant, sampled here as the daemon samples it per request.
+      const at = instantOf(new Date());
       const payload = await buildRenderPayload(
         hookData,
+        at,
         {
           ...providers,
           history: () => EMPTY_HISTORY_DEPTH,
@@ -153,6 +158,7 @@ async function renderFrames(): Promise<void> {
         state.store,
         state.registry,
         payload,
+        at,
         renderOptionsOf(effective, width),
         { onRenderWarning: warn },
         renderSelectionOf(effective),

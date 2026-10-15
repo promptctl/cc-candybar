@@ -11,6 +11,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
+import { instantOf } from "../src/utils/instant";
 
 const SESSION = "s1";
 
@@ -69,6 +70,7 @@ function renderPair(
       store,
       registry,
       { session_id: SESSION, cwd: "/tmp", git: GIT },
+      instantOf(new Date()),
       {
         endcaps: "powerline",
         colorCompatibility: "truecolor",

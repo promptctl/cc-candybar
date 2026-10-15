@@ -22,6 +22,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -207,6 +208,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     const { deps, counts } = buildMockDeps();
     await buildRenderPayload(
       HOOK_DATA,
+      instantOf(new Date()),
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS, PRESET_FLOOR),
@@ -229,6 +231,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     const { deps, counts } = buildMockDeps();
     await buildRenderPayload(
       HOOK_DATA,
+      instantOf(new Date()),
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS, PRESET_FLOOR),

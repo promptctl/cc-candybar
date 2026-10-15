@@ -52,6 +52,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -398,6 +399,7 @@ function buildPersistRuntime(
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(width),
     );
   const ctx: VerbContext = testVerbContext(
@@ -549,6 +551,7 @@ describe("persist action click → the config file", () => {
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
+        instantOf(new Date()),
         opts(),
       );
     const ctx: VerbContext = testVerbContext(

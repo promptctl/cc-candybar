@@ -32,6 +32,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -101,7 +102,6 @@ function depsWith(
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
-    clock: () => new Date(NOW_MS),
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }
@@ -158,6 +158,7 @@ describe("buildRenderPayload — burn projection lane", () => {
   test("projectable: burn rate + block & weekly ETAs land in the payload", async () => {
     const payload = await buildRenderPayload(
       hookWithWindows(),
+      instantOf(new Date(NOW_MS)),
       depsWith(),
       undefined,
       BURN_PATHS,
@@ -176,6 +177,7 @@ describe("buildRenderPayload — burn projection lane", () => {
     hook.rate_limits.five_hour.resets_at = NOW_SEC + (5 * 3600 - 120);
     const payload = await buildRenderPayload(
       hook,
+      instantOf(new Date(NOW_MS)),
       depsWith(),
       undefined,
       BURN_PATHS,
@@ -190,6 +192,7 @@ describe("buildRenderPayload — burn projection lane", () => {
   test("gating: burn omitted from the closure ⇒ no burn key (lanes not pulled)", async () => {
     const payload = await buildRenderPayload(
       hookWithWindows(),
+      instantOf(new Date(NOW_MS)),
       depsWith(),
       undefined,
       new Set(["block.resetsAt", "weekly.resetsAt"]),
@@ -225,7 +228,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    return renderDsl(cfg, compiled, store, registry, payload, {
+    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,

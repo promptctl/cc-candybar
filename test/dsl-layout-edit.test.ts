@@ -95,6 +95,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -545,6 +546,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(),
     );
   const ctx: VerbContext = {
@@ -869,6 +871,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
         project_dir: "/tmp/proj",
         preset: { effective: presetName, customized: true },
       },
+      instantOf(new Date()),
       opts(),
       undefined,
       { preset: presetName },
@@ -921,6 +924,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
           project_dir: "/tmp/proj",
           preset: { effective: "gated", customized: true },
         },
+        instantOf(new Date()),
         opts(),
         undefined,
         { preset: "gated" },

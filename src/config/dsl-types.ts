@@ -690,14 +690,11 @@ export interface TemplateVarDecl {
   readonly default?: string;
 }
 
-// [LAW:types-are-the-program] Time vars refresh on a clock — ttl is the only
-// cache form the runtime honors (declareTime always registers a TTL timer).
-// The loader rejects the other CacheDecl arms at load, so past that boundary
-// a non-ttl cache on a time var is unrepresentable, not silently coerced.
+// [LAW:types-are-the-program] No `cache`: a time variable is the instant its
+// render is drawn at, formatted, so there is nothing to refresh.
 export interface TimeVarDecl {
   readonly kind: "time";
   readonly layout: string;
-  readonly cache?: TtlCacheDecl;
   readonly default?: string;
 }
 
@@ -785,18 +782,12 @@ export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type VariableDeclWithCache =
   | FileVarDecl
   | ShellVarDecl
-  | TemplateVarDecl
-  | TimeVarDecl;
+  | TemplateVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   // [LAW:types-are-the-program] Named positively: a kind added to the union
   // (a tombstone's `dropped`) has no cache until it is listed here.
-  return (
-    v.kind === "file" ||
-    v.kind === "shell" ||
-    v.kind === "template" ||
-    v.kind === "time"
-  );
+  return v.kind === "file" || v.kind === "shell" || v.kind === "template";
 }
 
 export const GIT_FIELDS: readonly GitField[] = [

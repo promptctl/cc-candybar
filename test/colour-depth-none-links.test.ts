@@ -28,6 +28,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const SGR = /\x1b\[[0-9;]*m/g;
 
@@ -74,6 +75,7 @@ test("colour depth none keeps every link the bar draws in colour", () => {
           model: { id: "claude-opus-4-7", display_name: "Opus" },
           ...effectiveInputs(effective()),
         },
+        instantOf(new Date()),
         {
           endcaps: "powerline",
           wrap: true,

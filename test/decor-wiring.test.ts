@@ -92,6 +92,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       store,
       registry,
       { session_id: "s1", ...payload },
+      instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink },
       {
@@ -309,6 +310,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { instantOf } from "../src/utils/instant";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.
@@ -547,6 +549,7 @@ describe("a band whose nested hue has no state", () => {
       store,
       registry,
       { session_id: "s1" },
+      instantOf(new Date()),
       OPTS,
       { onSegmentError: (name, message) => errors.push(`${name}: ${message}`) },
       { theme: { kind: "decided", name: "lopsided", value: lopsided } },

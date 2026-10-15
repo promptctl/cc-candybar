@@ -13,6 +13,7 @@
 
 import type { ColorRgba, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
+import type { Instant } from "../utils/instant.js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -302,13 +303,8 @@ function declareOne(
       break;
 
     case "time":
-      // [LAW:types-are-the-program] TimeVarDecl.cache is ttl-only by
-      // construction — the loader rejects every other CacheDecl form at load
-      // (the runtime honors no other invalidation on a clock-driven var), so
-      // the mapping here is total, not a silent coercion.
       registry.declareTime(name, {
         format: decl.layout,
-        ttlMs: decl.cache ? parseDuration(decl.cache.ttl) : undefined,
         varDefault: decl.default,
       });
       break;
@@ -416,7 +412,7 @@ export function registerDslConfig(
   // [LAW:no-silent-fallbacks] `cwd` is required: it is the directory `git`
   // and `shell` sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
-  opts: { cwd: string; clock?: () => Date },
+  opts: { cwd: string },
 ): CompiledConfig {
   const cwd = opts.cwd;
 
@@ -468,9 +464,6 @@ export function registerDslConfig(
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
   // apply/page actions from the same compiled table), so they read one source.
-  // [LAW:single-enforcer] Forward the caller's clock (the daemon's `() => new
-  // Date()`, a test's frozen clock) to the one engine. Omitted ⇒ undefined ⇒
-  // createCcCandybarEngine applies its single default; no second default literal.
   // [LAW:one-source-of-truth] ONE record for "which segment is rendering", read
   // by every segment-scoped template function: `{{ menu }}` takes its identity
   // from the name, `{{ color }}` its palette, `{{ bgOf }}` its background. A
@@ -495,8 +488,8 @@ export function registerDslConfig(
   const styleNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
   const perConfigDomains = configOptionDomains(config);
-  const engine = createCcCandybarEngine(
-    {
+  const engine = createCcCandybarEngine({
+    extraFuncs: {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime, activeSegment),
@@ -529,11 +522,12 @@ export function registerDslConfig(
         arity: { kind: "exact" },
       },
     },
-    opts.clock,
-    // [LAW:one-source-of-truth] The registry's drawn-depth clock: this
-    // engine's `readableOn` floors at the same depth its variables' do.
-    registry.drawnAt,
-  );
+    // [LAW:one-source-of-truth] The registry's clocks: this engine's datetime
+    // functions read the instant its variables' do, and its `readableOn` floors
+    // at the same depth theirs does.
+    clock: registry.now,
+    drawnAt: registry.drawnAt,
+  });
   // [LAW:single-enforcer] THE one parse path for this config: every template —
   // segment template/when/bg/fg, node `when`, and action copy/open — inherits
   // the same helper define set, so `{{ template "name" }}` resolves against one
@@ -963,14 +957,20 @@ export function renderDsl(
   store: VariableStore,
   registry: SourceRegistry,
   payload: unknown,
+  // [LAW:effects-at-boundaries] The instant this render is drawn at, sampled by
+  // the caller: nothing rendered reads a clock of its own.
+  at: Instant,
   opts: BuildLineOptions,
   observers?: RenderObservers,
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
-  // [LAW:one-source-of-truth] The depth this render draws at, published once
-  // before the walk into the registry's one clock: every text colour chosen
-  // below — and every variable template's `readableOn` — is floored on it.
+  // [LAW:one-source-of-truth] The instant and the depth this render draws at,
+  // published once before the walk into the registry's clocks: every time read
+  // below — a template's `now`, a `time` variable — reads the one instant, and
+  // every text colour chosen below — and every variable template's
+  // `readableOn` — is floored on the one depth.
+  registry.renderAt(at);
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] What an omitting caller falls back to is the

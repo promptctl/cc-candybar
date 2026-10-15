@@ -18,6 +18,7 @@ import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { INVISIBLE, links, stripAnsi } from "./helpers/ansi";
 import { effectsOf } from "../src/click/read";
 import { VERB_COPY } from "../src/click/wire";
+import { instantOf } from "../src/utils/instant";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -84,7 +85,7 @@ function renderDirRaw(paths: DirPaths): string {
         added_dirs: [],
       },
     };
-    return renderDsl(parsed, compiled, store, registry, payload, {
+    return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
       endcaps: "plain",
       colorCompatibility: "none",
       wrap: true,
@@ -223,6 +224,7 @@ describe("configurability seam: user template override restores full path", () =
             added_dirs: [],
           },
         },
+        instantOf(new Date()),
         {
           endcaps: "plain",
           colorCompatibility: "none",

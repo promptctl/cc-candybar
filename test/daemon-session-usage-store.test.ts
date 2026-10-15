@@ -29,6 +29,7 @@ import { join } from "node:path";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { instantOf } from "../src/utils/instant";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -270,13 +271,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       writeFileSync(join(odir, "other-1.jsonl"), usageLine("other-1", new Date(), 7));
       const all = PROJECTS * FILES_PER_PROJECT * COST_PER_FILE;
 
-      const first = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      const first = await store.getTodayInfo(hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(first.kind === "ok" && first.value.cost).toBeCloseTo(all, 5);
-      const second = await store.getTodayInfo(hook("other-0", opath), other);
+      const second = await store.getTodayInfo(hook("other-0", opath), other, instantOf(new Date()));
       expect(second.kind === "ok" && second.value.cost).toBeCloseTo(12, 5);
       // Each directory is scanned once; a later render of either re-scans none
       // and reads the sum it read before the other was seen.
-      const again = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      const again = await store.getTodayInfo(hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(again.kind === "ok" && again.value.cost).toBeCloseTo(all, 5);
       expect(store.getStats().seeds).toBe(2);
 
@@ -285,9 +286,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const late = join(odir, "other-late.jsonl");
       writeFileSync(late, usageLine("other-late", new Date(), 3));
       await store.getUsageInfo("other-late", hook("other-late", late));
-      const joined = await store.getTodayInfo(hook("other-0", opath), other);
+      const joined = await store.getTodayInfo(hook("other-0", opath), other, instantOf(new Date()));
       expect(joined.kind === "ok" && joined.value.cost).toBeCloseTo(15, 5);
-      const apart = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      const apart = await store.getTodayInfo(hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(apart.kind === "ok" && apart.value.cost).toBeCloseTo(all, 5);
     } finally {
       store.close();
@@ -299,7 +300,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     clearParseCache();
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      const info = await store.getTodayInfo(hook("sess-0-0", activePath), root);
+      const info = await store.getTodayInfo(hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.cost).toBeCloseTo(
@@ -317,13 +318,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => store.getTodayInfo(hd, root));
+      const seedOps = await countFsOps(() => store.getTodayInfo(hd, root, instantOf(new Date())));
       expect(seedOps).toBeGreaterThan(0); // the one whole-tree scan
 
       // 20 further renders: seed is memoized, active mtime unchanged → the only
       // freshness check is a sync statSync. No async fs ops at all.
       const steadyOps = await countFsOps(async () => {
-        for (let i = 0; i < 20; i++) await store.getTodayInfo(hd, root);
+        for (let i = 0; i < 20; i++) await store.getTodayInfo(hd, root, instantOf(new Date()));
       });
       expect(steadyOps).toBe(0);
       expect(store.getStats().seeds).toBe(1); // never re-seeded
@@ -337,13 +338,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => store.getTodayInfo(hd, root));
+      const seedOps = await countFsOps(() => store.getTodayInfo(hd, root, instantOf(new Date())));
 
       // Advance only the active session's mtime, then render once.
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(activePath, future, future);
       clearParseCache();
-      const reparseOps = await countFsOps(() => store.getTodayInfo(hd, root));
+      const reparseOps = await countFsOps(() => store.getTodayInfo(hd, root, instantOf(new Date())));
 
       // One session's re-parse is a tiny fraction of a whole-tree scan, and the
       // seed never runs again.

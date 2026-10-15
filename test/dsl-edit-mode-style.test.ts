@@ -28,6 +28,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import type { ValidatedConfig } from "../src/config/dsl-types";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-edit-look";
 const BASE_THEME = "textual-dark";
@@ -89,6 +90,7 @@ function buildRuntime(source: string) {
       store,
       registry,
       { session_id: SID },
+      instantOf(new Date()),
       {
         endcaps: effective.endcaps,
         separator: effective.separator,

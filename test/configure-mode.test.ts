@@ -58,6 +58,7 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -119,6 +120,7 @@ function buildRuntime(
       store,
       registry,
       { session_id: SID, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,

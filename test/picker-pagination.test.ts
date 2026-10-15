@@ -21,6 +21,7 @@ import type { Charset, Endcaps } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { CHARSETS, listResolvablePaletteNames } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -92,6 +93,7 @@ function buildRuntime(
       store,
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       {
         endcaps: style,
         colorCompatibility: "truecolor" as const,
@@ -309,6 +311,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
+        instantOf(new Date()),
         {
           endcaps: style,
           colorCompatibility: "truecolor" as const,

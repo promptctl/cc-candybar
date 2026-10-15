@@ -43,7 +43,9 @@ export interface GitInfo {
   sha?: Outcome<string>;
   operation?: Outcome<string>;
   tag?: Outcome<string>;
-  timeSinceCommit?: Outcome<number>;
+  // The last commit's committer date, ms since the epoch — a fact of the repo;
+  // its age is a fact of the render that subtracts it.
+  committedAt?: Outcome<number>;
   stashCount?: Outcome<number>;
   upstream?: Outcome<string>;
   repoName?: Outcome<string>;
@@ -867,10 +869,7 @@ export class GitService {
       result.tag = await this.getNearestTagAsync(gitDir);
     }
     if (options.showTimeSinceCommit) {
-      result.timeSinceCommit = await this.timeSinceCommit(
-        gitDir,
-        core.value.oid,
-      );
+      result.committedAt = await this.committedAt(gitDir, core.value.oid);
     }
 
     // [LAW:polishing-by-subtraction] These two used to overlap in a `Promise.all`
@@ -971,20 +970,21 @@ export class GitService {
   // is a property of the repo. The commit's TIMESTAMP never changes — a sha names
   // one commit forever — while "how long ago" is that timestamp minus a clock
   // read. Split apart, the repo fact becomes cacheable with no TTL at all (the
-  // daemon's GitDataProvider keys it on the oid) and the clock read stays where it
-  // belongs, recomputed every time this runs. Folded together, the spawn could
-  // only ever be cached for as long as the answer was allowed to be wrong.
+  // daemon's GitDataProvider keys it on the oid) and the clock read belongs to
+  // the render: buildRenderPayload subtracts this from the instant the bar is
+  // drawn at, so a GitInfo cached for a whole TTL window never carries an age
+  // frozen at its fetch. Folded together, the spawn could only ever be cached
+  // for as long as the answer was allowed to be wrong.
   //
   // An unborn HEAD has no commit to time, and says so without spawning anything:
   // `oid` is already absent, and that absence IS the answer the old non-zero
   // `git log` exit was translated into.
-  private async timeSinceCommit(
+  private async committedAt(
     gitDir: string,
     oid: Outcome<string>,
   ): Promise<Outcome<number>> {
     if (oid.kind !== "ok") return oid;
-    const committedAt = await this.commitTimestampMs(gitDir, oid.value);
-    return derived(committedAt, (ms) => Math.floor((Date.now() - ms) / 1000));
+    return this.commitTimestampMs(gitDir, oid.value);
   }
 
   // [LAW:one-source-of-truth] exception: the class header rules out a cache here,
@@ -1002,9 +1002,9 @@ export class GitService {
   //
   // What it buys: `git log -1` fired once per cache miss — once per 30 s TTL
   // window on an active repo — to answer a question that had not changed since the
-  // last commit. It now fires once per commit. `timeSinceCommit` above subtracts a
-  // fresh clock read every call, which is why splitting that derivation out is what
-  // made this cacheable at all.
+  // last commit. It now fires once per commit. The age is this timestamp
+  // subtracted from each render's instant, which is why splitting that
+  // derivation out is what made this cacheable at all.
   //
   // Only `ok` is stored: `absent`/`failed` are transient (a commit the status call
   // just named should be readable), and pinning one under a key that never expires

@@ -40,6 +40,7 @@ import {
 } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-theme-expr";
 // Four visibly different installed themes: the floor, plus three the expression
@@ -107,6 +108,7 @@ function buildRuntime(source = src(RULE)): Runtime {
       store,
       registry,
       { session_id: SID, ctx: { pct } },
+      instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink, onRenderWarning: (m) => warnings.push(m) },
       {
@@ -326,6 +328,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct: 0 } },
+        instantOf(new Date()),
         OPTS,
         { perSegmentSink: sink },
       );
@@ -355,6 +358,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct: 90 } },
+        instantOf(new Date()),
         OPTS,
         { perSegmentSink: sink },
       );
@@ -559,6 +563,7 @@ describe("a rule inside a preset's globals", () => {
           store,
           registry,
           { session_id: SID, ctx: { pct } },
+          instantOf(new Date()),
           OPTS,
           { perSegmentSink: sink },
           { theme: effective.theme, style: effective.style },
@@ -601,6 +606,7 @@ describe("a rule inside a preset's globals", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct: 90 } },
+        instantOf(new Date()),
         OPTS,
         {},
         { preset: "ruled" },
@@ -621,6 +627,7 @@ describe("a rule inside a preset's globals", () => {
           store,
           registry,
           { session_id: SID, ctx: { pct: 0 } },
+          instantOf(new Date()),
           OPTS,
           { onRenderWarning: (m) => said.push(m) },
           { preset: "ruled" },
@@ -643,6 +650,7 @@ describe("a rule inside a preset's globals", () => {
         store,
         registry,
         { session_id: SID, ctx: { pct: 0 } },
+        instantOf(new Date()),
         OPTS,
         { onRenderWarning: (m) => said.push(m) },
         { preset: "ruled" },

@@ -32,6 +32,7 @@ import { cellWidth } from "../src/render/picker";
 import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -75,7 +76,7 @@ function rig(width: number, userSegments = "") {
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, {
+    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,

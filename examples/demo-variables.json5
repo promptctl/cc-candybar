@@ -192,7 +192,7 @@
     },
 
     // ── 7. time ─────────────────────────────────────────────────────────────
-    // Formats the current wall-clock time with a Go reference-time layout.
+    // Formats the instant the bar is drawn at with a Go reference-time layout.
     //
     // Go's reference time (the "epoch" used as a mnemonic for tokens):
     //   Mon Jan 2 15:04:05 MST 2006
@@ -205,29 +205,25 @@
     //   "Mon 02 Jan"    → "Wed 11 Jun"     (short weekday)
     //   "January 2006"  → "June 2026"      (long month + year)
     //
-    // cache: only { ttl: "..." } is valid for time vars.
+    // A time variable takes no cache: it moves with every render.
     "demo.clock": {
       kind: "time",
       layout: "15:04",
-      cache: { ttl: "30s" },
       default: "--:--",
     },
     "demo.date": {
       kind: "time",
       layout: "Mon 02 Jan",
-      cache: { ttl: "300s" },
       default: "",
     },
     "demo.isoDate": {
       kind: "time",
       layout: "2006-01-02",
-      cache: { ttl: "3600s" },
       default: "",
     },
     "demo.time12h": {
       kind: "time",
       layout: "3:04 PM",
-      cache: { ttl: "30s" },
       default: "",
     },
 

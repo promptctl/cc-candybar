@@ -68,6 +68,7 @@ import { linkUrls, stripAnsi } from "./helpers/ansi";
 import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -118,7 +119,7 @@ function buildRuntime(
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string => {
     sink.clear();
-    return renderDsl(config, compiled, store, registry, payload, OPTS, {
+    return renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
     });
   };

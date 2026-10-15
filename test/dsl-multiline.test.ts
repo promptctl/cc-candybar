@@ -19,6 +19,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
 import { stripAnsi } from "./helpers/ansi";
 import { DOOR_GLYPH } from "../src/config/disclosure";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -45,7 +46,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     expect(out.includes("\n")).toBe(false);
     expect(stripAnsi(out)).toContain("A");
   });
@@ -64,7 +65,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n");
     expect(lines).toHaveLength(2);
     expect(stripAnsi(lines[0]!)).toContain("TOP");
@@ -92,7 +93,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, { h: ['sc', 'sd'] }] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     // Row 0: A precedes B
@@ -109,7 +110,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     // No row of the author's: one line, the door every bar carries.
     expect(out.split("\n")).toHaveLength(1);
     expect(stripAnsi(out)).toContain(DOOR_GLYPH);
@@ -147,7 +148,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, 'sc'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     // Row 0 still emits even though `sa` hid — it just contains only B.
     expect(lines).toHaveLength(2);
@@ -168,7 +169,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -191,7 +192,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("ABCDE");
@@ -215,7 +216,7 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n");
     expect(lines).toHaveLength(2);
     // Each visual line carries an OSC-8 open sequence for the same URL.
@@ -239,7 +240,7 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -268,8 +269,8 @@ describe("renderDsl — multi-line layout", () => {
       root: { kind: 'container', direction: 'horizontal', children: ['sa', 'sb'] } }`;
     const hArm = buildRuntime(hArmSrc);
     const horiz = buildRuntime(horizSrc);
-    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, OPTS);
-    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, OPTS);
+    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, instantOf(new Date()), OPTS);
+    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, instantOf(new Date()), OPTS);
     expect(horizOut).toBe(hArmOut);
     expect(horizOut.split("\n")).toHaveLength(1);
   });
@@ -298,7 +299,7 @@ describe("renderDsl — multi-line layout", () => {
       },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     const lines = out.split("\n").map(stripAnsi);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("L1");
@@ -327,7 +328,7 @@ describe("renderDsl — multi-line layout", () => {
       ] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, OPTS);
+    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
     // The settings door takes its own ungated row above a gated first node.
     const lines = out
       .split("\n")

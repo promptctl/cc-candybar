@@ -18,6 +18,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { NO_FILL } from "../src/template-engine/colors";
+import { instantOf } from "../src/utils/instant";
 
 const THEME = "textual-dark";
 
@@ -50,6 +51,7 @@ function render() {
     store,
     registry,
     { session_id: "s1" },
+    instantOf(new Date()),
     {
       endcaps: "powerline",
       colorCompatibility: "truecolor",

@@ -66,6 +66,7 @@ import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { effectivePresetName, presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "ef6";
@@ -140,6 +141,7 @@ function rig(
         colorCompatibility: { effective: depth },
         variation: { effective: variation },
       },
+      instantOf(new Date()),
       opts(width, padding, style, charset, depth),
       { perSegmentSink: sink },
       {

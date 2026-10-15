@@ -20,6 +20,7 @@ import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -37,6 +38,7 @@ function buildRuntime(src: string) {
       store,
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,

@@ -96,6 +96,9 @@ export function introspectVars(
     // makes the per-row data dependency obvious: every field below
     // comes from this one node.
     const node = store.getNode(name);
+    // The value first: reading a derived variable is what records (or clears)
+    // its error, so the error beside it is the one this read produced.
+    const value = valueOf(node);
     const err = registry.getLastError(name);
     // A read CAN throw, and the premise that it could not no longer holds:
     // declareShell/declareFile/declareGit/declareInput still write a typed
@@ -110,7 +113,7 @@ export function introspectVars(
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
-      ...valueOf(node),
+      ...value,
       lastError:
         err !== undefined
           ? { timestampMs: err.timestamp, message: err.message }

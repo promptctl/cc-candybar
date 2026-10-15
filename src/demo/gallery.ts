@@ -24,6 +24,7 @@ import { expandHome } from "../config/loader/discovery.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
+import { instantOf } from "../utils/instant.js";
 
 const THEMES = listResolvablePaletteNames();
 const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
@@ -38,6 +39,9 @@ const prepared = await prepareConfig(
   process.cwd(),
   warnings,
 );
+// [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
+// only in the theme they wear.
+const at = instantOf(new Date());
 try {
   for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
   for (const theme of THEMES) {
@@ -46,7 +50,12 @@ try {
       (key) => (key === "theme" ? theme : null),
       () => false,
     );
-    const { rendered, failures } = renderEffective(prepared, effective, WIDTH);
+    const { rendered, failures } = renderEffective(
+      prepared,
+      effective,
+      WIDTH,
+      at,
+    );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
     process.stdout.write(

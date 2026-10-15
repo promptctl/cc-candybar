@@ -6,8 +6,11 @@
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 
 // Evaluate a source against an empty scope, return joined plain text.
-function evalText(source: string, clock?: () => Date): string {
-  return createCcCandybarEngine(undefined, clock)
+function evalText(
+  source: string,
+  clock: () => Date = () => new Date(),
+): string {
+  return createCcCandybarEngine({ clock })
     .parse(source)
     .evaluate({})
     .map((rt) => rt.plain)
@@ -56,13 +59,6 @@ describe("the clock seam is injectable", () => {
     const fixed = new Date("2026-06-04T12:00:00.000Z");
     const epoch = String(Math.floor(fixed.getTime() / 1000));
     expect(evalText("{{ unixEpoch (now) }}", () => fixed)).toBe(epoch);
-  });
-
-  test("omitting the clock falls back to a live default (advances)", () => {
-    // No injected clock ⇒ the default () => new Date(). We can't assert an exact
-    // value, only that it produces a plausible recent epoch (the default is wired).
-    const out = Number(evalText("{{ unixEpoch (now) }}"));
-    expect(out).toBeGreaterThan(1_700_000_000); // after 2023-11
   });
 });
 

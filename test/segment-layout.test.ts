@@ -48,7 +48,7 @@ const autoOptions = {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("evaluateWhen", () => {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
 
   test("undefined template → always true", () => {
     expect(evaluateWhen(undefined, {})).toBe(true);

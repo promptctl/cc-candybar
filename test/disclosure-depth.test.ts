@@ -57,6 +57,7 @@ import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -171,7 +172,7 @@ function build(src: string, withDefault = false) {
   // the sink, which would read here as "did not render"; say what it was.
   const render = (): string => {
     const errors: string[] = [];
-    const out = renderDsl(config, compiled, store, registry, PAYLOAD, OPTS, {
+    const out = renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
     });

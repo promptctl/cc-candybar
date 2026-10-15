@@ -121,6 +121,10 @@ const GROUNDS = {
 // The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
 // which is what caps its diagnostic strip.
 const REPORTED_ROWS = 40;
+// Claude Code's fastest status-line cadence (`statusLine.refreshInterval: 1`):
+// the page asks for a render this often, so whatever the bar shows of the time
+// moves with nobody touching the page.
+const REFRESH_MS = 1000;
 const $ = (id) => document.getElementById(id);
 const frame = $("frame");
 let view = { ansi: "", links: [] };
@@ -155,21 +159,27 @@ term.unicode.activeVersion = "11";
 const size = () => ({ width: term.cols, rows: REPORTED_ROWS });
 const fitCols = () => fit.proposeDimensions()?.cols ?? term.cols;
 
-// Only what changed is redrawn: a scenario redraws every second, and rewriting the
+// Only what changed is redrawn: the page redraws every second, and rewriting the
 // terminal or the table each time would drop a hover, a half-made click, or focus.
-let drawnAt = { ansi: null, cols: 0, links: "" };
+// xterm drops a link's hover, and a press on it, whenever the row under it is
+// written, so a bar of the same shape is rewritten row by row, only where the
+// row's bytes differ: a clock ticking on one row leaves the others untouched.
+let drawnAt = { lines: [], cols: 0, links: "" };
 function draw(next) {
   view = next;
   $("size").textContent = `${term.cols} columns`;
-  if (next.ansi !== drawnAt.ansi || term.cols !== drawnAt.cols) {
-    const lines = next.ansi.replace(/\n$/, "").split("\n");
+  const lines = next.ansi.replace(/\n$/, "").split("\n");
+  if (term.cols !== drawnAt.cols || lines.length !== drawnAt.lines.length) {
     term.resize(term.cols, Math.max(lines.length, 4));
     term.reset();
     term.write("\x1b[?25l" + lines.join("\n"));
+  } else {
+    term.write(lines.map((line, i) =>
+      line === drawnAt.lines[i] ? "" : `\x1b[${i + 1};1H\x1b[0m\x1b[2K${line}`).join(""));
   }
   const links = JSON.stringify(next.links);
   if (links !== drawnAt.links) drawLinks(next.links);
-  drawnAt = { ansi: next.ansi, cols: term.cols, links };
+  drawnAt = { lines, cols: term.cols, links };
 }
 
 function drawLinks(links) {
@@ -310,6 +320,7 @@ document.fonts.load("14px 'Rich Powerline'", "").then(() => {
   }
   if (transport.scenario) mountScenario(transport.scenario);
   redraw();
+  setInterval(redraw, REFRESH_MS);
 });
 </script>
 </body>

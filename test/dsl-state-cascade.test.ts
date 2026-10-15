@@ -20,6 +20,7 @@ import { resolveThemeSelection } from "../src/themes";
 import { testVerbContext, recordRender } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -62,7 +63,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS));
+      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
     // A click is gated by the config its session renders: every test below
     // hands this config to its verb context, and this is the render it reads.
     recordRender(sessionState, SESSION_ID);
@@ -114,7 +115,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // renders below would BOTH be the floor theme and the test would assert
     // that two identical strings differ — vacuous rather than merely weaker.
     const render = () =>
-      renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS, undefined, {
+      renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS, undefined, {
         theme: resolveThemeSelection(
           undefined,
           sessionState.get(SESSION_ID, "theme"),
@@ -555,7 +556,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-    const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, {
+    const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,
@@ -590,7 +591,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, OPTS));
+      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
     recordRender(sessionState, SESSION_ID);
     const ctx =testVerbContext(sessionState, undefined, config);
 

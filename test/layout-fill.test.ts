@@ -36,6 +36,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
 import { INVISIBLE } from "../src/render/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const cols = (line: string): number => cellLen(line.replace(INVISIBLE, ""));
 
@@ -215,6 +216,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       store,
       registry,
       { session_id: "s1" },
+      instantOf(new Date()),
       opts({ width: WIDTH, padding: 1 }),
       { onSegmentError: (n, m) => errors.push(`${n}: ${m}`) },
     );
