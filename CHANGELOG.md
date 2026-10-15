@@ -1,3 +1,10 @@
+# [1.123.0](https://github.com/promptctl/cc-candybar/compare/v1.122.0...v1.123.0) (2026-10-15)
+
+
+### Features
+
+* **theme:** each theme carries a default look, set from the bar ([#326](https://github.com/promptctl/cc-candybar/issues/326)) ([e686f75](https://github.com/promptctl/cc-candybar/commit/e686f758c67fcd8a9f5a60186ad7802df54bfd74)), closes [#328](https://github.com/promptctl/cc-candybar/issues/328)
+
 # [1.122.0](https://github.com/promptctl/cc-candybar/compare/v1.121.0...v1.122.0) (2026-10-15)
 
 
