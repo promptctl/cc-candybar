@@ -1,3 +1,10 @@
+# [1.122.0](https://github.com/promptctl/cc-candybar/compare/v1.121.0...v1.122.0) (2026-10-15)
+
+
+### Features
+
+* **theme:** the closed bar wears its theme's own shades, through a shade dial ([#325](https://github.com/promptctl/cc-candybar/issues/325)) ([a9b8e83](https://github.com/promptctl/cc-candybar/commit/a9b8e8384ebd02a789d3cd652da574aba6c29b17)), closes [#328](https://github.com/promptctl/cc-candybar/issues/328)
+
 # [1.121.0](https://github.com/promptctl/cc-candybar/compare/v1.120.0...v1.121.0) (2026-10-15)
 
 
