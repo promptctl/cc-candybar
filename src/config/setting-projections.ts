@@ -69,6 +69,12 @@ export const SETTINGS = {
     effectiveVar: "variation.effective",
     label: "🎼",
   },
+  shade: {
+    configKey: "shade",
+    sessionKey: "shade",
+    effectiveVar: "shade.effective",
+    label: "🔆",
+  },
   autoWrap: {
     configKey: "autoWrap",
     sessionKey: "autoWrap",

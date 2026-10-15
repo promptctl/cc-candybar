@@ -10,6 +10,7 @@ import {
   DEFAULT_PADDING,
   PADDING_RANGE,
   VARIATION_NAMES,
+  SHADE_NAMES,
   ENDCAPS_SHAPES,
   isExpression,
   type ColorCompatibility,
@@ -168,6 +169,10 @@ const GLOBALS: {
   // [LAW:types-are-the-program] Closed enum like `endcaps`: the named bar
   // variations — which theme role each row of the closed bar wears.
   variation: enumGlobal(VARIATION_NAMES),
+  // [LAW:types-are-the-program] Closed enum like `variation`: the positions of
+  // the shade dial — which of its role's shades each cell of the closed bar
+  // wears.
+  shade: enumGlobal(SHADE_NAMES),
   autoWrap: boolGlobal(),
   // Intra-cell spaces per side. Bounded above so a config value can never
   // drive an unbounded `" ".repeat` allocation in the daemon

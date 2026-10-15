@@ -16,6 +16,8 @@ import {
   darken,
   blendRgb,
   contrastFor,
+  contrastRatio,
+  drawnColour,
   ColorDepth,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
@@ -89,7 +91,7 @@ function resolve(
   scope: object = {},
 ): Style {
   return resolveSegmentColors(
-    openSegment(h.ref, SEG, SEG, palette, DISCLOSURE, TINT),
+    openSegment(h.ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT),
     ColorDepth.TRUECOLOR,
     bg,
     fg,
@@ -98,25 +100,29 @@ function resolve(
 }
 
 // This file is about bg/fg resolution; the disclosure only rides the record.
-const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
+const DISCLOSURE: Disclosure = {
+  hue: "primary",
+  depth: 0,
+  ground: [{ hue: "primary", shade: "base" }],
+};
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");
-// The pole `textOn` picks on each background below, measured by hand so the
-// expectation is not the implementation's own answer: on the dark TINT the
-// foreground reads (14.2:1 vs 1.1:1), on the `error` red the background does
-// (5.5:1 vs 2.9:1). Two different answers are what let an assertion see WHICH
-// background the text was chosen on.
-const TEXT_ON_TINT = "#eeeeee";
+// The text the decoration pairs with that tint — a colour neither pole is, so
+// text equal to it can only have come from the pairing.
+const PAIRED_TEXT = parseRgbHex("c0ffee");
+// The pole `textOn` picks on an authored background, measured by hand so the
+// expectation is not the implementation's own answer: on the `error` red the
+// background reads (5.5:1 vs the foreground's 2.9:1).
 const TEXT_ON_ERROR = "#12121a";
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. No bg template → the tint IS the background (a segment always has one);
-//    no fg template → the theme pole that reads on that background.
+//    no fg template → the text the decoration pairs with that tint.
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("no bg/fg templates → the tint, and text chosen on it", () => {
-  test("undefined bg → the address's tint; undefined fg → the pole that reads on it", () => {
+describe("no bg/fg templates → the tint, and the text paired with it", () => {
+  test("undefined bg → the address's tint; undefined fg → the text its decoration pairs with it", () => {
     const style = resolve(
       makeHarness(),
       makeTestPalette(),
@@ -124,7 +130,7 @@ describe("no bg/fg templates → the tint, and text chosen on it", () => {
       undefined,
     );
     expect(style.bgcolor?.value?.hex).toBe(TINT.hex);
-    expect(style.color?.value?.hex).toBe(TEXT_ON_TINT);
+    expect(style.color?.value?.hex).toBe(PAIRED_TEXT.hex);
   });
 
   test("{{ tint }} is the dealt decoration, readable inside bg: itself — a threshold's calm arm", () => {
@@ -133,6 +139,14 @@ describe("no bg/fg templates → the tint, and text chosen on it", () => {
     expect(calm.bgcolor?.value?.hex).toBe(TINT.hex);
     const hot = resolve(h, makeTestPalette(), h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'), undefined);
     expect(hot.bgcolor?.value?.hex).toBe("#ff4444");
+  });
+
+  test("a threshold resting on its calm arm wears the decoration's text; past it, text chosen for the alert", () => {
+    const h = makeHarness();
+    const calm = resolve(h, makeTestPalette(), h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'), undefined);
+    expect(calm.color?.value?.hex).toBe(PAIRED_TEXT.hex);
+    const hot = resolve(h, makeTestPalette(), h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'), undefined);
+    expect(hot.color?.value?.hex).toBe(TEXT_ON_ERROR);
   });
 
   test("an authored bg paints over the tint — meaning outranks decoration", () => {
@@ -157,6 +171,52 @@ describe("no bg/fg templates → the tint, and text chosen on it", () => {
     const h = makeHarness();
     const style = resolve(h, makeTestPalette(), undefined, h.parse("{{ bgOf }}"));
     expect(style.color?.value?.hex).toBe(TINT.hex);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 1b. keptOn: a colour shown as given, which rounding never makes less legible
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("keptOn: a colour shown exactly as given, which the terminal's rounding never makes less legible", () => {
+  const at = (drawnAt: ColorDepth) => {
+    const ref = createActiveSegmentRef(() => drawnAt);
+    const engine = createCcCandybarEngine({
+      clock: () => new Date(),
+      extraFuncs: segmentColorFuncs(ref),
+    });
+    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
+    return (fg: string, bg: string): string =>
+      engine
+        .parse(`{{ keptOn "${fg}" "${bg}" }}`)
+        .evaluate({})
+        .map((f) => f.plain)
+        .join("");
+  };
+  // rose-pine-moon's door ✖ red on its open state: 3.90:1 in truecolor, and
+  // 2.73:1 once the terminal rounds both to 256 colours.
+  const RED = "#ea6f92";
+  const STATE = "#443546";
+  const drawn = (hex: string) => drawnColour(parseRgbHex(hex.slice(1)), ColorDepth.EIGHT_BIT);
+
+  test("in truecolor it is the colour itself, however faint — a theme that gives it faintly keeps it so", () => {
+    const keptOn = at(ColorDepth.TRUECOLOR);
+    expect(keptOn(RED, STATE)).toBe(RED);
+    expect(keptOn("#ff4444", "#ee5555")).toBe("#ff4444");
+  });
+
+  test("at 256 colours it keeps the quiet floor its truecolor pair clears, where rounding alone would cost it", () => {
+    expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(3);
+    const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
+    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(3);
+  });
+
+  test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
+    // White at half alpha on #202020 is drawn #808080: 4.13:1 off the ground
+    // as drawn, 4.32:1 once 256 colours round the pair, so it keeps its
+    // contrast as it is. Laid over the ground it would claim 5.10:1, and a
+    // floor taken from that refused the grey the terminal draws.
+    expect(at(ColorDepth.EIGHT_BIT)("#ffffff80", "#202020")).toBe("#808080");
   });
 });
 
@@ -399,7 +459,7 @@ describe("segment color functions in the engine", () => {
       extraFuncs: segmentColorFuncs(ref),
     });
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT);
+    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
     const fragments = tpl.evaluate({});
     expect(resolvedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
     expect(fragments[0]?.plain).toBe("hello");

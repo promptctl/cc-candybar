@@ -45,6 +45,7 @@ import {
   registerDslConfig,
   renderDsl,
   type CompiledConfig,
+  type RenderWarning,
 } from "./dsl/render.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
@@ -413,7 +414,11 @@ export function renderEffective(
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): { rendered: string; failures: Map<string, string> } {
+): {
+  rendered: string;
+  failures: Map<string, string>;
+  advisories: Set<string>;
+} {
   // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
   // appended to a list — each can fail at most once per pass, so this is the
   // strongest true shape (dedupe-by-construction within one pass). The key
@@ -422,6 +427,23 @@ export function renderEffective(
   // a bare name could not tell them apart
   // (nor stop a segment named `globals.palette` from displacing the slot).
   const failures = new Map<string, string>();
+  // What the daemon shows on the bar as a warning and check lists beside its
+  // verdict, without failing it: a fact about the look the config chose.
+  const advisories = new Set<string>();
+  // [LAW:types-are-the-program] Keyed by every kind a render can warn of, so a
+  // new kind is a compile error here until check says what it means.
+  const warned: Record<RenderWarning["kind"], (message: string) => void> = {
+    // [LAW:no-silent-failure] A palette rule whose result names no installed
+    // theme is a real finding for a headless pass: the bar would render, in
+    // the wrong theme, with nobody watching the strip. Keyed "theme rule" so it
+    // dedupes and prints through the one channel every other finding does;
+    // the message itself names the path(s) the rule was written at, which may
+    // be a preset's globals rather than the config's own.
+    "theme-rule": (message) => failures.set("theme rule", message),
+    // An open band the chosen look leaves short of a floor: the bar draws it
+    // as near as it comes, and the message names what clears it.
+    "band-floor": (message) => advisories.add(message),
+  };
   const rendered = renderDsl(
     config,
     compiled,
@@ -433,17 +455,11 @@ export function renderEffective(
     {
       onSegmentError: (placementId: string, message: string) =>
         failures.set(`segment "${placementId}"`, message),
-      // [LAW:no-silent-failure] A palette rule whose result names no installed
-      // theme is a real finding for a headless pass: the bar would render, in
-      // the wrong theme, with nobody watching the strip. Keyed "theme rule" so it
-      // dedupes and prints through the one channel every other finding does;
-      // the message itself names the path(s) the rule was written at, which may
-      // be a preset's globals rather than the config's own.
-      onRenderWarning: (message: string) => failures.set("theme rule", message),
+      onRenderWarning: ({ kind, message }) => warned[kind](message),
     },
     renderSelectionOf(effective),
   );
-  return { rendered, failures };
+  return { rendered, failures, advisories };
 }
 
 // The verdict: the prepared config rendered under every preset, every render
@@ -498,7 +514,11 @@ async function loadRegisterRender(
         (key) => (key === "preset" ? preset : null),
         () => customized,
       );
-      let pass: { rendered?: string; failures: Map<string, string> };
+      let pass: {
+        rendered?: string;
+        failures: Map<string, string>;
+        advisories: ReadonlySet<string>;
+      };
       try {
         pass = renderEffective(prepared, effective, CHECK_WIDTH, at);
       } catch (e) {
@@ -506,6 +526,7 @@ async function loadRegisterRender(
           failures: new Map([
             ["render", e instanceof Error ? e.message : String(e)],
           ]),
+          advisories: new Set(),
         };
       }
       return { preset, customized, ...pass };
@@ -519,34 +540,44 @@ async function loadRegisterRender(
         .flatMap((p) => [render(p, false), render(p, true)]),
     ];
 
-    // [LAW:one-source-of-truth] One failure per (what failed, why) — the
-    // line's text — however many passes hit it: an unconditional error fires
-    // in every pass, and reporting it once per preset would count one bug N
-    // times; the same segment failing for two different reasons is two
-    // failures. A failure the fresh session's own pass shows is reported
-    // bare — that is the bar a session opens on; any other is tagged with
-    // the presets that reach it, and `.preset.customized = true` only where
-    // that preset's plain pass did not, so the reader knows which switch
-    // exposes it.
-    const found = new Map<string, Map<string, Set<boolean>>>();
-    for (const { preset, customized, failures } of outs) {
-      for (const [label, message] of failures) {
-        const line = `${label}: ${message}`;
-        const reached = found.get(line) ?? new Map<string, Set<boolean>>();
-        reached.set(preset, (reached.get(preset) ?? new Set()).add(customized));
-        found.set(line, reached);
+    // [LAW:one-source-of-truth] One line per (what, why) — the line's text —
+    // however many passes reach it, for failures and advisories alike: an
+    // unconditional error fires in every pass, and reporting it once per
+    // preset would count one bug N times; the same segment failing for two
+    // different reasons is two lines. A line the fresh session's own pass
+    // shows is reported bare — that is the bar a session opens on; any other
+    // is tagged with the presets that reach it, and
+    // `.preset.customized = true` only where that preset's plain pass did
+    // not, so the reader knows which switch exposes it.
+    const reported = (
+      linesOf: (out: (typeof outs)[number]) => Iterable<string>,
+    ): string[] => {
+      const found = new Map<string, Map<string, Set<boolean>>>();
+      for (const out of outs) {
+        for (const line of linesOf(out)) {
+          const reached = found.get(line) ?? new Map<string, Set<boolean>>();
+          reached.set(
+            out.preset,
+            (reached.get(out.preset) ?? new Set()).add(out.customized),
+          );
+          found.set(line, reached);
+        }
       }
-    }
-    const errors = [...found].map(([line, reached]) => {
-      if (reached.get(freshPreset)?.has(false)) return line;
-      const where = [...reached].map(([preset, passes]) =>
-        [
-          ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
-          ...(passes.has(false) ? [] : [".preset.customized = true"]),
-        ].join(", "),
-      );
-      return `${line} (under ${where.join("; ")})`;
-    });
+      return [...found].map(([line, reached]) => {
+        if (reached.get(freshPreset)?.has(false)) return line;
+        const where = [...reached].map(([preset, passes]) =>
+          [
+            ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
+            ...(passes.has(false) ? [] : [".preset.customized = true"]),
+          ].join(", "),
+        );
+        return `${line} (under ${where.join("; ")})`;
+      });
+    };
+    warnings.push(...reported((out) => out.advisories));
+    const errors = reported((out) =>
+      [...out.failures].map(([label, message]) => `${label}: ${message}`),
+    );
     const bar = primary.rendered;
     // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, so
     // only the verdict can say the config asked for something it did not get.

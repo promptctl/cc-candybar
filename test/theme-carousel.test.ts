@@ -25,7 +25,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  DEFAULT_VARIATION,
+  effectiveShade,
   effectiveVariation,
   DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -51,8 +51,8 @@ import {
   CAROUSEL_PREV,
   neighbourLevels,
 } from "../src/render/carousel";
-import { previewSwatches } from "../src/render/theme-preview";
-import { VARIATIONS } from "../src/themes/decor";
+import { decorEntryColour, vocabularyOf } from "../src/themes/decor";
+import { DEFAULT_DECOR } from "./helpers/decor";
 import { renderStripCells } from "../src/render/strip";
 import {
   blockLabel,
@@ -121,6 +121,11 @@ function rig(
       sessionState.get(SID, "variation"),
       config.globals.variation,
     );
+    const shade = effectiveShade(
+      undefined,
+      sessionState.get(SID, "shade"),
+      config.globals.shade,
+    );
     last = renderDsl(
       config,
       compiled,
@@ -140,6 +145,7 @@ function rig(
         charset: { effective: charset },
         colorCompatibility: { effective: depth },
         variation: { effective: variation },
+        shade: { effective: shade },
       },
       instantOf(new Date()),
       opts(width, padding, style, charset, depth),
@@ -152,6 +158,7 @@ function rig(
         ),
         preset,
         variation,
+        shade,
         ...(styleKey !== undefined && {
           style: { kind: "decided" as const, name: styleName!, value: styleKey },
         }),
@@ -475,6 +482,32 @@ describe("the variation control", () => {
   });
 });
 
+// candybar-theme-colours-6fq5.e5n: which of its role's shades each cell wears
+// is a setting in the 🎨 look tab, beside the variation.
+describe("the shade control", () => {
+  test("▶ turns the dial one position in this session and the bar's closed cells recolour", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openPicker(rt, "shade");
+    expect(stripAnsi(rt.render())).toMatch(
+      new RegExp(`${CAROUSEL_PREV} middle ${CAROUSEL_NEXT}`),
+    );
+    const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
+    expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
+      ["set-state", "shade", "brighter"],
+    ]);
+    rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
+    expect(rt.sessionState.get(SID, "shade")).toBe("brighter");
+    expect(stripAnsi(rt.render())).toMatch(
+      new RegExp(`${CAROUSEL_PREV} brighter ${CAROUSEL_NEXT}`),
+    );
+    const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    expect(after[0]).not.toEqual(before[0]);
+    expect(after[1]).not.toEqual(before[1]);
+    rt.dispose();
+  });
+});
+
 // brandon-menu-ia-q30.5y4: "make users set them in the config file."
 describe("glyphs and colour depth are set in the config file, not the menu", () => {
   test("no link on the bar or in the ⚙ config tab writes either key", () => {
@@ -678,7 +711,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     expect(labelBudget([row], 29)).toBe(10);
     expect(labelBudget([row], 28)).toBe(9);
     expect(labelBudget([row], 3)).toBe(1);
-    const text = renderLayoutPreview([row], VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR, 20).plain;
+    const text = renderLayoutPreview([row], DEFAULT_DECOR, ColorDepth.TRUECOLOR, 20).plain;
     expect(text).toBe(" menu  dire…  gita… ");
   });
 });
@@ -696,6 +729,21 @@ const backgrounds = (cells: readonly RichText[]): Set<string> =>
       .filter((hex): hex is string => hex !== undefined),
   );
 
+// The background `text` is drawn on: the last span over its first character
+// that paints one, else its fragment's own.
+const bgUnder = (cells: readonly RichText[], text: string): string | undefined => {
+  for (const cell of cells) {
+    const at = cell.plain.indexOf(text);
+    if (at === -1) continue;
+    const painted = cell.spans
+      .filter((span) => span.start <= at && at < span.end)
+      .map((span) => bgHex(span.style))
+      .filter((hex): hex is string => hex !== undefined);
+    return painted.at(-1) ?? bgHex(cell.style);
+  }
+  return undefined;
+};
+
 describe("the preview is the bar's own colours", () => {
   const IDENTITY: ThemeKey = {
     hueShift: 0,
@@ -710,24 +758,33 @@ describe("the preview is the bar's own colours", () => {
       const rt = rig(`{ globals: { palette: '${theme}' } }`);
       openPicker(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
-      const swatches = new Set(
-        previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
-      );
-      // What the preview segment actually drew is the swatch set.
-      const drawn = backgrounds(rt.sink.get("candybar.list.theme.0")!);
-      expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
-      // The open door wears the open state the preview shows beside its plane.
-      const door = bgHex(rt.sink.get("candybar.menu")![0]!.style);
-      expect(swatches.has(door!)).toBe(true);
+      const preview = rt.sink.get("candybar.list.theme.0")!;
+      const drawn = backgrounds(preview);
+      // Every decoration a closed cell can wear is a swatch.
+      const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
+      expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+      // Its open swatch is the colour the open door is drawn in.
+      expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
       // Every closed bar cell that authors no meaning wears a preview tint.
       for (const name of ["directory", "model", "gitaculous"]) {
         const cells = rt.sink.get(name);
         if (cells === undefined) continue;
-        expect([name, swatches.has(bgHex(cells[0]!.style)!)]).toEqual([name, true]);
+        expect([name, drawn.has(bgHex(cells[0]!.style)!)]).toEqual([name, true]);
       }
       rt.dispose();
     },
   );
+
+  test("under alt the open swatch is still the door's colour, though the door's row turns between two roles", () => {
+    // textual-dark's navy secondary and orange accent: the pure accent stands
+    // off a row of secondary alone, and no colour stands off the door's row,
+    // which turns to the accent after three cells — so a preview standing on
+    // anything but the door's own row shows an open colour the bar never draws.
+    const rt = rig(`{ globals: { palette: 'textual-dark', variation: 'alt' } }`);
+    openPicker(rt, "theme");
+    expect(bgUnder(rt.sink.get("candybar.list.theme.0")!, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
+    rt.dispose();
+  });
 
   test("under a style the preview is the styled palette the bar wears — the style list previews it", () => {
     const rt = rig(`{ globals: { palette: 'gruvbox' } }`);
@@ -739,12 +796,12 @@ describe("the preview is the bar's own colours", () => {
       getThemePalette("gruvbox")!,
       rt.config.styles[look]!,
     );
-    const swatches = new Set(
-      previewSwatches(palette, VARIATIONS[DEFAULT_VARIATION], ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
-    );
-    const drawn = backgrounds(rt.sink.get("candybar.list.style.0")!);
-    expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
-    expect(swatches.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
+    const preview = rt.sink.get("candybar.list.style.0")!;
+    const drawn = backgrounds(preview);
+    const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
+    expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+    expect(drawn.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
+    expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();
   });
 

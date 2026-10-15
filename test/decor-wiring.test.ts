@@ -19,7 +19,7 @@ import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
@@ -32,11 +32,13 @@ import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   decorFor,
   DISTRIBUTIONS,
+  SHADES,
   VARIATIONS,
   type Address,
+  type ShadeName,
   type VariationName,
 } from "../src/themes/decor";
-import { DEFAULT_VARIATION } from "../src/themes/policy";
+import { DEFAULT_DECOR, decorOf } from "./helpers/decor";
 
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -85,7 +87,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}, variation?: VariationName): string =>
+  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): string =>
     renderDsl(
       config,
       compiled,
@@ -98,6 +100,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       {
         ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
+        ...(shade === undefined ? {} : { shade }),
       },
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
@@ -108,10 +111,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   };
   const fgOf = (name: string): string =>
     resolvedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
-  const expectedTint = (name: string, variation: VariationName = DEFAULT_VARIATION): string =>
+  const expectedTint = (name: string, variation?: VariationName, shade?: ShadeName): string =>
     decorFor(
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
-      VARIATIONS[variation],
+      decorOf(variation, shade),
       addressOf(root, name),
     ).hex;
   return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
@@ -228,11 +231,41 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     rt.dispose();
   });
 
+  // candybar-theme-colours-6fq5.e5n: which of its role's shades each cell
+  // wears is the render's selection too, beside the variation.
+  test("the shade reaches every closed cell: each wears its role at the shade the dial selects", () => {
+    const rt = build(SRC);
+    const names = ["a", "b", "c", "echo", "d", "f"];
+    const seen = new Set<string>();
+    for (const shade of Object.keys(SHADES) as ShadeName[]) {
+      rt.render({}, undefined, shade);
+      for (const name of names) {
+        expect([shade, name, rt.bgOf(name)]).toEqual([shade, name, rt.expectedTint(name, undefined, shade)]);
+      }
+      seen.add(names.map((n) => rt.bgOf(n)).join());
+    }
+    // Every position of the dial paints this bar differently.
+    expect(seen.size).toBe(Object.keys(SHADES).length);
+    // An omitting caller renders the default: the window around each role.
+    rt.render();
+    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, undefined, "middle"));
+    rt.dispose();
+  });
+
   test("globals.variation is the config's default under an omitting caller", () => {
     const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', variation: 'mono' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, "mono")]);
+    }
+    rt.dispose();
+  });
+
+  test("globals.shade is the config's default under an omitting caller", () => {
+    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', shade: 'muted' }`));
+    rt.render();
+    for (const name of ["a", "b", "c", "echo"]) {
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, undefined, "muted")]);
     }
     rt.dispose();
   });
@@ -419,7 +452,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       const rePlaced: Address = address.map((step, i) =>
         i === own ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, VARIATIONS[DEFAULT_VARIATION], rePlaced).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, rePlaced).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
@@ -456,7 +489,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
         name,
         [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row" }],
       ]);
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, VARIATIONS[DEFAULT_VARIATION], authored).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, authored).hex]);
     }
     expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
       CELLS.map((n) => plain.bgOf(n)),
@@ -510,26 +543,22 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   });
 });
 
-describe("a band whose nested hue has no state", () => {
-  // This accent finds a state; the primary nested
-  // under it clears nowhere. Every cell of an open depth-0 body deals that
-  // nested band, but only a cell with something open under it may draw it.
-  const lopsided = new Palette(
-    "lopsided",
+describe("an open trigger on a row no colour stands off", () => {
+  // nord, with its secondary row's shades pulled to black, mid grey and white:
+  // every colour sits within 2.2:1 of one of them, so no open state clears the
+  // first row's ground under the default shade.
+  const straddling = new Palette(
+    "straddling",
     true,
     new Map<string, ColorRgba>([
-      ["background", new ColorRgba(0xf4, 0xa8, 0xae)],
-      ["surface", new ColorRgba(0x0f, 0x99, 0x75)],
-      ["foreground", new ColorRgba(0x30, 0x21, 0xa3)],
-      ["primary", new ColorRgba(0x10, 0x9b, 0xdb)],
-      ["secondary", new ColorRgba(0xa8, 0x90, 0x21)],
-      ["accent", new ColorRgba(0x39, 0x1a, 0x1b)],
-      // Not a decoration role: the open body's ✕ is written in it.
-      ["warning", new ColorRgba(0xe0, 0xaf, 0x68)],
+      ...getThemePalette("nord")!.vars,
+      ["secondary-darken-1", new ColorRgba(0, 0, 0)],
+      ["secondary", new ColorRgba(0x77, 0x77, 0x77)],
+      ["secondary-lighten-1", new ColorRgba(0xff, 0xff, 0xff)],
     ]),
   );
 
-  test("renders the bar and an open body without an error", () => {
+  test("still opens: the bar and the body render, and the shortfall is reported once", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -543,6 +572,7 @@ describe("a band whose nested hue has no state", () => {
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const errors: string[] = [];
+    const warnings: RenderWarning[] = [];
     const out = renderDsl(
       config,
       compiled,
@@ -551,11 +581,80 @@ describe("a band whose nested hue has no state", () => {
       { session_id: "s1" },
       instantOf(new Date()),
       OPTS,
-      { onSegmentError: (name, message) => errors.push(`${name}: ${message}`) },
-      { theme: { kind: "decided", name: "lopsided", value: lopsided } },
+      {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+        onRenderWarning: (warning) => warnings.push(warning),
+      },
+      { theme: { kind: "decided", name: "straddling", value: straddling } },
     );
     expect(errors).toEqual([]);
     expect(out).toContain("INNER-BODY");
+    expect(warnings).toEqual([
+      {
+        kind: "band-floor",
+        message: expect.stringMatching(/^theme "straddling": no open-trigger colour stands 2\.2:1 off every cell beside it — the nearest stands \d\.\d\d:1 as drawn at depth TRUECOLOR; another shade or variation clears it$/),
+      },
+    ]);
+    registry.dispose();
+  });
+});
+
+describe("an open band whose plane stands on its trigger", () => {
+  // nord washed out the way a style can wash a palette: the accent, the
+  // background and the foreground all but meet, over a first row dark enough
+  // that the accent stands off it as it is — so the open state is the accent,
+  // and no plane recedes from it.
+  const washed = new Palette(
+    "washed",
+    true,
+    new Map<string, ColorRgba>([
+      ...getThemePalette("nord")!.vars,
+      ["accent", new ColorRgba(0xff, 0xff, 0xff)],
+      ["background", new ColorRgba(0xff, 0xff, 0xff)],
+      ["foreground", new ColorRgba(0xf4, 0xf4, 0xf4)],
+      ["secondary-darken-1", new ColorRgba(0x20, 0x20, 0x20)],
+      ["secondary", new ColorRgba(0x30, 0x30, 0x30)],
+      ["secondary-lighten-1", new ColorRgba(0x40, 0x40, 0x40)],
+    ]),
+  );
+
+  test("still renders its body, and reports the plane once", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        segments: { inner: { template: 'INNER-BODY' } },
+        root: { v: [ { kind: 'group', name: 'details', label: 'details', open: true, children: ['inner'] } ] },
+      }`,
+      ALLOWED,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const errors: string[] = [];
+    const warnings: RenderWarning[] = [];
+    const out = renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s1" },
+      instantOf(new Date()),
+      OPTS,
+      {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+        onRenderWarning: (warning) => warnings.push(warning),
+      },
+      { theme: { kind: "decided", name: "washed", value: washed } },
+    );
+    expect(errors).toEqual([]);
+    expect(out).toContain("INNER-BODY");
+    expect(warnings).toEqual([
+      {
+        kind: "band-floor",
+        message: expect.stringMatching(/^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/),
+      },
+    ]);
     registry.dispose();
   });
 });

@@ -4,12 +4,12 @@
 //
 // The rule, in Textual's colour roles: each row of the bar wears one step of
 // the VARIATION — an ordered list of the theme's decorative roles, chosen
-// like any other display setting — and each cell of the row one TONE of that
-// hue: a depth between the theme's `surface` receded toward its `background`
-// and its `surface` pulled toward the hue, with the row and the tone chosen by
-// the node's position in the tree. Every coordinate is one the theme already
-// contains or lies between two it contains: it SELECTS from the theme; it
-// never synthesises saturation the theme lacks.
+// like any other display setting — and each cell of the row one of that
+// role's SHADES — the darkenings, the lightenings and the muted form Textual
+// generates for the role in every theme — from the window of them the SHADE
+// dial is turned to, with the row and the shade chosen by the node's position
+// in the tree. Every colour a closed cell wears is one its palette names: it
+// SELECTS from the theme; it never synthesises a colour.
 //
 // [LAW:effects-at-boundaries] Pure. No renderer wiring, no I/O, no traversal
 // state: any node's colour is computable from its address alone, without
@@ -17,7 +17,7 @@
 // imports only rich-js, which owns every colour operation used (`mixAxes`,
 // `blendRgb`, `ensureContrast`, `ensureDrawn`, `drawnColour`, `contrastFor`,
 // `contrastRatio`, `Oklch.deltaE`); cc-candybar keeps the POLICY (which roles,
-// which tones, which address formula) and no colour arithmetic of its own.
+// which shades, which address formula) and no colour arithmetic of its own.
 
 import {
   blendRgb,
@@ -28,7 +28,7 @@ import {
   ensureContrast,
   ensureDrawn,
   drawnColour,
-  type ColorRgba,
+  ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
 
@@ -37,32 +37,135 @@ import {
 /**
  * The three non-semantic root hues, in the order a disclosure lineage advances
  * through them (`hueAtDepth`). `error`/`success`/`warning` are deliberately NOT
- * here: decoration cannot collide with meaning because meaning is not in the
- * set — strictly stronger than hue-anchoring, which only stopped the semantic
- * colours from moving while leaving decoration free to arrive at them.
+ * here: decoration never borrows a role that carries meaning, because meaning
+ * is not in the set — strictly stronger than hue-anchoring, which only stopped
+ * the semantic colours from moving while leaving decoration free to arrive at
+ * them. A theme can still spell a decorative role in an alert's colour
+ * (textual-dark's `accent` is its `warning`); that is the theme's own choice.
  */
 export const DECOR_HUES = ["primary", "secondary", "accent"] as const;
 export type DecorHue = (typeof DECOR_HUES)[number];
 
 /**
- * Where a cell sits on its row's tone axis, from the theme's `surface` receded
- * `TONE_RECESS` toward `background` (0) to its `surface` pulled `TONE_TINT`
- * of the way toward the row's hue (1).
- * Three tones, not a continuum: a row's neighbours are placed by its
- * distribution, and van der Corput's first six cells land on 0, 1, ½, 1, 0, 1
- * of three tones — never one tone twice in a row, and never less than half
- * the axis apart. A continuous axis gives neighbours a quarter of it (cells
- * 1 and 2 sit at ½ and ¼), which measured under the seam floor in 42 of 46
- * theme × hue rows.
+ * The shades of a role a dial position can reach, darkest first: three
+ * darkenings, the role itself, three lightenings — the ladder Textual
+ * generates for every role of every theme. The dial turns a window along it.
  */
-export const DECOR_TONES = [0, 0.5, 1] as const;
-export type DecorTone = (typeof DECOR_TONES)[number];
+const LADDER = [
+  "darken-3",
+  "darken-2",
+  "darken-1",
+  "base",
+  "lighten-1",
+  "lighten-2",
+  "lighten-3",
+] as const;
+
+/**
+ * Every shade of a role a closed cell can wear: a rung of the ladder, or the
+ * role's MUTED form — the role blended most of the way into the theme's
+ * background, which Textual's labels and flat buttons wear under the role's
+ * own text colour.
+ */
+export type RoleShade = (typeof LADDER)[number] | "muted";
+
+// [LAW:one-source-of-truth] Textual's own name for a role at a shade: the
+// role's name, suffixed. The record is keyed by every shade, so a shade with
+// no palette name is a compile error.
+const SHADE_SUFFIX = {
+  "darken-3": "-darken-3",
+  "darken-2": "-darken-2",
+  "darken-1": "-darken-1",
+  base: "",
+  "lighten-1": "-lighten-1",
+  "lighten-2": "-lighten-2",
+  "lighten-3": "-lighten-3",
+  muted: "-muted",
+} as const satisfies Record<RoleShade, string>;
+
+/** The palette entry naming a role at a shade: `secondary-lighten-1`, `accent`, `primary-muted`. */
+export type ShadeRole = `${DecorHue}${(typeof SHADE_SUFFIX)[RoleShade]}`;
+
+export const shadeRole = (hue: DecorHue, shade: RoleShade): ShadeRole =>
+  `${hue}${SHADE_SUFFIX[shade]}`;
+
+/**
+ * The text a decorated cell wears, chosen for its background the way its
+ * shade asks. [LAW:dataflow-not-control-flow] A VALUE in the shade's row of
+ * the table: a cell's text is one call, whichever position the dial is on.
+ */
+export type DecorText = (
+  palette: Palette,
+  hue: DecorHue,
+  background: ColorRgba,
+  drawnAt: ColorDepth,
+) => ColorRgba;
+
+/** On a rung of the ladder: the theme pole that reads on it (`textOn`). */
+const poleText: DecorText = (palette, _hue, background, drawnAt) =>
+  textOn(palette, background, drawnAt);
+
+/**
+ * On a muted role: Textual's own text colour for that role, `$text-primary`
+ * on `$primary-muted`, with its hue kept and its lightness slid until it
+ * clears TEXT_MIN_CONTRAST — so a muted row's text is coloured the way
+ * Textual's labels are, and reads.
+ */
+const roleText: DecorText = (palette, hue, background, drawnAt) =>
+  legibleOn(palette, paletteRole(palette, `text-${hue}`), background, drawnAt);
+
+/**
+ * One position of the shade dial: the shades a row's cells wear, in the order
+ * a cell's place in its row selects them (`vocabularySelect` over this list),
+ * and how text is chosen on them. A position of one shade is a uniform row.
+ */
+export interface Shade {
+  readonly tones: readonly [RoleShade, ...RoleShade[]];
+  readonly text: DecorText;
+}
+
+/**
+ * Three neighbouring rungs of the ladder from `from`: one position of the dial.
+ * Listed low, high, middle because a row's first eight cells take entries 0, 2,
+ * 1, 2, 0, 2, 1, 0 of three (van der Corput, read by `nearestPoint`): the row
+ * walks up and down its window a rung at a time — low, middle, high, middle,
+ * low — and turning the dial one position moves every cell exactly one rung.
+ * The order is the one Brandon compared the positions in
+ * (candybar-theme-colours-6fq5.e5n).
+ */
+const ladderWindow = (from: number): Shade => ({
+  // [LAW:no-defensive-null-guards] Every position below starts at most four
+  // rungs up a ladder of seven; the `!`s state that, they do not guard it.
+  tones: [LADDER[from]!, LADDER[from + 2]!, LADDER[from + 1]!],
+  text: poleText,
+});
+
+/**
+ * [LAW:one-type-per-behavior] The shade dial: every position a user can turn
+ * it to, lowest first (candybar-theme-colours-6fq5.e5n). The window of three
+ * rungs slides up the ladder from the role's deepest shades to its brightest,
+ * and `middle` — centred on the role itself — is where it rests. Below the
+ * deepest window the dial reaches `muted`: every cell of a row in the role's
+ * muted form under the role's own text, one colour per row, its cells parted
+ * by the joiner's divider. A new position is one row here: the option domain,
+ * the loader's enum, the settings control and every floor derive from this
+ * table.
+ */
+export const SHADES = {
+  muted: { tones: ["muted"], text: roleText },
+  deepest: ladderWindow(0),
+  deeper: ladderWindow(1),
+  middle: ladderWindow(2),
+  brighter: ladderWindow(3),
+  brightest: ladderWindow(4),
+} as const satisfies Record<string, Shade>;
+export type ShadeName = keyof typeof SHADES;
 
 /**
  * The hues the closed bar wears: row n starts on step n (the selection reads
  * the row's placement, so under van der Corput a two-step variation
  * alternates and a one-step one is uniform), and a row advances one step
- * every `run` cells along it. Cells sitting side by side differ by tone; a
+ * every `run` cells along it. Cells sitting side by side differ by shade; a
  * hue changes only after a run of them — hue changing at every cell reads as
  * team colours, not as the theme (brandon-theme-picker-bgw.8fp). A variation
  * is a sequence of roles the way a chord progression is a sequence of
@@ -117,6 +220,16 @@ export const VARIATIONS = {
 export type VariationName = keyof typeof VARIATIONS;
 
 /**
+ * How the closed bar wears its theme: the variation chooses each row's role,
+ * the shade which of that role's shades each cell wears. Both are display
+ * settings resolved per render, and the bar's Region carries them together.
+ */
+export interface Decor {
+  readonly variation: Variation;
+  readonly shade: Shade;
+}
+
+/**
  * The hue an open disclosure wears: Textual's `accent`, "used sparingly to
  * draw attention". Every bar trigger opens a band in it. A variation may put
  * it on a closed row too, which is why an open trigger is held apart from the
@@ -136,71 +249,24 @@ const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
 void _decorHuesAreNonSemantic;
 
 /**
- * How far the tinted end of the tone axis moves `surface`'s LIGHTNESS toward
- * the row's hue. With `TONE_RECESS` it sets the width of the bar's tonal range
- * — and every floor the regions are held to (state over tint, text over cell)
- * is a contrast ratio, which lightness decides. It is the largest pull tried
- * (0.45, 0.4, 0.35) that the state floor allows: at 0.4, solarized-dark's dim
- * foreground no longer clears 2.2 against its most-tinted cell, and its three
- * open states collapse onto one colour past the pole.
- */
-export const TONE_TINT = 0.35;
-
-/**
- * How far the deep end of the tone axis moves `surface`'s lightness toward
- * `background`: halfway, so the deepest cell stays apart from a terminal
- * painted in the theme's own background.
- */
-export const TONE_RECESS = 0.5;
-
-/**
- * How far every tone's CHROMA moves toward the row's hue: most of the way.
- * Chroma is the axis a theme's identity is carried on and the contrast floors
- * barely read, so it is decoupled from lightness rather than dragged along
- * with it. Tied to lightness, the bar wore 19–57% of each theme's accent
- * chroma and distinct themes converged (dracula ~ rose-pine-moon ΔE .006;
- * brandon-theme-picker-bgw.8fp). Below 1, so a tint stays quieter than the
- * hue it is drawn from; the sRGB gamut lowers it further at the lightness
- * ends, which is the most those lightnesses can hold.
- */
-export const DECOR_CHROMA_SHARE = 0.8;
-
-/**
- * The theme's two poles. Directional cues are mixes toward them — active
- * toward `foreground`, recessed toward `background` — which is what makes the
- * cues invert on their own between light and dark themes, with no branch.
+ * The theme's two poles: text is chosen from them (`textOn`), and a band's
+ * plane recedes toward `background` — or `foreground`, where the background
+ * leaves it no room — so the cues invert on their own between light and dark
+ * themes, with no branch.
  */
 export type ThemePole = "foreground" | "background";
 
-/** One closed bar cell's decoration: its row's hue, at its own tone. */
+/** One closed bar cell's decoration: its row's hue, at its own shade. */
 export interface DecorEntry {
   readonly hue: DecorHue;
-  readonly tone: DecorTone;
+  readonly shade: RoleShade;
 }
 
-/** Every decoration a row can wear over `hues`: each hue at each tone. */
-export const vocabularyOf = (
-  hues: readonly DecorHue[],
-): readonly DecorEntry[] =>
-  hues.flatMap((hue) => DECOR_TONES.map((tone) => ({ hue, tone })));
-
-/**
- * Every decoration the closed bar can wear under ANY variation: every hue
- * some variation steps through × every tone, all the theme's own. The
- * floors that hold an open trigger apart from the closed bar measure against
- * this whole set, so they hold whichever variation is chosen — a choice is
- * a render-time value, and a floor that read it would pass under the default
- * and fail after one click.
- * [LAW:one-source-of-truth] Derived from VARIATIONS, so a new variation
- * that reaches a new hue is measured the moment it is added.
- */
-export const DECOR_VOCABULARY: readonly DecorEntry[] = vocabularyOf(
-  DECOR_HUES.filter((hue) =>
-    Object.values(VARIATIONS).some(({ hues }) =>
-      (hues as readonly DecorHue[]).includes(hue),
-    ),
-  ),
-);
+/** Every decoration a closed cell can wear under `decor`: each of its roles at each of its shades. */
+export const vocabularyOf = (decor: Decor): readonly DecorEntry[] =>
+  decor.variation.hues.flatMap((hue) =>
+    decor.shade.tones.map((shade) => ({ hue, shade })),
+  );
 
 // --- Distributions ------------------------------------------------------------
 
@@ -298,7 +364,7 @@ export interface PlacedStep extends Position {
 /**
  * What a container's children are to the bar: its ROWS (a vertical container)
  * or the CELLS of one row (a horizontal one). Rows choose the hue and cells
- * the tone, so a hue can only change where the bar itself changes row.
+ * the shade, so a hue can only change where the bar itself changes row.
  */
 export type Axis = "row" | "cell";
 
@@ -354,10 +420,10 @@ export const inBin: Quantize = (placement, size) =>
   Math.floor(placement * size);
 
 /**
- * The nearest of `size` points spaced evenly round the circle from 0. Over
- * three tones a row's first eight cells land on 0, 1, ½, 1, 0, 1, ½, 0: no two
- * neighbours alike, never less than half the axis apart. The bin rule puts
- * cells 5 and 6 on one tone, inside the bundled status row.
+ * The nearest of `size` points spaced evenly round the circle from 0. Over a
+ * window of three shades a row's first eight cells take entries 0, 2, 1, 2, 0,
+ * 2, 1, 0: no two neighbours alike. The bin rule puts cells 5 and 6 on one
+ * entry, inside the bundled status row.
  */
 export const nearestPoint: Quantize = (placement, size) =>
   Math.round(placement * size) % size;
@@ -390,15 +456,33 @@ export function vocabularySelect<T extends {}>(
 }
 
 /**
- * The decorative entry a bar node's address selects under `variation`. An
- * address reads as the
- * rows it stacks through, then the cell of the innermost of them, then
- * whatever is nested inside that cell: the last of those rows chooses the hue
- * the row starts on, so a row stacked above the whole bar (edit mode's reset
- * banner) recolours no row beneath it; the cell chooses the tone, and its
- * index how many of the variation's runs it has passed along the row. Anything nested inside a cell
+ * A bar address read as the rows it stacks through, then the cell of the
+ * innermost of them, then whatever is nested inside that cell: the row it
+ * stands in is the LAST of those rows, and its cell the step after it. An
+ * absent step is a node alone on that axis — a bar with no vertical container,
+ * a one-cell row — placed where a first child is.
+ */
+function rowAndCell(address: Address): {
+  readonly row: AddressStep | undefined;
+  readonly cell: AddressStep | undefined;
+} {
+  const at = address.findIndex((step) => step.axis === "cell");
+  const rows = at === -1 ? address : address.slice(0, at);
+  return { row: rows.at(-1), cell: address[rows.length] };
+}
+
+/** The step of the variation a row starts on: the bin its placement falls in. */
+const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
+  inBin(placementOf(row), variation.hues.length);
+
+/**
+ * The decorative entry a bar node's address selects under `decor`: the last
+ * of the rows it stacks through chooses the hue the row starts on, so a row
+ * stacked above the whole bar (edit mode's reset banner) recolours no row
+ * beneath it; the cell chooses the shade, and its index how many of the
+ * variation's runs it has passed along the row. Anything nested inside a cell
  * — edit mode's `+`/`-` around it, an authored `{ h }` or `{ v }` — wears the
- * cell's hue and tone: a row's cells are what sit side by side, so they are
+ * cell's hue and shade: a row's cells are what sit side by side, so they are
  * what must differ, and the loader refuses a `distribution` authored inside a
  * cell, where it could place nothing. A cell's run counts its position among
  * its row's siblings in the tree the walk renders — authored, never what is
@@ -413,24 +497,68 @@ export function vocabularySelect<T extends {}>(
  * pre-order cursor's flaw, where hiding one segment recoloured others. The
  * bundled bar stacks no rows inside a row.
  */
-export function decorEntryFor(
-  variation: Variation,
-  address: Address,
+export function decorEntryFor(decor: Decor, address: Address): DecorEntry {
+  const { row, cell } = rowAndCell(address);
+  return entryAt(decor, row, cell);
+}
+
+// [LAW:one-source-of-truth] The one reading of a cell of a row: the row starts
+// on its own step and advances one step per run along it, and the cell's place
+// picks its shade. A closed cell's colour (`decorEntryFor`) and the cells an
+// open trigger stands among (`rowGround`) both read it.
+function entryAt(
+  decor: Decor,
+  row: AddressStep | undefined,
+  cell: AddressStep | undefined,
 ): DecorEntry {
-  const cell = address.findIndex((step) => step.axis === "cell");
-  const rows = cell === -1 ? address : address.slice(0, cell);
-  const cellStep = address[rows.length];
-  // The row starts on its own step and advances one step per run along it.
-  const { hues, run } = variation;
-  const start = inBin(placementOf(rows.at(-1)), hues.length);
-  const turn = cellStep === undefined ? 0 : Math.floor(cellStep.index / run);
-  const hue = hues[(start + turn) % hues.length];
+  const { hues, run } = decor.variation;
+  const turn = cell === undefined ? 0 : Math.floor(cell.index / run);
+  const hue = hues[(rowStart(decor.variation, row) + turn) % hues.length];
   if (hue === undefined) throw new Error("decorEntryFor: empty variation");
   return {
     hue,
-    tone: vocabularySelect(DECOR_TONES, cellStep, nearestPoint),
+    shade: vocabularySelect(decor.shade.tones, cell, nearestPoint),
   };
 }
+
+/**
+ * The closed cells a bar node's row wears, from its first cell to its last:
+ * each cell's entry, read as `decorEntryFor` reads it — the roles the row
+ * reaches, at the shades its cells take, which a row of one or two cells, or
+ * a role an `alt` row turns to for only part of a run, does not take all of. A
+ * node alone on the cell axis is a row of one. Read off the row's authored
+ * cells, as their colours are, so hiding one changes no trigger's ground.
+ * Each entry once, in the vocabulary's order: two rows whose cells wear the
+ * same entries stand among the same cells, so they deal one ground.
+ */
+export function rowGround(decor: Decor, address: Address): Ground {
+  const { row, cell } = rowAndCell(address);
+  const cells: ReadonlyArray<AddressStep | undefined> =
+    cell === undefined
+      ? [undefined]
+      : Array.from({ length: cell.count }, (_, index) => ({ ...cell, index }));
+  const worn = new Map(
+    cells
+      .map((c) => entryAt(decor, row, c))
+      .map((entry) => [shadeRole(entry.hue, entry.shade), entry] as const),
+  );
+  return [...worn.values()].sort(
+    (a, b) =>
+      DECOR_HUES.indexOf(a.hue) - DECOR_HUES.indexOf(b.hue) ||
+      ROLE_SHADES.indexOf(a.shade) - ROLE_SHADES.indexOf(b.shade),
+  );
+}
+
+// Every shade of a role, darkest rung first and the muted form last: the order
+// a ground lists a role's entries in.
+const ROLE_SHADES = Object.keys(SHADE_SUFFIX) as readonly RoleShade[];
+
+/** A palette entry decoration reads: a pole, an alert, a role at a shade, or a role's text. */
+export type DecorRole =
+  | ThemePole
+  | SemanticRole
+  | ShadeRole
+  | `text-${DecorHue}`;
 
 /**
  * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
@@ -439,10 +567,7 @@ export function decorEntryFor(
  * drift or a hand-built palette missing a role — a loud failure naming both,
  * never a fallback colour. [LAW:no-silent-failure]
  */
-export function paletteRole(
-  palette: Palette,
-  role: "surface" | DecorHue | ThemePole | SemanticRole,
-): ColorRgba {
+export function paletteRole(palette: Palette, role: DecorRole): ColorRgba {
   const colour = palette.get(role);
   if (colour === undefined) {
     throw new Error(
@@ -453,198 +578,203 @@ export function paletteRole(
 }
 
 /**
- * The colour of one vocabulary entry in `palette`: a point on the row hue's
- * tone axis. The axis runs in OKLCH from the theme's `surface` receded
- * `TONE_RECESS` toward its `background` to its `surface` pulled `TONE_TINT`
- * of the way toward the hue, and both ends carry
- * the hue's own angle and `DECOR_CHROMA_SHARE` of its chroma, so every tone is
- * the same hue at a different depth. [LAW:one-source-of-truth] The one place
- * the rule is spelled — `decorFor` renders through it and `stateFor` measures
- * against it, so the floor is enforced against the very bytes a tint cell will
- * show, not a second transcription of the formula.
+ * The colour of one vocabulary entry in `palette`: the palette's own entry for
+ * the role at that shade, byte for byte. [LAW:one-source-of-truth] The one
+ * place an entry becomes a colour — `decorFor` renders through it and
+ * `stateFor` measures against it, so a floor is enforced against the very
+ * bytes a closed cell will show.
  */
-export function decorEntryColour(
+export const decorEntryColour = (
   palette: Palette,
   entry: DecorEntry,
-): ColorRgba {
-  let colours = DECOR_MEMO.get(palette);
-  if (colours === undefined) {
-    colours = new Map();
-    DECOR_MEMO.set(palette, colours);
-  }
-  const key = `${entry.hue}|${entry.tone}`;
-  const hit = colours.get(key);
-  if (hit !== undefined) return hit;
-  const hue = Oklch.fromRgba(paletteRole(palette, entry.hue));
-  const surface = Oklch.fromRgba(paletteRole(palette, "surface"));
-  const carry = (from: Oklch, l: number): Oklch =>
-    from.mixAxes(hue, { l, c: DECOR_CHROMA_SHARE, h: 1, alpha: 0 });
-  const deep = surface.mixAxes(
-    Oklch.fromRgba(paletteRole(palette, "background")),
-    { l: TONE_RECESS, c: 0, h: 0, alpha: 0 },
-  );
-  const colour = carry(deep, 0)
-    .mixAxes(carry(surface, TONE_TINT), {
-      l: entry.tone,
-      c: entry.tone,
-      h: entry.tone,
-      alpha: 0,
-    })
-    .toRgba();
-  colours.set(key, colour);
-  return colour;
-}
-
-// Every segment of every render asks for its tint, and the answer is a pure
-// function of (palette, entry) — OKLCH conversions, four mixes, and a possible
-// gamut bisection, ~5% of a render before this memo. Keyed by the entry's
-// VALUE, whose domain is DECOR_HUES × DECOR_TONES, so each map holds at most
-// nine colours whoever built the entry.
-const DECOR_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
+): ColorRgba => paletteRole(palette, shadeRole(entry.hue, entry.shade));
 
 /** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (
   palette: Palette,
-  variation: Variation,
+  decor: Decor,
   address: Address,
-): ColorRgba => decorEntryColour(palette, decorEntryFor(variation, address));
+): ColorRgba => decorEntryColour(palette, decorEntryFor(decor, address));
 
 // --- The state region ---------------------------------------------------------
 
 /**
- * The contrast a state cell must hold above every tint cell of its own hue.
+ * The contrast an open trigger must hold above every cell it stands among.
  * Enforced rather than assumed because "the pure hue is vivid" is false for
- * some palettes (textual-dark's `secondary` sat on its tints at 1.42, and
- * textual-ansi's `primary` at 1.14 — see the design doc's region model).
+ * some palettes (textual-dark's `secondary` is a navy darker than most
+ * surfaces), and because a closed cell wears its role's own shades, so a
+ * trigger drawn in a role can stand among cells drawn in that same role.
  */
 export const STATE_FLOOR = 2.2;
 
-/** The pure form of a hue: the rule's own mix near the top of its range, where the search starts. */
-export const STATE_PURE_AMOUNT = 0.92;
-
 /**
- * The search toward `foreground` runs in twelfths and is allowed to reach
- * `foreground` itself (solarized-dark's `secondary` clears only at the pole).
+ * The search slides the hue's lightness in twelfths each way, reaching black
+ * and white themselves, so any cells some colour stands off are cells a
+ * candidate stands off.
  */
 const STATE_STEPS = 12;
 
 /**
- * The state colour of `hue`: an open disclosure's trigger is drawn here. The
- * pure form of the hue, pushed toward `foreground` in twelfths — and past it,
- * along its own lightness, when the pole itself falls short — until it clears
- * `STATE_FLOOR` against EVERY colour the closed bar can wear under any
- * variation, since an open trigger stands among closed cells of any row and
- * tone — its own hue's included, when a variation puts that hue on a row. A hue that already
- * clears at step zero is its pure form as drawn (composited over black, which
- * leaves an opaque colour byte-unchanged) — the enforcement is a floor, not a
- * transform.
+ * The closed cells a bar trigger stands among: the entries its row's cells
+ * wear (`rowGround`). The state floor holds a bar trigger off these and only
+ * these. Measured against the whole bar it cannot hold: the dial puts the
+ * roles' own shades on the bar, and a bar whose rows wear a deep role and a
+ * bright one — textual-dark's navy `secondary` and orange `accent`, at the
+ * default shade — leaves no colour 2.2:1 off every cell of both. Held off
+ * every shade of the row's roles, rather than the ones its cells wear, it
+ * reported rows short that a colour clears (design doc, Decisions).
+ */
+export type Ground = readonly DecorEntry[];
+
+/** The colours of a ground's cells, as the palette names them. */
+export const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>
+  ground.map((entry) => decorEntryColour(palette, entry));
+
+/**
+ * What the state search found: the colour an open trigger wears and, when no
+ * colour stands `STATE_FLOOR` off every cell it stands among, how far the
+ * colour it settled on does — its contrast against its nearest cell, as drawn
+ * at the depth it was searched for — or null when it clears.
+ */
+export interface StateSearch {
+  readonly state: ColorRgba;
+  readonly short: number | null;
+}
+
+/**
+ * [LAW:one-source-of-truth] The one per-palette memo every colour search here
+ * is cached through: `compute` runs once per (palette, key). Palettes are
+ * memoised objects (`transposedPalette`), so keying on the palette object lets
+ * each palette's answers go when it does.
+ */
+function memoPerPalette<V extends {}>(): (
+  palette: Palette,
+  key: string,
+  compute: () => V,
+) => V {
+  const memo = new WeakMap<Palette, Map<string, V>>();
+  return (palette, key, compute) => {
+    let entries = memo.get(palette);
+    if (entries === undefined) {
+      entries = new Map();
+      memo.set(palette, entries);
+    }
+    const hit = entries.get(key);
+    if (hit !== undefined) return hit;
+    const value = compute();
+    entries.set(key, value);
+    return value;
+  };
+}
+
+/** A colour as the terminal shows it at `drawnAt` (rich-js `drawnColour`). */
+const shownAt =
+  (drawnAt: ColorDepth) =>
+  (c: ColorRgba): ColorRgba =>
+    drawnColour(c, drawnAt);
+
+/** A colour as truecolor shows it: composited over the terminal's black. */
+const shownTrue = shownAt(ColorDepth.TRUECOLOR);
+
+/**
+ * The state colour of `hue` among `cells`: an open disclosure's trigger is
+ * drawn here. The hue itself, as the palette names it, when it already stands
+ * `STATE_FLOOR` off every cell — the enforcement is a floor, not a transform.
+ * Otherwise the hue slid along its own OKLCH lightness, its angle and chroma
+ * kept, the least distance that stands off every cell: toward white and toward
+ * black in twelfths, a step each way in turn. Cells that are dim take a bright
+ * state and cells that are vivid a deep one, with no branch on which.
  *
  * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
- * trigger and every tint are rounded independently, and a trigger whose
- * rounding lands too near a rounded tint is replaced by the nearest drawn
+ * trigger and every cell are rounded independently, and a trigger whose
+ * rounding lands too near a rounded cell is replaced by the nearest drawn
  * colour that clears the floor against all of them (rich-js `ensureDrawn`).
  *
- * [LAW:dataflow-not-control-flow] Fourteen candidates, one predicate, the
+ * [LAW:dataflow-not-control-flow] Twenty-five candidates, one predicate, the
  * first that passes; the values decide, not a branch per theme.
- * [LAW:no-silent-failure] A hue that cannot clear even beyond `foreground`, or
- * whose drawn colour nothing at `drawnAt` repairs, throws naming palette and
- * hue — never a quieter colour.
+ * [LAW:no-silent-failure] Cells no colour clears — a row turning between
+ * textual-dark's navy and orange under `alt` — get the candidate standing
+ * furthest off its nearest cell, and `short` says how far it stands as drawn,
+ * for the render to report. It does not throw: the settings door is a trigger too,
+ * and a throw there would leave no way to turn the setting back.
  */
 export function stateFor(
   palette: Palette,
   hue: DecorHue,
-  drawnAt: ColorDepth,
-): ColorRgba {
-  const search = stateSearch(palette, hue, drawnAt);
-  if ("refused" in search) throw new Error(search.refused);
-  return search.state;
-}
-
-/**
- * The state search's outcome as a value: the colour, or why no colour clears.
- * Whether a hue finds one depends on the hue (its pure mix may clear where
- * `foreground` beyond cannot), so a caller that needs a NEIGHBOUR's state
- * reads the refusal rather than inheriting its throw — a band that can never
- * be drawn is nothing to stand off, and it still throws when it is opened.
- */
-type StateSearch = { state: ColorRgba } | { refused: string };
-
-function stateSearch(
-  palette: Palette,
-  hue: DecorHue,
+  cells: readonly ColorRgba[],
   drawnAt: ColorDepth,
 ): StateSearch {
-  let states = STATE_MEMO.get(palette);
-  if (states === undefined) {
-    states = new Map();
-    STATE_MEMO.set(palette, states);
-  }
-  const key = `${hue}|${drawnAt}`;
-  const hit = states.get(key);
-  if (hit !== undefined) return hit;
-  const search = searchState(palette, hue, drawnAt);
-  states.set(key, search);
-  return search;
+  return STATES(
+    palette,
+    `${hue}|${cells.map((c) => c.hex).join("+")}|${drawnAt}`,
+    () => searchState(palette, hue, cells, drawnAt),
+  );
 }
 
 // Memoised per palette like the band: a band's floors ask for the states of
 // its neighbours at two depths, and the render walk asks for every band.
-const STATE_MEMO = new WeakMap<Palette, Map<string, StateSearch>>();
+const STATES = memoPerPalette<StateSearch>();
 
 function searchState(
   palette: Palette,
   hue: DecorHue,
+  among: readonly ColorRgba[],
   drawnAt: ColorDepth,
 ): StateSearch {
-  // Measured as drawn: a translucent theme's tints and candidates are shown
-  // composited over the terminal's black, and a raw-RGBA ratio reads colours
-  // drawn nowhere (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
-  const tints = DECOR_VOCABULARY.map((entry) =>
-    drawnColour(decorEntryColour(palette, entry), ColorDepth.TRUECOLOR),
+  // Measured as drawn: a translucent theme's colours are shown composited over
+  // the terminal's black, and a raw-RGBA ratio reads colours drawn nowhere
+  // (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
+  const cells = among.map(shownTrue);
+  const pure = paletteRole(palette, hue);
+  // A ray from the pure hue to an end of the lightness axis, in twelfths: its
+  // lightness moved, its angle and chroma kept (as far as the gamut holds them
+  // near black and white), so every candidate is still the theme's hue.
+  // Sliding toward the theme's poles instead greyed the hue, and a slide past a
+  // pole cell by cell undid itself on cells straddling the middle grey.
+  const ray = (end: ColorRgba): ColorRgba[] =>
+    Array.from({ length: STATE_STEPS }, (_, k) =>
+      Oklch.fromRgba(pure)
+        .mixAxes(Oklch.fromRgba(end), {
+          l: (k + 1) / STATE_STEPS,
+          c: 0,
+          h: 0,
+          alpha: 0,
+        })
+        .toRgba(),
+    );
+  const darker = ray(new ColorRgba(0, 0, 0));
+  const candidates = [
+    pure,
+    // [LAW:no-defensive-null-guards] Both rays are one length by construction.
+    ...ray(new ColorRgba(255, 255, 255)).flatMap((c, k) => [c, darker[k]!]),
+  ];
+  // The contrast against the nearest cell: what the floor holds, and what
+  // cells no colour clears are drawn to the most of. No cell at all is
+  // nothing to stand off.
+  const nearest = (candidate: ColorRgba): number =>
+    Math.min(
+      Infinity,
+      ...cells.map((cell) => contrastRatio(shownTrue(candidate), cell)),
+    );
+  const chosen =
+    candidates.find((c) => nearest(c) >= STATE_FLOOR) ??
+    candidates.reduce((a, b) => (nearest(b) > nearest(a) ? b : a));
+  // [LAW:dataflow-not-control-flow] One path whichever was chosen: the depth
+  // replaces it by the nearest colour it draws that clears every cell as
+  // drawn, where one does, and the shortfall is measured on the pair the
+  // terminal shows — never on truecolor's while the label names the depth.
+  const state =
+    ensureDrawn(chosen, drawnAt, (candidate, draw) =>
+      cells.every(
+        (cell) => contrastRatio(candidate, draw(cell)) >= STATE_FLOOR,
+      ),
+    ) ?? chosen;
+  const asDrawn = shownAt(drawnAt);
+  const stands = Math.min(
+    Infinity,
+    ...cells.map((cell) => contrastRatio(asDrawn(state), asDrawn(cell))),
   );
-  const pure = blendRgb(
-    paletteRole(palette, "surface"),
-    paletteRole(palette, hue),
-    STATE_PURE_AMOUNT,
-  );
-  const foreground = paletteRole(palette, "foreground");
-  // Past the pole: `foreground` slid on in OKLCH lightness until it clears
-  // every tint. A style can pull the pole itself under the floor (atom-one-
-  // dark's foreground under `dim` measured 2.19 against its primary tints),
-  // and the palette holds no stronger role to reach for. The bar's tints run
-  // from `background` toward `surface` and share its polarity, so each slide
-  // moves the same way and never undoes the one before it; when they straddle
-  // the cutoff it can, and the check below still refuses.
-  const beyond = tints.reduce(
-    (candidate, tint) => ensureContrast(candidate, tint, STATE_FLOOR),
-    foreground,
-  );
-  const state = [
-    ...Array.from({ length: STATE_STEPS + 1 }, (_, k) =>
-      blendRgb(pure, foreground, k / STATE_STEPS),
-    ),
-    beyond,
-  ].find((candidate) =>
-    tints.every(
-      (tint) =>
-        contrastRatio(drawnColour(candidate, ColorDepth.TRUECOLOR), tint) >=
-        STATE_FLOOR,
-    ),
-  );
-  if (state === undefined) {
-    return {
-      refused: `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even beyond foreground`,
-    };
-  }
-  const drawnState = ensureDrawn(state, drawnAt, (candidate, drawn) =>
-    tints.every((tint) => contrastRatio(candidate, drawn(tint)) >= STATE_FLOOR),
-  );
-  if (drawnState === undefined) {
-    return {
-      refused: `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor on the colours drawn at depth ${ColorDepth[drawnAt]}`,
-    };
-  }
-  return { state: drawnState };
+  return { state, short: stands >= STATE_FLOOR ? null : stands };
 }
 
 /**
@@ -684,49 +814,125 @@ export function textOn(
   background: ColorRgba,
   drawnAt: ColorDepth,
 ): ColorRgba {
-  let texts = TEXT_MEMO.get(palette);
-  if (texts === undefined) {
-    texts = new Map();
-    TEXT_MEMO.set(palette, texts);
-  }
-  const key = `${background.hex}|${drawnAt}`;
-  const hit = texts.get(key);
-  if (hit !== undefined) return hit;
-  const side = contrastFor(background);
-  const pole = (["background", "foreground"] as const)
-    .map((role) => paletteRole(palette, role))
-    .reduce((best, pole) =>
-      contrastRatio(side, pole) < contrastRatio(side, best) ? pole : best,
-    );
-  const text = ensureContrast(pole, background, TEXT_MIN_CONTRAST, drawnAt);
-  texts.set(key, text);
-  return text;
+  return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
+    const side = contrastFor(background);
+    const pole = (["background", "foreground"] as const)
+      .map((role) => paletteRole(palette, role))
+      .reduce((best, pole) =>
+        contrastRatio(side, pole) < contrastRatio(side, best) ? pole : best,
+      );
+    return legibleOn(palette, pole, background, drawnAt);
+  });
+}
+
+// Every decorated cell of every render asks for its text, so the pole's choice
+// is memoised ahead of the floor's: 2–3% of a render on the bundled bar.
+const POLE_TEXT = memoPerPalette<ColorRgba>();
+
+/**
+ * `text` with its hue kept and its lightness slid until it clears
+ * TEXT_MIN_CONTRAST on `background` as drawn at `drawnAt` (rich-js
+ * `ensureContrast`); text that already clears is returned unchanged.
+ * [LAW:single-enforcer] The one floor every chosen text meets — a theme pole
+ * (`textOn`), a muted role's own text colour (the `muted` shade).
+ */
+export function legibleOn(
+  palette: Palette,
+  text: ColorRgba,
+  background: ColorRgba,
+  drawnAt: ColorDepth,
+): ColorRgba {
+  return LEGIBLE(palette, `${text.hex}|${background.hex}|${drawnAt}`, () =>
+    ensureContrast(text, background, TEXT_MIN_CONTRAST, drawnAt),
+  );
 }
 
 // Every cell of every render asks for its text, and the answer is a pure
-// function of (palette, background, drawnAt) — a bisection when the pole misses the
-// floor, measured at 20% of a render before this memo. A palette's distinct
-// backgrounds are its tints, band colours, and the stops its authored ramps
+// function of (text, background, drawnAt) — a bisection when the text misses
+// the floor, measured at 20% of a render before this memo. A palette's distinct
+// backgrounds are its shades, band colours, and the stops its authored ramps
 // reach, so each map stays as small as the colours a bar can wear.
-const TEXT_MEMO = new WeakMap<Palette, Map<string, ColorRgba>>();
+const LEGIBLE = memoPerPalette<ColorRgba>();
 
 // --- Disclosure: bands ---------------------------------------------------------
 
 /**
- * Where a disclosure sits in the colour model: the hue its lineage is at, and
- * how many bands deep it is. `depth` 0 is a bar cell's own band, opened in
- * `OPEN_HUE`; a disclosure opened from inside that band is depth 1, and so on.
- * The address never enters here — a band is NOT a tree position, it is a
- * plane hung under a trigger.
+ * Where a disclosure sits in the colour model: the hue its lineage is at, how
+ * many bands deep it is, and the closed cells its lineage's bar trigger
+ * stands among. `depth` 0 is a bar cell's own band, opened in `OPEN_HUE`; a
+ * disclosure opened from inside that band is depth 1, and so on, keeping the
+ * ground it started from. The address never enters here — a band is NOT a
+ * tree position, it is a plane hung under a trigger; the ground is what its
+ * bar trigger was dealt for the row it stands in.
  */
 export interface Disclosure {
   readonly hue: DecorHue;
   readonly depth: number;
+  readonly ground: Ground;
 }
 
 /**
+ * The cells the trigger of the band `disclosure` opens stands among: a bar
+ * trigger (depth 0) among its row's closed cells, and a trigger that is itself
+ * an item of a band — a tab, a picker's control — on that band's plane. Held
+ * off the bar's row as well, a nested state was driven to the same end of the
+ * lightness axis as its parent's on a row of vivid shades, and the two
+ * collapsed into one; held off nothing, it could sit on the plane it stands on.
+ */
+function standsAmong(
+  palette: Palette,
+  disclosure: Disclosure,
+): readonly ColorRgba[] {
+  return disclosure.depth === 0
+    ? groundCells(palette, disclosure.ground)
+    : enclosingPlane(palette, disclosure);
+}
+
+// The plane of the band `disclosure` hangs in, as truecolor draws it: none for
+// a bar trigger's band (the bar is no band), the plane one depth up otherwise.
+const enclosingPlane = (
+  palette: Palette,
+  disclosure: Disclosure,
+): readonly ColorRgba[] =>
+  disclosure.depth === 0
+    ? []
+    : [trueBand(palette, { ...disclosure, depth: disclosure.depth - 1 }).plane];
+
+/** The line the render reports for a state that stands short of its floor, if it does. */
+const stateShortfall = (
+  palette: Palette,
+  { short }: StateSearch,
+  drawnAt: ColorDepth,
+): readonly string[] =>
+  short === null
+    ? []
+    : [
+        `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it — the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; another shade or variation clears it`,
+      ];
+
+/**
+ * The line the render reports for a plane standing too near the trigger that
+ * opened it to be told from it, if it does — the floor whose miss leaves the
+ * band's items no colour between the two (`bandItemFor`). Every bundled theme
+ * holds it under the `none` style at every depth a bundled menu reaches
+ * (test/decor.test.ts), so a style clears it.
+ */
+const planeShortfall = (
+  palette: Palette,
+  apart: number,
+  drawnAt: ColorDepth,
+): readonly string[] =>
+  apart >= BAND_FLOORS.triggerPlane
+    ? []
+    : [
+        `theme "${palette.name}": an open band's plane stands ΔE ${apart.toFixed(3)} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the ${BAND_FLOORS.triggerPlane} that tells them apart; another style clears it`,
+      ];
+
+/**
  * How far a band's plane recedes from its state colour toward `background`:
- * `base + perDepth × depth`, capped. Two cues move with depth — the hue
+ * `base + perDepth × depth`, capped — and where that plane breaks a band floor,
+ * toward `foreground`, then either as far as the cap (`computeTrueBand`). Two
+ * cues move with depth — the hue
  * advances and the plane recedes. The cap is the limit: between depths 2 and
  * 3 only 0.05 of recession remains while `hueAtDepth` has wrapped onto a hue
  * already used, so adjacent planes are guaranteed apart only through depth 2
@@ -746,6 +952,12 @@ export const BAND_RECESSION = {
  */
 export const BAND_WINDOW = { floor: 0.12, span: 0.8 } as const;
 
+/**
+ * How an item whose own place rounds onto its plane or its trigger steps
+ * toward the middle of the window (`bandItemFor`): in twelfths of the way.
+ */
+const ITEM_STEPS = 12;
+
 /** The vocabulary hue `depth` steps after `hue`, wrapping — depth advances the hue. */
 export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
   const index = (DECOR_HUES.indexOf(hue) + depth) % DECOR_HUES.length;
@@ -757,27 +969,40 @@ export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
 /**
  * How far apart (ΔE in OKLab) the colours of nested bands stand, the eye's
  * ~.02 threshold of a visible difference being the unit: a trigger off the
- * plane it opens, a plane off the plane it is nested in, and a nested
- * trigger off the plane it sits on. They hold over the depths a bar reaches
- * (0–2; depth 3 is the model's limit, see BAND_RECESSION) in truecolor by the
- * construction below — `test/decor.test.ts` pins the measured minima — and
- * `bandFor` holds each one again on the colours drawn at 256 and ansi.
+ * plane it opens, and a plane off the plane it is nested in. They hold over
+ * the depths a bar reaches (0–2; depth 3 is the model's limit, see
+ * BAND_RECESSION) in truecolor by the construction below —
+ * `test/decor.test.ts` pins the measured minima — and `bandFor` holds each one
+ * again on the colours drawn at 256 and ansi. A nested trigger is held off the
+ * plane it sits on by STATE_FLOOR, as every open trigger is held off what it
+ * stands among (`standsAmong`).
  */
 export const BAND_FLOORS = {
   triggerPlane: 0.1,
   nestedPlane: 0.035,
-  nestedTriggerPlane: 0.08,
 } as const;
 
 /**
  * A disclosure's band: two colours of one hue. `state` is its peak — the
  * colour the trigger that opened it wears, so a trigger is drawn from what it
  * OPENS, not from where it sits — and `plane` is its floor, the state receded
- * toward `background`.
+ * toward `background` (`computeTrueBand`).
  */
-export interface Band {
+export interface BandColours {
   readonly state: ColorRgba;
   readonly plane: ColorRgba;
+}
+
+/** A band as the terminal draws it, and the floors it stands short of. */
+export interface Band extends BandColours {
+  /**
+   * One line per floor the band stands short of as drawn, for the render to
+   * report where its trigger opens: `state` off the ground its lineage's
+   * trigger stands on (STATE_FLOOR, `StateSearch`), and `plane` off `state`
+   * (BAND_FLOORS.triggerPlane). Empty when it clears both, and at a depth
+   * that draws no colour.
+   */
+  readonly shortfalls: readonly string[];
 }
 
 /**
@@ -793,138 +1018,181 @@ export interface Band {
  * itself misses (depth 3) is not one rounding broke, so it is not asked of
  * the drawn colours either.
  *
- * Memoised per (palette, hue, depth, drawnAt): the render walk asks for every
+ * Memoised per (palette, disclosure, drawnAt): the render walk asks for every
  * segment's band on every render, and palettes are memoised objects
  * (transposedPalette), so the key is stable and each band is computed once
- * per palette, hue, depth and drawn depth.
+ * per palette, lineage and drawn depth.
  */
 export function bandFor(
   palette: Palette,
   disclosure: Disclosure,
   drawnAt: ColorDepth,
 ): Band {
-  const key = `${disclosure.hue}|${disclosure.depth}|${drawnAt}`;
-  let bands = BAND_MEMO.get(palette);
-  if (bands === undefined) {
-    bands = new Map();
-    BAND_MEMO.set(palette, bands);
-  }
-  const hit = bands.get(key);
-  if (hit !== undefined) return hit;
-  const state = stateFor(
-    palette,
-    hueAtDepth(disclosure.hue, disclosure.depth),
-    drawnAt,
-  );
-  // The plane is the truecolor plane as drawn — rounded once, from the
-  // theme's own colours, never blended from a state already rounded.
-  const neighbours = planeNeighbours(palette, disclosure, state, drawnAt);
-  const plane = ensureDrawn(
-    trueBand(palette, disclosure).plane,
-    drawnAt,
-    (candidate, drawn) =>
-      neighbours.every(
-        ([other, floor]) => deltaE(candidate, drawn(other)) >= floor,
-      ),
-  );
-  if (plane === undefined) {
-    throw new Error(
-      `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
+  return BANDS(palette, `${disclosureKey(disclosure)}|${drawnAt}`, () => {
+    const search = stateFor(
+      palette,
+      hueAtDepth(disclosure.hue, disclosure.depth),
+      standsAmong(palette, disclosure),
+      drawnAt,
     );
-  }
-  const band = { state, plane };
-  bands.set(key, band);
-  return band;
+    const { state } = search;
+    // The plane is the truecolor plane as drawn — rounded once, from the
+    // theme's own colours, never blended from a state already rounded.
+    const floors = planeFloors(palette, disclosure, state, drawnAt);
+    const plane = ensureDrawn(
+      trueBand(palette, disclosure).plane,
+      drawnAt,
+      (candidate, drawn) => floors.every((holds) => holds(candidate, drawn)),
+    );
+    // Never thrown, whatever the palette: every depth's table holds an entry
+    // that keeps all three floors (test/decor.test.ts, "a band's drawn plane
+    // always has a colour that keeps its floors"), and truecolor keeps them by
+    // construction, since a floor is asked only where truecolor kept it.
+    if (plane === undefined) {
+      throw new Error(
+        `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
+      );
+    }
+    const asDrawn = shownAt(drawnAt);
+    return {
+      state,
+      plane,
+      // No floor is measurable where nothing is drawn in colour (`none` draws
+      // at DEFAULT, `drawnDepth`), so nothing there stands short of one.
+      shortfalls:
+        drawnAt === ColorDepth.DEFAULT
+          ? []
+          : [
+              ...stateShortfall(palette, search, drawnAt),
+              ...planeShortfall(
+                palette,
+                deltaE(asDrawn(state), asDrawn(plane)),
+                drawnAt,
+              ),
+            ],
+    };
+  });
 }
+const BANDS = memoPerPalette<Band>();
+
+// [LAW:one-source-of-truth] The one spelling of a lineage as a memo key.
+const disclosureKey = ({ hue, depth, ground }: Disclosure): string =>
+  `${hue}|${depth}|${ground.map((e) => shadeRole(e.hue, e.shade)).join("+")}`;
 
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
 // The band as truecolor draws it — the colours every depth rounds from, and
 // the pair whose floors decide which floors a drawn band is held to.
-function trueBand(palette: Palette, disclosure: Disclosure): Band {
-  // Memoised beside the drawn bands: every band's floors and every band item
-  // round from it, so the render walk asks for it once per item.
-  const key = `${disclosure.hue}|${disclosure.depth}`;
-  let bands = TRUE_BAND_MEMO.get(palette);
-  if (bands === undefined) {
-    bands = new Map();
-    TRUE_BAND_MEMO.set(palette, bands);
-  }
-  const hit = bands.get(key);
-  if (hit !== undefined) return hit;
-  const band = computeTrueBand(palette, disclosure);
-  bands.set(key, band);
-  return band;
+function trueBand(palette: Palette, disclosure: Disclosure): BandColours {
+  return TRUE_BANDS(palette, disclosureKey(disclosure), () =>
+    computeTrueBand(palette, disclosure),
+  );
 }
-const TRUE_BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
+// Memoised beside the drawn bands: every band's floors and every band item
+// round from it, so the render walk asks for it once per item.
+const TRUE_BANDS = memoPerPalette<BandColours>();
 
-function computeTrueBand(palette: Palette, disclosure: Disclosure): Band {
-  const state = stateFor(
+function computeTrueBand(
+  palette: Palette,
+  disclosure: Disclosure,
+): BandColours {
+  const { state } = stateFor(
     palette,
     hueAtDepth(disclosure.hue, disclosure.depth),
+    standsAmong(palette, disclosure),
     ColorDepth.TRUECOLOR,
   );
   const recession = Math.min(
     BAND_RECESSION.cap,
     BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
   );
+  // The plane recedes into the background, as a band always has — or, where
+  // that plane would stand too near its trigger or the plane it hangs in (a
+  // state the search carried to the background to stand off a row of vivid
+  // shades), into the foreground, then into either as far as the cap: the
+  // first that holds the band's floors, and the background where none does.
+  const into = (pole: ThemePole, amount: number): ColorRgba =>
+    blendRgb(state, paletteRole(palette, pole), amount);
+  const enclosing = enclosingPlane(palette, disclosure);
+  const holds = (plane: ColorRgba): boolean =>
+    deltaE(shownTrue(state), shownTrue(plane)) >= BAND_FLOORS.triggerPlane &&
+    enclosing.every(
+      (outer) =>
+        deltaE(shownTrue(outer), shownTrue(plane)) >= BAND_FLOORS.nestedPlane,
+    );
+  const intoBackground = into("background", recession);
   return {
     state,
-    plane: blendRgb(state, paletteRole(palette, "background"), recession),
+    plane:
+      [
+        intoBackground,
+        into("foreground", recession),
+        into("background", BAND_RECESSION.cap),
+        into("foreground", BAND_RECESSION.cap),
+      ].find(holds) ?? intoBackground,
   };
 }
 
-// What a band's plane must stand off, each with the floor it keeps there: its
-// own trigger, the trigger of the band nested in it, and — below depth 0,
-// whose enclosing surface is the bar and is the state floor's to keep — the
-// plane it is nested in. Each floor is the one its truecolor pair already
-// kept, and none where truecolor missed it.
-function planeNeighbours(
+// A floor a band's drawn plane must hold: true when `candidate`, already drawn,
+// holds it against the neighbour `drawn` shows it beside.
+type PlaneFloor = (
+  candidate: ColorRgba,
+  drawn: (c: ColorRgba) => ColorRgba,
+) => boolean;
+
+// What a band's plane must hold as drawn, each a floor its truecolor colours
+// already hold, and none where truecolor missed it: off its own trigger (ΔE),
+// under the trigger of the band nested in it — which stands STATE_FLOOR off
+// the plane it sits on — and, below depth 0, whose enclosing surface is the
+// bar and the state floor's to keep, off the plane it is nested in (ΔE).
+function planeFloors(
   palette: Palette,
   disclosure: Disclosure,
   state: ColorRgba,
   drawnAt: ColorDepth,
-): ReadonlyArray<readonly [ColorRgba, number]> {
-  const { hue, depth } = disclosure;
+): readonly PlaneFloor[] {
+  const { hue, depth, ground } = disclosure;
   // The truecolor band is the unrepaired one (`trueBand`),
   // so no floor asks `bandFor` for the band it is computing.
   const trueState = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d }).state;
+    trueBand(palette, { hue, depth: d, ground }).state;
   const truePlane = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d }).plane;
-  const shown = (c: ColorRgba): ColorRgba =>
-    drawnColour(c, ColorDepth.TRUECOLOR);
+    trueBand(palette, { hue, depth: d, ground }).plane;
   const plane = truePlane(depth);
-  const kept = (floor: number, other: ColorRgba): number =>
-    deltaE(shown(plane), shown(other)) >= floor ? floor : 0;
-  // The nested trigger is a neighbour only where it can be drawn: a hue with
-  // no state is a band that throws when opened, and must not take this band —
-  // and every closed cell that deals it — down with it.
+  const keptApart = (floor: number, other: ColorRgba): number =>
+    deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
   const nested = hueAtDepth(hue, depth + 1);
-  const nestedDrawn = stateSearch(palette, nested, drawnAt);
-  const nestedTrue = stateSearch(palette, nested, ColorDepth.TRUECOLOR);
+  const nestedAmong = standsAmong(palette, { hue, depth: depth + 1, ground });
+  const nestedTrue = stateFor(
+    palette,
+    nested,
+    nestedAmong,
+    ColorDepth.TRUECOLOR,
+  );
+  const nestedDrawn = stateFor(palette, nested, nestedAmong, drawnAt).state;
+  const keptUnder =
+    contrastRatio(shownTrue(plane), shownTrue(nestedTrue.state)) >= STATE_FLOOR
+      ? STATE_FLOOR
+      : 0;
+  const apart =
+    (other: ColorRgba, floor: number): PlaneFloor =>
+    (candidate, drawn) =>
+      deltaE(candidate, drawn(other)) >= floor;
   return [
-    [state, kept(BAND_FLOORS.triggerPlane, trueState(depth))],
-    ...("state" in nestedDrawn && "state" in nestedTrue
-      ? [
-          [
-            nestedDrawn.state,
-            kept(BAND_FLOORS.nestedTriggerPlane, nestedTrue.state),
-          ] as const,
-        ]
-      : []),
+    apart(state, keptApart(BAND_FLOORS.triggerPlane, trueState(depth))),
+    (candidate, drawn) =>
+      contrastRatio(candidate, drawn(nestedDrawn)) >= keptUnder,
     ...(depth > 0
       ? [
-          [
-            bandFor(palette, { hue, depth: depth - 1 }, drawnAt).plane,
-            kept(BAND_FLOORS.nestedPlane, truePlane(depth - 1)),
-          ] as const,
+          apart(
+            bandFor(palette, { hue, depth: depth - 1, ground }, drawnAt).plane,
+            keptApart(BAND_FLOORS.nestedPlane, truePlane(depth - 1)),
+          ),
         ]
       : []),
   ];
 }
-const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 
 /**
  * The colour of the item at `address` — its steps from the band's root, each
@@ -944,25 +1212,35 @@ export function bandItemFor(
 ): ColorRgba {
   const band = bandFor(palette, disclosure, drawnAt);
   const truecolor = trueBand(palette, disclosure);
-  const item = ensureDrawn(
-    blendRgb(
-      truecolor.plane,
-      truecolor.state,
-      BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address),
-    ),
-    drawnAt,
-    // An item is never the plane it sits on and never its own trigger — as
-    // drawn, where a rounding can land it on either.
-    (candidate, drawn) =>
-      candidate.hex !== drawn(band.plane).hex &&
-      candidate.hex !== drawn(band.state).hex,
-  );
-  if (item === undefined) {
-    throw new Error(
-      `palette "${palette.name}": a ${disclosure.hue} band item at depth ${disclosure.depth} is drawn as its plane or its trigger at depth ${ColorDepth[drawnAt]}, and nothing that depth draws is neither`,
+  const at = (place: number): ColorRgba =>
+    blendRgb(truecolor.plane, truecolor.state, place);
+  const own = BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address);
+  const middle = BAND_WINDOW.floor + BAND_WINDOW.span / 2;
+  // An item is never the plane it sits on and never its own trigger — as
+  // drawn, where a rounding can land it on either. Where its own place does,
+  // it takes the nearest place toward the window's middle that is neither: at
+  // 256 colours and ansi the depth offers another colour for the place itself
+  // (`ensureDrawn`); truecolor draws a place as itself, so it steps inward.
+  const neither = (
+    candidate: ColorRgba,
+    drawn: (c: ColorRgba) => ColorRgba,
+  ): boolean =>
+    candidate.hex !== drawn(band.plane).hex &&
+    candidate.hex !== drawn(band.state).hex;
+  for (let step = 0; step <= ITEM_STEPS; step++) {
+    const item = ensureDrawn(
+      at(own + ((middle - own) * step) / ITEM_STEPS),
+      drawnAt,
+      neither,
     );
+    if (item !== undefined) return item;
   }
-  return item;
+  // [LAW:no-silent-failure] Not even the window's middle is neither: the
+  // plane stands on its trigger, which `bandFor` reports where the trigger
+  // opens. Drawn at its place rather than thrown — the items of the door's
+  // band are the settings controls, and a throw would take them away, as one
+  // from `stateFor` would the door.
+  return at(own);
 }
 
 // --- Regions -------------------------------------------------------------------
@@ -970,18 +1248,19 @@ export function bandItemFor(
 /**
  * Where a node stands in the colour model (design doc, "The region model"):
  * on the BAR, where its address selects a vocabulary entry under the bar's
- * variation, or on a BAND — the plane a disclosure hung under its trigger —
- * where its address is the steps since that band's root and places it along
- * the band's axis. The band's `Disclosure` is the hue and depth its TRIGGER
- * computed; nothing about the trigger's own position enters, which is what
- * lets a body hang on its trigger and still be coloured without walk order
- * [LAW:types-are-the-program]. The variation rides the bar arm alone: a
- * band's colours are its trigger's lineage, which no variation reaches.
+ * decor, or on a BAND — the plane a disclosure hung under its trigger — where
+ * its address is the steps since that band's root and places it along the
+ * band's axis. The band's `Disclosure` is the hue, depth and ground its
+ * TRIGGER computed; nothing about the trigger's own position enters, which is
+ * what lets a body hang on its trigger and still be coloured without walk
+ * order [LAW:types-are-the-program]. The decor rides the bar arm alone: a
+ * band's colours are its trigger's lineage, which reaches the bar only
+ * through the ground its trigger was dealt.
  */
 export type Region =
   | {
       readonly kind: "bar";
-      readonly variation: Variation;
+      readonly decor: Decor;
       readonly address: Address;
     }
   | {
@@ -990,10 +1269,10 @@ export type Region =
       readonly address: Address;
     };
 
-/** The bar's root under `variation`: the top of the layout tree, before any step. */
-export const barRoot = (variation: Variation): Region => ({
+/** The bar's root under `decor`: the top of the layout tree, before any step. */
+export const barRoot = (decor: Decor): Region => ({
   kind: "bar",
-  variation,
+  decor,
   address: [],
 });
 
@@ -1012,24 +1291,28 @@ export const bandRoot = (band: Disclosure): Region => ({
 
 /**
  * What a segment in a region is dealt. `tint` is the colour its CLOSED cell
- * wears; `disclosure` is the band the segment opens if it is a trigger. Its
- * text is not dealt: an unauthored `fg:` is `textOn` of whatever background
- * the cell resolves to, in every region (resolveSegmentColors).
+ * wears and `text` the text that colour is paired with — what an unauthored
+ * `fg:` is wherever the cell wears its tint; on any other background it is
+ * `textOn` of that background (resolveSegmentColors). `disclosure` is the
+ * band the segment opens if it is a trigger.
  */
 export interface Decoration {
   readonly tint: ColorRgba;
+  readonly text: ColorRgba;
   readonly disclosure: Disclosure;
 }
 
 /**
- * [LAW:one-source-of-truth] ONE read per segment, projected two ways. On the
- * bar, the entry its address selects under the bar's variation is the
- * closed cell's tint, and
- * what it opens is the depth-0 band in `OPEN_HUE` — every bar trigger opens
- * the same accent, because an open disclosure is what the accent is for. On a
- * band, the item is placed by its address and OPENS the next band of the same
+ * [LAW:one-source-of-truth] ONE read per segment, projected three ways. On
+ * the bar, the entry its address selects under the bar's decor is the closed
+ * cell's tint, its shade says what text the tint is paired with, and what it
+ * opens is the depth-0 band in `OPEN_HUE` — every bar trigger opens the same
+ * accent, because an open disclosure is what the accent is for — over the
+ * ground of the row it stands in. On a band, the item is placed by its
+ * address, its text is chosen for it, and it OPENS the next band of the same
  * lineage: the band's own hue one depth further — a natural counted up from
- * the band it stands on, never arithmetic back from a position.
+ * the band it stands on, never arithmetic back from a position — over the
+ * same ground.
  */
 export function decorationFor(
   palette: Palette,
@@ -1038,15 +1321,32 @@ export function decorationFor(
 ): Decoration {
   switch (region.kind) {
     case "bar": {
+      const { decor, address } = region;
+      const entry = decorEntryFor(decor, address);
+      const tint = decorEntryColour(palette, entry);
+      // Read where the segment opens a band (`bandFor`), once: a closed cell
+      // never reads it, and reading every cell's row for every cell cost 2–3%
+      // of a closed bar's render.
+      let ground: Ground | undefined;
       return {
-        tint: decorFor(palette, region.variation, region.address),
-        disclosure: { hue: OPEN_HUE, depth: 0 },
+        tint,
+        text: decor.shade.text(palette, entry.hue, tint, drawnAt),
+        disclosure: {
+          hue: OPEN_HUE,
+          depth: 0,
+          get ground() {
+            return (ground ??= rowGround(decor, address));
+          },
+        },
       };
     }
     case "band": {
+      const { band, address } = region;
+      const tint = bandItemFor(palette, band, address, drawnAt);
       return {
-        tint: bandItemFor(palette, region.band, region.address, drawnAt),
-        disclosure: { hue: region.band.hue, depth: region.band.depth + 1 },
+        tint,
+        text: textOn(palette, tint, drawnAt),
+        disclosure: { ...band, depth: band.depth + 1 },
       };
     }
   }

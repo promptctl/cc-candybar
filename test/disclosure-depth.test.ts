@@ -29,7 +29,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
 import { SessionState } from "../src/daemon/session-state";
-import { DEFAULT_VARIATION, listResolvablePaletteNames } from "../src/themes/policy";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { DEFAULT_DECOR } from "./helpers/decor";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -37,7 +38,6 @@ import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
-  VARIATIONS,
   bandFor,
   bandItemFor,
   bandRoot,
@@ -49,8 +49,8 @@ import {
   type Region,
 } from "../src/themes/decor";
 
-// The variation the bundled config renders under.
-const BAR = VARIATIONS[DEFAULT_VARIATION];
+// The decor the bundled config renders under.
+const BAR = DEFAULT_DECOR;
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
@@ -241,10 +241,12 @@ function build(src: string, withDefault = false) {
   };
   const expectedTint = (name: string): string =>
     decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR).tint.hex;
-  const hueOf = (name: string): Disclosure["hue"] => {
+  // What the bar trigger `name` opens: its lineage's hue at depth 0, over the
+  // ground of the row it stands in.
+  const opensOf = (name: string): Disclosure => {
     const region = regionOf(root, palette, name);
     if (region.kind !== "bar") throw new Error(`"${name}" is not on the bar`);
-    return decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure.hue;
+    return decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure;
   };
   return {
     palette,
@@ -256,7 +258,7 @@ function build(src: string, withDefault = false) {
     clickWriting,
     openMenuIn,
     expectedTint,
-    hueOf,
+    opensOf,
     dispose: () => registry.dispose(),
   };
 }
@@ -269,7 +271,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     const rt = build(BUNDLED, true);
     const { palette, root } = rt;
     rt.render();
-    const hue = rt.hueOf(SETTINGS_ANCHOR);
+    const band0 = rt.opensOf(SETTINGS_ANCHOR);
 
     expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(rt.expectedTint(SETTINGS_ANCHOR));
 
@@ -277,7 +279,6 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     // depth-0 items, each placed by its band-relative step, text chosen.
     rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_ANCHOR, "open");
     rt.render();
-    const band0: Disclosure = { hue, depth: 0 };
     expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(bandFor(palette, band0, ColorDepth.TRUECOLOR).state.hex);
     // The door's body is two lines, each a row of cells.
     const lines = bodyOf(root, SETTINGS_ANCHOR).children.map((line) => {
@@ -290,7 +291,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     // A fresh session opens the menu on its session tab, a trigger inside
     // the depth-0 band: it wears the depth-1 state, not a depth-0 item.
     const firstTab = "candybar.tab.session";
-    expect(rt.bgOf(firstTab)).toBe(bandFor(palette, { hue, depth: 1 }, ColorDepth.TRUECOLOR).state.hex);
+    expect(rt.bgOf(firstTab)).toBe(bandFor(palette, { ...band0, depth: 1 }, ColorDepth.TRUECOLOR).state.hex);
     for (const [line, cells] of lines.entries()) {
       for (const [index, name] of cells.entries()) {
         if (name === firstTab) continue;
@@ -312,7 +313,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     // depth-1 items.
     rt.clickWriting(look, "candybar.tab", "look");
     rt.render();
-    const band1: Disclosure = { hue, depth: 1 };
+    const band1: Disclosure = { ...band0, depth: 1 };
     expect(rt.bgOf(look)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
     const row2 = bodyCellsOf(root, look);
     expect(row2.length).toBeGreaterThan(2);
@@ -331,7 +332,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(control, pickers, "candybar.apply.theme");
     rt.render();
-    const band2: Disclosure = { hue, depth: 2 };
+    const band2: Disclosure = { ...band0, depth: 2 };
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const list = "candybar.list.theme";
     expect(rt.bgOf(list)).toBe(
@@ -379,7 +380,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       const out = rt.render();
       // The menu's band is depth 0 — the trigger sits on the bar, whatever
       // `when`s enclose it — and the trigger wears that band's state.
-      const band = bandFor(rt.palette, { hue: rt.hueOf("m"), depth: 0 }, ColorDepth.TRUECOLOR);
+      const band = bandFor(rt.palette, rt.opensOf("m"), ColorDepth.TRUECOLOR);
       expect(rt.bgOf("m")).toBe(band.state.hex);
       expect(resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
@@ -418,8 +419,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
 
     rt.clickWriting(toggle, toggle, "outer");
     rt.render();
-    const hue = rt.hueOf(toggle);
-    expect(rt.bgOf(toggle)).toBe(bandFor(palette, { hue, depth: 0 }, ColorDepth.TRUECOLOR).state.hex);
+    expect(rt.bgOf(toggle)).toBe(bandFor(palette, rt.opensOf(toggle), ColorDepth.TRUECOLOR).state.hex);
     // The body: three cells of a horizontal band, placed by their own step.
     for (const name of ["b", "groups.inner", "c"]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
@@ -460,12 +460,12 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     expect(rt.bgOf("groups.inner")).toBe(rt.expectedTint("groups.inner"));
     rt.clickWriting("groups.inner", "groups.inner", "inner");
     rt.render();
-    const hue = rt.hueOf("groups.outer");
-    const band1 = bandFor(palette, { hue, depth: 1 }, ColorDepth.TRUECOLOR);
+    const nested: Disclosure = { ...rt.opensOf("groups.outer"), depth: 1 };
+    const band1 = bandFor(palette, nested, ColorDepth.TRUECOLOR);
     expect(rt.bgOf("groups.inner")).toBe(band1.state.hex);
     expect(rt.bgOf("d")).toBe(rt.expectedTint("d"));
     expect(rt.bgOf("d")).toBe(
-      bandItemFor(palette, { hue, depth: 1 }, regionAddress(rt, "d"), ColorDepth.TRUECOLOR).hex,
+      bandItemFor(palette, nested, regionAddress(rt, "d"), ColorDepth.TRUECOLOR).hex,
     );
     rt.dispose();
   });

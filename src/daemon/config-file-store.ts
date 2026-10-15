@@ -99,6 +99,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   preset: "string",
   endcaps: "string",
   variation: "string",
+  shade: "string",
   autoWrap: "boolean",
   padding: "number",
   charset: "string",

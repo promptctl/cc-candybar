@@ -106,6 +106,11 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "variation.effective",
     default: "",
   },
+  "shade.effective": {
+    kind: "input",
+    path: "shade.effective",
+    default: "",
+  },
   "charset.effective": {
     kind: "input",
     path: "charset.effective",

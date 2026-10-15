@@ -5,10 +5,10 @@
 //
 // Nothing here chooses a segment, a row or a colour. The rows are
 // `layoutRows` of the compiled tree the render is walking, under the walk's
-// own visibility (`ActionRuntime.layout`, published by renderDsl); each tint
-// is `decorationFor` of the segment's bar address under the render's
-// variation — the function the walk
-// colours every closed cell with — on the palette that segment renders in.
+// own visibility (`ActionRuntime.layout`, published by renderDsl); each block
+// wears `decorationFor` of the segment's bar address under the render's
+// decor — the function the walk colours every closed cell with, its tint and
+// the text paired with it — on the palette that segment renders in.
 // An authored `bg:` is not what a block wears: it states a fact about live
 // data (a threshold, an alert), not about where the segment sits.
 //
@@ -18,10 +18,10 @@
 import { RichText } from "@promptctl/rich-js";
 import type { ColorDepth } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { decorationFor, type Variation } from "../themes/decor.js";
+import { decorationFor, type Decor } from "../themes/decor.js";
 import type { ActionRuntime, PreviewRows } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
-import { stateCell } from "./band-style.js";
+import { decoratedCell } from "./band-style.js";
 import { cellWidth, ledRowBudget } from "./picker.js";
 
 // What a block says: the segment's own name, less any namespace — the door is
@@ -60,7 +60,7 @@ export function labelBudget(rows: PreviewRows, available: number): number {
 
 export function renderLayoutPreview(
   rows: PreviewRows,
-  variation: Variation,
+  decor: Decor,
   drawnAt: ColorDepth,
   available: number,
 ): RichText {
@@ -70,11 +70,8 @@ export function renderLayoutPreview(
     let width = 0;
     for (const { name, address, palette } of row) {
       const block = new RichText(` ${clippedLabel(name, most)} `, {
-        style: stateCell(
-          palette,
-          decorationFor(palette, { kind: "bar", variation, address }, drawnAt)
-            .tint,
-          drawnAt,
+        style: decoratedCell(
+          decorationFor(palette, { kind: "bar", decor, address }, drawnAt),
         ),
       });
       width += block.cellLength;
@@ -104,7 +101,7 @@ export function layoutPreviewFuncs(
       fn: () =>
         renderLayoutPreview(
           runtime.layout(),
-          runtime.variation,
+          runtime.decor,
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
         ),

@@ -4,14 +4,24 @@
 // rich-js owns every color operation and knows nothing about segments;
 // cc-candybar owns segments and performs no color arithmetic of its own
 // [LAW:rich-js-owns-color-math]. This module is exactly the join: it supplies
-// rich-js's `color` and `ramp` with *which* palette, and adds the two functions
+// rich-js's `color` and `ramp` with *which* palette, and adds the functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
-// currently rendering, and `tint`, the decoration its region dealt it.
+// currently rendering, `tint`, the decoration its region dealt it, and
+// `keptOn`, a colour shown as given at the depth this render draws at.
 // [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
+import {
+  ColorDepth,
+  contrastRatio,
+  drawnColour,
+  ensureDrawn,
+  resolveColorRef,
+} from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
+import { QUIET_MIN_CONTRAST } from "../config/quiet-text.js";
 import { renderGauge } from "../template-engine/gauge.js";
+import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -83,6 +93,46 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "string",
   };
 
+  // A colour shown exactly as given — the door's ✖ is the theme's own red,
+  // unfloored by design, so it reads as red on every theme (#294) — that the
+  // terminal's rounding must still not cost legibility: `keptOn fg bg` is `fg`
+  // itself in truecolor, and at a depth that draws other colours (rich-js
+  // `ensureDrawn`, which has nothing to replace a truecolor colour with) the
+  // nearest drawn colour that stands on `bg` as drawn at least as far as `fg`
+  // does on `bg` — and at least the quiet floor, since a ground repaired at
+  // that depth no longer measures what truecolor drew — capped at the text
+  // floor. Where the depth draws nothing that clears, `fg` itself.
+  // [LAW:one-source-of-truth] rich-js measures and repairs; this only names
+  // the floor.
+  const keptOn: TemplateFunc = {
+    fn: ((fgRef: string, bgRef: string) => {
+      const { palette } = requireActiveSegment(ref, "{{ keptOn }}");
+      const fg = resolveColorRef(palette, fgRef);
+      const bg = resolveColorRef(palette, bgRef);
+      // As every floor is measured: on the colours as drawn, each composited
+      // over the terminal's black — never `fg` laid over `bg`, which no
+      // terminal draws.
+      const held = contrastRatio(
+        drawnColour(fg, ColorDepth.TRUECOLOR),
+        drawnColour(bg, ColorDepth.TRUECOLOR),
+      );
+      const floor = Math.min(
+        TEXT_MIN_CONTRAST,
+        Math.max(held, QUIET_MIN_CONTRAST),
+      );
+      return (
+        ensureDrawn(
+          fg,
+          ref.drawnAt(),
+          (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor,
+        ) ?? fg
+      ).hex;
+    }) as TemplateFunc["fn"],
+    argTypes: ["string", "string"],
+    arity: { kind: "exact" },
+    returnType: "string",
+  };
+
   // One getter serves every palette reader, so the message names them.
   const palette = paletteFuncs(
     () =>
@@ -144,7 +194,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  return { ...palette, bgOf, tint, gauge };
+  return { ...palette, bgOf, tint, keptOn, gauge };
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

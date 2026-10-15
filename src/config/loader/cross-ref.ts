@@ -283,7 +283,7 @@ export function validateCrossReferences(
     if (distributionInsideCell(tree)) {
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} sets "distribution" on a container inside a bar cell — everything inside a cell wears that cell's hue and tone, so it would place nothing. Set it on the row whose children are the cells (the horizontal container) or on the root, which places the rows.`,
+        message: `${layoutKey} sets "distribution" on a container inside a bar cell — everything inside a cell wears that cell's hue and shade, so it would place nothing. Set it on the row whose children are the cells (the horizontal container) or on the root, which places the rows.`,
         line: layoutLine,
       });
     }

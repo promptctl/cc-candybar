@@ -1,14 +1,16 @@
 // [LAW:one-source-of-truth] `{{ themePreview }}` — a small sample of the theme
 // the bar is wearing, drawn from the colours the bar itself is drawn from
 // (brandon-theme-picker-bgw.ef6): every decoration a closed cell can wear under
-// the render's variation (each of its roles at each tone), the
-// state/plane pair an open disclosure wears, and the two alerts. Nothing here
-// computes a colour. Each swatch is a call to the SAME function the render walk
-// calls for that kind of cell (`decorEntryColour`, `bandFor`, the role lookup),
-// on the SAME palette object the walk colours every unpinned segment from
-// (`ActionRuntime.palette`, published by renderDsl), with text chosen by the
-// same `stateCell`/`textOn` rule — so a preview cannot show a colour the bar
-// under that theme would not draw.
+// the render's decor (each of its variation's roles at each of its shade's
+// shades), the state/plane pair of the band the preview's own lineage opens
+// from the bar — inside the settings menu, the door's, so "▾ open" is the
+// colour the open door wears — and the two alerts. Nothing here computes a
+// colour. Each swatch is a call to the SAME function the render walk calls for
+// that kind of cell (`decorEntryColour`, `bandFor`, the role lookup), on the
+// SAME palette object the walk colours every unpinned segment from
+// (`ActionRuntime.palette`, published by renderDsl), with its text the one the
+// walk draws there — the shade's for a closed cell, `textOn` for the rest — so
+// a preview cannot show a colour the bar under that theme would not draw.
 //
 // The palette sampled is the render's own, not the active segment's: a segment
 // pinned to another theme by `palette:` still previews the bar's theme, which
@@ -23,14 +25,18 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import {
   bandFor,
   decorEntryColour,
-  OPEN_HUE,
   paletteRole,
+  textOn,
   vocabularyOf,
-  type Variation,
+  type Decor,
+  type Disclosure,
 } from "../themes/decor.js";
 import type { ActionRuntime } from "./action.js";
-import type { ActiveSegmentRef } from "./active-segment.js";
-import { stateCell } from "./band-style.js";
+import {
+  requireActiveSegment,
+  type ActiveSegmentRef,
+} from "./active-segment.js";
+import { decoratedCell } from "./band-style.js";
 import { ledRowBudget } from "./picker.js";
 
 // What the closed swatches say: words a bar actually carries, so the sample
@@ -38,33 +44,41 @@ import { ledRowBudget } from "./picker.js";
 // and repeated if the vocabulary outgrows them — the words are decoration too.
 const BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"] as const;
 
-/** One swatch of the preview: what it says and the colour it is drawn on. */
-export interface Swatch {
+/** One swatch of the preview: what it says, the colour it is drawn on, and the text colour it is written in. */
+interface Swatch {
   readonly text: string;
   readonly colour: ColorRgba;
+  readonly ink: ColorRgba;
 }
 
 // [LAW:dataflow-not-control-flow] The preview as data, in the order it is
-// drawn: one group per kind of cell. Exported so a test can hold every swatch
-// against the cell the bar renders, rather than re-reading them off bytes.
-export function previewSwatches(
+// drawn: one group per kind of cell.
+function previewSwatches(
   palette: Palette,
-  variation: Variation,
+  decor: Decor,
+  opens: Disclosure,
   drawnAt: ColorDepth,
 ): readonly Swatch[][] {
-  const band = bandFor(palette, { hue: OPEN_HUE, depth: 0 }, drawnAt);
+  const band = bandFor(palette, opens, drawnAt);
+  // A cell chosen its text the way the walk chooses it off its decoration.
+  const chosen = (text: string, colour: ColorRgba): Swatch => ({
+    text,
+    colour,
+    ink: textOn(palette, colour, drawnAt),
+  });
   return [
-    vocabularyOf(variation.hues).map((entry, i) => ({
-      text: BAR_WORDS[i % BAR_WORDS.length]!,
-      colour: decorEntryColour(palette, entry),
-    })),
+    vocabularyOf(decor).map((entry, i) => {
+      const colour = decorEntryColour(palette, entry);
+      return {
+        text: BAR_WORDS[i % BAR_WORDS.length]!,
+        colour,
+        ink: decor.shade.text(palette, entry.hue, colour, drawnAt),
+      };
+    }),
+    [chosen("▾ open", band.state), chosen("menu", band.plane)],
     [
-      { text: "▾ open", colour: band.state },
-      { text: "menu", colour: band.plane },
-    ],
-    [
-      { text: "warn", colour: paletteRole(palette, "warning") },
-      { text: "error", colour: paletteRole(palette, "error") },
+      chosen("warn", paletteRole(palette, "warning")),
+      chosen("error", paletteRole(palette, "error")),
     ],
   ];
 }
@@ -75,18 +89,19 @@ export function previewSwatches(
 // the terminal breaks away from its ✕.
 export function renderThemePreview(
   palette: Palette,
-  variation: Variation,
+  decor: Decor,
+  opens: Disclosure,
   drawnAt: ColorDepth,
   available: number,
 ): RichText {
   // Swatches in a group touch, like neighbouring bar cells; groups are set
   // apart by one space of whatever the preview sits on.
-  const cells = previewSwatches(palette, variation, drawnAt).flatMap(
+  const cells = previewSwatches(palette, decor, opens, drawnAt).flatMap(
     (group, g) =>
-      group.map(({ text, colour }, i) => ({
+      group.map(({ text, colour, ink }, i) => ({
         gap: g > 0 && i === 0 ? " " : "",
         cell: new RichText(` ${text} `, {
-          style: stateCell(palette, colour, drawnAt),
+          style: decoratedCell({ tint: colour, text: ink }),
         }),
       })),
   );
@@ -113,7 +128,15 @@ export function themePreviewFuncs(
       fn: () =>
         renderThemePreview(
           runtime.palette,
-          runtime.variation,
+          runtime.decor,
+          // The bar trigger's band of the lineage the preview stands in: a
+          // band is coloured from the row its trigger stands in, which only
+          // the trigger's own region knows (decor.ts `decorationFor`).
+          {
+            ...requireActiveSegment(activeSegment, "{{ themePreview }}")
+              .disclosure,
+            depth: 0,
+          },
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
         ),

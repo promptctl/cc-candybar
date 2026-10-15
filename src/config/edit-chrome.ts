@@ -633,12 +633,12 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
     // places its content cells and nothing else. Each child's position in its
     // parent is what its colour derives from (src/themes/decor.ts); chrome
     // spliced in as SIBLINGS took two of every three positions, so visible
-    // neighbours were never consecutive and the row's tones collided
+    // neighbours were never consecutive and the row's shades collided
     // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the content
     // was a whole row (presetRoot stacks every root's rows vertically, so a
     // bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this
     // way): the unit becomes that row's one CELL, so the content keeps the
-    // tone a one-cell row wears outside edit mode. The row carries no gate of
+    // shade a one-cell row wears outside edit mode. The row carries no gate of
     // its own: the content's `when` stays on the content, so a hidden row still
     // shows its label and chrome in edit mode.
     const unit: LayoutNode = {

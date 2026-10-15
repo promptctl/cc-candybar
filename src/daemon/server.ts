@@ -1089,7 +1089,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         // debug handler so normal renders pay no extra serializer cost.
         {
           perSegmentSink: entry.state.lastRenderCellsBySegment,
-          onRenderWarning: (message: string) => renderWarnings.push(message),
+          onRenderWarning: ({ message }) => renderWarnings.push(message),
         },
         // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
         // and name together, so renderDsl publishes the `theme.effective` the

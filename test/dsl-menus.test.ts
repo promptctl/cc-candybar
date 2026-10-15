@@ -61,6 +61,7 @@ import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
   paletteRole,
+  SHADES,
   VARIATIONS,
   textOn,
   type Address,
@@ -698,7 +699,7 @@ describe("toggle round trip + drop stacking", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
     const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
@@ -1295,7 +1296,7 @@ describe("a menu's `distribution` option places its band", () => {
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
     const body = sink.get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
@@ -1539,7 +1540,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", variation: VARIATIONS["accent"], address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
     const cells = optionCells(sink, "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {

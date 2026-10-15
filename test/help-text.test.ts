@@ -12,7 +12,7 @@ describe("HELP_TEXT", () => {
     for (const tab of ["⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"]) {
       expect(HELP_TEXT).toContain(tab);
     }
-    expect(HELP_TEXT).toMatch(/theme\/style\/variation\/endcaps/);
+    expect(HELP_TEXT).toMatch(/theme\/style\/variation\/shade\/endcaps/);
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/💾 save/);
   });
