@@ -38,12 +38,8 @@ import {
   EDIT_MODE_KEY,
   EDIT_CONFIGURE_KEY,
 } from "../src/config/loader/edit-mode";
-import {
-  ADD_GLYPH,
-  CONFIGURE_GLYPH,
-  REMOVE_GLYPH,
-  placementDraftKey,
-} from "../src/config/edit-chrome";
+import { placementDraftKey } from "../src/config/edit-chrome";
+import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import {
   placementId,
   walkNodes,

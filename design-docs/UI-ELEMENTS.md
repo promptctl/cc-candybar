@@ -31,7 +31,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Setting control](#setting-control) | The control a setting gets, chosen by its domain | Settings menu, configure mode | `settingControl` |
 | [Settings menu](#the-settings-menu) | The door to every session and config setting | Every bar | Synthesized |
 | [Edit mode](#edit-mode) | Add, remove and configure placements | Every bar, from `✎ arrange` | Synthesized |
-| [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `⚙️` | Synthesized |
+| [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `🔧` | Synthesized |
 | [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, ceiling, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
 | [State-showing segments](#state-showing-segments) | Colour or glyph that tracks a value | Default rows and opt-in | `bg:` ramps, `cascade`, `gauge`, `sparkline` |
 | [Diagnostic strip](#diagnostic-strip) | Errors, warnings, update notice, above the bar | Any bar with something to say | Composed by the daemon |
@@ -46,7 +46,7 @@ These are the existing pieces each part of the proposal touches. They are facts 
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
 - **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
 - **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Today an option in the theme picker is painted in that theme's own background and primary colour, and an option in the style picker is painted in the base theme with that style applied. Every other picker's options wear the band's colours.
-- **The gear (`[⚙️]`) opening a separate menu.** This is how configure mode works today: `⚙️` on a placement opens a body of that placement's settings.
+- **The gear (`[⚙️]`) opening a separate menu.** This is how configure mode works today: `🔧` on a placement opens a body of that placement's settings.
 - **`[Done]`.** Edit mode's `✓ done` / `✓ save` is the nearest element. Every other open body closes with `✕`.
 - **`(random)`.** No element today picks a random value.
 - **Moving style and variation into the theme picker.** Today theme, style, endcaps and variation are four sibling rings in the `🎨 look` tab.
@@ -515,8 +515,8 @@ A passing check reads `✓ <label>`. A failing check that can be fixed carries `
 
 ```
  ✓ done  |  ☐ live
- 🍫  |  ✚  |  ✖ host ⚙️  |  ✚  |  ✖ directory ⚙️  |  ✚  |  ✖ gitaculous ⚙️  |  ✚
- ✚  |  ✖ model ⚙️  |  ✚  |  ✚  |  ✖ context ⚙️  |  ✚  |  ✖ ceiling ⚙️  |  ✚  |  ✖ autocompact ⚙️  |  ✚  |  ✖ cacheTimer ⚙️  |  ✚  |  ✖ block ⚙️  |  ✚  |  ✖ weekly ⚙️  |  ✚  |  ✖ activity ⚙️  |  ✚
+ 🍫  |  ✚  |  ✖ host 🔧  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧  |  ✚
+ ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ ceiling 🔧  |  ✚  |  ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚
  (?)
 ```
 
@@ -524,18 +524,18 @@ At 80 columns the rows wrap:
 
 ```
  ✓ done  |  ☐ live
- 🍫  |  ✚  |  ✖ host ⚙️  |  ✚  |  ✖ directory ⚙️  |  ✚  |  ✖ gitaculous ⚙️
+ 🍫  |  ✚  |  ✖ host 🔧  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧
  ✚
- ✚  |  ✖ model ⚙️  |  ✚  |  ✚  |  ✖ context ⚙️  |  ✚  |  ✖ ceiling ⚙️  |  ✚
- ✖ autocompact ⚙️  |  ✚  |  ✖ cacheTimer ⚙️  |  ✚  |  ✖ block ⚙️  |  ✚
- ✖ weekly ⚙️  |  ✚  |  ✖ activity ⚙️  |  ✚  |  (?)
+ ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ ceiling 🔧  |  ✚
+ ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚
+ ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚  |  (?)
 ```
 
 After a change (here, `✖` on host), the edit row grows:
 
 ```
  ✓ save  |  ↩ cancel  |  ↺ reset layout  |  ☐ live
- 🍫  |  ✚  |  ✖ directory ⚙️  |  ✚  |  ✖ gitaculous ⚙️  |  ✚
+ 🍫  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧  |  ✚
 ```
 
 | Region | Click |
@@ -546,7 +546,7 @@ After a change (here, `✖` on host), the edit row grows:
 | `☐ live` / `☑ live` | shows each placement's live output instead of its name |
 | `✖` (red, inside a placement's cell) | removes that placement: rewrites `presets.<name>.root` in the config file at once |
 | `✚` (green, no fill) | opens the [library](#library-pages) at that position; becomes `✕` while open. Picking a row inserts that segment there |
-| `⚙️` | enters [configure mode](#configure-mode) for that placement |
+| `🔧` | enters [configure mode](#configure-mode) for that placement |
 | `(?)` | opens the help body (below); becomes `✕` while open |
 
 Layout changes are not drafts: each `✖` and `✚` pick writes the config file at once. Opening edit mode takes a savepoint, which is what `↩ cancel` returns to.
@@ -554,19 +554,19 @@ Layout changes are not drafts: each `✖` and `✚` pick writes the config file 
 The `(?)` body:
 
 ```
- ✕  |  ✚ inserts  |  ✖ removes  |  ⚙️ configures  |  ↺ resets layout
+ ✕  |  ✚ inserts  |  ✖ removes  |  🔧 configures  |  ↺ resets layout
 ```
 
 `(?)` is the only help disclosure in the bar (`declareHelp`, `src/config/help.ts`).
 
 ## Configure mode
 
-`⚙️` on a placement opens that placement's settings below its name, one [setting control](#setting-control) per setting. While a placement is configured, the bar shows live output rather than names, so a change is visible as it is made. Configuring `gitaculous`, at 80 columns:
+`🔧` on a placement opens that placement's settings below its name, one [setting control](#setting-control) per setting. While a placement is configured, the bar shows live output rather than names, so a change is visible as it is made. Configuring `gitaculous`, at 80 columns:
 
 ```
  ✓ done  |  ☐ live
- 🍫  |  ✚  |  ✖ ⇄ bmf@mmu ⚙️  |  ✚  |  ✖ ~/c/cc-candybar ⚙️  |  ✚
- ✖ gitaculous ⚙️  |  ✖ ⎇ docs/ui-elements-inventory +1 ? ▸ ⚙️  |  ✚
+ 🍫  |  ✚  |  ✖ ⇄ bmf@mmu 🔧  |  ✚  |  ✖ ~/c/cc-candybar 🔧  |  ✚
+ ✖ gitaculous 🔧  |  ✖ ⎇ docs/ui-elements-inventory +1 ? ▸ 🔧  |  ✚
  ✕  |  ☑ ahead/behind
     |  ☑ dirty flags
     |  ☑ operation
@@ -598,7 +598,7 @@ Configuring `block`:
 |---|---|
 | A control | session `edit.draft.<preset>.<id>.<setting>` ← the new value; the placement renders it at once and `💾 save` counts it |
 | `✕` | closes configure mode, back to arranging |
-| Another `⚙️` | configures that placement instead (one at a time) |
+| Another `🔧` | configures that placement instead (one at a time) |
 
 - **Settings:** every placement has `theme` (`bar` follows the bar's theme; any installed theme pins this placement). Bundled segments declare more: `gitaculous` has eight toggles; `block` and `weekly` have warning and error thresholds; `session` and `today` have a budget and a warning threshold; `burnrate` has two time thresholds.
 - **Saving:** `✓ save` writes each draft into the placement in the config file, turning a bare `"block"` into `{ seg: "block", settings: { … } }`.
@@ -734,7 +734,7 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 
 1. **A two-value carousel hides its other value.** Neighbours come in symmetric pairs, so a domain of two shows none: the charset ring is `◀ unicode ▶`, and `ascii` appears nowhere until it is picked (`neighbourLevels` in `src/render/carousel.ts`).
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
-3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous ⚙️` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ ⚙️` (its live cell), so one placement has two `✖` and two `⚙️`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
+3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, and around `context`/`ceiling` and `autocompact`, edit mode draws adjacent `✚` with nothing between them, because `context` and `ceiling` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing (`ceiling`, without memento) leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
 6. **Four ways to choose one value.** A [menu](#menu)'s grid (`✕ asc desc`), a [carousel](#carousel) (`◀ none ▶`), a ring row that opens a carousel (`◐ none ▸`), and [library pages](#library-pages). The settings menu uses the ring row and carousel; edit mode uses the menu and library; nothing bundled uses a bare menu over a plain list.

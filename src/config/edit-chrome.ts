@@ -59,6 +59,7 @@ import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
+import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
 import { SAVE_SEG, UNSAVED_VAR } from "./settings-menu.js";
 import {
   menuActionName,
@@ -104,9 +105,6 @@ const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 const EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
 const CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
 const TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-export const REMOVE_GLYPH = "✖";
-export const ADD_GLYPH = "✚";
-export const CONFIGURE_GLYPH = "⚙️";
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
@@ -285,7 +283,7 @@ function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
 }
 
 // An affordance drawn inside a placement's own cell — its `✖` as the segment
-// node's `lead`, its `⚙️` as its `trail` — so nothing sits between a placement
+// node's `lead`, its `🔧` as its `trail` — so nothing sits between a placement
 // and what acts on it. Neither is a segment, so no segment `when` hides it:
 // each carries arrange mode's gate itself.
 function inArrangeMode(term: string): string {
@@ -336,7 +334,7 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
-// What configure mode adds to one placement: the `⚙️` that
+// What configure mode adds to one placement: the `🔧` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
 // through. The body is a disclosure over `edit.configure` at this placement's
@@ -574,9 +572,9 @@ interface SpliceCtx {
 }
 
 // [LAW:dataflow-not-control-flow] One recursive splice: every non-exempt
-// segment child carries its `-` as its lead and `⚙️` as its trail and is followed by one gap
+// segment child carries its `-` as its lead and `🔧` as its trail and is followed by one gap
 // cell holding the `+` that inserts after it, and the first also leads with a
-// `+` (so N consecutive segments read `+ [-seg1⚙️] + [-seg2⚙️] + [-seg3⚙️] +` — N+1
+// `+` (so N consecutive segments read `+ [-seg1🔧] + [-seg2🔧] + [-seg3🔧] +` — N+1
 // insert points, N remove points, N+1 chrome cells); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
 // untouched — but the disclosure BODY a segment hangs (a group's children,

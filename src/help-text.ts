@@ -1,5 +1,6 @@
 import { DOOR_GLYPH } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
+import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
@@ -21,9 +22,9 @@ import { NODE_FLAGS } from "./cli-flags";
 // it explains is worth. Every line leads with the glyph it explains, so the
 // reader matches text to affordance by shape rather than by reading order.
 export const EDIT_MODE_HELP = [
-  "✚ inserts",
-  "✖ removes",
-  "⚙️ configures",
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
   "↺ resets layout",
 ] as const;
 

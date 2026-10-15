@@ -51,11 +51,9 @@ import {
 import {
   ADDABLE_DOMAIN,
   EDIT_LIVE_KEY,
-  ADD_GLYPH,
-  REMOVE_GLYPH,
-  CONFIGURE_GLYPH,
   arrangedSegment,
 } from "../src/config/edit-chrome";
+import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -455,10 +453,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     }
   });
 
-  // A fill cell's pad is part of its content, so the `⚙️` rides AFTER the pad,
+  // A fill cell's pad is part of its content, so the `🔧` rides AFTER the pad,
   // against the cell's far edge — never stranded mid-cell with the pad beyond it
   // — and the `-` leads the content, outside its sizing.
-  test("a fill segment's `-` leads and its `⚙️` sits after the leftover width it absorbed", () => {
+  test("a fill segment's `-` leads and its `🔧` sits after the leftover width it absorbed", () => {
     const src = BASE.replace(
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
