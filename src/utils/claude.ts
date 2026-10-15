@@ -7,7 +7,11 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
-import { entryActivity, type EntryActivity } from "./transcript-activity";
+import {
+  entryActivity,
+  turnText,
+  type EntryActivity,
+} from "./transcript-activity";
 
 export interface ClaudeHookData {
   // cc-candybar internal — not part of Anthropic's schema
@@ -275,12 +279,11 @@ export type PrunedRaw = {
 export interface ParsedEntry {
   timestamp: Date;
   // [LAW:one-source-of-truth] The pruned projection carries every scalar any
-  // consumer reads. `type`, `message.role/type/firstContentType` are the
+  // consumer reads. `type`, `message.role/type` and `userEntry` are the
   // message-classification discriminators the metrics segment needs; they are
   // small enum-like strings, so projecting them keeps metrics on this one parse
   // path WITHOUT retaining the multi-MB `message.content[]` arrays the pruning
-  // exists to drop. `firstContentType` is the `type` of the first content block
-  // only (undefined when content is text/absent) — never the array itself.
+  // exists to drop.
   type?: string;
   message?: {
     id?: string;
@@ -288,28 +291,76 @@ export interface ParsedEntry {
     model?: string;
     role?: string;
     type?: string;
-    firstContentType?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
+  // Who wrote a "user" entry; undefined on every other entry.
+  userEntry?: UserEntry;
   // [LAW:one-source-of-truth] What this entry says Claude is DOING, projected
   // here rather than by a second scanner (src/utils/transcript-activity.ts).
-  // Same discipline as `firstContentType`: bounded scalars out of
+  // Same discipline as `userEntry`: bounded scalars out of
   // `message.content[]`, never the array. Undefined for every entry that
   // contributes no activity, which is most of them.
   activity?: EntryActivity;
   raw: PrunedRaw;
 }
 
-// [LAW:one-source-of-truth] A real user turn vs. a tool_result echoed back as a
-// "user" line. Two folds ask this — the message count and the activity turn
-// boundary — so it is spelled once, over the projected scalars, beside the type
-// it classifies.
-export function isRealUserMessage(entry: ParsedEntry): boolean {
-  const messageType = entry.type || entry.message?.role || entry.message?.type;
-  const isToolResult =
-    entry.type === "user" && entry.message?.firstContentType === "tool_result";
-  return messageType === "user" && !isToolResult;
+// A "user" entry is one of five facts, read from the marks Claude Code writes:
+// - `prompt`: input Claude answers, a person's or an SDK caller's — the input
+//   Claude Code's own `turnPosition.promptIndex` counts.
+// - `turn`: Claude Code opening another turn of the same prompt (an `origin`
+//   other than human: a task notification, an auto-continuation).
+// - `interrupt`: the marker Claude Code leaves when a person stops a turn.
+// - `tool-result`: a tool's answer echoed back.
+// - `claude-code`: what passes between the person and Claude Code without
+//   reaching Claude as input — what Claude Code writes on its own (`isMeta`: a
+//   skill's expanded body, a command caveat; a compaction summary; a command's
+//   output) and what a person addresses to Claude Code itself (a built-in
+//   command such as `/clear` or `/model`, a `!` shell command).
+export type UserEntry =
+  | "prompt"
+  | "turn"
+  | "interrupt"
+  | "tool-result"
+  | "claude-code";
+
+// [LAW:one-source-of-truth] Classified once, at the parse site, from the marks
+// Claude Code writes — the message count, the response clock and the activity
+// fold all read the one projected value.
+export function userEntryOf(
+  parsed: Record<string, unknown>,
+): UserEntry | undefined {
+  const msg = parsed.message as Record<string, unknown> | undefined;
+  const messageType = parsed.type || msg?.role || msg?.type;
+  if (messageType !== "user") return undefined;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin =
+    typeof parsed.origin === "object" && parsed.origin !== null
+      ? (parsed.origin as { kind?: unknown }).kind
+      : undefined;
+  if (origin !== undefined && origin !== "human") return "turn";
+  // Claude Code marks the rest only by the fixed text it writes. A skill
+  // command, which Claude answers, leads with `<command-message>`; a built-in
+  // command leads with `<command-name>`.
+  const text = turnText(msg?.content).trimStart();
+  if (text.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed.isMeta === true ||
+    parsed.isCompactSummary === true ||
+    CLAUDE_CODE_TEXT.test(text)
+    ? "claude-code"
+    : "prompt";
+}
+
+const CLAUDE_CODE_TEXT =
+  /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+
+// The first content block's `type`; the array (full LLM text) is never
+// retained. Text content (a bare string) has no block type.
+function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0]
+    ? (content[0] as { type?: unknown }).type
+    : undefined;
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
@@ -416,13 +467,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   if (!parsed.timestamp) return null;
   const msg = parsed.message as Record<string, unknown> | undefined;
   const usage = msg?.usage as UsageCounts | undefined;
-  // Project only the first content block's `type` scalar; the array (full LLM
-  // text) is never retained. Text content (a bare string) has no block type.
-  const content = msg?.content;
-  const firstBlock =
-    Array.isArray(content) && typeof content[0] === "object" && content[0]
-      ? (content[0] as { type?: unknown })
-      : undefined;
+  const userEntry = userEntryOf(parsed);
   return {
     timestamp: new Date(parsed.timestamp as string),
     type: typeof parsed.type === "string" ? parsed.type : undefined,
@@ -433,13 +478,12 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
           usage,
           role: typeof msg.role === "string" ? msg.role : undefined,
           type: typeof msg.type === "string" ? msg.type : undefined,
-          firstContentType:
-            typeof firstBlock?.type === "string" ? firstBlock.type : undefined,
         }
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
     isSidechain: parsed.isSidechain === true,
-    activity: entryActivity(parsed),
+    userEntry,
+    activity: entryActivity(parsed, userEntry),
     raw: {
       model: typeof parsed.model === "string" ? parsed.model : undefined,
       message: msg

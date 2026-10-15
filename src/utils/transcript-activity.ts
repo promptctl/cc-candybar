@@ -7,12 +7,13 @@
 // [LAW:one-source-of-truth] These facts live inside `message.content[]`, which
 // `makeEntry` deliberately does NOT retain — those arrays are the multi-MB LLM
 // text the pruning exists to drop. So this module is a PROJECTION run at the one
-// parse site, in exactly the shape `firstContentType` already established:
+// parse site, in exactly the shape the rest of the pruned entry takes:
 // project the bounded scalars, never the array. A tool call keeps its id and
 // name (29 + ~8 bytes), a tool result keeps the id it answers plus what lit
 // said in it (src/utils/transcript-lit.ts), a TodoWrite keeps its list (bounded by the list), and a slash command keeps its name. The
 // content arrays stay unreachable from here on, as before.
 
+import type { UserEntry } from "./claude";
 import {
   phaseOf,
   litClaim,
@@ -90,6 +91,23 @@ function todoItems(input: unknown): readonly TodoItem[] | undefined {
   return items;
 }
 
+// [LAW:one-source-of-truth] The entry's own prose, whichever shape it arrived
+// in — a bare string or the first text block — read the one way by the
+// command projection here and by `userEntryOf`, so the two shapes cannot end up
+// under two different rules.
+export function turnText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b): b is { type: "text"; text: string } =>
+      typeof b === "object" &&
+      b !== null &&
+      (b as { type?: unknown }).type === "text" &&
+      typeof (b as { text?: unknown }).text === "string",
+  );
+  return block?.text ?? "";
+}
+
 /**
  * Project one parsed transcript line's activity, or undefined when it has none.
  *
@@ -99,29 +117,21 @@ function todoItems(input: unknown): readonly TodoItem[] | undefined {
  */
 export function entryActivity(
   parsed: Record<string, unknown>,
+  userEntry: UserEntry | undefined,
 ): EntryActivity | undefined {
   const msg = parsed.message as Record<string, unknown> | undefined;
   const content = msg?.content;
-  // A `<command-name>` tag is only this turn's command when the USER wrote it;
-  // an assistant echoing the tag back is discussing a command, not running one.
-  const isUser = parsed.type === "user";
 
   const started: ToolCall[] = [];
   const finished: string[] = [];
   let todos: readonly TodoItem[] | undefined;
-  // The turn's own prose, whichever shape it arrived in — a bare string or the
-  // first text block. The user check is applied ONCE, to the result, so the two
-  // shapes cannot end up under two different rules.
-  let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
   const claims: LitClaim[] = [];
   const said: LitSaid[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
 
-  if (typeof content === "string") {
-    turnText = content;
-  } else if (Array.isArray(content)) {
+  if (Array.isArray(content)) {
     for (const block of content) {
       if (typeof block !== "object" || block === null) continue;
       const b = block as Record<string, unknown>;
@@ -149,17 +159,16 @@ export function entryActivity(
           }
           break;
         }
-        case "text": {
-          turnText ??= b.text;
-          break;
-        }
         default:
           break;
       }
     }
   }
 
-  const command = isUser ? slashCommand(turnText) : undefined;
+  // A `<command-name>` tag is the command only in a prompt a person wrote; an
+  // assistant echoing the tag back is discussing a command, not running one.
+  const command =
+    userEntry === "prompt" ? slashCommand(turnText(content)) : undefined;
   const lit: EntryLit | undefined =
     claims.length === 0 &&
     phase === undefined &&

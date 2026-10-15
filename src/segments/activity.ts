@@ -21,7 +21,6 @@
 // O(bytes appended since the last render).
 
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
-import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import type {
   EntryLit,
@@ -156,20 +155,36 @@ function bump(tally: readonly ToolTally[], name: string): readonly ToolTally[] {
   );
 }
 
-// [LAW:dataflow-not-control-flow] One entry onto the prior state, producing a
-// FRESH state. A real user message is the turn boundary: the per-turn facts (the
-// command and the tool activity) start over, the todo list does not — it is state
-// the user carries across turns until a TodoWrite replaces it.
-function step(state: ActivityState, entry: ParsedEntry): ActivityState {
-  if (entry.isSidechain) return state;
-  const turn = isRealUserMessage(entry)
-    ? {
+// [LAW:dataflow-not-control-flow] What one entry does to the per-turn facts,
+// as one total read of who wrote it. A prompt starts them over (the todo list
+// stays — it is state the user carries across turns until a TodoWrite replaces
+// it). An interrupt leaves the turn's record but nothing running. Everything
+// else — another turn of the same prompt, a skill's body, a built-in command —
+// is part of the prompt's work.
+function atBoundary(state: ActivityState, entry: ParsedEntry): ActivityState {
+  switch (entry.userEntry) {
+    case "prompt":
+      return {
         ...state,
         command: entry.activity?.command ?? null,
         pending: [],
         done: [],
-      }
-    : state;
+      };
+    case "interrupt":
+      return { ...state, pending: [] };
+    case "turn":
+    case "tool-result":
+    case "claude-code":
+    case undefined:
+      return state;
+  }
+}
+
+// [LAW:dataflow-not-control-flow] One entry onto the prior state, producing a
+// FRESH state.
+function step(state: ActivityState, entry: ParsedEntry): ActivityState {
+  if (entry.isSidechain) return state;
+  const turn = atBoundary(state, entry);
 
   const activity = entry.activity;
   if (activity === undefined) return turn;

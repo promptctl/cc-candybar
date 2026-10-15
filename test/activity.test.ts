@@ -23,7 +23,11 @@ import type {
 import { ABSENT, ok } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
-import { clearParseCache, type ClaudeHookData } from "../src/utils/claude";
+import {
+  clearParseCache,
+  userEntryOf,
+  type ClaudeHookData,
+} from "../src/utils/claude";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
@@ -46,6 +50,35 @@ const userText = (text: string): string =>
     type: "user",
     message: { role: "user", content: text },
   });
+
+// A "user" entry Claude Code writes itself (`isMeta: true`), never typed by a
+// person — here the nudge it sends after an empty response, seen mid-turn in
+// a real transcript (brandon-effects-2gka.2rm).
+const metaUser = (text: string): string =>
+  JSON.stringify({
+    timestamp: stamp(),
+    type: "user",
+    isMeta: true,
+    message: { role: "user", content: [{ type: "text", text }] },
+  });
+
+// A task notification: Claude Code wakes Claude for another turn of the same
+// prompt when a background task finishes. Not isMeta — its `origin` says who.
+const taskNotification = (): string =>
+  JSON.stringify({
+    timestamp: stamp(),
+    type: "user",
+    origin: { kind: "task-notification", producer: "session-task" },
+    promptSource: "system",
+    message: { role: "user", content: "<task-notification>done</task-notification>" },
+  });
+
+// A slash command Claude answers (a skill), as Claude Code writes it — leading
+// with `<command-message>`. A built-in command leads with `<command-name>`.
+const skill = (name: string): string =>
+  userText(
+    `<command-message>${name}</command-message>\n<command-name>/${name}</command-name>`,
+  );
 
 const toolUse = (
   ...calls: Array<{ id: string; name: string; input?: unknown }>
@@ -148,12 +181,17 @@ beforeEach(() => {
 
 // ─── the per-entry projection ────────────────────────────────────────────────
 
+// The projection as the parse site runs it: classified first, then projected.
+const project = (
+  parsed: Record<string, unknown>,
+): ReturnType<typeof entryActivity> => entryActivity(parsed, userEntryOf(parsed));
+
 describe("the entry projection carries the scalars and never the content array", () => {
   test("a tool call keeps its id and name; the input is not retained", () => {
     const parsed = JSON.parse(
       toolUse({ id: "t1", name: "Bash", input: { command: "x".repeat(5000) } }),
     );
-    expect(entryActivity(parsed)).toEqual({
+    expect(project(parsed)).toEqual({
       started: [{ id: "t1", name: "Bash" }],
     });
   });
@@ -168,7 +206,7 @@ describe("the entry projection carries the scalars and never the content array",
         },
       ]),
     );
-    expect(entryActivity(parsed)).toEqual({
+    expect(project(parsed)).toEqual({
       started: [{ id: "t1", name: "TodoWrite" }],
       todos: [{ text: "Writing the gate", active: true, done: false }],
     });
@@ -189,7 +227,7 @@ describe("the entry projection carries the scalars and never the content array",
         },
       ]),
     );
-    expect(entryActivity(parsed)?.todos).toEqual([
+    expect(project(parsed)?.todos).toEqual([
       { text: "Write the gate", active: false, done: true },
       { text: "Mutating it", active: true, done: false },
     ]);
@@ -201,23 +239,23 @@ describe("the entry projection carries the scalars and never the content array",
     const parsed = JSON.parse(
       todoWrite("t1", [{ content: "Later", status: "deferred" }]),
     );
-    expect(entryActivity(parsed)?.todos).toEqual([
+    expect(project(parsed)?.todos).toEqual([
       { text: "Later", active: false, done: false },
     ]);
   });
 
   test("a user turn's slash command is projected, from either content shape", () => {
     expect(
-      entryActivity(
+      project(
         JSON.parse(
           userText(
-            "<command-name>/next</command-name>\n  <command-args></command-args>",
+            "<command-message>next</command-message>\n<command-name>/next</command-name>\n<command-args></command-args>",
           ),
         ),
       ),
     ).toEqual({ command: "/next" });
     expect(
-      entryActivity(
+      project(
         JSON.parse(
           JSON.stringify({
             timestamp: stamp(),
@@ -225,7 +263,10 @@ describe("the entry projection carries the scalars and never the content array",
             message: {
               role: "user",
               content: [
-                { type: "text", text: "<command-name>/loop</command-name>" },
+                {
+                  type: "text",
+                  text: "<command-message>loop</command-message>\n<command-name>/loop</command-name>",
+                },
               ],
             },
           }),
@@ -254,13 +295,19 @@ describe("the entry projection carries the scalars and never the content array",
           },
         }),
       );
-      expect(entryActivity(echoed)).toBeUndefined();
+      expect(project(echoed)).toBeUndefined();
     },
   );
 
+  test("a command tag in an entry Claude Code wrote itself is not a command", () => {
+    expect(
+      project(JSON.parse(metaUser("<command-name>/next</command-name>"))),
+    ).toBeUndefined();
+  });
+
   test("an entry with nothing to say projects nothing at all", () => {
     expect(
-      entryActivity(JSON.parse(userText("just a question"))),
+      project(JSON.parse(userText("just a question"))),
     ).toBeUndefined();
   });
 });
@@ -317,6 +364,60 @@ describe("the fold reports what is happening now", () => {
     ]);
   });
 
+  test("a meta user entry is not a turn boundary, so the tally and the command survive it", async () => {
+    const info = await activityOf(
+      skill("next"),
+      metaUser("Base directory for this skill: …"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      metaUser(
+        "Your previous response had no visible output. Please continue and produce a user-visible response.",
+      ),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("a task notification is another turn of the same prompt, so the tally and the command survive it", async () => {
+    const info = await activityOf(
+      skill("next"),
+      toolUse({ id: "a", name: "Agent" }),
+      toolResult("a"),
+      taskNotification(),
+      toolUse({ id: "b", name: "Bash" }),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Agent", count: 1 }]);
+    expect(info.running).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("a built-in command, a shell command and their output are not prompts, so the turn before them stands", async () => {
+    const info = await activityOf(
+      skill("next"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      userText("<command-name>/model</command-name>"),
+      userText("<local-command-stdout>Set model to Opus</local-command-stdout>"),
+      userText("<bash-input>ls</bash-input>"),
+      userText("<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("an interrupt ends the turn without starting one: its tally and command stay, nothing is left running", async () => {
+    const info = await activityOf(
+      skill("next"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      toolUse({ id: "b", name: "Read" }),
+      userText("[Request interrupted by user]"),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+    expect(info.running).toEqual([]);
+  });
+
   test("a real user message resets the tool activity but keeps the todo list", async () => {
     const info = await activityOf(
       userText("first"),
@@ -343,13 +444,13 @@ describe("the fold reports what is happening now", () => {
 
   test("the slash command that opened the turn is reported, and plain text clears it", async () => {
     expect(
-      (await activityOf(userText("<command-name>/next</command-name>")))
+      (await activityOf(skill("next")))
         .command,
     ).toBe("/next");
     expect(
       (
         await activityOf(
-          userText("<command-name>/next</command-name>"),
+          skill("next"),
           userText("now do this"),
         )
       ).command,
