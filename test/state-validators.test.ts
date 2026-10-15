@@ -78,7 +78,7 @@ describe("state-validators contract", () => {
   });
 
   test("toolbar-expanded validator rejects the empty string (no silent guess)", () => {
-    // [LAW:no-silent-fallbacks] Empty value on the wire is structurally
+    // [LAW:no-silent-failure] Empty value on the wire is structurally
     // ambiguous (did the operator mean "0", or did they forget to provide
     // a value?). Accepting it would be a silent semantic guess; the
     // validator rejects it explicitly so the operator sees the malformed
@@ -89,7 +89,7 @@ describe("state-validators contract", () => {
   });
 
   test("unknown key rejection lists the gate's keys", () => {
-    // [LAW:errors-context-in-errors] The rejection IS the schema
+    // [LAW:no-silent-failure] The rejection IS the schema
     // surface for a confused caller — confirms the error carries the
     // gate's own keys, not a stale literal.
     const result = bare().validate("not-a-key", "x");
@@ -120,7 +120,7 @@ describe("state-validators contract", () => {
   });
 
   test("a built-in key cannot be re-claimed daemon-wide", () => {
-    // [LAW:no-silent-fallbacks] Built-in keys are permanent; a claim on
+    // [LAW:no-silent-failure] Built-in keys are permanent; a claim on
     // `theme` collides loudly rather than silently hijacking the canonical
     // theme validator.
     expect(() =>

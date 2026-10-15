@@ -29,6 +29,7 @@ import {
   linkFragment,
   readVar,
   realize,
+  renderLook,
   type ActionRuntime,
 } from "./action.js";
 import {
@@ -264,7 +265,7 @@ export function carouselFuncs(
           optionItemStyle(
             active,
             placedBy(undefined),
-            runtime,
+            renderLook(runtime, "{{ carousel }}"),
             apply.paletteOf,
             activeSegment.drawnAt(),
             active.bg,

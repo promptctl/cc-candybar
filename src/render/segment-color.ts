@@ -3,7 +3,7 @@
 //
 // rich-js owns every color operation and knows nothing about segments;
 // cc-candybar owns segments and performs no color arithmetic of its own
-// [LAW:rich-js-owns-color-math]. This module is exactly the join: it supplies
+// [LAW:one-source-of-truth]. This module is exactly the join: it supplies
 // rich-js's `color` and `ramp` with *which* palette, and adds the functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
 // currently rendering, `tint`, the decoration its region dealt it, and

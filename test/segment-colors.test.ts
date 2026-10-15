@@ -19,6 +19,7 @@ import {
   contrastRatio,
   drawnColour,
   ColorDepth,
+  transposePalette,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import {
@@ -571,6 +572,17 @@ describe("per-segment hue via palette transposition", () => {
   test("memoized: same (palette, hueShift) returns the same palette instance", () => {
     expect(transposedPalette(base, hueKey(30))).toBe(
       transposedPalette(base, hueKey(30)),
+    );
+  });
+
+  test("the memo answers for the palette it is handed, whatever was cached first", () => {
+    // A transposed palette keeps its base's name, so the answer cached for the
+    // base under that name is not an answer for it.
+    const shifted = transposedPalette(base, hueKey(30));
+    const chained = transposedPalette(shifted, hueKey(30));
+    expect(chained).not.toBe(shifted);
+    expect(chained.get("primary")!.hex).toBe(
+      transposePalette(shifted, hueKey(30)).get("primary")!.hex,
     );
   });
 

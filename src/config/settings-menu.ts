@@ -739,7 +739,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       },
     },
     segments: {
-      // [LAW:representation] ONE symbol per state, unlike the labelled toggles
+      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
       // below, which are a word plus the ▸/▾ that gates it. The door has no
       // label to gate: it is a glyph, so a second glyph beside it would be the
       // only thing on the bar that spells its state twice. The door's glyph

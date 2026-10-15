@@ -49,7 +49,12 @@ import {
 } from "../config/menu-keys.js";
 import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
-import { linkFragment, readVar, type ActionRuntime } from "./action.js";
+import {
+  linkFragment,
+  readVar,
+  renderLook,
+  type ActionRuntime,
+} from "./action.js";
 import { renderPicker, requireOptionKind } from "./picker.js";
 import { closeOn, optionItemStyle } from "./band-style.js";
 import { bandFor } from "../themes/decor.js";
@@ -184,7 +189,7 @@ function renderMenu(
       optionItemStyle(
         placement,
         options.distribution,
-        action,
+        renderLook(action, "{{ menu }}"),
         requireOptionKind(action, applyName, "menu").paletteOf,
         drawnAt,
         plane,

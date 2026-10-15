@@ -60,13 +60,12 @@ export type OptionDomainResolver = () => readonly string[];
 // which is exactly the absence below.
 //
 // `render` is the render's two palettes. `basePalette` is the one the render's
-// STYLE applies to — never a palette that has already been transposed.
-// `transposedPalette` must not be chained: its memo keys on the base palette's
-// NAME, which transposition preserves, so transposing an already-styled
-// palette both double-pays OKLCH quantization and collides the shared memo
-// (gruvbox+vivid vs gruvbox+dim+vivid). `palette` is the base under the style —
-// what the bar is drawn in, and so what an option that follows the bar paints
-// in. The render publishes both on ActionRuntime for exactly this reason.
+// STYLE applies to — never a palette that has already been transposed: a style
+// adapts a theme, so transposing an already-styled palette would paint an
+// option in two styles at once (and double-pay OKLCH quantization). `palette`
+// is the base under the style — what the bar is drawn in, and so what an
+// option that follows the bar paints in. The render publishes both in its
+// look (ActionRuntime) for exactly this reason.
 export interface RenderPalettes {
   readonly basePalette: Palette;
   readonly palette: Palette;
@@ -164,7 +163,7 @@ registerBuiltinDomain("shades", () => SHADE_NAMES);
 registerBuiltinDomain("charsets", () => CHARSETS);
 registerBuiltinDomain("colorCompatibilities", () => COLOR_COMPATIBILITIES);
 
-// [LAW:no-silent-fallbacks] A built-in domain can never be re-claimed — a
+// [LAW:no-silent-failure] A built-in domain can never be re-claimed — a
 // config or feature registering a custom domain named "themes" gets a loud
 // load-time error, never a silent shadow of the real theme list. Registering
 // returns a disposer (same shape as registerStateValidator) so a caller with

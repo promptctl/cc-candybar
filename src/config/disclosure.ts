@@ -36,7 +36,7 @@ import type {
 // (two identical members, never openable), which both synthesis passes reject.
 export const DISCLOSURE_CLOSED = "closed";
 
-// [LAW:representation] The disclosure glyph vocabulary — one pair for the whole
+// [LAW:one-type-per-behavior] The disclosure glyph vocabulary — one pair for the whole
 // bar so every disclosure reads the same (trailing the label/content it gates,
 // per pdu.8): collapsed ▸, expanded ▾.
 //

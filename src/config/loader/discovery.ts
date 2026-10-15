@@ -41,7 +41,7 @@ function presence(path: string): Presence {
 // `CC_CANDYBAR_CONFIG` hint) and the `check` CLI's target. Every path that
 // reaches this module is already literal.
 //
-// [LAW:enumeration-gap] Only the shell-standard home-expansion forms trigger
+// [LAW:types-are-the-program] Only the shell-standard home-expansion forms trigger
 // replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
 // `~alice/cfg` (POSIX named-home lookup) is NOT expanded — we have no way
 // to resolve another user's home and a literal substitution would corrupt

@@ -316,7 +316,7 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 // naming the failing pair so the operator can localize the typo). The
 // dispatcher in server.ts maps BadVerbArgs to BAD_REQUEST.
 //
-// [LAW:no-silent-fallbacks] Batch atomicity: every pair is validated
+// [LAW:no-silent-failure] Batch atomicity: every pair is validated
 // BEFORE any write happens. Any single failure rejects the whole
 // batch — no half-applied state, no "first three writes landed and
 // the fourth failed." A widget click is one transactional intent;
@@ -439,7 +439,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   const by = parseInt(byRaw, 10);
   const config = sessionConfig(ctx, sid);
   const gate = stateGate(config);
-  // [LAW:no-silent-fallbacks] A key the session's config declares no range for
+  // [LAW:no-silent-failure] A key the session's config declares no range for
   // is not a stepper — reject loudly rather than fabricate bounds or silently
   // no-op.
   const params = gate.rangeParamsFor(key);
@@ -624,7 +624,7 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 // SessionState. The write is DURABLE, and the session's config reloads before
 // the click answers, as save's does, so the next render draws it
 // ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
-// [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
+// [LAW:no-silent-failure] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
 // derived from the SAME action table.
 const setConfig: VerbHandler = (rawValue, ctx) => {
@@ -1406,7 +1406,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // batchAdjacentWrites has joined each run of adjacent set-state (or
 // reset-config) effects into the one batch that lands whole. The
 // effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
-// compound branch. [LAW:no-silent-fallbacks] Every effect runs even if an
+// compound branch. [LAW:no-silent-failure] Every effect runs even if an
 // earlier one failed; failures accumulate in `errors`. An unknown or
 // non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
 // never executed.

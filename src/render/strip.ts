@@ -39,7 +39,7 @@ function draw(
   return renderToString(renderable, {
     ...options,
     theme: RENDER_THEME,
-    // [LAW:no-silent-fallbacks] rich-js would draw a style it cannot resolve
+    // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
     // as no style at all; a name the theme lacks is a broken config, so it
     // throws here exactly as the cell splitter throws on it.
     onStyleError: (error) => {

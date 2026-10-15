@@ -27,12 +27,17 @@ import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
+import {
+  registerDslConfig,
+  renderDsl,
+  type CompiledConfig,
+  type RenderWarning,
+} from "../src/dsl/render";
+import { renderLook } from "../src/render/action";
 import { SessionState } from "../src/daemon/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
 import {
-  declaredBasePalette,
   decideThemeName,
   resolveStyleSelection,
   resolveThemeSelection,
@@ -87,6 +92,7 @@ interface Painted {
 }
 
 interface Runtime {
+  readonly compiled: CompiledConfig;
   readonly sessionState: SessionState;
   readonly warnings: readonly RenderWarning[];
   render(pct: number, staged?: string): Painted;
@@ -145,7 +151,13 @@ function buildRuntime(source = src(RULE)): Runtime {
       },
     };
   };
-  return { sessionState, warnings, render, dispose: () => registry.dispose() };
+  return {
+    compiled,
+    sessionState,
+    warnings,
+    render,
+    dispose: () => registry.dispose(),
+  };
 }
 
 // What the same bar's `plain` cell looks like under that theme chosen BY NAME —
@@ -225,12 +237,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const STYLES = "styles: { none: {}, washed: { chromaScale: 0.2 } },";
     const { sessionState, render, dispose } = buildRuntime(src(RULE, STYLES));
     try {
-      // [LAW:one-source-of-truth] The expectation is built with rich-js
-      // `transposePalette` DIRECTLY, never `transposedPalette` — that memo keys on
-      // the base palette's NAME, which transposition preserves, so computing the
-      // expected value through it would hand back whatever the implementation
-      // cached and the assertion would pass for any base
-      // (memoized-expectation-masks-mutation).
+      // [LAW:behavior-not-structure] The expectation is built with rich-js
+      // `transposePalette` DIRECTLY, never cc-candybar's `transposedPalette` —
+      // the function under test cannot be the oracle that checks it.
       const washed = transposePalette(getThemePalette("dracula")!, {
         hueShift: 0,
         chromaScale: 0.2,
@@ -291,20 +300,24 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("registration does not resolve the rule as a palette NAME", () => {
-    // The ActionRuntime's compile-only base palette went through
-    // paletteForThemeName of `globals.palette`, which THROWS on a name it cannot
-    // resolve — so a rule there would have failed at LOAD for a config that
-    // renders perfectly well. `declaredBasePalette` is the one resolution.
+    // paletteForThemeName THROWS on a name it cannot resolve, so resolving
+    // `globals.palette` at registration would fail at LOAD for a config that
+    // renders perfectly well. Only a render resolves the theme.
     expect(() => buildRuntime().dispose()).not.toThrow();
-    expect(declaredBasePalette(RULE).name).toBe(
-      getThemePalette(THEME_FLOOR)!.name,
-    );
-    expect(declaredBasePalette("nord").name).toBe(
-      getThemePalette("nord")!.name,
-    );
-    expect(declaredBasePalette(undefined).name).toBe(
-      getThemePalette(THEME_FLOOR)!.name,
-    );
+  });
+
+  test("the look a template reads is the render's own, and there is none before one", () => {
+    const rt = buildRuntime();
+    try {
+      const runtime = rt.compiled.menuRuntime.action;
+      expect(() => renderLook(runtime, "{{ probe }}")).toThrow(
+        "{{ probe }} read the render's look before any render resolved one",
+      );
+      rt.render(90);
+      expect(renderLook(runtime, "{{ probe }}").basePalette.name).toBe("dracula");
+    } finally {
+      rt.dispose();
+    }
   });
 
   test("an omitted theme selection renders what the CONFIG declares, not the floor", () => {

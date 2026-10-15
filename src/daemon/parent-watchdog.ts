@@ -33,7 +33,7 @@ export type LivenessAnchor =
   | { kind: "outlives-nobody" }
   | { kind: "anchored"; pid: number };
 
-// [LAW:no-silent-fallbacks] Three inputs, three outcomes, no overlap: absent →
+// [LAW:no-silent-failure] Three inputs, three outcomes, no overlap: absent →
 // production (outlive nobody); a positive integer → anchor to it; present but
 // malformed → throw. Only the test harness ever sets this variable, so a
 // malformed value is a harness bug; silently degrading to "outlives-nobody"

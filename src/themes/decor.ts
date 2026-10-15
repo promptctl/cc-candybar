@@ -14,7 +14,7 @@
 // [LAW:effects-at-boundaries] Pure. No renderer wiring, no I/O, no traversal
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
-// imports only rich-js, which owns every colour operation used (`mixAxes`,
+// imports only its memo and rich-js, which owns every colour operation used (`mixAxes`,
 // `blendRgb`, `ensureContrast`, `ensureDrawn`, `drawnColour`, `contrastFor`,
 // `contrastRatio`, `Oklch.deltaE`); cc-candybar keeps the POLICY (which roles,
 // which shades, which address formula) and no colour arithmetic of its own.
@@ -31,6 +31,7 @@ import {
   ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
+import { memoPerPalette } from "./palette-memo.js";
 
 // --- The vocabulary -----------------------------------------------------------
 
@@ -551,7 +552,7 @@ export function rowGround(decor: Decor, address: Address): Ground {
 
 // Every shade of a role, darkest rung first and the muted form last: the order
 // a ground lists a role's entries in.
-const ROLE_SHADES = Object.keys(SHADE_SUFFIX) as readonly RoleShade[];
+const ROLE_SHADES: readonly RoleShade[] = [...LADDER, "muted"];
 
 /** A palette entry decoration reads: a pole, an alert, a role at a shade, or a role's text. */
 export type DecorRole =
@@ -639,32 +640,6 @@ export const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>
 export interface StateSearch {
   readonly state: ColorRgba;
   readonly short: number | null;
-}
-
-/**
- * [LAW:one-source-of-truth] The one per-palette memo every colour search here
- * is cached through: `compute` runs once per (palette, key). Palettes are
- * memoised objects (`transposedPalette`), so keying on the palette object lets
- * each palette's answers go when it does.
- */
-function memoPerPalette<V extends {}>(): (
-  palette: Palette,
-  key: string,
-  compute: () => V,
-) => V {
-  const memo = new WeakMap<Palette, Map<string, V>>();
-  return (palette, key, compute) => {
-    let entries = memo.get(palette);
-    if (entries === undefined) {
-      entries = new Map();
-      memo.set(palette, entries);
-    }
-    const hit = entries.get(key);
-    if (hit !== undefined) return hit;
-    const value = compute();
-    entries.set(key, value);
-    return value;
-  };
 }
 
 /** A colour as the terminal shows it at `drawnAt` (rich-js `drawnColour`). */

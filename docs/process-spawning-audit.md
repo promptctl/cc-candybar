@@ -378,7 +378,7 @@ When changing anything that adds, removes, or modifies a spawn site:
 - [ ] Did you add a new `LaunchCategory` if this is a new kind of work?
       `LAUNCH_CATEGORIES` is the closed list at `src/proc/launch.ts`.
 - [ ] Did you pass a `timeoutMs`? If not, justify in a comment with a
-      `[LAW:no-silent-fallbacks]` exception marker.
+      `[LAW:no-silent-failure]` exception marker.
 - [ ] If detached: are you using `launchDetachedSync` (typed return) and not
       `void launch({detached:true})` (discards spawn outcome)?
 - [ ] If the new call is on the render hot path: have you measured the

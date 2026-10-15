@@ -764,7 +764,7 @@ export function synthesizeGroupDecls(
     // closing the sibling on a shared key.
     variables[name] = disclosureStateVar(key, defaultByKey.get(key)!);
     actions[name] = disclosureCycleAction(key, g.name);
-    // [LAW:representation] The disclosure glyph trails the label it gates, so an
+    // [LAW:one-type-per-behavior] The disclosure glyph trails the label it gates, so an
     // arrow reads as belonging to the text on its LEFT — adjacent toggles
     // ("details ▸" "links ▸") stay unambiguous even when abutted. `indent` is a
     // structural left-margin (nesting depth) and stays leading; the glyph is a

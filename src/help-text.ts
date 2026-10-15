@@ -15,7 +15,7 @@ import { NODE_FLAGS } from "./cli-flags";
 // segment template — where nothing would ever notice it drifting from the CLI's
 // wording — is the defect this shape exists to make unrepresentable.
 //
-// [LAW:representation] One line is one CELL on the bar, so each is a complete
+// [LAW:decomposition] One line is one CELL on the bar, so each is a complete
 // thought that stands alone and each stays short: `(?)` bodies drop below their
 // row, and a body that overflows `term.cols` wraps into more rows than the fact
 // it explains is worth. Every line leads with the glyph it explains, so the

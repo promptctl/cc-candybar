@@ -30,7 +30,7 @@ import {
   type KeySpecContribution,
 } from "./validator-registry";
 
-// [LAW:no-silent-fallbacks] No built-in keys: a config globals field is
+// [LAW:no-silent-failure] No built-in keys: a config globals field is
 // writable ONLY when some `persist` action names it.
 const keyspace = createKeyspace({}, "config", deriveConfigActionValidators);
 

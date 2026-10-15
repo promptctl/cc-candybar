@@ -1,23 +1,23 @@
 // Memoized Palette construction over rich-js. cc-candybar moves theme
 // NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
-// memos live here: a theme name -> base palette, and a (base, ThemeKey) ->
+// memos live here: a theme name -> base palette, and a (palette, ThemeKey) ->
 // transposed palette. They compose — the per-render base palette feeds the
 // per-render style transposition.
 //
-// [LAW:no-shared-mutable-globals] Single owner: this module. Both Maps are pure
+// [LAW:no-shared-mutable-globals] Single owner: this module. Both are pure
 // memos of pure rich-js functions, keyed by immutable inputs (resolved theme
-// name; palette name + the four ThemeKey axes). rich-js palettes are immutable
-// registry singletons, so a cached palette never goes stale. Key spaces are
-// bounded by #themes and #themes × #declared styles (style axes bounded by the
-// loaded configs' styles blocks) — both small. Shared on purpose: a theme's
-// base palette and its gruvbox-under-`vivid` transposition are each computed
-// once per process, not once per RenderCache entry or per render.
-// Read/written only through the two functions below.
+// name; the palette object + the four ThemeKey axes). rich-js palettes are
+// immutable, so a cached palette never goes stale. Key spaces are bounded by
+// #themes and #themes × #declared styles (style axes bounded by the loaded
+// configs' styles blocks) — both small. Shared on purpose: a theme's base
+// palette and its gruvbox-under-`vivid` transposition are each computed once
+// per process, not once per RenderCache entry or per render. Read/written only
+// through the two functions below.
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
+import { memoPerPalette } from "./palette-memo.js";
 import {
-  finishSelection,
   FOLLOW_BAR,
   resolveSelection,
   retiredThemeNote,
@@ -27,7 +27,6 @@ import {
 } from "./policy.js";
 
 const baseCache = new Map<string, Palette>();
-const transposeCache = new Map<string, Palette>();
 
 /**
  * The Palette for a theme name. Memoized.
@@ -82,10 +81,8 @@ function basePaletteFor(name: string): Palette | null {
 /**
  * `base` transposed by a full ThemeKey — the adapted-palette constructor:
  * (base palette, key) → palette. The caller composes whatever axes it carries
- * (a style's four axes) into ONE key and this makes ONE transposePalette call — never chain
- * two transpositions: chaining double-pays OKLCH quantization AND collides this
- * memo (a transposed palette keeps the base palette's name, so a re-transposed
- * gruvbox-with-style and plain gruvbox would share cache keys).
+ * (a style's four axes) into ONE key and this makes ONE transposePalette call —
+ * never chain two transpositions: chaining double-pays OKLCH quantization.
  *
  * [LAW:dataflow-not-control-flow] The key is data; the identity key flows
  * through transposePalette's isIdentityKey fast-path (byte-exact, no
@@ -94,22 +91,21 @@ function basePaletteFor(name: string): Palette | null {
  * no local exemption list to drift.
  *
  * [LAW:single-enforcer] The sole place a transposed palette is built — a
- * future style `roles` remap is additive at this one seam. The memo miss
- * (undefined) is genuine optionality — not-yet-computed — not a defended
- * invariant. [LAW:one-source-of-truth] The cache key carries every axis of the
- * ThemeKey: two keys differing on any axis are distinct palettes.
+ * future style `roles` remap is additive at this one seam.
+ * [LAW:one-source-of-truth] Memoised per palette object (`memoPerPalette`) and
+ * every axis of the ThemeKey, so the memo answers what `transposePalette` would
+ * for exactly this input. Keyed by the palette's NAME, which transposition
+ * keeps, a chained call was handed whichever answer for that name was cached
+ * first.
  */
 export function transposedPalette(base: Palette, key: ThemeKey): Palette {
-  const cacheKey =
-    `${base.name} ${key.hueShift} ${key.chromaScale} ` +
-    `${key.lightnessScale} ${key.lightnessShift}`;
-  const hit = transposeCache.get(cacheKey);
-  if (hit !== undefined) return hit;
-
-  const transposed = transposePalette(base, key);
-  transposeCache.set(cacheKey, transposed);
-  return transposed;
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key),
+  );
 }
+const TRANSPOSED = memoPerPalette<Palette>();
 
 // ─── The theme as a name-or-rule selection (brandon-themes-dzl) ──────────────
 
@@ -189,28 +185,14 @@ export function resolveThemeSelection(
 }
 
 // [LAW:one-source-of-truth] THE floor as a decided selection — what
-// `decideThemeName` collapses to, what the rung below every other rung is, and
-// what a compile-only path answers a rule with. Spelled once so the three do not
-// drift, and because the non-null assertion wants stating once: the floor is a
-// palette this package SHIPS, so it asserts a fact rather than defending one (and
-// `paletteForThemeName` would throw loudly first if that ever stopped being true).
+// `decideThemeName` collapses to and what the rung below every other rung is.
+// Spelled once so the two do not drift. The floor is a palette this package
+// ships, so it resolves as a pre-validated name does: through
+// `paletteForThemeName`, which names it if the registry ever stops installing it.
 function themeFloor(): DecidedTheme {
-  return namedTheme(THEME_FLOOR)!;
-}
-
-// The base palette before any render has happened: the theme the config declares,
-// or the floor when that slot holds a RULE only a render can settle. A rule's
-// answer is not WRONG here, it is unknowable — no store has been filled yet — so
-// it collapses to the same floor a rule naming nothing does, and there is nothing
-// to report because no name failed [LAW:no-silent-failure].
-//
-// [LAW:dataflow-not-control-flow] `finishSelection` with a settle that yields
-// the floor: one value, no arm on the discriminator.
-export function declaredBasePalette(
-  globalsPalette: string | undefined,
-): Palette {
-  return finishSelection(
-    resolveThemeSelection(undefined, null, globalsPalette),
-    themeFloor,
-  ).value;
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR),
+  };
 }

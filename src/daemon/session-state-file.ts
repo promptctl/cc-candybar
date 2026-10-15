@@ -3,7 +3,7 @@ import path from "node:path";
 import { quietLogger, type DaemonLogger } from "./log";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
 
-// [LAW:no-silent-fallbacks] Corrupt/missing file → empty state is the *defined*
+// [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
 // random picks exactly as a first-ever boot would. Anything that isn't the
 // expected sessionId→key→value shape is rejected here so the store never
@@ -42,7 +42,7 @@ export class FileSessionStorage implements SessionStorage {
     try {
       raw = fs.readFileSync(this.filePath, "utf8");
     } catch (e) {
-      // [LAW:no-silent-fallbacks] A missing file is the expected first-boot
+      // [LAW:no-silent-failure] A missing file is the expected first-boot
       // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
       // anomaly worth surfacing before recovering to empty.
       const code = (e as NodeJS.ErrnoException).code;

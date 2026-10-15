@@ -160,7 +160,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("a malformed helper body fails LOUDLY with a per-helper diagnostic", () => {
-    // [LAW:no-silent-fallbacks] validateHelpers accepts any string; the parse
+    // [LAW:no-silent-failure] validateHelpers accepts any string; the parse
     // failure surfaces at registerDslConfig, attributed to the helper by name —
     // not blamed on the first segment that calls it, not silently skipped.
     const source = `{

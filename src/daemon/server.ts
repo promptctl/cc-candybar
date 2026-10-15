@@ -913,7 +913,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
           `schema: unknown field '${field}' — Anthropic may have added it`,
         );
       }
-      // [LAW:no-silent-fallbacks][LAW:types-are-the-program] Gate hard on
+      // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
       // schema violations. Continuing with `workspace?.project_dir` would
       // collapse "absent" into an empty-string cache key — silently sharing
       // one entry across every malformed request — and downstream code would
@@ -1204,7 +1204,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
     if (!isDebugWhat(req.what)) {
       return stay({
         ok: false,
-        // [LAW:errors-context-in-errors] Include the allowed values so a
+        // [LAW:no-silent-failure] Include the allowed values so a
         // CLI consumer (or operator) sees what is supported without
         // grep — same pattern as the set-state verb's unknown-key error
         // in src/daemon/verbs/state-validators.ts.
@@ -1260,7 +1260,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
   });
 }
 
-// [LAW:single-enforcer][LAW:no-silent-fallbacks] Parse render-path args with
+// [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
 // diagnostic icon (caller composes it alongside config errors). The

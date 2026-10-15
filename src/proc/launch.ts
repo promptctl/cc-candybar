@@ -576,7 +576,7 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
       error: spawnErrorText(err, opts.cwd),
     };
   }
-  // [LAW:no-silent-fallbacks] spawn() with ENOENT (e.g. missing binary) does
+  // [LAW:no-silent-failure] spawn() with ENOENT (e.g. missing binary) does
   // *not* throw — it returns a ChildProcess with pid=undefined that emits
   // 'error' asynchronously. Two things matter here:
   //   1. The 'error' must have a listener or Node crashes the process.

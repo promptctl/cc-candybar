@@ -19,7 +19,7 @@ import { RichText } from "@promptctl/rich-js";
 import type { ColorDepth } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { decorationFor, type Decor } from "../themes/decor.js";
-import type { ActionRuntime, PreviewRows } from "./action.js";
+import { renderLook, type ActionRuntime, type PreviewRows } from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 import { decoratedCell } from "./band-style.js";
 import { cellWidth, ledRowBudget } from "./picker.js";
@@ -101,7 +101,7 @@ export function layoutPreviewFuncs(
       fn: () =>
         renderLayoutPreview(
           runtime.layout(),
-          runtime.decor,
+          renderLook(runtime, "{{ layoutPreview }}").decor,
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
         ),
