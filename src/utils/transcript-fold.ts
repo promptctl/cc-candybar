@@ -25,7 +25,7 @@ import {
   type ParsedEntry,
   type TranscriptCursor,
 } from "./claude";
-import { statMtimeMs } from "./transcript-fs";
+import { statStamp } from "./transcript-fs";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -58,12 +58,12 @@ export class TranscriptFold<S> {
     transcriptPath: string,
   ): Promise<FoldOutcome<S>> {
     const prior = this.states.get(sessionId);
-    const mtime = statMtimeMs(transcriptPath);
+    const stamp = statStamp(transcriptPath);
     // [LAW:no-ambient-temporal-coupling] Fast hit: the transcript has not moved
     // since we last folded it, so the prior state stands. Re-ordering on the HIT
     // makes eviction reflect read recency, so an active session whose transcript
     // is momentarily unchanged is not evicted ahead of idle ones.
-    if (prior && mtime !== 0 && prior.cursor.mtimeMs === mtime) {
+    if (prior && stamp !== "" && prior.cursor.stamp === stamp) {
       this.touch(sessionId, prior);
       return { kind: "ok", value: prior.value };
     }

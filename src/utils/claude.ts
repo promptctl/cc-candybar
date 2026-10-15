@@ -525,14 +525,14 @@ async function parseJsonlFileInMemory(
 }
 
 // A byte cursor into an append-only transcript: the offset consumed through the
-// last complete line, the mtime observed at that read, and the inode. The store
+// last complete line, the stamp observed at that read, and the inode. The store
 // keys its per-file fold by this — `offset` bounds the next read to only what's
-// new; `mtimeMs` lets an unchanged file skip the read entirely; `ino` detects a
+// new; `stamp` lets an unchanged file skip the read entirely; `ino` detects a
 // rewrite (a rename-based /compact swaps the inode) so the fold resets instead
 // of splicing new bytes onto a stale prefix.
 export interface TranscriptCursor {
   readonly offset: number;
-  readonly mtimeMs: number;
+  readonly stamp: string;
   readonly ino: number;
 }
 
@@ -562,18 +562,18 @@ export async function readAppendedEntries(
     prior === undefined ? undefined : { offset: prior.offset, ino: prior.ino },
   );
   if (r.kind !== "ok") return r;
-  const { buf, start, mtimeMs, ino, reset } = r.value;
+  const { buf, start, stamp, ino, reset } = r.value;
   // Consume only through the last newline; a trailing partial line waits.
   const lastNl = buf.lastIndexOf(0x0a);
   if (lastNl < 0) {
-    return ok({ entries: [], cursor: { offset: start, mtimeMs, ino }, reset });
+    return ok({ entries: [], cursor: { offset: start, stamp, ino }, reset });
   }
   const entries = parseJsonlLines(
     buf.subarray(0, lastNl + 1).toString("utf-8"),
   );
   return ok({
     entries,
-    cursor: { offset: start + lastNl + 1, mtimeMs, ino },
+    cursor: { offset: start + lastNl + 1, stamp, ino },
     reset,
   });
 }
