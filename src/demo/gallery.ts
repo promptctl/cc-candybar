@@ -50,7 +50,7 @@ try {
       (key) => (key === "theme" ? theme : null),
       () => false,
     );
-    const { rendered, failures } = renderEffective(
+    const { rendered, failures, advisories } = renderEffective(
       prepared,
       effective,
       WIDTH,
@@ -58,6 +58,8 @@ try {
     );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
+    for (const advisory of advisories)
+      process.stderr.write(`${theme}: warning: ${advisory}\n`);
     process.stdout.write(
       rendered
         .split("\n")

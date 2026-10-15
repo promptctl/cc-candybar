@@ -27,7 +27,7 @@ import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
@@ -88,7 +88,7 @@ interface Painted {
 
 interface Runtime {
   readonly sessionState: SessionState;
-  readonly warnings: readonly string[];
+  readonly warnings: readonly RenderWarning[];
   render(pct: number, staged?: string): Painted;
   dispose(): void;
 }
@@ -99,7 +99,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  const warnings: string[] = [];
+  const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
   const render = (pct: number, staged?: string): Painted => {
     const text = renderDsl(
@@ -110,7 +110,7 @@ function buildRuntime(source = src(RULE)): Runtime {
       { session_id: SID, ctx: { pct } },
       instantOf(new Date()),
       OPTS,
-      { perSegmentSink: sink, onRenderWarning: (m) => warnings.push(m) },
+      { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
       {
         // Resolved exactly as src/daemon/server.ts resolves it.
         theme: resolveThemeSelection(
@@ -264,10 +264,10 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       const bad = rt.render(90);
       expect(bad.bg("plain")).toBe(byName(THEME_FLOOR));
       expect(stripAnsi(bad.text)).toContain(`T=${THEME_FLOOR}`);
-      expect(rt.warnings).toHaveLength(1);
-      expect(rt.warnings[0]).toContain("globals.palette");
-      expect(rt.warnings[0]).toContain("gruvbux-dark");
-      expect(rt.warnings[0]).toContain(THEME_FLOOR);
+      expect(rt.warnings.map((w) => w.kind)).toEqual(["theme-rule"]);
+      expect(rt.warnings[0]!.message).toContain("globals.palette");
+      expect(rt.warnings[0]!.message).toContain("gruvbux-dark");
+      expect(rt.warnings[0]!.message).toContain(THEME_FLOOR);
     } finally {
       rt.dispose();
     }
@@ -620,7 +620,7 @@ describe("a rule inside a preset's globals", () => {
       presetSrc("{{ if true }}no-such-theme{{ end }}"),
       (config, registry, store) => {
         const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-        const said: string[] = [];
+        const said: RenderWarning[] = [];
         renderDsl(
           config,
           compiled,
@@ -629,11 +629,11 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct: 0 } },
           instantOf(new Date()),
           OPTS,
-          { onRenderWarning: (m) => said.push(m) },
+          { onRenderWarning: (w) => said.push(w) },
           { preset: "ruled" },
         );
         expect(said).toEqual([
-          expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /),
+          { kind: "theme-rule", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
         ]);
       },
     );
@@ -643,7 +643,7 @@ describe("a rule inside a preset's globals", () => {
     const shared = "{{ if true }}none{{ end }}";
     withRegistry(presetSrc(shared, shared), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-      const said: string[] = [];
+      const said: RenderWarning[] = [];
       renderDsl(
         config,
         compiled,
@@ -652,11 +652,11 @@ describe("a rule inside a preset's globals", () => {
         { session_id: SID, ctx: { pct: 0 } },
         instantOf(new Date()),
         OPTS,
-        { onRenderWarning: (m) => said.push(m) },
+        { onRenderWarning: (w) => said.push(w) },
         { preset: "ruled" },
       );
       expect(said).toEqual([
-        expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /),
+        { kind: "theme-rule", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
       ]);
     });
   });

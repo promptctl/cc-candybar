@@ -51,7 +51,7 @@ import {
   CAROUSEL_PREV,
   neighbourLevels,
 } from "../src/render/carousel";
-import { previewSwatches } from "../src/render/theme-preview";
+import { decorEntryColour, vocabularyOf } from "../src/themes/decor";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { renderStripCells } from "../src/render/strip";
 import {
@@ -729,6 +729,21 @@ const backgrounds = (cells: readonly RichText[]): Set<string> =>
       .filter((hex): hex is string => hex !== undefined),
   );
 
+// The background `text` is drawn on: the last span over its first character
+// that paints one, else its fragment's own.
+const bgUnder = (cells: readonly RichText[], text: string): string | undefined => {
+  for (const cell of cells) {
+    const at = cell.plain.indexOf(text);
+    if (at === -1) continue;
+    const painted = cell.spans
+      .filter((span) => span.start <= at && at < span.end)
+      .map((span) => bgHex(span.style))
+      .filter((hex): hex is string => hex !== undefined);
+    return painted.at(-1) ?? bgHex(cell.style);
+  }
+  return undefined;
+};
+
 describe("the preview is the bar's own colours", () => {
   const IDENTITY: ThemeKey = {
     hueShift: 0,
@@ -743,24 +758,33 @@ describe("the preview is the bar's own colours", () => {
       const rt = rig(`{ globals: { palette: '${theme}' } }`);
       openPicker(rt, "theme");
       const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
-      const swatches = new Set(
-        previewSwatches(palette, DEFAULT_DECOR, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
-      );
-      // What the preview segment actually drew is the swatch set.
-      const drawn = backgrounds(rt.sink.get("candybar.list.theme.0")!);
-      expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
-      // The open door wears the open state the preview shows beside its plane.
-      const door = bgHex(rt.sink.get("candybar.menu")![0]!.style);
-      expect(swatches.has(door!)).toBe(true);
+      const preview = rt.sink.get("candybar.list.theme.0")!;
+      const drawn = backgrounds(preview);
+      // Every decoration a closed cell can wear is a swatch.
+      const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
+      expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+      // Its open swatch is the colour the open door is drawn in.
+      expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
       // Every closed bar cell that authors no meaning wears a preview tint.
       for (const name of ["directory", "model", "gitaculous"]) {
         const cells = rt.sink.get(name);
         if (cells === undefined) continue;
-        expect([name, swatches.has(bgHex(cells[0]!.style)!)]).toEqual([name, true]);
+        expect([name, drawn.has(bgHex(cells[0]!.style)!)]).toEqual([name, true]);
       }
       rt.dispose();
     },
   );
+
+  test("under alt the open swatch is still the door's colour, though the door's row turns between two roles", () => {
+    // textual-dark's navy secondary and orange accent: the pure accent stands
+    // off a row of secondary alone, and no colour stands off the door's row,
+    // which turns to the accent after three cells — so a preview standing on
+    // anything but the door's own row shows an open colour the bar never draws.
+    const rt = rig(`{ globals: { palette: 'textual-dark', variation: 'alt' } }`);
+    openPicker(rt, "theme");
+    expect(bgUnder(rt.sink.get("candybar.list.theme.0")!, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
+    rt.dispose();
+  });
 
   test("under a style the preview is the styled palette the bar wears — the style list previews it", () => {
     const rt = rig(`{ globals: { palette: 'gruvbox' } }`);
@@ -772,12 +796,12 @@ describe("the preview is the bar's own colours", () => {
       getThemePalette("gruvbox")!,
       rt.config.styles[look]!,
     );
-    const swatches = new Set(
-      previewSwatches(palette, DEFAULT_DECOR, ColorDepth.TRUECOLOR).flat().map((s) => s.colour.hex),
-    );
-    const drawn = backgrounds(rt.sink.get("candybar.list.style.0")!);
-    expect([...swatches].filter((hex) => !drawn.has(hex))).toEqual([]);
-    expect(swatches.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
+    const preview = rt.sink.get("candybar.list.style.0")!;
+    const drawn = backgrounds(preview);
+    const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
+    expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+    expect(drawn.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
+    expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();
   });
 

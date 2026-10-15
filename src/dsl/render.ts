@@ -907,22 +907,32 @@ export interface RenderObservers {
   // registry-dispose contract): an observer that throws is a caller bug
   // surfaced loudly, never caught and absorbed by the render walk.
   readonly onSegmentError?: (placementId: string, message: string) => void;
-  // [LAW:no-silent-failure] Optional observer for a resolution this render had to
-  // complete for itself and could not honour — today exactly one thing: a
-  // `globals.palette` RULE whose result names no installed theme
-  // (brandon-themes-dzl). The render continues in the floor theme, because the
-  // value is data-driven and a throw would take the whole statusline away the
-  // moment live data reached a branch with a typo — but the author must be able to
-  // see WHY the bar is the wrong colour, and a palette has no cell of its own to
-  // show a ⚠ in the way a failing segment does.
+  // [LAW:no-silent-failure] Optional observer for what this render had to settle
+  // for itself and could not honour (`RenderWarning`). The render goes on — a
+  // throw would take the whole statusline away — but nothing else on the bar
+  // says why it looks as it does.
   //
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
-  // callers listen — the daemon folds these into the diagnostic strip's warning
-  // channel, and `cc-candybar check` folds them into its verdict, so the same
-  // fact is visible whether or not anyone is looking at a bar.
-  readonly onRenderWarning?: (message: string) => void;
+  // callers listen — the daemon folds every one into the diagnostic strip's
+  // warning channel, and `cc-candybar check` fails a theme rule and lists a
+  // state-floor shortfall, so the same fact is visible whether or not anyone is
+  // looking at a bar.
+  readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
+
+// [LAW:types-are-the-program] What a render could not honour, by what failed:
+// the kind is what a consumer that treats them differently reads, never the
+// prose.
+export type RenderWarning =
+  // A `globals.palette` RULE whose result names no installed theme
+  // (brandon-themes-dzl): the bar renders in the floor theme, and a palette has
+  // no cell of its own to show a ⚠ in the way a failing segment does.
+  | { readonly kind: "theme-rule"; readonly message: string }
+  // An open trigger on a row no colour stands STATE_FLOOR off (decor.ts
+  // `stateFor`): drawn as near as one comes, which another shade or variation
+  // clears. A fact about the chosen look, not a fault in the config.
+  | { readonly kind: "state-floor"; readonly message: string };
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -1082,7 +1092,7 @@ export function renderDsl(
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
     return decideThemeName(evalRule(rule, scope), rule.where, (message) =>
-      onRenderWarning?.(message),
+      onRenderWarning?.({ kind: "theme-rule", message }),
     );
   });
   const style = finishSelection(selectedStyle, (source) =>
@@ -1335,6 +1345,7 @@ export function renderDsl(
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
     .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
     .join("\n");
-  for (const shortfall of shortfalls) onRenderWarning?.(shortfall);
+  for (const message of shortfalls)
+    onRenderWarning?.({ kind: "state-floor", message });
   return rendered;
 }

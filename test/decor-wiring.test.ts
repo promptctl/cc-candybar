@@ -19,7 +19,7 @@ import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
@@ -572,7 +572,7 @@ describe("an open trigger on a row no colour stands off", () => {
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const errors: string[] = [];
-    const warnings: string[] = [];
+    const warnings: RenderWarning[] = [];
     const out = renderDsl(
       config,
       compiled,
@@ -583,14 +583,18 @@ describe("an open trigger on a row no colour stands off", () => {
       OPTS,
       {
         onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-        onRenderWarning: (message) => warnings.push(message),
+        onRenderWarning: (warning) => warnings.push(warning),
       },
       { theme: { kind: "decided", name: "straddling", value: straddling } },
     );
     expect(errors).toEqual([]);
     expect(out).toContain("INNER-BODY");
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/^theme "straddling": no open-trigger colour stands 2\.2:1 off every cell beside it — the nearest stands \d\.\d\d:1 as drawn at depth TRUECOLOR; another shade or variation clears it$/);
+    expect(warnings).toEqual([
+      {
+        kind: "state-floor",
+        message: expect.stringMatching(/^theme "straddling": no open-trigger colour stands 2\.2:1 off every cell beside it — the nearest stands \d\.\d\d:1 as drawn at depth TRUECOLOR; another shade or variation clears it$/),
+      },
+    ]);
     registry.dispose();
   });
 });

@@ -532,6 +532,29 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('(under preset "b"');
   });
 
+  it("an open trigger no colour stands off is a WARNING in its own words: the config renders the look it chose", async () => {
+    // textual-dark's navy secondary and orange accent under `alt`: the first
+    // row (the door, three cells and the group's trigger) turns between them,
+    // and no colour stands 2.2:1 off both. The daemon draws the nearest under
+    // an amber warning; check lists the same warning and passes — neither a
+    // fault of the config nor a theme rule.
+    const p = write(
+      "state-floor-short.json5",
+      `{
+        globals: { palette: 'textual-dark', variation: 'alt' },
+        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
+        root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind === "clean") {
+      expect(outcome.warnings).toEqual([
+        expect.stringMatching(/^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it/),
+      ]);
+    }
+  });
+
   it("a segment only another preset places is rendered, and its error is FATAL", async () => {
     const p = write(
       "segment-other-preset.json5",

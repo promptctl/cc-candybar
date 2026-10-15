@@ -160,7 +160,7 @@ async function renderFrames(): Promise<void> {
         payload,
         at,
         renderOptionsOf(effective, width),
-        { onRenderWarning: warn },
+        { onRenderWarning: ({ message }) => warn(message) },
         renderSelectionOf(effective),
       );
       process.stdout.write(

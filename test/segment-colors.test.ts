@@ -103,7 +103,7 @@ function resolve(
 const DISCLOSURE: Disclosure = {
   hue: "primary",
   depth: 0,
-  ground: { hues: ["primary"], tones: ["base"] },
+  ground: [{ hue: "primary", shade: "base" }],
 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
