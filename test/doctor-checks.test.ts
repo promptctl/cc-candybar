@@ -324,6 +324,17 @@ describe("effectRefresh probe", () => {
     });
   });
 
+  // There is no statusLine object to add the interval beside; install writes
+  // one.
+  test("a statusLine that is not an object → failed naming it, NO fix", () => {
+    expect(
+      effectRefresh(SHIMMER, { kind: "not-an-object", value: "cc-candybar" }),
+    ).toEqual({
+      ok: false,
+      reason: `the bar wears the shimmer effect, and ${SETTINGS_PATH} sets statusLine to "cc-candybar", not a statusLine object — re-run \`cc-candybar install\` to write one`,
+    });
+  });
+
   test("a still bar needs no statusLine here at all", () => {
     expect(effectRefresh(STILL, { kind: "absent" })).toEqual({ ok: true });
   });

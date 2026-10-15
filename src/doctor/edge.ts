@@ -13,6 +13,7 @@ import path from "node:path";
 import {
   claudeConfigDir,
   claudeSettingsPath,
+  isJsonObject,
   readClaudeSettings,
   readClaudeSettingsText,
 } from "../claude-settings.js";
@@ -112,30 +113,24 @@ function configFacts(load: ConfigLoad): ConfigFacts {
 // [LAW:no-silent-failure] The one reading of the settings document
 // (readClaudeSettings: missing or blank is empty, anything unparseable throws
 // naming the file — never read as empty, because the fix would then splice
-// into a file it cannot parse either), and each entry read held to the same
-// rule: absent, or an object.
+// into a file it cannot parse either), and its `env` held to the same rule.
+// `statusLine` is parsed into its own three arms instead (StatusLineFacts).
 function readClaudeSettingsFacts(
   settingsPath: string,
 ): DoctorFacts["claudeSettings"] {
-  const doc = readClaudeSettings(settingsPath);
-  const entry = (key: string): Readonly<Record<string, unknown>> | null => {
-    const value = doc[key];
-    if (value === undefined) return null;
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      throw new Error(
-        `cannot read ${settingsPath}: \`${key}\` is not an object`,
-      );
-    }
-    return value as Record<string, unknown>;
-  };
-  const statusLine = entry("statusLine");
+  const { env, statusLine } = readClaudeSettings(settingsPath);
+  if (env !== undefined && !isJsonObject(env)) {
+    throw new Error(`cannot read ${settingsPath}: \`env\` is not an object`);
+  }
   return {
     path: settingsPath,
-    env: entry("env") ?? {},
+    env: env ?? {},
     statusLine:
-      statusLine === null
+      statusLine === undefined
         ? { kind: "absent" }
-        : { kind: "present", refreshInterval: statusLine.refreshInterval },
+        : isJsonObject(statusLine)
+          ? { kind: "present", refreshInterval: statusLine.refreshInterval }
+          : { kind: "not-an-object", value: statusLine },
   };
 }
 

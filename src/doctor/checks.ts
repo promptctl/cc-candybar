@@ -94,9 +94,12 @@ export type UrlHandlerFacts =
 // Absent is its own arm, not an empty object: a fix may only add a key beside
 // a command that is already there, because a `statusLine` holding nothing but
 // a refresh interval is one Claude Code cannot run. `refreshInterval` is raw —
-// whatever the file holds; a probe decides what it means.
+// whatever the file holds; a probe decides what it means. A `statusLine` that
+// is not an object is a fact too, read by the one check it concerns, never a
+// throw that would take every other verdict with it.
 export type StatusLineFacts =
   | { readonly kind: "absent" }
+  | { readonly kind: "not-an-object"; readonly value: unknown }
   | { readonly kind: "present"; readonly refreshInterval: unknown };
 
 export interface DoctorFacts {
@@ -334,11 +337,19 @@ const effectRefresh: Check = {
         ? `the bar wears the ${effect.name} effect`
         : "a globals.effect rule can give the bar an effect";
     const { path, statusLine } = claudeSettings;
-    if (statusLine.kind === "absent") {
-      return {
-        ok: false,
-        reason: `${wearing}, and ${path} sets no statusLine — set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside the statusLine command that runs the bar`,
-      };
+    switch (statusLine.kind) {
+      case "absent":
+        return {
+          ok: false,
+          reason: `${wearing}, and ${path} sets no statusLine — set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside the statusLine command that runs the bar`,
+        };
+      case "not-an-object":
+        return {
+          ok: false,
+          reason: `${wearing}, and ${path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — re-run \`cc-candybar install\` to write one`,
+        };
+      case "present":
+        break;
     }
     // [LAW:one-source-of-truth] Claude Code's own reading: a number of
     // seconds, no fewer than the minimum, so the minimum itself is the one

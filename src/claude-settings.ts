@@ -83,11 +83,18 @@ export function readClaudeSettings(
       cause: e,
     });
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  if (!isJsonObject(parsed)) {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
   }
-  return parsed as Record<string, unknown>;
+  return parsed;
 }
+
+// A JSON object — the shape the document and each of its sections (`env`,
+// `statusLine`) must have for a key to be read or spliced inside it.
+export const isJsonObject = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const messageOf = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);

@@ -278,11 +278,20 @@ describe("gatherFacts", () => {
     expect(() => factsOf(notObject)).toThrow(/not a JSON object/);
     const badEnv = writeSettings(`{ "env": "yes" }`, "badenv");
     expect(() => factsOf(badEnv)).toThrow(/`env` is not an object/);
-    const badStatusLine = writeSettings(`{ "statusLine": "x" }`, "badline");
-    expect(() => factsOf(badStatusLine)).toThrow(
-      /`statusLine` is not an object/,
-    );
   });
+
+  // A statusLine that is not an object concerns one check, so it is a fact
+  // that check reads — every other verdict still runs.
+  test.each([[`"x"`, "x"], ["null", null]])(
+    "a statusLine of %s is its own arm, not a throw",
+    (text, value) => {
+      const conf = writeSettings(`{ "statusLine": ${text} }`, "badline");
+      expect(factsOf(conf).claudeSettings.statusLine).toEqual({
+        kind: "not-an-object",
+        value,
+      });
+    },
+  );
 
   test("the three hint states map to the three TmuxFacts arms; tmux is asked only inside", () => {
     const absent = configDir("absent");

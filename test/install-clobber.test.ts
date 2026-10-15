@@ -237,6 +237,23 @@ describe("install — clobber protection", () => {
     );
   });
 
+  // A statusLine that is not an object runs nothing and holds no command to
+  // protect, so install replaces it whole — with or without --force.
+  test.each([["null"], [`"cc-candybar"`]])(
+    "a statusLine of %s is replaced by a statusLine object",
+    (text) => {
+      const p = tmpSettingsPath();
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, `{ "model": "opus", "statusLine": ${text} }\n`);
+
+      updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+      expect(JSON.parse(fs.readFileSync(p, "utf-8"))).toEqual({
+        model: "opus",
+        statusLine: { type: "command", command: buildStatusLineCommand(BIN, []) },
+      });
+    },
+  );
+
   test("settings without statusLine gets statusLine written", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });

@@ -15,6 +15,7 @@ import {
   claudeConfigDir,
   claudeSettingsPath,
   detectClaudeConfigDir,
+  isJsonObject,
   readClaudeSettings,
   readClaudeSettingsText,
 } from "../claude-settings";
@@ -513,6 +514,9 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
   process[report.stream].write(report.text);
 }
 
+// One value spliced at one key path of settings.json.
+type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
+
 function updateClaudeSettings(
   binPath: string,
   rendererArgs: readonly string[],
@@ -529,10 +533,7 @@ function updateClaudeSettings(
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const statusLine = readClaudeSettings(target).statusLine;
-  const existing =
-    typeof statusLine === "object" && statusLine !== null
-      ? (statusLine as Record<string, unknown>).command
-      : undefined;
+  const existing = isJsonObject(statusLine) ? statusLine.command : undefined;
   // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
   // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
   // a version suffix follows) or has the staged bin path — quoted or bare —
@@ -559,23 +560,25 @@ function updateClaudeSettings(
     return;
   }
 
-  // [LAW:one-source-of-truth] A splice through the editor the doctor's fixes
-  // use, not a rewrite: the two keys install owns change, and every other
-  // `statusLine` key — the `refreshInterval` the doctor sets, a `padding` —
-  // and every other byte of the file survive an upgrade.
-  const withType = setValue(
-    readClaudeSettingsText(target),
-    ["statusLine", "type"],
-    JSON.stringify("command"),
-    JSON_DIALECT,
-  );
+  // [LAW:one-source-of-truth] Splices through the editor the doctor's fixes
+  // use, not a rewrite, so every byte install does not own survives.
+  // [LAW:types-are-the-program] What it owns depends on the shape it finds: a
+  // statusLine object is amended — its other keys, the `refreshInterval` the
+  // doctor sets among them, survive an upgrade — and anything else (none, or a
+  // value Claude Code runs nothing from) is replaced whole.
+  const command = buildStatusLineCommand(binPath, rendererArgs);
+  const edits: readonly SettingsEdit[] = isJsonObject(statusLine)
+    ? [
+        [["statusLine", "type"], "command"],
+        [["statusLine", "command"], command],
+      ]
+    : [[["statusLine"], { type: "command", command }]];
   writeAtomic(
     target,
-    setValue(
-      withType,
-      ["statusLine", "command"],
-      JSON.stringify(buildStatusLineCommand(binPath, rendererArgs)),
-      JSON_DIALECT,
+    edits.reduce(
+      (text, [keyPath, value]) =>
+        setValue(text, keyPath, JSON.stringify(value, null, 2), JSON_DIALECT),
+      readClaudeSettingsText(target),
     ),
   );
   process.stdout.write(`Updated ${target}\n`);
