@@ -85,7 +85,7 @@ export const SETTINGS = {
     configKey: "transitions",
     sessionKey: "transitions",
     effectiveVar: "transitions.effective",
-    label: "fade in",
+    label: "fade in/out",
   },
   autoWrap: {
     configKey: "autoWrap",

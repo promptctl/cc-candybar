@@ -617,8 +617,10 @@ export interface Globals {
   readonly updateNotice?: boolean;
 
   // Whether a placement that appears mid-session fades in over 20 s
-  // (brandon-effects-2gka.631) instead of popping in. Default false. A
-  // session's pick over this — `effectiveTransitions` resolves both.
+  // (brandon-effects-2gka.631) instead of popping in, and one that leaves
+  // dissolves out over 30 s (brandon-effects-2gka.3vt) instead of vanishing.
+  // Default false. A session's pick over this — `effectiveTransitions`
+  // resolves both.
   readonly transitions?: boolean;
 
   // The legacy display.colorCompatibility knob: the color depth rich-js

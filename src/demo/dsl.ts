@@ -45,6 +45,7 @@ import { settingCounts } from "../daemon/setting-drafts.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { renderDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
+import type { RenderedLines } from "../dsl/node-registry.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug } from "../utils/logger.js";
@@ -134,7 +135,7 @@ async function renderFrames(): Promise<void> {
 
     // The session's effect memory, held across the frames as the daemon holds
     // it across a session's requests, so a `globals.effect` moves frame to frame.
-    const effects = new SessionEffects(sessionId);
+    const effects = new SessionEffects<RenderedLines>(sessionId);
     for (let frame = 0; frame < FRAMES; frame++) {
       // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
       // instant, sampled here as the daemon samples it per request.

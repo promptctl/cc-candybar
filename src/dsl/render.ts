@@ -127,6 +127,8 @@ import {
 // render.ts threads the recursion (compileChild/renderChild) in as
 // capabilities; it never re-switches on node kind.
 import {
+  drawingOf,
+  heldLines,
   layoutRows,
   nodeType,
   rowIdentities,
@@ -963,13 +965,14 @@ export interface RenderSelection {
   // style's twin (`resolveEffectSelection`), finished here under a rule.
   readonly effect?: EffectSelection;
   // The session's effect memory: when its effect came into force (the effect's
-  // own t = 0), the effects already made for its rows, and the placements its
-  // last frame drew. The daemon hands each session its own; an omitting caller
-  // draws with a fresh one, so its render is the effect's calm first frame and
-  // nothing in it fades in.
-  readonly effects?: SessionEffects;
-  // Whether a placement the last frame did not draw fades in: the resolved
-  // `transitions` setting (effectiveTransitions over staged/session/globals).
+  // own t = 0), the effects already made for its rows, and what each placement
+  // its last frame drew. The daemon hands each session its own; an omitting
+  // caller draws with a fresh one, so its render is the effect's calm first
+  // frame and nothing in it fades in or dissolves out.
+  readonly effects?: SessionEffects<RenderedLines>;
+  // Whether a placement the last frame did not draw fades in, and one it drew
+  // and this frame does not dissolves out: the resolved `transitions` setting
+  // (effectiveTransitions over staged/session/globals).
   readonly transitions?: boolean;
   // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
   // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
@@ -1168,24 +1171,24 @@ export function renderDsl(
   compiled.menuRuntime.action.look = { basePalette, palette, decor };
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
-  // and the placements this frame draws, so one the last frame — drawn from
-  // this config, preset and session state — did not draw fades in.
-  const motion = (selection?.effects ?? new SessionEffects("")).motion(
-    effect.value,
-    at,
-    {
-      // [LAW:one-source-of-truth] An omitting caller fades as the config
-      // declares, the same true default the decor above honours.
-      transitions:
-        selection?.transitions ??
-        effectiveTransitions(undefined, null, declared.transitions),
-      source: {
-        config: compiled,
-        preset,
-        revision: registry.stateRevision(),
-      },
+  // and what each placement this frame draws, so one the last frame — drawn
+  // from this config, preset and session state — did not draw fades in, and
+  // one it drew that this frame does not dissolves out as it was drawn there.
+  const motion = (
+    selection?.effects ?? new SessionEffects<RenderedLines>("")
+  ).motion(effect.value, at, {
+    // [LAW:one-source-of-truth] An omitting caller fades as the config
+    // declares, the same true default the decor above honours.
+    transitions:
+      selection?.transitions ??
+      effectiveTransitions(undefined, null, declared.transitions),
+    source: {
+      config: compiled,
+      preset,
+      revision: registry.stateRevision(),
     },
-  );
+    hold: heldLines,
+  });
 
   perSegmentSink?.clear();
 
@@ -1340,6 +1343,7 @@ export function renderDsl(
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
+      placed: (id, lines) => motion.placed(id, drawingOf(id, lines)) ?? [],
     };
     return nodeType(node.kind).render(node, ctx);
   };

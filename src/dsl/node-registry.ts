@@ -58,7 +58,12 @@ import {
   applySegmentLayout,
   placementScope,
 } from "../template-engine/index.js";
-import { cellParts, type LaidCell } from "../template-engine/layout.js";
+import {
+  cellParts,
+  heldCell,
+  type LaidCell,
+} from "../template-engine/layout.js";
+import type { Drawing } from "../render/effect.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -286,6 +291,42 @@ export interface NodeRenderCtx {
   // the trigger lays in its own state colour on every row of the body it
   // opens. Injected so this module never imports the click wire.
   closeDisclosure(key: string): RichText;
+  // [LAW:locality-or-seam] The session's record of what the last frame drew,
+  // as the walk meets it: a placement reports the lines it drew this frame and
+  // returns what comes back — those, or, while it dissolves off the bar, the
+  // rows it last drew (`SessionEffects.motion`, brandon-effects-2gka.3vt).
+  placed(id: string, lines: RenderedLines): RenderedLines;
+}
+
+// [LAW:one-source-of-truth] What the placement `id` drew, as the session's
+// effect record keeps it: the lines its segment returned, the width of the
+// first row its own cells sit on, and the ground those cells fade from — or
+// nothing, when it laid no cell.
+export function drawingOf(
+  id: string,
+  lines: RenderedLines,
+): Drawing<RenderedLines> | null {
+  const first = lines
+    .map((line) => line.cells.filter((cell) => cell.placement.id === id))
+    .find((cells) => cells.length > 0);
+  return first === undefined
+    ? null
+    : {
+        lines,
+        span: first
+          .flatMap(cellParts)
+          .reduce((width, part) => width + part.cellLength, 0),
+        ground: first[0]!.placement.ground,
+      };
+}
+
+// What a placement leaving the bar replays of what it last drew: its own rows
+// — never a menu it dropped or a body it opened — each cell as it was drawn,
+// with nothing to click (`heldCell`).
+export function heldLines(lines: RenderedLines): RenderedLines {
+  return lines
+    .filter((line) => line.band === "own")
+    .map((line) => ({ ...line, cells: line.cells.map(heldCell) }));
 }
 
 // [LAW:types-are-the-program] Every Style a segment can wear, resolved at
@@ -540,256 +581,261 @@ const segmentType: NodeType<"segment"> = {
       }),
     };
   },
-  render(node, ctx) {
-    const found = ctx.lookupSegment(node.name);
-    // [LAW:no-defensive-null-guards] The loader validates every segment ref
-    // against the segments map and registerDslConfig compiles every declared
-    // segment; a miss is a caller bug (renderDsl given a mismatched compiled
-    // object).
-    if (!found) {
-      throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
+  // hidden, gated off, drawn, broken — is reported to the session's record, so
+  // one that stops drawing leaves the bar as it was last drawn.
+  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx)),
+};
+
+// What one placement draws this frame: nothing, its rows (with the menus it
+// drops and the body it opens hung under them), or the ⚠ cell its failure is.
+function drawSegment(
+  node: CompiledSegmentNode,
+  ctx: NodeRenderCtx,
+): RenderedLines {
+  const found = ctx.lookupSegment(node.name);
+  // [LAW:no-defensive-null-guards] The loader validates every segment ref
+  // against the segments map and registerDslConfig compiles every declared
+  // segment; a miss is a caller bug (renderDsl given a mismatched compiled
+  // object).
+  if (!found) {
+    throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  }
+  const { seg, compiled: segCompiled } = found;
+  if (!ctx.visible) return [];
+  // [LAW:one-source-of-truth] Every template of THIS placement — its
+  // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
+  // this placement's settings; nothing outside the placement does.
+  const scope = placementScope(ctx.scope, node.settings);
+
+  // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
+  // partial-load consequence (e.g. a variable that failed to declare, leaving a
+  // MissingFieldError when the template or when-predicate accesses it) surfaces
+  // as a visible error cell rather than crashing the whole bar. The remaining
+  // segments render normally. This is the render-time complement to the per-
+  // variable catch in registerDslConfig — together they implement option-2
+  // partial rendering: the new config stays active, working segments render, and
+  // broken segments show an error cell.
+  try {
+    if (!evaluateWhen(segCompiled.when, scope)) return [];
+
+    // [LAW:dataflow-not-control-flow] The per-placement variability is
+    // WHICH palette, and it is a value: this placement's `theme` setting,
+    // the render's palette (the base theme under the style) when it follows
+    // the bar, else the named theme, which ignores the style as it ignores
+    // the session theme.
+    const palette = placementPalette(node.settings.theme, ctx.palette);
+    // Every cell this placement lays is its own — its inline rows, the menu
+    // bands it drops, the lead of each row of the body it opens — and names
+    // it: its `effect` setting moves every one (the per-segment sink's
+    // cells), and every one fades in from its palette's ground when the
+    // placement appears.
+    const placement = {
+      id: node.id,
+      effect: node.settings.effect,
+      ground: groundOf(palette),
+    };
+
+    // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
+    // `fg:`, and every `{{ color }}` in its body resolve from this same
+    // object. That is the whole reason the segment is entered before its body
+    // evaluates rather than after — a body coloured from a palette resolved
+    // independently of the cell it sits in is two palettes in one segment,
+    // and they diverge the moment a theme or style moves.
+    // [LAW:decomposition] The open menu bodies (`drops`) come back beside
+    // the fragments, never inside them — invisible to the inline render, so
+    // a menu can sit anywhere in the template, under any wrapper, and
+    // content after it stays inline. Each becomes one full-width line
+    // stacked below the segment's row.
+    // The disclosure body this segment opens (a group's, the settings menu's,
+    // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
+    // each entering the seam in turn — on the band this trigger computed.
+    // Walked open or closed, like every child: visibility is a value.
+    const bodyOpen =
+      node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
+    // [LAW:dataflow-not-control-flow] `open` is the PRESENCE of something
+    // under the segment: a dropped menu body, or an open disclosure body.
+    // Either way the segment is the TRIGGER of the band below it and wears
+    // that band's state colour — drawn from what it opens, not from where
+    // it sits. The seam decides it (the drop list is only known once the
+    // body has evaluated) and evaluates the lead and trail on that ground.
+    const { styles, fragments, lead, trail, drops, open } = ctx.evaluateSegment(
+      node,
+      scope,
+      palette,
+      ctx.region,
+      {
+        bg: segCompiled.bg,
+        fg: segCompiled.fg,
+        body: segCompiled.template,
+        lead: node.lead,
+        trail: node.trail,
+      },
+      bodyOpen,
+    );
+    const baseStyle = open ? styles.trigger : styles.closed;
+    const layout = {
+      width: seg.width ?? "auto",
+      justify: seg.justify ?? "left",
+      truncate: seg.truncate ?? "right",
+      baseStyle,
+      // [LAW:dataflow-not-control-flow] Padding is uniform across every line
+      // a segment contributes — inline rows AND dropped menu bands — one
+      // value, no per-line-kind branch. The picker reserves 2×padding at its
+      // pagination seam so a padded band still fits the width budget.
+      padding: ctx.padding,
+      placement,
+    } as const;
+    const opens = node.opens;
+    // [LAW:dataflow-not-control-flow] Where the body's rows go is its
+    // placement, applied to each row as a value: an `above` body lifts every
+    // row; a `drop` body leaves each where it is (a row an `above` body
+    // nested inside it lifted stays lifted).
+    const bodyLines: RenderedLines =
+      opens === undefined
+        ? []
+        : ctx
+            .renderBody(opens.body, bodyOpen, styles.disclosure)
+            .map((line) => ({
+              ...line,
+              place: BODY_PLACE[opens.placement](line),
+            }));
+    // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
+    // lines BEFORE per-segment layout — width/justify/truncate then measure each
+    // line cleanly. A newline-free segment is the degenerate one-line case. Each
+    // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
+    // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
+    // at the segment's edges, never inside it.
+    // Each inline line is a ROW of the band this segment sits on.
+    const inlineLines: RenderedLines = splitCellsIntoLines(
+      fragmentsToCells(fragments, baseStyle),
+    ).map((line, i) => ({
+      cells: applySegmentLayout(line, {
+        ...layout,
+        lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
+        trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
+      }),
+      band: "own",
+      place: "flow",
+    }));
+    // Each open menu body is one full-width dropped line on the band's
+    // PLANE — the recessed floor its items are placed above — stacked after
+    // the inline row(s), a row of that deeper band with the picker's own ✕.
+    // composeBlocks then drops every line below row 0 below the enclosing
+    // horizontal row.
+    const dropLines: RenderedLines = drops.map((body) => ({
+      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
+        ...layout,
+        baseStyle: styles.band,
+      }),
+      band: "deeper",
+      place: "flow",
+    }));
+    // The lead of the body this segment opens (brandon-disclosure-43z), in
+    // the trigger's own state colour — the colour the open trigger wears, so
+    // the lead and the trigger it answers to read as one affordance. ONE per
+    // body, on its first row: every later row leads with a blank of each of
+    // its cells' widths in the same colour, so the rows stay aligned and read
+    // as one panel with one way to close it.
+    const leadCell = (
+      text: RichText,
+      style: Style,
+      padding: number,
+    ): readonly LaidCell[] =>
+      applySegmentLayout(fragmentsToCells([text], style), {
+        ...layout,
+        width: "auto",
+        baseStyle: style,
+        padding,
+      });
+    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+    const { lead: openLead, stays } =
+      opens !== undefined && firstOwn !== -1
+        ? OPEN_LEAD[opens.placement](inlineLines, () =>
+            leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding),
+          )
+        : { lead: [], stays: inlineLines };
+    const holdLead = openLead.flatMap((cell) =>
+      leadCell(
+        new RichText(
+          " ".repeat(
+            cellParts(cell).reduce((w, part) => w + part.cellLength, 0),
+          ),
+        ),
+        styles.trigger,
+        0,
+      ),
+    );
+    // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
+    // the band this trigger opened gets its lead — the first its close, the
+    // rest the blank beside it; a row of a band hung deeper inside (a
+    // `{{ menu }}` body, a nested disclosure's rows) already has its own and
+    // gets none. Every line then returns as a row of a DEEPER band, so the
+    // band this trigger sits on never leads it again.
+    const leadOf = (line: RenderedLine, i: number): readonly LaidCell[] =>
+      line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
+    const ledBody: RenderedLines = bodyLines.map((line, i) => ({
+      cells: [...leadOf(line, i), ...line.cells],
+      band: "deeper",
+      place: line.place,
+    }));
+
+    const laidLines = [...stays, ...dropLines];
+
+    // The sink holds THIS segment's cells — the inline row(s) it left
+    // where it sits, the menu bands it dropped, and the lead of each row of
+    // the body it led (none when the body laid no row) — a risen trigger's
+    // row among them. A disclosure body's cells belong to the
+    // segments in it, each of which sinks its own.
+    if (ctx.perSegmentSink !== undefined) {
+      ctx.perSegmentSink.set(
+        node.id,
+        [
+          ...laidLines.flatMap((line) => line.cells),
+          ...bodyLines.flatMap(leadOf),
+        ].flatMap(cellParts),
+      );
     }
-    const { seg, compiled: segCompiled } = found;
-    if (!ctx.visible) return [];
-    // [LAW:one-source-of-truth] Every template of THIS placement — its
-    // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
-    // this placement's settings; nothing outside the placement does.
-    const scope = placementScope(ctx.scope, node.settings);
-
-    // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
-    // partial-load consequence (e.g. a variable that failed to declare, leaving a
-    // MissingFieldError when the template or when-predicate accesses it) surfaces
-    // as a visible error cell rather than crashing the whole bar. The remaining
-    // segments render normally. This is the render-time complement to the per-
-    // variable catch in registerDslConfig — together they implement option-2
-    // partial rendering: the new config stays active, working segments render, and
-    // broken segments show an error cell.
-    try {
-      if (!evaluateWhen(segCompiled.when, scope)) return [];
-
-      // [LAW:dataflow-not-control-flow] The per-placement variability is
-      // WHICH palette, and it is a value: this placement's `theme` setting,
-      // the render's palette (the base theme under the style) when it follows
-      // the bar, else the named theme, which ignores the style as it ignores
-      // the session theme.
-      const palette = placementPalette(node.settings.theme, ctx.palette);
-      // Every cell this placement lays is its own — its inline rows, the menu
-      // bands it drops, the lead of each row of the body it opens — and names
-      // it: its `effect` setting moves every one (the per-segment sink's
-      // cells), and every one fades in from its palette's ground when the
-      // placement appears.
-      const placement = {
-        id: node.id,
-        effect: node.settings.effect,
-        ground: groundOf(palette),
-      };
-
-      // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
-      // `fg:`, and every `{{ color }}` in its body resolve from this same
-      // object. That is the whole reason the segment is entered before its body
-      // evaluates rather than after — a body coloured from a palette resolved
-      // independently of the cell it sits in is two palettes in one segment,
-      // and they diverge the moment a theme or style moves.
-      // [LAW:decomposition] The open menu bodies (`drops`) come back beside
-      // the fragments, never inside them — invisible to the inline render, so
-      // a menu can sit anywhere in the template, under any wrapper, and
-      // content after it stays inline. Each becomes one full-width line
-      // stacked below the segment's row.
-      // The disclosure body this segment opens (a group's, the settings menu's,
-      // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
-      // each entering the seam in turn — on the band this trigger computed.
-      // Walked open or closed, like every child: visibility is a value.
-      const bodyOpen =
-        node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
-      // [LAW:dataflow-not-control-flow] `open` is the PRESENCE of something
-      // under the segment: a dropped menu body, or an open disclosure body.
-      // Either way the segment is the TRIGGER of the band below it and wears
-      // that band's state colour — drawn from what it opens, not from where
-      // it sits. The seam decides it (the drop list is only known once the
-      // body has evaluated) and evaluates the lead and trail on that ground.
-      const { styles, fragments, lead, trail, drops, open } =
-        ctx.evaluateSegment(
-          node,
-          scope,
-          palette,
-          ctx.region,
+    // Below row 0 every line is a drop: menu bands first (template order),
+    // then the disclosure body, in the order they hang under the trigger.
+    return [...laidLines, ...ledBody];
+  } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    ctx.onSegmentError?.(node.id, message);
+    // The error cell is a row of the band the segment sits on, like any
+    // inline line — a broken segment inside an open body still gets its ✕.
+    // A cell is one line: the message's own line breaks (a parse error's
+    // excerpt, a source's stderr) fold to spaces here — the full text went
+    // to onSegmentError above — and the cell is placed whole, never wrapped
+    // inside itself, like every other cell.
+    const oneLine = message.replace(/\s*\n\s*/g, " ");
+    return [
+      {
+        cells: applySegmentLayout(
+          [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
           {
-            bg: segCompiled.bg,
-            fg: segCompiled.fg,
-            body: segCompiled.template,
-            lead: node.lead,
-            trail: node.trail,
+            width: "auto",
+            justify: "left",
+            truncate: "right",
+            padding: 0,
+            // It follows the bar, and fades in from the bar's ground: the
+            // failure it reports may be the read of this placement's own
+            // settings.
+            placement: {
+              id: node.id,
+              effect: FOLLOW_BAR,
+              ground: groundOf(ctx.palette),
+            },
+            lead: errorAffix(node.lead, node, scope, ctx),
+            trail: errorAffix(node.trail, node, scope, ctx),
           },
-          bodyOpen,
-        );
-      const baseStyle = open ? styles.trigger : styles.closed;
-      const layout = {
-        width: seg.width ?? "auto",
-        justify: seg.justify ?? "left",
-        truncate: seg.truncate ?? "right",
-        baseStyle,
-        // [LAW:dataflow-not-control-flow] Padding is uniform across every line
-        // a segment contributes — inline rows AND dropped menu bands — one
-        // value, no per-line-kind branch. The picker reserves 2×padding at its
-        // pagination seam so a padded band still fits the width budget.
-        padding: ctx.padding,
-        placement,
-      } as const;
-      const opens = node.opens;
-      // [LAW:dataflow-not-control-flow] Where the body's rows go is its
-      // placement, applied to each row as a value: an `above` body lifts every
-      // row; a `drop` body leaves each where it is (a row an `above` body
-      // nested inside it lifted stays lifted).
-      const bodyLines: RenderedLines =
-        opens === undefined
-          ? []
-          : ctx
-              .renderBody(opens.body, bodyOpen, styles.disclosure)
-              .map((line) => ({
-                ...line,
-                place: BODY_PLACE[opens.placement](line),
-              }));
-      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
-      // lines BEFORE per-segment layout — width/justify/truncate then measure each
-      // line cleanly. A newline-free segment is the degenerate one-line case. Each
-      // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
-      // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
-      // at the segment's edges, never inside it.
-      // Each inline line is a ROW of the band this segment sits on.
-      const inlineLines: RenderedLines = splitCellsIntoLines(
-        fragmentsToCells(fragments, baseStyle),
-      ).map((line, i) => ({
-        cells: applySegmentLayout(line, {
-          ...layout,
-          lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
-          trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
-        }),
+        ),
         band: "own",
         place: "flow",
-      }));
-      // Each open menu body is one full-width dropped line on the band's
-      // PLANE — the recessed floor its items are placed above — stacked after
-      // the inline row(s), a row of that deeper band with the picker's own ✕.
-      // composeBlocks then drops every line below row 0 below the enclosing
-      // horizontal row.
-      const dropLines: RenderedLines = drops.map((body) => ({
-        cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
-          ...layout,
-          baseStyle: styles.band,
-        }),
-        band: "deeper",
-        place: "flow",
-      }));
-      // The lead of the body this segment opens (brandon-disclosure-43z), in
-      // the trigger's own state colour — the colour the open trigger wears, so
-      // the lead and the trigger it answers to read as one affordance. ONE per
-      // body, on its first row: every later row leads with a blank of each of
-      // its cells' widths in the same colour, so the rows stay aligned and read
-      // as one panel with one way to close it.
-      const leadCell = (
-        text: RichText,
-        style: Style,
-        padding: number,
-      ): readonly LaidCell[] =>
-        applySegmentLayout(fragmentsToCells([text], style), {
-          ...layout,
-          width: "auto",
-          baseStyle: style,
-          padding,
-        });
-      const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-      const { lead: openLead, stays } =
-        opens !== undefined && firstOwn !== -1
-          ? OPEN_LEAD[opens.placement](inlineLines, () =>
-              leadCell(
-                ctx.closeDisclosure(opens.key),
-                styles.close,
-                ctx.padding,
-              ),
-            )
-          : { lead: [], stays: inlineLines };
-      const holdLead = openLead.flatMap((cell) =>
-        leadCell(
-          new RichText(
-            " ".repeat(
-              cellParts(cell).reduce((w, part) => w + part.cellLength, 0),
-            ),
-          ),
-          styles.trigger,
-          0,
-        ),
-      );
-      // [LAW:single-enforcer] The ONE site a body's rows are led: each row of
-      // the band this trigger opened gets its lead — the first its close, the
-      // rest the blank beside it; a row of a band hung deeper inside (a
-      // `{{ menu }}` body, a nested disclosure's rows) already has its own and
-      // gets none. Every line then returns as a row of a DEEPER band, so the
-      // band this trigger sits on never leads it again.
-      const leadOf = (line: RenderedLine, i: number): readonly LaidCell[] =>
-        line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
-      const ledBody: RenderedLines = bodyLines.map((line, i) => ({
-        cells: [...leadOf(line, i), ...line.cells],
-        band: "deeper",
-        place: line.place,
-      }));
-
-      const laidLines = [...stays, ...dropLines];
-
-      // The sink holds THIS segment's cells — the inline row(s) it left
-      // where it sits, the menu bands it dropped, and the lead of each row of
-      // the body it led (none when the body laid no row) — a risen trigger's
-      // row among them. A disclosure body's cells belong to the
-      // segments in it, each of which sinks its own.
-      if (ctx.perSegmentSink !== undefined) {
-        ctx.perSegmentSink.set(
-          node.id,
-          [
-            ...laidLines.flatMap((line) => line.cells),
-            ...bodyLines.flatMap(leadOf),
-          ].flatMap(cellParts),
-        );
-      }
-      // Below row 0 every line is a drop: menu bands first (template order),
-      // then the disclosure body, in the order they hang under the trigger.
-      return [...laidLines, ...ledBody];
-    } catch (err) {
-      const message = (err as Error).message ?? String(err);
-      ctx.onSegmentError?.(node.id, message);
-      // The error cell is a row of the band the segment sits on, like any
-      // inline line — a broken segment inside an open body still gets its ✕.
-      // A cell is one line: the message's own line breaks (a parse error's
-      // excerpt, a source's stderr) fold to spaces here — the full text went
-      // to onSegmentError above — and the cell is placed whole, never wrapped
-      // inside itself, like every other cell.
-      const oneLine = message.replace(/\s*\n\s*/g, " ");
-      return [
-        {
-          cells: applySegmentLayout(
-            [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
-            {
-              width: "auto",
-              justify: "left",
-              truncate: "right",
-              padding: 0,
-              // It follows the bar, and fades in from the bar's ground: the
-              // failure it reports may be the read of this placement's own
-              // settings.
-              placement: {
-                id: node.id,
-                effect: FOLLOW_BAR,
-                ground: groundOf(ctx.palette),
-              },
-              lead: errorAffix(node.lead, node, scope, ctx),
-              trail: errorAffix(node.trail, node, scope, ctx),
-            },
-          ),
-          band: "own",
-          place: "flow",
-        },
-      ];
-    }
-  },
-};
+      },
+    ];
+  }
+}
 
 // A broken segment stays configurable and removable: edit mode's buttons ride
 // its ⚠ cell as they ride any cell. Each is entered as a body of its own, so

@@ -12,6 +12,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { settingsOf, type ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects } from "../src/render/effect";
+import type { RenderedLines } from "../src/dsl/node-registry";
 import { menuStateKey } from "../src/config/menu-keys";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { decideEffectName, EFFECT_NAMES, type EffectName } from "../src/themes";
@@ -53,7 +54,7 @@ function renderer(
   readonly render: (
     bar: EffectName,
     when: Instant,
-    effects: SessionEffects,
+    effects: SessionEffects<RenderedLines>,
   ) => string;
   readonly dispose: () => void;
 } {
@@ -121,8 +122,8 @@ describe("a placement's effect setting", () => {
       const plain = renderer(PLAIN);
       const pulsing = renderer(PULSING);
       try {
-        const plainFx = new SessionEffects("s");
-        const pulsingFx = new SessionEffects("s");
+        const plainFx = new SessionEffects<RenderedLines>("s");
+        const pulsingFx = new SessionEffects<RenderedLines>("s");
         let moved = false;
         for (const s of INSTANTS) {
           const before = plain.render(bar, at(s), plainFx);
@@ -161,10 +162,10 @@ describe("a placement's effect setting", () => {
     try {
       // The session has drawn the plain row since 0; pulse comes into force on
       // the middle placement at 300, so its first frame is at rest.
-      const effects = new SessionEffects("s");
+      const effects = new SessionEffects<RenderedLines>("s");
       plain.render("none", at(0), effects);
       expect(pulsing.render("none", at(300), effects)).toBe(
-        plain.render("none", at(300), new SessionEffects("s")),
+        plain.render("none", at(300), new SessionEffects<RenderedLines>("s")),
       );
       expect(effects.lastFrame().own).toEqual([
         { placement: "middle", effect: "pulse", t: 0 },
@@ -185,7 +186,7 @@ describe("a placement's effect setting", () => {
   test("none stands a placement still on a moving bar", () => {
     const still = renderer(row(`{ seg: "middle", settings: { effect: "none" } }`));
     try {
-      const effects = new SessionEffects("s");
+      const effects = new SessionEffects<RenderedLines>("s");
       const frames = INSTANTS.map((s) => still.render("shimmer", at(s), effects));
       const middle = frames.map((frame) => {
         const line = frame.split("\n").find((l) => stripAnsi(l).includes("MIDDLE"))!;
@@ -209,8 +210,8 @@ describe("a placement's effect setting", () => {
       row(`{ seg: "middle", id: "bar", settings: { effect: "pulse" } }`),
     );
     try {
-      const plainFx = new SessionEffects("s");
-      const namedFx = new SessionEffects("s");
+      const plainFx = new SessionEffects<RenderedLines>("s");
+      const namedFx = new SessionEffects<RenderedLines>("s");
       const differs = INSTANTS.some(
         (s) =>
           named.render("shimmer", at(s), namedFx) !==
@@ -246,7 +247,7 @@ describe("a placement's effect setting", () => {
       [menuStateKey("picker", "applyTheme", undefined)]: "applyTheme",
     });
     try {
-      const effects = new SessionEffects("s");
+      const effects = new SessionEffects<RenderedLines>("s");
       const frames = INSTANTS.map((s) =>
         open.render("shimmer", at(s), effects).split("\n"),
       );

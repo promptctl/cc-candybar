@@ -166,7 +166,7 @@ export interface EffectiveGlobals {
   // every other setting the menu controls. The per-version dismissal is a
   // separate thing, keyed on the update's identity.
   readonly updateNotice: boolean;
-  // Whether a placement that appears fades in (Globals.transitions) — carried
+  // Whether placements fade in and dissolve out (Globals.transitions) — carried
   // into the walk by the render's selection (RenderSelection.transitions).
   readonly transitions: boolean;
 }

@@ -21,6 +21,7 @@ import { renderLook } from "../src/render/action";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
+import type { RenderedLines } from "../src/dsl/node-registry";
 import { resolvedStyle } from "../src/render/rich-theme";
 import {
   decideEffectName,
@@ -87,7 +88,7 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
     palette: () => renderLook(compiled.menuRuntime.action, "the fade test").palette,
     render: (
       { shown, when }: Frame,
-      effects: SessionEffects,
+      effects: SessionEffects<RenderedLines>,
       selection: { transitions?: boolean; bar?: EffectName } = {},
     ): string =>
       renderDsl(
@@ -142,8 +143,8 @@ describe("a placement that appears fades in", () => {
       const on = renderer(ROW);
       const off = renderer(ROW);
       try {
-        const onFx = new SessionEffects("s");
-        const offFx = new SessionEffects("s");
+        const onFx = new SessionEffects<RenderedLines>("s");
+        const offFx = new SessionEffects<RenderedLines>("s");
         for (const frame of FRAMES) {
           const faded = on.render(frame, onFx, { transitions: true, bar });
           const plain = off.render(frame, offFx, { transitions: false, bar });
@@ -179,7 +180,7 @@ describe("a placement that appears fades in", () => {
   const risesFrom = (cfg: ValidatedConfig): { row: string; bar: string } => {
     const on = renderer(cfg);
     try {
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       const row = on
         .render({ shown: true, when: at(S) }, fx, { transitions: true })
@@ -223,7 +224,7 @@ describe("a placement that appears fades in", () => {
   test("its event says what the frame compared against, and what is fading in on what clock", () => {
     const on = renderer(ROW);
     try {
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
@@ -249,8 +250,8 @@ describe("a placement that appears fades in", () => {
     const on = renderer(config("{ transitions: true }"));
     const off = renderer(ROW);
     try {
-      const onFx = new SessionEffects("s");
-      const offFx = new SessionEffects("s");
+      const onFx = new SessionEffects<RenderedLines>("s");
+      const offFx = new SessionEffects<RenderedLines>("s");
       on.render({ shown: false, when: at(0) }, onFx);
       off.render({ shown: false, when: at(0) }, offFx);
       const shown = { shown: true, when: at(S + 10) };
@@ -269,8 +270,8 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const off = renderer(ROW);
     try {
       const frame = { shown: true, when: at(S) };
-      expect(on.render(frame, new SessionEffects("s"), { transitions: true })).toBe(
-        off.render(frame, new SessionEffects("s"), { transitions: false }),
+      expect(on.render(frame, new SessionEffects<RenderedLines>("s"), { transitions: true })).toBe(
+        off.render(frame, new SessionEffects<RenderedLines>("s"), { transitions: false }),
       );
     } finally {
       on.dispose();
@@ -282,7 +283,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
@@ -297,7 +298,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
         fades: [],
       });
       expect(opened).toBe(
-        off.render(frame, new SessionEffects("s"), { transitions: false }),
+        off.render(frame, new SessionEffects<RenderedLines>("s"), { transitions: false }),
       );
     } finally {
       on.dispose();
@@ -312,7 +313,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       const journal = history.begin();
       journal.sessionState.set("s", "theme", "nord");
       journal.commit();
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
@@ -328,7 +329,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const first = renderer(ROW);
     const reloaded = renderer(ROW);
     try {
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       first.render({ shown: false, when: at(0) }, fx, { transitions: true });
       reloaded.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
@@ -341,7 +342,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
   test("leaving arrange mode shows the bar at once", () => {
     const on = renderer(ROW);
     try {
-      const fx = new SessionEffects("s");
+      const fx = new SessionEffects<RenderedLines>("s");
       on.session.set("s", "edit.mode", "arrange");
       on.render({ shown: true, when: at(0) }, fx, { transitions: true });
       on.session.set("s", "edit.mode", "closed");
@@ -365,19 +366,32 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   const fades = {
     transitions: true,
     source: { config: ROW, preset: "default", revision: 0 },
+    hold: (lines: string) => lines,
+  };
+  const left = {
+    lines: "left",
+    span: 4,
+    ground: DEFAULT_TERMINAL_THEME.backgroundColor,
   };
 
   test("a frame never drawn is never compared against", () => {
-    const fx = new SessionEffects("s");
+    const fx = new SessionEffects<string>("s");
     const first = fx.motion("none", at(0), fades);
+    first.placed("left", left);
     first.row("r", [item("left")]);
     first.drawn();
-    // The next render throws before its first row: it is never drawn.
-    fx.motion("none", at(1), fades);
+    // The next render's walk finds `left` gone, then it throws before its
+    // first row: it is never drawn, so `left` never began leaving.
+    fx.motion("none", at(1), fades).placed("left", null);
     const after = fx.motion("none", at(2), fades);
+    after.placed("left", left);
     after.row("r", [item("left")]);
     after.drawn();
-    expect(fx.lastFrame()).toMatchObject({ basis: "compared", fades: [] });
+    expect(fx.lastFrame()).toMatchObject({
+      basis: "compared",
+      fades: [],
+      leaves: [],
+    });
   });
 });
 
