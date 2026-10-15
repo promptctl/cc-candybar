@@ -639,6 +639,7 @@ describe("an open band whose plane stands on its trigger", () => {
       store,
       registry,
       { session_id: "s1" },
+      instantOf(new Date()),
       OPTS,
       {
         onSegmentError: (name, message) => errors.push(`${name}: ${message}`),

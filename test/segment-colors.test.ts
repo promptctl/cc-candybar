@@ -181,7 +181,10 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 describe("keptOn: a colour shown exactly as given, which the terminal's rounding never makes less legible", () => {
   const at = (drawnAt: ColorDepth) => {
     const ref = createActiveSegmentRef(() => drawnAt);
-    const engine = createCcCandybarEngine(segmentColorFuncs(ref));
+    const engine = createCcCandybarEngine({
+      clock: () => new Date(),
+      extraFuncs: segmentColorFuncs(ref),
+    });
     openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
     return (fg: string, bg: string): string =>
       engine
