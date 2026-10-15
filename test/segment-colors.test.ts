@@ -22,6 +22,7 @@ import {
   transposePalette,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
+import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import {
   resolveSegmentColors,
   ColorSpecError,
@@ -206,10 +207,13 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
     expect(keptOn("#ff4444", "#ee5555")).toBe("#ff4444");
   });
 
-  test("at 256 colours it keeps the quiet floor its truecolor pair clears, where rounding alone would cost it", () => {
-    expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(3);
+  test("at 256 colours it stands as far off its ground as the truecolor pair does, where rounding alone would cost it", () => {
+    const held = contrastRatio(parseRgbHex(RED.slice(1)), parseRgbHex(STATE.slice(1)));
+    // The pair holds more than the quiet floor, so keeping only that floor fails here.
+    expect(held).toBeGreaterThan(QUIET_MIN_CONTRAST);
+    expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(held);
     const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
-    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(held);
   });
 
   test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {

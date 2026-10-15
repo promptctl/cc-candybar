@@ -14,7 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
-import { ColorRgba, getThemePalette, Palette } from "@promptctl/rich-js";
+import { ColorRgba, getThemePalette, Palette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -24,7 +24,6 @@ import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
@@ -111,9 +110,12 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   };
   const fgOf = (name: string): string =>
     resolvedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
+  // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never the
+  // render's memoized `transposedPalette`: the function under test cannot be
+  // the oracle that checks it.
   const expectedTint = (name: string, variation?: VariationName, shade?: ShadeName): string =>
     decorFor(
-      transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
+      transposePalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
       decorOf(variation, shade),
       addressOf(root, name),
     ).hex;
@@ -443,7 +445,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     const plain = build(tree(""));
     const rt = build(tree(", distribution: 'monotonic'"));
     rt.render();
-    const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
+    const palette = transposePalette(getThemePalette(THEME), IDENTITY_KEY);
     for (const name of ["a", "b", "c"]) {
       // The row places its cells at the step after the row's own; edit mode
       // wraps each cell with its `+`/`-`, whose placer is not the row's.
@@ -472,7 +474,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     const rt = build(tree("", ", distribution: 'uniform'"));
     rt.render();
     plain.render();
-    const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
+    const palette = transposePalette(getThemePalette(THEME), IDENTITY_KEY);
     for (const name of CELLS) {
       const authored = addressOf(rt.root, name);
       const unauthored = addressOf(plain.root, name);

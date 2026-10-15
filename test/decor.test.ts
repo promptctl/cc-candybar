@@ -31,6 +31,7 @@ import {
   DECOR_HUES,
   OPEN_HUE,
   DEFAULT_DISTRIBUTION,
+  DISTRIBUTION_NAMES,
   DISTRIBUTIONS,
   LEVEL_DECAY,
   STATE_FLOOR,
@@ -374,22 +375,42 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     }
   });
 
-  test("a decorated cell's text is the pole on its shades, and on a muted row its role's own text colour, read at the floor", () => {
-    const palette = getThemePalette("tokyo-night");
-    for (const shade of SHADE_NAMES) {
-      const decor: Decor = { variation: VARIATIONS.accent, shade: SHADES[shade] };
-      for (const address of [[row(0, 2), cell(1, 4)], [row(1, 2), cell(2, 4)]]) {
-        const { hue } = decorEntryFor(decor, address);
-        const { tint, text } = decorationFor(palette, { kind: "bar", decor, address }, ColorDepth.TRUECOLOR);
-        expect(contrastRatio(drawnGround(tint), text)).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
-        expect([shade, text.hex]).toEqual([
-          shade,
-          shade === "muted"
-            ? (paletteRole(palette, `text-${hue}`).hex)
-            : textOn(palette, tint, ColorDepth.TRUECOLOR).hex,
-        ]);
+  test("a decorated cell's text is the pole on its shades, and on a muted row its role's own text colour wherever that reads, moved to the floor where it does not, on every theme as drawn", () => {
+    const wrong: string[] = [];
+    let kept = 0;
+    let moved = 0;
+    for (const drawnAt of DRAWN) {
+      const shown = shownAt(drawnAt);
+      for (const palette of REGISTRY) {
+        for (const shade of SHADE_NAMES) {
+          // The variations' rows between them reach every decorative hue.
+          for (const variation of VARIATION_NAMES) {
+            const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
+            for (const address of [[row(0, 2), cell(1, 4)], [row(1, 2), cell(2, 4)]]) {
+              const { hue } = decorEntryFor(decor, address);
+              const { tint, text } = decorationFor(palette, { kind: "bar", decor, address }, drawnAt);
+              const where = `${palette.name} ${variation}/${shade} ${hue} at ${ColorDepth[drawnAt]}`;
+              const ratio = contrastRatio(shown(tint), shown(text));
+              if (ratio < TEXT_MIN_CONTRAST) wrong.push(`${where}: ${ratio.toFixed(2)}`);
+              if (shade !== "muted") {
+                if (text.hex !== textOn(palette, tint, drawnAt).hex) wrong.push(`${where}: not the pole`);
+                continue;
+              }
+              const own = paletteRole(palette, `text-${hue}`);
+              if (contrastRatio(shown(tint), shown(own)) < TEXT_MIN_CONTRAST) moved++;
+              else if (text.hex === own.hex) kept++;
+              else wrong.push(`${where}: ${text.hex}, not its own ${own.hex}, which reads`);
+            }
+          }
+        }
       }
     }
+    expect(wrong).toEqual([]);
+    // Non-vacuous both ways: the registry has muted roles whose own text
+    // reads, and roles whose own text only the floor makes read — in
+    // truecolor every bundled theme's does, so those are the depths that round.
+    expect(kept).toBeGreaterThan(0);
+    expect(moved).toBeGreaterThan(0);
   });
 });
 
@@ -532,7 +553,7 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 // --- candybar-render-ai7.2, candybar-theme-colours-6fq5.e5n: the state floor ---
 // [LAW:verifiable-goals] Each `describe` is one line of the Done-when, over the
 // WHOLE registry, every bundled style, every position of the dial and every
-// ground a shipped variation deals — the failures the floor exists for are
+// ground a shipped variation deals under every distribution — the failures the floor exists for are
 // theme-specific (textual-dark's navy secondary, textual-ansi's flat shades),
 // so a sample proves nothing.
 
@@ -551,45 +572,66 @@ const shownAt =
   (c: ColorRgba): ColorRgba =>
     drawnColour(c, drawnAt);
 
-// Rows this long deal every ground a row can: by then a row has turned to
-// every role its variation steps it through and worn every shade of each
-// (pinned below), and a longer row wears only what a shorter one did.
+// Rows this long deal every ground a row can (pinned below): a cell's place
+// in its row picks its shade, so the distribution its container authors
+// decides which shades a row of a given length wears.
 const ROW_REACH = 12;
+/** The ground of a row of `length` cells, starting on `start`, placed by `placedBy`. */
+const groundOf = (
+  variation: VariationName,
+  shade: ShadeName,
+  start: number,
+  length: number,
+  placedBy: DistributionName,
+): Ground =>
+  rowGround({ variation: VARIATIONS[variation], shade: SHADES[shade] }, [
+    row(start, 2),
+    { index: 0, count: length, distribution: DISTRIBUTIONS[placedBy], axis: "cell" },
+  ]);
+const groundName = (ground: Ground): string => ground.map((e) => shadeRole(e.hue, e.shade)).join("+");
 /**
  * Every ground an open bar trigger can stand on: what a row of every length,
- * at either start, wears under every shipped variation at every position of
- * the dial — derived from the tables, so a new one is measured the moment it
- * ships. Named by its entries, which is also what makes two rows' grounds one.
+ * at either start, placed by every distribution, wears under every shipped
+ * variation at every position of the dial — derived from the tables, so a new
+ * one is measured the moment it ships. Named by its entries, which is also
+ * what makes two rows' grounds one.
  */
 const GROUNDS: readonly { readonly name: string; readonly ground: Ground }[] = [
   ...new Map(
-    VARIATION_NAMES.flatMap((variation) =>
-      SHADE_NAMES.flatMap((shade) =>
-        [0, 1].flatMap((r) =>
-          Array.from({ length: ROW_REACH }, (_, n) => {
-            const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
-            const ground = rowGround(decor, [row(r, 2), cell(0, n + 1)]);
-            const name = ground.map((e) => shadeRole(e.hue, e.shade)).join("+");
-            return [name, { name, ground }] as const;
-          }),
+    DISTRIBUTION_NAMES.flatMap((placedBy) =>
+      VARIATION_NAMES.flatMap((variation) =>
+        SHADE_NAMES.flatMap((shade) =>
+          [0, 1].flatMap((r) =>
+            Array.from({ length: ROW_REACH }, (_, n) => {
+              const ground = groundOf(variation, shade, r, n + 1, placedBy);
+              const name = groundName(ground);
+              return [name, { name, ground }] as const;
+            }),
+          ),
         ),
       ),
     ),
   ).values(),
 ];
 
-test("a row of ROW_REACH cells wears every shade of every role it turns to, so no longer row deals a ground GROUNDS lacks", () => {
-  for (const variation of VARIATION_NAMES) {
-    const { hues, run } = VARIATIONS[variation];
-    const roles = run === WHOLE_ROW ? 1 : new Set(hues).size;
-    for (const shade of SHADE_NAMES) {
-      for (const r of [0, 1]) {
-        const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
-        const ground = rowGround(decor, [row(r, 2), cell(0, ROW_REACH)]);
-        expect([variation, shade, r, ground.length]).toEqual([variation, shade, r, roles * SHADES[shade].tones.length]);
+test("no row longer than ROW_REACH, under any distribution, deals a ground GROUNDS lacks", () => {
+  // Far past the cells a terminal row holds.
+  const LONGEST = 8 * ROW_REACH;
+  const named = new Set(GROUNDS.map(({ name }) => name));
+  const fresh: string[] = [];
+  for (const placedBy of DISTRIBUTION_NAMES) {
+    for (const variation of VARIATION_NAMES) {
+      for (const shade of SHADE_NAMES) {
+        for (const r of [0, 1]) {
+          for (let length = ROW_REACH + 1; length <= LONGEST; length++) {
+            const name = groundName(groundOf(variation, shade, r, length, placedBy));
+            if (!named.has(name)) fresh.push(`${placedBy} ${variation}/${shade} row ${r}, ${length} cells: ${name}`);
+          }
+        }
       }
     }
   }
+  expect(fresh).toEqual([]);
 });
 const DEPTH_HUES = [0, 1, 2].map((depth) => hueAtDepth(OPEN_HUE, depth));
 
@@ -833,8 +875,9 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
 // "Distinguishable" is measured as ΔE in OKLab (Euclidean distance over the
 // coordinates rich-js's `Oklch` exposes): luminance contrast cannot see two
 // hues at one lightness, and a nested trigger differs from its parent by HUE.
-// The floors are the measured registry minima rounded down — a regression
-// that moves a theme below its own floor fails, whichever theme it is.
+// The floors are BAND_FLOORS: bandFor searches for a plane that holds them,
+// and every lineage is measured against them here, so a regression that moves
+// any theme under one fails, naming it.
 
 const THEMES = REGISTRY;
 const DEPTHS = [0, 1, 2] as const;
@@ -1070,14 +1113,10 @@ describe("a band is a plane", () => {
 });
 
 describe("open trigger, its band, and a nested band are mutually distinguishable on every theme", () => {
-  // Registry minima in truecolor at the time of writing (ΔE in OKLab):
-  // trigger/plane 0.119 (textual-ansi primary), plane/nested plane 0.040
-  // (rose-pine-dawn accent), nested trigger/enclosing plane 0.087 (rose-pine
-  // primary). Each is measured on the colours the terminal draws: at 256 the
-  // band's colours are rounded to the xterm cube, and bandFor holds the same
-  // floors there (brandon-theme-picker-bgw.ddk).
-  // At ansi the floors are measured on the ANSI table's nominal colours, as
-  // rich-js `drawnColour` rounds them.
+  // Each pair is measured on the colours the terminal draws: at 256 the band's
+  // colours are rounded to the xterm cube, and bandFor holds the same floors
+  // there (brandon-theme-picker-bgw.ddk); at ansi on the ANSI table's nominal
+  // colours, as rich-js `drawnColour` rounds them.
   /** Every (lineage, depth) whose pair, as drawn at `drawnAt`, falls below `floor`, named. */
   function below(
     drawnAt: ColorDepth,

@@ -16,8 +16,9 @@
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
 // imports only its memo and rich-js, which owns every colour operation used (`mixAxes`,
 // `blendRgb`, `ensureContrast`, `ensureDrawn`, `drawnColour`, `contrastFor`,
-// `contrastRatio`, `Oklch.deltaE`); cc-candybar keeps the POLICY (which roles,
-// which shades, which address formula) and no colour arithmetic of its own.
+// `contrastRatio`, `relativeLuminance`, `Oklch.deltaE`); cc-candybar keeps the
+// POLICY (which roles, which shades, which address formula) and no colour
+// arithmetic of its own.
 
 import {
   blendRgb,
@@ -29,6 +30,7 @@ import {
   ensureDrawn,
   drawnColour,
   ColorRgba,
+  relativeLuminance,
   type Palette,
 } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
@@ -610,10 +612,12 @@ export const STATE_FLOOR = 2.2;
 
 /**
  * The search slides the hue's lightness in twelfths each way, reaching black
- * and white themselves, so any cells some colour stands off are cells a
- * candidate stands off.
+ * and white themselves.
  */
 const STATE_STEPS = 12;
+
+/** Halvings of the ray that find a balance: far finer than any colour drawn. */
+const BALANCE_HALVINGS = 40;
 
 /**
  * The closed cells a bar trigger stands among: the entries its row's cells
@@ -657,16 +661,18 @@ const shownTrue = shownAt(ColorDepth.TRUECOLOR);
  * `STATE_FLOOR` off every cell — the enforcement is a floor, not a transform.
  * Otherwise the hue slid along its own OKLCH lightness, its angle and chroma
  * kept, the least distance that stands off every cell: toward white and toward
- * black in twelfths, a step each way in turn. Cells that are dim take a bright
- * state and cells that are vivid a deep one, with no branch on which.
+ * black in twelfths, a step each way in turn, and where no twelfth clears, the
+ * balance in a window between two cells the twelfths stepped over. Cells that
+ * are dim take a bright state and cells that are vivid a deep one, with no
+ * branch on which.
  *
  * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
  * trigger and every cell are rounded independently, and a trigger whose
  * rounding lands too near a rounded cell is replaced by the nearest drawn
  * colour that clears the floor against all of them (rich-js `ensureDrawn`).
  *
- * [LAW:dataflow-not-control-flow] Twenty-five candidates, one predicate, the
- * first that passes; the values decide, not a branch per theme.
+ * [LAW:dataflow-not-control-flow] The candidates nearest first, one predicate,
+ * the first that passes; the values decide, not a branch per theme.
  * [LAW:no-silent-failure] Cells no colour clears — a row turning between
  * textual-dark's navy and orange under `alt` — get the candidate standing
  * furthest off its nearest cell, and `short` says how far it stands as drawn,
@@ -701,27 +707,26 @@ function searchState(
   // (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
   const cells = among.map(shownTrue);
   const pure = paletteRole(palette, hue);
-  // A ray from the pure hue to an end of the lightness axis, in twelfths: its
-  // lightness moved, its angle and chroma kept (as far as the gamut holds them
-  // near black and white), so every candidate is still the theme's hue.
-  // Sliding toward the theme's poles instead greyed the hue, and a slide past a
-  // pole cell by cell undid itself on cells straddling the middle grey.
+  const black = new ColorRgba(0, 0, 0);
+  const white = new ColorRgba(255, 255, 255);
+  // The hue `t` of the way along its lightness toward an end of the axis: its
+  // angle and chroma kept (as far as the gamut holds them near black and
+  // white), so every candidate is still the theme's hue. Sliding toward the
+  // theme's poles instead greyed the hue, and a slide past a pole cell by cell
+  // undid itself on cells straddling the middle grey.
+  const along = (end: ColorRgba, t: number): ColorRgba =>
+    Oklch.fromRgba(pure)
+      .mixAxes(Oklch.fromRgba(end), { l: t, c: 0, h: 0, alpha: 0 })
+      .toRgba();
   const ray = (end: ColorRgba): ColorRgba[] =>
     Array.from({ length: STATE_STEPS }, (_, k) =>
-      Oklch.fromRgba(pure)
-        .mixAxes(Oklch.fromRgba(end), {
-          l: (k + 1) / STATE_STEPS,
-          c: 0,
-          h: 0,
-          alpha: 0,
-        })
-        .toRgba(),
+      along(end, (k + 1) / STATE_STEPS),
     );
-  const darker = ray(new ColorRgba(0, 0, 0));
+  const toBlack = ray(black);
   const candidates = [
     pure,
     // [LAW:no-defensive-null-guards] Both rays are one length by construction.
-    ...ray(new ColorRgba(255, 255, 255)).flatMap((c, k) => [c, darker[k]!]),
+    ...ray(white).flatMap((c, k) => [c, toBlack[k]!]),
   ];
   // The contrast against the nearest cell: what the floor holds, and what
   // cells no colour clears are drawn to the most of. No cell at all is
@@ -731,8 +736,54 @@ function searchState(
       Infinity,
       ...cells.map((cell) => contrastRatio(shownTrue(candidate), cell)),
     );
+  const clears = (c: ColorRgba): boolean => nearest(c) >= STATE_FLOOR;
+  // Between two cells adjacent in luminance lies a window of colours standing
+  // STATE_FLOOR off both exactly when the two stand STATE_FLOOR² apart: a
+  // contrast ratio multiplies, so the colour at their balance stands the root
+  // of their ratio off each, and no other cell comes nearer to it. A window
+  // can be narrower than a twelfth — rows an authored distribution deals on
+  // textual-dark leave them as narrow as .002 of luminance between its navy
+  // and its orange — and the twelfths step over it, so the balance is found
+  // on the ray toward it by halving: past it, the colour stands nearer the
+  // cell beyond it than the one it left.
+  // The ray is drawn in 8-bit steps that can be wider than half a window, so
+  // both colours either side of the balance are offered, the nearer first.
+  const aroundBalance = (
+    lighter: ColorRgba,
+    darker: ColorRgba,
+  ): ColorRgba[] => {
+    const leans = (c: ColorRgba): number =>
+      contrastRatio(shownTrue(c), lighter) -
+      contrastRatio(shownTrue(c), darker);
+    const end = leans(pure) < 0 ? black : white;
+    // Darkening, the colour leans further toward standing off the lighter
+    // cell; lightening, the reverse.
+    const way = end === black ? 1 : -1;
+    let [near, far] = [0, 1];
+    for (let i = 0; i < BALANCE_HALVINGS; i++) {
+      const t = (near + far) / 2;
+      if (way * leans(along(end, t)) > 0) far = t;
+      else near = t;
+    }
+    return [along(end, near), along(end, far)];
+  };
+  const windows = (): ColorRgba[] => {
+    const rising = [...cells].sort(
+      (a, b) => relativeLuminance(a) - relativeLuminance(b),
+    );
+    return rising.slice(1).flatMap((lighter, i) => {
+      // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
+      const darker = rising[i]!;
+      return contrastRatio(lighter, darker) >= STATE_FLOOR ** 2
+        ? aroundBalance(lighter, darker)
+        : [];
+    });
+  };
+  // Black and white are steps, so a colour beyond every cell is found among
+  // them; the windows between cells are searched only where no step clears.
   const chosen =
-    candidates.find((c) => nearest(c) >= STATE_FLOOR) ??
+    candidates.find(clears) ??
+    windows().find(clears) ??
     candidates.reduce((a, b) => (nearest(b) > nearest(a) ? b : a));
   // [LAW:dataflow-not-control-flow] One path whichever was chosen: the depth
   // replaces it by the nearest colour it draws that clears every cell as
@@ -947,8 +998,8 @@ export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
  * plane it opens, and a plane off the plane it is nested in. They hold over
  * the depths a bar reaches (0–2; depth 3 is the model's limit, see
  * BAND_RECESSION) in truecolor by the construction below —
- * `test/decor.test.ts` pins the measured minima — and `bandFor` holds each one
- * again on the colours drawn at 256 and ansi. A nested trigger is held off the
+ * `test/decor.test.ts` measures every lineage against them — and `bandFor`
+ * holds each one again on the colours drawn at 256 and ansi. A nested trigger is held off the
  * plane it sits on by STATE_FLOOR, as every open trigger is held off what it
  * stands among (`standsAmong`).
  */

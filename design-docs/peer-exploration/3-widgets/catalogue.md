@@ -335,7 +335,7 @@ claude-statusline-powerline, **claudia** = claudia-statusline, **YAS** = Yet Ano
   not re-run keeps publishing its last value with no mark on the cell, and `registry.settled()`
   exists only for `cc-candybar check`.
 - **Worth taking:** maybe. It is the law the codebase already argues for — a number whose provenance
-  changed silently is exactly the case `[LAW:no-silent-fallbacks]` exists to refuse — but the honest
+  changed silently is exactly the case `[LAW:no-silent-failure]` exists to refuse — but the honest
   scope is small, because every cc-candybar number that can go stale is one the daemon can also just
   refresh. Revisit if user-authored `shell` sources with long TTLs become common.
 

@@ -168,7 +168,7 @@ on cost and on correctness:
   (`foldFile`, `src/daemon/cache/session-usage-store.ts:184-188`). A persisted fold pins the prices
   in force when it was written, and re-pricing it requires the raw entries the fold deliberately
   discards. The failure mode is a wrong number on the bar rather than a slow one, which is the worse
-  trade under `[LAW:no-silent-fallbacks]`.
+  trade under `[LAW:no-silent-failure]`.
 - Both of parcel's own failure behaviours would have to be rejected rather than copied: a missing
   snapshot silently yielding "nothing changed", and a file that records neither its format nor what
   it describes. cc-candybar's equivalent would need a typed `Outcome` and an identity stamp, so the

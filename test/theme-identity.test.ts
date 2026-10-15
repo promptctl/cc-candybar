@@ -29,20 +29,15 @@ import {
   listThemePalettes,
   Oklch,
   SEAM_MIN_DELTA_E,
-  transposePalette,
 } from "@promptctl/rich-js";
 
 import { checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
-import { DEFAULT_SHADE } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  DECOR_HUES,
-  decorEntryColour,
-  paletteRole,
   SHADES,
   VARIATIONS,
   type ShadeName,
@@ -118,11 +113,9 @@ const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>
 // Each variation, position of the shade dial and bundled style is a runtime
 // pick (brandon-theme-picker-bgw.7g6, candybar-theme-colours-6fq5.e5n), so
 // each fact below holds whichever one the user is in, not only under the
-// defaults: every variation × every position of the dial, unstyled, and every
-// variation × every style at the default position. A style moves every colour
-// of a palette alike, and the full cross-product of all three — 6.6k bars —
-// held every fact when the dial was added; the suite keeps these two planes
-// of it, which reach every pair the dial or a style can fold.
+// defaults: the palette fact under every variation × every position of the
+// dial, unstyled, and the seam fact under every variation × position × style,
+// since only the three together decide which two colours meet.
 const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
 const STYLES = Object.keys(CONFIG.styles);
@@ -135,12 +128,9 @@ const named = ({ variation, shade, look }: Variant): string => `${variation}/${s
 const UNSTYLED: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
   SHADE_NAMES.map((shade) => ({ variation, shade, look: "none" })),
 );
-const VARIANTS: readonly Variant[] = [
-  ...UNSTYLED,
-  ...VARIATION_NAMES.flatMap((variation) =>
-    STYLES.filter((look) => look !== "none").map((look) => ({ variation, shade: DEFAULT_SHADE, look })),
-  ),
-];
+const VARIANTS: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
+  SHADE_NAMES.flatMap((shade) => STYLES.map((look) => ({ variation, shade, look }))),
+);
 
 // Every rate-limit window and the context calm: the case where the threshold
 // cells wear their calm arm side by side.
@@ -267,43 +257,14 @@ describe("no two neighbouring cells blur", () => {
       ),
     );
 
-  // Two colours a row can put side by side meet when they sit closer than the
-  // eye resolves, and only the theme (under its style) can make them: two of
-  // the shades the dial puts on the bar fold where the theme draws them alike
-  // (textual-ansi's every shade of a role is one colour), and a cell can meet
-  // an alert cell's `warning`/`error` beside it (atom-one-light under
-  // `inverted` pulls its warning and its accent's middle shade onto one
-  // near-black). Neighbours share a background because the THEME says so, and
-  // the divider keeps that seam. The one other shared background is not a seam
-  // between cells at all: segments nested in one bar cell (context beside
-  // autocompact, and ceiling) wear that cell's colour byte for byte
-  // (decorEntryFor), as do the cells of a muted row, and the divider is how
-  // the joiner separates them on it.
-  const oneCell = (s: { left: ColorRgba; right: ColorRgba }): boolean =>
-    s.left.hex === s.right.hex;
-  const MEET = new Map<string, boolean>();
-  const ownColoursMeet = (name: string, variant: Variant): boolean => {
-    const key = `${name}|${named(variant)}`;
-    const hit = MEET.get(key);
-    if (hit !== undefined) return hit;
-    const meet = coloursMeet(name, variant);
-    MEET.set(key, meet);
-    return meet;
-  };
-  const coloursMeet = (name: string, { shade, look }: Variant): boolean => {
-    const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
-    const alerts = (["warning", "error"] as const).map((role) => paletteRole(palette, role));
-    const cells = DECOR_HUES.flatMap((hue) =>
-      SHADES[shade].tones.map((tone) => decorEntryColour(palette, { hue, shade: tone })),
-    );
-    return cells.some(
-      (a, i) =>
-        cells.some((b, j) => i !== j && dE(a, b) < SEAM_MIN_DELTA_E) ||
-        alerts.some((alert) => dE(a, alert) < SEAM_MIN_DELTA_E),
-    );
-  };
-
-  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider joins only what the theme's own colours put on one", (_name, variant) => {
+  // The joiner draws a divider where an arrow would vanish into the ground
+  // it enters: where two neighbours' backgrounds meet. Cells nested in one bar
+  // cell (context beside autocompact, and ceiling) wear that cell's colour
+  // byte for byte (decorEntryFor), as do the cells of a muted row, and a
+  // theme can draw two of its colours alike (textual-ansi's every shade of a
+  // role is one colour). A divider between backgrounds the eye tells apart is
+  // a seam the joiner gave up for nothing.
+  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider only backgrounds that meet", (_name, variant) => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
     const arrows = seams
@@ -311,16 +272,14 @@ describe("no two neighbouring cells blur", () => {
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(arrows)]).toEqual([]);
     const dividers = seams
-      .filter((s) => s.glyph === DIVIDER)
-      .filter((s) => !oneCell(s))
-      .filter((s) => !(dE(s.left, s.right) < SEAM_MIN_DELTA_E && ownColoursMeet(s.theme, variant)))
+      .filter((s) => s.glyph === DIVIDER && dE(s.left, s.right) >= SEAM_MIN_DELTA_E)
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(dividers)]).toEqual([]);
   });
 
   test("dividers are drawn, so the divider rule has seams to judge", () => {
-    // Non-vacuous: a muted row is one colour, and textual-ansi draws every
-    // shade of a role alike.
+    // Non-vacuous: the rule judges every divider, and a muted row is one
+    // colour, as is every shade of a role under textual-ansi.
     expect(VARIANTS.some((variant) => seamsUnder(variant).some((s) => s.glyph === DIVIDER))).toBe(true);
   });
 });
