@@ -69,9 +69,10 @@ const PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
 // The same greedy name and anchored suffix; the field is one a preset fragment
 // may author (never a dotted name).
 const PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-// A theme name is an installed theme's (dotless); the field one of
-// THEME_DEFAULT_FIELDS.
-const THEME_DEFAULT_KEY = /^themeDefaults\.([^.]+)\.([^.]+)$/;
+// The same greedy name and anchored suffix: a theme name is whatever rich-js
+// installs, so it round-trips themeDefaultKey dotted or not; the field is one
+// of THEME_DEFAULT_FIELDS (never dotted).
+const THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
 
 // [LAW:one-source-of-truth] THE builder for a preset's root key — the
 // inverse of PRESET_ROOT_KEY's parse. edit-chrome.ts's synthesis and

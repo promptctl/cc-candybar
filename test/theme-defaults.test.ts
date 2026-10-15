@@ -23,6 +23,11 @@ import { mergeWithDefault } from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
+  parsePersistTarget,
+  persistPath,
+  themeDefaultKey,
+} from "../src/config/loader/persist-target";
+import {
   renderOptionsOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
@@ -324,5 +329,25 @@ describe("a theme's default reaches the bar", () => {
     expect(cellBg(pinned("{ nord: { shade: 'deepest' } }"))).toEqual(
       cellBg(pinned("{}")),
     );
+  });
+});
+
+// ─── 5. The key a save or reset writes ───────────────────────────────────────
+
+describe("a theme-default key", () => {
+  // A theme name is whatever rich-js installs; nothing here forbids a dot.
+  test("round-trips any theme name, a dotted one included", () => {
+    for (const theme of ["nord", "tokyo-night", "solarized.dark"]) {
+      const target = parsePersistTarget(themeDefaultKey(theme, "shade"));
+      expect(target).toEqual({ scope: "theme-default", theme, field: "shade" });
+      if (target?.scope !== "theme-default") throw new Error(`${theme}: no theme-default target`);
+      expect(persistPath(target)).toEqual(["themeDefaults", theme, "shade"]);
+    }
+  });
+
+  test("names a theme and one of the look fields", () => {
+    expect(parsePersistTarget("themeDefaults.nord.endcaps")).toBeNull();
+    expect(parsePersistTarget("themeDefaults.nord")).toBeNull();
+    expect(parsePersistTarget("themeDefaults..shade")).toBeNull();
   });
 });
