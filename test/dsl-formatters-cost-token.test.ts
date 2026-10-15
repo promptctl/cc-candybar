@@ -26,6 +26,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -68,6 +69,7 @@ function render(call: string, payload: Record<string, number>): string {
     store,
     registry,
     payload,
+    instantOf(new Date()),
     OPTS,
   );
   return stripAnsi(out);

@@ -47,6 +47,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -255,7 +256,6 @@ function depsWith(
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
-    clock: () => new Date(1000),
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }
@@ -304,6 +304,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("projectable: output/total rates land; idle input lane is absent", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith(),
       undefined,
       SPEED_PATHS,
@@ -320,6 +321,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("first render (no prior sample) ⇒ no speed key, never a fabricated rate", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith({
         usageStore: {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
@@ -342,6 +344,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith({
         usageStore: {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
@@ -374,6 +377,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith({
         usageStore: {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
@@ -405,6 +409,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("a single-sample ring yields no history (needs two samples for one bar)", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith({
         usageStore: {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
@@ -427,6 +432,7 @@ describe("buildRenderPayload — speed lane", () => {
   test("gating: speed omitted from the closure ⇒ no speed key (lane not pulled)", async () => {
     const payload = await buildRenderPayload(
       hook(),
+      instantOf(new Date(1000)),
       depsWith(),
       undefined,
       new Set(["session.tokens"]),
@@ -458,7 +464,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    return renderDsl(cfg, compiled, store, registry, payload, {
+    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,

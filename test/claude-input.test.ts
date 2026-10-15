@@ -29,6 +29,7 @@ import { linkUrls } from "./helpers/ansi";
 import { __resetRateLimitsForTest } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -224,7 +225,7 @@ function runtime(tmux: TmuxHint | null) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  const raw = renderDsl(config, compiled, store, registry, { session_id: "s1" }, OPTS);
+  const raw = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS);
   const logged: string[] = [];
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
@@ -369,7 +370,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   };
   // The tray's links by what they do, in render order.
   const links = () =>
-    linkUrls(renderDsl(config, compiled, store, registry, payload, OPTS)).map(
+    linkUrls(renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS)).map(
       (u) => ({ url: u, effects: effectsOf(u) }),
     );
   return { config, links, ctx, sessionState };

@@ -18,6 +18,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -53,7 +54,7 @@ function runtime(src: string) {
   recordRender(sessionState, "s1");
   return {
     sessionState,
-    render: () => renderDsl(cfg, compiled, store, registry, PAYLOAD, OPTS),
+    render: () => renderDsl(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS),
     click: (url: string) =>
       clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };

@@ -45,6 +45,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 type Rgb = readonly [number, number, number];
 type Drawn = Rgb | { readonly ansi: number };
@@ -236,6 +237,7 @@ async function closedBars(): Promise<{
             colorCompatibility,
           },
           200,
+          instantOf(new Date()),
         ).rendered,
       ),
     dispose: () => prepared.registry.dispose(),
@@ -314,7 +316,7 @@ function forEachStage(
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
     const render = (colorCompatibility: ColorCompatibility) =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, { ...OPTS, colorCompatibility });
+      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), { ...OPTS, colorCompatibility });
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) clickUrl(url, ctx);

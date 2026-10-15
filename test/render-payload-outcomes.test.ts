@@ -21,6 +21,7 @@ import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 type LogEntry = { level: string; msg: string };
 
@@ -95,6 +96,7 @@ describe("buildRenderPayload — git outcome lane", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       GIT_PATHS,
@@ -118,6 +120,7 @@ describe("buildRenderPayload — git outcome lane", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       GIT_PATHS,
@@ -146,6 +149,7 @@ describe("buildRenderPayload — git outcome lane", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       GIT_PATHS,
@@ -188,6 +192,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
     const deps = depsWith(ABSENT, logs);
     const payload = await buildRenderPayload(
       hookData(transcript),
+      instantOf(new Date()),
       deps,
       undefined,
       CACHE_PATHS,
@@ -219,6 +224,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
     const deps = depsWith(ABSENT, logs);
     const payload = await buildRenderPayload(
       hookData(transcript),
+      instantOf(new Date()),
       deps,
       undefined,
       CACHE_PATHS,
@@ -258,6 +264,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       LANE_PATHS,
@@ -301,6 +308,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       LANE_PATHS,
@@ -327,6 +335,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       LANE_PATHS,
@@ -362,6 +371,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       LANE_PATHS,
@@ -388,6 +398,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
     await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       LANE_PATHS,
@@ -424,6 +435,7 @@ describe("buildRenderPayload — effective globals projection", () => {
     const logs: LogEntry[] = [];
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       depsWith(ABSENT, logs),
       undefined,
       new Set(), // no provider lane needed for this projection
@@ -485,6 +497,7 @@ describe("buildRenderPayload — git PR projection", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       PR_PATHS,
@@ -516,6 +529,7 @@ describe("buildRenderPayload — git PR projection", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       PR_PATHS,
@@ -549,6 +563,7 @@ describe("buildRenderPayload — git PR projection", () => {
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       PR_PATHS,
@@ -584,6 +599,7 @@ describe("buildRenderPayload — autocompact lane", () => {
     });
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       AUTOCOMPACT_PATHS,
@@ -624,6 +640,7 @@ describe("buildRenderPayload — autocompact lane", () => {
     });
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       AUTOCOMPACT_PATHS,
@@ -678,6 +695,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
     });
     await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       deps,
       undefined,
       new Set(paths),
@@ -725,6 +743,7 @@ describe("buildRenderPayload — config file and resume command", () => {
   const build = (configPath: string | null, hints: typeof NO_HINTS) =>
     buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
       new Set(),
@@ -754,6 +773,7 @@ describe("buildRenderPayload — config file and resume command", () => {
     const { added_dirs: _, ...workspace } = hookData("/x").workspace;
     const payload = await buildRenderPayload(
       { ...hookData("/no/such/transcript.jsonl"), workspace },
+      instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
       new Set(),

@@ -32,6 +32,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
+import { instantOf } from "../src/utils/instant";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;
@@ -206,6 +207,7 @@ function renderOne(
       store,
       registry,
       { ...HOOK, ...c.payload(value) },
+      instantOf(new Date()),
       OPTS,
       { onSegmentError },
       { theme: resolveThemeSelection(undefined, null, themeName) },

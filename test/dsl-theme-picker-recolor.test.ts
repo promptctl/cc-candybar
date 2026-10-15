@@ -35,6 +35,7 @@ import {
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveThemeSelection } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
@@ -104,6 +105,7 @@ function buildRuntime() {
       store,
       registry,
       { session_id: SID },
+      instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink },
       {

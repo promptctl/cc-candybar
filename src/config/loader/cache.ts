@@ -4,12 +4,7 @@
 // requireCache/optionalCache gate presence by source kind. This file changes when
 // the cache vocabulary changes — add an arm to CACHE_SCHEMA and CacheDecl.
 
-import {
-  CACHE_KEYS,
-  type CacheDecl,
-  type SourceKind,
-  type TtlCacheDecl,
-} from "../dsl-types.js";
+import { CACHE_KEYS, type CacheDecl, type SourceKind } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   absolutePathProblem,
@@ -58,9 +53,9 @@ export function optionalCache(
 // [LAW:dataflow-not-control-flow] The `cache` field as a record-field spec, so a
 // per-kind variable schema declares its cache policy as DATA. `kind` selects the
 // requiredness: file/shell require it (a missing cache reports the per-kind
-// message and fails the arm); template leaves it optional; time is optional but
-// ttl-only (ttlOnlyCacheSpec below); git takes none. The field key is
-// conventionally "cache", read directly by requireCache/optionalCache.
+// message and fails the arm); template leaves it optional; time and git take
+// none. The field key is conventionally "cache", read directly by
+// requireCache/optionalCache.
 export function requireCacheSpec(kind: PolicySourceKind): FieldSpec<CacheDecl> {
   return {
     required: true,
@@ -158,34 +153,6 @@ function validateCache(
   raw: unknown,
 ): CacheDecl | null {
   return oneOfPresent(ctx, CACHE_SCHEMA, path, raw);
-}
-
-// [LAW:types-are-the-program] The ttl-only subset for kinds whose runtime
-// honors no other invalidation (time vars refresh on a clock; declareTime
-// always registers a TTL timer). OneOfPresentSchema<TtlCacheDecl> forces
-// exactly the ttl arm at compile time, and the arm is CACHE_SCHEMA's own —
-// a subset of the vocabulary, never a parallel grammar. A non-ttl form is a
-// load-time diagnostic naming ttl as the only supported key, replacing the
-// runtime's former silent coercion to the default TTL [LAW:no-silent-failure].
-const TTL_ONLY_CACHE_SCHEMA: OneOfPresentSchema<TtlCacheDecl> = {
-  noun: "time-variable cache",
-  arms: { ttl: CACHE_SCHEMA.arms.ttl },
-};
-
-export function ttlOnlyCacheSpec(): FieldSpec<TtlCacheDecl> {
-  return {
-    required: false,
-    json: oneOfPresentJson(TTL_ONLY_CACHE_SCHEMA),
-    parse: (ctx, path, _field, raw) =>
-      raw.cache === undefined
-        ? undefined
-        : (oneOfPresent(
-            ctx,
-            TTL_ONLY_CACHE_SCHEMA,
-            `${path}.cache`,
-            raw.cache,
-          ) ?? undefined),
-  };
 }
 
 // [LAW:one-source-of-truth] The cache emitter derives from the SAME CACHE_SCHEMA

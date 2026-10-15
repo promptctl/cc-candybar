@@ -121,6 +121,10 @@ const GROUNDS = {
 // The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
 // which is what caps its diagnostic strip.
 const REPORTED_ROWS = 40;
+// Claude Code's fastest status-line cadence (`statusLine.refreshInterval: 1`):
+// the page asks for a render this often, so whatever the bar shows of the time
+// moves with nobody touching the page.
+const REFRESH_MS = 1000;
 const $ = (id) => document.getElementById(id);
 const frame = $("frame");
 let view = { ansi: "", links: [] };
@@ -155,7 +159,7 @@ term.unicode.activeVersion = "11";
 const size = () => ({ width: term.cols, rows: REPORTED_ROWS });
 const fitCols = () => fit.proposeDimensions()?.cols ?? term.cols;
 
-// Only what changed is redrawn: a scenario redraws every second, and rewriting the
+// Only what changed is redrawn: the page redraws every second, and rewriting the
 // terminal or the table each time would drop a hover, a half-made click, or focus.
 let drawnAt = { ansi: null, cols: 0, links: "" };
 function draw(next) {
@@ -310,6 +314,7 @@ document.fonts.load("14px 'Rich Powerline'", "").then(() => {
   }
   if (transport.scenario) mountScenario(transport.scenario);
   redraw();
+  setInterval(redraw, REFRESH_MS);
 });
 </script>
 </body>

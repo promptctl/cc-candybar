@@ -34,6 +34,7 @@ import {
 import { projectAutoCompact } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -75,7 +76,7 @@ function runtime(
     context: { totalTokens: 1, contextLeft: 99 },
     ...(autocompact !== undefined && { autocompact }),
   };
-  const raw = renderDsl(config, compiled, store, registry, payload, OPTS);
+  const raw = renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
   const typed: string[] = [];
   const claudeInput: ClaudeInputEdge = {
     read: () => ({ inMode: false, screen: ["─".repeat(30), "❯ ", "─".repeat(30)] }),

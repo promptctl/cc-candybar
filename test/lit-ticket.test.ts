@@ -17,6 +17,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 let clock = 0;
 let seq = 0;
@@ -313,6 +314,7 @@ describe("the bundled ticket segment", () => {
             workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
             ...(ticket !== undefined && { activity: { ticket } }),
           },
+          instantOf(new Date()),
           {
             endcaps: "plain" as const,
             colorCompatibility: "truecolor" as const,

@@ -63,6 +63,7 @@ import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
 import { contrastRatio, parseRgbHex } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
+import { instantOf } from "../src/utils/instant";
 
 // The truecolor fg and bg in force where `text` first appears in `rendered`
 // (links removed): every SGR before it, folded in order.
@@ -201,6 +202,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
         project_dir: "/tmp/proj",
         history: history.depth(sessionId),
       },
+      instantOf(new Date()),
       opts(width),
     );
   const ctx: VerbContext = {
@@ -830,6 +832,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
         store,
         registry,
         { session_id: "s1", project_dir: "/tmp/proj" },
+        instantOf(new Date()),
         { ...opts(), padding },
       );
     const padded0 = stripAnsi(renderWith(0));

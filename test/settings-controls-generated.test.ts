@@ -41,6 +41,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -207,7 +208,7 @@ describe("a global the menu has never seen gets its control from the generator",
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const render = () =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
+      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
     const gate = stateGate(config);
     expect(gate.validate("zoom", "high").ok).toBe(true);
     expect(gate.validate("zoom", "max").ok).toBe(false);

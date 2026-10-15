@@ -38,6 +38,7 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -87,6 +88,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       store,
       registry,
       { session_id: SID, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,

@@ -533,22 +533,6 @@
               "layout": {
                 "type": "string"
               },
-              "cache": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "ttl": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "ttl"
-                    ],
-                    "additionalProperties": false
-                  }
-                ]
-              },
               "default": {
                 "type": "string"
               }
@@ -1916,22 +1900,6 @@
                   "layout": {
                     "type": "string"
                   },
-                  "cache": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "ttl": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "ttl"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
                   "default": {
                     "type": "string"
                   }
@@ -2580,22 +2548,6 @@
                   },
                   "layout": {
                     "type": "string"
-                  },
-                  "cache": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "ttl": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "ttl"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
                   },
                   "default": {
                     "type": "string"

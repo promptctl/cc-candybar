@@ -34,8 +34,9 @@
     // asynchronously: until the command returns, `.branch` is the default ''.
     branch: { kind: 'shell', command: 'git branch --show-current', cache: { ttl: '5s' }, default: '' },
 
-    // time — the system clock, formatted with a Go reference-time layout.
-    clock: { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
+    // time — the instant the bar is drawn at, formatted with a Go
+    // reference-time layout.
+    clock: { kind: 'time', layout: '15:04:05' },
 
     // (file and git kinds exist too — omitted here to stay minimal.)
   },

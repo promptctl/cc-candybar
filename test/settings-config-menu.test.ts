@@ -47,6 +47,7 @@ import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { linkUrls, links } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -172,6 +173,7 @@ function rig(
             redo: durable?.history(SID).future.length ?? 0,
           },
         },
+        instantOf(new Date()),
         renderOptionsOf(effective, width),
         undefined,
         renderSelectionOf(effective),

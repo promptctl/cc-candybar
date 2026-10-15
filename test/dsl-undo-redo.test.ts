@@ -41,6 +41,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/verbs/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -167,6 +168,7 @@ function buildRuntime(
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(),
     );
   // The config a click is gated by and a save compares against, re-read from

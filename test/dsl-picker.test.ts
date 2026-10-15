@@ -28,6 +28,7 @@ import {
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf, boldUrls } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -82,6 +83,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(width),
     );
   const gate = stateGate(config);

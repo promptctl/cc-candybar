@@ -29,6 +29,7 @@ import { effectsOf } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "slash-gate";
 const OPTS = {
@@ -97,6 +98,7 @@ async function bar(
   } as unknown as RenderPayloadDeps;
   const payload = await buildRenderPayload(
     HOOK_DATA,
+    instantOf(new Date()),
     deps,
     undefined,
     buildNeededPrefixes(config, PRESET_FLOOR),
@@ -110,7 +112,7 @@ async function bar(
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, payload, OPTS);
+    renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
   // Open the door by the write its own link carries, so the menu's session
   // tab — and its tray — is on the bar too.
   const door = linkUrls(render())

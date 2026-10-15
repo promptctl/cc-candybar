@@ -37,6 +37,7 @@ import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const TAB_KEY = `${SETTINGS_NS}tab`;
@@ -94,10 +95,10 @@ function buildRuntime(tmux: TmuxHint | null, load: ConfigLoad = CLEAN_LOAD) {
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const render = (): string =>
     stripAnsi(
-      renderDsl(config, compiled, store, registry, PAYLOAD, OPTS),
+      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS),
     );
   const renderRaw = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
+    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
   recordRender(sessionState, "s1");
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;

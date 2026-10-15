@@ -74,7 +74,10 @@ interface Harness {
 
 function makeHarness(): Harness {
   const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
-  const engine = createCcCandybarEngine(segmentColorFuncs(ref));
+  const engine = createCcCandybarEngine({
+    clock: () => new Date(),
+    extraFuncs: segmentColorFuncs(ref),
+  });
   return { ref, parse: (src: string) => engine.parse(src) };
 }
 
@@ -391,7 +394,10 @@ describe("invalid color reference → ColorSpecError", () => {
 describe("segment color functions in the engine", () => {
   test('{{ fg (color "primary") … }} paints the palette color', () => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
-    const engine = createCcCandybarEngine(segmentColorFuncs(ref));
+    const engine = createCcCandybarEngine({
+      clock: () => new Date(),
+      extraFuncs: segmentColorFuncs(ref),
+    });
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
     openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT);
     const fragments = tpl.evaluate({});
@@ -400,19 +406,19 @@ describe("segment color functions in the engine", () => {
   });
 
   test("an engine built without segmentColorFuncs has no `color` function", () => {
-    const engine = createCcCandybarEngine(); // no segment-scoped funcs
+    const engine = createCcCandybarEngine({ clock: () => new Date() }); // no segment-scoped funcs
     const tpl = engine.parse('{{ color "primary" }}');
     expect(() => tpl.evaluate({})).toThrow(/"color" is not registered/);
   });
 
   test("an engine built without segmentColorFuncs has no `bgOf` function", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse("{{ bgOf }}");
     expect(() => tpl.evaluate({})).toThrow(/"bgOf" is not registered/);
   });
 
   test("an engine built without segmentColorFuncs has no `tint` function", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse("{{ tint }}");
     expect(() => tpl.evaluate({})).toThrow(/"tint" is not registered/);
   });

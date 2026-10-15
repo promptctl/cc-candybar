@@ -22,11 +22,11 @@ import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
 import { readAutoCompactWindow } from "../segments/autocompact.js";
 
-// What a session's own history contributes (`history`, `navigation`) and the
-// clock are the renderer's to supply; everything else is a provider.
+// What a session's own history contributes (`history`, `navigation`) is the
+// renderer's to supply; everything else is a provider.
 export type PayloadProviders = Omit<
   RenderPayloadDeps,
-  "history" | "navigation" | "clock"
+  "history" | "navigation"
 >;
 
 export function createPayloadProviders(opts: {

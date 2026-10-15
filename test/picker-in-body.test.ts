@@ -12,6 +12,7 @@ import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { links, stripAnsi } from "./helpers/ansi";
 import { cellWidth as cellLength } from "../src/render/picker";
+import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -47,7 +48,7 @@ function renderOf(
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  return renderDsl(config, compiled, store, registry, PAYLOAD, {
+  return renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
     width,
   });

@@ -11,13 +11,13 @@ import { toDocument } from "../src/var-system/types";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
 // Helper: evaluate against a VariableStore scope.
 function evalStore(source: string, store: VariableStore): string {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
   const scope = buildScope(store);
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
@@ -76,7 +76,7 @@ describe("variable resolver (store scope)", () => {
     store.defineBox("git.branch", "string", "main");
     store.defineBox("git.dirty", "boolean", false);
     const scope = buildScope(store);
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse("{{ .git.branch }}:{{ .git.dirty }}");
     const result = tpl.evaluate(scope).map((rt) => rt.plain).join("");
     expect(result).toBe("main:false");
@@ -96,7 +96,7 @@ describe("variable resolver (store scope)", () => {
 
   test("unknown variable throws MissingFieldError", () => {
     const store = oneBox("cwd", "/home");
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const scope = buildScope(store);
     const tpl = engine.parse("{{ .missing }}");
     expect(() => tpl.evaluate(scope)).toThrow(MissingFieldError);
@@ -217,19 +217,19 @@ describe("cast functions", () => {
   });
 
   test("int throws on non-numeric string", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse('{{ int "abc" }}');
     expect(() => tpl.evaluate({})).toThrow(/Cannot cast "abc" to number/);
   });
 
   // An explicit cast is how an author drops a fraction the int gate refuses.
   test("int truncates toward zero, as sprig's does", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     expect(engine.parse("{{ formatInteger (int 2.7) }} {{ int -2.7 }}").evaluate({}).map((r) => r.plain).join("")).toBe("2 -2");
   });
 
   test("bool throws on ambiguous string", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse('{{ bool "yes" }}');
     expect(() => tpl.evaluate({})).toThrow(/Cannot cast "yes" to bool/);
   });
@@ -238,7 +238,7 @@ describe("cast functions", () => {
   // truncating it (brandon-theme-picker-bgw.exj.b7k): 2.7 grouped as "2" would
   // be a plausible wrong number.
   test("an int parameter refuses a fractional instead of truncating it", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     expect(() => engine.parse("{{ formatInteger 2.7 }}").evaluate({})).toThrow(
       /expected integer; found 2\.7/,
     );
@@ -303,19 +303,19 @@ describe("filter chains", () => {
 
 describe("error cases", () => {
   test("unbalanced action throws ParseError", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     expect(() => engine.parse("{{ .foo")).toThrow(ParseError);
   });
 
   test("unknown function throws at eval time", () => {
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const tpl = engine.parse("{{ nonexistent .x }}");
     expect(() => tpl.evaluate({ x: "y" })).toThrow();
   });
 
   test("missing field on namespace prefix throws MissingFieldError", () => {
     const store = oneBox("session.id", "x");
-    const engine = createCcCandybarEngine();
+    const engine = createCcCandybarEngine({ clock: () => new Date() });
     const scope = buildScope(store);
     const tpl = engine.parse("{{ .session.notreal }}");
     expect(() => tpl.evaluate(scope)).toThrow(MissingFieldError);
@@ -355,13 +355,13 @@ describe("documents in scope", () => {
 
   test("a missing field is a MissingFieldError, like a payload field", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
-    const tpl = createCcCandybarEngine().parse("{{ .budget.nope }}");
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse("{{ .budget.nope }}");
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
   });
 
   test("prototype names are not fields of a document", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
-    const tpl = createCcCandybarEngine().parse("{{ .budget.constructor }}");
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse("{{ .budget.constructor }}");
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
   });
 
@@ -371,7 +371,7 @@ describe("documents in scope", () => {
     expect(evalStore("{{ if .budget.owner }}set{{ else }}unset{{ end }}", store)).toBe(
       "unset",
     );
-    const tpl = createCcCandybarEngine().parse("{{ .budget.owner.name }}");
+    const tpl = createCcCandybarEngine({ clock: () => new Date() }).parse("{{ .budget.owner.name }}");
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
   });
 

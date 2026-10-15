@@ -226,9 +226,10 @@ setInterval(() => {
   const elapsed = (Date.now() - lastTick) / 1000;
   lastTick = Date.now();
   const stepped = playing && advance(elapsed);
-  // A step is drawn at once. Between steps, and while paused, the bar still moves (its clocks,
-  // and what the daemon's watchers see a moment after a step or a seek), so redraw each second.
-  if (stepped || Date.now() - lastNotified > 1000) {
+  // A step is drawn at once; while playing, the progress moves each second. The bar's own
+  // per-second redraw — its clocks, and what the daemon's watchers see a moment after a step
+  // or a seek — is the page's, at Claude Code's cadence, whether or not anything plays.
+  if (stepped || (playing && Date.now() - lastNotified > 1000)) {
     lastNotified = Date.now();
     notify();
   }

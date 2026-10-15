@@ -36,6 +36,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
@@ -76,7 +77,7 @@ const HOOK = {
 } as never;
 
 const payloadWith = (hints: ClientHints) =>
-  buildRenderPayload(HOOK, DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, NO_CONFIG_FILE);
+  buildRenderPayload(HOOK, instantOf(new Date()), DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, NO_CONFIG_FILE);
 
 describe("shortHostname", () => {
   test("takes everything before the first dot — zsh's %m, not %M", () => {
@@ -157,6 +158,7 @@ describe("the bundled host segment", () => {
         store,
         registry,
         { ...(HOOK as object), host } as never,
+        instantOf(new Date()),
         {
           endcaps: "powerline" as const,
           colorCompatibility: "none" as const,

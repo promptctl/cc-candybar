@@ -47,6 +47,7 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig } from "../src/config/dsl-types";
 import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -135,7 +136,7 @@ function buildRuntime(root: string) {
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, OPTS);
+    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

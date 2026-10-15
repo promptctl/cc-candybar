@@ -12,6 +12,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import { instantOf } from "../src/utils/instant";
 import type { GitDataProvider } from "../src/daemon/cache/git";
 import { buildScope } from "../src/template-engine/scope";
 
@@ -1368,49 +1369,44 @@ describe("SourceRegistry — template: cycle detection", () => {
 
 // ─── time source kind ─────────────────────────────────────────────────────────
 
-describe("SourceRegistry — time: basic", () => {
-  it("initialises box with a formatted time string", () => {
-    const { store, registry } = make();
-    registry.declareTime("t", { format: "2006-01-02", ttlMs: 60_000 });
-    const val = store.read("t") as string;
-    expect(val).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    registry.dispose();
-  });
+describe("SourceRegistry — time: the render's instant, formatted", () => {
+  // Built from local fields, so the layout's local-time reading is the same
+  // wherever the suite runs.
+  const at = (h: number, m: number, sec: number) =>
+    instantOf(new Date(2026, 5, 4, h, m, sec));
 
-  it("type is always 'string'", () => {
+  it("is the published instant in the variable's layout", () => {
     const { store, registry } = make();
-    registry.declareTime("t", { format: "15:04", ttlMs: 60_000 });
+    registry.declareTime("t", { format: "2006-01-02 15:04:05" });
+    registry.renderAt(at(12, 34, 56));
+    expect(store.read("t")).toBe("2026-06-04 12:34:56");
     expect(store.getType("t")).toBe("string");
     registry.dispose();
   });
 
-  it("TTL fires and box value is refreshed", async () => {
+  it("moves when a later render publishes a later instant, and only then", () => {
     const { store, registry } = make();
-    registry.declareTime("t", { format: "15:04:05", ttlMs: 60 });
-    await settle(200);
-    expect(store.read("t")).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    registry.declareTime("t", { format: "15:04:05" });
+    registry.renderAt(at(9, 0, 0));
+    expect(store.read("t")).toBe("09:00:00");
+    expect(store.read("t")).toBe("09:00:00");
+    registry.renderAt(at(9, 0, 1));
+    expect(store.read("t")).toBe("09:00:01");
     registry.dispose();
   });
 
-  it("default TTL is 1 second — no throw when ttlMs is omitted", () => {
-    const { registry } = make();
-    expect(() =>
-      registry.declareTime("t", { format: "15:04:05" }),
-    ).not.toThrow();
+  it("before any render has published an instant, a read says so — or yields the authored default", () => {
+    const { store, registry } = make();
+    registry.declareTime("bare", { format: "15:04" });
+    registry.declareTime("fallback", { format: "15:04", varDefault: "--:--" });
+    expect(() => store.read("bare")).toThrow(
+      /variable "bare": the time was read before any render published its instant/,
+    );
+    expect(store.read("fallback")).toBe("--:--");
+    registry.renderAt(at(7, 5, 0));
+    expect(store.read("bare")).toBe("07:05");
+    expect(store.read("fallback")).toBe("07:05");
     registry.dispose();
-  });
-
-  it("dispose stops TTL timer from firing", async () => {
-    const store = new VariableStore();
-    const registry = new SourceRegistry(store);
-    registry.declareTime("t", { format: "15:04:05", ttlMs: 60 });
-    await settle(100);
-    const snapshot = store.read("t");
-    registry.dispose();
-    // After dispose the timer must stop; no unhandled timer callbacks.
-    await settle(200);
-    // Value in the store stays at whatever it was when disposed.
-    expect(store.read("t")).toBe(snapshot);
   });
 });
 

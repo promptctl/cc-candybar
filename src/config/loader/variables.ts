@@ -50,11 +50,7 @@ import {
   type TaggedUnionSchema,
   type ValidateCtx,
 } from "./validate-core.js";
-import {
-  optionalCacheSpec,
-  requireCacheSpec,
-  ttlOnlyCacheSpec,
-} from "./cache.js";
+import { optionalCacheSpec, requireCacheSpec } from "./cache.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -361,11 +357,14 @@ const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
 };
 const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
   layout: requireStringSpec(),
-  // [LAW:no-silent-failure] ttl-only: the runtime honors no other invalidation
-  // on a clock-driven var, so the loader rejects what it would otherwise have
-  // had to silently coerce.
-  cache: ttlOnlyCacheSpec(),
   default: optionalStringSpec(),
+};
+// [LAW:no-silent-failure] A time variable reads the instant its render is drawn
+// at, so it changes exactly when the time it shows does; a `cache:` ttl once set
+// how often it re-read the wall clock, and would now change nothing.
+const TIME_VAR_REMOVED = {
+  cache:
+    "a time variable reads the instant its render is drawn at, so it takes no cache policy — delete the key",
 };
 const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
   field: gitFieldSpec(),
@@ -439,7 +438,7 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS),
-    time: arm("time", TIME_FIELDS),
+    time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
     git: arm("git", GIT_VAR_FIELDS, GIT_VAR_REMOVED),
     state: arm("state", STATE_FIELDS),
   },

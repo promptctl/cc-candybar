@@ -82,6 +82,7 @@ import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { VariationName } from "../themes/decor.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
 
@@ -687,11 +688,6 @@ export interface RenderPayloadDeps {
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
   readonly log: DaemonLogger;
-  // [LAW:single-enforcer] The one clock the projection math reads "now" from —
-  // the same seam threaded to the template engine's `minutesUntilReset`, so
-  // an ETA and the reset countdown beside it agree on the instant. Omitted ⇒
-  // wall clock; tests inject a frozen clock for determinism.
-  readonly clock?: () => Date;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth — NavigationHistory.depth in the daemon.
@@ -1147,6 +1143,10 @@ export type ConfigFileFacts = SettingCounts & {
 
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
+  // [LAW:one-source-of-truth] The instant the render this payload feeds is
+  // drawn at — the one renderDsl publishes to the template engine, so an ETA
+  // here and the `minutesUntilReset` countdown beside it agree on "now".
+  at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
   // [LAW:single-enforcer] The cache pre-computes the closure once at
@@ -1179,7 +1179,7 @@ export async function buildRenderPayload(
   // [LAW:single-enforcer] One clock read feeds every projection this render —
   // the ETA extrapolations below AND the tok/s sample window in the speed lane,
   // so an ETA, a reset countdown, and a throughput figure all agree on "now".
-  const nowMs = (deps.clock ?? (() => new Date()))().getTime();
+  const nowMs = dateOf(at).getTime();
 
   // The hint's three states fold to two here: a pane to address, or none
   // ("not in tmux" and "client too old to say" both leave nothing to ask tmux

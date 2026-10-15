@@ -40,6 +40,7 @@ import {
 } from "../src/themes/decor";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
+import { instantOf } from "../src/utils/instant";
 
 // The eye's resolution: two bars closer than ~.02 read as one theme. The
 // measured minimum over the registry, under the default variation and no
@@ -149,7 +150,7 @@ function render(theme: string, calm: boolean, { variation, look }: Variant): str
         key === "theme" ? theme : key === "variation" ? variation : key === "style" ? look : null,
       () => false,
     );
-    const hot = checkPayload(e, null) as Record<string, Record<string, unknown>>;
+    const hot = checkPayload(e, null, instantOf(new Date())) as Record<string, Record<string, unknown>>;
     const payload = calm
       ? Object.fromEntries(
           Object.entries(hot).map(([k, v]) => [
@@ -164,6 +165,7 @@ function render(theme: string, calm: boolean, { variation, look }: Variant): str
       store,
       registry,
       payload,
+      instantOf(new Date()),
       {
         endcaps: e.endcaps,
         separator: e.separator,

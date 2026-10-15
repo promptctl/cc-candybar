@@ -44,6 +44,7 @@ import {
   REMOVE_GLYPH,
   CONFIGURE_GLYPH,
 } from "../src/config/edit-chrome";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -94,6 +95,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
       store,
       registry,
       PAYLOAD,
+      instantOf(new Date()),
       {
         endcaps: effective.endcaps,
         separator: effective.separator,

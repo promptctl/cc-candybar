@@ -32,6 +32,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -66,16 +67,14 @@ function render(call: string, payload: Record<string, number>): string {
   ) as ValidatedConfig;
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
-  const compiled = registerDslConfig(config, registry, {
-    cwd: "/tmp",
-    clock: FROZEN_CLOCK,
-  });
+  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const out = renderDsl(
     config,
     compiled,
     store,
     registry,
     payload,
+    instantOf(FROZEN_CLOCK()),
     OPTS,
   );
   return stripAnsi(out);

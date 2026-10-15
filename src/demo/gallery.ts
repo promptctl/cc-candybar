@@ -24,6 +24,7 @@ import { expandHome } from "../config/loader/discovery.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
+import { instantOf } from "../utils/instant.js";
 
 const THEMES = listResolvablePaletteNames();
 const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
@@ -46,7 +47,12 @@ try {
       (key) => (key === "theme" ? theme : null),
       () => false,
     );
-    const { rendered, failures } = renderEffective(prepared, effective, WIDTH);
+    const { rendered, failures } = renderEffective(
+      prepared,
+      effective,
+      WIDTH,
+      instantOf(new Date()),
+    );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
     process.stdout.write(

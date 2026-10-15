@@ -42,6 +42,7 @@ import {
 import type { JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -135,8 +136,6 @@ export interface TimeOptions {
   // Go reference-time layout string (e.g. "15:04:05", "2006-01-02").
   // Reference time: Mon Jan 2 15:04:05 MST 2006
   readonly format: string;
-  // Refresh interval.  Defaults to 1 000 ms.
-  readonly ttlMs?: number;
   readonly varDefault?: string;
 }
 
@@ -732,14 +731,30 @@ export class SourceRegistry {
   // keeping the answer it measured at the previous depth.
   private readonly drawn = observable.box(ColorDepth.TRUECOLOR);
   readonly drawnAt = (): ColorDepth => this.drawn.get();
+  // [LAW:one-source-of-truth] The instant the current render is drawn at — the
+  // one clock every time read in a render reads: the datetime functions of this
+  // registry's variable templates and of the render engine, and every `time`
+  // variable. Observable for the depth's reason: a variable that read the time
+  // recomputes when a later render moves it, and one that did not is untouched.
+  // Absent until a render publishes one, and a read before then says so
+  // [LAW:no-silent-failure]: there is no instant a render has not been given.
+  private readonly instant = observable.box<Instant | null>(null);
+  readonly now = (): Date => {
+    const at = this.instant.get();
+    if (at === null) {
+      throw new Error(
+        "the time was read before any render published its instant",
+      );
+    }
+    return dateOf(at);
+  };
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  private readonly engine = createCcCandybarEngine(
-    undefined,
-    undefined,
-    this.drawnAt,
-  );
+  private readonly engine = createCcCandybarEngine({
+    clock: this.now,
+    drawnAt: this.drawnAt,
+  });
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
@@ -1052,13 +1067,38 @@ export class SourceRegistry {
     // A ParseError propagates here so invalid templates fail at config load, not
     // at the first render.
     const parsedTpl = this.engine.parse(template);
-    this.store.defineComputed(name, "string", (_read) => {
-      const scope = buildScope(this.store);
-      try {
-        const result = parsedTpl
-          .evaluate(scope)
+    this.declareDerived(
+      name,
+      () =>
+        parsedTpl
+          .evaluate(buildScope(this.store))
           .map((f) => f.plain)
-          .join("");
+          .join(""),
+      opts.varDefault,
+    );
+  }
+
+  // time: the instant the render is drawn at, formatted with a Go
+  // reference-time layout — a derivation of the registry's one clock like a
+  // template reading `now`, so it changes exactly when a render's instant does.
+  declareTime(name: string, opts: TimeOptions): void {
+    this.declareDerived(
+      name,
+      () => formatGoTime(opts.format, this.now()),
+      opts.varDefault,
+    );
+  }
+
+  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
+  // template and a time variable differ only in what they compute.
+  private declareDerived(
+    name: string,
+    derive: () => string,
+    varDefault: string | undefined,
+  ): void {
+    this.store.defineComputed(name, "string", () => {
+      try {
+        const result = derive();
         this.lastErrors.delete(name);
         return result;
       } catch (e) {
@@ -1085,10 +1125,10 @@ export class SourceRegistry {
         // global cosmetic floor for absent values, and letting it stand in for a
         // per-variable `default` would let one unrelated global silently switch
         // this loudness back off for every template in the config.
-        if (opts.varDefault === undefined) {
+        if (varDefault === undefined) {
           throw new Error(`variable "${name}": ${message}`);
         }
-        return opts.varDefault;
+        return varDefault;
       }
     });
     // Force eager evaluation so any cycle is detected here (at config load)
@@ -1108,36 +1148,6 @@ export class SourceRegistry {
       // Recorded by the deriver; MobX has cached the failure and every read of
       // this variable will surface it.
     }
-  }
-
-  // time: current wall-clock time formatted with a Go reference-time layout.
-  // Box initialises to the current time; the TTL timer refreshes it.
-  // [LAW:dataflow-not-control-flow] Box always holds a valid formatted string.
-  declareTime(name: string, opts: TimeOptions): void {
-    const ttlMs = opts.ttlMs ?? 1_000;
-    const format = (d: Date): string => {
-      try {
-        return formatGoTime(opts.format, d);
-      } catch {
-        return this.stringInitial(opts.varDefault);
-      }
-    };
-    this.store.defineBox(name, "string", format(new Date()));
-    const update = (): void => {
-      try {
-        this.store.setBox(name, formatGoTime(opts.format, new Date()));
-        this.lastErrors.delete(name);
-      } catch (e) {
-        this.applyFallback(
-          name,
-          "string",
-          opts.varDefault,
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    };
-    const unsub = this.ttlMgr.subscribe(ttlMs, update);
-    this.cleanups.push(unsub);
   }
 
   // git: first-class git fields delivered by the shared GitDataProvider.
@@ -1280,6 +1290,11 @@ export class SourceRegistry {
   // Called by the render beside applyInput: the depth this render draws at.
   drawAt(depth: ColorDepth): void {
     this.store.runInAction(() => this.drawn.set(depth));
+  }
+
+  // Called by the render beside drawAt: the instant this render is drawn at.
+  renderAt(at: Instant): void {
+    this.store.runInAction(() => this.instant.set(at));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────

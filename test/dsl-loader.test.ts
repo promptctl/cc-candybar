@@ -473,40 +473,24 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
-  // [LAW:no-silent-failure] Non-ttl cache forms on time vars were silently
-  // coerced to the default TTL at render; they are now load-time diagnostics
-  // naming ttl as the only supported form (brandon-config-validation-cje).
-  test("time: cache is ttl-only — non-ttl forms are load-time diagnostics", () => {
-    for (const cache of [
-      `{ watch_file: "/repo/.git/HEAD" }`,
-      `{ depends_on: ["x"] }`,
-      `{ key: "{{ .x }}" }`,
-      `{ never: true }`,
-    ]) {
-      const cacheKey = cache.match(/\{ (\w+):/)![1]!;
-      expectIssue(
-        `{ variables: { now: { kind: "time", layout: "15:04", cache: ${cache} } } }`,
-        {
-          path: `variables.now.cache.${cacheKey}`,
-          message: `Unknown time-variable cache key "${cacheKey}". Expected exactly one of: ttl`,
-        },
-      );
-    }
-    expectIssue(
-      `{ variables: { now: { kind: "time", layout: "15:04", cache: { ttl: "soon" } } } }`,
-      {
-        path: "variables.now.cache.ttl",
-        message: "cache.ttl must be a duration string",
-      },
-    );
+  // [LAW:no-silent-failure] A time variable reads its render's instant, so a
+  // `cache:` — once its ttl — would change nothing; it is refused with that
+  // reason, once, rather than accepted and ignored.
+  test("time: a cache is refused", () => {
+    const refused = expectError(
+      `{ variables: { now: { kind: "time", layout: "15:04", cache: { ttl: "5s" } } } }`,
+    ).issues.filter((i) => i.path === "variables.now.cache");
+    expect(refused.map((i) => i.message)).toEqual([
+      "variables.now.cache was removed: a time variable reads the instant its render is drawn at, so it takes no cache policy — delete the key",
+    ]);
     const ok = parseAndValidate(
       FILE,
-      `{ variables: { now: { kind: "time", layout: "15:04", cache: { ttl: "5s" } } } }`,
+      `{ variables: { now: { kind: "time", layout: "15:04", default: "--:--" } } }`,
     );
     expect(ok.variables.now).toEqual({
       kind: "time",
       layout: "15:04",
-      cache: { ttl: "5s" },
+      default: "--:--",
     });
   });
 
@@ -613,7 +597,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "file", path: "/p", cache: { never: true } }`,
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
-      `{ kind: "time", layout: "15:04", cache: { ttl: "1s" } }`,
+      `{ kind: "time", layout: "15:04" }`,
       `{ kind: "git", field: "branch" }`,
       `{ kind: "state", key: "theme" }`,
     ]) {
@@ -2037,7 +2021,7 @@ describe("loadDslConfig — valid corpus", () => {
         cwd_short: {
           kind: "template", template: "{{ .cwd }}",
         },
-        now: { kind: "time", layout: "15:04", cache: { ttl: "1s" } },
+        now: { kind: "time", layout: "15:04" },
         branch: {
           kind: "git", field: "branch",
           default: "(detached)",

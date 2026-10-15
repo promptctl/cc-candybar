@@ -14,6 +14,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { linkCloseCount, linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -70,7 +71,7 @@ function renderGitPr(git: Record<string, unknown>): string {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
       git,
     };
-    return renderDsl(parsed, compiled, store, registry, payload, OPTS);
+    return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), OPTS);
   } finally {
     registry.dispose();
   }

@@ -26,6 +26,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -66,7 +67,7 @@ function render(src: string, opts: BuildLineOptions): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  return renderDsl(config, compiled, store, registry, {}, opts);
+  return renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), opts);
 }
 
 // A multi-link toolbar with PLAIN text trailing the final link — the shape that

@@ -30,6 +30,7 @@ import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -69,6 +70,7 @@ function buildRuntime(src: string, utilization: number) {
         project_dir: "/tmp/proj",
         block: { nativeUtilization: utilization, resetsAt: RESETS_AT },
       },
+      instantOf(new Date()),
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,

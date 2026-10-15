@@ -32,6 +32,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import { instantOf } from "../src/utils/instant";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -450,6 +451,7 @@ describe("the payload projection", () => {
     } as unknown as RenderPayloadDeps;
     const built = await buildRenderPayload(
       hook(join(dir, "t.jsonl"), "p"),
+      instantOf(new Date()),
       deps,
       undefined,
       new Set(["activity"]),
@@ -567,6 +569,7 @@ describe("the bundled activity segment renders the payload", () => {
             },
             ...(activity !== undefined && { activity }),
           },
+          instantOf(new Date()),
           {
             // Plain, because what is under test is the cell's TEXT: the
             // powerline joiner's end-cap glyphs are not whitespace, so they

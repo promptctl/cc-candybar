@@ -22,6 +22,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -49,7 +50,7 @@ function render(src: string, hookData: Record<string, unknown>): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  return renderDsl(config, compiled, store, registry, hookData, OPTS);
+  return renderDsl(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
 }
 
 describe("segment is the rendering unit (2de.10)", () => {

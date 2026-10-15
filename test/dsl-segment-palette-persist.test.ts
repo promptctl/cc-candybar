@@ -65,6 +65,7 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { testVerbContext } from "./helpers/click";
 import { linkUrls, links, stripAnsi } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -282,6 +283,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       store,
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
       opts(width),
     );
   const ctx: VerbContext = testVerbContext(

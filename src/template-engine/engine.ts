@@ -60,17 +60,18 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // one engine shape; the data (its presence) governs what's registered.
 // [LAW:single-enforcer] `clock` is the one time source. It feeds sprigDatetime
 // (the funcs that read "now") AND createEngine's clock option, so every
-// time-dependent evaluation in this engine reads from one seam. Defaulted here
-// so the default literal `() => new Date()` lives in exactly one place; callers
-// that omit it (and forwarders passing `undefined`) inherit it unchanged.
+// time-dependent evaluation in this engine reads from one seam. Required: a
+// render's clock is the instant its registry publishes (SourceRegistry.now), so
+// a default here would be a second clock a caller could fall onto by omission.
 // `drawnAt` is forwarded to rich-js `richTextFuncs` as the depth it reads, whose
 // own default (truecolor) is the one default: the depth `readableOn` floors text
 // at. It carries no terminal: the detached daemon cannot see the client's.
-export function createCcCandybarEngine(
-  extraFuncs?: FuncMap,
-  clock: () => Date = () => new Date(),
-  drawnAt?: () => ColorDepth,
-): Engine<RichText> {
+export function createCcCandybarEngine(opts: {
+  readonly clock: () => Date;
+  readonly drawnAt?: () => ColorDepth;
+  readonly extraFuncs?: FuncMap;
+}): Engine<RichText> {
+  const { clock, drawnAt, extraFuncs } = opts;
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
     toString: (rt) => rt.plain,

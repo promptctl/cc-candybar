@@ -11,7 +11,7 @@ import { createCcCandybarEngine } from "../src/template-engine/engine";
 
 // Evaluate the registered `sparkline` template func against a plain scope.
 function evalText(source: string, scope: object): string {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
   return engine
     .parse(source)
     .evaluate(scope)

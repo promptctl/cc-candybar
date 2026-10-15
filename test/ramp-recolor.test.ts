@@ -20,6 +20,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection, resolveThemeSelection } from "../src/themes";
+import { instantOf } from "../src/utils/instant";
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
@@ -98,6 +99,7 @@ function buildRuntime() {
       store,
       registry,
       { session_id: SID, ...payload },
+      instantOf(new Date()),
       OPTS,
       undefined,
       { theme, style: look },

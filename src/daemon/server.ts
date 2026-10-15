@@ -110,6 +110,7 @@ import {
   formatDiagnosticDump,
 } from "../render/diagnostic-strip.js";
 import { DiagnosticDump } from "./diagnostic-dump.js";
+import { instantOf } from "../utils/instant.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -886,7 +887,12 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
 
   if (req.kind === "render") {
     stats.requestsTotal++;
-    const t0 = Date.now();
+    // [LAW:effects-at-boundaries] The one clock read of a render request: the
+    // instant the bar is drawn at (every time read in the render reads it) and
+    // the start its duration is measured from.
+    const started = new Date();
+    const at = instantOf(started);
+    const t0 = started.getTime();
     try {
       // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
       // The validator reports missing/wrong-typed required fields and unknown
@@ -1021,6 +1027,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       );
       const payload = await buildRenderPayload(
         req.hookData,
+        at,
         {
           ...payloadDeps,
           // Measured against the gate of the config this render draws with.
@@ -1071,6 +1078,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         entry.state.store,
         entry.state.registry,
         payload,
+        at,
         renderOpts,
         // [LAW:single-enforcer] The per-segment StripCell sink for the
         // `debug segments` projection. Its identity stays stable for the
@@ -1152,7 +1160,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const u = usageStore.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {

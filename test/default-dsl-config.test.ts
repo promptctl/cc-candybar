@@ -50,6 +50,7 @@ import {
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { instantOf } from "../src/utils/instant";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
 const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
@@ -216,7 +217,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           added_dirs: [],
         },
       };
-      const line = renderDsl(parsed, compiled, store, registry, payload, {
+      const line = renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
         endcaps: "powerline",
         colorCompatibility: "truecolor",
         wrap: true,
@@ -288,6 +289,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             added_dirs: [],
           },
         },
+        instantOf(new Date()),
         opts,
         undefined,
         // Both `.effective` fields are renderDsl's to publish, so the payload
@@ -382,7 +384,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(parsed, compiled, store, registry, payload, {
+        return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
@@ -449,7 +451,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, opts);
+        return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
       } finally {
         registry.dispose();
       }
@@ -509,7 +511,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, opts);
+        return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
       } finally {
         registry.dispose();
       }
@@ -563,6 +565,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             git,
             ...extra,
           },
+          instantOf(new Date()),
           {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
@@ -664,7 +667,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
           home: opts.home,
         };
-        const line = renderDsl(dirOnly, compiled, store, registry, payload, {
+        const line = renderDsl(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
@@ -864,6 +867,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           store,
           registry,
           { ...GIT_PAYLOAD, git },
+          instantOf(new Date()),
           {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
@@ -1205,6 +1209,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           store,
           registry,
           payload,
+          instantOf(new Date()),
           {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
@@ -1295,7 +1300,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
               resetsAt: Math.floor(Date.now() / 1000) + 600,
             },
           };
-          return renderDsl(blockOnly, compiled, store, registry, payload, {
+          return renderDsl(blockOnly, compiled, store, registry, payload, instantOf(new Date()), {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
@@ -1376,6 +1381,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             },
             ...payload,
           },
+          instantOf(new Date()),
           {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
@@ -1509,7 +1515,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
         compiled,
         store,
         registry,
-        withPayload(checkPayload(effective, null)),
+        withPayload(checkPayload(effective, null, instantOf(new Date()))),
+        instantOf(new Date()),
         {
           endcaps: effective.endcaps,
           separator: effective.separator,

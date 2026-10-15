@@ -27,7 +27,7 @@ const SGR = "\x1b[";
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {
-  const engine = createCcCandybarEngine();
+  const engine = createCcCandybarEngine({ clock: () => new Date() });
   const fragments = engine.parse(source).evaluate(scope);
   return fragmentsToCells(fragments);
 }

@@ -14,6 +14,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { instantOf } from "../src/utils/instant";
 
 // Fires every interior-colored branch: staged→green "S", unstaged→red "U",
 // ahead→green "+1", behind→red "-1".
@@ -118,7 +119,7 @@ function render(): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-    return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, {
+    return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
