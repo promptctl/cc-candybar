@@ -555,10 +555,6 @@ const segmentType: NodeType<"segment"> = {
     // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
     // this placement's settings; nothing outside the placement does.
     const scope = placementScope(ctx.scope, node.settings);
-    // Every cell this placement lays is its own — its inline rows, the menu
-    // bands it drops, the lead of each row of the body it opens, its ⚠ — and
-    // its `effect` setting moves every one (the per-segment sink's cells).
-    const effect = placementMotion(node.id, node.settings.effect);
 
     // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
     // partial-load consequence (e.g. a variable that failed to declare, leaving a
@@ -577,6 +573,10 @@ const segmentType: NodeType<"segment"> = {
       // the bar, else the named theme, which ignores the style as it ignores
       // the session theme.
       const palette = placementPalette(node.settings.theme, ctx.palette);
+      // Every cell this placement lays is its own — its inline rows, the menu
+      // bands it drops, the lead of each row of the body it opens — and its
+      // `effect` setting moves every one (the per-segment sink's cells).
+      const effect = placementMotion(node.id, node.settings.effect);
 
       // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
       // `fg:`, and every `{{ color }}` in its body resolve from this same
@@ -765,7 +765,9 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
-              effect,
+              // It follows the bar: the failure it reports may be the read of
+              // this placement's own settings.
+              effect: undefined,
               lead: errorAffix(node.lead, node, scope, ctx),
               trail: errorAffix(node.trail, node, scope, ctx),
             },
