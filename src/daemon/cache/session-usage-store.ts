@@ -539,8 +539,6 @@ export class SessionUsageStore {
     const existing = this.entries.get(sessionId);
     if (existing && mtime !== 0 && existing.transcriptMtime === mtime) {
       existing.lastSeenAt = Date.now();
-      this.entries.delete(sessionId);
-      this.entries.set(sessionId, existing);
       this.hits++;
       return ok(existing);
     }
@@ -590,7 +588,6 @@ export class SessionUsageStore {
       transcriptPath,
       lastSeenAt: Date.now(),
     };
-    this.entries.delete(sessionId);
     this.entries.set(sessionId, record);
     return ok(record);
   }
@@ -716,18 +713,19 @@ export class SessionUsageStore {
   }
 
   // Public for tests; called periodically from the timer. Drops what nothing
-  // reads any more: a session unseen for `staleAgeMs` whose work all lies
-  // before today. A stale record holding a bucket for today is `held`, since
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for the
+  // day `today` last summed. A stale record holding one is `held`, since
   // `today` sums it — a seeded session is seen once a day, and a day can run
   // past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] That day is `seededDay`, taken from the render's
+  // instant, not this timer's clock: which day counts is the projection's.
   sweepStale(): number {
     const now = Date.now();
-    const today = dayKey(new Date(now));
     let dropped = 0;
     let held = 0;
     for (const [sid, record] of this.entries) {
       if (now - record.lastSeenAt <= this.staleAgeMs) continue;
-      if (record.days.has(today)) {
+      if (record.days.has(this.seededDay)) {
         held++;
         continue;
       }

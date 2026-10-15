@@ -192,7 +192,10 @@ describe("SessionUsageStore — session projection", () => {
   // holding today's work stays until the day rolls over.
   test("sweepStale holds a stale record that `today` still sums", async () => {
     const t = join(dir, "A.jsonl");
-    writeFileSync(t, usageLine("a", new Date(), 0.01));
+    // One instant for the entry and the render, so the day summed is the
+    // entry's day whatever the wall clock does in between.
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.01));
     const lines: string[] = [];
     const store = new SessionUsageStore({
       sweepIntervalMs: 0,
@@ -200,11 +203,26 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await store.getUsageInfo("A", hook("A", t));
+      await store.getTodayInfo(hook("A", t), dir, instantOf(at));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ sweeps: 0, size: 1 });
       expect(lines).toContain("usageStore sweep dropped=0 held=1");
+    } finally {
+      store.close();
+    }
+  });
+
+  // The day held is the one `today` summed: with no render asking for `today`,
+  // nothing reads the record, so a bucket for the wall clock's day holds nothing.
+  test("sweepStale drops a stale record when no render has summed `today`", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(t, usageLine("a", new Date(), 0.01));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0, staleAgeMs: 1 });
+    try {
+      await store.getUsageInfo("A", hook("A", t));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(store.sweepStale()).toBe(1);
     } finally {
       store.close();
     }
