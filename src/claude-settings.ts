@@ -36,9 +36,10 @@ export function claudeConfigDir(detected: string | undefined): string {
 }
 
 // [LAW:one-source-of-truth] THE location of Claude Code's user settings file
-// in a configuration directory. Two writers touch it — `cc-candybar install`
-// (the statusLine command) and the doctor's claude-settings-env fix
-// (src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
+// in a configuration directory. Two writers touch it, both splicing through
+// one editor so neither drops the other's keys — `cc-candybar install` (the
+// statusLine command) and the doctor's claude-settings fixes (`env`,
+// `statusLine.refreshInterval`; src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
 // shows (src/segments/autocompact.ts), which Claude Code's own `/autocompact`
 // writes here. They must all mean the file Claude Code reads, so the path is
 // spelled once and imported by each.
@@ -82,11 +83,18 @@ export function readClaudeSettings(
       cause: e,
     });
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  if (!isJsonObject(parsed)) {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
   }
-  return parsed as Record<string, unknown>;
+  return parsed;
 }
+
+// A JSON object — the shape the document and each of its sections (`env`,
+// `statusLine`) must have for a key to be read or spliced inside it.
+export const isJsonObject = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const messageOf = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);

@@ -507,7 +507,7 @@ At 80 columns the row moves under an empty row and is still 113 cells wide:
  ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
-A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. The checks are data in `src/doctor/checks.ts`: `config` and `tmux truecolor`.
+A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor` and `effect refresh`.
 
 ## Edit mode
 

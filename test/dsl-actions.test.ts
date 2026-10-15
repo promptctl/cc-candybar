@@ -769,7 +769,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   test("a doctor fix names a declared check", () => {
     expectIssue(
       base(`{ a: { doctor: 'fix', check: 'ghost' } }`),
-      /doctor fix must name a check \(have: config, urlHandler, tmuxTruecolor\)/,
+      /doctor fix must name a check \(have: config, urlHandler, tmuxTruecolor, effectRefresh\)/,
     );
   });
 

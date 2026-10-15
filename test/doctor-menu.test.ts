@@ -69,14 +69,16 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const CLEAN_LOAD: ConfigLoad = {
+// The load's outcome; the config it carries is the one the runtime renders.
+type LoadOutcome = Omit<ConfigLoad, "config">;
+const CLEAN_LOAD: LoadOutcome = {
   layers: [],
   error: null,
   warning: null,
   unused: [],
 };
 
-function buildRuntime(tmux: TmuxHint | null, load: ConfigLoad = CLEAN_LOAD) {
+function buildRuntime(tmux: TmuxHint | null, load: LoadOutcome = CLEAN_LOAD) {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['directory', 'model'] } }`,
@@ -107,7 +109,7 @@ function buildRuntime(tmux: TmuxHint | null, load: ConfigLoad = CLEAN_LOAD) {
       probes += 1;
       return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
     },
-    loadConfig: () => load,
+    loadConfig: () => ({ ...load, config }),
   };
   const logs: string[] = [];
   const ctx: VerbContext = {
@@ -214,7 +216,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok (session=s1)",
     ]);
   });
 
@@ -268,6 +270,33 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const before = fs.readFileSync(rt.settingsPath, "utf8");
     expect(() => rt.click(fixUrl)).toThrow(BadVerbArgs);
     expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(before);
+  });
+
+  // brandon-effects-2gka.21e: the session's own effect pick, a statusLine with
+  // no interval — the row fails with [fix], and the fix lands the interval
+  // beside the statusLine's keys.
+  test("a session wearing an effect, no refresh interval: failed row with [fix]; the fix lands and the row passes", () => {
+    const rt = buildRuntime(null);
+    fs.writeFileSync(
+      rt.settingsPath,
+      `{\n  "statusLine": { "type": "command", "command": "cc-candybar" }\n}\n`,
+    );
+    rt.sessionState.set("s1", "effect", "shimmer");
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.render()).toContain(
+      "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events [fix]",
+    );
+
+    rt.clickVerb(VERB_DOCTOR_FIX);
+    expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
+      statusLine: { type: "command", command: "cc-candybar", refreshInterval: 1 },
+    });
+    expect(rt.render()).toContain("✓ effect refresh");
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
+    expect(rt.logs).toContain(
+      'doctor-fix: effectRefresh → claude-settings statusLine.refreshInterval=1 (session=s1)',
+    );
   });
 
   test("not in tmux: the check is ok", () => {

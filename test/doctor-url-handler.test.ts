@@ -25,6 +25,7 @@ import {
   handlerScriptPath,
 } from "../src/install/index";
 import { PACKAGE_VERSION } from "../src/version";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
 
 const probe = checkByName("urlHandler")!.probe;
@@ -38,7 +39,8 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
       warnings: [],
       unused: [],
     },
-    claudeSettings: { path: "/s.json", env: {} },
+    effect: { kind: "decided", name: "none", value: "none" },
+    claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 
 const APP = "/Users/u/Applications/CCCandybarURLHandler.app";
@@ -413,6 +415,7 @@ describe("the daemon's side of the round trip", () => {
           error: null,
           warning: null,
           unused: [],
+          config: DEFAULT_DSL_CONFIG,
         }),
       },
     };
@@ -473,7 +476,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok (session=s1)",
+      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok (session=s1)",
     ]);
   });
 
@@ -484,7 +487,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok (session=s1)",
+      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok (session=s1)",
     ]);
   });
 

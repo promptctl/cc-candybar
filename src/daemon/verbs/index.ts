@@ -1136,7 +1136,12 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // as the link that came back through the URL handler.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   return {
-    ...gatherFacts(ctx.doctor, sessionHints(ctx, sid), sessionOrigin(ctx, sid)),
+    ...gatherFacts(
+      ctx.doctor,
+      sessionHints(ctx, sid),
+      sessionOrigin(ctx, sid),
+      (key) => ctx.sessionState.get(sid, key),
+    ),
     urlHandler: clickArrived(ctx.clientVersion),
   };
 }
@@ -1183,7 +1188,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
   const after = applyFix(verdict.fix, facts);
   ctx.dlog(
     "info",
-    `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.name}=${verdict.fix.value} (session=${sid})`,
+    `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.path.join(".")}=${JSON.stringify(verdict.fix.value)} (session=${sid})`,
   );
   writeReport(ctx, sid, after);
 };

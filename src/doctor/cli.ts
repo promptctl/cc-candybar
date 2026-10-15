@@ -33,7 +33,7 @@ import {
 } from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
 import { expandHome } from "../config/dsl-loader.js";
-import { loadFromDisk } from "../daemon/cache/render.js";
+import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { sanitizeConfigPath } from "../daemon/protocol.js";
 import { detectClaudeConfigDir } from "../claude-settings.js";
@@ -54,20 +54,25 @@ function reportLine({ check, verdict }: CheckReport): string {
 
 // [LAW:single-enforcer] The CLI's config load is the daemon's own
 // `loadFromDisk`, run once: it has no cache entry to read, so it builds the
-// state, keeps the outcome, and releases the sources the state started.
+// state, keeps the outcome, and releases the sources the state started. A
+// load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
+  const deps = { sessionState: new SessionState() };
   const loaded = loadFromDisk(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
-    { sessionState: new SessionState() },
+    deps,
   );
-  loaded.state?.registry.dispose();
+  const state =
+    loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
+  state.registry.dispose();
   return {
     layers: loaded.layers,
     error: loaded.error,
     warning: loaded.warning,
-    unused: loaded.state?.unused ?? [],
+    unused: state.unused,
+    config: state.config,
   };
 }
 
@@ -98,6 +103,8 @@ export async function doctorPlan(
         configFile:
           sanitizeConfigPath(configFile ?? detectConfigEnv(env)) ?? null,
       },
+      // No session: the bar a session started here opens on.
+      () => null,
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.

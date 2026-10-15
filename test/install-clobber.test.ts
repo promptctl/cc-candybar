@@ -209,6 +209,51 @@ describe("install — clobber protection", () => {
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
+  // brandon-effects-2gka.21e: the doctor's effectRefresh fix writes
+  // `statusLine.refreshInterval`, and the update notice's [upgrade] re-runs
+  // install — which must change only the command it owns.
+  test("re-install keeps every other statusLine key and every other byte", () => {
+    const p = tmpSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const before = `{
+    "env": { "A": "1" },
+    "statusLine": {
+        "type": "command",
+        "command": ${JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"]))},
+        "refreshInterval": 1,
+        "padding": 2
+    }
+}
+`;
+    fs.writeFileSync(p, before);
+
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+
+    expect(fs.readFileSync(p, "utf-8")).toBe(
+      before.replace(
+        JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"])),
+        JSON.stringify(buildStatusLineCommand(BIN, [])),
+      ),
+    );
+  });
+
+  // A statusLine that is not an object runs nothing and holds no command to
+  // protect, so install replaces it whole — with or without --force.
+  test.each([["null"], [`"cc-candybar"`]])(
+    "a statusLine of %s is replaced by a statusLine object",
+    (text) => {
+      const p = tmpSettingsPath();
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, `{ "model": "opus", "statusLine": ${text} }\n`);
+
+      updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+      expect(JSON.parse(fs.readFileSync(p, "utf-8"))).toEqual({
+        model: "opus",
+        statusLine: { type: "command", command: buildStatusLineCommand(BIN, []) },
+      });
+    },
+  );
+
   test("settings without statusLine gets statusLine written", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });

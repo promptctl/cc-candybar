@@ -13,6 +13,7 @@ import path from "node:path";
 import {
   claudeConfigDir,
   claudeSettingsPath,
+  isJsonObject,
   readClaudeSettings,
   readClaudeSettingsText,
 } from "../claude-settings.js";
@@ -22,6 +23,8 @@ import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
+import type { DslConfig } from "../config/dsl-types.js";
+import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import type {
   ConfigFacts,
   DoctorFacts,
@@ -54,11 +57,14 @@ export interface ConfigOrigin {
 // One load's outcome, as both a cache entry and a fresh load carry it: the
 // file it resolved, the error that stopped it, the advisories it earned (one
 // per line), and — for the config last loaded — what its file left unused.
+// `config` is the config the bar draws from: the one loaded, else what the
+// bar falls back to under the error.
 export interface ConfigLoad {
   readonly layers: readonly string[];
   readonly error: string | null;
   readonly warning: string | null;
   readonly unused: readonly UnusedDecl[];
+  readonly config: DslConfig;
 }
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
@@ -90,8 +96,7 @@ export function productionEdge(
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
 // two.
-function configFacts(edge: DoctorEdge, origin: ConfigOrigin): ConfigFacts {
-  const load = edge.loadConfig(origin);
+function configFacts(load: ConfigLoad): ConfigFacts {
   const base = {
     layers: load.layers,
     warnings: load.warning === null ? [] : load.warning.split("\n"),
@@ -109,15 +114,24 @@ function configFacts(edge: DoctorEdge, origin: ConfigOrigin): ConfigFacts {
 // (readClaudeSettings: missing or blank is empty, anything unparseable throws
 // naming the file — never read as empty, because the fix would then splice
 // into a file it cannot parse either), and its `env` held to the same rule.
-function readClaudeSettingsEnv(
+// `statusLine` is parsed into its own three arms instead (StatusLineFacts).
+function readClaudeSettingsFacts(
   settingsPath: string,
 ): DoctorFacts["claudeSettings"] {
-  const env = readClaudeSettings(settingsPath).env;
-  if (env === undefined) return { path: settingsPath, env: {} };
-  if (typeof env !== "object" || env === null || Array.isArray(env)) {
+  const { env, statusLine } = readClaudeSettings(settingsPath);
+  if (env !== undefined && !isJsonObject(env)) {
     throw new Error(`cannot read ${settingsPath}: \`env\` is not an object`);
   }
-  return { path: settingsPath, env: env as Record<string, unknown> };
+  return {
+    path: settingsPath,
+    env: env ?? {},
+    statusLine:
+      statusLine === undefined
+        ? { kind: "absent" }
+        : isJsonObject(statusLine)
+          ? { kind: "present", refreshInterval: statusLine.refreshInterval }
+          : { kind: "not-an-object", value: statusLine },
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
@@ -141,15 +155,25 @@ export function clickArrived(handler: string | null): UrlHandlerFacts {
 // session spawned it. The URL handler's facts are not gathered here: the
 // daemon has them in the click it is handling, the CLI has to send a link and
 // wait (src/doctor/handler-probe.ts), and each adds them to these.
+//
+// `sessionPick` reads the session's own picks — the daemon's SessionState for
+// the clicking session, `() => null` for the CLI, which has no session.
 export function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
   origin: ConfigOrigin,
+  sessionPick: (key: string) => string | null,
 ): Omit<DoctorFacts, "urlHandler"> {
+  const load = edge.loadConfig(origin);
   return {
     tmux: tmuxFacts(edge, hints.tmux),
-    config: configFacts(edge, origin),
-    claudeSettings: readClaudeSettingsEnv(
+    config: configFacts(load),
+    // [LAW:one-source-of-truth] The render's own resolution, so the doctor
+    // and the bar cannot disagree about which effect is on. The preset's
+    // customization is a fact no field read here depends on.
+    effect: resolveEffectiveGlobals(load.config, sessionPick, () => false)
+      .effect,
+    claudeSettings: readClaudeSettingsFacts(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),
   };
@@ -157,8 +181,9 @@ export function gatherFacts(
 
 // [LAW:one-source-of-truth] The fix is a SPLICE, not a rewrite: the same
 // span-tracking editor the cc-candybar config uses (JSON ⊂ JSON5) replaces one
-// value span or appends one entry, creating `env` only when absent, and every
-// other byte of the user's file survives — comments, ordering, indentation.
+// value span or appends one entry, creating the parent object only when
+// absent, and every other byte of the user's file survives — comments,
+// ordering, indentation.
 // In the JSON dialect: Claude Code parses settings.json strictly, so a bare
 // key or a trailing comma here would break every Claude Code launch.
 //
@@ -168,17 +193,20 @@ export function gatherFacts(
 export function applyFix(fix: Fix, facts: DoctorFacts): DoctorFacts {
   const settingsPath = facts.claudeSettings.path;
   switch (fix.kind) {
-    case "claude-settings-env": {
+    case "claude-settings": {
       const text = readClaudeSettingsText(settingsPath);
       const next = setValue(
         text,
-        ["env", fix.name],
+        fix.path,
         JSON.stringify(fix.value),
         JSON_DIALECT,
       );
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
       writeAtomic(settingsPath, next);
-      return { ...facts, claudeSettings: readClaudeSettingsEnv(settingsPath) };
+      return {
+        ...facts,
+        claudeSettings: readClaudeSettingsFacts(settingsPath),
+      };
     }
     default: {
       const _exhaustive: never = fix.kind;
