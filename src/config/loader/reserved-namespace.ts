@@ -29,7 +29,12 @@ export const EDIT_NS = "edit.";
 // live under that name.
 export const SETTINGS_NS = "candybar.";
 
-const RESERVED_NAMESPACES = [GROUP_NS, MENU_NS, EDIT_NS, SETTINGS_NS] as const;
+export const RESERVED_NAMESPACES = [
+  GROUP_NS,
+  MENU_NS,
+  EDIT_NS,
+  SETTINGS_NS,
+] as const;
 
 // A name a user can never author: every synthesized artifact lives under one
 // of the prefixes above, so membership alone proves "synthesized, not

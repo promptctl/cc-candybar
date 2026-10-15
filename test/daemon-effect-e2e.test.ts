@@ -8,7 +8,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { logPath } from "../src/daemon/paths";
-import { killAndWait, render } from "./helpers/daemon-e2e";
+import {
+  hookData,
+  killAndWait,
+  render,
+  renderRequest,
+} from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -80,5 +85,39 @@ describe("a daemon render's event names the effect it wore", () => {
     // keeps its own clock.
     expect(ownT(first.own)).toBe(0);
     expect(ownT(last.own)).toBeGreaterThan(0);
+  });
+
+  // brandon-effects-2gka.3vt: a placement the payload hides dissolves out, and
+  // the event names it on its dissolve's clock.
+  test("a placement that leaves is named on the event, its dissolve on its own clock", async () => {
+    const sessionId = "effect-e2e-leaves";
+    const leaving = path.join(projectDir, "leaving.json5");
+    writeFileSync(
+      leaving,
+      `{ globals: { transitions: true }, variables: { modelName: { kind: "input", path: "model.display_name", type: "string" } }, segments: { a: { template: 'steady' }, b: { template: 'leaves', when: '{{ ne .modelName "gone" }}' } }, root: { h: ['a', 'b'] } }`,
+    );
+    const renderAs = (displayName: string): Promise<string> =>
+      renderRequest(sockPath, {
+        hookData: {
+          ...hookData(sessionId, projectDir),
+          model: { id: "claude-opus-4-7", display_name: displayName },
+        },
+        args: ["cc-candybar", "--config", leaving],
+        cwd: projectDir,
+      });
+    await renderAs("here");
+    await renderAs("here");
+    await renderAs("gone");
+
+    const leaves = readFileSync(logPath(env), "utf8")
+      .split("\n")
+      .filter((l) => l.includes(`render sid=${sessionId} `))
+      .map((l) => l.match(/ leaves=(\S+) /)?.[1]);
+    // A retried request logs once per attempt, so the event that saw `b`
+    // leave is the first naming it, and every event before it names none.
+    const left = leaves.findIndex((l) => l !== "-");
+    expect(left).toBeGreaterThan(0);
+    expect(leaves.slice(0, left).every((l) => l === "-")).toBe(true);
+    expect(leaves[left]).toBe("b@0.000");
   });
 });

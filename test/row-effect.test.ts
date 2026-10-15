@@ -17,6 +17,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { EffectSessions, SessionEffects } from "../src/render/effect";
+import type { RenderedLine } from "../src/dsl/node-registry";
 import {
   decideEffectName,
   EFFECT_NAMES,
@@ -30,7 +31,9 @@ import { linkUrls, stripAnsi } from "./helpers/ansi";
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
   transitions: false,
-  source: { config: {}, preset: "default", revision: 0 },
+  source: { config: {}, preset: "default", revision: 0, width: 80 },
+  returned: () => ({ drawing: null, deeper: [] }),
+  hold: (line: RenderedLine) => line,
 };
 
 const LOOPS = Object.keys(EFFECT_CATALOGUE.loops) as EffectName[];
@@ -65,7 +68,7 @@ function renderer(
   readonly render: (
     effect: EffectName | undefined,
     when: Instant,
-    effects?: SessionEffects,
+    effects?: SessionEffects<RenderedLine>,
     payload?: object,
   ) => string;
   readonly dispose: () => void;
@@ -113,7 +116,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("none draws the bytes a render with no effect named draws", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("none", at(30), new SessionEffects("s"))).toBe(
+      expect(render("none", at(30), new SessionEffects<RenderedLine>("s"))).toBe(
         render(undefined, at(30)),
       );
     } finally {
@@ -126,7 +129,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     (loop) => {
       const { render, dispose } = renderer(BAR);
       try {
-        const effects = new SessionEffects("s");
+        const effects = new SessionEffects<RenderedLine>("s");
         const instants = [0, 7, 30, 61, 200, 450];
         // Brought into force at the first instant, so t counts from there.
         const drawn = instants.map((s) => render(loop, at(s), effects));
@@ -146,7 +149,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("pulse starts at rest: its first frame is none's bytes", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("pulse", at(5), new SessionEffects("s"))).toBe(
+      expect(render("pulse", at(5), new SessionEffects<RenderedLine>("s"))).toBe(
         render("none", at(5)),
       );
     } finally {
@@ -157,12 +160,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("an effect's clock starts when it comes into force, not at the first render", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      const late = new SessionEffects("s");
+      const late = new SessionEffects<RenderedLine>("s");
       render("none", at(0), late);
       // Pulse came into force at 300: its first frame is at rest.
       expect(render("pulse", at(300), late)).toBe(render("none", at(300)));
       // On a session where pulse has been on since 0, the same stretch moves.
-      const early = new SessionEffects("s");
+      const early = new SessionEffects<RenderedLine>("s");
       render("pulse", at(0), early);
       const moved = [100, 200, 300].some(
         (s) => render("pulse", at(s), early) !== render("none", at(s)),
@@ -176,7 +179,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test.each(LOOPS)("under colorCompatibility none, %s draws none's bytes", (loop) => {
     const { render, dispose } = renderer(BAR, "none");
     try {
-      const effects = new SessionEffects("s");
+      const effects = new SessionEffects<RenderedLine>("s");
       for (const s of [0, 30, 200]) {
         expect(render(loop, at(s), effects)).toBe(render("none", at(s)));
       }
@@ -188,7 +191,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("a rule flips the effect as the payload changes", () => {
     const { render, dispose } = renderer(RULED);
     try {
-      const effects = new SessionEffects("s");
+      const effects = new SessionEffects<RenderedLine>("s");
       const quiet = render(undefined, at(0), effects);
       expect(stripAnsi(quiet)).toContain("fx=none");
       // A tool starts: the rule names shimmer, whose clock starts now. Every
@@ -212,7 +215,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   });
 
   test("a session holds the effects of the rows its latest render drew, and no others", () => {
-    const sessions = new EffectSessions();
+    const sessions = new EffectSessions<RenderedLine>();
     const effects = sessions.of("s");
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion("shimmer", when, STILL_FRAME);
@@ -259,7 +262,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       const bottom = (bytes: string): string =>
         bytes.split("\n").find((line) => stripAnsi(line).includes("bottom row"))!;
       for (const loop of LOOPS) {
-        const effects = new SessionEffects("s");
+        const effects = new SessionEffects<RenderedLine>("s");
         closed.render(loop, at(0), effects);
         const before = closed.render(loop, at(30), effects);
         const after = opened.render(loop, at(30), effects);

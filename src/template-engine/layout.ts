@@ -20,6 +20,7 @@ import { RichText } from "@promptctl/rich-js";
 import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { CellPlacement } from "../render/effect.js";
+import { resolvedStyle } from "../render/rich-theme.js";
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";
@@ -140,9 +141,9 @@ export interface LaidCell {
   // The placement the cell belongs to and the effect it wears — the bar's or
   // its own (brandon-effects-2gka.bm1): a demand like `fill`, settled where the
   // row's strip is drawn (`SessionEffects.motion`), the one place the row's
-  // items, the bar's effect and the last frame's placements are all in hand —
-  // which is where a placement the last frame did not draw fades in
-  // (brandon-effects-2gka.631).
+  // items and the bar's effect are both in hand — which is also where a
+  // placement fading in (brandon-effects-2gka.631) or dissolving out
+  // (brandon-effects-2gka.3vt) has its transition confined to its own cells.
   readonly placement: CellPlacement;
   // Drawn inside the cell before / after `text`, never resized with it
   // (SegmentNode.lead / .trail). Joined by `stripItem` once sizing is final.
@@ -159,6 +160,28 @@ export function cellParts({ lead, text, trail }: LaidCell): RichText[] {
     text,
     ...(trail === undefined ? [] : [trail]),
   ];
+}
+
+// A laid cell as a placement leaving the bar replays it
+// (brandon-effects-2gka.3vt): sized as its row last drew it — the row's fill
+// grows a cell in place, so the copy keeps that width and asks the row for
+// nothing — and with every link and click handler removed, since a placement
+// on its way out offers nothing to click.
+export function heldCell({ text, placement, lead, trail }: LaidCell): LaidCell {
+  return {
+    text: unlinked(text),
+    placement,
+    ...(lead !== undefined && { lead: unlinked(lead) }),
+    ...(trail !== undefined && { trail: unlinked(trail) }),
+  };
+}
+
+function unlinked(text: RichText): RichText {
+  const copy = text.blankCopy(text.plain);
+  copy.style = resolvedStyle(text.style).clearMetaAndLinks();
+  for (const { start, end, style } of text.spans)
+    copy.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
+  return copy;
 }
 
 // The ONE strip item a laid cell serializes to: its parts, on the cell's own

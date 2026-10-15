@@ -120,8 +120,9 @@ export interface DoctorFacts {
   // own (brandon-effects-2gka.bm1) — saved, or the session's unsaved pick —
   // which moves whatever the bar's effect is.
   readonly placementEffects: readonly PlacementEffectFact[];
-  // Whether a placement that appears fades in (brandon-effects-2gka.631),
-  // resolved as the render resolves it: a fade moves over 20 s.
+  // Whether placements fade in and dissolve out (brandon-effects-2gka.631,
+  // .3vt), resolved as the render resolves it: a fade moves over 20 s, a
+  // dissolve over 30 s.
   readonly transitions: boolean;
   // The session's Claude Code settings file and the entries read from it — a
   // second, daemon-observable fact beside the client-observed env, so a
@@ -353,7 +354,9 @@ const effectRefresh: Check = {
       ...placementEffects.map(
         ({ placement, effect }) => `${placement} wears the ${effect} effect`,
       ),
-      ...(transitions ? ["placements fade in as they appear"] : []),
+      ...(transitions
+        ? ["placements fade in and dissolve out as they come and go"]
+        : []),
     ];
     if (moving.length === 0) return { ok: true };
     const wearing = moving.join(" and ");

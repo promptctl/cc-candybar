@@ -354,6 +354,15 @@ describe("load errors", () => {
       refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: 'a:b' }] }`)),
     ).toContain(`a placement "id" must be a non-empty string without "/" or ":"`);
   });
+
+  test.each(["candybar.save", "edit.live", "groups.x", "menus.x"])(
+    "a placement id %s in a namespace synthesis mints its own under",
+    (id) => {
+      expect(
+        refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: '${id}' }] }`)),
+      ).toContain(`outside the reserved "groups.", "menus.", "edit.", "candybar." namespaces`);
+    },
+  );
 });
 
 describe("edit mode addresses placements by id", () => {

@@ -16,6 +16,7 @@ import {
   type SettingValue,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { isReservedName, RESERVED_NAMESPACES } from "./reserved-namespace.js";
 import {
   describeType,
   describeValue,
@@ -268,19 +269,36 @@ export function settingsDeclSpec(): FieldSpec<
 }
 
 // A placement's `id`. It rides the click wire inside a layout-op token, whose
-// delimiters are `/` and `:` (layout-ops.ts), so it may hold neither.
+// delimiters are `/` and `:` (layout-ops.ts), so it may hold neither; and it
+// may not sit in a namespace synthesis mints its own placements under, whose
+// ids are their reserved segment names — an authored id there would be a
+// second placement under one id in the synthesized tree, which the per-tree
+// count (cross-ref) runs too early to see.
+const RESERVED_ID_JSON = RESERVED_NAMESPACES.map((ns) =>
+  ns.replace(/\./g, "\\."),
+).join("|");
 export function placementIdSpec(): FieldSpec<string> {
   return {
     required: false,
-    json: { type: "string", minLength: 1, pattern: "^[^:/]+$" },
+    json: {
+      type: "string",
+      minLength: 1,
+      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`,
+    },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
-      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v)) return v;
+      if (
+        typeof v === "string" &&
+        v.length > 0 &&
+        !/[:/]/.test(v) &&
+        !isReservedName(v)
+      )
+        return v;
       return issue(
         ctx,
         `${path}.${field}`,
-        `a placement "id" must be a non-empty string without "/" or ":", got ${describeValue(v)}`,
+        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`,
       );
     },
   };

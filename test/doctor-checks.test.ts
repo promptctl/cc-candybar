@@ -400,7 +400,7 @@ describe("effectRefresh probe", () => {
     ).toEqual({
       ok: false,
       reason:
-        "placements fade in as they appear, but Claude Code redraws it only on events",
+        "placements fade in and dissolve out as they come and go, but Claude Code redraws it only on events",
       fix: FIX,
     });
   });

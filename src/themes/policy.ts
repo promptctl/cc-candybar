@@ -764,7 +764,7 @@ export function effectiveUpdateNotice(
   );
 }
 
-// Whether a placement that appears fades in, as data — effectiveAutoWrap's
+// Whether placements fade in and dissolve out, as data — effectiveAutoWrap's
 // twin over the transitions setting, with its own floor.
 export function effectiveTransitions(
   stagedTransitions: boolean | undefined,

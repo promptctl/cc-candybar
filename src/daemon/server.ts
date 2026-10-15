@@ -103,7 +103,8 @@ import {
   type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "./render-payload.js";
-import { EffectSessions } from "../render/effect.js";
+import { EffectSessions, type PassageFrame } from "../render/effect.js";
+import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
@@ -155,7 +156,7 @@ const settingsHistory = new SettingsHistory(sessionState, dlog);
 const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
-const effectSessions = new EffectSessions();
+const effectSessions = new EffectSessions<RenderedLine>();
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -1177,16 +1178,16 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         fx.own
           .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
           .join(",") || "-";
-      // Each placement fading in, on its own clock; `-` for none.
-      const fades =
-        fx.fades.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") ||
-        "-";
+      // Each placement fading in, and each dissolving out, on its own clock;
+      // `-` for none.
+      const passages = (frames: readonly PassageFrame[]): string =>
+        frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
       // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
       // order, including any its row cap left undrawn; `-` for none.
       const warned = warnings.map((w) => w.kind).join(",") || "-";
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${fades} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
