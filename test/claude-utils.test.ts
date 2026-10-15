@@ -182,6 +182,16 @@ describe("userEntryOf", () => {
       "claude-code",
     ],
     [
+      "an interrupt marker",
+      { type: "user", interruptedMessageId: "m", message: text("[Request interrupted by user]") },
+      "claude-code",
+    ],
+    [
+      "an interrupt marker with no interruptedMessageId",
+      { type: "user", message: text("[Request interrupted by user for tool use]") },
+      "claude-code",
+    ],
+    [
       "an assistant entry",
       {
         type: "assistant",

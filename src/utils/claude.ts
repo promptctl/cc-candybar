@@ -306,8 +306,9 @@ export interface ParsedEntry {
 // a tool's answer echoed back. A `claude-code` entry is one Claude Code marks as
 // its own: `isMeta` (a skill's expanded body, a local-command caveat, a nudge to
 // continue), a compaction summary, an `origin` other than human (a task
-// notification wakes Claude for a new TURN of the same prompt), or a local
-// command's output, which Claude Code wraps in its own tag and marks no other way.
+// notification wakes Claude for a new TURN of the same prompt), or text Claude
+// Code writes in a fixed form and marks no other way: a local command's output
+// in its own tag, and the marker it leaves when a person interrupts a turn.
 export type UserEntry = "prompt" | "tool-result" | "claude-code";
 
 // [LAW:one-source-of-truth] Classified once, at the parse site, from the marks
@@ -319,7 +320,8 @@ export function userEntryOf(
   const msg = parsed.message as Record<string, unknown> | undefined;
   const messageType = parsed.type || msg?.role || msg?.type;
   if (messageType !== "user") return undefined;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const first = firstBlock(msg);
+  if (first?.type === "tool_result") return "tool-result";
   const origin =
     typeof parsed.origin === "object" && parsed.origin !== null
       ? (parsed.origin as { kind?: unknown }).kind
@@ -327,20 +329,35 @@ export function userEntryOf(
   return parsed.isMeta === true ||
     parsed.isCompactSummary === true ||
     (origin !== undefined && origin !== "human") ||
-    (typeof msg?.content === "string" && LOCAL_COMMAND_OUTPUT.test(msg.content))
+    CLAUDE_CODE_TEXT.test(leadingText(msg?.content, first))
     ? "claude-code"
     : "prompt";
 }
 
-const LOCAL_COMMAND_OUTPUT = /^\s*<local-command-std(?:out|err)>/;
+const CLAUDE_CODE_TEXT =
+  /^\s*(?:<local-command-std(?:out|err)>|\[Request interrupted by user)/;
 
-// The first content block's `type`; the array (full LLM text) is never
-// retained. Text content (a bare string) has no block type.
-function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
+// The first content block; the array (full LLM text) is never retained. Text
+// content (a bare string) has no block.
+function firstBlock(
+  msg: Record<string, unknown> | undefined,
+): { type?: unknown; text?: unknown } | undefined {
   const content = msg?.content;
   return Array.isArray(content) && typeof content[0] === "object" && content[0]
-    ? (content[0] as { type?: unknown }).type
+    ? (content[0] as { type?: unknown; text?: unknown })
     : undefined;
+}
+
+// What the entry says first, in either content shape: a bare string, or the
+// first block's text.
+function leadingText(
+  content: unknown,
+  first: { type?: unknown; text?: unknown } | undefined,
+): string {
+  if (typeof content === "string") return content;
+  return first?.type === "text" && typeof first.text === "string"
+    ? first.text
+    : "";
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {

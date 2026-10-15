@@ -389,6 +389,17 @@ describe("the fold reports what is happening now", () => {
     expect(info.command).toBe("/model");
   });
 
+  test("an interrupt ends the turn without starting one, so its tally and command stay", async () => {
+    const info = await activityOf(
+      userText("<command-name>/next</command-name>"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      userText("[Request interrupted by user]"),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
   test("a real user message resets the tool activity but keeps the todo list", async () => {
     const info = await activityOf(
       userText("first"),
