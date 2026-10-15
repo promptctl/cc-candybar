@@ -112,8 +112,8 @@ interface Part {
   readonly scope: Scope;
   readonly name: EffectName;
   readonly t: number;
-  // The item it is confined to, or none: the whole row.
-  readonly owner: object | undefined;
+  // The items it is confined to, or none: the whole row.
+  readonly owners: readonly RichText[] | undefined;
 }
 
 // A part wearing a catalogue loop: every effect name but the floor.
@@ -125,7 +125,7 @@ function isMoving<P extends { name: EffectName }>(part: P): part is Moving<P> {
 // [LAW:one-type-per-behavior] Several effects, each on its own clock, as the one
 // `Effect` an `Effected` takes: every first stage is called with the frame's
 // `drawn` at its own t, then the second stages fold over the cell. Each is
-// confined to its own item's colours, so for any one colour of a cell at most
+// confined to its own items' colours, so for any one colour of a cell at most
 // one of them moves it. The `t` the `Effected` passes is not read: no clock
 // here is the row's.
 function together(parts: ReadonlyArray<{ t: number; effect: Effect }>): Effect {
@@ -217,7 +217,7 @@ export class SessionEffects {
     at: Instant,
   ): (row: string, items: readonly RowItem[]) => RowMotion {
     if (this.inForce?.name !== name) this.inForce = { name, since: at };
-    const bar: Omit<Part, "owner"> = {
+    const bar: Omit<Part, "owners"> = {
       scope: BAR_SCOPE,
       name,
       t: at - this.inForce.since,
@@ -232,7 +232,7 @@ export class SessionEffects {
     const frame = { effect: name, t: bar.t, made: 0, reused: 0, own };
     this.frame = frame;
 
-    const ownPart = ({ placement, name }: CellEffect): Omit<Part, "owner"> => {
+    const ownPart = ({ placement, name }: CellEffect): Omit<Part, "owners"> => {
       const last = placements.get(placement) ?? knownPlacements.get(placement);
       const since = last?.name === name ? last : { name, since: at };
       const t = at - since.since;
@@ -269,18 +269,30 @@ export class SessionEffects {
       return effect;
     };
 
+    // [LAW:one-type-per-behavior] A row's parts by scope: each effect the row
+    // wears, once, confined to every item wearing it.
+    const byScope = (items: readonly RowItem[]): Part[] => {
+      const parts = new Map<Scope, Part & { owners: RichText[] }>();
+      for (const { owner, effect } of items) {
+        const part = effect === undefined ? bar : ownPart(effect);
+        const seen = parts.get(part.scope);
+        if (seen === undefined)
+          parts.set(part.scope, { ...part, owners: [owner] });
+        else seen.owners.push(owner);
+      }
+      return [...parts.values()];
+    };
+
     return (row, items) => {
       // [LAW:dataflow-not-control-flow] Each item is drawn under its own
-      // effect or the bar's. rich-js confines an effect to one item's colours
-      // and has no complement, so "the bar's everywhere else" is the bar's
-      // confined to each item following it; with no item wearing its own,
-      // everywhere else is the whole row, and the bar's needs no confining.
+      // effect or the bar's. rich-js confines an effect to the colours of the
+      // items it names and has no complement, so "the bar's everywhere else" is
+      // the bar's confined to every item following it; with no item wearing
+      // its own, everywhere else is the whole row, and the bar's needs no
+      // confining.
       const parts: readonly Part[] = items.some((i) => i.effect !== undefined)
-        ? items.map(({ owner, effect }) => ({
-            ...(effect === undefined ? bar : ownPart(effect)),
-            owner,
-          }))
-        : [{ ...bar, owner: undefined }];
+        ? byScope(items)
+        : [{ ...bar, owners: undefined }];
       // `none` is the floor of the effect domain and has no catalogue entry:
       // a part wearing it is drawn as it stands, and a row of such parts is
       // still — no `Effected` at all, so it draws the bytes it always drew.
@@ -298,9 +310,9 @@ export class SessionEffects {
                 return {
                   t: part.t,
                   effect:
-                    part.owner === undefined
+                    part.owners === undefined
                       ? effect
-                      : confined(effect, part.owner),
+                      : confined(effect, ...part.owners),
                 };
               }),
             ),
