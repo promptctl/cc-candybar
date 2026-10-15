@@ -20,7 +20,8 @@ import {
 import {
   readdir as gatedReaddir,
   stat as gatedStat,
-  statMtimeMs,
+  statStamp,
+  stampOf,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
@@ -32,15 +33,19 @@ import { dateOf, type Instant } from "../../utils/instant";
 // totals) and the `today` projection (cross-session sum of today's per-day
 // buckets) are BOTH folds over this one store. There is no second usage cache
 // and no per-render whole-tree scan: a render observes the active session's
-// change through the single mtime stat it already does, re-parses only that one
+// change through the single stat it already does, re-parses only that one
 // session, and folds in-memory records for everything else.
 //
 // [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
 // (where the staleness probe — a whole-tree mtime sweep — cost as much as the
 // recompute it guarded). The aggregate is derived state maintained
-// incrementally: the whole transcript tree is scanned EXACTLY ONCE, lazily, to
+// incrementally: the whole transcript tree is scanned lazily, once a day, to
 // seed records for sessions that did work before this daemon saw them; every
-// render after that is a single-file stat plus a fold.
+// render after that is a single-file stat plus a fold. A session that never
+// renders (headless `claude -p`, the Agent SDK) is kept current by RESCANNING
+// the tree in the background at most once per `rescanIntervalMs` — the seed
+// again, which over warm records is a stat per transcript plus the bytes
+// appended since the last scan (measured: ~75 ms over 6k transcripts).
 
 // [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
 // "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
@@ -118,16 +123,39 @@ interface SessionRecord {
   files: Map<string, FileFold>;
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
-  transcriptMtime: number;
+  transcriptStamp: string;
   transcriptPath: string | undefined;
   lastSeenAt: number;
 }
 
+// What one caller's ingests did. Renders share the store's running tally — the
+// usage cache's hit rate; each scan keeps its own, reported on its event, so a
+// rescan over thousands of warm records cannot pass for render behaviour.
+interface IngestTally {
+  hits: number;
+  misses: number;
+}
+
+// One set of Claude Code directories' scans on `seededDay`.
+interface DaySeed {
+  // What a `today` render awaits: the day's first scan. A rescan never
+  // replaces it — the records it refreshes are read as each ingest lands, and
+  // an append-only fold only grows, so a render mid-rescan sums no less than
+  // the last scan did.
+  readonly done: Promise<void>;
+  // The scan in flight, the first included: at most one per directory set.
+  scanning: Promise<void> | undefined;
+  // The render instant (ms) the latest scan started at.
+  startedAtMs: number;
+}
+
 const DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// How far behind a never-rendering session's work `today` may run.
+const DEFAULT_RESCAN_INTERVAL_MS = 60 * 1000;
 // Mirrors the transcript-fs gate width: the seed's parse fan-out is bounded by
-// the same constant as the I/O it drives, so the once-a-day scan can never
-// re-create the unbounded burst gn4 exists to kill.
+// the same constant as the I/O it drives, so a scan can never re-create the
+// unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
 
 const EMPTY_DAY: DayUsage = {
@@ -303,17 +331,19 @@ export class SessionUsageStore {
   // sessions seen within `staleAgeMs` plus those holding work done today.
   private readonly entries = new Map<string, SessionRecord>();
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
-  // (session, observed mtime) onto one parse; cleared on settle (a coalescer,
+  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
   private readonly flight = new SingleFlight();
   // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
   // per set of Claude Code directories a session's client resolves to (keyed
   // by the directories themselves, so a default that resolves to one directory
-  // shares a scan with that directory named outright). Unlike SingleFlight this RETAINS the resolved promise, so
-  // after a seed completes every later read awaits an already-settled promise
-  // — zero rescan. A rejected seed is dropped so the next read retries.
-  private readonly seeded = new Map<string, Promise<void>>();
+  // shares a scan with that directory named outright). Unlike SingleFlight
+  // this RETAINS the resolved promise, so after a seed completes every later
+  // read awaits an already-settled promise. A rejected scan is dropped so the
+  // next read seeds afresh.
+  private readonly seeded = new Map<string, DaySeed>();
   private seededDay = "";
+  private readonly rescanIntervalMs: number;
   // [LAW:one-source-of-truth] The recent tok/s observations per session, a
   // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
   // the records map already owns; the baseline (prior counts + time) is the ring's
@@ -329,16 +359,18 @@ export class SessionUsageStore {
   private readonly speedFlight = new SingleFlight();
   private readonly staleAgeMs: number;
   private readonly log: DaemonLogger;
-  private hits = 0;
-  private misses = 0;
+  private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private sweeps = 0;
-  private seeds = 0;
+  // Scans that completed and reported, by kind: a `seed` is a day's first (or
+  // one after a failed scan dropped its memo), a `rescan` the background one.
+  private readonly scans = { seed: 0, rescan: 0 };
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
     opts: {
       staleAgeMs?: number;
       sweepIntervalMs?: number;
+      rescanIntervalMs?: number;
       // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
       // daemon passes `dlog`; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
@@ -347,6 +379,7 @@ export class SessionUsageStore {
   ) {
     this.log = opts.logger ?? quietLogger;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+    this.rescanIntervalMs = opts.rescanIntervalMs ?? DEFAULT_RESCAN_INTERVAL_MS;
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
       this.sweepTimer = setInterval(() => this.sweepStale(), interval);
@@ -360,13 +393,15 @@ export class SessionUsageStore {
     misses: number;
     sweeps: number;
     seeds: number;
+    rescans: number;
   } {
     return {
       size: this.entries.size,
-      hits: this.hits,
-      misses: this.misses,
+      hits: this.renderTally.hits,
+      misses: this.renderTally.misses,
       sweeps: this.sweeps,
-      seeds: this.seeds,
+      seeds: this.scans.seed,
+      rescans: this.scans.rescan,
     };
   }
 
@@ -380,7 +415,11 @@ export class SessionUsageStore {
     sessionId: string,
     hookData?: ClaudeHookData,
   ): Promise<Outcome<UsageInfo>> {
-    const record = await this.ingest(sessionId, hookData?.transcript_path);
+    const record = await this.ingest(
+      sessionId,
+      hookData?.transcript_path,
+      this.renderTally,
+    );
     if (record.kind === "failed") return record;
     const base =
       record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO;
@@ -390,7 +429,7 @@ export class SessionUsageStore {
     // reimplementation — kept ONLY as a fallback for clients that omit cost,
     // and to feed the cross-session `today` total, which has no native source
     // (past sessions expose only their transcripts, not a live cost figure).
-    // The native cost is overlaid at READ time, not frozen into the mtime-keyed
+    // The native cost is overlaid at READ time, not frozen into the stamp-keyed
     // record, because it changes every render while the transcript total moves
     // only when the file does.
     const officialCost = hookData?.cost?.total_cost_usd ?? null;
@@ -420,18 +459,19 @@ export class SessionUsageStore {
     const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
     try {
-      await this.ensureSeeded(today, claudePaths);
+      await this.ensureSeeded(today, claudePaths, at * 1000);
     } catch (error) {
       return failed(
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    // Keep the active session fresh: a seed runs once per day, so after it
-    // every render's freshness for the active session comes from here (a hit
-    // when its transcript is unchanged). Empty sessionId no-ops in ingest.
+    // Keep the active session fresh: a scan reaches it at most once a minute,
+    // so every render's freshness for the active session comes from here (a
+    // hit when its transcript is unchanged). Empty sessionId no-ops in ingest.
     const active = await this.ingest(
       hookData?.session_id ?? "",
       hookData?.transcript_path,
+      this.renderTally,
     );
     if (active.kind === "failed") return active;
 
@@ -481,14 +521,19 @@ export class SessionUsageStore {
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
     // [LAW:no-ambient-temporal-coupling] Key the observation by the same
-    // (session, mtime) tuple ingest uses, so concurrent renders at one transcript
+    // (session, stamp) tuple ingest uses, so concurrent renders at one transcript
     // state coalesce onto a single observe-and-commit — the read of `prev` and
     // the write of `cur` happen exactly once for that state, with the flight as
-    // the sole owner of ordering. A distinct mtime is a genuinely new sample and
+    // the sole owner of ordering. A distinct stamp is a genuinely new sample and
     // gets its own key.
-    const mtime = statMtimeMs(transcriptPath);
-    return this.speedFlight.run(`${sessionId}:${mtime}`, async () => {
-      const record = await this.ingest(sessionId, transcriptPath, mtime);
+    const stamp = statStamp(transcriptPath);
+    return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
+      const record = await this.ingest(
+        sessionId,
+        transcriptPath,
+        this.renderTally,
+        stamp,
+      );
       if (record.kind === "failed") return record;
       const breakdown =
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
@@ -496,7 +541,7 @@ export class SessionUsageStore {
       const ring = this.speedRings.get(sessionId) ?? [];
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
       // clock) owns ring order — NOT ingest-completion order. Two concurrent
-      // observes with different mtimes don't coalesce in speedFlight and each
+      // observes with different stamps don't coalesce in speedFlight and each
       // awaits ingest before this mutation, so a plain append would record
       // samples in whichever-ingest-settled-first order and invert oldest→newest.
       // prev is the latest sample strictly before this observation; the post-
@@ -523,7 +568,7 @@ export class SessionUsageStore {
     });
   }
 
-  // mtime-gated, coalesced re-parse of ONE session. `ok` is its record,
+  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
   // `absent` is an unknown empty session (or no sessionId), `failed` is a
   // transcript that exists but couldn't be parsed — NOT cached (only ok
   // records enter the map; the next render retries, same rule as the git
@@ -531,63 +576,74 @@ export class SessionUsageStore {
   private async ingest(
     sessionId: string,
     transcriptPath: string | undefined,
-    knownMtime?: number,
+    tally: IngestTally,
+    knownStamp?: string,
   ): Promise<Outcome<SessionRecord>> {
     if (!sessionId) return ABSENT;
-
-    const mtime = knownMtime ?? statMtimeMs(transcriptPath);
+    const stamp = knownStamp ?? statStamp(transcriptPath);
     const existing = this.entries.get(sessionId);
-    if (existing && mtime !== 0 && existing.transcriptMtime === mtime) {
+    if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
       existing.lastSeenAt = Date.now();
-      this.hits++;
+      tally.hits++;
       return ok(existing);
     }
     // No path to read fresh content — preserve the last-known record rather
     // than blank it. (The session will refresh when its transcript reappears.)
     if (!transcriptPath) return existing ? ok(existing) : ABSENT;
 
-    this.misses++;
+    tally.misses++;
     // [LAW:no-ambient-temporal-coupling] The flight thunk snapshots the prior
     // record when it RUNS (first caller); coalesced callers share that one
-    // refold. Two concurrent DIFFERENT-mtime refolds each read the same prior and
-    // last-writer-wins. This is safe — and specifically NOT a double-count —
-    // because `refold` writes the byte cursor and the fold as ONE atomic pair
-    // (both from a single refold result), and the fold always covers exactly
-    // [0, cursor). A losing writer's fold is discarded WITH its cursor, not left
-    // beside a stale one. So even when last-writer-wins rewinds the stored cursor,
-    // it rewinds the paired fold with it; the next refold folds [cursor, end) onto
-    // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
-    // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
-    // Pinned by the concurrency test in test/transcript-incremental.test.ts.
+    // refold. Two concurrent DIFFERENT-stamp refolds — a render and a rescan,
+    // say — each read the same prior, and the commit below is a compare-and-set
+    // on it: the first to land replaces the prior, and the other is not stored,
+    // though its caller still gets the fold its own stamp asked for (so a tok/s
+    // sample is never another stamp's counts). So the stored record only ever
+    // advances — `today` never steps back to a shorter fold — and since
+    // `refold` writes the byte cursor and the fold as ONE pair
+    // covering exactly [0, cursor), the next refold folds each byte once.
+    // `foldFile` is pure (fresh FileFold, prior never mutated), so the shared
+    // prior can't corrupt. Pinned by the concurrency test in
+    // test/transcript-incremental.test.ts.
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
     // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
     // throwing on a bad rate table or network hiccup inside foldFile) would
     // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
     // wrapped this; keep that guarantee by mapping any throw to `failed`.
-    let outcome: Outcome<{
-      files: Map<string, FileFold>;
-      sessionInfo: SessionInfo;
-      days: Map<string, DayUsage>;
-      mainMtime: number;
-    }>;
+    let refolded: {
+      prior: SessionRecord | undefined;
+      outcome: Outcome<{
+        files: Map<string, FileFold>;
+        sessionInfo: SessionInfo;
+        days: Map<string, DayUsage>;
+        mainStamp: string;
+      }>;
+    };
     try {
-      outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
-        this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
-      );
+      refolded = await this.flight.run(`${sessionId}:${stamp}`, async () => {
+        const prior = this.entries.get(sessionId);
+        return {
+          prior,
+          outcome: await this.refold(sessionId, transcriptPath, prior),
+        };
+      });
     } catch (error) {
       return failed(
         `usage refold (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    const { prior, outcome } = refolded;
     if (outcome.kind !== "ok") return outcome;
     const record: SessionRecord = {
       files: outcome.value.files,
       sessionInfo: outcome.value.sessionInfo,
       days: outcome.value.days,
-      transcriptMtime: outcome.value.mainMtime,
+      transcriptStamp: outcome.value.mainStamp,
       transcriptPath,
       lastSeenAt: Date.now(),
     };
+    // Something else landed first (another refold, a sweep): store nothing.
+    if (this.entries.get(sessionId) !== prior) return ok(record);
     this.entries.set(sessionId, record);
     return ok(record);
   }
@@ -608,7 +664,7 @@ export class SessionUsageStore {
       files: Map<string, FileFold>;
       sessionInfo: SessionInfo;
       days: Map<string, DayUsage>;
-      mainMtime: number;
+      mainStamp: string;
     }>
   > {
     // File set for this fold: the main transcript plus the session's current
@@ -622,7 +678,7 @@ export class SessionUsageStore {
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
     const newFiles = new Map<string, FileFold>();
-    let mainMtime = 0;
+    let mainStamp = "";
     for (const filePath of [transcriptPath, ...agentPaths]) {
       const priorFold = prior?.files.get(filePath);
       const read = await readAppendedEntries(filePath, priorFold?.cursor);
@@ -630,19 +686,26 @@ export class SessionUsageStore {
       if (read.kind === "absent") {
         // The file has no bytes yet (fresh main) or vanished (removed agent
         // sidechain). Carry a prior fold forward; otherwise it contributes
-        // nothing. The main transcript's absence leaves mainMtime 0, so the next
-        // render's mtime gate re-attempts rather than caching an empty read.
+        // nothing. The main transcript's absence leaves mainStamp empty, so the
+        // next render's stamp gate re-attempts rather than caching an empty read.
         if (priorFold) newFiles.set(filePath, priorFold);
         continue;
       }
       const { entries, cursor, reset } = read.value;
       newFiles.set(filePath, await foldFile(priorFold, reset, entries, cursor));
-      if (filePath === transcriptPath) mainMtime = cursor.mtimeMs;
+      if (filePath === transcriptPath) mainStamp = cursor.stamp;
     }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainMtime });
+    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
   }
 
-  private ensureSeeded(day: string, claudePaths: string[]): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] `atMs` is the render's instant: a
+  // rescan is due by the clock the render is drawn at, and the memo owns that
+  // at most one scan per directory set runs.
+  private ensureSeeded(
+    day: string,
+    claudePaths: string[],
+    atMs: number,
+  ): Promise<void> {
     // Drop other days' memos so the map holds only the current day's.
     if (this.seededDay !== day) {
       this.seeded.clear();
@@ -650,25 +713,64 @@ export class SessionUsageStore {
     }
     const key = claudePaths.join("\0");
     const existing = this.seeded.get(key);
-    if (existing) return existing;
-    const promise = this.seed(claudePaths);
-    this.seeded.set(key, promise);
-    promise.catch(() => {
-      if (this.seeded.get(key) === promise) this.seeded.delete(key);
-    });
-    return promise;
+    if (!existing) {
+      const done = this.seed(claudePaths, "seed");
+      const memo: DaySeed = { done, scanning: done, startedAtMs: atMs };
+      this.seeded.set(key, memo);
+      this.settle(key, memo, done);
+      return done;
+    }
+    if (
+      existing.scanning === undefined &&
+      atMs - existing.startedAtMs >= this.rescanIntervalMs
+    ) {
+      existing.startedAtMs = atMs;
+      existing.scanning = this.seed(claudePaths, "rescan");
+      this.settle(key, existing, existing.scanning);
+    }
+    return existing.done;
   }
 
-  // The one and only whole-tree scan: lazily, once per day and Claude Code
-  // directory, ingest every session whose transcript was touched recently
-  // enough to hold a today entry.
-  private async seed(claudePaths: string[]): Promise<void> {
+  // [LAW:no-silent-failure] A failed scan drops its memo, so the next render
+  // seeds afresh and awaits it — `today` is `failed` if that fails too, never
+  // a total silently frozen at the last scan that worked.
+  private settle(key: string, memo: DaySeed, scan: Promise<void>): void {
+    scan.then(
+      () => {
+        memo.scanning = undefined;
+      },
+      (error: unknown) => {
+        this.log(
+          "warn",
+          `usageStore scan: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        if (this.seeded.get(key) === memo) this.seeded.delete(key);
+      },
+    );
+  }
+
+  // Resolves once every scan in flight has settled, whatever its outcome.
+  async scanned(): Promise<void> {
+    await Promise.allSettled(
+      [...this.seeded.values()].map((memo) => memo.scanning),
+    );
+  }
+
+  // The one whole-tree scan, per day and Claude Code directory set: ingest
+  // every session whose transcript was touched recently enough to hold a today
+  // entry. A rescan is the same scan over warm records, so it costs a stat per
+  // transcript plus the bytes appended since the last one.
+  private async seed(
+    claudePaths: string[],
+    kind: "seed" | "rescan",
+  ): Promise<void> {
+    const startedMs = Date.now();
     const cutoff = seedCutoffMs();
     const projectPaths = await findProjectPaths(claudePaths);
     const candidates: Array<{
       sessionId: string;
       path: string;
-      mtime: number;
+      stamp: string;
     }> = [];
 
     for (const dir of projectPaths) {
@@ -681,17 +783,17 @@ export class SessionUsageStore {
       for (const file of files) {
         if (!file.endsWith(".jsonl")) continue;
         const filePath = join(dir, file);
-        let mtime: number;
+        let st: { mtimeMs: number; size: number };
         try {
-          mtime = (await gatedStat(filePath)).mtimeMs;
+          st = await gatedStat(filePath);
         } catch {
           continue;
         }
-        if (mtime < cutoff) continue;
+        if (st.mtimeMs < cutoff) continue;
         candidates.push({
           sessionId: file.slice(0, -".jsonl".length),
           path: filePath,
-          mtime,
+          stamp: stampOf(st),
         });
       }
     }
@@ -699,24 +801,28 @@ export class SessionUsageStore {
     // [LAW:no-silent-failure] The seed is its own effect edge (timer/lazy
     // driven, no render boundary to carry the outcome to), so its per-session
     // parse failures are logged here.
+    const tally: IngestTally = { hits: 0, misses: 0 };
     await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
-      const outcome = await this.ingest(c.sessionId, c.path, c.mtime);
+      const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
       if (outcome.kind === "failed") {
-        this.log("warn", `usageStore seed: ${outcome.reason}`);
+        this.log("warn", `usageStore ${kind}: ${outcome.reason}`);
       }
     });
-    this.seeds++;
+    // [LAW:nothing-unseen] `read` is how many of the sessions the scan had to
+    // read: over warm records, the ones that changed since the last scan.
     this.log(
       "info",
-      `usageStore seed sessions=${candidates.length} dirs=${claudePaths.join(",")}`,
+      `usageStore ${kind} sessions=${candidates.length} read=${tally.misses} dirs=${claudePaths.join(",")} ms=${Date.now() - startedMs}`,
     );
+    this.scans[kind]++;
   }
 
   // Public for tests; called periodically from the timer. Drops what nothing
   // reads any more: a session unseen for `staleAgeMs` holding no bucket for the
   // day `today` last summed. A stale record holding one is `held`, since
-  // `today` sums it — a seeded session is seen once a day, and a day can run
-  // past `staleAgeMs` (a 25-hour DST day).
+  // `today` sums it — a session whose transcript the scans have stopped
+  // visiting is seen no more, and a day can run past `staleAgeMs` (a 25-hour
+  // DST day).
   // [LAW:one-source-of-truth] That day is `seededDay`, taken from the render's
   // instant, not this timer's clock: which day counts is the projection's.
   sweepStale(): number {

@@ -11,7 +11,7 @@
 // zero transcript fs work while the active session is unchanged. async_hooks
 // counts FSREQPROMISE inits deterministically.
 //
-// (statMtimeMs on the hot path is fs.statSync — synchronous, so it inits no
+// (statStamp on the hot path is fs.statSync — synchronous, so it inits no
 // FSREQPROMISE. That is the point: the per-render freshness check is a sync
 // single-file stat, not an async whole-tree sweep.)
 
@@ -22,6 +22,7 @@ import {
   writeFileSync,
   rmSync,
   utimesSync,
+  appendFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -367,6 +368,117 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     } finally {
       store.close();
       rmSync(many, { recursive: true, force: true });
+    }
+  });
+
+  // brandon-unfiled-3248.7xp: a session that never renders (headless
+  // `claude -p`, the Agent SDK) reaches `today` through the next rescan, both
+  // one that started after the day's seed and one the seed saw that kept going
+  // — the latter appending inside the mtime tick of the seed's read, as on a
+  // coarse-timestamp filesystem, so only its size says it moved.
+  test("today counts never-rendering sessions' work by the next rescan", async () => {
+    clearParseCache();
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-"));
+    const RESCAN_MS = 60_000;
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      rescanIntervalMs: RESCAN_MS,
+      logger: (level, msg) => lines.push(`${level} ${msg}`),
+    });
+    try {
+      const pdir = join(tree, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      const active = join(pdir, "active.jsonl");
+      const ongoing = join(pdir, "ongoing.jsonl");
+      // Local noon: every render below falls on one day, whenever this runs.
+      const noon = new Date();
+      noon.setHours(12, 0, 0, 0);
+      writeFileSync(active, usageLine("active", noon, 1));
+      writeFileSync(ongoing, usageLine("ongoing-0", noon, 2));
+      const tick = new Date(Math.floor(Date.now() / 1000) * 1000);
+      utimesSync(ongoing, tick, tick);
+      const t0 = noon.getTime();
+      const render = (afterMs: number) =>
+        store.getTodayInfo(hook("active", active), tree, instantOf(new Date(t0 + afterMs)));
+      const cost = async (afterMs: number) => {
+        const info = await render(afterMs);
+        return info.kind === "ok" ? info.value.cost : info.kind;
+      };
+
+      expect(await cost(0)).toBeCloseTo(3, 5);
+      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
+      appendFileSync(ongoing, usageLine("ongoing-1", noon, 8));
+      utimesSync(ongoing, tick, tick);
+
+      // Inside the interval nothing is rescanned.
+      expect(await cost(RESCAN_MS - 1)).toBeCloseTo(3, 5);
+      await store.scanned();
+      expect(await cost(RESCAN_MS - 1)).toBeCloseTo(3, 5);
+      expect(store.getStats()).toMatchObject({ seeds: 1, rescans: 0 });
+
+      // The first render past it starts one rescan in the background; a render
+      // while it runs starts no second one, even an interval later (both calls
+      // reach the memo before the rescan's first fs op); once it settles both
+      // sessions count.
+      await Promise.all([render(RESCAN_MS), render(2 * RESCAN_MS)]);
+      await store.scanned();
+      expect(store.getStats()).toMatchObject({ seeds: 1, rescans: 1 });
+      expect(await cost(2 * RESCAN_MS)).toBeCloseTo(15, 5);
+      // The rescan read the two sessions that moved, and its reads are not
+      // the renders' cache misses.
+      expect(lines.filter((l) => l.includes("usageStore rescan"))).toEqual([
+        expect.stringMatching(/^info usageStore rescan sessions=3 read=2 dirs=\S+ ms=\d+$/),
+      ]);
+      expect(store.getStats()).toMatchObject({ misses: 0 });
+    } finally {
+      store.close();
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  // A scan that throws drops its memo, so the next render seeds afresh and
+  // awaits it rather than summing over a tree nothing is rescanning.
+  test("a failed rescan is logged and the next render seeds afresh", async () => {
+    clearParseCache();
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-fail-"));
+    const lines: string[] = [];
+    let failNextRescan = true;
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      rescanIntervalMs: 1,
+      logger: (level, msg) => {
+        if (failNextRescan && msg.startsWith("usageStore rescan ")) {
+          failNextRescan = false;
+          throw new Error("scan broke");
+        }
+        lines.push(`${level} ${msg}`);
+      },
+    });
+    try {
+      const pdir = join(tree, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      const active = join(pdir, "active.jsonl");
+      const noon = new Date();
+      noon.setHours(12, 0, 0, 0);
+      writeFileSync(active, usageLine("active", noon, 1));
+      const render = (afterMs: number) =>
+        store.getTodayInfo(hook("active", active), tree, instantOf(new Date(noon.getTime() + afterMs)));
+
+      await render(0);
+      await render(1);
+      await store.scanned();
+      expect(lines).toContain("warn usageStore scan: scan broke");
+      expect(store.getStats()).toMatchObject({ seeds: 1, rescans: 0 });
+
+      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
+      const info = await render(2);
+      expect(info.kind === "ok" ? info.value.cost : info.kind).toBeCloseTo(5, 5);
+      expect(store.getStats()).toMatchObject({ seeds: 2, rescans: 0 });
+    } finally {
+      await store.scanned();
+      store.close();
+      rmSync(tree, { recursive: true, force: true });
     }
   });
 

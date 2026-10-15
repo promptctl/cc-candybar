@@ -227,14 +227,14 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     expect(incInfo.value.session.tokens).toBe(1000 + 200); // inputs + outputs
   });
 
-  test("concurrent different-mtime refolds do not double-count (last-writer-wins is consistent)", async () => {
-    // The race the reviewer flagged: two renders observing DIFFERENT mtimes hit
-    // different SingleFlight keys, both read the same prior, and last-writer-wins.
-    // The invariant that makes it safe: `refold` writes the byte cursor and the
-    // fold as one atomic pair, so whoever wins leaves a consistent (cursor, fold)
-    // covering exactly [0, cursor); the next ingest extends from there. This test
-    // pins the OBSERVABLE consequence — no matter which racer wins, a final read
-    // equals a from-scratch read of the same file (a double-count would exceed it).
+  test("concurrent different-stamp refolds do not double-count (the first to land wins)", async () => {
+    // Two renders observing DIFFERENT stamps hit different SingleFlight keys
+    // and both read the same prior. The commit is a compare-and-set on that
+    // prior, so whichever lands first is stored and the other is not; and
+    // `refold` writes the byte cursor and the fold as one pair covering exactly
+    // [0, cursor), so the next ingest extends from there. This test pins the
+    // OBSERVABLE consequence — no matter which racer lands, a final read equals
+    // a from-scratch read of the same file (a double-count would exceed it).
     const t = join(dir, "R.jsonl");
     const l1 = line(new Date(), 0.01, 100, 20);
     const l2 = line(new Date(), 0.02, 200, 40);

@@ -11,18 +11,27 @@ import { ABSENT, failed, ok, type Outcome } from "./outcome";
 import { debug } from "./logger";
 
 // [LAW:single-enforcer] The one per-render freshness probe: a SYNC single-file
-// stat's mtimeMs (0 when the file is absent or unreadable). Sync by design — the
-// mtime gate must resolve before deciding whether to read, and a sync stat
-// consumes no gate slot (the async `readAppended`/`readFile` bulk reads are what
-// the limiter bounds). Both the usage store and the metrics provider key their
-// incremental fold off this one helper so the ENOENT→0 policy lives in one place.
-export function statMtimeMs(filePath: string | undefined): number {
-  if (!filePath) return 0;
+// stat's stamp ("" when the file is absent or unreadable). Sync by design — the
+// gate must resolve before deciding whether to read, and a sync stat consumes
+// no gate slot (the async `readAppended`/`readFile` bulk reads are what the
+// limiter bounds). Both the usage store and the metrics provider key their
+// incremental fold off this one helper so the ENOENT→"" policy lives in one place.
+export function statStamp(filePath: string | undefined): string {
+  if (!filePath) return "";
   try {
-    return statSync(filePath).mtimeMs;
+    return stampOf(statSync(filePath));
   } catch {
-    return 0;
+    return "";
   }
+}
+
+// [LAW:one-source-of-truth] A transcript's version as stat reports it,
+// `mtimeMs:size` like the git config stamp: an append that lands inside the
+// mtime tick of the read before it (a coarse-timestamp filesystem) moves only
+// the size, and an mtime alone would then call the file unchanged for good —
+// for a session that never renders, nothing else would ever read that tail.
+export function stampOf(st: { mtimeMs: number; size: number }): string {
+  return `${st.mtimeMs}:${st.size}`;
 }
 
 // [LAW:single-enforcer] One owner of the transcript-scanning in-flight-I/O
@@ -160,7 +169,7 @@ export async function readAppended(
     buf: Buffer;
     start: number;
     size: number;
-    mtimeMs: number;
+    stamp: string;
     ino: number;
     reset: boolean;
   }>
@@ -169,7 +178,9 @@ export async function readAppended(
     let fh: FileHandle | null = null;
     try {
       fh = await fsOpen(path, "r");
-      const { size, mtimeMs, ino } = await fh.stat();
+      const st = await fh.stat();
+      const { size, ino } = st;
+      const stamp = stampOf(st);
       // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
       // only while the file stays append-only. Two independent signals break
       // that: the inode changed (a rename-based /compact or log rotation swapped
@@ -182,7 +193,7 @@ export async function readAppended(
         prior !== undefined && (ino !== prior.ino || size < prior.offset);
       const start = reset || prior === undefined ? 0 : prior.offset;
       if (start >= size) {
-        return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, ino, reset });
+        return ok({ buf: Buffer.alloc(0), start, size, stamp, ino, reset });
       }
       const buf = Buffer.alloc(size - start);
       // [LAW:no-silent-failure] A single read may return short — parsing a
@@ -204,7 +215,7 @@ export async function readAppended(
         buf: off === buf.length ? buf : buf.subarray(0, off),
         start,
         size,
-        mtimeMs,
+        stamp,
         ino,
         reset,
       });

@@ -87,19 +87,17 @@ test("a rewrite that shrinks the file re-folds from zero, not onto the prior val
   expect(await valueOf(fold, "s", path)).toBe(1);
 });
 
-test("an unchanged mtime is not re-read, and the prior value stands", async () => {
+test("an append inside the mtime tick of the last read is still read", async () => {
   const path = join(dir, "c.jsonl");
   write(path, line("one"));
   const fold = counting();
   expect(await valueOf(fold, "s", path)).toBe(1);
-  // The mtime IS the freshness signal, so grow the file and put the timestamp
-  // back where the fold last saw it: the fast path must answer from the prior
-  // value. (A fold that re-read here would splice the new line onto a value that
-  // already had it — the double-count the cursor+mtime pair exists to prevent.)
+  // A coarse-timestamp filesystem leaves the mtime where the last read saw it;
+  // the size still moves, and the stamp carries it.
   const before = statSync(path).mtime;
   appendFileSync(path, line("two") + "\n");
   utimesSync(path, before, before);
-  expect(await valueOf(fold, "s", path)).toBe(1);
+  expect(await valueOf(fold, "s", path)).toBe(2);
 });
 
 test("a session with no transcript is a real zero, never a failure", async () => {
