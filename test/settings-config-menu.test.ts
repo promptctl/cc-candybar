@@ -1191,3 +1191,170 @@ describe("the preset action", () => {
     ).toThrow(message);
   });
 });
+
+// [LAW:verifiable-goals] candybar-theme-colours-6fq5.ix8: `⤓ default for
+// <theme>` in the 🎨 look tab saves the look the session draws as the active
+// theme's default. Found in the rendered bar and dispatched through the real
+// verb table; every assertion on the file is on its exact bytes.
+const THEMED = `{
+  globals: { palette: 'nord' },
+  themeDefaults: {
+    nord: { variation: 'duo' },
+    dracula: { shade: 'brightest' },
+  },
+}`;
+
+const THEMED_SAVED = `{
+  globals: { palette: 'nord' },
+  themeDefaults: {
+    nord: {
+      shade: "deepest",
+      variation: "duo",
+      style: "dim",
+    },
+    dracula: { shade: 'brightest' },
+  },
+}`;
+
+describe("a theme's default look, set from the bar", () => {
+  let r: ReturnType<typeof rig>;
+  let durable: DurableConfig;
+
+  const SAVE_LABEL = "⤓ default for nord";
+  const link = (text: string): string | undefined =>
+    links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
+  const pick = (picks: Record<string, string>): void => {
+    for (const [k, v] of Object.entries(picks)) r.sessionState.set(SID, k, v);
+  };
+  const look = () => {
+    const e = resolveEffectiveGlobals(
+      r.config,
+      (key) => r.sessionState.get(SID, key),
+      () => false,
+    );
+    return [e.shade, e.variation, e.style.kind === "decided" ? e.style.name : "(rule)"];
+  };
+  // The door, then the 🎨 look tab.
+  function start(source: string): void {
+    durable = durableConfig("cc-candybar-theme-default-");
+    r = rig(source, durable);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    showTab(r, "look");
+  }
+  afterEach(() => {
+    r.dispose();
+    durable.dispose();
+  });
+
+  test("a pick equal to the theme's default is no draft, and picking a theme drafts only the theme", () => {
+    start(THEMED);
+    pick({ variation: "duo" });
+    expect(plain(r.render())).not.toContain("💾 save");
+    // dracula's own default shade comes with it: the theme is the one draft.
+    r.sessionState.clear(SID, "variation");
+    pick({ theme: "dracula" });
+    expect(plain(r.render())).toContain("💾 save 1");
+    pick({ shade: "brightest" });
+    expect(plain(r.render())).toContain("💾 save 1");
+    pick({ shade: "deepest" });
+    expect(plain(r.render())).toContain("💾 save 2");
+  });
+
+  test("the control shows exactly while the look differs from the theme's default", () => {
+    start(THEMED);
+    expect(plain(r.render())).not.toContain("⤓ default");
+    pick({ variation: "duo" });
+    expect(plain(r.render())).not.toContain("⤓ default");
+    pick({ shade: "deepest" });
+    expect(plain(r.render())).toContain(SAVE_LABEL);
+    // Named after the theme the bar wears.
+    pick({ theme: "dracula" });
+    expect(plain(r.render())).toContain("⤓ default for dracula");
+  });
+
+  test("the click writes the look into themeDefaults.<theme>, reloads, then releases the picks", () => {
+    start(THEMED);
+    pick({ shade: "deepest", style: "dim" });
+    r.click(link(SAVE_LABEL)!);
+
+    expect(durable.text()).toBe(THEMED_SAVED);
+    // Reloaded once, while the session still held its picks.
+    expect(r.reloads).toEqual([
+      { text: THEMED_SAVED, picks: { theme: null, style: "dim", padding: null } },
+    ]);
+    for (const key of ["shade", "variation", "style"]) {
+      expect(r.sessionState.get(SID, key)).toBeNull();
+    }
+    // The theme's default now draws what the picks did, and nothing is left
+    // to save or to set as the default.
+    expect(look()).toEqual(["deepest", "duo", "dim"]);
+    const out = plain(r.render());
+    expect(out).not.toContain("⤓ default");
+    expect(out).not.toContain("💾 save");
+    expect(r.logs).toContainEqual(
+      `save-theme-default: nord shade=deepest variation=duo style=dim → ${durable.configPath} (session=${SID})`,
+    );
+  });
+
+  test("a pick the user's own globals still outrank is saved, and kept, so the bar does not move", () => {
+    const source = `{
+  globals: { palette: 'nord', shade: 'brighter' },
+}`;
+    start(source);
+    pick({ shade: "deepest" });
+    r.click(link(SAVE_LABEL)!);
+    expect(durable.parsed().themeDefaults).toEqual({
+      nord: { shade: "deepest", variation: "accent", style: "none" },
+    });
+    // globals.shade outranks the theme's default, so the pick is still a
+    // draft and still held; the others the file now draws are released.
+    expect(r.sessionState.get(SID, "shade")).toBe("deepest");
+    expect(look()).toEqual(["deepest", "accent", "none"]);
+    expect(plain(r.render())).toContain("💾 save 1");
+  });
+
+  test("the click is one undo step, restoring the exact bytes and picks", () => {
+    start(THEMED);
+    pick({ shade: "deepest", style: "dim" });
+    r.click(link(SAVE_LABEL)!);
+    r.click(link("↶")!);
+    expect(durable.text()).toBe(THEMED);
+    expect(
+      ["shade", "variation", "style"].map((k) => r.sessionState.get(SID, k)),
+    ).toEqual(["deepest", null, "dim"]);
+  });
+
+  test("under a theme chosen by a rule there is no name to save: no control, and the click refuses", () => {
+    const source = `{
+  globals: { palette: '{{ if true }}nord{{ end }}' },
+}`;
+    start(source);
+    pick({ shade: "deepest" });
+    expect(plain(r.render())).not.toContain("⤓ default");
+    // The click a stale or hand-built URL could still carry.
+    expect(() => r.click(`cc-candybar://save-theme-default/${SID}`)).toThrow(
+      "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
+    );
+    expect(durable.text()).toBe(source);
+    expect(r.sessionState.get(SID, "shade")).toBe("deepest");
+  });
+});
+
+describe("the themeDefault action", () => {
+  test.each([
+    [{ themeDefault: "load" }, 'themeDefault must be "save"'],
+    [
+      { themeDefault: "save", theme: "nord" },
+      'Unknown key "theme" on a themeDefault action. Expected only: themeDefault',
+    ],
+  ])("%j is refused at load", (action, message) => {
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        JSON.stringify({ actions: { a: action } }),
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      ),
+    ).toThrow(message);
+  });
+});
