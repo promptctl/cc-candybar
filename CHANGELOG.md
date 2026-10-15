@@ -1,3 +1,10 @@
+## [1.127.2](https://github.com/promptctl/cc-candybar/compare/v1.127.1...v1.127.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **daemon:** a render's log line names every warning its strip carried ([#335](https://github.com/promptctl/cc-candybar/issues/335)) ([424ef65](https://github.com/promptctl/cc-candybar/commit/424ef656df273978a1a9f770c9e5d3c6f7794b89))
+
 ## [1.127.1](https://github.com/promptctl/cc-candybar/compare/v1.127.0...v1.127.1) (2026-10-15)
 
 
