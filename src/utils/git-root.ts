@@ -26,3 +26,18 @@ export function gitRootOf(start: string): string | undefined {
     dir = parent;
   }
 }
+
+// The checkout a working directory is in: its git root, or — a directory in
+// no checkout — the directory itself, with which of the two it was kept, so a
+// load can say why a data path landed where it did.
+export interface Checkout {
+  readonly root: string;
+  readonly git: boolean;
+}
+
+export function checkoutOf(cwd: string): Checkout {
+  const root = gitRootOf(cwd);
+  return root === undefined
+    ? { root: path.resolve(cwd), git: false }
+    : { root, git: true };
+}

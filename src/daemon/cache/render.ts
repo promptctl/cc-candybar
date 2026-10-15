@@ -168,15 +168,20 @@ export interface ConfigChain {
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, the data file each
-// merged one reads (a `{ checkout }` path is resolved from the session's
-// working directory, so which file it named is said here), and which it
-// dropped: a drop is also on the strip, but the merged set is said nowhere
-// else. The daemon's own sink — buildRenderState is shared with the demo.
+// merged one reads, the checkout a `{ checkout }` path resolved against —
+// `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
+// session — and which it dropped: a drop is also on the strip, but the rest is
+// said nowhere else. The daemon's own sink — buildRenderState is shared with
+// the demo.
 export function pluginLoadLine(
   layers: readonly string[],
   { plugins, config }: Pick<DslRenderState, "plugins" | "config">,
 ): string {
-  const { loaded, dropped, unreached } = plugins;
+  const { checkout, loaded, dropped, unreached } = plugins;
+  const checkoutField =
+    checkout === null
+      ? "-"
+      : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
   const dataOf = (definition: string): string => {
     const name = pluginNameOf(definition);
     const data =
@@ -184,7 +189,7 @@ export function pluginLoadLine(
     return data?.kind === "file" ? data.path : "none";
   };
   return (
-    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length}` +
+    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
@@ -441,6 +446,7 @@ export function buildRenderState(
       ).values(),
     ],
     plugins: {
+      checkout: installed.checkout,
       roots: installed.roots,
       // What renders, as the loader decided it: a nearer layer's load or
       // drop replaces a farther one's of the same name.

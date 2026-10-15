@@ -448,10 +448,13 @@ describe("an installed plugin", () => {
       expect(loaded.error).toBeNull();
       const data = path.join(dir, "main/.claude/worktrees/w/.lit/state.json");
       expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
-      // [LAW:nothing-unseen] The daemon's load line names the file it read.
-      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+      // [LAW:nothing-unseen] The daemon's load line names the file it read,
+      // and the checkout it resolved against.
+      const line = pluginLoadLine(loaded.layers, loaded.state!);
+      expect(line).toContain(
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
+      expect(line).toContain(` checkout=git:${path.join(dir, "main/.claude/worktrees/w")} `);
       loaded.state?.registry.dispose();
     } finally {
       gitService.close();
@@ -463,6 +466,34 @@ describe("an installed plugin", () => {
     write("loose/.lit/state.json", `{ "id": "l-3" }`);
     const p = placing("plugins.lit.ticket");
     expect(clean(await checkConfig(p, path.join(dir, "loose"))).rendered).toContain("#l-3");
+  });
+
+  // The installed layer is memoised; a `.git` appearing above a directory
+  // moves the checkout its data resolves against, and the next load sees it.
+  test("a checkout created above a directory moves its data on the next load", () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
+    const p = placing("plugins.lit.ticket");
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const load = (): string => {
+      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
+        gitService,
+        sessionState: new SessionState(),
+      });
+      loaded.state?.registry.dispose();
+      return pluginLoadLine(loaded.layers, loaded.state!);
+    };
+    try {
+      const before = load();
+      expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
+      expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
+      fs.mkdirSync(path.join(dir, "outer/.git"));
+      const after = load();
+      expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
+      expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
+    } finally {
+      gitService.close();
+    }
   });
 
   test("a nearer root replaces a farther one's plugin of the same name, whole", async () => {
@@ -694,6 +725,12 @@ describe("an installed plugin", () => {
       expect(fatal(await checkConfig(p, dir))).toContain("must be a path inside the checkout");
     },
   );
+
+  test("data: { project }, the field's spelling before { checkout }, is refused pointing at checkout", async () => {
+    write("x/plugin.json5", `{ data: { project: ".lit/candybar.json" }, segments: {} }`);
+    const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
+    expect(fatal(await checkConfig(p, dir))).toContain("data: { project } is now data: { checkout }");
+  });
 
   test("a file directly in a root is a drop naming where it belongs; a dot-file is nothing", async () => {
     write("data/cc-candybar/plugins/deploy.json5", "{}");

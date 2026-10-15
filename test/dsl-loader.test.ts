@@ -1198,7 +1198,9 @@ describe("loadDslConfig — renamed built-in segment", () => {
   test("the retired lit ticket points at lit's plugin segment", () => {
     expect(() =>
       validateAgainstDefault(`{ root: { h: ["directory", "ticket"] } }`),
-    ).toThrow(/the built-in segment "ticket" was renamed to "plugins.lit.ticket"/);
+    ).toThrow(
+      /the built-in segment "ticket" became "plugins.lit.ticket", a segment of the plugin in cc-candybar's examples\/plugins\/lit — install that folder in a plugin root/,
+    );
   });
 
   // [LAW:single-enforcer] The pointer rides every path an old name can be
