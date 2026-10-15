@@ -38,12 +38,8 @@ import {
 } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import {
-  ADD_GLYPH,
-  EDIT_LIVE_DISPLAY,
-  REMOVE_GLYPH,
-  CONFIGURE_GLYPH,
-} from "../src/config/edit-chrome";
+import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
+import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { instantOf } from "../src/utils/instant";
 
 const SID = "s-help";

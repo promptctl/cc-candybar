@@ -1040,13 +1040,13 @@ synthesizes:
   and each segment is one row of its name and `description:`, the whole row the
   click that inserts it. A segment declaring no `group:` stands under `other`,
   plus one `✚` leading each run — so N segments
-  in a row read `✚ [✖ seg1⚙️] ✚ [✖ seg2⚙️] ✚ … [✖ segN⚙️] ✚`. Every affordance is gated on edit
+  in a row read `✚ [✖ seg1🔧] ✚ [✖ seg2🔧] ✚ … [✖ segN🔧] ✚`. Every affordance is gated on edit
   mode being `arrange` — the same disclosure predicate a group body or a
   `{{ menu }}` gates on, over the `edit.mode` key — so each is invisible
   until the toggle opens, and present in the compiled tree either way.
-- Every placement also carries a `⚙️` closing its cell — every placement has
+- Every placement also carries a `🔧` closing its cell — every placement has
   at least the `theme` setting. Clicking it writes `<preset>:<id>` to `edit.configure`, which
-  hangs one control per setting below that placement (the `✚`/`✖`/`⚙️` chrome
+  hangs one control per setting below that placement (the `✚`/`✖`/`🔧` chrome
   stays, and the bar shows live output so a setting's effect is visible) — shown, with every row holding it, whatever their `when`
   says, so a setting that hides its own placement can be turned back; the
   controls write unsaved values that `💾 save` writes into the placement
@@ -1058,7 +1058,7 @@ synthesizes:
   found and removed. `☐ live` (the `edit.live` toggle, on the row above the
   bar) puts the live output back; a segment with no cell right now —
   hidden, or rendering nothing — then has no `✖` either, so find it in the
-  names view (a failing segment keeps its `✖` and `⚙️` on its `⚠` cell).
+  names view (a failing segment keeps its `✖` and `🔧` on its `⚠` cell).
 - A row above the bar, led by the ways out, so they are found without reopening
   the menu edit mode was entered from: `✓ save` (`✓ done` while there is
   nothing to keep) writes this session's unsaved settings — a placement's

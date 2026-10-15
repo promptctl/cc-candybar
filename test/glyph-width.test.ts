@@ -7,8 +7,10 @@
 // emoji's two, and the slider U+1F39A was replaced (#325) because its VS16
 // form is honoured unevenly. So a pictograph above U+1F000 anywhere in src/
 // is a default emoji, which rich-js measures two cells, as terminals draw it.
-// This scans source text, comments included: name a refused glyph by its
-// code point.
+// And no glyph carries VS16 (U+FE0F): rich-js measures the selected form two
+// cells, and a terminal that ignores the selector draws one — the edit-mode
+// gear U+2699 (dsz). This scans source text, comments included: name a
+// refused glyph by its code point.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -30,20 +32,27 @@ interface Found {
   readonly glyph: string;
 }
 
-const pictographs: readonly Found[] = sourceFiles(SRC).flatMap((file) =>
+const lines = sourceFiles(SRC).flatMap((file) =>
   fs
     .readFileSync(file, "utf8")
     .split("\n")
-    .flatMap((line, index) =>
-      [...line.matchAll(/\p{Extended_Pictographic}/gu)]
-        .map(([glyph]) => glyph)
-        .filter((glyph) => glyph.codePointAt(0)! >= SUPPLEMENTARY)
-        .map((glyph) => ({
-          where: `${path.relative(SRC, file)}:${index + 1}`,
-          glyph,
-        })),
-    ),
+    .map((text, index) => ({
+      where: `${path.relative(SRC, file)}:${index + 1}`,
+      text,
+    })),
 );
+
+const scan = (pattern: RegExp): readonly Found[] =>
+  lines.flatMap(({ where, text }) =>
+    [...text.matchAll(pattern)].map(([glyph]) => ({ where, glyph })),
+  );
+
+const pictographs = scan(/\p{Extended_Pictographic}/gu).filter(
+  ({ glyph }) => glyph.codePointAt(0)! >= SUPPLEMENTARY,
+);
+
+// Each VS16 with the glyph it selects, so the label names the glyph.
+const selected = scan(/.\uFE0F/gu);
 
 const label = ({ where, glyph }: Found): string =>
   `${where} U+${glyph.codePointAt(0)!.toString(16).toUpperCase()} ${glyph}`;
@@ -67,5 +76,11 @@ describe("pictographs above U+1F000 in src/", () => {
       ({ glyph }) => new RichText(glyph).cellLength !== 2,
     );
     expect(narrow.map(label)).toEqual([]);
+  });
+});
+
+describe("variation selectors in src/", () => {
+  test("no glyph is two cells only through VS16", () => {
+    expect(selected.map(label)).toEqual([]);
   });
 });

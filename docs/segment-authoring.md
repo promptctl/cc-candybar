@@ -660,7 +660,7 @@ reads either as `.settings.theme` / `.settings.effect` like any other setting.
 ```
 
 A setting is also changeable from the bar. In edit mode every placement
-carries a `⚙️` after its name (every placement has `theme` and `effect`); clicking it
+carries a `🔧` after its name (every placement has `theme` and `effect`); clicking it
 configures that one placement: the `+`/`-` chrome goes away and one control
 per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
 list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel
