@@ -1150,7 +1150,8 @@
                 "enum": [
                   "config",
                   "urlHandler",
-                  "tmuxTruecolor"
+                  "tmuxTruecolor",
+                  "effectRefresh"
                 ]
               }
             },

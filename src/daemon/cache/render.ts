@@ -523,6 +523,21 @@ export function loadFromDisk(
   };
 }
 
+// [LAW:single-enforcer] What a config that fails its FIRST load renders: the
+// bundled default. The render cache seeds an entry with it, and
+// `cc-candybar doctor`, which has no cache, reads the same bar from it. The
+// seed's own advisories go nowhere: the strip already carries the failed
+// load's, and the default earns none by program invariant.
+export function fallbackState(
+  cwd: string,
+  projectDir: string,
+  deps: StateDeps,
+): DslRenderState {
+  // The entry's own project: the seed watches its repo's plugin root, so a
+  // plugin installed there after the failed load reloads.
+  return buildRenderState(cwd, { layers: [], home: "", projectDir }, [], deps);
+}
+
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private readonly deps: RenderDeps;
@@ -573,18 +588,7 @@ export class RenderCache {
       failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      // The seed's own advisories go nowhere: the strip already carries the
-      // failed load's, and the default earns none by program invariant.
-      state:
-        loaded.state ??
-        buildRenderState(
-          cwd,
-          // The entry's own project: the seed watches its repo's plugin
-          // root, so a plugin installed there after the failed load reloads.
-          { layers: [], home: "", projectDir },
-          [],
-          this.deps,
-        ),
+      state: loaded.state ?? fallbackState(cwd, projectDir, this.deps),
       watcher: null,
       watcherKey: null,
     };

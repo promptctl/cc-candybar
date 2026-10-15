@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 
@@ -89,27 +90,43 @@ export type UrlHandlerFacts =
       readonly opener: Asked<HandlerApp | null>;
     };
 
+// [LAW:types-are-the-program] The `statusLine` entry of the settings file.
+// Absent is its own arm, not an empty object: a fix may only add a key beside
+// a command that is already there, because a `statusLine` holding nothing but
+// a refresh interval is one Claude Code cannot run. `refreshInterval` is raw —
+// whatever the file holds; a probe decides what it means.
+export type StatusLineFacts =
+  | { readonly kind: "absent" }
+  | { readonly kind: "present"; readonly refreshInterval: unknown };
+
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
-  // The session's Claude Code settings file and the `env` block read from it
-  // — a second, daemon-observable fact beside the client-observed env, so a
+  // The effect the session's bar wears, resolved as its render resolves it
+  // (session pick over config default over the floor). A rule stays a rule:
+  // only the render can say what it names.
+  readonly effect: EffectSelection;
+  // The session's Claude Code settings file and the entries read from it — a
+  // second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
   // has not restarted, naming the file it landed in.
   readonly claudeSettings: {
     readonly path: string;
     readonly env: Readonly<Record<string, unknown>>;
+    readonly statusLine: StatusLineFacts;
   };
 }
 
 // [LAW:types-are-the-program] A fix is a DESCRIPTION of an edit the edge
 // performs, discriminated by kind so a second repair shape is one more arm
 // here and one more case at the edge, never a callback smuggled in a verdict.
+// Every fix so far sets one value at one key path in the session's Claude Code
+// settings file, so a new entry to repair is a new value of this arm.
 export interface Fix {
-  readonly kind: "claude-settings-env";
-  readonly name: string;
-  readonly value: string;
+  readonly kind: "claude-settings";
+  readonly path: readonly [string, ...string[]];
+  readonly value: string | number;
 }
 
 // A check never has a third state: the reason string and the optional fix
@@ -192,8 +209,8 @@ const tmuxTruecolor: Check = {
           ok: false,
           reason: "Claude Code renders the bar in 256 colours inside tmux",
           fix: {
-            kind: "claude-settings-env",
-            name: TMUX_TRUECOLOR_VAR,
+            kind: "claude-settings",
+            path: ["env", TMUX_TRUECOLOR_VAR],
             value: "1",
           },
         };
@@ -294,7 +311,63 @@ const urlHandler: Check = {
   },
 };
 
-export const CHECKS: readonly Check[] = [config, urlHandler, tmuxTruecolor];
+// Claude Code's fastest statusline cadence, in seconds (`refreshInterval`'s
+// minimum; design-docs/ANTHROPIC-STATUSLINE-DOCS.md) — the frame rate every
+// effect curve is tuned for.
+export const EFFECT_REFRESH_INTERVAL = 1;
+
+// "A bar that moves is redrawn every second" (brandon-effects-2gka.21e).
+// Without `refreshInterval` Claude Code runs the statusline only on events, so
+// an effect's frames land seconds apart and an idle session stops moving.
+// `cc-candybar install` does not write it — a render a second costs every
+// session whether or not anything animates — so the doctor asks for it exactly
+// when the bar wears an effect. A rule counts: it can turn one on at any render.
+const effectRefresh: Check = {
+  name: "effectRefresh",
+  label: "effect refresh",
+  probe: ({ effect, claudeSettings }) => {
+    if (effect.kind === "decided" && effect.value === EFFECT_FLOOR) {
+      return { ok: true };
+    }
+    const wearing =
+      effect.kind === "decided"
+        ? `the bar wears the ${effect.name} effect`
+        : "a globals.effect rule can give the bar an effect";
+    const { path, statusLine } = claudeSettings;
+    if (statusLine.kind === "absent") {
+      return {
+        ok: false,
+        reason: `${wearing}, and ${path} sets no statusLine — set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside the statusLine command that runs the bar`,
+      };
+    }
+    // [LAW:one-source-of-truth] Claude Code's own reading: a number of
+    // seconds. Anything else — absent, a string — runs on events only, and
+    // the fix overwrites it.
+    const interval = statusLine.refreshInterval;
+    if (typeof interval === "number" && interval <= EFFECT_REFRESH_INTERVAL) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      reason:
+        typeof interval === "number"
+          ? `${wearing}, but Claude Code redraws it only every ${interval} s`
+          : `${wearing}, but Claude Code redraws it only on events`,
+      fix: {
+        kind: "claude-settings",
+        path: ["statusLine", "refreshInterval"],
+        value: EFFECT_REFRESH_INTERVAL,
+      },
+    };
+  },
+};
+
+export const CHECKS: readonly Check[] = [
+  config,
+  urlHandler,
+  tmuxTruecolor,
+  effectRefresh,
+];
 
 // [LAW:single-enforcer] THE fold. The bar's 🩺 click and `cc-candybar doctor`
 // both call this over facts their own edge gathered, so the two surfaces

@@ -9,9 +9,11 @@ import {
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
   type DoctorFacts,
+  type StatusLineFacts,
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
+import type { EffectSelection } from "../src/themes/policy";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 
@@ -31,15 +33,21 @@ const LOADED: ConfigFacts = {
   unused: [],
 };
 
+const SETTINGS_PATH = "/home/u/.claude/settings.json";
+const STILL: EffectSelection = { kind: "decided", name: "none", value: "none" };
+
 const facts = (
   tmux: TmuxFacts,
   env: Record<string, unknown> = {},
   config: ConfigFacts = LOADED,
+  effect: EffectSelection = STILL,
+  statusLine: StatusLineFacts = { kind: "present", refreshInterval: undefined },
 ): DoctorFacts => ({
   tmux,
   config,
+  effect,
   urlHandler: { kind: "unsupported" },
-  claudeSettings: { path: "/home/u/.claude/settings.json", env },
+  claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 
 const probe = checkByName("tmuxTruecolor")!.probe;
@@ -62,8 +70,8 @@ describe("tmuxTruecolor probe", () => {
     expect(v.ok).toBe(false);
     if (v.ok) return;
     expect(v.fix).toEqual({
-      kind: "claude-settings-env",
-      name: TMUX_TRUECOLOR_VAR,
+      kind: "claude-settings",
+      path: ["env", TMUX_TRUECOLOR_VAR],
       value: "1",
     });
     expect(v.reason).toMatch(/256 colours/);
@@ -227,6 +235,91 @@ describe("config probe", () => {
       ["config", true],
       ["urlHandler", true],
       ["tmuxTruecolor", true],
+      ["effectRefresh", true],
     ]);
+  });
+});
+
+// brandon-effects-2gka.21e: a bar that moves needs Claude Code to redraw it
+// every second.
+describe("effectRefresh probe", () => {
+  const SHIMMER: EffectSelection = {
+    kind: "decided",
+    name: "shimmer",
+    value: "shimmer",
+  };
+  const RULE: EffectSelection = {
+    kind: "expression",
+    source: '{{ if .busy }}shimmer{{ else }}none{{ end }}',
+  };
+  const interval = (refreshInterval: unknown): StatusLineFacts => ({
+    kind: "present",
+    refreshInterval,
+  });
+  const effectRefresh = (effect: EffectSelection, statusLine: StatusLineFacts) =>
+    checkByName("effectRefresh")!.probe(
+      facts({ kind: "outside" }, {}, LOADED, effect, statusLine),
+    );
+  const FIX = {
+    kind: "claude-settings",
+    path: ["statusLine", "refreshInterval"],
+    value: 1,
+  };
+
+  test("none with no interval → ok", () => {
+    expect(effectRefresh(STILL, interval(undefined))).toEqual({ ok: true });
+  });
+
+  test("shimmer with no interval → failed WITH the fix", () => {
+    expect(effectRefresh(SHIMMER, interval(undefined))).toEqual({
+      ok: false,
+      reason:
+        "the bar wears the shimmer effect, but Claude Code redraws it only on events",
+      fix: FIX,
+    });
+  });
+
+  test("shimmer with 1 → ok", () => {
+    expect(effectRefresh(SHIMMER, interval(1))).toEqual({ ok: true });
+  });
+
+  test("shimmer with 5 → failed WITH the fix, naming the interval", () => {
+    expect(effectRefresh(SHIMMER, interval(5))).toEqual({
+      ok: false,
+      reason:
+        "the bar wears the shimmer effect, but Claude Code redraws it only every 5 s",
+      fix: FIX,
+    });
+  });
+
+  test("a rule with no interval → failed WITH the fix: it can turn an effect on at any render", () => {
+    expect(effectRefresh(RULE, interval(undefined))).toEqual({
+      ok: false,
+      reason:
+        "a globals.effect rule can give the bar an effect, but Claude Code redraws it only on events",
+      fix: FIX,
+    });
+  });
+
+  // Claude Code reads a number of seconds; a string is no interval at all,
+  // so the fix overwrites it.
+  test("a non-number interval runs on events only, and offers the fix", () => {
+    expect(effectRefresh(SHIMMER, interval("1"))).toMatchObject({
+      ok: false,
+      fix: FIX,
+    });
+  });
+
+  // A statusLine holding only a refresh interval is one Claude Code cannot
+  // run, so with no statusLine in the file there is nothing to add it beside.
+  test("no statusLine in the file → failed naming the file, NO fix", () => {
+    expect(effectRefresh(SHIMMER, { kind: "absent" })).toEqual({
+      ok: false,
+      reason: `the bar wears the shimmer effect, and ${SETTINGS_PATH} sets no statusLine — set "refreshInterval": 1 beside the statusLine command that runs the bar`,
+    });
+  });
+
+  test("a still bar needs no statusLine here at all", () => {
+    expect(effectRefresh(STILL, { kind: "absent" })).toEqual({ ok: true });
   });
 });

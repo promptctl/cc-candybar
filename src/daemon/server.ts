@@ -1321,6 +1321,7 @@ const verbCtx = {
       error: entry.lastError,
       warning: entry.lastWarning,
       unused: entry.state.unused,
+      config: entry.state.config,
     };
   }),
   probes: handlerProbes,

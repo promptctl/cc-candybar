@@ -13,6 +13,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import type { DoctorEdge } from "../src/doctor/edge";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 
 const IN_TMUX = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
 
@@ -26,7 +27,13 @@ afterEach(() => {
 
 const EDGE: DoctorEdge = {
   probeTmux: () => ({ kind: "ok", value: ["osc7", "RGB", "sixel"] }),
-  loadConfig: () => ({ layers: [], error: null, warning: null, unused: [] }),
+  loadConfig: () => ({
+    layers: [],
+    error: null,
+    warning: null,
+    unused: [],
+    config: DEFAULT_DSL_CONFIG,
+  }),
 };
 // A platform with no URL handler: the probe has nothing to send, and these
 // tests are about the other checks (test/doctor-url-handler.test.ts has it).
@@ -87,7 +94,7 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/")).toEqual({
-      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n",
+      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n",
       stderr: "",
       code: 0,
     });
@@ -100,7 +107,8 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toBe(
       "✓ config\n✓ URL handler\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
-        ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n`,
+        ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
+        "✓ effect refresh\n",
     );
   });
 
@@ -109,7 +117,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/")).stdout).toBe(
-      `✓ config\n✓ URL handler\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n`,
+      `✓ config\n✓ URL handler\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ effect refresh\n`,
     );
   });
 });
@@ -136,7 +144,7 @@ describe("doctorPlan over a real config", () => {
     doctorPlan(REAL, NO_HANDLER, inDir(env), project);
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ URL handler\n✓ tmux truecolor\n");
+    expect((await plan()).stdout).toBe("✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -146,7 +154,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n",
+      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n",
       stderr: "",
       code: 0,
     });
@@ -169,7 +177,7 @@ describe("doctorPlan over a real config", () => {
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
-        "✓ URL handler\n✓ tmux truecolor\n",
+        "✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n",
       stderr: "",
       code: 1,
     });
@@ -211,14 +219,38 @@ describe("doctorPlan over a real config", () => {
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n`);
+    ).toBe(`✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n`);
+  });
+
+  // brandon-effects-2gka.21e: the config the bar draws decides the effect, and
+  // the settings file in this shell's CLAUDE_CONFIG_DIR decides the cadence.
+  test("a config wearing an effect under a statusLine with no interval fails effect refresh, with the fix hint", async () => {
+    fs.writeFileSync(projectConfig(), `{ globals: { effect: "shimmer" } }`);
+    fs.writeFileSync(
+      settingsPath(),
+      `{ "statusLine": { "type": "command", "command": "cc-candybar" } }`,
+    );
+    expect(await plan()).toEqual({
+      stdout:
+        "✓ config\n✓ URL handler\n✓ tmux truecolor\n" +
+        "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events" +
+        ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n`,
+      stderr: "",
+      code: 1,
+    });
+  });
+
+  // A config that does not load draws the bundled default — still.
+  test("a config that does not load is judged by the bar drawn under the error", async () => {
+    fs.writeFileSync(projectConfig(), `{ globals: { effect: "shimmer" }, root: { h: ["ghost"] } }`);
+    expect((await plan()).stdout).toMatch(/\n✓ effect refresh\n$/);
   });
 
   test("$CC_CANDYBAR_CONFIG names the file checked, as the client reports it", async () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n`,
+      `✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n`,
     );
   });
 
@@ -233,6 +265,7 @@ describe("doctorPlan over a real config", () => {
         REAL,
         { tmux: null, claudeConfigDir: dir },
         { projectDir: project, cwd: project, configFile: null },
+        () => null,
       ),
       urlHandler: { kind: "unsupported" },
     });
