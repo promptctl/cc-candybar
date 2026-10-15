@@ -1,3 +1,10 @@
+# [1.120.0](https://github.com/promptctl/cc-candybar/compare/v1.119.1...v1.120.0) (2026-10-15)
+
+
+### Features
+
+* **render:** endcaps choose among rich-js's named joiners ([#324](https://github.com/promptctl/cc-candybar/issues/324)) ([86dc4f2](https://github.com/promptctl/cc-candybar/commit/86dc4f2ebddc427bfdec4d3a3d401a4939a4424f))
+
 ## [1.119.1](https://github.com/promptctl/cc-candybar/compare/v1.119.0...v1.119.1) (2026-10-12)
 
 
