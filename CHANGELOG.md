@@ -1,3 +1,10 @@
+## [1.127.1](https://github.com/promptctl/cc-candybar/compare/v1.127.0...v1.127.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **theme:** the colour code e5n touched, and its tests, hold the laws ([#331](https://github.com/promptctl/cc-candybar/issues/331)) ([ebc699a](https://github.com/promptctl/cc-candybar/commit/ebc699ad4c61c4d12f4d208f384d719dddceac8c)), closes [#326](https://github.com/promptctl/cc-candybar/issues/326) [#ffb65f](https://github.com/promptctl/cc-candybar/issues/ffb65f) [#333](https://github.com/promptctl/cc-candybar/issues/333)
+
 # [1.127.0](https://github.com/promptctl/cc-candybar/compare/v1.126.0...v1.127.0) (2026-10-15)
 
 
