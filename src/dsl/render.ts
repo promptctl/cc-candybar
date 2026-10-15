@@ -415,7 +415,9 @@ function compileHelpers(
 // Registration's floor and renderDsl's selection both read it here. The
 // config-default rung is the declared theme's default under the globals
 // (src/config/theme-defaults.ts) — the fold resolveEffectiveGlobals makes — so
-// a compile-only render draws the look the daemon would.
+// a compile-only render draws the shade and variation the daemon would. Its
+// style is RenderSelection's identity, theme default or not: an omitting
+// caller renders the unadapted config.
 const declaredDecor = (
   config: DslConfig,
   globals: Globals,
