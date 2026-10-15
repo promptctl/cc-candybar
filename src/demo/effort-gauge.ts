@@ -40,6 +40,7 @@ import { renderDsl } from "../dsl/render.js";
 import { INVISIBLE } from "../render/ansi.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
+import { type Instant, instantOf } from "../utils/instant.js";
 
 const LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 const DEFAULT_THEMES = [
@@ -177,6 +178,7 @@ function modelRow(
   theme: string,
   level: string,
   label: string,
+  at: Instant,
 ): string {
   const effective = resolveEffectiveGlobals(
     prepared.config,
@@ -193,15 +195,16 @@ function modelRow(
     prepared.store,
     prepared.registry,
     {
-      ...checkPayload(effective, prepared.configPath),
+      ...checkPayload(effective, prepared.layers.at(-1) ?? null, at),
       model: MODEL,
       effort: { level },
     },
+    at,
     renderOptionsOf(effective, WIDE),
     {
       onSegmentError: (id: string, message: string) =>
         report(`segment "${id}"`, message),
-      onRenderWarning: (message: string) => report("theme rule", message),
+      onRenderWarning: ({ kind, message }) => report(kind, message),
     },
     renderSelectionOf(effective),
   );
@@ -224,7 +227,7 @@ async function prepare(
   const file = join(dir, `${name.replace(/\W+/g, "-")}.json5`);
   writeFileSync(file, JSON.stringify(config, null, 2));
   const warnings: string[] = [];
-  const result = await prepareConfig(file, process.cwd(), warnings);
+  const result = await prepareConfig([file], process.cwd(), warnings);
   for (const w of warnings) process.stderr.write(`${name}: warning: ${w}\n`);
   return result;
 }
@@ -240,7 +243,11 @@ interface Loaded {
   readonly bar: PreparedConfig;
 }
 
-function report(loaded: readonly Loaded[], themes: Themes): string {
+function report(
+  loaded: readonly Loaded[],
+  themes: Themes,
+  at: Instant,
+): string {
   const label = Math.max(...loaded.map(({ scheme }) => scheme.name.length)) + 3;
   const out: string[] = [
     "",
@@ -251,7 +258,9 @@ function report(loaded: readonly Loaded[], themes: Themes): string {
   for (const theme of themes) {
     const rows = loaded.map(({ scheme, cell }) => ({
       name: scheme.name,
-      cells: LEVELS.map((level) => modelRow(cell, theme, level, scheme.name)),
+      cells: LEVELS.map((level) =>
+        modelRow(cell, theme, level, scheme.name, at),
+      ),
     }));
     const column =
       Math.max(
@@ -273,7 +282,7 @@ function report(loaded: readonly Loaded[], themes: Themes): string {
     `  max, beside its neighbours — ${first}`,
     ...loaded.map(
       ({ scheme, bar }) =>
-        `  ${pad(scheme.name, label)}${modelRow(bar, first, "max", scheme.name)}`,
+        `  ${pad(scheme.name, label)}${modelRow(bar, first, "max", scheme.name, at)}`,
     ),
     "",
   );
@@ -298,7 +307,9 @@ async function main(): Promise<void> {
         }),
       });
     }
-    process.stdout.write(report(loaded, themes));
+    // [LAW:effects-at-boundaries] One instant for every cell, so the cells
+    // differ only in the scheme, theme and level they show.
+    process.stdout.write(report(loaded, themes, instantOf(new Date())));
   } finally {
     for (const { cell, bar } of loaded) {
       cell.registry.dispose();

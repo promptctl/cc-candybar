@@ -121,7 +121,7 @@ are the same on every machine:
 
 ```render
  🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
- ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
+ ✱ Opus 4.8 󰧑  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
 The bundled `identity` row is above and this config's `status` row below it,

@@ -27,7 +27,13 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
+import {
+  getThemePalette,
+  ColorRgba,
+  ColorSpec,
+  contrastRatio,
+  decodeAnsi,
+} from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   resolveThemeSelection,
@@ -46,9 +52,14 @@ import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
+  renderOptionsOf,
+  renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolvedStyle } from "../src/render/rich-theme";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
@@ -230,12 +241,39 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  // The model segment's effort gauge: one ladder rung per level,
-  // present exactly when Claude Code sends an effort level, and `?` for a
-  // level the gauge does not know — visible, never silently blank.
-  test("model segment shows the effort gauge glyph for the session's effort level", () => {
+  // The model segment's effort gauge: one rung of the ladder per level,
+  // present exactly when Claude Code sends an effort level, `?` for a level
+  // the gauge does not know — visible, never silently blank — and every rung
+  // legible on the model cell in every bundled theme, measured on the colours
+  // drawn. That cell wears the accent hue, so a rung drawn in the raw accent
+  // vanishes on it (1.00:1 on textual-ansi): the floors are what keep it.
+  describe("the model segment's effort gauge", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
-    const render = (effort: { level: string } | undefined): string => {
+    const at = instantOf(new Date());
+    // The rung each level draws, and the floor it stands at on the cell: the
+    // quiet rungs at the quiet floor, every other at the text floor.
+    const RUNGS = {
+      low: { glyph: "\u{F0143}", floor: QUIET_MIN_CONTRAST },
+      medium: { glyph: "\u{F0143}", floor: TEXT_MIN_CONTRAST },
+      high: { glyph: "\u{F013F}", floor: TEXT_MIN_CONTRAST },
+      xhigh: { glyph: "\u{F0DBC}", floor: TEXT_MIN_CONTRAST },
+      max: { glyph: "\u{F09D1}", floor: TEXT_MIN_CONTRAST },
+      "something-new": { glyph: "?", floor: QUIET_MIN_CONTRAST },
+    } as const;
+    const NAME = "Opus 4.8 ";
+
+    // [LAW:one-source-of-truth] The theme resolved as a session's pick is,
+    // by the daemon's own resolution, over `check`'s fixture with Claude Code
+    // sending `effort` (or none). Returns the row holding the model cell.
+    function modelRows(theme: string): {
+      row: (effort: { level: string } | undefined) => string;
+      dispose: () => void;
+    } {
+      const effective = resolveEffectiveGlobals(
+        parsed,
+        (key) => (key === "theme" ? theme : null),
+        () => false,
+      );
       const store = new VariableStore();
       const registry = new SourceRegistry(
         store,
@@ -243,49 +281,117 @@ describe("DEFAULT_DSL_CONFIG", () => {
         undefined,
         new SessionState(),
       );
-      try {
-        const compiled = registerDslConfig(parsed, registry, {
-          cwd: process.cwd(),
-        });
-        const payload = {
-          hook_event_name: "Status",
-          session_id: "deadbeef-1234-5678-9abc-def012345678",
-          cwd: "/tmp",
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
-          ...(effort ? { effort } : {}),
-        };
-        return renderDsl(parsed, compiled, store, registry, payload, {
-          endcaps: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding: 1,
-          charset: "unicode",
-          width: Number.POSITIVE_INFINITY,
-        });
-      } finally {
-        registry.dispose();
-      }
-    };
-    // Two pairs share a glyph and are told apart by colour alone: low is the
-    // quiet single chevron, max the filled triple. The segment boundary after
-    // the glyph pins that nothing follows it.
-    const gauge: Record<string, string> = {
-      low: "\u{F0143}",
-      medium: "\u{F0143}",
-      high: "\u{F013F}",
-      xhigh: "\u{F0DBC}",
-      max: "\u{F0DBC}",
-      "something-new": "?",
-    };
-    for (const [level, glyph] of Object.entries(gauge)) {
-      expect(stripAnsi(render({ level }))).toContain(`Opus 4.7 ${glyph} `);
+      const compiled = registerDslConfig(parsed, registry, {
+        cwd: process.cwd(),
+      });
+      const row = (effort: { level: string } | undefined): string => {
+        const { effort: _fixtureEffort, ...payload } = checkPayload(
+          effective,
+          null,
+          at,
+        );
+        const errors: string[] = [];
+        const rendered = renderDsl(
+          parsed,
+          compiled,
+          store,
+          registry,
+          effort === undefined ? payload : { ...payload, effort },
+          at,
+          renderOptionsOf(effective, Number.POSITIVE_INFINITY),
+          { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
+          renderSelectionOf(effective),
+        );
+        expect(errors).toEqual([]);
+        const found = rendered
+          .split("\n")
+          .find((line) => stripAnsi(line).includes(NAME));
+        if (found === undefined)
+          throw new Error(`${theme}: no row holds the model cell`);
+        return found;
+      };
+      return { row, dispose: () => registry.dispose() };
     }
-    expect(render({ level: "low" })).not.toBe(render({ level: "medium" }));
-    expect(render({ level: "xhigh" })).not.toBe(render({ level: "max" }));
-    const none = stripAnsi(render(undefined));
-    expect(none).toContain("Opus 4.7 ");
-    for (const glyph of Object.values(gauge)) expect(none).not.toContain(glyph);
+
+    // [LAW:parse-dont-validate] A colour the terminal draws, or a loud
+    // failure naming what was not one.
+    const drawn = (
+      spec: string | ColorSpec | undefined,
+      what: string,
+    ): ColorRgba => {
+      if (!(spec instanceof ColorSpec)) {
+        throw new Error(
+          `the rung's ${what} is not a drawn colour: ${String(spec)}`,
+        );
+      }
+      return spec.getTruecolor();
+    };
+
+    // The rung after the model's name — its glyph, its colour, and the
+    // contrast it is drawn at on its ground — read through rich-js's own
+    // decoder (the inverse of the writer).
+    function rungOf(row: string): {
+      glyph: string;
+      colour: string;
+      contrast: number;
+    } {
+      const text = decodeAnsi(row);
+      const start = text.plain.indexOf(NAME) + NAME.length;
+      const span = text.spans.findLast(
+        (s) => s.start <= start && start < s.end,
+      );
+      if (span === undefined) throw new Error(`no span draws the rung: ${row}`);
+      const { color, bgcolor } = resolvedStyle(span.style);
+      const fg = drawn(color, "colour");
+      return {
+        glyph: String.fromCodePoint(text.plain.codePointAt(start)!),
+        colour: fg.hex,
+        contrast: contrastRatio(fg, drawn(bgcolor, "ground")),
+      };
+    }
+
+    test.each(listResolvablePaletteNames())(
+      "under %s, each level draws its rung, on the cell at its floor",
+      (theme) => {
+        const { row, dispose } = modelRows(theme);
+        try {
+          const rungs = Object.entries(RUNGS).map(([level, { floor }]) => ({
+            level,
+            floor,
+            ...rungOf(row({ level })),
+          }));
+          // The whole ladder at once, then every rung under its floor.
+          expect(
+            Object.fromEntries(rungs.map(({ level, glyph }) => [level, glyph])),
+          ).toEqual(
+            Object.fromEntries(
+              Object.entries(RUNGS).map(([level, { glyph }]) => [level, glyph]),
+            ),
+          );
+          expect(
+            rungs
+              .filter(({ contrast, floor }) => contrast < floor)
+              .map(
+                ({ level, contrast, floor }) =>
+                  `${level}: ${contrast.toFixed(2)} (floor ${floor})`,
+              ),
+          ).toEqual([]);
+          // Low and medium share a glyph: colour is what tells them apart.
+          const colourOf = new Map(
+            rungs.map(({ level, colour }) => [level, colour]),
+          );
+          expect(colourOf.get("low")).not.toBe(colourOf.get("medium"));
+          // No effort level draws no rung at all.
+          const none = stripAnsi(row(undefined));
+          expect(none).toContain(NAME);
+          for (const { glyph } of Object.values(RUNGS)) {
+            expect(none).not.toContain(`${NAME}${glyph}`);
+          }
+        } finally {
+          dispose();
+        }
+      },
+    );
   });
 
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
