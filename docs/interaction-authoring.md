@@ -1660,8 +1660,9 @@ Unknown style key "saturation". Expected one of: hueShift, chromaScale, lightnes
 ```
 
 `powerline`, `capsule`, `plain` and the other joiner names are **endcaps** — the joiner shape, set with
-`globals.endcaps` — never styles. A style may not take one of those names, and a
-`style` holding one is refused with the key to use:
+`globals.endcaps` — never styles. A `style` holding one is refused with the key
+to use, and a style may not be named `powerline`, `capsule` or `plain` — the
+endcaps `style` held before it was renamed:
 
 ```json5 check:fail
 { globals: { style: "capsule" } }

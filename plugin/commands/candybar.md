@@ -120,7 +120,7 @@ If the user types a name in the free text field, accept it only if the preview l
 ${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-endcaps --theme=${theme} --charset=${charset}
 ```
 
-Tell the user: "The endcaps previews are in the bash output above, each under its name. Expand it if needed."
+Tell the user: "The endcaps previews are in the bash output above, each under its name. Expand it if needed. A preview drawn with boxes or question marks uses glyphs your font lacks — pick another."
 
 Then ask:
 

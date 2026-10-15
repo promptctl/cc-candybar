@@ -1499,8 +1499,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // user is trying to see where one segment ends and the next begins; `plain`
   // trades the caps for a visible separator between every cell.
   //
-  // The separator is stated rather than left to PlainJoiner's own default: this
-  // fragment layers over the user's globals, so a config that set
+  // The separator is stated rather than left to the bundled `plain` joiner's
+  // glyph: this fragment layers over the user's globals, so a config that set
   // `default_separator` for its own powerline bar would otherwise carry that
   // choice into edit mode, where the separator is the entire affordance. " | "
   // (not "│") because it must survive `charset: "ascii"` — the fragment does

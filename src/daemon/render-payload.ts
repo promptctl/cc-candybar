@@ -135,9 +135,10 @@ export interface EffectiveGlobals {
   readonly variation: VariationName;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
   // segments (globals.default_separator). `string | undefined`, not a resolved
-  // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
-  // pickJoiner already reads undefined as "use the class default", so naming a
-  // floor here would be a second copy of a constant that lives in rich-js.
+  // string, precisely because its floor is NOT ours: rich-js's bundled `plain`
+  // joiner owns its own glyph and pickJoiner reads undefined as "draw it as
+  // bundled", so naming a floor here would be a second copy of a constant that
+  // lives in rich-js.
   // It has no SessionState half — the config global (as staged by whatever
   // fragment is on top) is its whole resolution.
   readonly separator: string | undefined;

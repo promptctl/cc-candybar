@@ -40,7 +40,7 @@
     // alongside its open-state.
     // ── Endcaps picker (companion to the theme picker) ────────────────────────
     // The session powerline shape, written by applyEndcaps (from: "endcaps" ⇒ the
-    // ENDCAPS_SHAPES domain: powerline/capsule/plain). The daemon resolves it per
+    // ENDCAPS_SHAPES domain: every rich-js joiner name). The daemon resolves it per
     // render via effectiveEndcaps (session-over-globals.endcaps-over-floor,
     // exactly like the theme), so an endcaps click reshapes the bar live. Like the
     // theme it needs no state var: the label reads `endcaps.effective` (bundled

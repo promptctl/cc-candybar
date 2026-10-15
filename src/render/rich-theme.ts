@@ -10,7 +10,14 @@ import { Theme, type Style, type TextStyle } from "@promptctl/rich-js";
  * [LAW:one-source-of-truth] Drawn with by strip.ts's one `draw` and read by the
  * cell splitter, so the two cannot disagree about what a name means.
  */
-export const RENDER_THEME = new Theme();
+export const RENDER_THEME = new Theme({
+  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
+  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
+  // slot some terminal themes paint as that ground. The terminal's own text on
+  // its own ground is the one pair known to read there.
+  "strip.separator": "default",
+  "strip.rail": "default",
+});
 
 /**
  * The `Style` a RichText's stored style stands for under `RENDER_THEME`: a

@@ -169,6 +169,15 @@ describe("the renamed keys refuse their old spellings", () => {
     },
   );
 
+  test("a style may share a name with an endcaps shape `style` never held", () => {
+    const merged = mergeWithDefault(
+      parseDslConfig("<renames>", `{ styles: { flame: {} } }`, ALLOWED),
+      DEFAULT_DSL_CONFIG,
+    );
+    validateConfig(unauthored(merged), "<renames>", ALLOWED);
+    expect(merged.styles).toHaveProperty("flame");
+  });
+
   test.each([
     ["globals", `{ globals: { style: "capsule" } }`],
     ["presets.p.globals", `{ presets: { p: { globals: { style: "capsule" } } } }`],

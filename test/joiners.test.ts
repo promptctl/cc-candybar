@@ -1,4 +1,4 @@
-import { JOINERS } from "@promptctl/rich-js";
+import { JOINERS, cellLen } from "@promptctl/rich-js";
 import {
   buildLineStrip,
   stripChromeCols,
@@ -37,7 +37,7 @@ describe("endcaps are rich-js's named joiners", () => {
     test.each([["unicode"], ["ascii"]] as const)(
       "under %s, the row costs the chrome and seam the strip measures for it",
       (charset) => {
-        const width = [...stripAnsi(row(endcaps, charset))].length;
+        const width = cellLen(stripAnsi(row(endcaps, charset)));
         const content = cells.reduce((sum, c) => sum + c.text.length + 2, 0);
         expect(width).toBe(
           content + stripChromeCols({ endcaps, charset }) + stripSeamCols({ endcaps, charset }),
@@ -55,9 +55,12 @@ describe("endcaps are rich-js's named joiners", () => {
     expect(stripAnsi(row("plain", "ascii", " :: "))).toBe(" aaa  ::  bbb ");
   });
 
-  test("plain with a non-ASCII separator draws plain's own ascii separator under ascii", () => {
+  test("plain draws a non-ASCII separator as written under unicode (the loader refuses one under ascii)", () => {
     expect(stripAnsi(row("plain", "unicode", " │ "))).toBe(" aaa  │  bbb ");
-    expect(PUA.test(stripAnsi(row("plain", "ascii", " │ ")))).toBe(false);
-    expect(stripAnsi(row("plain", "ascii", " │ "))).not.toContain("│");
+  });
+
+  test("plain's separator and metro's rail are the terminal's own text, not a palette slot", () => {
+    expect(row("plain", "unicode", " | ")).toContain("\x1b[39m | ");
+    expect(row("metro", "unicode")).toMatch(/\x1b\[39m[^\x1b]+\x1b\[0m/);
   });
 });

@@ -288,6 +288,24 @@ describe("loadDslConfig — globals", () => {
     });
   });
 
+  test.each([
+    ["globals", `{ globals: { charset: "ascii", default_separator: " │ " } }`],
+    ["presets.p.globals", `{ globals: { charset: "ascii" }, presets: { p: { globals: { default_separator: " │ " } } } }`],
+    ["editGlobals", `{ globals: { charset: "ascii" }, editGlobals: { default_separator: " │ " } }`],
+  ])("a non-ASCII separator under charset ascii is refused at %s", (at, src) => {
+    expectIssue(src, {
+      path: `${at}.default_separator`,
+      message: `is not ASCII, but charset is "ascii"`,
+    });
+  });
+
+  test("a non-ASCII separator loads under unicode, and an ASCII one under ascii", () => {
+    expect(() => parseAndValidate(FILE, `{ globals: { default_separator: " │ " } }`)).not.toThrow();
+    expect(() =>
+      parseAndValidate(FILE, `{ globals: { charset: "ascii", default_separator: " : " } }`),
+    ).not.toThrow();
+  });
+
   test("colorCompatibility accepts each closed-enum member", () => {
     for (const depth of ["truecolor", "256", "ansi", "none"] as const) {
       const cfg = parseAndValidate(

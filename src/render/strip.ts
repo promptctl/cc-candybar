@@ -101,9 +101,12 @@ export interface BuildLineOptions {
 }
 
 // Plain drawn with an authored separator (globals.default_separator): the
-// bundled plain shape with the separator as its one glyph. Its ascii form is
-// the separator when that is ASCII, else plain's own, which is all an ascii
-// output can draw. Memoised per separator, so a render does not re-parse it.
+// bundled plain shape with the separator as its one glyph, drawn as written.
+// rich-js builds a joiner's ascii form up front and refuses a non-ASCII glyph
+// in it, so a non-ASCII separator keeps plain's own ascii form in that slot —
+// never drawn, since the loader refuses that separator under charset ascii
+// ([LAW:single-enforcer], cross-ref's `asciiSeparators`). Memoised per
+// separator, so a render does not re-parse it.
 const separatorJoiners = new Map<string, CellJoiner>();
 function plainWith(separator: string): CellJoiner {
   const known = separatorJoiners.get(separator);
@@ -113,8 +116,7 @@ function plainWith(separator: string): CellJoiner {
     return { ...shape, seam, divider: seam };
   };
   const { shape, ascii } = JOINERS.plain;
-  // eslint-disable-next-line no-control-regex
-  const isAscii = /^[\x00-\x7f]*$/.test(separator);
+  const isAscii = [...separator].every((c) => c.codePointAt(0)! <= 0x7f);
   const joiner = new CellJoiner(
     withGlyph(shape),
     isAscii ? withGlyph(ascii) : ascii,
