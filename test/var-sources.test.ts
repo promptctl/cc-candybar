@@ -22,7 +22,7 @@ import { buildScope } from "../src/template-engine/scope";
 // [LAW:dataflow-not-control-flow] Real subprocess timing can't be advanced
 // by fake timers (the OS does the spawning, not the test runner), so these
 // TTL tests are unavoidably real-time. The buffer accounts for setInterval
-// drift + the cat-subprocess round trip.
+// drift; the run the tick starts is awaited through `ran`, not guessed here.
 const TTL_TICK_BUFFER_MS = 200;
 const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
 
@@ -366,10 +366,31 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
   return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
-// Wait for all microtasks + a small wall-clock window so async shell/file
-// operations have time to settle before asserting.
-function settle(ms = 150): Promise<void> {
+// A test waits on what it asserts. `ran` waits on the registry's own state
+// for "every run it started has finished" — `settled()`, the state
+// `cc-candybar check` awaits — and fails naming any run still out; a fixed
+// sleep read "" instead of "hello world" whenever a full-suite spawn outlasted
+// its guess (brandon-unfiled-3248.e8p). A run a trigger starts (a key or
+// depends_on reaction) is tracked the moment the trigger lands, so `ran` covers
+// it too.
+const RUN_WITHIN_MS = 10_000;
+async function ran(registry: SourceRegistry): Promise<void> {
+  expect(await registry.settled(RUN_WITHIN_MS)).toEqual([]);
+}
+
+// A wall-clock wait, for what no state reports: a TTL tick still to come, or a
+// window in which nothing may change.
+function elapse(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// fs.watch attaches with no ready signal, so a watcher test repeats an
+// idempotent change until the value it asserts appears, then asserts it.
+async function repeatUntil(done: () => boolean, change: () => void): Promise<void> {
+  for (let i = 0; i < 60 && !done(); i++) {
+    change();
+    await elapse(50);
+  }
 }
 
 // ─── shell — basic ────────────────────────────────────────────────────────────
@@ -378,7 +399,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("populates box with command stdout (never policy)", async () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "hello world"', { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("hello world");
     registry.dispose();
   });
@@ -386,7 +407,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("replaces newlines with spaces in multi-line output", async () => {
     const { store, registry } = make();
     registry.declareShell("val", 'printf "a\\nb\\nc"', { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("a b c");
     registry.dispose();
   });
@@ -399,7 +420,7 @@ describe("SourceRegistry — shell: basic", () => {
       parse: regex("a(\\s*)b"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     expect(store.read("crlf")).toBe("a b c");
     expect(store.read("gap")).toBe(" ");
     registry.dispose();
@@ -412,7 +433,7 @@ describe("SourceRegistry — shell: basic", () => {
       parse: regex("load:\\s*([0-9.]+)"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("0.52");
     registry.dispose();
   });
@@ -424,7 +445,7 @@ describe("SourceRegistry — shell: basic", () => {
       parse: text("fallback"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("fallback");
     registry.dispose();
   });
@@ -433,7 +454,7 @@ describe("SourceRegistry — shell: basic", () => {
     const before = Date.now();
     const { registry } = make();
     registry.declareShell("val", "exit 2", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    await settle();
+    await ran(registry);
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/exited with code/);
@@ -480,7 +501,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("shell failure → defaultEmptyValue when no varDefault", async () => {
     const { store, registry } = make("(none)");
     registry.declareShell("val", "exit 1", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("(none)");
     registry.dispose();
   });
@@ -492,7 +513,7 @@ describe("SourceRegistry — shell: basic", () => {
       parse: regex("([0-9]+)", "—"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("—");
     registry.dispose();
   });
@@ -504,7 +525,7 @@ describe("SourceRegistry — shell: basic", () => {
       parse: regex("([0-9]+)"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/regex no-match/);
@@ -525,14 +546,14 @@ describe("SourceRegistry — shell: basic", () => {
         parse: TEXT,
         cache: { kind: "never" },
       });
-      await settle();
+      await ran(registry);
       expect(registry.getLastError("val")).toBeDefined();
 
       // Can't re-run on "never" — use a separate variable to test error-clearing
       const { store: store2, registry: registry2 } = make();
       // Command that succeeds
       registry2.declareShell("val", `echo "ok"`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-      await settle();
+      await ran(registry2);
       expect(registry2.getLastError("val")).toBeUndefined();
       expect(store2.read("val")).toBe("ok");
       registry.dispose();
@@ -562,17 +583,18 @@ describe("SourceRegistry — shell: TTL floor", () => {
         cache: { kind: "ttl", durationMs: 50 },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
       // Sleep less than MIN_SHELL_TTL_MS — refresh has NOT fired yet even
       // though the user's requested 50ms has elapsed many times over.
-      await settle(Math.max(50, MIN_SHELL_TTL_MS - 250));
+      await elapse(Math.max(50, MIN_SHELL_TTL_MS - 250));
       expect(store.read("val")).toBe("v1");
 
       // Sleep enough to cross the floor (plus buffer) — refresh now fires.
-      await settle(TTL_TICK_WAIT_MS);
+      await elapse(TTL_TICK_WAIT_MS);
+      await ran(registry);
       expect(store.read("val")).toBe("v2");
       registry.dispose();
     } finally {
@@ -598,11 +620,12 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await settle(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
+      await elapse(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
+      await ran(registry);
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -630,13 +653,14 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("v1")).toBe("a1");
       expect(store.read("v2")).toBe("b1");
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      await settle(TTL_TICK_WAIT_MS);
+      await elapse(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
+      await ran(registry);
 
       expect(store.read("v1")).toBe("a2");
       expect(store.read("v2")).toBe("b2");
@@ -658,13 +682,13 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(TTL_TICK_WAIT_MS); // timer should NOT fire after dispose
+      await elapse(TTL_TICK_WAIT_MS); // timer should NOT fire after dispose
 
       expect(store.read("val")).toBe("v1"); // unchanged
     } finally {
@@ -690,12 +714,14 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         cache: { kind: "watch_file", path: watchedFile },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
-      fs.writeFileSync(watchedFile, "x"); // trigger the watcher
-      await settle(250);
+      await repeatUntil(
+        () => store.read("val") === "v2",
+        () => fs.writeFileSync(watchedFile, "x"),
+      );
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -717,13 +743,14 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedDir },
       });
-      await settle(100);
+      await ran(registry);
       fs.writeFileSync(dataFile, "v2");
       // fs.watch attaches with no ready signal: repeat the idempotent change.
-      for (let i = 0; i < 40 && store.read("val") !== "v2"; i++) {
-        fs.writeFileSync(path.join(watchedDir, "main"), String(i));
-        await settle(50);
-      }
+      let write = 0;
+      await repeatUntil(
+        () => store.read("val") === "v2",
+        () => fs.writeFileSync(path.join(watchedDir, "main"), String(write++)),
+      );
       expect(store.read("val")).toBe("v2");
       registry.dispose();
     } finally {
@@ -740,18 +767,18 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: text("(none)"),
         cache: { kind: "watch_file", path: f },
       });
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("(none)");
       // Each directory that appears re-arms the watch one level deeper; the
       // watch attaches with no ready signal, so the idempotent write repeats.
       fs.mkdirSync(path.dirname(f), { recursive: true });
       // Let the mkdir's own event land first, so only a write can deliver v1.
-      await settle(500);
+      await elapse(500);
       expect(store.read("val")).toBe("(none)");
-      for (let i = 0; i < 60 && store.read("val") !== "v1"; i++) {
-        await settle(50);
-        fs.writeFileSync(f, "v1");
-      }
+      await repeatUntil(
+        () => store.read("val") === "v1",
+        () => fs.writeFileSync(f, "v1"),
+      );
       expect(store.read("val")).toBe("v1");
       registry.dispose();
     } finally {
@@ -770,11 +797,11 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: text("(none)"),
         cache: { kind: "watch_file", path: f },
       });
-      await settle(100);
+      await ran(registry);
+      await elapse(100); // the watch attaches with no ready signal, and a removal is not repeatable
       expect(store.read("val")).toBe("v1");
       fs.rmSync(path.dirname(f), { recursive: true });
-      for (let i = 0; i < 40 && store.read("val") !== "(none)"; i++)
-        await settle(50);
+      await repeatUntil(() => store.read("val") === "(none)", () => undefined);
       expect(store.read("val")).toBe("(none)");
       registry.dispose();
     } finally {
@@ -798,7 +825,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         /watch_file .*cannot watch/,
       );
       // The first read's outcome lands later and does not clear the fault.
-      await settle(100);
+      await ran(registry);
       expect(registry.getLastError("val")?.message).toMatch(
         /watch_file .*cannot watch/,
       );
@@ -822,11 +849,11 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: TEXT,
         cache: { kind: "watch_file", path: link },
       });
-      await settle(100);
-      for (let i = 0; i < 40 && store.read("val") !== "v2"; i++) {
-        fs.writeFileSync(real, "v2");
-        await settle(50);
-      }
+      await ran(registry);
+      await repeatUntil(
+        () => store.read("val") === "v2",
+        () => fs.writeFileSync(real, "v2"),
+      );
       expect(store.read("val")).toBe("v2");
       registry.dispose();
     } finally {
@@ -855,14 +882,16 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         cache: { kind: "watch_file", path: watchedFile },
       });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("v1")).toBe("a1");
       expect(store.read("v2")).toBe("b1");
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      fs.writeFileSync(watchedFile, "y");
-      await settle(250);
+      await repeatUntil(
+        () => store.read("v1") === "a2" && store.read("v2") === "b2",
+        () => fs.writeFileSync(watchedFile, "y"),
+      );
 
       expect(store.read("v1")).toBe("a2");
       expect(store.read("v2")).toBe("b2");
@@ -892,13 +921,13 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
 
-      await settle(150);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       // Mutate the data and change the key — reaction fires, shell re-runs.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
-      await settle(250);
+      await ran(registry);
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -922,13 +951,13 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
 
-      await settle(150);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       // Change data file, but do NOT change the key.
       fs.writeFileSync(dataFile, "v2");
       // trigger stays "a" — key template still produces "a" — no re-run.
-      await settle(250);
+      await elapse(250);
 
       expect(store.read("val")).toBe("v1");
       registry.dispose();
@@ -948,7 +977,7 @@ describe("SourceRegistry — file: basic", () => {
       fs.writeFileSync(f, "line1\nline2\nline3");
       const { store, registry } = make();
       registry.declareFile("val", f, { parse: TEXT, cache: { kind: "never" } });
-      await settle();
+      await ran(registry);
       expect(store.read("val")).toBe("line1 line2 line3");
       registry.dispose();
     } finally {
@@ -963,7 +992,7 @@ describe("SourceRegistry — file: basic", () => {
       fs.writeFileSync(f, "ref: refs/heads/main\nother");
       const { store, registry } = make();
       registry.declareFile("val", f, { parse: TEXT, readMode: "first-line", cache: { kind: "never" } });
-      await settle();
+      await ran(registry);
       expect(store.read("val")).toBe("ref: refs/heads/main");
       registry.dispose();
     } finally {
@@ -981,7 +1010,7 @@ describe("SourceRegistry — file: basic", () => {
         parse: regex("refs/heads/(.+)"),
         cache: { kind: "never" },
       });
-      await settle();
+      await ran(registry);
       expect(store.read("val")).toBe("feature-branch");
       registry.dispose();
     } finally {
@@ -995,7 +1024,7 @@ describe("SourceRegistry — file: basic", () => {
       parse: text("(missing)"),
       cache: { kind: "never" },
     });
-    await settle();
+    await ran(registry);
     expect(store.read("val")).toBe("(missing)");
     registry.dispose();
   });
@@ -1004,7 +1033,7 @@ describe("SourceRegistry — file: basic", () => {
     const before = Date.now();
     const { registry } = make();
     registry.declareFile("val", "/nonexistent/path/xyz.txt", { parse: TEXT, cache: { kind: "never" } });
-    await settle();
+    await ran(registry);
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/unreadable/);
@@ -1022,7 +1051,7 @@ describe("SourceRegistry — file: basic", () => {
         parse: regex("([0-9]+)", "—"),
         cache: { kind: "never" },
       });
-      await settle();
+      await ran(registry);
       expect(store.read("val")).toBe("—");
       registry.dispose();
     } finally {
@@ -1037,7 +1066,7 @@ describe("SourceRegistry — file: basic", () => {
       fs.writeFileSync(f, "no numbers");
       const { registry } = make();
       registry.declareFile("val", f, { parse: regex("([0-9]+)"), cache: { kind: "never" } });
-      await settle();
+      await ran(registry);
       expect(registry.getLastError("val")).toBeDefined();
       expect(registry.getLastError("val")!.message).toMatch(/regex no-match/);
       registry.dispose();
@@ -1058,11 +1087,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const { store, registry } = make();
       registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
-      fs.writeFileSync(f, "v2");
-      await settle(350);
+      await repeatUntil(() => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"));
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -1085,14 +1113,16 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       registry.declareFile("v1", f1, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
       registry.declareFile("v2", f2, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
 
-      await settle(100);
+      await ran(registry);
       expect(store.read("v1")).toBe("a1");
       expect(store.read("v2")).toBe("b1");
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      fs.writeFileSync(watchedFile, "v2"); // trigger both watchers
-      await settle(350);
+      await repeatUntil(
+        () => store.read("v1") === "a2" && store.read("v2") === "b2",
+        () => fs.writeFileSync(watchedFile, "v2"),
+      );
 
       expect(store.read("v1")).toBe("a2");
       expect(store.read("v2")).toBe("b2");
@@ -1118,11 +1148,11 @@ describe("SourceRegistry — dispose", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
-      await settle(100);
+      await ran(registry);
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(TTL_TICK_WAIT_MS);
+      await elapse(TTL_TICK_WAIT_MS);
       // Timer was cleared — box stays at last value before dispose.
       expect(store.read("val")).toBe("v1");
     } finally {
@@ -1138,11 +1168,11 @@ describe("SourceRegistry — dispose", () => {
       const { store, registry } = make();
       registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
 
-      await settle(100);
+      await ran(registry);
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(350);
+      await elapse(350);
       expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();
@@ -1430,12 +1460,12 @@ describe("SourceRegistry — depends_on cache policy", () => {
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      await settle(150);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
-      await settle(250);
+      await ran(registry);
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -1468,7 +1498,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
 
       // 50 ms in, the declare-time read is still out. Change both the dependency
       // and the data: this is the collision, not a sequence.
-      await settle(50);
+      await elapse(50);
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
 
@@ -1497,12 +1527,12 @@ describe("SourceRegistry — depends_on cache policy", () => {
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      await settle(150);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "a"); // same value — reaction data unchanged → no re-run
-      await settle(250);
+      await elapse(250);
 
       expect(store.read("val")).toBe("v1");
       registry.dispose();
@@ -1527,12 +1557,12 @@ describe("SourceRegistry — depends_on cache policy", () => {
         cache: { kind: "depends_on", varNames: ["a", "b"] },
       });
 
-      await settle(150);
+      await ran(registry);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(dataFile, "v2");
       store.setBox("b", "z"); // only "b" changes
-      await settle(250);
+      await ran(registry);
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -1556,12 +1586,12 @@ describe("SourceRegistry — depends_on cache policy", () => {
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      await settle(150);
+      await ran(registry);
       registry.dispose();
 
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b"); // reaction must NOT fire after dispose
-      await settle(250);
+      await elapse(250);
 
       expect(store.read("val")).toBe("v1");
     } finally {
@@ -2039,27 +2069,20 @@ describe("SourceRegistry — parse seam", () => {
       registry.declareFile("doc", f, { parse: json({}), cache: { kind: "watch_file", path: f } });
       await registry.settled(2000);
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
-      // fs.watch attaches with no ready signal: repeat the idempotent write.
-      const until = async (done: () => boolean, write: () => void) => {
-        for (let i = 0; i < 60 && !done(); i++) {
-          write();
-          await settle(50);
-        }
-      };
       // In place: a truncate, then a partial write — the document holds.
-      await until(
+      await repeatUntil(
         () => registry.getLastError("doc") !== undefined,
         () => fs.writeFileSync(f, `{ "sta`),
       );
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
-      await until(
+      await repeatUntil(
         () => store.readDocument("doc").kind === "ok" && doc(store, "doc").state === "two",
         () => fs.writeFileSync(f, `{ "state": "two" }`),
       );
       expect(readDoc(store, "doc")).toEqual({ state: "two" });
       // Left broken past the settle: the failure shows.
       fs.writeFileSync(f, `{ "sta`);
-      await until(() => store.readDocument("doc").kind === "failed", () => undefined);
+      await repeatUntil(() => store.readDocument("doc").kind === "failed", () => undefined);
       expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
       registry.dispose();
     } finally {
