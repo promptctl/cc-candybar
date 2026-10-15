@@ -230,7 +230,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   test("concurrent different-stamp refolds do not double-count (the first to land wins)", async () => {
     // Two renders observing DIFFERENT stamps hit different SingleFlight keys
     // and both read the same prior. The commit is a compare-and-set on that
-    // prior, so whichever lands first is stored and the other is dropped; and
+    // prior, so whichever lands first is stored and the other is not; and
     // `refold` writes the byte cursor and the fold as one pair covering exactly
     // [0, cursor), so the next ingest extends from there. This test pins the
     // OBSERVABLE consequence — no matter which racer lands, a final read equals

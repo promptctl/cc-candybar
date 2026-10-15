@@ -596,10 +596,11 @@ export class SessionUsageStore {
     // record when it RUNS (first caller); coalesced callers share that one
     // refold. Two concurrent DIFFERENT-stamp refolds — a render and a rescan,
     // say — each read the same prior, and the commit below is a compare-and-set
-    // on it: the first to land replaces the prior, and the other is dropped,
-    // its caller reading the record that landed. So the stored record only ever
-    // advances — `today` and the tok/s baseline never step back to a shorter
-    // fold — and since `refold` writes the byte cursor and the fold as ONE pair
+    // on it: the first to land replaces the prior, and the other is not stored,
+    // though its caller still gets the fold its own stamp asked for (so a tok/s
+    // sample is never another stamp's counts). So the stored record only ever
+    // advances — `today` never steps back to a shorter fold — and since
+    // `refold` writes the byte cursor and the fold as ONE pair
     // covering exactly [0, cursor), the next refold folds each byte once.
     // `foldFile` is pure (fresh FileFold, prior never mutated), so the shared
     // prior can't corrupt. Pinned by the concurrency test in
@@ -641,10 +642,8 @@ export class SessionUsageStore {
       transcriptPath,
       lastSeenAt: Date.now(),
     };
-    const current = this.entries.get(sessionId);
-    // A record swept (or a store closed) mid-refold leaves nothing to replace:
-    // this caller still gets the fold it read, and nothing is stored.
-    if (current !== prior) return ok(current ?? record);
+    // Something else landed first (another refold, a sweep): store nothing.
+    if (this.entries.get(sessionId) !== prior) return ok(record);
     this.entries.set(sessionId, record);
     return ok(record);
   }
