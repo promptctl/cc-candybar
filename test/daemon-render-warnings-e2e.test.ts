@@ -1,6 +1,6 @@
 // [LAW:nothing-unseen] candybar-theme-colours-6fq5.ge6, measured on a REAL
 // daemon: a render's event — its `render sid=…` log line — names every warning
-// the strip above that render's bar showed, by kind and in the strip's order:
+// the strip above that render's bar carried, by kind and in the strip's order:
 // the config load's own (`load`) and each one the render itself reported
 // (`RenderWarning`), `-` for none. The cases enumerate both sources whole — a
 // load warning or not, a render warning or not — and read each render's strip
@@ -32,7 +32,7 @@ const CONFIGS = {
   dup: `{ globals: { palette: '${RULE}' }, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
-describe("a daemon render's event names every warning its strip showed", () => {
+describe("a daemon render's event names every warning its strip carried", () => {
   let sockPath: string;
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
@@ -100,7 +100,7 @@ describe("a daemon render's event names every warning its strip showed", () => {
       const events = readFileSync(logPath(env), "utf8")
         .split("\n")
         .filter((l) => l.includes(`render sid=${sessionId} `))
-        .map((l) => l.match(/ warn=(\S+)$/)?.[1]);
+        .map((l) => l.match(/ warn=(\S+)/)?.[1]);
       expect(events.length).toBeGreaterThanOrEqual(1);
       for (const event of events) expect(event).toBe(warn);
     },

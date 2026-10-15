@@ -1181,8 +1181,8 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const fades =
         fx.fades.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") ||
         "-";
-      // [LAW:nothing-unseen] Each warning the strip showed, by kind, in its
-      // order; `-` for none.
+      // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
+      // order, including any its row cap left undrawn; `-` for none.
       const warned = warnings.map((w) => w.kind).join(",") || "-";
       dlog(
         "info",
