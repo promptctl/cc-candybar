@@ -26,6 +26,7 @@ import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../log";
 import { dateOf, type Instant } from "../../utils/instant";
+import { watchTranscripts, type TranscriptWatch } from "./transcript-watch";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -40,7 +41,10 @@ import { dateOf, type Instant } from "../../utils/instant";
 // recompute it guarded). The aggregate is derived state maintained
 // incrementally: the whole transcript tree is scanned EXACTLY ONCE, lazily, to
 // seed records for sessions that did work before this daemon saw them; every
-// render after that is a single-file stat plus a fold.
+// render after that is a single-file stat plus a fold. A session that never
+// renders (headless `claude -p`, the Agent SDK) reaches the store through the
+// watch the seed holds over its directory's transcripts, folded in by the next
+// `today` render: the seed is current exactly while that watch is.
 
 // [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
 // "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
@@ -129,6 +133,16 @@ const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // the same constant as the I/O it drives, so the once-a-day scan can never
 // re-create the unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
+
+// One directory set's seed and the watch that keeps it current. `dirty` holds
+// the main transcripts written since the watch was armed (path → session id)
+// and not yet folded in; the watch is armed BEFORE the scan, so a write the
+// scan read too early is still in `dirty`.
+interface Seeding {
+  readonly done: Promise<void>;
+  readonly dirty: Map<string, string>;
+  readonly watches: readonly TranscriptWatch[];
+}
 
 const EMPTY_DAY: DayUsage = {
   cost: 0,
@@ -311,8 +325,9 @@ export class SessionUsageStore {
   // by the directories themselves, so a default that resolves to one directory
   // shares a scan with that directory named outright). Unlike SingleFlight this RETAINS the resolved promise, so
   // after a seed completes every later read awaits an already-settled promise
-  // — zero rescan. A rejected seed is dropped so the next read retries.
-  private readonly seeded = new Map<string, Promise<void>>();
+  // — zero rescan. A rejected seed, or one whose watch is lost, is dropped so
+  // the next read seeds again.
+  private readonly seeded = new Map<string, Seeding>();
   private seededDay = "";
   // [LAW:one-source-of-truth] The recent tok/s observations per session, a
   // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
@@ -333,6 +348,8 @@ export class SessionUsageStore {
   private misses = 0;
   private sweeps = 0;
   private seeds = 0;
+  // Transcripts the watches reported, folded in by a `today` render.
+  private watched = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -360,13 +377,19 @@ export class SessionUsageStore {
     misses: number;
     sweeps: number;
     seeds: number;
+    watches: number;
+    watched: number;
   } {
+    let watches = 0;
+    for (const s of this.seeded.values()) watches += s.watches.length;
     return {
       size: this.entries.size,
       hits: this.hits,
       misses: this.misses,
       sweeps: this.sweeps,
       seeds: this.seeds,
+      watches,
+      watched: this.watched,
     };
   }
 
@@ -400,9 +423,10 @@ export class SessionUsageStore {
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed seed or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
+  // [LAW:no-silent-failure] A failed seed, a refused watch, a watched
+  // transcript that would not fold, or a failed active-session ingest makes
+  // the whole projection `failed` — a total silently missing today's work
+  // would be a confident wrong number, worse than a loud gap.
   //
   // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
   // the sum is that session plus every session whose transcript lives in THAT
@@ -419,12 +443,18 @@ export class SessionUsageStore {
   ): Promise<Outcome<TodayInfo>> {
     const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
+    let seeding: Seeding;
     try {
-      await this.ensureSeeded(today, claudePaths);
+      seeding = this.ensureSeeded(today, claudePaths);
+      await seeding.done;
     } catch (error) {
       return failed(
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+    const unfolded = await this.foldWatched(seeding);
+    if (unfolded.length > 0) {
+      return failed(`usage watch: ${unfolded.join("; ")}`);
     }
     // Keep the active session fresh: a seed runs once per day, so after it
     // every render's freshness for the active session comes from here (a hit
@@ -642,21 +672,68 @@ export class SessionUsageStore {
     return ok({ files: newFiles, ...mergeFolds(newFiles), mainMtime });
   }
 
-  private ensureSeeded(day: string, claudePaths: string[]): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] The watch is armed BEFORE the seed
+  // reads the tree, so every write lands in the scan, in `dirty`, or in both
+  // (the fold is mtime-gated, so both costs a stat) — never in neither. A watch
+  // the OS refuses throws here, before any scan: re-scanning each render in its
+  // place would be the per-render whole-tree scan this store exists to avoid.
+  private ensureSeeded(day: string, claudePaths: string[]): Seeding {
     // Drop other days' memos so the map holds only the current day's.
     if (this.seededDay !== day) {
-      this.seeded.clear();
+      for (const key of [...this.seeded.keys()]) this.unseed(key);
       this.seededDay = day;
     }
     const key = claudePaths.join("\0");
     const existing = this.seeded.get(key);
     if (existing) return existing;
-    const promise = this.seed(claudePaths);
-    this.seeded.set(key, promise);
-    promise.catch(() => {
-      if (this.seeded.get(key) === promise) this.seeded.delete(key);
+    const dirty = new Map<string, string>();
+    const watches: TranscriptWatch[] = [];
+    try {
+      for (const dir of claudePaths) {
+        watches.push(
+          watchTranscripts(
+            dir,
+            (write) => dirty.set(write.path, write.sessionId),
+            (reason) => {
+              this.log("warn", `usageStore watch lost: ${reason}`);
+              if (this.seeded.get(key) === seeding) this.unseed(key);
+            },
+          ),
+        );
+      }
+    } catch (error) {
+      for (const w of watches) w.close();
+      throw error;
+    }
+    const seeding: Seeding = { done: this.seed(claudePaths), dirty, watches };
+    this.seeded.set(key, seeding);
+    seeding.done.catch(() => {
+      if (this.seeded.get(key) === seeding) this.unseed(key);
     });
-    return promise;
+    return seeding;
+  }
+
+  private unseed(key: string): void {
+    for (const w of this.seeded.get(key)?.watches ?? []) w.close();
+    this.seeded.delete(key);
+  }
+
+  // Fold in every transcript the watch reported since the last `today`
+  // render. Each is the same mtime-gated ingest a render does, so one its own
+  // render already folded costs a stat. Returns why any could not be folded;
+  // those stay in `dirty` for the next render to retry.
+  private async foldWatched(seeding: Seeding): Promise<readonly string[]> {
+    const writes = [...seeding.dirty];
+    seeding.dirty.clear();
+    const failures: string[] = [];
+    await mapPool(writes, SEED_CONCURRENCY, async ([path, sessionId]) => {
+      const outcome = await this.ingest(sessionId, path);
+      if (outcome.kind !== "failed") return;
+      seeding.dirty.set(path, sessionId);
+      failures.push(outcome.reason);
+    });
+    this.watched += writes.length;
+    return failures;
   }
 
   // The one and only whole-tree scan: lazily, once per day and Claude Code
@@ -747,7 +824,7 @@ export class SessionUsageStore {
       this.sweepTimer = null;
     }
     this.entries.clear();
-    this.seeded.clear();
+    for (const key of [...this.seeded.keys()]) this.unseed(key);
     this.speedRings.clear();
   }
 }

@@ -60,6 +60,10 @@ export interface StatsSnapshot {
     hits: number;
     misses: number;
     sweeps: number;
+    // Transcript watches held (one per Claude Code directory seeded today),
+    // and the writes they reported that a `today` render folded in.
+    watches: number;
+    watched: number;
   };
   renderCache: {
     size: number;

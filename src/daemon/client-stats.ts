@@ -92,6 +92,8 @@ export function formatStats(s: StatsSnapshot): string {
     `  hit rate      ${fmtRate(s.usageCache.hits, s.usageCache.misses)} (${s.usageCache.hits} / ${s.usageCache.hits + s.usageCache.misses})`,
   );
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
+  lines.push(`  watches       ${s.usageCache.watches}`);
+  lines.push(`  watched       ${s.usageCache.watched}`);
   lines.push(``);
   lines.push(`renderCache`);
   lines.push(`  size          ${s.renderCache.size}`);

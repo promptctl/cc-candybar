@@ -17,6 +17,7 @@
 
 import { createHook } from "node:async_hooks";
 import {
+  appendFileSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
@@ -30,6 +31,7 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { instantOf } from "../src/utils/instant";
+import type { Outcome } from "../src/utils/outcome";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -63,6 +65,21 @@ function usageLine(tag: string, day: Date, cost: number): string {
       },
     }) + "\n"
   );
+}
+
+// Read `today` until it reports `cost`, or until a deadline: a write reaches
+// the store through an fs event, which arrives when the OS delivers it.
+async function todayOnceItReaches(
+  read: () => Promise<Outcome<{ cost: number }>>,
+  cost: number,
+): Promise<Outcome<{ cost: number }>> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const info = await read();
+    const reached = info.kind === "ok" && Math.abs(info.value.cost - cost) < 1e-6;
+    if (reached || Date.now() > deadline) return info;
+    await new Promise((r) => setTimeout(r, 25));
+  }
 }
 
 function hook(sessionId: string, transcriptPath: string): ClaudeHookData {
@@ -410,6 +427,68 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       expect(store.getStats().seeds).toBe(1);
     } finally {
       store.close();
+    }
+  });
+
+  // brandon-unfiled-3248.7xp: a headless session (claude -p, the Agent SDK)
+  // never renders, so nothing but the filesystem says it did work after the
+  // day's seed.
+  test("a session that never renders counts in today once it writes, with no rescan", async () => {
+    clearParseCache();
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-store-headless-"));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      const pdir = join(dir, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      const active = join(pdir, "active.jsonl");
+      const quiet = join(pdir, "quiet.jsonl");
+      writeFileSync(active, usageLine("active", new Date(), 1));
+      writeFileSync(quiet, usageLine("quiet-0", new Date(), 2));
+      const read = () =>
+        store.getTodayInfo(hook("active", active), dir, instantOf(new Date()));
+      const seeded = await read();
+      expect(seeded.kind === "ok" && seeded.value.cost).toBeCloseTo(3, 5);
+
+      // One session seeded but silent since appends; another starts after
+      // the seed. Neither renders.
+      appendFileSync(quiet, usageLine("quiet-1", new Date(), 4));
+      writeFileSync(join(pdir, "late.jsonl"), usageLine("late", new Date(), 8));
+
+      const caught = await todayOnceItReaches(read, 15);
+      expect(caught.kind === "ok" && caught.value.cost).toBeCloseTo(15, 5);
+      expect(store.getStats()).toMatchObject({ seeds: 1, watches: 1 });
+      expect(store.getStats().watched).toBeGreaterThan(0);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect(store.getStats().watches).toBe(0);
+  });
+
+  test("a directory with no projects yet is seeded again once one appears", async () => {
+    clearParseCache();
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-store-fresh-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "cc-candybar-store-elsewhere-"));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      const active = join(elsewhere, "active.jsonl");
+      writeFileSync(active, usageLine("active", new Date(), 1));
+      const read = () =>
+        store.getTodayInfo(hook("active", active), dir, instantOf(new Date()));
+      const alone = await read();
+      expect(alone.kind === "ok" && alone.value.cost).toBeCloseTo(1, 5);
+
+      const pdir = join(dir, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", new Date(), 6));
+
+      const caught = await todayOnceItReaches(read, 7);
+      expect(caught.kind === "ok" && caught.value.cost).toBeCloseTo(7, 5);
+      expect(store.getStats().seeds).toBe(2);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(elsewhere, { recursive: true, force: true });
     }
   });
 });

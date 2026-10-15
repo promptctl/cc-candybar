@@ -27,7 +27,7 @@ describe("RuntimeStats.snapshot", () => {
         invalidations: 3,
         watchers: 2,
       },
-      usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
+      usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1, watches: 1, watched: 4 },
       renderCacheSize: 3,
       effectCache: { sessions: 2, effects: 5 },
       watchersActive: 2,
@@ -42,7 +42,7 @@ describe("RuntimeStats.snapshot", () => {
       inFlight: 1,
     });
     expect(snap.gitCache.hits).toBe(100);
-    expect(snap.usageCache.size).toBe(10);
+    expect(snap.usageCache).toMatchObject({ size: 10, watches: 1, watched: 4 });
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.watchers).toEqual({
       active: 2,
@@ -61,7 +61,7 @@ describe("RuntimeStats.snapshot", () => {
   test("version is the package stamp; protocolVersion is the wire contract", () => {
     const snap = new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0, watches: 0, watched: 0 },
       renderCacheSize: 0,
       effectCache: { sessions: 0, effects: 0 },
       watchersActive: 0,
@@ -87,7 +87,7 @@ describe("formatStats", () => {
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
       gitCache: { size: 5, hits: 80, misses: 20, invalidations: 3, watchers: 5 },
-      usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
+      usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0, watches: 1, watched: 6 },
       renderCache: { size: 4 },
       effectCache: { sessions: 2, effects: 3 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
@@ -108,6 +108,8 @@ describe("formatStats", () => {
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
+    expect(out).toContain("watches       1");
+    expect(out).toContain("watched       6");
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -124,7 +126,7 @@ describe("formatStats", () => {
       arrayBuffersBytes: 0,
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0, watches: 0, watched: 0 },
       renderCache: { size: 0 },
       effectCache: { sessions: 0, effects: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
