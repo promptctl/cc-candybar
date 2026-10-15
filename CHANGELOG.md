@@ -1,3 +1,10 @@
+# [1.128.0](https://github.com/promptctl/cc-candybar/compare/v1.127.2...v1.128.0) (2026-10-15)
+
+
+### Features
+
+* **effects:** a placement dissolves out when it leaves ([#334](https://github.com/promptctl/cc-candybar/issues/334)) ([763b2b0](https://github.com/promptctl/cc-candybar/commit/763b2b05f830ab19b99b90da666329b91a51f04c))
+
 ## [1.127.2](https://github.com/promptctl/cc-candybar/compare/v1.127.1...v1.127.2) (2026-10-15)
 
 
