@@ -145,6 +145,22 @@ export interface Line<C> {
 }
 export type RenderedLine = Line<LaidCell>;
 
+// Which row each line is, as a name stable while lines of other kinds come and
+// go: its place and band, and how many lines of that kind came before it. A bar
+// row stays `flow.own#1` whether the settings door's body (`above`) or a dropped
+// menu (`deeper`) is drawn over it or not.
+export function rowIdentities<C>(
+  lines: ReadonlyArray<Line<C>>,
+): Array<{ readonly line: Line<C>; readonly row: string }> {
+  const counts = new Map<string, number>();
+  return lines.map((line) => {
+    const kind = `${line.place}.${line.band}`;
+    const nth = counts.get(kind) ?? 0;
+    counts.set(kind, nth + 1);
+    return { line, row: `${kind}#${nth}` };
+  });
+}
+
 export type RenderedLines = readonly RenderedLine[];
 
 // ─── Compile / render contexts (the injected capabilities) ──────────────────────

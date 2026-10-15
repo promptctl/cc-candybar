@@ -211,7 +211,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion("shimmer", when);
       for (let row = 0; row < rows; row++) {
-        const moving = motion(row);
+        const moving = motion(`flow.own#${row}`);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
         moving.wrap(new RichText("x"), 10);
       }
@@ -225,5 +225,44 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);
     expect(effects.lastFrame()).toMatchObject({ made: 4, reused: 1 });
+  });
+
+  test("a row keeps its motion when lines of another kind appear above it", () => {
+    // One bar, its group's body closed and open: the open body's lines push the
+    // bottom row lower, but it is the same row of the bar, so it moves alike.
+    const grouped = (open: boolean): ValidatedConfig =>
+      parseAndValidate(
+        "<test>",
+        `{
+          segments: {
+            inner: { template: 'inside the group' },
+            bottom: { template: 'bottom row, the same in both renders' },
+          },
+          root: { v: [
+            { kind: "group", name: "g", label: "g", open: ${open}, children: [{ v: ["inner", { seg: "inner", id: "inner-2" }] }] },
+            "bottom",
+          ] },
+        }`,
+        undefined,
+        DEFAULT_DSL_CONFIG,
+      );
+    const closed = renderer(grouped(false));
+    const opened = renderer(grouped(true));
+    try {
+      const bottom = (bytes: string): string =>
+        bytes.split("\n").find((line) => stripAnsi(line).includes("bottom row"))!;
+      for (const loop of LOOPS) {
+        const effects = new SessionEffects("s");
+        closed.render(loop, at(0), effects);
+        const before = closed.render(loop, at(30), effects);
+        const after = opened.render(loop, at(30), effects);
+        // [LAW:verifiable-goals] The body really added lines above the row.
+        expect(after.split("\n").length).toBeGreaterThan(before.split("\n").length);
+        expect(bottom(after)).toBe(bottom(before));
+      }
+    } finally {
+      closed.dispose();
+      opened.dispose();
+    }
   });
 });

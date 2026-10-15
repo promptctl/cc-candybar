@@ -88,7 +88,7 @@ export class SessionEffects {
   // not restart. Each render starts an empty map and keeps only the rows it
   // draws, so a row that stopped being drawn (a menu closed) takes its effect
   // and its settled shares with it.
-  private rows = new Map<number, RowEffect>();
+  private rows = new Map<string, RowEffect>();
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
@@ -117,13 +117,13 @@ export class SessionEffects {
    * catalogue effect starts calm at its t = 0 — pulse at rest, shimmer entering
    * from off the row, wheel at the theme's own hues.
    */
-  motion(name: EffectName, at: Instant): (row: number) => RowMotion {
+  motion(name: EffectName, at: Instant): (row: string) => RowMotion {
     if (this.inForce?.name !== name) {
       this.inForce = { name, since: at };
       this.rows.clear();
     }
     const known = this.rows;
-    const drawn = new Map<number, RowEffect>();
+    const drawn = new Map<string, RowEffect>();
     this.rows = drawn;
     const t = at - this.inForce.since;
     const frame = { effect: name, t, made: 0, reused: 0 };

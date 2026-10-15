@@ -133,6 +133,7 @@ import {
 import {
   layoutRows,
   nodeType,
+  rowIdentities,
   type Compiled,
   type CompiledNode,
   type CompiledSegment,
@@ -1406,10 +1407,12 @@ export function renderDsl(
             ];
       }),
     );
-  const rendered = renderNode(root, true, barRoot(decor))
+  const rendered = rowIdentities(renderNode(root, true, barRoot(decor)))
     // A row's fill demands resolve here and nowhere else: this is the one place a
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
-    .map((line, row) =>
+    // [LAW:one-source-of-truth] A row's motion follows the row, not its line
+    // number, so a menu opening over it does not move it onto another's.
+    .map(({ line, row }) =>
       renderStripCells(resolveFill(line.cells, opts), opts, rowMotion(row)),
     )
     .join("\n");
