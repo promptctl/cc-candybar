@@ -979,35 +979,46 @@ describe("depth advances the hue", () => {
 });
 
 describe("a band is a plane", () => {
+  // The plane a band builds from the colour its trigger was searched to: into
+  // the background, as a band always has — unless that plane would stand too
+  // near its trigger (a state the search carried to the background itself) or
+  // the plane it hangs in: then into the foreground, then each as far as the
+  // cap.
+  const recededPlane = (
+    palette: Palette,
+    state: ColorRgba,
+    depth: number,
+    outer: readonly ColorRgba[],
+  ): { readonly plane: ColorRgba; readonly background: ColorRgba } => {
+    const recession = Math.min(
+      BAND_RECESSION.cap,
+      BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
+    );
+    const toward = (pole: "background" | "foreground", amount: number): ColorRgba =>
+      blendRgb(state, paletteRole(palette, pole), amount);
+    const holds = (p: ColorRgba): boolean =>
+      deltaE(drawnGround(state), drawnGround(p)) >= BAND_FLOORS.triggerPlane &&
+      outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane);
+    const background = toward("background", recession);
+    const plane =
+      [
+        background,
+        toward("foreground", recession),
+        toward("background", BAND_RECESSION.cap),
+        toward("foreground", BAND_RECESSION.cap),
+      ].find(holds) ?? background;
+    return { plane, background };
+  };
+
   test("the plane is the state receded toward background by the depth's recession, capped — or, where that breaks a band floor, toward foreground, then as far as the cap", () => {
     let intoForeground = 0;
     for (const { palette, hue, ground } of LINEAGES) {
       for (const depth of [0, 1, 2, 3, 4]) {
         const { state, plane } = bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR);
-        const recession = Math.min(
-          BAND_RECESSION.cap,
-          BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
-        );
-        const toward = (pole: "background" | "foreground", amount: number): ColorRgba =>
-          blendRgb(state, paletteRole(palette, pole), amount);
-        // Into the background, as a band always has — unless that plane would
-        // stand too near its trigger (a state the search carried to the
-        // background itself) or the plane it hangs in: then into the
-        // foreground, then each as far as the cap.
         const outer = depth === 0 ? [] : [bandFor(palette, { hue, depth: depth - 1, ground }, ColorDepth.TRUECOLOR).plane];
-        const holds = (p: ColorRgba): boolean =>
-          deltaE(drawnGround(state), drawnGround(p)) >= BAND_FLOORS.triggerPlane &&
-          outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane);
-        const background = toward("background", recession);
-        const expected =
-          [
-            background,
-            toward("foreground", recession),
-            toward("background", BAND_RECESSION.cap),
-            toward("foreground", BAND_RECESSION.cap),
-          ].find(holds) ?? background;
-        if (expected.hex !== background.hex) intoForeground++;
-        expect(plane.hex).toBe(expected.hex);
+        const expected = recededPlane(palette, state, depth, outer);
+        if (expected.plane.hex !== expected.background.hex) intoForeground++;
+        expect(plane.hex).toBe(expected.plane.hex);
       }
     }
     // Non-vacuous: some band's background plane breaks a floor.
@@ -1016,6 +1027,44 @@ describe("a band is a plane", () => {
     expect(BAND_RECESSION.base + BAND_RECESSION.perDepth * 4).toBeGreaterThan(
       BAND_RECESSION.cap,
     );
+  });
+
+  test.each([ColorDepth.EIGHT_BIT, ColorDepth.STANDARD].map((d) => [ColorDepth[d], d] as const))("drawn at %s, the plane recedes from the colour its own trigger's search settled on, drawn once wherever that keeps the band's floors", (_name, drawnAt) => {
+    // Where no twelfth clears, the search settles on the candidate standing
+    // furthest as drawn, so a depth can settle on an anchor of its own — near
+    // black at 256 colours where truecolor settles on white — and the band
+    // recedes from the anchor its trigger is drawn from. A plane is replaced
+    // only where its rounding breaks a floor, so where it keeps them the band
+    // draws it as it is.
+    const shown = shownAt(drawnAt);
+    const wrong: string[] = [];
+    let checked = 0;
+    let ownAnchor = 0;
+    for (const { palette, hue, ground, name } of LINEAGES) {
+      let outer: readonly ColorRgba[] = [];
+      for (const depth of DEPTHS) {
+        const among = depth === 0 ? groundCells(palette, ground) : outer;
+        const anchorAt = (at: ColorDepth): ColorRgba =>
+          stateFor(palette, hueAtDepth(hue, depth), among, at).anchor;
+        const { plane } = recededPlane(palette, anchorAt(drawnAt), depth, outer);
+        const once = shown(plane);
+        const band = (d: number) => bandFor(palette, { hue, depth: d, ground }, drawnAt);
+        const keepsFloors =
+          deltaE(once, shown(band(depth).state)) >= BAND_FLOORS.triggerPlane &&
+          contrastRatio(once, shown(band(depth + 1).state)) >= STATE_FLOOR &&
+          (depth === 0 || deltaE(once, shown(band(depth - 1).plane)) >= BAND_FLOORS.nestedPlane);
+        if (keepsFloors) {
+          checked++;
+          if (anchorAt(drawnAt).hex !== anchorAt(ColorDepth.TRUECOLOR).hex) ownAnchor++;
+          if (shown(band(depth).plane).hex !== once.hex) wrong.push(`${name} depth ${depth}`);
+        }
+        outer = [plane];
+      }
+    }
+    expect(wrong).toEqual([]);
+    // Non-vacuous: bands whose depth settles on its own anchor are among those checked.
+    expect(ownAnchor).toBeGreaterThan(0);
+    expect(checked).toBeGreaterThan(LINEAGES.length);
   });
 
   test("items are placed along the plane→state axis by the band's distribution, inside the window", () => {

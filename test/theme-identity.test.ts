@@ -262,9 +262,10 @@ describe("no two neighbouring cells blur", () => {
   // cell (context beside autocompact, and ceiling) wear that cell's colour
   // byte for byte (decorEntryFor), as do the cells of a muted row, and a
   // theme can draw two of its colours alike (textual-ansi's every shade of a
-  // role is one colour). A divider between backgrounds the eye tells apart is
-  // a seam the joiner gave up for nothing.
-  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider only backgrounds that meet", (_name, variant) => {
+  // role is one colour). Those are the only neighbours that share a
+  // background, so a divider between two colours is two cells the eye cannot
+  // tell apart, with the divider covering for them.
+  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider only neighbours of one colour", (_name, variant) => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
     const arrows = seams
@@ -272,7 +273,7 @@ describe("no two neighbouring cells blur", () => {
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(arrows)]).toEqual([]);
     const dividers = seams
-      .filter((s) => s.glyph === DIVIDER && dE(s.left, s.right) >= SEAM_MIN_DELTA_E)
+      .filter((s) => s.glyph === DIVIDER && s.left.hex !== s.right.hex)
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(dividers)]).toEqual([]);
   });

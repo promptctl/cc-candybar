@@ -642,6 +642,13 @@ export const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>
  * at the depth it was searched for — or null when it clears.
  */
 export interface StateSearch {
+  /**
+   * The candidate the search settled on, before the depth draws it: `state`
+   * is drawn from it, and the band's plane and items are blended from it
+   * (`trueBand`), so a trigger and its band have one colour to agree on at
+   * every depth. Where no twelfth clears, the depth chooses it.
+   */
+  readonly anchor: ColorRgba;
   readonly state: ColorRgba;
   readonly short: number | null;
 }
@@ -703,9 +710,8 @@ function searchState(
   among: readonly ColorRgba[],
   drawnAt: ColorDepth,
 ): StateSearch {
-  // Measured as drawn: a translucent theme's colours are shown composited over
-  // the terminal's black, and a raw-RGBA ratio reads colours drawn nowhere
-  // (cyberpunk's secondary measured 2.2 raw and drew at 1.71).
+  // Measured as drawn: a translucent colour is shown composited over the
+  // terminal's black, and a raw-RGBA ratio reads a colour drawn nowhere.
   const cells = among.map(shownTrue);
   const pure = paletteRole(palette, hue);
   const black = new ColorRgba(0, 0, 0);
@@ -803,7 +809,11 @@ function searchState(
       ),
     ) ?? chosen;
   const stands = standsAsDrawn(state);
-  return { state, short: stands >= STATE_FLOOR ? null : stands };
+  return {
+    anchor: chosen,
+    state,
+    short: stands >= STATE_FLOOR ? null : stands,
+  };
 }
 
 /**
@@ -911,21 +921,30 @@ export interface Disclosure {
 function standsAmong(
   palette: Palette,
   disclosure: Disclosure,
+  drawnAt: ColorDepth,
 ): readonly ColorRgba[] {
   return disclosure.depth === 0
     ? groundCells(palette, disclosure.ground)
-    : enclosingPlane(palette, disclosure);
+    : enclosingPlane(palette, disclosure, drawnAt);
 }
 
-// The plane of the band `disclosure` hangs in, as truecolor draws it: none for
-// a bar trigger's band (the bar is no band), the plane one depth up otherwise.
+// The plane of the band `disclosure` hangs in, before `drawnAt` rounds it: none
+// for a bar trigger's band (the bar is no band), the plane one depth up
+// otherwise.
 const enclosingPlane = (
   palette: Palette,
   disclosure: Disclosure,
+  drawnAt: ColorDepth,
 ): readonly ColorRgba[] =>
   disclosure.depth === 0
     ? []
-    : [trueBand(palette, { ...disclosure, depth: disclosure.depth - 1 }).plane];
+    : [
+        trueBand(
+          palette,
+          { ...disclosure, depth: disclosure.depth - 1 },
+          drawnAt,
+        ).plane,
+      ];
 
 /** The line the render reports for a state that stands short of its floor, if it does. */
 const stateShortfall = (
@@ -1042,10 +1061,10 @@ export interface Band extends BandColours {
  *
  * Both colours are the ones the terminal draws at `drawnAt`: the state is
  * `stateFor`'s at that depth, and a plane whose rounding breaks a
- * `BAND_FLOORS` distance its truecolor colours kept is replaced by the
- * nearest drawn colour that keeps it (`ensureDrawn`). A distance truecolor
- * itself misses (depth 3) is not one rounding broke, so it is not asked of
- * the drawn colours either.
+ * `BAND_FLOORS` distance its unrounded colours kept is replaced by the
+ * nearest drawn colour that keeps it (`ensureDrawn`). A distance the
+ * unrounded band itself misses (depth 3) is not one rounding broke, so it is
+ * not asked of the drawn colours either.
  *
  * Memoised per (palette, disclosure, drawnAt): the render walk asks for every
  * segment's band on every render, and palettes are memoised objects
@@ -1061,22 +1080,23 @@ export function bandFor(
     const search = stateFor(
       palette,
       hueAtDepth(disclosure.hue, disclosure.depth),
-      standsAmong(palette, disclosure),
+      standsAmong(palette, disclosure, drawnAt),
       drawnAt,
     );
     const { state } = search;
-    // The plane is the truecolor plane as drawn — rounded once, from the
-    // theme's own colours, never blended from a state already rounded.
+    // The plane is the unrounded plane as drawn — rounded once, from the anchor
+    // the state is drawn from, never blended from a state already rounded.
     const floors = planeFloors(palette, disclosure, state, drawnAt);
     const plane = ensureDrawn(
-      trueBand(palette, disclosure).plane,
+      trueBand(palette, disclosure, drawnAt).plane,
       drawnAt,
       (candidate, drawn) => floors.every((holds) => holds(candidate, drawn)),
     );
     // Never thrown, whatever the palette: every depth's table holds an entry
     // that keeps all three floors (test/decor.test.ts, "a band's drawn plane
-    // always has a colour that keeps its floors"), and truecolor keeps them by
-    // construction, since a floor is asked only where truecolor kept it.
+    // always has a colour that keeps its floors"), and truecolor draws the
+    // unrounded plane, which keeps them, since a floor is asked only where the
+    // unrounded band kept it.
     if (plane === undefined) {
       throw new Error(
         `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
@@ -1111,11 +1131,17 @@ const disclosureKey = ({ hue, depth, ground }: Disclosure): string =>
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
-// The band as truecolor draws it — the colours every depth rounds from, and
-// the pair whose floors decide which floors a drawn band is held to.
-function trueBand(palette: Palette, disclosure: Disclosure): BandColours {
-  return TRUE_BANDS(palette, disclosureKey(disclosure), () =>
-    computeTrueBand(palette, disclosure),
+// The band before `drawnAt` rounds it — its state the anchor the search settled
+// on at that depth (`StateSearch`), the colours that depth rounds from, and the
+// pair whose floors decide which floors a drawn band is held to. Where a
+// twelfth clears, every depth settles on it, and so on one band.
+function trueBand(
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): BandColours {
+  return TRUE_BANDS(palette, `${disclosureKey(disclosure)}|${drawnAt}`, () =>
+    computeTrueBand(palette, disclosure, drawnAt),
   );
 }
 // Memoised beside the drawn bands: every band's floors and every band item
@@ -1125,12 +1151,13 @@ const TRUE_BANDS = memoPerPalette<BandColours>();
 function computeTrueBand(
   palette: Palette,
   disclosure: Disclosure,
+  drawnAt: ColorDepth,
 ): BandColours {
-  const { state } = stateFor(
+  const { anchor: state } = stateFor(
     palette,
     hueAtDepth(disclosure.hue, disclosure.depth),
-    standsAmong(palette, disclosure),
-    ColorDepth.TRUECOLOR,
+    standsAmong(palette, disclosure, drawnAt),
+    drawnAt,
   );
   const recession = Math.min(
     BAND_RECESSION.cap,
@@ -1143,7 +1170,7 @@ function computeTrueBand(
   // first that holds the band's floors, and the background where none does.
   const into = (pole: ThemePole, amount: number): ColorRgba =>
     blendRgb(state, paletteRole(palette, pole), amount);
-  const enclosing = enclosingPlane(palette, disclosure);
+  const enclosing = enclosingPlane(palette, disclosure, drawnAt);
   const holds = (plane: ColorRgba): boolean =>
     deltaE(shownTrue(state), shownTrue(plane)) >= BAND_FLOORS.triggerPlane &&
     enclosing.every(
@@ -1170,8 +1197,8 @@ type PlaneFloor = (
   drawn: (c: ColorRgba) => ColorRgba,
 ) => boolean;
 
-// What a band's plane must hold as drawn, each a floor its truecolor colours
-// already hold, and none where truecolor missed it: off its own trigger (ΔE),
+// What a band's plane must hold as drawn, each a floor its unrounded colours
+// already hold, and none where they missed it: off its own trigger (ΔE),
 // under the trigger of the band nested in it — which stands STATE_FLOOR off
 // the plane it sits on — and, below depth 0, whose enclosing surface is the
 // bar and the state floor's to keep, off the plane it is nested in (ΔE).
@@ -1182,26 +1209,23 @@ function planeFloors(
   drawnAt: ColorDepth,
 ): readonly PlaneFloor[] {
   const { hue, depth, ground } = disclosure;
-  // The truecolor band is the unrepaired one (`trueBand`),
+  // The unrounded band is the unrepaired one (`trueBand`),
   // so no floor asks `bandFor` for the band it is computing.
   const trueState = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d, ground }).state;
+    trueBand(palette, { hue, depth: d, ground }, drawnAt).state;
   const truePlane = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d, ground }).plane;
+    trueBand(palette, { hue, depth: d, ground }, drawnAt).plane;
   const plane = truePlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
-  const nested = hueAtDepth(hue, depth + 1);
-  const nestedAmong = standsAmong(palette, { hue, depth: depth + 1, ground });
-  const nestedTrue = stateFor(
+  const nested = stateFor(
     palette,
-    nested,
-    nestedAmong,
-    ColorDepth.TRUECOLOR,
+    hueAtDepth(hue, depth + 1),
+    standsAmong(palette, { hue, depth: depth + 1, ground }, drawnAt),
+    drawnAt,
   );
-  const nestedDrawn = stateFor(palette, nested, nestedAmong, drawnAt).state;
   const keptUnder =
-    contrastRatio(shownTrue(plane), shownTrue(nestedTrue.state)) >= STATE_FLOOR
+    contrastRatio(shownTrue(plane), shownTrue(nested.anchor)) >= STATE_FLOOR
       ? STATE_FLOOR
       : 0;
   const apart =
@@ -1211,7 +1235,7 @@ function planeFloors(
   return [
     apart(state, keptApart(BAND_FLOORS.triggerPlane, trueState(depth))),
     (candidate, drawn) =>
-      contrastRatio(candidate, drawn(nestedDrawn)) >= keptUnder,
+      contrastRatio(candidate, drawn(nested.state)) >= keptUnder,
     ...(depth > 0
       ? [
           apart(
@@ -1240,7 +1264,7 @@ export function bandItemFor(
   drawnAt: ColorDepth,
 ): ColorRgba {
   const band = bandFor(palette, disclosure, drawnAt);
-  const truecolor = trueBand(palette, disclosure);
+  const truecolor = trueBand(palette, disclosure, drawnAt);
   const at = (place: number): ColorRgba =>
     blendRgb(truecolor.plane, truecolor.state, place);
   const own = BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address);
