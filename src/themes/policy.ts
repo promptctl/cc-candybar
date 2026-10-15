@@ -648,12 +648,13 @@ export function effectiveShade(
 //
 // Wrapping and cell padding are how much bar you want on your screen right now
 // — a taste that legitimately differs between one session in a wide terminal
-// and another in a split pane, so, like charset and colorCompatibility above,
-// each resolves a session pick over the config default. Their floors and domains live here, beside the
-// other globals vocabularies, because both the config loader (range validation,
-// JSON-schema emit) and the render layer need them and config must not import
-// render [LAW:one-way-deps]. src/render/strip.ts re-exports them so render-layer
-// callers keep their existing import site.
+// and another in a split pane, so, unlike charset and colorCompatibility above,
+// each resolves a session pick over the config default. Their floors and
+// domains live here, beside the other globals vocabularies, because both the
+// config loader (range validation, JSON-schema emit) and the render layer need
+// them and config must not import render [LAW:one-way-deps].
+// src/render/strip.ts re-exports them so render-layer callers keep their
+// existing import site.
 
 // [LAW:one-source-of-truth] The one statement of the globals.autoWrap default
 // (on — current behavior).

@@ -92,7 +92,7 @@ The port changes no observable behaviour. Same socket path, same wire format and
 
 **Loud errors**
 
-- The diagnostic strip is render data, word-wrapped by the same cell measure as the bar `[LAW:no-silent-fallbacks]`.
+- The diagnostic strip is render data, word-wrapped by the same cell measure as the bar `[LAW:no-silent-failure]`.
 - The recovery path's `file://` links never depend on the `cc-candybar://` handler.
 - Duplicate keys surface as warnings; `cc-candybar check` fails on a ⚠ segment.
 - The update notice compares the baked source digest to `src/` beside the bundle, and polls the registry only for published installs (how the digest is baked without a JS bundle is an open question below).

@@ -93,7 +93,7 @@ function todoItems(input: unknown): readonly TodoItem[] | undefined {
 /**
  * Project one parsed transcript line's activity, or undefined when it has none.
  *
- * [LAW:no-control-flow-on-union-kind] ONE total switch over the content-block
+ * [LAW:parse-dont-validate] ONE total switch over the content-block
  * kind, accumulating DATA — the discrimination happens once, here, at the parse
  * site, and no consumer downstream re-asks what kind of block something was.
  */

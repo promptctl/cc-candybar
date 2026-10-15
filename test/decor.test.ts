@@ -13,6 +13,7 @@ import {
   ColorRgba,
   contrastFor,
   contrastRatio,
+  ensureContrast,
   getThemePalette,
   listThemePalettes,
   Oklch,
@@ -31,6 +32,7 @@ import {
   DECOR_HUES,
   OPEN_HUE,
   DEFAULT_DISTRIBUTION,
+  DISTRIBUTION_NAMES,
   DISTRIBUTIONS,
   LEVEL_DECAY,
   STATE_FLOOR,
@@ -374,22 +376,45 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     }
   });
 
-  test("a decorated cell's text is the pole on its shades, and on a muted row its role's own text colour, read at the floor", () => {
-    const palette = getThemePalette("tokyo-night");
-    for (const shade of SHADE_NAMES) {
-      const decor: Decor = { variation: VARIATIONS.accent, shade: SHADES[shade] };
-      for (const address of [[row(0, 2), cell(1, 4)], [row(1, 2), cell(2, 4)]]) {
-        const { hue } = decorEntryFor(decor, address);
-        const { tint, text } = decorationFor(palette, { kind: "bar", decor, address }, ColorDepth.TRUECOLOR);
-        expect(contrastRatio(drawnGround(tint), text)).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
-        expect([shade, text.hex]).toEqual([
-          shade,
-          shade === "muted"
-            ? (paletteRole(palette, `text-${hue}`).hex)
-            : textOn(palette, tint, ColorDepth.TRUECOLOR).hex,
-        ]);
+  test("a decorated cell's text is the pole on its shades, and on a muted row its role's own text colour wherever that reads, moved to the floor where it does not, on every theme as drawn", () => {
+    const wrong: string[] = [];
+    let kept = 0;
+    let moved = 0;
+    for (const drawnAt of DRAWN) {
+      const shown = shownAt(drawnAt);
+      for (const palette of REGISTRY) {
+        for (const shade of SHADE_NAMES) {
+          // The variations' rows between them reach every decorative hue.
+          for (const variation of VARIATION_NAMES) {
+            const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
+            for (const address of [[row(0, 2), cell(1, 4)], [row(1, 2), cell(2, 4)]]) {
+              const { hue } = decorEntryFor(decor, address);
+              const { tint, text } = decorationFor(palette, { kind: "bar", decor, address }, drawnAt);
+              const where = `${palette.name} ${variation}/${shade} ${hue} at ${ColorDepth[drawnAt]}`;
+              const ratio = contrastRatio(shown(tint), shown(text));
+              if (ratio < TEXT_MIN_CONTRAST) wrong.push(`${where}: ${ratio.toFixed(2)}`);
+              if (shade !== "muted") {
+                if (text.hex !== textOn(palette, tint, drawnAt).hex) wrong.push(`${where}: not the pole`);
+                continue;
+              }
+              // Its role's own text, slid by rich-js until it reads — the hue
+              // kept, the lightness moved — and untouched where it already does.
+              const own = paletteRole(palette, `text-${hue}`);
+              const slid = ensureContrast(own, tint, TEXT_MIN_CONTRAST, drawnAt);
+              if (text.hex !== slid.hex) wrong.push(`${where}: ${text.hex}, not its own ${own.hex} slid to the floor (${slid.hex})`);
+              else if (slid.hex === own.hex) kept++;
+              else moved++;
+            }
+          }
+        }
       }
     }
+    expect(wrong).toEqual([]);
+    // Non-vacuous both ways: the registry has muted roles whose own text
+    // reads, and roles whose own text only the floor makes read — in
+    // truecolor every bundled theme's does, so those are the depths that round.
+    expect(kept).toBeGreaterThan(0);
+    expect(moved).toBeGreaterThan(0);
   });
 });
 
@@ -532,7 +557,7 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 // --- candybar-render-ai7.2, candybar-theme-colours-6fq5.e5n: the state floor ---
 // [LAW:verifiable-goals] Each `describe` is one line of the Done-when, over the
 // WHOLE registry, every bundled style, every position of the dial and every
-// ground a shipped variation deals — the failures the floor exists for are
+// ground a shipped variation deals under every distribution — the failures the floor exists for are
 // theme-specific (textual-dark's navy secondary, textual-ansi's flat shades),
 // so a sample proves nothing.
 
@@ -551,45 +576,66 @@ const shownAt =
   (c: ColorRgba): ColorRgba =>
     drawnColour(c, drawnAt);
 
-// Rows this long deal every ground a row can: by then a row has turned to
-// every role its variation steps it through and worn every shade of each
-// (pinned below), and a longer row wears only what a shorter one did.
+// Rows this long deal every ground a row can (pinned below): a cell's place
+// in its row picks its shade, so the distribution its container authors
+// decides which shades a row of a given length wears.
 const ROW_REACH = 12;
+/** The ground of a row of `length` cells, starting on `start`, placed by `placedBy`. */
+const groundOf = (
+  variation: VariationName,
+  shade: ShadeName,
+  start: number,
+  length: number,
+  placedBy: DistributionName,
+): Ground =>
+  rowGround({ variation: VARIATIONS[variation], shade: SHADES[shade] }, [
+    row(start, 2),
+    { index: 0, count: length, distribution: DISTRIBUTIONS[placedBy], axis: "cell" },
+  ]);
+const groundName = (ground: Ground): string => ground.map((e) => shadeRole(e.hue, e.shade)).join("+");
 /**
  * Every ground an open bar trigger can stand on: what a row of every length,
- * at either start, wears under every shipped variation at every position of
- * the dial — derived from the tables, so a new one is measured the moment it
- * ships. Named by its entries, which is also what makes two rows' grounds one.
+ * at either start, placed by every distribution, wears under every shipped
+ * variation at every position of the dial — derived from the tables, so a new
+ * one is measured the moment it ships. Named by its entries, which is also
+ * what makes two rows' grounds one.
  */
 const GROUNDS: readonly { readonly name: string; readonly ground: Ground }[] = [
   ...new Map(
-    VARIATION_NAMES.flatMap((variation) =>
-      SHADE_NAMES.flatMap((shade) =>
-        [0, 1].flatMap((r) =>
-          Array.from({ length: ROW_REACH }, (_, n) => {
-            const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
-            const ground = rowGround(decor, [row(r, 2), cell(0, n + 1)]);
-            const name = ground.map((e) => shadeRole(e.hue, e.shade)).join("+");
-            return [name, { name, ground }] as const;
-          }),
+    DISTRIBUTION_NAMES.flatMap((placedBy) =>
+      VARIATION_NAMES.flatMap((variation) =>
+        SHADE_NAMES.flatMap((shade) =>
+          [0, 1].flatMap((r) =>
+            Array.from({ length: ROW_REACH }, (_, n) => {
+              const ground = groundOf(variation, shade, r, n + 1, placedBy);
+              const name = groundName(ground);
+              return [name, { name, ground }] as const;
+            }),
+          ),
         ),
       ),
     ),
   ).values(),
 ];
 
-test("a row of ROW_REACH cells wears every shade of every role it turns to, so no longer row deals a ground GROUNDS lacks", () => {
-  for (const variation of VARIATION_NAMES) {
-    const { hues, run } = VARIATIONS[variation];
-    const roles = run === WHOLE_ROW ? 1 : new Set(hues).size;
-    for (const shade of SHADE_NAMES) {
-      for (const r of [0, 1]) {
-        const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
-        const ground = rowGround(decor, [row(r, 2), cell(0, ROW_REACH)]);
-        expect([variation, shade, r, ground.length]).toEqual([variation, shade, r, roles * SHADES[shade].tones.length]);
+test("no row longer than ROW_REACH, under any distribution, deals a ground GROUNDS lacks", () => {
+  // Far past the cells a terminal row holds.
+  const LONGEST = 8 * ROW_REACH;
+  const named = new Set(GROUNDS.map(({ name }) => name));
+  const fresh: string[] = [];
+  for (const placedBy of DISTRIBUTION_NAMES) {
+    for (const variation of VARIATION_NAMES) {
+      for (const shade of SHADE_NAMES) {
+        for (const r of [0, 1]) {
+          for (let length = ROW_REACH + 1; length <= LONGEST; length++) {
+            const name = groundName(groundOf(variation, shade, r, length, placedBy));
+            if (!named.has(name)) fresh.push(`${placedBy} ${variation}/${shade} row ${r}, ${length} cells: ${name}`);
+          }
+        }
       }
     }
   }
+  expect(fresh).toEqual([]);
 });
 const DEPTH_HUES = [0, 1, 2].map((depth) => hueAtDepth(OPEN_HUE, depth));
 
@@ -616,6 +662,22 @@ function someColourClears(cells: readonly ColorRgba[]): boolean {
   return free <= 1;
 }
 
+/**
+ * How far the colour standing furthest off its nearest cell stands, as drawn.
+ * A contrast ratio reads luminance alone, so that colour is black, white, or
+ * the balance of the two cells adjacent in luminance that stand furthest
+ * apart, which stands the root of their ratio off each — answered here in the
+ * test's own words, independent of any search.
+ */
+function furthestAnyColourStands(cells: readonly ColorRgba[]): number {
+  const rising = cells.map((c) => relativeLuminance(drawnGround(c)) + 0.05).sort((x, y) => x - y);
+  return Math.max(
+    rising[0]! / 0.05,
+    1.05 / rising[rising.length - 1]!,
+    ...rising.slice(1).map((l, i) => Math.sqrt(l / rising[i]!)),
+  );
+}
+
 describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of the row it stands in", () => {
   // One test per depth and style: together they walk every theme × ground ×
   // depth hue, past what one test's timeout allows.
@@ -633,6 +695,36 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
             const said = short === null ? "clears" : short.toFixed(6);
             const drawn = stands >= STATE_FLOOR ? "clears" : stands.toFixed(6);
             if (said !== drawn) wrong.push(`${name} ${where} ${hue}: said ${said}, drawn ${drawn}`);
+          }
+        }
+      }
+      expect(wrong).toEqual([]);
+    },
+  );
+
+  // Black and white end every ray the search walks. In truecolor the ray
+  // toward black can stop a hair off it (#000002); a depth that draws from a
+  // table rounds both ends onto its own black and white.
+  test.each(
+    [ColorDepth.EIGHT_BIT, ColorDepth.STANDARD].flatMap((drawnAt) =>
+      STYLE_NAMES.map((style) => [drawnAt, style] as const),
+    ),
+  )(
+    "a state that stands short as drawn stands at least as far off its nearest cell as black or white would (depth %s, style %s)",
+    (drawnAt, style) => {
+      const shown = shownAt(drawnAt);
+      const ends = [new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255)];
+      const wrong: string[] = [];
+      for (const { name, palette } of STYLED.filter((styled) => styled.style === style)) {
+        for (const { name: where, ground } of GROUNDS) {
+          const cells = groundCells(palette, ground).map((c) => shown(drawnGround(c)));
+          const stands = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(shown(c), x)));
+          const furthestEnd = Math.max(...ends.map(stands));
+          for (const hue of DEPTH_HUES) {
+            const { state, short } = stateFor(palette, hue, groundCells(palette, ground), drawnAt);
+            if (short !== null && stands(state) < furthestEnd) {
+              wrong.push(`${name} ${where} ${hue}: ${stands(state).toFixed(3)}:1, an end ${furthestEnd.toFixed(3)}:1`);
+            }
           }
         }
       }
@@ -661,10 +753,10 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     expect(short.every((ground) => new Set(ground.map((e) => e.hue)).size > 1)).toBe(true);
   });
 
-  test("a row no colour stands off draws the colour standing furthest off its nearest cell, and says how far that is", () => {
+  test("a row no colour stands off draws the colour standing furthest off its nearest cell as the terminal draws both, and says how far that is", () => {
     // A row of black, grey and white: every colour sits within 2.2:1 of one.
     const roles = new Map<string, ColorRgba>([
-      ["accent", new ColorRgba(0xd0, 0x70, 0x30)],
+      ["accent", new ColorRgba(0xfe, 0xa6, 0x2b)],
       ["secondary-darken-1", new ColorRgba(0, 0, 0)],
       ["secondary", new ColorRgba(0x77, 0x77, 0x77)],
       ["secondary-lighten-1", new ColorRgba(0xff, 0xff, 0xff)],
@@ -673,15 +765,22 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     const ground: Ground = SHADES.middle.tones.map((shade) => ({ hue: "secondary", shade }));
     const cells = groundCells(straddling, ground);
     expect(someColourClears(cells)).toBe(false);
-    const { state, short } = stateFor(straddling, "accent", cells, ColorDepth.TRUECOLOR);
-    const nearest = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(c, x)));
-    expect(short).toBe(nearest(state));
-    expect(short!).toBeLessThan(STATE_FLOOR);
-    // At least as far off its nearest cell as the hue itself or either end of
-    // the lightness axis.
-    for (const other of [paletteRole(straddling, "accent"), new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255)]) {
-      expect(nearest(state)).toBeGreaterThanOrEqual(nearest(other) - 1e-9);
+    for (const drawnAt of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT]) {
+      const shown = shownAt(drawnAt);
+      const stands = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(shown(c), shown(x))));
+      const { state, short } = stateFor(straddling, "accent", cells, drawnAt);
+      expect(short).toBe(stands(state));
+      expect(short!).toBeLessThan(STATE_FLOOR);
+      // At 256 colours the deep orange truecolor picks rounds nearer the black
+      // than the hue itself stands off the white.
+      expect(stands(state)).toBeGreaterThanOrEqual(stands(paletteRole(straddling, "accent")) - 1e-9);
     }
+    // In truecolor, as far as any colour stands — at the balance of the black
+    // and the grey — short of it only by the 8-bit step the hue's ray is
+    // drawn in.
+    const { state } = stateFor(straddling, "accent", cells, ColorDepth.TRUECOLOR);
+    const nearest = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(c, x)));
+    expect(nearest(state)).toBeGreaterThan(furthestAnyColourStands(cells) * 0.99);
   });
 
   test("the search reaches the end of the lightness axis when only that end clears", () => {
@@ -833,8 +932,9 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
 // "Distinguishable" is measured as ΔE in OKLab (Euclidean distance over the
 // coordinates rich-js's `Oklch` exposes): luminance contrast cannot see two
 // hues at one lightness, and a nested trigger differs from its parent by HUE.
-// The floors are the measured registry minima rounded down — a regression
-// that moves a theme below its own floor fails, whichever theme it is.
+// The floors are BAND_FLOORS: bandFor searches for a plane that holds them,
+// and every lineage is measured against them here, so a regression that moves
+// any theme under one fails, naming it.
 
 const THEMES = REGISTRY;
 const DEPTHS = [0, 1, 2] as const;
@@ -909,35 +1009,46 @@ describe("depth advances the hue", () => {
 });
 
 describe("a band is a plane", () => {
+  // The plane a band builds from the colour its trigger was searched to: into
+  // the background, as a band always has — unless that plane would stand too
+  // near its trigger (a state the search carried to the background itself) or
+  // the plane it hangs in: then into the foreground, then each as far as the
+  // cap.
+  const recededPlane = (
+    palette: Palette,
+    state: ColorRgba,
+    depth: number,
+    outer: readonly ColorRgba[],
+  ): { readonly plane: ColorRgba; readonly background: ColorRgba } => {
+    const recession = Math.min(
+      BAND_RECESSION.cap,
+      BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
+    );
+    const toward = (pole: "background" | "foreground", amount: number): ColorRgba =>
+      blendRgb(state, paletteRole(palette, pole), amount);
+    const holds = (p: ColorRgba): boolean =>
+      deltaE(drawnGround(state), drawnGround(p)) >= BAND_FLOORS.triggerPlane &&
+      outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane);
+    const background = toward("background", recession);
+    const plane =
+      [
+        background,
+        toward("foreground", recession),
+        toward("background", BAND_RECESSION.cap),
+        toward("foreground", BAND_RECESSION.cap),
+      ].find(holds) ?? background;
+    return { plane, background };
+  };
+
   test("the plane is the state receded toward background by the depth's recession, capped — or, where that breaks a band floor, toward foreground, then as far as the cap", () => {
     let intoForeground = 0;
     for (const { palette, hue, ground } of LINEAGES) {
       for (const depth of [0, 1, 2, 3, 4]) {
         const { state, plane } = bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR);
-        const recession = Math.min(
-          BAND_RECESSION.cap,
-          BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
-        );
-        const toward = (pole: "background" | "foreground", amount: number): ColorRgba =>
-          blendRgb(state, paletteRole(palette, pole), amount);
-        // Into the background, as a band always has — unless that plane would
-        // stand too near its trigger (a state the search carried to the
-        // background itself) or the plane it hangs in: then into the
-        // foreground, then each as far as the cap.
         const outer = depth === 0 ? [] : [bandFor(palette, { hue, depth: depth - 1, ground }, ColorDepth.TRUECOLOR).plane];
-        const holds = (p: ColorRgba): boolean =>
-          deltaE(drawnGround(state), drawnGround(p)) >= BAND_FLOORS.triggerPlane &&
-          outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane);
-        const background = toward("background", recession);
-        const expected =
-          [
-            background,
-            toward("foreground", recession),
-            toward("background", BAND_RECESSION.cap),
-            toward("foreground", BAND_RECESSION.cap),
-          ].find(holds) ?? background;
-        if (expected.hex !== background.hex) intoForeground++;
-        expect(plane.hex).toBe(expected.hex);
+        const expected = recededPlane(palette, state, depth, outer);
+        if (expected.plane.hex !== expected.background.hex) intoForeground++;
+        expect(plane.hex).toBe(expected.plane.hex);
       }
     }
     // Non-vacuous: some band's background plane breaks a floor.
@@ -946,6 +1057,44 @@ describe("a band is a plane", () => {
     expect(BAND_RECESSION.base + BAND_RECESSION.perDepth * 4).toBeGreaterThan(
       BAND_RECESSION.cap,
     );
+  });
+
+  test.each([ColorDepth.EIGHT_BIT, ColorDepth.STANDARD].map((d) => [ColorDepth[d], d] as const))("drawn at %s, the plane recedes from the colour its own trigger's search settled on, drawn once wherever that keeps the band's floors", (_name, drawnAt) => {
+    // Where no twelfth clears, the search settles on the candidate standing
+    // furthest as drawn, so a depth can settle on an anchor of its own — near
+    // black at 256 colours where truecolor settles on white — and the band
+    // recedes from the anchor its trigger is drawn from. A plane is replaced
+    // only where its rounding breaks a floor, so where it keeps them the band
+    // draws it as it is.
+    const shown = shownAt(drawnAt);
+    const wrong: string[] = [];
+    let checked = 0;
+    let ownAnchor = 0;
+    for (const { palette, hue, ground, name } of LINEAGES) {
+      let outer: readonly ColorRgba[] = [];
+      for (const depth of DEPTHS) {
+        const among = depth === 0 ? groundCells(palette, ground) : outer;
+        const anchorAt = (at: ColorDepth): ColorRgba =>
+          stateFor(palette, hueAtDepth(hue, depth), among, at).anchor;
+        const { plane } = recededPlane(palette, anchorAt(drawnAt), depth, outer);
+        const once = shown(plane);
+        const band = (d: number) => bandFor(palette, { hue, depth: d, ground }, drawnAt);
+        const keepsFloors =
+          deltaE(once, shown(band(depth).state)) >= BAND_FLOORS.triggerPlane &&
+          contrastRatio(once, shown(band(depth + 1).state)) >= STATE_FLOOR &&
+          (depth === 0 || deltaE(once, shown(band(depth - 1).plane)) >= BAND_FLOORS.nestedPlane);
+        if (keepsFloors) {
+          checked++;
+          if (anchorAt(drawnAt).hex !== anchorAt(ColorDepth.TRUECOLOR).hex) ownAnchor++;
+          if (shown(band(depth).plane).hex !== once.hex) wrong.push(`${name} depth ${depth}`);
+        }
+        outer = [plane];
+      }
+    }
+    expect(wrong).toEqual([]);
+    // Non-vacuous: bands whose depth settles on its own anchor are among those checked.
+    expect(ownAnchor).toBeGreaterThan(0);
+    expect(checked).toBeGreaterThan(LINEAGES.length);
   });
 
   test("items are placed along the plane→state axis by the band's distribution, inside the window", () => {
@@ -1070,14 +1219,10 @@ describe("a band is a plane", () => {
 });
 
 describe("open trigger, its band, and a nested band are mutually distinguishable on every theme", () => {
-  // Registry minima in truecolor at the time of writing (ΔE in OKLab):
-  // trigger/plane 0.119 (textual-ansi primary), plane/nested plane 0.040
-  // (rose-pine-dawn accent), nested trigger/enclosing plane 0.087 (rose-pine
-  // primary). Each is measured on the colours the terminal draws: at 256 the
-  // band's colours are rounded to the xterm cube, and bandFor holds the same
-  // floors there (brandon-theme-picker-bgw.ddk).
-  // At ansi the floors are measured on the ANSI table's nominal colours, as
-  // rich-js `drawnColour` rounds them.
+  // Each pair is measured on the colours the terminal draws: at 256 the band's
+  // colours are rounded to the xterm cube, and bandFor holds the same floors
+  // there (brandon-theme-picker-bgw.ddk); at ansi on the ANSI table's nominal
+  // colours, as rich-js `drawnColour` rounds them.
   /** Every (lineage, depth) whose pair, as drawn at `drawnAt`, falls below `floor`, named. */
   function below(
     drawnAt: ColorDepth,

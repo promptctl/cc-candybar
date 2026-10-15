@@ -31,6 +31,7 @@ import {
   linkFragment,
   realize,
   readVar,
+  renderLook,
   type ActionRuntime,
   type CompiledActionDecl,
 } from "./action.js";
@@ -547,7 +548,7 @@ export function pickerFuncs(
           optionItemStyle(
             active,
             placedBy(undefined),
-            runtime,
+            renderLook(runtime, "{{ picker }}"),
             apply.paletteOf,
             activeSegment.drawnAt(),
             active.bg,

@@ -75,7 +75,7 @@ export function defaultSocketPath(): string {
 // client sees no response, the user sees the last cached render).
 //
 // Throws on any unsafe state; callers are expected to let the daemon exit.
-// [LAW:no-silent-fallbacks] do NOT auto-rmdir + recreate — a wrong-owner dir
+// [LAW:no-silent-failure] do NOT auto-rmdir + recreate — a wrong-owner dir
 // is hostile state, not a recoverable error.
 // [LAW:one-source-of-truth] The owner/mode/symlink verification a private
 // per-uid directory needs is declared once here — both the socket parent

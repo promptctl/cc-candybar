@@ -1451,12 +1451,8 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect(cells.length).toBe(names.length);
     for (const cell of cells) {
       // rich-js's transposePalette DIRECTLY, never cc-candybar's memoized
-      // `transposedPalette`: that memo keys on the base palette's NAME, which
-      // transposition preserves, so an implementation transposing the WRONG base
-      // would populate the very cache key this expectation then reads — handing
-      // the assertion the implementation's own answer. Asking rich-js fresh is
-      // what makes the base observable. (It is also why the memo must never be
-      // handed an already-transposed palette in the first place.)
+      // `transposedPalette`: the function under test cannot be the oracle that
+      // checks it. Asking rich-js fresh is what makes the base observable.
       expectApplied(
         cell,
         transposePalette(palette, config.styles[cell.name]!),
@@ -1483,10 +1479,9 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     );
     // The chaining guard, and the reason this renders under a look at all:
     // the bar wears base-under-vivid, so a painter handed the SEGMENT's palette
-    // instead of the base would transpose an already-transposed palette — which
-    // both double-pays OKLCH quantization and collides transposedPalette's memo
-    // (it keys on the base palette's NAME, which transposition preserves). Under
-    // that bug the identity style `none` would come back wearing dim's primary.
+    // instead of the base would transpose an already-transposed palette, and
+    // the identity style `none` would come back wearing vivid's primary rather
+    // than the base's.
     const none = cells.find((c) => c.name === "none")!;
     const dim = cells.find((c) => c.name === "dim")!;
     expect(none.fg).not.toBe(dim.fg);

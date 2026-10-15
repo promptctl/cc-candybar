@@ -936,7 +936,7 @@ function valueSourceAction(
     : ({ ...keys, ...payload } as unknown as ActionDecl);
 }
 
-// [LAW:no-silent-fallbacks] A literal `to` and the discriminator key share
+// [LAW:no-silent-failure] A literal `to` and the discriminator key share
 // the non-empty/slash-free shape — the wire rejects empty values and splits
 // on "/", so either is undeliverable. The empty/slash messages are this
 // arm's, the shape is the shared enforcer's. Built once per discriminator
@@ -1112,7 +1112,7 @@ function cycleSpec(discriminator: Discriminator): FieldSpec<readonly string[]> {
   };
 }
 
-// [LAW:no-silent-fallbacks] `int` is a marker, not a value — it declares the key
+// [LAW:no-silent-failure] `int` is a marker, not a value — it declares the key
 // an unbounded-integer cursor. Only the literal `true` is meaningful; anything
 // else is a typo to surface, not silently coerce.
 function intMarkerSpec(): FieldSpec<true> {

@@ -263,7 +263,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects an unknown theme value (BadVerbArgs)", () => {
-    // Pinning the [LAW:no-silent-fallbacks] contract on the verb itself.
+    // Pinning the [LAW:no-silent-failure] contract on the verb itself.
     // An unknown theme cannot quietly persist — the daemon's dispatcher
     // converts BadVerbArgs into a BAD_REQUEST wire response.
     const { config, sessionState } = buildRuntime();
@@ -287,7 +287,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects an unknown key with the registered-key list", () => {
-    // [LAW:no-silent-fallbacks] An unknown key is the session's gate telling
+    // [LAW:no-silent-failure] An unknown key is the session's gate telling
     // the operator "this is not a writable surface" — the BAD_REQUEST surfaces
     // exactly which keys ARE writable, so a typo or stale wire spec is
     // self-diagnosing.
@@ -469,7 +469,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state rejects whole batch if any pair fails (no partial writes)", () => {
-    // [LAW:no-silent-fallbacks] A batch is one transactional click.
+    // [LAW:no-silent-failure] A batch is one transactional click.
     // First pair valid, second pair invalid — the whole batch rejects.
     // Asserting the FIRST pair did NOT land is the load-bearing
     // guarantee: a future widget author can write a two-pair URL
@@ -502,7 +502,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   });
 
   test("set-state names the failing pair index for batched diagnostics", () => {
-    // [LAW:errors-context-in-errors] The operator clicked a Menu URL
+    // [LAW:no-silent-failure] The operator clicked a Menu URL
     // with N pairs; the diagnostic tells them WHICH pair the validator
     // rejected (1-based) so they can localize their config bug. A
     // generic "set-state: unknown state key" without an index would

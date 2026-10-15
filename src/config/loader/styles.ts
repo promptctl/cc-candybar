@@ -78,7 +78,7 @@ export function validateStyles(
   }
   const out: Record<string, ThemeKey> = {};
   for (const [name, value] of Object.entries(raw)) {
-    // [LAW:no-silent-fallbacks] A style name is a deliverable set-state value —
+    // [LAW:no-silent-failure] A style name is a deliverable set-state value —
     // a style picker writes it on the wire, which rejects empty values and
     // splits on "/". Rejecting the shape HERE surfaces the error on every
     // config load, not only once an action ranges the "styles" domain (the same

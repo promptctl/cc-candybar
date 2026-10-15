@@ -32,6 +32,7 @@ import {
   resolveOptionDomain,
   type DomainLibrary,
   type OptionPalette,
+  type RenderPalettes,
   type ResolvedDomain,
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
@@ -274,32 +275,39 @@ export interface ActionRuntime {
   // disclosure body leads each row with its ✕ as a cell of its own, so a row
   // fitted inside a body reserves that cell: its glyph, its padding, this seam.
   seamCols: number;
-  // [LAW:locality-or-seam] The current render's BASE palette — the theme before
-  // the style — published per render by renderDsl exactly like chromeCols and
-  // padding. A picker over a colour-valued domain paints each option in the
-  // palette picking it would put in force, and a style's answer is the base
-  // transposed by that style's key. It must be the base and not the segment's own
-  // (already-styled) palette: transposedPalette may never be chained, because its
-  // memo keys on the base palette's NAME, which transposition preserves.
-  // A picked theme or style recolours the WHOLE bar, so the render-wide base is
-  // also the honest input even inside a `palette:`-pinned segment.
-  basePalette: Palette;
-  // [LAW:one-source-of-truth] The palette the bar is DRAWN in this render — the
-  // base above transposed by the render's style, the one object every unpinned
-  // segment colours from — published at the same site. `{{ themePreview }}`
-  // samples it, so a preview cannot show a palette the bar is not wearing.
-  palette: Palette;
-  // [LAW:one-source-of-truth] The decor the closed bar wears THIS render — the
-  // variation its rows step through and the shade its cells wear — published
-  // at the same site: `{{ layoutPreview }}` colours its blocks and
-  // `{{ themePreview }}` its bar swatches under it, so neither can show a cell
-  // in a role or shade the bar is not wearing.
-  decor: Decor;
+  // [LAW:no-ambient-temporal-coupling] The look THIS render draws in, published
+  // by renderDsl once it has resolved the theme, the style and the decor —
+  // absent until a render has, because only a render can resolve them (a
+  // `globals.palette` rule needs the payload). Read through `renderLook`.
+  look: RenderLook | undefined;
   // [LAW:one-source-of-truth] The rows the bar lays its closed segments out in
   // THIS render — `layoutRows` of the compiled tree the walk renders, under the
   // walk's own visibility — published by renderDsl at the same site, lazily,
   // since only `{{ layoutPreview }}` asks.
   layout: () => PreviewRows;
+}
+
+/** The look a render draws in, as that render resolved it. */
+export interface RenderLook extends RenderPalettes {
+  // [LAW:one-source-of-truth] The decor the closed bar wears — the variation
+  // its rows step through and the shade its cells wear: `{{ layoutPreview }}`
+  // colours its blocks and `{{ themePreview }}` its bar swatches under it, so
+  // neither can show a cell in a role or shade the bar is not wearing.
+  readonly decor: Decor;
+}
+
+/**
+ * The look of the render `reader` is evaluated in. Every reader is a template
+ * function, so it runs inside a render, after renderDsl published the look;
+ * [LAW:no-silent-failure] a read before any render throws, naming the reader.
+ */
+export function renderLook(runtime: ActionRuntime, reader: string): RenderLook {
+  if (runtime.look === undefined) {
+    throw new Error(
+      `${reader} read the render's look before any render resolved one`,
+    );
+  }
+  return runtime.look;
 }
 
 /** A segment the layout places, with the palette it renders in. */

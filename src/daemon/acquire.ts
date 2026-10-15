@@ -83,7 +83,7 @@ export async function obtainDaemon(
   while (Date.now() < deadline) {
     const lock = tryAcquireSpawnLock();
     if (lock.kind === "error") {
-      // [LAW:no-silent-fallbacks] Unrecoverable errors (EACCES, ENOTDIR,
+      // [LAW:no-silent-failure] Unrecoverable errors (EACCES, ENOTDIR,
       // broken state dir) must not silently degrade into a contention loop
       // + timeout. The caller gets an actionable reason.
       return { kind: "failed", reason: `spawn-lock: ${lock.reason}` };
@@ -670,7 +670,7 @@ function spawnDaemonDetachedReal(): boolean {
   const node = process.execPath;
   const script = process.argv[1];
   if (!script) return false;
-  // [LAW:no-silent-fallbacks] launchDetachedSync returns the typed outcome
+  // [LAW:no-silent-failure] launchDetachedSync returns the typed outcome
   // synchronously, so the spawn-failure case (ENOENT, EACCES, EAGAIN under
   // process-table pressure) propagates as `false` instead of being silently
   // reported as success. The previous `void launch({detached:true})` form

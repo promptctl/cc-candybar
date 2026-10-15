@@ -302,7 +302,7 @@ the information that snapshot cannot contain. Add a `captureMemoryReport: () => 
 `vmmap --summary <pid>`, and on a non-Darwin host to reading `/proc/self/smaps_rollup`), and write
 its output beside the `.heapsnapshot` under the same rotation. It must be a **total** function
 returning a string — including a string that says which probe was unavailable and why — never a
-throw and never an empty file, because `[LAW:no-silent-fallbacks]` wants the reason recorded where
+throw and never an empty file, because `[LAW:no-silent-failure]` wants the reason recorded where
 the post-mortem will look for it. It goes through `LimitsDeps` rather than being called inline for
 the reason already stated in the comment at 77-81: a test of `checkRss` must not shell out against
 the real process.

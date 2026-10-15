@@ -16,7 +16,7 @@
 //      plane, the alerts.
 
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { ColorDepth, getThemePalette } from "@promptctl/rich-js";
+import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -36,10 +36,7 @@ import type {
   ColorCompatibility,
   Endcaps,
 } from "../src/themes/policy";
-import {
-  resolveThemeSelection,
-  transposedPalette,
-} from "../src/themes/palette-resolvers";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
@@ -753,11 +750,11 @@ describe("the preview is the bar's own colours", () => {
   };
 
   test.each(["nord", "gruvbox", "rose-pine-dawn", "textual-light"])(
-    "%s: the preview draws exactly the colours the bar under it draws",
+    "%s: the preview shows every colour a closed cell can wear, and its open swatch is the open door's",
     (theme) => {
       const rt = rig(`{ globals: { palette: '${theme}' } }`);
       openPicker(rt, "theme");
-      const palette = transposedPalette(getThemePalette(theme)!, IDENTITY);
+      const palette = transposePalette(getThemePalette(theme)!, IDENTITY);
       const preview = rt.sink.get("candybar.list.theme.0")!;
       const drawn = backgrounds(preview);
       // Every decoration a closed cell can wear is a swatch.
@@ -792,7 +789,10 @@ describe("the preview is the bar's own colours", () => {
     rt.click(rt.linkOn("style", CAROUSEL_NEXT).url);
     const look = rt.sessionState.get(SID, "style")!;
     expect(look).not.toBe("none");
-    const palette = transposedPalette(
+    // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never
+    // the render's memoized `transposedPalette`: the function under test
+    // cannot be the oracle that checks it.
+    const palette = transposePalette(
       getThemePalette("gruvbox")!,
       rt.config.styles[look]!,
     );

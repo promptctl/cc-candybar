@@ -185,7 +185,7 @@ export async function readAppended(
         return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, ino, reset });
       }
       const buf = Buffer.alloc(size - start);
-      // [LAW:no-silent-fallbacks] A single read may return short — parsing a
+      // [LAW:no-silent-failure] A single read may return short — parsing a
       // zero-padded tail would fabricate entries. Loop until the window fills or
       // EOF; on a short final read (the file shrank under us) return only the
       // bytes actually read, never the zero padding.
@@ -239,7 +239,7 @@ export async function readTail(
       const { size } = await fh.stat();
       const start = Math.max(0, size - maxBytes);
       const buf = Buffer.alloc(size - start);
-      // [LAW:no-silent-fallbacks] A single read may return short — the scanner
+      // [LAW:no-silent-failure] A single read may return short — the scanner
       // would then parse a zero-padded tail and miss cache activity. Loop until
       // the window is filled or EOF; on a short final read (the file shrank
       // under us) return only the bytes actually read, never the zero padding.

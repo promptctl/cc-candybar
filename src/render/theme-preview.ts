@@ -8,7 +8,7 @@
 // colour. Each swatch is a call to the SAME function the render walk calls for
 // that kind of cell (`decorEntryColour`, `bandFor`, the role lookup), on the
 // SAME palette object the walk colours every unpinned segment from
-// (`ActionRuntime.palette`, published by renderDsl), with its text the one the
+// (the look renderDsl publishes, `renderLook`), with its text the one the
 // walk draws there — the shade's for a closed cell, `textOn` for the rest — so
 // a preview cannot show a colour the bar under that theme would not draw.
 //
@@ -31,7 +31,7 @@ import {
   type Decor,
   type Disclosure,
 } from "../themes/decor.js";
-import type { ActionRuntime } from "./action.js";
+import { renderLook, type ActionRuntime } from "./action.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -125,10 +125,11 @@ export function themePreviewFuncs(
 ): FuncMap {
   return {
     themePreview: {
-      fn: () =>
-        renderThemePreview(
-          runtime.palette,
-          runtime.decor,
+      fn: () => {
+        const { palette, decor } = renderLook(runtime, "{{ themePreview }}");
+        return renderThemePreview(
+          palette,
+          decor,
           // The bar trigger's band of the lineage the preview stands in: a
           // band is coloured from the row its trigger stands in, which only
           // the trigger's own region knows (decor.ts `decorationFor`).
@@ -139,7 +140,8 @@ export function themePreviewFuncs(
           },
           activeSegment.drawnAt(),
           ledRowBudget(runtime),
-        ),
+        );
+      },
       argTypes: [],
       arity: { kind: "exact" },
       returnType: "T",

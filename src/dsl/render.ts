@@ -69,7 +69,6 @@ import {
   EXPRESSION_SLOTS,
   type ExpressionSlot,
   finishSelection,
-  declaredBasePalette,
   drawnDepth,
   effectiveShade,
   effectiveTransitions,
@@ -352,7 +351,7 @@ function declareOne(
 // stdlib block, ~287 parses per config, ~30 MB per config, and a daemon
 // holding twenty configs sat at 600 MB of nothing but duplicated helper ASTs
 // (the 2026-09-02 RSS-breach snapshot and the 2026-09-03 crash-loop).
-// [LAW:no-silent-fallbacks] Each body is parsed in ISOLATION, so a malformed
+// [LAW:no-silent-failure] Each body is parsed in ISOLATION, so a malformed
 // helper surfaces a per-helper diagnostic rather than a confusing error blamed
 // on the first segment that happens to call it; the redefinition check the
 // parser applies against the inherited set is what makes helper names unique.
@@ -415,8 +414,7 @@ function compileHelpers(
  */
 // [LAW:one-source-of-truth] The decor a globals block declares — what a caller
 // that resolved no session renders: the same folds, minus the rungs only a
-// session could supply — under whichever names a caller did resolve.
-// Registration's floor and renderDsl's selection both read it here. The
+// session could supply — under whichever names a caller did resolve. The
 // config-default rung is the declared theme's default under the globals
 // (src/config/theme-defaults.ts) — the fold resolveEffectiveGlobals makes — so
 // a compile-only render draws the shade and variation the daemon would. Its
@@ -445,7 +443,7 @@ const declaredDecor = (
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  // [LAW:no-silent-fallbacks] `cwd` is required: it is the directory `git`
+  // [LAW:no-silent-failure] `cwd` is required: it is the directory `git`
   // and `shell` sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
   opts: { cwd: string },
@@ -462,7 +460,6 @@ export function registerDslConfig(
   // registry declares into and the renderer reads back — sourced from the registry
   // itself, not a redundant opts field a caller could forget (or pass a divergent
   // store for). Every config has a registry, so the action store is never null.
-  const floorPalette = declaredBasePalette(config.globals.palette);
   const actionRuntime: ActionRuntime = {
     store: registry.variableStore,
     compiled: new Map(),
@@ -476,23 +473,6 @@ export function registerDslConfig(
     // Same contract as chromeCols; the floor is `term.cols`'s own default.
     width: TERM_COLS_FLOOR,
     // Same contract as chromeCols: renderDsl republishes the live resolved
-    // base palette each render; `globals.palette` is the registration-time
-    // value, so a compile-only path (no render) still has a real palette.
-    // [LAW:one-source-of-truth] Resolved through the same resolution the render
-    // uses, with no session pick — so the floor here is the one floor — and it
-    // must go through `declaredBasePalette` rather than the raw name, because that
-    // slot may hold a RULE (brandon-themes-dzl) and `paletteForThemeName` of a
-    // template would throw at LOAD for a config that renders perfectly well.
-    basePalette: floorPalette,
-    // The compile-only floor for the drawn palette: the base under no style.
-    palette: floorPalette,
-    // Same contract: the compile-only floor is the config's own decor.
-    decor: declaredDecor(
-      config,
-      config.globals,
-      resolveThemeSelection(undefined, null, config.globals.palette),
-    ),
-    // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
     // Same contract again: the compile-only floor is the registration-time
@@ -500,6 +480,10 @@ export function registerDslConfig(
     seamCols: stripSeamCols({ endcaps: "powerline", charset: DEFAULT_CHARSET }),
     // Same contract again: with no render there is no walk, and no rows.
     layout: () => [],
+    // [LAW:one-source-of-truth] Unlike the geometry above, a look has no
+    // floor to stand in for it: only a render resolves one, so there is none
+    // until renderDsl publishes its own.
+    look: undefined,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -545,7 +529,7 @@ export function registerDslConfig(
       // where it was, so one segment painted from two palettes at once. Reading
       // live costs nothing structurally — FuncMap bodies run at evaluate time,
       // so parse-once/evaluate-many is untouched.
-      // `{{ bgOf }}` rides the same record. [LAW:rich-js-owns-color-math]
+      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
       ...segmentColorFuncs(activeSegment),
       // [LAW:one-type-per-behavior] The per-config sibling of the static
       // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
@@ -1067,7 +1051,6 @@ export function renderDsl(
     selection?.variation,
     selection?.shade,
   );
-  compiled.menuRuntime.action.decor = decor;
   // [LAW:one-source-of-truth] The effect's twin of the same true default: an
   // omitting caller wears the effect the config declares, rule included.
   const selectedEffect =
@@ -1168,22 +1151,21 @@ export function renderDsl(
     effect !== selectedEffect
   )
     registry.applyInput(payloadWith(theme.name, style.name, effect.name));
-  // [LAW:one-source-of-truth] The render's BASE palette, published beside the
-  // style and padding: a picker over a colour-valued domain paints each option in
-  // the palette picking it would put in force, and a style's answer is this base
-  // transposed by that style's key. The base, never the styled palette below —
-  // transposedPalette must not be chained (its memo keys on the base palette's
-  // name, which transposition preserves), and a style applies to the base by
-  // definition. Published after the fold finishes, because under a rule this is
-  // the first line at which the base palette is known.
+  // [LAW:one-source-of-truth] The render's BASE palette: a picker over a
+  // colour-valued domain paints each option in the palette picking it would put
+  // in force, and a style's answer is this base transposed by that style's key —
+  // the base, never the styled palette below, because a style applies to the
+  // base by definition. Under a rule, this is the first line at which the base
+  // palette is known.
   const basePalette = theme.value;
-  compiled.menuRuntime.action.basePalette = basePalette;
   // [LAW:one-source-of-truth] The render's palette: the base theme under the
   // session's style, transposed ONCE here — every unpinned segment colours from
   // this one object, so a style click recolours the whole bar from one
   // transposition, not one per segment.
   const palette = transposedPalette(basePalette, style.value);
-  compiled.menuRuntime.action.palette = palette;
+  // The look the walk below draws in, published before it evaluates a template
+  // that reads it (`renderLook`).
+  compiled.menuRuntime.action.look = { basePalette, palette, decor };
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
   // and the placements this frame draws, so one the last frame — drawn from

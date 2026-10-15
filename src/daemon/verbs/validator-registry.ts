@@ -71,7 +71,7 @@ const INT_RE = /^-?\d+$/;
 // shape, so error messages, empty-input rejection, and lookup semantics are
 // identical by construction.
 //
-// [LAW:no-silent-fallbacks] Empty input is rejected with a label-referencing
+// [LAW:no-silent-failure] Empty input is rejected with a label-referencing
 // reason rather than silently mapped to a default.
 //
 // [LAW:one-source-of-truth] `wire` names the ACTUAL wire this allow-list's
@@ -291,7 +291,7 @@ export interface Gate {
   rangeParamsFor(key: string): RangeParams | null;
 }
 
-// [LAW:no-silent-fallbacks] An unknown key is a caller-visible rejection
+// [LAW:no-silent-failure] An unknown key is a caller-visible rejection
 // (validate); a contribution that cannot be addressed, re-claims a built-in
 // key, or contradicts another on its key is a loud throw — never a silent
 // accept-and-store.

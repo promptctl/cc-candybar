@@ -197,7 +197,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     this.setBatch(sessionId, [{ key, value }]);
   }
 
-  // [LAW:no-silent-fallbacks] Atomic commit of N pairs: every write
+  // [LAW:no-silent-failure] Atomic commit of N pairs: every write
   // lands BEFORE the single reportChanged() that scheduler-visibly
   // marks the transaction complete. Observers cannot see an
   // intermediate "half-applied" snapshot — `runInAction` defers

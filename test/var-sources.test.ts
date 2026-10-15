@@ -1937,7 +1937,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   });
 
   test("declareState without SessionState injection fails loudly", () => {
-    // [LAW:no-silent-fallbacks] If the registry was constructed without a
+    // [LAW:no-silent-failure] If the registry was constructed without a
     // SessionState, declareState refuses rather than silently returning
     // empty — that would be a footgun where renders look fine until a
     // verb fires and "nothing happens."
