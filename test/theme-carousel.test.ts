@@ -535,7 +535,7 @@ function previewLabels(rendered: string): string[][] {
     // The preview's rows end where the ring's body goes on to the preset
     // actions (brandon-save-undo-bwi.o6u), or where the body ends: the
     // menu's tab strip is the next line.
-    if (line.includes("🗑 delete") || line.includes("⚡ session")) break;
+    if (line.includes("🚮 delete") || line.includes("⚡ session")) break;
     rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
   }
   return rows;

@@ -251,12 +251,14 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
   // of it, one block per segment, named. Under it, while the ring is on a
   // preset the user made (brandon-save-undo-bwi.o6u), the click that deletes
-  // it; `+ preset` in the 📐 layout tab makes one.
+  // it; `+ preset` in the 📐 layout tab makes one. Its glyph is a default
+  // emoji (Emoji_Presentation): 🗑 is text-default, measured one cell where
+  // a terminal draws it two, and VS16 is honoured unevenly (kgr).
   preset: [
     LAYOUT_PREVIEW,
     {
       when: "{{ not .preset.bundled }}",
-      template: `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
+      template: `{{ action "${PRESET_DELETE}" (printf "🚮 delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
     },
   ],
   theme: PALETTE_PREVIEW,

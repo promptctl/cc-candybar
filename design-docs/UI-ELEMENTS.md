@@ -418,7 +418,7 @@ Picking `compact` changes the whole bar, including its padding, which the preset
  ▾ ⚡ session🎨 look📐 layout⚙ config🧰 tools
 ```
 
-On a preset the user authored, the ring's body also holds `🗑 delete <name>`.
+On a preset the user authored, the ring's body also holds `🚮 delete <name>`.
 
 ### Tabs
 
@@ -716,7 +716,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `set-config`, `step-config` | `persist` actions (author configs); `[disable]` |
 | `reset-config` | every `↺`, `⟲ reset all`, `↺ reset layout` |
 | `save` | `💾 save`, `✓ save` |
-| `save-preset`, `delete-preset` | `+ preset`, `🗑 delete` |
+| `save-preset`, `delete-preset` | `+ preset`, `🚮 delete` |
 | `apply-layout-op` | edit mode's `✖` and `✚` |
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
 | `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |

@@ -1058,17 +1058,19 @@ describe("save as preset", () => {
     expect(effective().preset).toBe("custom-2");
   });
 
-  test("🗑 deletes the preset it names, returning the file byte for byte, and only a user preset offers it", () => {
+  test("🚮 deletes the preset it names, returning the file byte for byte, and only a user preset offers it", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    expect(plain(r.render())).toContain("🗑 delete narrow");
+    // A default-emoji glyph: every terminal draws it two cells, as rich-js
+    // measures it, so the row's width budget is not a column short.
+    expect(plain(r.render())).toMatch(/\p{Emoji_Presentation} delete narrow/u);
     r.click(savePreset());
-    r.click(link("🗑 delete custom-1")!);
+    r.click(link("🚮 delete custom-1")!);
 
     expect(durable.text()).toBe(USER_PRESETS);
     expect(r.sessionState.get(SID, "preset")).toBeNull();
     expect(effective().preset).toBe("default");
     // `default` is bundled: nothing to delete.
-    expect(plain(r.render())).not.toContain("🗑");
+    expect(plain(r.render())).not.toContain("🚮");
     expect(r.logs).toContainEqual(
       `delete-preset: custom-1 ← ${durable.configPath} (session=${SID})`,
     );
@@ -1077,7 +1079,7 @@ describe("save as preset", () => {
   test("save and delete are one undo step each, restoring the exact bytes and picks", () => {
     start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     r.click(savePreset());
-    r.click(link("🗑 delete custom-1")!);
+    r.click(link("🚮 delete custom-1")!);
 
     r.click(link("↶")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
@@ -1095,7 +1097,7 @@ describe("save as preset", () => {
   presets: { compact: { globals: { padding: 3 } } },
 }`;
     start(source, { preset: "compact" });
-    expect(plain(r.render())).not.toContain("🗑");
+    expect(plain(r.render())).not.toContain("🚮");
     // The click a stale or hand-built URL could still carry.
     expect(() =>
       r.click(`cc-candybar://delete-preset/${SID}/compact`),
@@ -1110,7 +1112,7 @@ describe("save as preset", () => {
 }`;
     start(source);
     expect(effective().preset).toBe("mine");
-    r.click(link("🗑 delete mine")!);
+    r.click(link("🚮 delete mine")!);
     expect(durable.parsed()).toEqual({});
     expect(effective().preset).toBe("default");
   });
@@ -1142,7 +1144,7 @@ describe("save as preset", () => {
   presets: { mine: { globals: { padding: 4 } } },
 }`;
     start(source, { preset: "mine" });
-    expect(() => r.click(link("🗑 delete mine")!)).toThrow(
+    expect(() => r.click(link("🚮 delete mine")!)).toThrow(
       /would not load after this click[\s\S]*resetMine/,
     );
     expect(durable.text()).toBe(source);
