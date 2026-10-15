@@ -1,3 +1,10 @@
+## [1.129.1](https://github.com/promptctl/cc-candybar/compare/v1.129.0...v1.129.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **menu:** the preset delete glyph is a default emoji, measured as wide as it is drawn ([#338](https://github.com/promptctl/cc-candybar/issues/338)) ([f69e985](https://github.com/promptctl/cc-candybar/commit/f69e985a7f02253a1c81961998f4f4351ba4c5b3)), closes [#325](https://github.com/promptctl/cc-candybar/issues/325)
+
 # [1.129.0](https://github.com/promptctl/cc-candybar/compare/v1.128.0...v1.129.0) (2026-10-15)
 
 
