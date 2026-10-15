@@ -154,23 +154,6 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  test("LRU eviction at the size cap", async () => {
-    const store = new SessionUsageStore({ maxEntries: 2, sweepIntervalMs: 0 });
-    try {
-      for (const sid of ["a", "b", "c"]) {
-        const t = join(dir, `${sid}.jsonl`);
-        writeFileSync(t, usageLine(sid, new Date(), 0.01));
-        await store.getUsageInfo(sid, hook(sid, t));
-      }
-      // Cap is 2; oldest (`a`) was evicted → asking again must miss+recompute.
-      const before = store.getStats().misses;
-      await store.getUsageInfo("a", hook("a", join(dir, "a.jsonl")));
-      expect(store.getStats().misses).toBe(before + 1);
-    } finally {
-      store.close();
-    }
-  });
-
   test("empty sessionId does no work and is not cached", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
@@ -186,13 +169,60 @@ describe("SessionUsageStore — session projection", () => {
 
   test("sweepStale drops entries older than staleAgeMs", async () => {
     const t = join(dir, "A.jsonl");
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    writeFileSync(t, usageLine("a", lastWeek, 0.01));
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 1,
+      logger: (_level, msg) => lines.push(msg),
+    });
+    try {
+      await store.getUsageInfo("A", hook("A", t));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(store.sweepStale()).toBe(1);
+      expect(store.getStats()).toMatchObject({ sweeps: 1, size: 0 });
+      expect(lines).toContain("usageStore sweep dropped=1 held=0");
+    } finally {
+      store.close();
+    }
+  });
+
+  // brandon-usage-store-x2e0: `today` sums every record, so a stale record
+  // holding today's work stays until the day rolls over.
+  test("sweepStale holds a stale record that `today` still sums", async () => {
+    const t = join(dir, "A.jsonl");
+    // One instant for the entry and the render, so the day summed is the
+    // entry's day whatever the wall clock does in between.
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.01));
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 1,
+      logger: (_level, msg) => lines.push(msg),
+    });
+    try {
+      await store.getTodayInfo(hook("A", t), dir, instantOf(at));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(store.sweepStale()).toBe(0);
+      expect(store.getStats()).toMatchObject({ sweeps: 0, size: 1 });
+      expect(lines).toContain("usageStore sweep dropped=0 held=1");
+    } finally {
+      store.close();
+    }
+  });
+
+  // The day held is the one `today` summed: with no render asking for `today`,
+  // nothing reads the record, so a bucket for the wall clock's day holds nothing.
+  test("sweepStale drops a stale record when no render has summed `today`", async () => {
+    const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
     const store = new SessionUsageStore({ sweepIntervalMs: 0, staleAgeMs: 1 });
     try {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
-      expect(store.getStats().sweeps).toBe(1);
     } finally {
       store.close();
     }
@@ -310,6 +340,33 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       expect(store.getStats().seeds).toBe(1);
     } finally {
       store.close();
+    }
+  });
+
+  // brandon-usage-store-x2e0: the store once capped its records at 256, and a
+  // seed ingesting more sessions evicted the oldest out of `today` unseen.
+  test("today sums every session the seed ingests, however many", async () => {
+    clearParseCache();
+    const many = mkdtempSync(join(tmpdir(), "cc-candybar-store-many-"));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      const SESSIONS = 300;
+      const at = new Date();
+      const pdir = join(many, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      for (let s = 0; s < SESSIONS; s++) {
+        writeFileSync(join(pdir, `many-${s}.jsonl`), usageLine(`many-${s}`, at, 1));
+      }
+      const info = await store.getTodayInfo(
+        hook("many-0", join(pdir, "many-0.jsonl")),
+        many,
+        instantOf(at),
+      );
+      expect(info.kind === "ok" && info.value.cost).toBeCloseTo(SESSIONS, 5);
+      expect(store.getStats().size).toBe(SESSIONS);
+    } finally {
+      store.close();
+      rmSync(many, { recursive: true, force: true });
     }
   });
 

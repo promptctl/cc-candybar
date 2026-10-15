@@ -123,7 +123,6 @@ interface SessionRecord {
   lastSeenAt: number;
 }
 
-const DEFAULT_MAX_ENTRIES = 256;
 const DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // Mirrors the transcript-fs gate width: the seed's parse fan-out is bounded by
@@ -298,6 +297,10 @@ async function mapPool<T>(
 }
 
 export class SessionUsageStore {
+  // No count cap: `today` is a fold over every record, so a cap smaller than
+  // the day's sessions would drop work from it unseen. A record is a few
+  // scalars per file and retained day, and `sweepStale` bounds the map to the
+  // sessions seen within `staleAgeMs` plus those holding work done today.
   private readonly entries = new Map<string, SessionRecord>();
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed mtime) onto one parse; cleared on settle (a coalescer,
@@ -324,7 +327,6 @@ export class SessionUsageStore {
   // exactly once — so they return the same prev+cur and render identical,
   // deterministic throughput instead of the second clobbering the first.
   private readonly speedFlight = new SingleFlight();
-  private readonly maxEntries: number;
   private readonly staleAgeMs: number;
   private readonly log: DaemonLogger;
   private hits = 0;
@@ -335,7 +337,6 @@ export class SessionUsageStore {
 
   constructor(
     opts: {
-      maxEntries?: number;
       staleAgeMs?: number;
       sweepIntervalMs?: number;
       // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
@@ -345,7 +346,6 @@ export class SessionUsageStore {
     } = {},
   ) {
     this.log = opts.logger ?? quietLogger;
-    this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
@@ -539,8 +539,6 @@ export class SessionUsageStore {
     const existing = this.entries.get(sessionId);
     if (existing && mtime !== 0 && existing.transcriptMtime === mtime) {
       existing.lastSeenAt = Date.now();
-      this.entries.delete(sessionId);
-      this.entries.set(sessionId, existing);
       this.hits++;
       return ok(existing);
     }
@@ -561,11 +559,6 @@ export class SessionUsageStore {
     // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
     // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
     // Pinned by the concurrency test in test/transcript-incremental.test.ts.
-    // The prior is read when the thunk RUNS. If evictIfNeeded dropped this
-    // session between thunk creation and run, prior is undefined and refold does
-    // one whole-file re-fold — still correct, just non-incremental that once.
-    // (Eviction only fires after a successful write, so this can bite only on a
-    // first miss under cap pressure.)
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
     // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
     // throwing on a bad rate table or network hiccup inside foldFile) would
@@ -595,9 +588,7 @@ export class SessionUsageStore {
       transcriptPath,
       lastSeenAt: Date.now(),
     };
-    this.entries.delete(sessionId);
     this.entries.set(sessionId, record);
-    this.evictIfNeeded();
     return ok(record);
   }
 
@@ -721,32 +712,33 @@ export class SessionUsageStore {
     );
   }
 
-  // Public for tests; called periodically from the timer.
+  // Public for tests; called periodically from the timer. Drops what nothing
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for the
+  // day `today` last summed. A stale record holding one is `held`, since
+  // `today` sums it — a seeded session is seen once a day, and a day can run
+  // past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] That day is `seededDay`, taken from the render's
+  // instant, not this timer's clock: which day counts is the projection's.
   sweepStale(): number {
     const now = Date.now();
     let dropped = 0;
+    let held = 0;
     for (const [sid, record] of this.entries) {
-      if (now - record.lastSeenAt > this.staleAgeMs) {
-        this.entries.delete(sid);
-        this.speedRings.delete(sid);
-        dropped++;
+      if (now - record.lastSeenAt <= this.staleAgeMs) continue;
+      if (record.days.has(this.seededDay)) {
+        held++;
+        continue;
       }
+      this.entries.delete(sid);
+      this.speedRings.delete(sid);
+      dropped++;
     }
-    if (dropped > 0) {
-      this.sweeps++;
-      this.log("info", `usageStore sweep dropped=${dropped}`);
+    if (dropped > 0) this.sweeps++;
+    // [LAW:nothing-unseen] A sweep that held records for `today` says so.
+    if (dropped > 0 || held > 0) {
+      this.log("info", `usageStore sweep dropped=${dropped} held=${held}`);
     }
     return dropped;
-  }
-
-  private evictIfNeeded(): void {
-    while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
-      if (oldest === undefined) break;
-      this.entries.delete(oldest);
-      this.speedRings.delete(oldest);
-      this.log("info", `usageStore evict ${oldest}`);
-    }
   }
 
   close(): void {
