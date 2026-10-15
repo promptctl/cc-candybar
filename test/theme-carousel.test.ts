@@ -20,6 +20,7 @@ import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-j
 import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -535,7 +536,7 @@ function previewLabels(rendered: string): string[][] {
     // The preview's rows end where the ring's body goes on to the preset
     // actions (brandon-save-undo-bwi.o6u), or where the body ends: the
     // menu's tab strip is the next line.
-    if (line.includes("🚮 delete") || line.includes("⚡ session")) break;
+    if (line.includes(`${PRESET_DELETE_GLYPH} delete`) || line.includes("⚡ session")) break;
     rows.push(line.split(/\s+/).filter((word) => /\w/.test(word)));
   }
   return rows;

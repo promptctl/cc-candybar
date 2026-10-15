@@ -157,6 +157,10 @@ export const SAVE_SEG = `${SETTINGS_NS}save`;
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
 const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+// A default emoji (Emoji_Presentation), so rich-js measures it the two cells a
+// terminal draws: the wastebasket U+1F5D1 is text-default, measured one cell,
+// and its VS16 form is honoured unevenly (kgr; test/glyph-width.test.ts).
+export const PRESET_DELETE_GLYPH = "🚮";
 
 // ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
 //
@@ -251,14 +255,12 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
   // of it, one block per segment, named. Under it, while the ring is on a
   // preset the user made (brandon-save-undo-bwi.o6u), the click that deletes
-  // it; `+ preset` in the 📐 layout tab makes one. Its glyph is a default
-  // emoji (Emoji_Presentation): 🗑 is text-default, measured one cell where
-  // a terminal draws it two, and VS16 is honoured unevenly (kgr).
+  // it; `+ preset` in the 📐 layout tab makes one.
   preset: [
     LAYOUT_PREVIEW,
     {
       when: "{{ not .preset.bundled }}",
-      template: `{{ action "${PRESET_DELETE}" (printf "🚮 delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
+      template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
     },
   ],
   theme: PALETTE_PREVIEW,
