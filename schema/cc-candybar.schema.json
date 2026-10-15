@@ -693,9 +693,6 @@
         "metrics": {
           "$ref": "#/definitions/SegmentDelta"
         },
-        "ticket": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
         "activity": {
           "$ref": "#/definitions/SegmentDelta"
         }

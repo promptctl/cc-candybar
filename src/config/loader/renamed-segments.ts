@@ -15,6 +15,9 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, string> = new Map([
   // The settings menu's anchor left `settings.` so `.settings` could be a
   // placement's own settings (brandon-segment-settings-i4n).
   ["settings.menu", "candybar.menu"],
+  // lit's ticket moved out of the bundled bar into the plugin lit ships,
+  // which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  ["ticket", "plugins.lit.ticket"],
 ]);
 
 export function renamedHint(name: string): string {

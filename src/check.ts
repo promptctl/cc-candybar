@@ -360,7 +360,7 @@ export async function prepareConfig(
     layers,
     DEFAULT_DSL_CONFIG,
     { entered: () => {}, warned: (w) => warnings.push(...w) },
-    { projectDir: cwd },
+    { projectDir: cwd, cwd },
   );
   const { config } = loaded;
 

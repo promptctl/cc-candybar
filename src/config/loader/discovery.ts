@@ -249,8 +249,10 @@ export interface ConfigHome {
   // The chain's layers over `path`, lowest first. The home is the chain's
   // bottom, so a layer is either the home or above it.
   readonly above: readonly string[];
-  // The session's project the chain loads for (its installed plugins).
+  // The session's project and working directory the chain loads for (its
+  // installed plugins, and their checkout data paths).
   readonly projectDir: string | null;
+  readonly cwd: string | null;
 }
 
 export function durableConfig(
@@ -264,6 +266,7 @@ export function durableConfig(
     path: resolved.home,
     above: layers.filter((l) => l !== resolved.home),
     projectDir: projectDir ?? null,
+    cwd: cwd ?? null,
   };
 }
 

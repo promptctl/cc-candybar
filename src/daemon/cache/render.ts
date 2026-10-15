@@ -33,6 +33,7 @@ import type {
   WatchTargets,
 } from "./watchers.js";
 import { dlog } from "../log.js";
+import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -162,24 +163,31 @@ type LoadedPlugins = LoadedChain["installed"];
 export interface ConfigChain {
   readonly layers: readonly string[];
   readonly home: string;
-  // The session's project: where its repo-shipped plugins live, and what a
-  // plugin's `data: { project }` path is relative to.
+  // The session's project: where its repo-shipped plugins live.
   readonly projectDir: string | null;
 }
 
-// [LAW:nothing-unseen] Which plugins a daemon load merged and which it
+// [LAW:nothing-unseen] Which plugins a daemon load merged, the data file each
+// merged one reads (a `{ checkout }` path is resolved from the session's
+// working directory, so which file it named is said here), and which it
 // dropped: a drop is also on the strip, but the merged set is said nowhere
 // else. The daemon's own sink — buildRenderState is shared with the demo.
-function logPlugins(
+export function pluginLoadLine(
   layers: readonly string[],
-  { loaded, dropped, unreached }: LoadedPlugins,
-): void {
-  dlog(
-    "info",
+  { plugins, config }: Pick<DslRenderState, "plugins" | "config">,
+): string {
+  const { loaded, dropped, unreached } = plugins;
+  const dataOf = (definition: string): string => {
+    const name = pluginNameOf(definition);
+    const data =
+      name === undefined ? undefined : config.variables[pluginDataVar(name)];
+    return data?.kind === "file" ? data.path : "none";
+  };
+  return (
     `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length}` +
-      loaded.map((p) => ` +${p}`).join("") +
-      dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
-      unreached.map((d) => ` ~${d.path} (${d.reason})`).join(""),
+    loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
+    dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
+    unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
   );
 }
 
@@ -359,7 +367,7 @@ export function buildRenderState(
     chain.layers,
     DEFAULT_DSL_CONFIG,
     { entered, warned: (w) => warnings.push(...w) },
-    { projectDir: chain.projectDir },
+    { projectDir: chain.projectDir, cwd },
   );
   // Past the chain, a failure is the one file's when there is one, and no
   // file's when several merged into what failed.
@@ -572,7 +580,8 @@ export class RenderCache {
     }
 
     const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
-    if (loaded.state !== null) logPlugins(loaded.layers, loaded.state.plugins);
+    if (loaded.state !== null)
+      dlog("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -654,7 +663,7 @@ export class RenderCache {
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
-      logPlugins(loaded.layers, loaded.state.plugins);
+      dlog("info", pluginLoadLine(loaded.layers, loaded.state));
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
       // timers, fs watchers, MobX reactions, and git subscriptions — dropping
       // the reference without disposing would leak them.

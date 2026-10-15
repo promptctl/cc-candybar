@@ -3,6 +3,7 @@ import path from "node:path";
 import { launch, type LaunchResult } from "../proc/launch";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { debug } from "../utils/logger";
+import { gitRootOf, holdsGit } from "../utils/git-root";
 
 export interface WorkingTree {
   staged: number;
@@ -688,11 +689,7 @@ function configIdentity(configPath: string): ConfigIdentity | null {
 
 export class GitService {
   private isGitRepo(workingDir: string): boolean {
-    try {
-      return fs.existsSync(path.join(workingDir, ".git"));
-    } catch {
-      return false;
-    }
+    return holdsGit(workingDir);
   }
 
   // [LAW:types-are-the-program] args is a string[] so the boundary type
@@ -781,15 +778,8 @@ export class GitService {
   // through `classify(…, "absent")` — a state this never produced, so inventing
   // one here would be a new answer for an unchanged question.
   async findGitRoot(workingDir: string): Promise<Outcome<string>> {
-    let dir = path.resolve(workingDir);
-    for (;;) {
-      if (this.isGitRepo(dir)) return ok(dir);
-      const parent = path.dirname(dir);
-      // `path.dirname` is its own fixed point at the filesystem root, which is
-      // the ascent's termination and the only one it needs.
-      if (parent === dir) return ABSENT;
-      dir = parent;
-    }
+    const root = gitRootOf(workingDir);
+    return root === undefined ? ABSENT : ok(root);
   }
 
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side

@@ -188,10 +188,11 @@ export interface LoadContext extends PluginContext {
   };
 }
 
-// A load with no session project and nothing beneath the bundled default: a
-// `data: { project }` plugin drops, naming why.
+// A load with no session and nothing beneath the bundled default: a
+// `data: { checkout }` plugin drops, naming why.
 export const NO_PROJECT: LoadContext = {
   projectDir: null,
+  cwd: null,
   beneath: { dropped: [], rendering: new Map() },
 };
 
@@ -271,7 +272,8 @@ function installedLayer(
   ]);
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
-  const slot = String(ctx.projectDir);
+  // A checkout data path is resolved from the working directory.
+  const slot = JSON.stringify([ctx.projectDir, ctx.cwd]);
   const hit = byProject.get(slot);
   if (hit?.key === key) return hit.layer;
   const layer = applyPlugins(

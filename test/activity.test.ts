@@ -434,7 +434,6 @@ describe("the fold reports what is happening now", () => {
       userText("second"),
     );
     expect(info).toEqual({
-      ticket: null,
       command: null,
       todos: [{ text: "Shipping it", active: true, done: false }],
       running: [],
@@ -524,7 +523,7 @@ describe("the fold reports what is happening now", () => {
     );
     expect(outcome).toEqual({
       kind: "ok",
-      value: { ticket: null, command: null, todos: [], running: [], done: [] },
+      value: { command: null, todos: [], running: [], done: [] },
     });
   });
 });
@@ -567,7 +566,6 @@ describe("the payload projection", () => {
   };
 
   const INFO = (over: Partial<ActivityInfo> = {}): ActivityInfo => ({
-    ticket: null,
     command: null,
     todos: [],
     running: [],
