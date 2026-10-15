@@ -351,15 +351,16 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const SESSIONS = 300;
+      const at = new Date();
       const pdir = join(many, "projects", "proj");
       mkdirSync(pdir, { recursive: true });
       for (let s = 0; s < SESSIONS; s++) {
-        writeFileSync(join(pdir, `many-${s}.jsonl`), usageLine(`many-${s}`, new Date(), 1));
+        writeFileSync(join(pdir, `many-${s}.jsonl`), usageLine(`many-${s}`, at, 1));
       }
       const info = await store.getTodayInfo(
         hook("many-0", join(pdir, "many-0.jsonl")),
         many,
-        instantOf(new Date()),
+        instantOf(at),
       );
       expect(info.kind === "ok" && info.value.cost).toBeCloseTo(SESSIONS, 5);
       expect(store.getStats().size).toBe(SESSIONS);
