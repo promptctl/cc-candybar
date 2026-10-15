@@ -1,6 +1,6 @@
 // [LAW:nothing-unseen] brandon-effects-2gka.2rm, measured on a REAL daemon: the
 // render event — its `render sid=…` log line — carries the session's prompt
-// count and the count of user entries Claude Code wrote itself, so a count that
+// count and the count of the other user entries, so a count that
 // stops moving can be told from a session with none, and a render whose hook
 // carried no cost block (no metrics fold ran) reads `-`, not zero.
 
@@ -109,17 +109,17 @@ describe("a daemon render's event counts the session's prompts", () => {
       .filter((l) => l.includes(`render sid=${sessionId} `))
       .map((l) => ({
         prompts: l.match(/ prompts=(\S+) /)?.[1],
-        ccEntries: l.match(/ ccEntries=(\S+) /)?.[1],
+        nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],
       }));
 
-  test("one prompt, and two entries Claude Code wrote, on a render that folded the transcript", async () => {
+  test("one prompt, and two other user entries, on a render that folded the transcript", async () => {
     const sessionId = "prompts-e2e-folded";
     await renderRequest(sockPath, {
       hookData: { ...hookData(sessionId, projectDir), cost: COST },
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect(counts(sessionId).at(-1)).toEqual({ prompts: "1", ccEntries: "2" });
+    expect(counts(sessionId).at(-1)).toEqual({ prompts: "1", nonPrompts: "2" });
   });
 
   test("a render with no cost block reads `-` for both", async () => {
@@ -129,6 +129,6 @@ describe("a daemon render's event counts the session's prompts", () => {
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect(counts(sessionId).at(-1)).toEqual({ prompts: "-", ccEntries: "-" });
+    expect(counts(sessionId).at(-1)).toEqual({ prompts: "-", nonPrompts: "-" });
   });
 });

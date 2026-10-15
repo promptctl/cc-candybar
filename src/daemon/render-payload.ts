@@ -671,7 +671,7 @@ export interface MetricsPayload {
   readonly responseTime?: number;
   readonly sessionDuration?: number;
   readonly messageCount?: number;
-  readonly claudeCodeEntries?: number;
+  readonly nonPrompts?: number;
   readonly linesAdded?: number;
   readonly linesRemoved?: number;
 }
@@ -1487,7 +1487,7 @@ export async function buildRenderPayload(
           responseTime: metricsValue.responseTime,
           sessionDuration: metricsValue.sessionDuration,
           messageCount: metricsValue.messageCount,
-          claudeCodeEntries: metricsValue.claudeCodeEntries,
+          nonPrompts: metricsValue.nonPrompts,
           linesAdded: metricsValue.linesAdded,
           linesRemoved: metricsValue.linesRemoved,
         });

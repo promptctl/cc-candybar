@@ -91,6 +91,23 @@ function todoItems(input: unknown): readonly TodoItem[] | undefined {
   return items;
 }
 
+// [LAW:one-source-of-truth] The entry's own prose, whichever shape it arrived
+// in — a bare string or the first text block — read the one way by the
+// command projection here and by `userEntryOf`, so the two shapes cannot end up
+// under two different rules.
+export function turnText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b): b is { type: "text"; text: string } =>
+      typeof b === "object" &&
+      b !== null &&
+      (b as { type?: unknown }).type === "text" &&
+      typeof (b as { text?: unknown }).text === "string",
+  );
+  return block?.text ?? "";
+}
+
 /**
  * Project one parsed transcript line's activity, or undefined when it has none.
  *
@@ -108,19 +125,13 @@ export function entryActivity(
   const started: ToolCall[] = [];
   const finished: string[] = [];
   let todos: readonly TodoItem[] | undefined;
-  // The turn's own prose, whichever shape it arrived in — a bare string or the
-  // first text block. The prompt check is applied ONCE, to the result, so the two
-  // shapes cannot end up under two different rules.
-  let turnText: unknown;
   // The lit facts: a later block in the entry is the newer call, so it wins.
   const claims: LitClaim[] = [];
   const said: LitSaid[] = [];
   let phase: string | undefined;
   const sentinels: LitSentinel[] = [];
 
-  if (typeof content === "string") {
-    turnText = content;
-  } else if (Array.isArray(content)) {
+  if (Array.isArray(content)) {
     for (const block of content) {
       if (typeof block !== "object" || block === null) continue;
       const b = block as Record<string, unknown>;
@@ -148,10 +159,6 @@ export function entryActivity(
           }
           break;
         }
-        case "text": {
-          turnText ??= b.text;
-          break;
-        }
         default:
           break;
       }
@@ -160,7 +167,8 @@ export function entryActivity(
 
   // A `<command-name>` tag is the command only in a prompt a person wrote; an
   // assistant echoing the tag back is discussing a command, not running one.
-  const command = userEntry === "prompt" ? slashCommand(turnText) : undefined;
+  const command =
+    userEntry === "prompt" ? slashCommand(turnText(content)) : undefined;
   const lit: EntryLit | undefined =
     claims.length === 0 &&
     phase === undefined &&

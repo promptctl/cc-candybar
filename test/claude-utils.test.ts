@@ -91,114 +91,55 @@ describe("findAgentTranscripts", () => {
   });
 });
 
-// brandon-effects-2gka.2rm: who wrote a "user" entry, from the marks Claude Code
-// writes. Every row is a shape seen in real 2.1.280–2.1.289 transcripts.
+// brandon-effects-2gka.2rm: what a "user" entry is, from the marks Claude Code
+// writes. Every row is a shape seen in real transcripts, 2.1.0–2.1.289.
 describe("userEntryOf", () => {
-  const text = (t: string) => ({
-    role: "user",
-    content: [{ type: "text", text: t }],
+  const user = (content: unknown, fields: Record<string, unknown> = {}) => ({
+    type: "user",
+    ...fields,
+    message: { role: "user", content },
   });
+  const text = (t: string) => [{ type: "text", text: t }];
   test.each<[string, Record<string, unknown>, UserEntry | undefined]>([
+    ["a typed prompt", user("go", { origin: { kind: "human" }, promptSource: "typed" }), "prompt"],
+    ["a prompt from an older Claude Code, which writes no origin", user("go"), "prompt"],
+    ["an SDK caller's prompt, which carries no origin", user("go", { promptSource: "sdk" }), "prompt"],
+    ["a user line known only by its role", { message: { role: "user", content: "go" } }, "prompt"],
     [
-      "a typed prompt",
-      {
-        type: "user",
-        origin: { kind: "human" },
-        promptSource: "typed",
-        message: { role: "user", content: "go" },
-      },
+      "a skill command, which leads with <command-message>",
+      user("<command-message>lit:next</command-message>\n<command-name>/lit:next</command-name>", { origin: { kind: "human" } }),
       "prompt",
-    ],
-    [
-      "a slash command (no origin)",
-      {
-        type: "user",
-        message: {
-          role: "user",
-          content: "<command-name>/next</command-name>",
-        },
-      },
-      "prompt",
-    ],
-    [
-      "a user line known only by its role",
-      { message: { role: "user", content: "go" } },
-      "prompt",
-    ],
-    [
-      "a tool result",
-      {
-        type: "user",
-        message: {
-          role: "user",
-          content: [{ type: "tool_result", tool_use_id: "a" }],
-        },
-      },
-      "tool-result",
-    ],
-    [
-      "a skill's expanded body (isMeta)",
-      {
-        type: "user",
-        isMeta: true,
-        sourceToolUseID: "a",
-        message: text("Base directory for this skill: …"),
-      },
-      "claude-code",
-    ],
-    [
-      "a nudge to continue (isMeta, auto-continuation)",
-      {
-        type: "user",
-        isMeta: true,
-        origin: { kind: "auto-continuation" },
-        message: text("Please continue"),
-      },
-      "claude-code",
-    ],
-    [
-      "a compaction summary",
-      {
-        type: "user",
-        isCompactSummary: true,
-        isVisibleInTranscriptOnly: true,
-        message: { role: "user", content: "This session is being continued…" },
-      },
-      "claude-code",
     ],
     [
       "a task notification",
-      {
-        type: "user",
-        origin: { kind: "task-notification", producer: "session-task" },
-        promptSource: "system",
-        message: { role: "user", content: "<task-notification>…" },
-      },
+      user("<task-notification>…", { origin: { kind: "task-notification", producer: "session-task" }, promptSource: "system" }),
+      "turn",
+    ],
+    [
+      "a nudge to continue (isMeta, auto-continuation)",
+      user(text("Please continue"), { isMeta: true, origin: { kind: "auto-continuation" } }),
+      "turn",
+    ],
+    ["an interrupt marker", user(text("[Request interrupted by user]"), { interruptedMessageId: "m" }), "interrupt"],
+    ["an interrupt marker with no interruptedMessageId", user(text("[Request interrupted by user for tool use]")), "interrupt"],
+    ["a tool result", user([{ type: "tool_result", tool_use_id: "a" }]), "tool-result"],
+    ["a skill's expanded body (isMeta)", user(text("Base directory for this skill: …"), { isMeta: true, sourceToolUseID: "a" }), "claude-code"],
+    ["a command caveat (isMeta)", user("<local-command-caveat>Caveat…</local-command-caveat>", { isMeta: true }), "claude-code"],
+    [
+      "a compaction summary",
+      user("This session is being continued…", { isCompactSummary: true, isVisibleInTranscriptOnly: true }),
       "claude-code",
     ],
     [
-      "a local command's output (marked only by its tag)",
-      { type: "user", message: { role: "user", content: "<local-command-stdout>Set model to Opus</local-command-stdout>" } },
+      "a built-in command, which leads with <command-name>",
+      user("<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>"),
       "claude-code",
     ],
-    [
-      "an interrupt marker",
-      { type: "user", interruptedMessageId: "m", message: text("[Request interrupted by user]") },
-      "claude-code",
-    ],
-    [
-      "an interrupt marker with no interruptedMessageId",
-      { type: "user", message: text("[Request interrupted by user for tool use]") },
-      "claude-code",
-    ],
-    [
-      "an assistant entry",
-      {
-        type: "assistant",
-        message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
-      },
-      undefined,
-    ],
+    ["a built-in command's output", user("<local-command-stdout>Set model to Opus</local-command-stdout>"), "claude-code"],
+    ["a built-in command's error", user("<local-command-stderr>no</local-command-stderr>"), "claude-code"],
+    ["a ! shell command", user("<bash-input>ls</bash-input>"), "claude-code"],
+    ["a ! shell command's output", user("<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"), "claude-code"],
+    ["an assistant entry", { type: "assistant", message: { role: "assistant", content: text("hi") } }, undefined],
   ])("%s", (_, parsed, expected) => {
     expect(userEntryOf(parsed)).toBe(expected);
   });

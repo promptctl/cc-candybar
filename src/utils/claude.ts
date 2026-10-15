@@ -7,7 +7,11 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
-import { entryActivity, type EntryActivity } from "./transcript-activity";
+import {
+  entryActivity,
+  turnText,
+  type EntryActivity,
+} from "./transcript-activity";
 
 export interface ClaudeHookData {
   // cc-candybar internal — not part of Anthropic's schema
@@ -301,15 +305,24 @@ export interface ParsedEntry {
   raw: PrunedRaw;
 }
 
-// A "user" entry is one of three things. A `prompt` is what a person wrote, the
-// input Claude Code's own `turnPosition.promptIndex` counts. A `tool-result` is
-// a tool's answer echoed back. A `claude-code` entry is one Claude Code marks as
-// its own: `isMeta` (a skill's expanded body, a local-command caveat, a nudge to
-// continue), a compaction summary, an `origin` other than human (a task
-// notification wakes Claude for a new TURN of the same prompt), or text Claude
-// Code writes in a fixed form and marks no other way: a local command's output
-// in its own tag, and the marker it leaves when a person interrupts a turn.
-export type UserEntry = "prompt" | "tool-result" | "claude-code";
+// A "user" entry is one of five facts, read from the marks Claude Code writes:
+// - `prompt`: input Claude answers, a person's or an SDK caller's — the input
+//   Claude Code's own `turnPosition.promptIndex` counts.
+// - `turn`: Claude Code opening another turn of the same prompt (an `origin`
+//   other than human: a task notification, an auto-continuation).
+// - `interrupt`: the marker Claude Code leaves when a person stops a turn.
+// - `tool-result`: a tool's answer echoed back.
+// - `claude-code`: what passes between the person and Claude Code without
+//   reaching Claude as input — what Claude Code writes on its own (`isMeta`: a
+//   skill's expanded body, a command caveat; a compaction summary; a command's
+//   output) and what a person addresses to Claude Code itself (a built-in
+//   command such as `/clear` or `/model`, a `!` shell command).
+export type UserEntry =
+  | "prompt"
+  | "turn"
+  | "interrupt"
+  | "tool-result"
+  | "claude-code";
 
 // [LAW:one-source-of-truth] Classified once, at the parse site, from the marks
 // Claude Code writes — the message count, the response clock and the activity
@@ -320,44 +333,34 @@ export function userEntryOf(
   const msg = parsed.message as Record<string, unknown> | undefined;
   const messageType = parsed.type || msg?.role || msg?.type;
   if (messageType !== "user") return undefined;
-  const first = firstBlock(msg);
-  if (first?.type === "tool_result") return "tool-result";
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
   const origin =
     typeof parsed.origin === "object" && parsed.origin !== null
       ? (parsed.origin as { kind?: unknown }).kind
       : undefined;
+  if (origin !== undefined && origin !== "human") return "turn";
+  // Claude Code marks the rest only by the fixed text it writes. A skill
+  // command, which Claude answers, leads with `<command-message>`; a built-in
+  // command leads with `<command-name>`.
+  const text = turnText(msg?.content).trimStart();
+  if (text.startsWith("[Request interrupted by user")) return "interrupt";
   return parsed.isMeta === true ||
     parsed.isCompactSummary === true ||
-    (origin !== undefined && origin !== "human") ||
-    CLAUDE_CODE_TEXT.test(leadingText(msg?.content, first))
+    CLAUDE_CODE_TEXT.test(text)
     ? "claude-code"
     : "prompt";
 }
 
 const CLAUDE_CODE_TEXT =
-  /^\s*(?:<local-command-std(?:out|err)>|\[Request interrupted by user)/;
+  /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
 
-// The first content block; the array (full LLM text) is never retained. Text
-// content (a bare string) has no block.
-function firstBlock(
-  msg: Record<string, unknown> | undefined,
-): { type?: unknown; text?: unknown } | undefined {
+// The first content block's `type`; the array (full LLM text) is never
+// retained. Text content (a bare string) has no block type.
+function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
   const content = msg?.content;
   return Array.isArray(content) && typeof content[0] === "object" && content[0]
-    ? (content[0] as { type?: unknown; text?: unknown })
+    ? (content[0] as { type?: unknown }).type
     : undefined;
-}
-
-// What the entry says first, in either content shape: a bare string, or the
-// first block's text.
-function leadingText(
-  content: unknown,
-  first: { type?: unknown; text?: unknown } | undefined,
-): string {
-  if (typeof content === "string") return content;
-  return first?.type === "text" && typeof first.text === "string"
-    ? first.text
-    : "";
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {

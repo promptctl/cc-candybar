@@ -1187,7 +1187,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const warned = warnings.map((w) => w.kind).join(",") || "-";
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} prompts=${payload.metrics?.messageCount ?? "-"} ccEntries=${payload.metrics?.claudeCodeEntries ?? "-"} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} prompts=${payload.metrics?.messageCount ?? "-"} nonPrompts=${payload.metrics?.nonPrompts ?? "-"} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {

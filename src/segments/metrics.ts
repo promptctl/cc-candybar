@@ -1,4 +1,4 @@
-import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
+import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 
 // [LAW:one-source-of-truth] Metrics reads the transcript through the shared
 // incremental fold (src/utils/transcript-fold.ts), which folds only the bytes
@@ -22,9 +22,10 @@ export interface MetricsInfo {
   lastResponseTime: number | null;
   sessionDuration: number;
   messageCount: number;
-  // User entries Claude Code wrote itself — a fact for the render event, so a
-  // count of prompts that stops moving can be told from a session with none.
-  claudeCodeEntries: number;
+  // User entries that are neither a prompt nor a tool result — a fact for the
+  // render event, so a count of prompts that stops moving can be told from a
+  // session with none.
+  nonPrompts: number;
   linesAdded: number;
   linesRemoved: number;
 }
@@ -35,19 +36,19 @@ export interface MetricsInfo {
 const RECENT_WINDOW = 20;
 
 // [LAW:types-are-the-program] The immutable fold state: the running prompt
-// count, the running count of user entries Claude Code wrote itself, and the
-// recent-entry ring. Canonical; MetricsInfo's
+// count, the running count of the other user entries, and the recent-entry
+// ring. Canonical; MetricsInfo's
 // transcript-derived fields derive from it, the hookData-derived fields
 // (durations, lines) are always fresh.
 interface MetricsState {
   readonly messageCount: number;
-  readonly claudeCodeEntries: number;
+  readonly nonPrompts: number;
   readonly recent: readonly ParsedEntry[];
 }
 
 const EMPTY: MetricsState = {
   messageCount: 0,
-  claudeCodeEntries: 0,
+  nonPrompts: 0,
   recent: [],
 };
 
@@ -55,13 +56,18 @@ const EMPTY: MetricsState = {
 // FRESH state — so two concurrent renders of one session both fold from the same
 // prior and last-writer-wins is a correct answer, never a double-count, and the
 // stored state can be handed out without copying.
+const NON_PROMPTS: ReadonlySet<UserEntry | undefined> = new Set<UserEntry>([
+  "turn",
+  "interrupt",
+  "claude-code",
+]);
+
 function step(state: MetricsState, entry: ParsedEntry): MetricsState {
   if (entry.isSidechain) return state;
   const grown = [...state.recent, entry];
   return {
     messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
-    claudeCodeEntries:
-      state.claudeCodeEntries + (entry.userEntry === "claude-code" ? 1 : 0),
+    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
     recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown,
   };
 }
@@ -74,9 +80,9 @@ function lastResponseTime(entries: readonly ParsedEntry[]): number | null {
     const messageType =
       entry.type || entry.message?.role || entry.message?.type;
 
-    // The clock starts at the person's prompt; a skill's body or a nudge
-    // Claude Code writes mid-turn does not restart it.
-    if (entry.userEntry === "prompt") {
+    // The clock starts where a turn does — a prompt, or Claude Code opening
+    // another turn of it; a skill's body written mid-turn does not restart it.
+    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
       lastUserTime = entry.timestamp;
     } else if (messageType === "assistant" && lastUserTime) {
       const elapsed =
@@ -115,7 +121,7 @@ export class MetricsProvider {
       lastResponseTime: lastResponseTime(folded.value.recent),
       sessionDuration: hookData.cost.total_duration_ms / 1000,
       messageCount: folded.value.messageCount,
-      claudeCodeEntries: folded.value.claudeCodeEntries,
+      nonPrompts: folded.value.nonPrompts,
       linesAdded: hookData.cost.total_lines_added,
       linesRemoved: hookData.cost.total_lines_removed,
     });

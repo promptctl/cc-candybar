@@ -73,6 +73,13 @@ const taskNotification = (): string =>
     message: { role: "user", content: "<task-notification>done</task-notification>" },
   });
 
+// A slash command Claude answers (a skill), as Claude Code writes it — leading
+// with `<command-message>`. A built-in command leads with `<command-name>`.
+const skill = (name: string): string =>
+  userText(
+    `<command-message>${name}</command-message>\n<command-name>/${name}</command-name>`,
+  );
+
 const toolUse = (
   ...calls: Array<{ id: string; name: string; input?: unknown }>
 ): string =>
@@ -242,7 +249,7 @@ describe("the entry projection carries the scalars and never the content array",
       project(
         JSON.parse(
           userText(
-            "<command-name>/next</command-name>\n  <command-args></command-args>",
+            "<command-message>next</command-message>\n<command-name>/next</command-name>\n<command-args></command-args>",
           ),
         ),
       ),
@@ -256,7 +263,10 @@ describe("the entry projection carries the scalars and never the content array",
             message: {
               role: "user",
               content: [
-                { type: "text", text: "<command-name>/loop</command-name>" },
+                {
+                  type: "text",
+                  text: "<command-message>loop</command-message>\n<command-name>/loop</command-name>",
+                },
               ],
             },
           }),
@@ -356,7 +366,7 @@ describe("the fold reports what is happening now", () => {
 
   test("a meta user entry is not a turn boundary, so the tally and the command survive it", async () => {
     const info = await activityOf(
-      userText("<command-name>/next</command-name>"),
+      skill("next"),
       metaUser("Base directory for this skill: …"),
       toolUse({ id: "a", name: "Bash" }),
       toolResult("a"),
@@ -370,7 +380,7 @@ describe("the fold reports what is happening now", () => {
 
   test("a task notification is another turn of the same prompt, so the tally and the command survive it", async () => {
     const info = await activityOf(
-      userText("<command-name>/next</command-name>"),
+      skill("next"),
       toolUse({ id: "a", name: "Agent" }),
       toolResult("a"),
       taskNotification(),
@@ -381,23 +391,31 @@ describe("the fold reports what is happening now", () => {
     expect(info.running).toEqual([{ name: "Bash", count: 1 }]);
   });
 
-  test("a local command's output is not a prompt, so the command it answers stays", async () => {
+  test("a built-in command, a shell command and their output are not prompts, so the turn before them stands", async () => {
     const info = await activityOf(
-      userText("<command-name>/model</command-name>"),
-      userText("<local-command-stdout>Set model to Opus</local-command-stdout>"),
-    );
-    expect(info.command).toBe("/model");
-  });
-
-  test("an interrupt ends the turn without starting one, so its tally and command stay", async () => {
-    const info = await activityOf(
-      userText("<command-name>/next</command-name>"),
+      skill("next"),
       toolUse({ id: "a", name: "Bash" }),
       toolResult("a"),
+      userText("<command-name>/model</command-name>"),
+      userText("<local-command-stdout>Set model to Opus</local-command-stdout>"),
+      userText("<bash-input>ls</bash-input>"),
+      userText("<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("an interrupt ends the turn without starting one: its tally and command stay, nothing is left running", async () => {
+    const info = await activityOf(
+      skill("next"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      toolUse({ id: "b", name: "Read" }),
       userText("[Request interrupted by user]"),
     );
     expect(info.command).toBe("/next");
     expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+    expect(info.running).toEqual([]);
   });
 
   test("a real user message resets the tool activity but keeps the todo list", async () => {
@@ -426,13 +444,13 @@ describe("the fold reports what is happening now", () => {
 
   test("the slash command that opened the turn is reported, and plain text clears it", async () => {
     expect(
-      (await activityOf(userText("<command-name>/next</command-name>")))
+      (await activityOf(skill("next")))
         .command,
     ).toBe("/next");
     expect(
       (
         await activityOf(
-          userText("<command-name>/next</command-name>"),
+          skill("next"),
           userText("now do this"),
         )
       ).command,
