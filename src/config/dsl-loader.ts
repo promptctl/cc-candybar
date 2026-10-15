@@ -274,8 +274,9 @@ function installedLayer(
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
   // Keyed on the checkout, not the working directory: every directory of one
-  // checkout reads the same data, and a `.git` appearing above a directory
-  // moves its slot.
+  // checkout reads the same data, and the next load after a `.git` appears
+  // above a directory reads the new checkout's. Nothing watches for that
+  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
   const slot = JSON.stringify([ctx.projectDir, ctx.checkout?.root ?? null]);
   const hit = byProject.get(slot);
   if (hit?.key === key) return hit.layer;
