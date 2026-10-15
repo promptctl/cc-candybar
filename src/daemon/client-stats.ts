@@ -95,6 +95,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`renderCache`);
   lines.push(`  size          ${s.renderCache.size}`);
+  lines.push(``);
+  lines.push(`effectCache`);
+  lines.push(`  sessions      ${s.effectCache.sessions}`);
+  lines.push(`  rows          ${s.effectCache.rows}`);
+  lines.push(``);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);

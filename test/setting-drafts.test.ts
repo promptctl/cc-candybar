@@ -137,6 +137,7 @@ type PinnedSetting = Exclude<keyof typeof SETTINGS, "preset">;
 const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   theme: { pin: "'nord'", pick: "gruvbox" },
   style: { pin: "'dim'", pick: "vivid" },
+  effect: { pin: "'pulse'", pick: "shimmer" },
   endcaps: { pin: "'capsule'", pick: "plain" },
   variation: { pin: "'mono'", pick: "duo" },
   shade: { pin: "'muted'", pick: "brightest" },

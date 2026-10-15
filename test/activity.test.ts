@@ -21,7 +21,7 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { FLOOR_STYLE } from "./helpers/floor-style";
+import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
 import { clearParseCache, type ClaudeHookData } from "../src/utils/claude";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -86,6 +86,7 @@ const todoWrite = (
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
   style: FLOOR_STYLE,
+  effect: FLOOR_EFFECT,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",

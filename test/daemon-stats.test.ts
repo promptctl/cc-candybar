@@ -29,6 +29,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       renderCacheSize: 3,
+      effectCache: { sessions: 2, rows: 5 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
     });
@@ -42,6 +43,7 @@ describe("RuntimeStats.snapshot", () => {
     });
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.usageCache.size).toBe(10);
+    expect(snap.effectCache).toEqual({ sessions: 2, rows: 5 });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
@@ -61,6 +63,7 @@ describe("RuntimeStats.snapshot", () => {
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCacheSize: 0,
+      effectCache: { sessions: 0, rows: 0 },
       watchersActive: 0,
       handlerProbes: [],
     });
@@ -86,6 +89,7 @@ describe("formatStats", () => {
       gitCache: { size: 5, hits: 80, misses: 20, invalidations: 3, watchers: 5 },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4 },
+      effectCache: { sessions: 2, rows: 3 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       subprocesses: {
         total: 0,
@@ -103,6 +107,7 @@ describe("formatStats", () => {
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain("active        5");
+    expect(out).toContain("rows          3");
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -121,6 +126,7 @@ describe("formatStats", () => {
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0 },
+      effectCache: { sessions: 0, rows: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       subprocesses: {
         total: 0,

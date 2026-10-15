@@ -16,7 +16,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
-import { FLOOR_STYLE } from "./helpers/floor-style";
+import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -115,6 +115,7 @@ const NO_HINTS: ClientHints = {};
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
   style: FLOOR_STYLE,
+  effect: FLOOR_EFFECT,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",

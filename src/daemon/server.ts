@@ -103,6 +103,7 @@ import {
   type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "./render-payload.js";
+import { EffectSessions } from "../render/effect.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
@@ -152,6 +153,9 @@ const sessionState = new SessionState();
 // [LAW:locality-or-seam] Same terms: ephemeral until runDaemon binds its file.
 const settingsHistory = new SettingsHistory(sessionState, dlog);
 const navigationHistory = new NavigationHistory();
+// Each session's effect memory — when its effect came into force — held in
+// daemon memory only: a restarted daemon starts every session's effect again.
+const effectSessions = new EffectSessions();
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -879,6 +883,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
         renderCacheSize: renderCache.size,
+        effectCache: effectSessions.getStats(),
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
@@ -1068,6 +1073,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
       // computation to drift from it.
       const renderOpts = renderOptionsOf(effective, width);
+      const effects = effectSessions.of(sessionId);
       // [LAW:single-enforcer] renderDsl internally calls
       // `registry.applyInput(payload)` as its first step (see step 1 in
       // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -1095,7 +1101,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         // and name together, so renderDsl publishes the `theme.effective` the
         // bar was actually painted from. No separate basePalette argument: one
         // would be a second clock free to disagree with that name.
-        renderSelectionOf(effective),
+        { ...renderSelectionOf(effective), effects },
       );
       // [LAW:one-source-of-truth] Consume the transient click error written by
       // dispatch on partial/total effect failure, then clear it so it shows
@@ -1159,9 +1165,10 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageStore.getStats();
+      const fx = effects.lastFrame();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {

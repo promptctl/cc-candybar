@@ -80,6 +80,7 @@ const SPELLING: {
   theme: (e) => (e.theme.kind === "decided" ? e.theme.name : null),
   preset: (e) => e.preset,
   style: (e) => (e.style.kind === "decided" ? e.style.name : null),
+  effect: (e) => (e.effect.kind === "decided" ? e.effect.name : null),
   endcaps: (e) => e.endcaps,
   variation: (e) => e.variation,
   shade: (e) => e.shade,

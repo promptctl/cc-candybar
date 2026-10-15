@@ -331,6 +331,7 @@ const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
   preset: "door",
   theme: "look",
   style: "look",
+  effect: "look",
   variation: "look",
   shade: "look",
   endcaps: "look",

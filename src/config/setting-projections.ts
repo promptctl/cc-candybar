@@ -57,6 +57,12 @@ export const SETTINGS = {
     effectiveVar: "style.effective",
     label: "◐",
   },
+  effect: {
+    configKey: "effect",
+    sessionKey: "effect",
+    effectiveVar: "effect.effective",
+    label: "✨",
+  },
   endcaps: {
     configKey: "endcaps",
     sessionKey: "endcaps",

@@ -9,7 +9,6 @@
 // width are both in hand [LAW:single-enforcer].
 
 import type { RichText } from "@promptctl/rich-js";
-import { cellLen } from "@promptctl/rich-js";
 
 import {
   sizeCell,
@@ -17,15 +16,7 @@ import {
   type CellSizing,
   type LaidCell,
 } from "../template-engine/layout.js";
-import { renderStripCells, type BuildLineOptions } from "./strip.js";
-import { INVISIBLE } from "./ansi.js";
-
-// The columns a serialized line actually occupies. SGR and OSC-8 are zero-width,
-// and `cellLen` is the same measure the strip wraps by, so this is the row's own
-// arithmetic rather than a second opinion about character widths.
-function visibleCols(serialized: string): number {
-  return cellLen(serialized.replace(INVISIBLE, ""));
-}
+import { drawnCols, renderStripCells, type BuildLineOptions } from "./strip.js";
 
 /**
  * Give every fill-demanding cell in one row its share of the leftover width, and
@@ -70,7 +61,7 @@ export function resolveFill(
   // line 0 would under-report it anyway. The clamp case, reached honestly.
   if (natural.length > 1) return cells;
 
-  const deficit = Math.max(0, options.width - visibleCols(natural[0] ?? ""));
+  const deficit = Math.max(0, options.width - drawnCols(natural[0] ?? ""));
   // Even shares of the deficit, remainder to the last demand so the row lands on
   // the width exactly rather than one column short per fill. Each fill GROWS from
   // its natural width, because that width is already inside the measurement above.

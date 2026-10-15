@@ -18,7 +18,9 @@ import {
   resolveColorSystem,
   IDENTITY,
   JOINERS,
+  EFFECT_CATALOGUE,
   listThemePalettes,
+  type LoopName,
   type ThemeKey,
 } from "@promptctl/rich-js";
 import {
@@ -213,9 +215,9 @@ export type Decided<T> = Extract<Selection<T>, { kind: "decided" }>;
 // `endcaps`/`autoWrap`/`padding` are deliberately absent, and the reason is a type
 // rather than a preference: their result would need a parse into a non-name
 // domain (a closed enum, a bool, a bounded int), which is a second variability
-// this shape does not carry. A style and a theme each name a member of their own
-// domain, which is why one shape serves both.
-export const EXPRESSION_SLOTS = ["style", "palette"] as const;
+// this shape does not carry. A style, a theme and an effect each name a member
+// of their own domain, which is why one shape serves all three.
+export const EXPRESSION_SLOTS = ["style", "palette", "effect"] as const;
 export type ExpressionSlot = (typeof EXPRESSION_SLOTS)[number];
 
 // Shape-detection, the same way a template is told from a literal everywhere
@@ -358,6 +360,66 @@ export function resolveStyleSelection(
     globalsStyle,
     decideStyleName(STYLE_FLOOR, declaredStyles),
     (raw) => namedStyle(raw, declaredStyles),
+  );
+}
+
+// --- Effect identifiers ---
+
+// [LAW:one-source-of-truth] The effect domain's floor: no effect, the identity.
+// Like the style's, three things collapse to it — a stale session pick, a config
+// default naming nothing, and a rule whose result names nothing — and they must
+// all land on the same name.
+export const EFFECT_FLOOR = "none";
+
+// [LAW:one-source-of-truth][LAW:types-are-the-program] The looping effects a bar
+// can wear are rich-js's catalogue, by name: this list is the floor and the
+// catalogue's keys, so a loop rich-js adds is offered by the loader, the settings
+// control and the session gate with no edit here — as `ENDCAPS_SHAPES` is the
+// keys of `JOINERS`.
+export type EffectName = typeof EFFECT_FLOOR | LoopName;
+export const EFFECT_NAMES: readonly EffectName[] = Object.freeze([
+  EFFECT_FLOOR,
+  ...(Object.keys(EFFECT_CATALOGUE.loops) as LoopName[]),
+]);
+
+// An effect's selection carries its NAME as its value: what a settled name
+// denotes is a catalogue entry made per row by the render (a row's span is a
+// fact only the render has), so the name is the whole of what crosses here.
+export type EffectSelection = Selection<EffectName>;
+export type DecidedEffect = Decided<EffectName>;
+
+function namedEffect(name: string): DecidedEffect | null {
+  const value = EFFECT_NAMES.find((member) => member === name);
+  return value === undefined ? null : { kind: "decided", name, value };
+}
+
+// [LAW:single-enforcer] The membership policy for an effect NAME, wherever it
+// came from. Silent, as the style's is and for the same reason: the floor is the
+// identity, so a rule that named nothing leaves a still bar, which is right.
+export function decideEffectName(name: string): DecidedEffect {
+  return (
+    namedEffect(name) ?? {
+      kind: "decided",
+      name: EFFECT_FLOOR,
+      value: EFFECT_FLOOR,
+    }
+  );
+}
+
+// The effect a render should wear, as far as it can be known before the render
+// runs [LAW:one-type-per-behavior] — `resolveSelection` with the effect's own two
+// values.
+export function resolveEffectSelection(
+  stagedEffect: string | undefined,
+  sessionEffect: string | null,
+  globalsEffect: string | undefined,
+): EffectSelection {
+  return resolveSelection(
+    stagedEffect,
+    sessionEffect,
+    globalsEffect,
+    decideEffectName(EFFECT_FLOOR),
+    namedEffect,
   );
 }
 

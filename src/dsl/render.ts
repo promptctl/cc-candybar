@@ -61,9 +61,15 @@ import {
   stripSeamCols,
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
+import { SessionEffects } from "../render/effect.js";
 import {
+  decideEffectName,
   decideStyleName,
   decideThemeName,
+  EFFECT_FLOOR,
+  resolveEffectSelection,
+  type EffectSelection,
+  type Selection,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
   finishSelection,
@@ -127,6 +133,7 @@ import {
 import {
   layoutRows,
   nodeType,
+  rowIdentities,
   type Compiled,
   type CompiledNode,
   type CompiledSegment,
@@ -871,10 +878,7 @@ function evalRule(rule: CompiledRule, scope: object): string {
 // decided name, or that field's floor when only this render can settle it.
 // [LAW:dataflow-not-control-flow] One total projection of the union to one value,
 // shared by both slots, rather than a per-slot branch at the push site.
-function provisionalName(
-  selected: StyleSelection | ThemeSelection,
-  floorName: string,
-): string {
+function provisionalName<T>(selected: Selection<T>, floorName: string): string {
   return selected.kind === "decided" ? selected.name : floorName;
 }
 
@@ -979,6 +983,14 @@ export interface RenderSelection {
   // deliberately splits here and nowhere else (brandon-looks-pe6). The base
   // palette is transposed by the result ONCE per render.
   readonly style?: StyleSelection;
+  // The looping effect, resolved by the caller as far as it CAN be — the
+  // style's twin (`resolveEffectSelection`), finished here under a rule.
+  readonly effect?: EffectSelection;
+  // The session's effect memory: when its effect came into force (the effect's
+  // own t = 0) and the effects already made for its rows. The daemon hands each
+  // session its own; an omitting caller draws with a fresh one, so its render
+  // is the effect's calm first frame.
+  readonly effects?: SessionEffects;
   // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
   // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
   // base PALETTE beside the name, which is why renderDsl takes no `basePalette`
@@ -1060,6 +1072,11 @@ export function renderDsl(
     selection?.shade,
   );
   compiled.menuRuntime.action.decor = decor;
+  // [LAW:one-source-of-truth] The effect's twin of the same true default: an
+  // omitting caller wears the effect the config declares, rule included.
+  const selectedEffect =
+    selection?.effect ??
+    resolveEffectSelection(undefined, null, declared.effect);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
   // ActionRuntime.width), so a template reads the exact wrap width — never a
@@ -1079,11 +1096,16 @@ export function renderDsl(
   // `{{ .theme.effective }}` / `{{ .style.effective }}` label and the palette the
   // bar is actually painted from cannot disagree (brandon-looks-pe6,
   // brandon-themes-dzl).
-  const payloadWith = (themeName: string, styleName: string): object => ({
+  const payloadWith = (
+    themeName: string,
+    styleName: string,
+    effectName: string,
+  ): object => ({
     ...(payload as object),
     term: { cols: opts.width },
     theme: { effective: themeName },
     style: { effective: styleName },
+    effect: { effective: effectName },
   });
   // An expression arm's provisional value is its FLOOR: it is what that slot
   // collapses to when its result names nothing, so a rule reading its own
@@ -1095,6 +1117,7 @@ export function renderDsl(
     payloadWith(
       provisionalName(selectedTheme, THEME_FLOOR),
       provisionalName(selectedStyle, STYLE_FLOOR),
+      provisionalName(selectedEffect, EFFECT_FLOOR),
     ),
   );
   // [LAW:single-enforcer] Publish the columns the render's strip spends on a
@@ -1134,14 +1157,27 @@ export function renderDsl(
       config.styles,
     ),
   );
+  const effect = finishSelection(selectedEffect, (source) =>
+    decideEffectName(evalRule(compiledRule(compiled, "effect", source), scope)),
+  );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
   // carry, so push it: without this the settings menu's `🎨 theme` / `◐ style`
   // controls would label themselves from the floor while the bar wore the rule's
   // result — one fact with two answers. All payload ingestion goes through
   // applyInput (see SourceRegistry's own contract), so this is that one path,
   // called again, not a second way to write an input box.
-  if (theme !== selectedTheme || style !== selectedStyle)
-    registry.applyInput(payloadWith(theme.name, style.name));
+  if (
+    theme !== selectedTheme ||
+    style !== selectedStyle ||
+    effect !== selectedEffect
+  )
+    registry.applyInput(payloadWith(theme.name, style.name, effect.name));
+  // The motion of each row this render draws: the session's effect memory
+  // records the settled effect coming into force, so its clock starts there.
+  const rowMotion = (selection?.effects ?? new SessionEffects("")).motion(
+    effect.value,
+    at,
+  );
   // [LAW:one-source-of-truth] The render's BASE palette, published beside the
   // style and padding: a picker over a colour-valued domain paints each option in
   // the palette picking it would put in force, and a style's answer is this base
@@ -1371,10 +1407,14 @@ export function renderDsl(
             ];
       }),
     );
-  const rendered = renderNode(root, true, barRoot(decor))
+  const rendered = rowIdentities(renderNode(root, true, barRoot(decor)))
     // A row's fill demands resolve here and nowhere else: this is the one place a
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
-    .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
+    // [LAW:one-source-of-truth] A row's motion follows the row, not its line
+    // number, so a menu opening over it does not move it onto another's.
+    .map(({ line, row }) =>
+      renderStripCells(resolveFill(line.cells, opts), opts, rowMotion(row)),
+    )
     .join("\n");
   for (const message of shortfalls)
     onRenderWarning?.({ kind: "band-floor", message });

@@ -64,6 +64,10 @@ export interface StatsSnapshot {
   renderCache: {
     size: number;
   };
+  effectCache: {
+    sessions: number;
+    rows: number;
+  };
   watchers: {
     active: number;
     opened: number;
@@ -202,6 +206,7 @@ export class RuntimeStats {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
     renderCacheSize: number;
+    effectCache: StatsSnapshot["effectCache"];
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
@@ -227,6 +232,7 @@ export class RuntimeStats {
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
       renderCache: { size: extras.renderCacheSize },
+      effectCache: extras.effectCache,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

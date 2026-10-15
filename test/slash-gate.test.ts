@@ -27,7 +27,7 @@ import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { effectsOf } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { FLOOR_STYLE } from "./helpers/floor-style";
+import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
@@ -43,6 +43,7 @@ const OPTS = {
 const EFFECTIVE: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
   style: FLOOR_STYLE,
+  effect: FLOOR_EFFECT,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",

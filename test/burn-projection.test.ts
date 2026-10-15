@@ -30,7 +30,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { FLOOR_STYLE } from "./helpers/floor-style";
+import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
@@ -142,6 +142,7 @@ const NO_HINTS: ClientHints = {};
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
   style: FLOOR_STYLE,
+  effect: FLOOR_EFFECT,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",
