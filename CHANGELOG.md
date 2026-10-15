@@ -1,3 +1,10 @@
+# [1.126.0](https://github.com/promptctl/cc-candybar/compare/v1.125.0...v1.126.0) (2026-10-15)
+
+
+### Features
+
+* **effects:** a placement can carry its own effect ([#332](https://github.com/promptctl/cc-candybar/issues/332)) ([0571560](https://github.com/promptctl/cc-candybar/commit/0571560eac728a89e27286209e1639f81c624902))
+
 # [1.125.0](https://github.com/promptctl/cc-candybar/compare/v1.124.0...v1.125.0) (2026-10-15)
 
 
