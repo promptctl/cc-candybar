@@ -73,7 +73,7 @@ export const SETTINGS = {
     configKey: "shade",
     sessionKey: "shade",
     effectiveVar: "shade.effective",
-    label: "🎚️",
+    label: "🔆",
   },
   autoWrap: {
     configKey: "autoWrap",

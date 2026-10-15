@@ -109,8 +109,13 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       const { palette } = requireActiveSegment(ref, "{{ keptOn }}");
       const fg = resolveColorRef(palette, fgRef);
       const bg = resolveColorRef(palette, bgRef);
-      const ground = drawnColour(bg, ColorDepth.TRUECOLOR);
-      const held = contrastRatio(fg.compositeOver(ground), ground);
+      // As every floor is measured: on the colours as drawn, each composited
+      // over the terminal's black — never `fg` laid over `bg`, which no
+      // terminal draws.
+      const held = contrastRatio(
+        drawnColour(fg, ColorDepth.TRUECOLOR),
+        drawnColour(bg, ColorDepth.TRUECOLOR),
+      );
       const floor = Math.min(
         TEXT_MIN_CONTRAST,
         Math.max(held, QUIET_MIN_CONTRAST),

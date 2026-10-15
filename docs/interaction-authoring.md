@@ -427,7 +427,7 @@ below the deepest window, `"muted"`: every cell of a row in the role's muted
 form under the role's own text colour, as Textual's labels wear them, the
 cells parted by the joiner's divider. Under a window, cells side by side step
 up and down it a shade at a time. It resolves like `variation`, and the
-settings menu's `🎨 look` tab carries a `🎚️` carousel over it. `shades` is a
+settings menu's `🎨 look` tab carries a `🔆` carousel over it. `shades` is a
 registered domain and `{{ .shade.effective }}` its projection:
 
 ```json5 check:pass

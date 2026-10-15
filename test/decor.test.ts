@@ -702,6 +702,29 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     expect(short).toBeNull();
     expect(relativeLuminance(state)).toBeLessThan(0.002);
   });
+
+  test("another shade or variation clears every shortfall, as its message says: under `muted` a whole-row variation wears one colour per row", () => {
+    // The witness the message leans on: at the dial's muted position a
+    // variation that keeps its role across the row draws each row in one
+    // colour, and black or white stands at least √21:1 off any one colour —
+    // the two ends of the search, drawn at every depth.
+    const wrong: string[] = [];
+    for (const variation of VARIATION_NAMES.filter((name) => VARIATIONS[name].run === WHOLE_ROW)) {
+      const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES.muted };
+      for (const r of [0, 1]) {
+        const ground = rowGround(decor, [row(r, 2), cell(0, ROW_REACH)]);
+        expect([variation, r, ground.length]).toEqual([variation, r, 1]);
+        for (const { name, palette } of STYLED) {
+          for (const drawnAt of DRAWN) {
+            if (stateFor(palette, OPEN_HUE, groundCells(palette, ground), drawnAt).short !== null) {
+              wrong.push(`${name} ${variation} row ${r} at ${ColorDepth[drawnAt]}`);
+            }
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
 });
 
 describe("done-when: the enforcement is a floor, not a transform", () => {
@@ -1137,5 +1160,57 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
       }),
     );
     expect(wrong).toEqual([]);
+  });
+});
+
+describe("a band item is drawn, never thrown — the settings controls are band items", () => {
+  test("an item whose own place rounds onto its trigger takes the nearest place inward that is neither", () => {
+    // textual-dark under `dim`, an `alt` row at the brightest shade: option 21
+    // of 32 placed by golden angle sits .98 of the way up its window, where
+    // truecolor rounds it onto the open trigger's own colour.
+    const palette = STYLED.find(({ name }) => name === "textual-dark/dim")!.palette;
+    const { ground } = GROUNDS.find(
+      ({ name }) =>
+        name === "secondary-lighten-1+secondary-lighten-2+secondary-lighten-3+accent-lighten-1+accent-lighten-2+accent-lighten-3",
+    )!;
+    const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground };
+    const goldenAngle = DISTRIBUTIONS["golden-angle"];
+    const { state, plane } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+    // Non-vacuous: the item's own place is its trigger's colour, on a band
+    // with room — its plane stands its floor off the trigger.
+    expect(blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * goldenAngle(21)).hex).toBe(state.hex);
+    expect(deltaE(state, plane)).toBeGreaterThanOrEqual(BAND_FLOORS.triggerPlane);
+    const item = bandItemFor(palette, disclosure, [{ index: 21, count: 32, distribution: goldenAngle }], ColorDepth.TRUECOLOR);
+    expect([item.hex === plane.hex, item.hex === state.hex]).toEqual([false, false]);
+  });
+
+  test("a band whose plane stands on its trigger reports it, and its items are drawn at every depth", () => {
+    // A palette a style washed out: the accent, the background and the
+    // foreground all but meet, the accent stands off its dark row as it is,
+    // and no plane recedes from it.
+    const washed = new Palette(
+      "washed",
+      true,
+      new Map<string, ColorRgba>([
+        ...getThemePalette("nord")!.vars,
+        ["accent", new ColorRgba(0xff, 0xff, 0xff)],
+        ["background", new ColorRgba(0xff, 0xff, 0xff)],
+        ["foreground", new ColorRgba(0xf4, 0xf4, 0xf4)],
+        ["secondary-darken-1", new ColorRgba(0x20, 0x20, 0x20)],
+      ]),
+    );
+    const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground: [{ hue: "secondary", shade: "darken-1" }] };
+    for (const drawnAt of DRAWN) {
+      expect(bandFor(washed, disclosure, drawnAt).shortfalls).toEqual([
+        expect.stringMatching(
+          new RegExp(
+            `^theme "washed": an open band's plane stands ΔE 0\\.\\d{3} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the 0\\.1 that tells them apart; another style clears it$`,
+          ),
+        ),
+      ]);
+      for (let index = 0; index < 6; index++) {
+        expect(() => bandItemFor(washed, disclosure, [{ index, count: 6, distribution: VDC }], drawnAt)).not.toThrow();
+      }
+    }
   });
 });

@@ -898,15 +898,35 @@ const enclosingPlane = (
     ? []
     : [trueBand(palette, { ...disclosure, depth: disclosure.depth - 1 }).plane];
 
-/** The one line the render reports for a state that stands short of its floor. */
-const shortfallOf = (
+/** The line the render reports for a state that stands short of its floor, if it does. */
+const stateShortfall = (
   palette: Palette,
   { short }: StateSearch,
   drawnAt: ColorDepth,
-): string | null =>
+): readonly string[] =>
   short === null
-    ? null
-    : `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it — the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; another shade or variation clears it`;
+    ? []
+    : [
+        `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it — the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; another shade or variation clears it`,
+      ];
+
+/**
+ * The line the render reports for a plane standing too near the trigger that
+ * opened it to be told from it, if it does — the floor whose miss leaves the
+ * band's items no colour between the two (`bandItemFor`). Every bundled theme
+ * holds it under the `none` style at every depth a bundled menu reaches
+ * (test/decor.test.ts), so a style clears it.
+ */
+const planeShortfall = (
+  palette: Palette,
+  apart: number,
+  drawnAt: ColorDepth,
+): readonly string[] =>
+  apart >= BAND_FLOORS.triggerPlane
+    ? []
+    : [
+        `theme "${palette.name}": an open band's plane stands ΔE ${apart.toFixed(3)} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the ${BAND_FLOORS.triggerPlane} that tells them apart; another style clears it`,
+      ];
 
 /**
  * How far a band's plane recedes from its state colour toward `background`:
@@ -931,6 +951,12 @@ export const BAND_RECESSION = {
  * the state, so no item is the plane and none is its own trigger.
  */
 export const BAND_WINDOW = { floor: 0.12, span: 0.8 } as const;
+
+/**
+ * How an item whose own place rounds onto its plane or its trigger steps
+ * toward the middle of the window (`bandItemFor`): in twelfths of the way.
+ */
+const ITEM_STEPS = 12;
 
 /** The vocabulary hue `depth` steps after `hue`, wrapping — depth advances the hue. */
 export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
@@ -967,14 +993,15 @@ export interface BandColours {
   readonly plane: ColorRgba;
 }
 
-/** A band as the terminal draws it, and whether its state stands short. */
+/** A band as the terminal draws it, and the floors it stands short of. */
 export interface Band extends BandColours {
   /**
-   * Why `state` stands short of STATE_FLOOR off the ground its lineage's
-   * trigger stands on (`StateSearch`), or null when it clears. The render
-   * reports it where the trigger opens.
+   * One line per floor the band stands short of as drawn, for the render to
+   * report where its trigger opens: `state` off the ground its lineage's
+   * trigger stands on (STATE_FLOOR, `StateSearch`), and `plane` off `state`
+   * (BAND_FLOORS.triggerPlane). Empty when it clears both.
    */
-  readonly shortfall: string | null;
+  readonly shortfalls: readonly string[];
 }
 
 /**
@@ -1021,7 +1048,19 @@ export function bandFor(
         `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
       );
     }
-    return { state, plane, shortfall: shortfallOf(palette, search, drawnAt) };
+    const asDrawn = shownAt(drawnAt);
+    return {
+      state,
+      plane,
+      shortfalls: [
+        ...stateShortfall(palette, search, drawnAt),
+        ...planeShortfall(
+          palette,
+          deltaE(asDrawn(state), asDrawn(plane)),
+          drawnAt,
+        ),
+      ],
+    };
   });
 }
 const BANDS = memoPerPalette<Band>();
@@ -1163,25 +1202,35 @@ export function bandItemFor(
 ): ColorRgba {
   const band = bandFor(palette, disclosure, drawnAt);
   const truecolor = trueBand(palette, disclosure);
-  const item = ensureDrawn(
-    blendRgb(
-      truecolor.plane,
-      truecolor.state,
-      BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address),
-    ),
-    drawnAt,
-    // An item is never the plane it sits on and never its own trigger — as
-    // drawn, where a rounding can land it on either.
-    (candidate, drawn) =>
-      candidate.hex !== drawn(band.plane).hex &&
-      candidate.hex !== drawn(band.state).hex,
-  );
-  if (item === undefined) {
-    throw new Error(
-      `palette "${palette.name}": a ${disclosure.hue} band item at depth ${disclosure.depth} is drawn as its plane or its trigger at depth ${ColorDepth[drawnAt]}, and nothing that depth draws is neither`,
+  const at = (place: number): ColorRgba =>
+    blendRgb(truecolor.plane, truecolor.state, place);
+  const own = BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address);
+  const middle = BAND_WINDOW.floor + BAND_WINDOW.span / 2;
+  // An item is never the plane it sits on and never its own trigger — as
+  // drawn, where a rounding can land it on either. Where its own place does,
+  // it takes the nearest place toward the window's middle that is neither: at
+  // 256 colours and ansi the depth offers another colour for the place itself
+  // (`ensureDrawn`); truecolor draws a place as itself, so it steps inward.
+  const neither = (
+    candidate: ColorRgba,
+    drawn: (c: ColorRgba) => ColorRgba,
+  ): boolean =>
+    candidate.hex !== drawn(band.plane).hex &&
+    candidate.hex !== drawn(band.state).hex;
+  for (let step = 0; step <= ITEM_STEPS; step++) {
+    const item = ensureDrawn(
+      at(own + ((middle - own) * step) / ITEM_STEPS),
+      drawnAt,
+      neither,
     );
+    if (item !== undefined) return item;
   }
-  return item;
+  // [LAW:no-silent-failure] Not even the window's middle is neither: the
+  // plane stands on its trigger, which `bandFor` reports where the trigger
+  // opens. Drawn at its place rather than thrown — the items of the door's
+  // band are the settings controls, and a throw would take them away, as one
+  // from `stateFor` would the door.
+  return at(own);
 }
 
 // --- Regions -------------------------------------------------------------------
@@ -1265,13 +1314,19 @@ export function decorationFor(
       const { decor, address } = region;
       const entry = decorEntryFor(decor, address);
       const tint = decorEntryColour(palette, entry);
+      // Read where the segment opens a band (`bandFor`), once: a closed cell
+      // never reads it, and reading every cell's row for every cell cost 2–3%
+      // of a closed bar's render.
+      let ground: Ground | undefined;
       return {
         tint,
         text: decor.shade.text(palette, entry.hue, tint, drawnAt),
         disclosure: {
           hue: OPEN_HUE,
           depth: 0,
-          ground: rowGround(decor, address),
+          get ground() {
+            return (ground ??= rowGround(decor, address));
+          },
         },
       };
     }

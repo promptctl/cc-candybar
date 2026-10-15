@@ -440,9 +440,9 @@ export function renderEffective(
     // the message itself names the path(s) the rule was written at, which may
     // be a preset's globals rather than the config's own.
     "theme-rule": (message) => failures.set("theme rule", message),
-    // An open trigger the theme leaves no colour to stand off its row: the bar
-    // draws the nearest, and the message names what clears it.
-    "state-floor": (message) => advisories.add(message),
+    // An open band the chosen look leaves short of a floor: the bar draws it
+    // as near as it comes, and the message names what clears it.
+    "band-floor": (message) => advisories.add(message),
   };
   const rendered = renderDsl(
     config,

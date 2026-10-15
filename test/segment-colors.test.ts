@@ -207,6 +207,14 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
     const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
     expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(3);
   });
+
+  test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
+    // White at half alpha on #202020 is drawn #808080: 4.13:1 off the ground
+    // as drawn, 4.32:1 once 256 colours round the pair, so it keeps its
+    // contrast as it is. Laid over the ground it would claim 5.10:1, and a
+    // floor taken from that refused the grey the terminal draws.
+    expect(at(ColorDepth.EIGHT_BIT)("#ffffff80", "#202020")).toBe("#808080");
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────

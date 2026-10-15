@@ -11,7 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { ColorRgba, RichText, Palette } from "@promptctl/rich-js";
+import type { RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type {
@@ -109,6 +109,7 @@ import {
   SHADES,
   VARIATIONS,
   type AddressStep,
+  type Band,
   type Decor,
   type ShadeName,
   type VariationName,
@@ -915,9 +916,11 @@ export interface RenderObservers {
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
   // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a theme rule and lists a
-  // state-floor shortfall, so the same fact is visible whether or not anyone is
-  // looking at a bar.
+  // warning channel, and `cc-candybar check` fails a theme rule, so a rule's
+  // failure is visible whether or not anyone is looking at a bar. Check lists
+  // a band-floor shortfall only where its own renders open a trigger — one open
+  // by default; it opens none itself, so a shortfall behind a closed trigger
+  // reaches the bar alone.
   readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
 
@@ -929,10 +932,11 @@ export type RenderWarning =
   // (brandon-themes-dzl): the bar renders in the floor theme, and a palette has
   // no cell of its own to show a ⚠ in the way a failing segment does.
   | { readonly kind: "theme-rule"; readonly message: string }
-  // An open trigger on a row no colour stands STATE_FLOOR off (decor.ts
-  // `stateFor`): drawn as near as one comes, which another shade or variation
-  // clears. A fact about the chosen look, not a fault in the config.
-  | { readonly kind: "state-floor"; readonly message: string };
+  // A floor an open band stands short of as drawn (decor.ts `bandFor`): its
+  // trigger off the cells of the row it stands in, or its plane off its
+  // trigger. Drawn as near as it comes, and the message names the setting that
+  // clears it — a fact about the chosen look, not a fault in the config.
+  | { readonly kind: "band-floor"; readonly message: string };
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -992,8 +996,8 @@ export function renderDsl(
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
-  // The state-floor shortfalls of the triggers this render opens, each
-  // reported once after the walk however many triggers stand on its ground.
+  // The band-floor shortfalls of the bands this render opens, each reported
+  // once after the walk however many triggers open a band that falls short.
   const shortfalls = new Set<string>();
   // [LAW:one-source-of-truth] The instant and the depth this render draws at,
   // published once before the walk into the registry's clocks: every time read
@@ -1204,9 +1208,11 @@ export function renderDsl(
       // disclosure body is known before the body evaluates, so the body reads
       // it too; a dropped menu is known only after, so the lead and trail —
       // evaluated last — read the final ground either way.
-      const state = (): ColorRgba =>
-        bandFor(palette, disclosure, drawnAt).state;
-      if (bodyOpen) active.bg = state();
+      // [LAW:one-source-of-truth] The band the segment opens, read the one way
+      // for the background `{{ bgOf }}` sees, its shortfalls and every Style
+      // below.
+      const opened = (): Band => bandFor(palette, disclosure, drawnAt);
+      if (bodyOpen) active.bg = opened().state;
       const fragments = templates.body.evaluate(segScope);
       // [LAW:one-source-of-truth] Open is the PRESENCE of something under the
       // segment: a dropped menu body (known only now the body has evaluated),
@@ -1214,11 +1220,11 @@ export function renderDsl(
       // walk picks the cell's Style by this same value.
       const open = active.drops.length > 0 || bodyOpen;
       if (open) {
-        const band = bandFor(palette, disclosure, drawnAt);
+        const band = opened();
         active.bg = band.state;
-        // [LAW:no-silent-failure] A trigger whose row leaves no colour that
-        // clears the state floor is drawn as near as one comes, and said so.
-        if (band.shortfall !== null) shortfalls.add(band.shortfall);
+        // [LAW:no-silent-failure] A floor the band stands short of is drawn as
+        // near as it comes, and said so.
+        for (const shortfall of band.shortfalls) shortfalls.add(shortfall);
       }
       const lead = templates.lead?.evaluate(segScope) ?? [];
       const trail = templates.trail?.evaluate(segScope) ?? [];
@@ -1228,17 +1234,13 @@ export function renderDsl(
       const styles: SegmentStyles = {
         closed,
         get trigger() {
-          return stateCell(palette, state(), drawnAt);
+          return stateCell(palette, opened().state, drawnAt);
         },
         get band() {
-          return stateCell(
-            palette,
-            bandFor(palette, disclosure, drawnAt).plane,
-            drawnAt,
-          );
+          return stateCell(palette, opened().plane, drawnAt);
         },
         get close() {
-          return closeCell(palette, state(), drawnAt);
+          return closeCell(palette, opened().state, drawnAt);
         },
         disclosure,
       };
@@ -1346,6 +1348,6 @@ export function renderDsl(
     .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
     .join("\n");
   for (const message of shortfalls)
-    onRenderWarning?.({ kind: "state-floor", message });
+    onRenderWarning?.({ kind: "band-floor", message });
   return rendered;
 }

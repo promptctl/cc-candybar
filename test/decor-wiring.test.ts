@@ -591,8 +591,67 @@ describe("an open trigger on a row no colour stands off", () => {
     expect(out).toContain("INNER-BODY");
     expect(warnings).toEqual([
       {
-        kind: "state-floor",
+        kind: "band-floor",
         message: expect.stringMatching(/^theme "straddling": no open-trigger colour stands 2\.2:1 off every cell beside it — the nearest stands \d\.\d\d:1 as drawn at depth TRUECOLOR; another shade or variation clears it$/),
+      },
+    ]);
+    registry.dispose();
+  });
+});
+
+describe("an open band whose plane stands on its trigger", () => {
+  // nord washed out the way a style can wash a palette: the accent, the
+  // background and the foreground all but meet, over a first row dark enough
+  // that the accent stands off it as it is — so the open state is the accent,
+  // and no plane recedes from it.
+  const washed = new Palette(
+    "washed",
+    true,
+    new Map<string, ColorRgba>([
+      ...getThemePalette("nord")!.vars,
+      ["accent", new ColorRgba(0xff, 0xff, 0xff)],
+      ["background", new ColorRgba(0xff, 0xff, 0xff)],
+      ["foreground", new ColorRgba(0xf4, 0xf4, 0xf4)],
+      ["secondary-darken-1", new ColorRgba(0x20, 0x20, 0x20)],
+      ["secondary", new ColorRgba(0x30, 0x30, 0x30)],
+      ["secondary-lighten-1", new ColorRgba(0x40, 0x40, 0x40)],
+    ]),
+  );
+
+  test("still renders its body, and reports the plane once", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        segments: { inner: { template: 'INNER-BODY' } },
+        root: { v: [ { kind: 'group', name: 'details', label: 'details', open: true, children: ['inner'] } ] },
+      }`,
+      ALLOWED,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const errors: string[] = [];
+    const warnings: RenderWarning[] = [];
+    const out = renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s1" },
+      OPTS,
+      {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+        onRenderWarning: (warning) => warnings.push(warning),
+      },
+      { theme: { kind: "decided", name: "washed", value: washed } },
+    );
+    expect(errors).toEqual([]);
+    expect(out).toContain("INNER-BODY");
+    expect(warnings).toEqual([
+      {
+        kind: "band-floor",
+        message: expect.stringMatching(/^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/),
       },
     ]);
     registry.dispose();
