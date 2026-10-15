@@ -19,7 +19,7 @@ import type {
 } from "../src/daemon/render-payload";
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { FLOOR_STYLE } from "./helpers/floor-style";
+import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
@@ -58,6 +58,7 @@ const TMUX_PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: resolveThemeSelection(undefined, null, "textual-dark"),
   style: FLOOR_STYLE,
+  effect: FLOOR_EFFECT,
   preset: "default",
   presetCustomized: false,
   endcaps: "powerline",
@@ -479,6 +480,7 @@ describe("buildRenderPayload — effective globals projection", () => {
     const effective: EffectiveGlobals = {
       theme: resolveThemeSelection(undefined, null, "nord"),
       style: FLOOR_STYLE,
+      effect: FLOOR_EFFECT,
       preset: "default",
       presetCustomized: true,
       endcaps: "capsule",

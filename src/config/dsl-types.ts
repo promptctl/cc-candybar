@@ -540,6 +540,12 @@ export interface Globals {
   // default-provided style.
   readonly style?: string;
 
+  // [LAW:one-type-per-behavior] The config default for the looping EFFECT the
+  // whole bar wears (brandon-effects-2gka.d2i): `none` or a rich-js catalogue
+  // loop name (EFFECT_NAMES), or a rule rendering one — `style`'s shape over a
+  // registry-static domain, so the loader checks a name by membership.
+  readonly effect?: string;
+
   // [LAW:one-type-per-behavior] The config default for the PRESET (a named
   // config fragment from the `presets` block) — the same twin-of-`palette`
   // shape as `style` one dimension over: the daemon resolves the live preset per

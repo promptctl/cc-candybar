@@ -1822,6 +1822,50 @@ reason on the diagnostic strip until you fix it. A **per-segment** `palette:` wi
 not take a template at all: that pin is resolved once when the config loads, so a
 rule there could never be evaluated.
 
+### The whole bar in motion: `globals.effect`
+
+`globals.effect` sets a looping effect the whole bar wears: `none` (the
+default), `shimmer` (a band of light crossing the bar), `pulse` (a slow
+breath), `sparkle` (short lit strokes) or `wheel` (every hue drifting round, far
+too slowly to see move). An effect changes colours only: the text, the links
+and every click target stay exactly as they are. The settings menu's
+`🎨 look` tab has a `✨` control for it, and `💾 save` writes your pick here.
+
+```json5 check:pass
+{ globals: { effect: "pulse" } }
+```
+
+It is the same slot as `style`: a template there picks the effect from live
+data, a session pick outranks it, and a result naming no effect becomes `none`
+in silence. Shimmer while a tool runs, still otherwise:
+
+```json5 check:pass
+{
+  globals: {
+    effect: '{{ if .activity.tool.running }}shimmer{{ else }}none{{ end }}',
+  },
+}
+```
+
+A name outside the list is a load error:
+
+```json5 check:fail
+{ globals: { effect: "glitter" } }
+```
+
+```error
+globals.effect must be one of: none, shimmer, pulse, sparkle, wheel
+```
+
+The effects are slow by design, tuned for Claude Code's fastest statusline
+refresh of one frame a second: shimmer's band crosses about every 109 seconds,
+pulse breathes over 43, and wheel takes 907 seconds for a full turn. Set
+`statusLine.refreshInterval: 1` in Claude Code's settings: without it the bar
+redraws only on events (a new message, a mode change), and the motion jumps
+from one to the next. Each effect starts
+calm when it comes on, so a rule switching it on mid-session begins gently.
+`colorCompatibility: "none"` draws no colour, so no effect shows there.
+
 ## `kind: "group"` — the layout disclosure
 
 A group collapses an arbitrary layout subtree behind a synthesized ▸/▾ toggle
@@ -2207,7 +2251,7 @@ Give the second its own id and each copy's menu opens on its own:
 
 ### A setting value the setting does not have
 
-A `set` on a setting's key (`theme`, `style`, `preset`, `endcaps`,
+A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 `variation`, `shade`, `autoWrap`, `padding`, `updateNotice`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a

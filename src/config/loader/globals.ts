@@ -12,6 +12,7 @@ import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
   DEFAULT_PADDING,
+  EFFECT_NAMES,
   PADDING_RANGE,
   VARIATION_NAMES,
   SHADE_NAMES,
@@ -96,6 +97,23 @@ const paletteOrRuleSpec: FieldSpec<string> = {
   },
 };
 
+// [LAW:types-are-the-program] `globals.effect` admits a NAME of the closed effect
+// domain or a RULE, `globals.palette`'s two shapes over an enum: a name is checked
+// by membership here, a rule is parsed eagerly by registerDslConfig and its result
+// gets the forgiveness `decideEffectName` owns.
+const effectOrRuleSpec: FieldSpec<string> = {
+  required: false,
+  json: {
+    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }],
+  },
+  parse: (ctx, path, field, raw) => {
+    const v = raw[field];
+    return typeof v === "string" && isExpression(v)
+      ? v
+      : optionalEnum(ctx, path, raw, field, EFFECT_NAMES);
+  },
+};
+
 const MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
 const CLOSE_GLYPH = new RegExp(
   `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
@@ -165,6 +183,9 @@ const GLOBALS: {
   // emitted schema needed a new arm. Shape-only here,
   // exactly the shape/meaning split paletteSpec's schema facet keeps.
   style: { spec: optionalStringSpec(), domain: { from: "styles" } },
+  // The looping effect the whole bar wears — a name of the catalogue's closed
+  // domain, or a rule (see effectOrRuleSpec).
+  effect: { spec: effectOrRuleSpec, domain: { from: EFFECT_NAMES } },
   // [LAW:types-are-the-program] The config-default PRESET name — same
   // per-config-domain shape as `style` (membership is a post-merge cross-ref
   // check, since a user's globals.preset may name a default-provided preset).
@@ -388,6 +409,11 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
     ),
     style: nameOnlySpec(
       GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY,
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
       "the editGlobals fragment",
       EDIT_GLOBALS_WHY,
     ),

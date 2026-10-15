@@ -97,6 +97,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   default_separator: "string",
   palette: "string",
   style: "string",
+  effect: "string",
   preset: "string",
   endcaps: "string",
   variation: "string",

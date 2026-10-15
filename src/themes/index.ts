@@ -12,6 +12,10 @@ export {
   finishSelection,
   decideStyleName,
   resolveStyleSelection,
+  EFFECT_FLOOR,
+  EFFECT_NAMES,
+  decideEffectName,
+  resolveEffectSelection,
   effectiveEndcaps,
   effectiveAutoWrap,
   effectivePadding,
@@ -43,6 +47,9 @@ export type {
   ExpressionSlot,
   StyleSelection,
   DecidedStyle,
+  EffectName,
+  EffectSelection,
+  DecidedEffect,
 } from "./policy.js";
 
 export {

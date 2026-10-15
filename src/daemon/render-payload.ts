@@ -38,6 +38,8 @@ import {
   effectiveAutoWrap,
   resolveStyleSelection,
   type StyleSelection,
+  resolveEffectSelection,
+  type EffectSelection,
   effectivePadding,
   effectiveEndcaps,
   effectiveVariation,
@@ -119,6 +121,9 @@ export interface EffectiveGlobals {
   // `style.effective` is published. That is why this struct carries no style NAME
   // and the payload below carries no `style` field.
   readonly style: StyleSelection;
+  // The looping effect the bar wears, as far as it can be resolved here — the
+  // style's twin, settled by renderDsl under a rule for the same reason.
+  readonly effect: EffectSelection;
   // The active PRESET name — effectivePresetName(sessionState.preset,
   // globals.preset, presets), collapsed to the floor if stale. Unlike every
   // other field here it is not itself a display value: it is the name of the
@@ -219,6 +224,11 @@ export function resolveEffectiveGlobals(
       globals.style,
       config.styles,
     ),
+    effect: resolveEffectSelection(
+      staged.effect,
+      sessionPick("effect"),
+      globals.effect,
+    ),
     endcaps: effectiveEndcaps(
       staged.endcaps,
       sessionPick("endcaps"),
@@ -285,6 +295,7 @@ export function renderSelectionOf(
   return {
     theme: effective.theme,
     style: effective.style,
+    effect: effective.effect,
     preset: effective.preset,
     variation: effective.variation,
     shade: effective.shade,
@@ -292,8 +303,9 @@ export function renderSelectionOf(
 }
 
 // The `.effective` inputs a render reads back — the resolved globals, as the
-// payload fields a settings label or a carousel centre reads. No `theme` or
-// `style`: renderDsl injects both, because under a rule only it knows the answer.
+// payload fields a settings label or a carousel centre reads. No `theme`,
+// `style` or `effect`: renderDsl injects all three, because under a rule only
+// it knows the answer.
 // [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
 // and the demo's payload all spread THIS, so a caller cannot render a label
 // blank by forgetting a field the daemon's payload carries.
@@ -358,11 +370,12 @@ export interface RenderPayload extends ClaudeHookData {
   // requested" (two syscalls and one already-parsed wire hint). The fields
   // INSIDE it carry the real optionality — see HostPayload.
   readonly host: HostPayload;
-  // `theme.effective` and `style.effective` are deliberately NOT fields here.
-  // They are the two selections whose config rung may hold an EXPRESSION
-  // (brandon-looks-pe6, brandon-themes-dzl), so each fold finishes inside
-  // renderDsl — which therefore injects `theme: { effective }` and
-  // `style: { effective }` into the payload it pushes, exactly as it injects
+  // `theme.effective`, `style.effective` and `effect.effective` are
+  // deliberately NOT fields here. They are the selections whose config rung may
+  // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
+  // brandon-effects-2gka.d2i), so each fold finishes inside renderDsl — which
+  // therefore injects `theme`, `style` and `effect: { effective }` into the
+  // payload it pushes, exactly as it injects
   // `term: { cols }`. ONE producer per field, so the name a label displays and
   // the palette the bar actually wears cannot disagree
   // [LAW:one-source-of-truth]. `EffectiveGlobals` above carries the SELECTIONS

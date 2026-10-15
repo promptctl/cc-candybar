@@ -5,6 +5,7 @@ import {
   CellJoiner,
   JOINERS,
   FlexStrip,
+  cellLen,
   renderToString,
   type Joiner,
   type JoinShape,
@@ -14,6 +15,18 @@ import {
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { isAsciiText } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
+import { INVISIBLE } from "./ansi.js";
+import { STILL, type RowMotion } from "./effect.js";
+
+// The columns the widest line of a drawing occupies: SGR and OSC-8 are
+// zero-width, and `cellLen` is the measure the strip wraps by, so this is the
+// row's own arithmetic rather than a second opinion about character widths.
+export function drawnCols(drawing: string): number {
+  return Math.max(
+    0,
+    ...drawing.split("\n").map((line) => cellLen(line.replace(INVISIBLE, ""))),
+  );
+}
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
@@ -228,20 +241,27 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
 export function renderStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
+  motion: RowMotion = STILL,
 ): string {
   if (cells.length === 0) return "";
   const joiner = pickJoiner(options.endcaps, options.separator);
+  const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
     colorSystem: options.colorCompatibility,
     ...drawOptions(options.charset),
+    ...(flex ? { width: options.width } : {}),
   };
+  const strip = flex
+    ? new FlexStrip([...cells], { joiner })
+    : new Strip([...cells], joiner);
+  // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
+  // powerline seam's ink — its left cell's fill — moves with that cell. Its span
+  // is the row's width as drawn, MEASURED as fill.ts measures a row, never
+  // modelled from the joiner's chrome.
   const out =
-    options.wrap && Number.isFinite(options.width)
-      ? draw(new FlexStrip([...cells], { joiner }), {
-          width: options.width,
-          ...drawn,
-        })
-      : draw(new Strip([...cells], joiner), drawn);
+    motion.kind === "still"
+      ? draw(strip, drawn)
+      : draw(motion.wrap(strip, drawnCols(draw(strip, drawn))), drawn);
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

@@ -20,6 +20,23 @@
         "style": {
           "type": "string"
         },
+        "effect": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "shimmer",
+                "pulse",
+                "sparkle",
+                "wheel"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "\\{\\{"
+            }
+          ]
+        },
         "preset": {
           "type": "string"
         },
@@ -1282,6 +1299,23 @@
               "style": {
                 "type": "string"
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "none",
+                      "shimmer",
+                      "pulse",
+                      "sparkle",
+                      "wheel"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\{\\{"
+                  }
+                ]
+              },
               "preset": {
                 "not": {},
                 "description": "not allowed here — a preset cannot select a preset"
@@ -1375,6 +1409,26 @@
         },
         "style": {
           "type": "string",
+          "not": {
+            "pattern": "\\{\\{"
+          }
+        },
+        "effect": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "shimmer",
+                "pulse",
+                "sparkle",
+                "wheel"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "\\{\\{"
+            }
+          ],
           "not": {
             "pattern": "\\{\\{"
           }

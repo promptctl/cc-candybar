@@ -59,6 +59,14 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "style.effective",
     default: "",
   },
+  // The effective EFFECT name, style's twin — published by renderDsl, the one
+  // place a `globals.effect` rule is settled, so the `✨` control's label and
+  // the motion the bar wears trace to one resolution.
+  "effect.effective": {
+    kind: "input",
+    path: "effect.effective",
+    default: "",
+  },
   // [LAW:one-type-per-behavior] The effective PRESET name, theme/style's twin
   // one level up — effectivePresetName(sessionState.preset, globals.preset,
   // presets), the SAME name that selected the layout this render walked and
