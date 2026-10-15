@@ -1,3 +1,10 @@
+## [1.129.3](https://github.com/promptctl/cc-candybar/compare/v1.129.2...v1.129.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **usage-store:** today sums every session; the record cap is gone ([#341](https://github.com/promptctl/cc-candybar/issues/341)) ([3b97f28](https://github.com/promptctl/cc-candybar/commit/3b97f287a63bd77672235158922bad0b34b5f720))
+
 ## [1.129.2](https://github.com/promptctl/cc-candybar/compare/v1.129.1...v1.129.2) (2026-10-15)
 
 
