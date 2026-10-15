@@ -555,6 +555,44 @@ describe("checkConfig — explicit target", () => {
     }
   });
 
+  it("a shortfall only another preset reaches is tagged with that preset, as a failure is", async () => {
+    // The same row as above, opened only in preset b: the fresh session's bar
+    // (preset a) opens nothing, so the warning names where it is reached.
+    const p = write(
+      "state-floor-other-preset.json5",
+      `{
+        globals: { palette: 'textual-dark', variation: 'alt', preset: 'a' },
+        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
+        presets: {
+          a: {},
+          b: { root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] } },
+        },
+        root: { h: ['a', 'b', 'c', 'd'] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind === "clean") {
+      expect(outcome.warnings).toEqual([
+        expect.stringMatching(/^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it.* \(under preset "b"\)$/),
+      ]);
+    }
+  });
+
+  it("at colour depth none nothing is drawn in colour, so no shortfall is reported", async () => {
+    const p = write(
+      "state-floor-none.json5",
+      `{
+        globals: { palette: 'textual-dark', variation: 'alt', colorCompatibility: 'none' },
+        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
+        root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind === "clean") expect(outcome.warnings).toEqual([]);
+  });
+
   it("a segment only another preset places is rendered, and its error is FATAL", async () => {
     const p = write(
       "segment-other-preset.json5",

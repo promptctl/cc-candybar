@@ -1214,3 +1214,43 @@ describe("a band item is drawn, never thrown — the settings controls are band 
     }
   });
 });
+
+describe("no floor is measured where nothing is drawn in colour", () => {
+  test("a band that stands short in truecolor reports nothing at colour depth none (DEFAULT)", () => {
+    // textual-dark's first row under `alt`, turning from its navy to its
+    // orange: no colour stands 2.2:1 off both.
+    const textualDark = getThemePalette("textual-dark")!;
+    const ground = rowGround({ variation: VARIATIONS.alt, shade: SHADES[DEFAULT_SHADE] }, [row(0, 2), cell(0, 5)]);
+    const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground };
+    expect(bandFor(textualDark, disclosure, ColorDepth.TRUECOLOR).shortfalls).not.toEqual([]);
+    expect(bandFor(textualDark, disclosure, ColorDepth.DEFAULT).shortfalls).toEqual([]);
+  });
+});
+
+describe("a band's drawn plane always has a colour that keeps its floors", () => {
+  // bandFor throws if nothing a depth draws keeps its plane's floors. The
+  // tables rule that out whatever the palette: the floors are measured on
+  // drawn colours, each an entry of the depth's table, and wherever the
+  // trigger, the nested trigger and the enclosing plane are drawn, the entries
+  // standing STATE_FLOOR off the nested trigger outnumber those either ΔE
+  // floor can rule out.
+  const LEVELS = [0, 95, 135, 175, 215, 255];
+  const XTERM = [
+    ...LEVELS.flatMap((r) => LEVELS.flatMap((g) => LEVELS.map((b) => new ColorRgba(r, g, b)))),
+    ...Array.from({ length: 24 }, (_, i) => new ColorRgba(8 + 10 * i, 8 + 10 * i, 8 + 10 * i)),
+  ];
+  test.each([
+    ["ansi", ColorDepth.STANDARD, 16],
+    ["256 colours", ColorDepth.EIGHT_BIT, 240],
+  ] as const)("at %s, over its %i entries", (_name, drawnAt, entries) => {
+    // Every colour the depth draws, through its own rounding.
+    const table = [...new Map(XTERM.map((c) => drawnColour(c, drawnAt)).map((c) => [c.hex, c])).values()];
+    expect(table.length).toBe(entries);
+    const mostNear = (floor: number): number =>
+      Math.max(...table.map((at) => table.filter((v) => deltaE(v, at) < floor).length));
+    const fewestOffNested = Math.min(
+      ...table.map((nested) => table.filter((v) => contrastRatio(v, nested) >= STATE_FLOOR).length),
+    );
+    expect(fewestOffNested).toBeGreaterThan(mostNear(BAND_FLOORS.triggerPlane) + mostNear(BAND_FLOORS.nestedPlane));
+  });
+});

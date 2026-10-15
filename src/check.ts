@@ -540,37 +540,44 @@ async function loadRegisterRender(
         .flatMap((p) => [render(p, false), render(p, true)]),
     ];
 
-    // One warning per message, however many passes reach it.
-    warnings.push(...new Set(outs.flatMap((out) => [...out.advisories])));
-
-    // [LAW:one-source-of-truth] One failure per (what failed, why) — the
-    // line's text — however many passes hit it: an unconditional error fires
-    // in every pass, and reporting it once per preset would count one bug N
-    // times; the same segment failing for two different reasons is two
-    // failures. A failure the fresh session's own pass shows is reported
-    // bare — that is the bar a session opens on; any other is tagged with
-    // the presets that reach it, and `.preset.customized = true` only where
-    // that preset's plain pass did not, so the reader knows which switch
-    // exposes it.
-    const found = new Map<string, Map<string, Set<boolean>>>();
-    for (const { preset, customized, failures } of outs) {
-      for (const [label, message] of failures) {
-        const line = `${label}: ${message}`;
-        const reached = found.get(line) ?? new Map<string, Set<boolean>>();
-        reached.set(preset, (reached.get(preset) ?? new Set()).add(customized));
-        found.set(line, reached);
+    // [LAW:one-source-of-truth] One line per (what, why) — the line's text —
+    // however many passes reach it, for failures and advisories alike: an
+    // unconditional error fires in every pass, and reporting it once per
+    // preset would count one bug N times; the same segment failing for two
+    // different reasons is two lines. A line the fresh session's own pass
+    // shows is reported bare — that is the bar a session opens on; any other
+    // is tagged with the presets that reach it, and
+    // `.preset.customized = true` only where that preset's plain pass did
+    // not, so the reader knows which switch exposes it.
+    const reported = (
+      linesOf: (out: (typeof outs)[number]) => Iterable<string>,
+    ): string[] => {
+      const found = new Map<string, Map<string, Set<boolean>>>();
+      for (const out of outs) {
+        for (const line of linesOf(out)) {
+          const reached = found.get(line) ?? new Map<string, Set<boolean>>();
+          reached.set(
+            out.preset,
+            (reached.get(out.preset) ?? new Set()).add(out.customized),
+          );
+          found.set(line, reached);
+        }
       }
-    }
-    const errors = [...found].map(([line, reached]) => {
-      if (reached.get(freshPreset)?.has(false)) return line;
-      const where = [...reached].map(([preset, passes]) =>
-        [
-          ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
-          ...(passes.has(false) ? [] : [".preset.customized = true"]),
-        ].join(", "),
-      );
-      return `${line} (under ${where.join("; ")})`;
-    });
+      return [...found].map(([line, reached]) => {
+        if (reached.get(freshPreset)?.has(false)) return line;
+        const where = [...reached].map(([preset, passes]) =>
+          [
+            ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
+            ...(passes.has(false) ? [] : [".preset.customized = true"]),
+          ].join(", "),
+        );
+        return `${line} (under ${where.join("; ")})`;
+      });
+    };
+    warnings.push(...reported((out) => out.advisories));
+    const errors = reported((out) =>
+      [...out.failures].map(([label, message]) => `${label}: ${message}`),
+    );
     const bar = primary.rendered;
     // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, so
     // only the verdict can say the config asked for something it did not get.

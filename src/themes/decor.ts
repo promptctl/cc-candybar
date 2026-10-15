@@ -999,7 +999,8 @@ export interface Band extends BandColours {
    * One line per floor the band stands short of as drawn, for the render to
    * report where its trigger opens: `state` off the ground its lineage's
    * trigger stands on (STATE_FLOOR, `StateSearch`), and `plane` off `state`
-   * (BAND_FLOORS.triggerPlane). Empty when it clears both.
+   * (BAND_FLOORS.triggerPlane). Empty when it clears both, and at a depth
+   * that draws no colour.
    */
   readonly shortfalls: readonly string[];
 }
@@ -1043,6 +1044,10 @@ export function bandFor(
       drawnAt,
       (candidate, drawn) => floors.every((holds) => holds(candidate, drawn)),
     );
+    // Never thrown, whatever the palette: every depth's table holds an entry
+    // that keeps all three floors (test/decor.test.ts, "a band's drawn plane
+    // always has a colour that keeps its floors"), and truecolor keeps them by
+    // construction, since a floor is asked only where truecolor kept it.
     if (plane === undefined) {
       throw new Error(
         `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
@@ -1052,14 +1057,19 @@ export function bandFor(
     return {
       state,
       plane,
-      shortfalls: [
-        ...stateShortfall(palette, search, drawnAt),
-        ...planeShortfall(
-          palette,
-          deltaE(asDrawn(state), asDrawn(plane)),
-          drawnAt,
-        ),
-      ],
+      // No floor is measurable where nothing is drawn in colour (`none` draws
+      // at DEFAULT, `drawnDepth`), so nothing there stands short of one.
+      shortfalls:
+        drawnAt === ColorDepth.DEFAULT
+          ? []
+          : [
+              ...stateShortfall(palette, search, drawnAt),
+              ...planeShortfall(
+                palette,
+                deltaE(asDrawn(state), asDrawn(plane)),
+                drawnAt,
+              ),
+            ],
     };
   });
 }
