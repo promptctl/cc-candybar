@@ -1,3 +1,10 @@
+# [1.124.0](https://github.com/promptctl/cc-candybar/compare/v1.123.0...v1.124.0) (2026-10-15)
+
+
+### Features
+
+* **render:** the whole bar wears a looping effect chosen by globals.effect ([#329](https://github.com/promptctl/cc-candybar/issues/329)) ([add6ddd](https://github.com/promptctl/cc-candybar/commit/add6ddd408447064dd1bfcbc999f74405ff0cf14))
+
 # [1.123.0](https://github.com/promptctl/cc-candybar/compare/v1.122.0...v1.123.0) (2026-10-15)
 
 
