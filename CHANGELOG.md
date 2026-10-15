@@ -1,3 +1,10 @@
+# [1.121.0](https://github.com/promptctl/cc-candybar/compare/v1.120.0...v1.121.0) (2026-10-15)
+
+
+### Features
+
+* **render:** each render is drawn at one instant, and bar:web redraws every second ([#328](https://github.com/promptctl/cc-candybar/issues/328)) ([d0163af](https://github.com/promptctl/cc-candybar/commit/d0163af8ffaa2b7cf13ed77618b156c9b2e3813c))
+
 # [1.120.0](https://github.com/promptctl/cc-candybar/compare/v1.119.1...v1.120.0) (2026-10-15)
 
 
