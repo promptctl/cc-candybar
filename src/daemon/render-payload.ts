@@ -405,7 +405,7 @@ export interface RenderPayload extends ClaudeHookData {
   // the render cache's authoredRoots, never absent.
   // `bundled` says whether the bundled default declares that preset — false
   // exactly for a preset the user authored, the only kind the settings menu's
-  // `🗑` deletes (brandon-save-undo-bwi.o6u).
+  // `🚮` deletes (brandon-save-undo-bwi.o6u).
   readonly preset: {
     readonly effective: string;
     readonly customized: boolean;

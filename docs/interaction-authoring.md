@@ -366,7 +366,7 @@ on a bar of your own:
   },
   segments: {
     presets: {
-      template: '▦ {{ .preset.effective }} {{ action "keepBar" "✚" }}{{ if not .preset.bundled }} {{ action "dropPreset" "🗑" }}{{ end }}',
+      template: '▦ {{ .preset.effective }} {{ action "keepBar" "✚" }}{{ if not .preset.bundled }} {{ action "dropPreset" "🚮" }}{{ end }}',
     },
   },
   root: { v: ["presets"] },
@@ -1335,7 +1335,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   setting holds a draft or your config file holds a value for it.
 - **The preset switcher** sits on the first line, one click from the door,
   because switching arrangement is what you most often open this menu to do.
-  Under its carousel, `🗑 delete <name>` removes the preset you are in when you
+  Under its carousel, `🚮 delete <name>` removes the preset you are in when you
   made it (see "Save as preset" above).
 - **`🎨 look`** holds theme, style, variation, shade and endcaps; **`📐 layout`**
   holds `+ preset`, which keeps the bar as a new preset and switches to it,

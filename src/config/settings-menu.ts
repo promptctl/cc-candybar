@@ -157,6 +157,10 @@ export const SAVE_SEG = `${SETTINGS_NS}save`;
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
 const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+// A default emoji (Emoji_Presentation), so rich-js measures it the two cells a
+// terminal draws: the wastebasket U+1F5D1 is text-default, measured one cell,
+// and its VS16 form is honoured unevenly (kgr; test/glyph-width.test.ts).
+export const PRESET_DELETE_GLYPH = "🚮";
 
 // ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
 //
@@ -256,7 +260,7 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
     LAYOUT_PREVIEW,
     {
       when: "{{ not .preset.bundled }}",
-      template: `{{ action "${PRESET_DELETE}" (printf "🗑 delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
+      template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
     },
   ],
   theme: PALETTE_PREVIEW,
