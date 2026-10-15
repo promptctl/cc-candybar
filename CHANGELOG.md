@@ -1,3 +1,10 @@
+# [1.125.0](https://github.com/promptctl/cc-candybar/compare/v1.124.0...v1.125.0) (2026-10-15)
+
+
+### Features
+
+* **doctor:** a bar wearing an effect needs statusLine.refreshInterval 1 ([#330](https://github.com/promptctl/cc-candybar/issues/330)) ([5260e66](https://github.com/promptctl/cc-candybar/commit/5260e66934ee3983185be1ab334b24a1f261208b))
+
 # [1.124.0](https://github.com/promptctl/cc-candybar/compare/v1.123.0...v1.124.0) (2026-10-15)
 
 
