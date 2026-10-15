@@ -252,7 +252,7 @@ describe.each(["segment", "container"] as const)(
   },
 );
 
-test("it holds its own row only: a body it opened goes at once", () => {
+describe("a trigger replays its own row only while nothing hangs open under it", () => {
   const cfg = parseAndValidate(
     "<test>",
     `{
@@ -267,54 +267,41 @@ test("it holds its own row only: a body it opened goes at once", () => {
     undefined,
     DEFAULT_DSL_CONFIG,
   );
-  const on = renderer(cfg);
-  try {
-    // Opened before the frames compared below, so none of them is fresh.
-    on.session.set("s", "groups.more", "more");
-    const fx = new SessionEffects<RenderedLine>("s");
-    on.render({ shown: true, when: at(0) }, fx, true);
-    expect(stripAnsi(on.render({ shown: true, when: at(1) }, fx, true))).toContain(
-      "EXTRA",
-    );
-    const out = stripAnsi(on.render({ shown: false, when: at(S) }, fx, true));
-    expect(fx.lastFrame().leaves).not.toEqual([]);
-    expect(out).toContain("MORE");
-    expect(out).not.toContain("EXTRA");
-  } finally {
-    on.dispose();
-  }
-});
+  // Its toggle hidden by data, with the group open or closed since before the
+  // frames compared, so none of them is fresh.
+  const hiddenWith = (open: boolean) => {
+    const on = renderer(cfg);
+    const off = renderer(cfg, on.session);
+    try {
+      if (open) on.session.set("s", "groups.more", "more");
+      const fx = new SessionEffects<RenderedLine>("s");
+      on.render({ shown: true, when: at(0) }, fx, true);
+      const drawn = stripAnsi(on.render({ shown: true, when: at(1) }, fx, true));
+      expect(drawn).toContain("MORE");
+      expect(drawn.includes("EXTRA")).toBe(open);
+      const frame = { shown: false, when: at(S) };
+      return {
+        fx,
+        on: on.render(frame, fx, true),
+        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+      };
+    } finally {
+      on.dispose();
+      off.dispose();
+    }
+  };
 
-test("one whose template renders empty holds its row and adds none beneath it", () => {
-  const cfg = parseAndValidate(
-    "<test>",
-    `{
-      variables: {
-        shown: { kind: "input", path: "shown", type: "boolean", default: false },
-      },
-      segments: {
-        left: { template: 'left cell' },
-        middle: { template: '{{ if .shown }}MIDDLE{{ end }}' },
-        right: { template: 'right cell' },
-      },
-      root: { v: [{ h: ["left", "middle", "right"] }] },
-    }`,
-    undefined,
-    DEFAULT_DSL_CONFIG,
-  );
-  const on = renderer(cfg);
-  try {
-    const fx = new SessionEffects<RenderedLine>("s");
-    on.render({ shown: true, when: at(0) }, fx, true);
-    const drawn = on.render({ shown: true, when: at(1) }, fx, true);
-    const leaving = on.render({ shown: false, when: at(S) }, fx, true);
-    expect(fx.lastFrame().leaves).toEqual([{ placement: "middle", t: 0 }]);
-    expect(stripAnsi(leaving).split("\n")).toEqual(
-      stripAnsi(drawn).split("\n"),
-    );
-  } finally {
-    on.dispose();
-  }
+  test("open: it goes at once, with its body, rather than replaying an open trigger over nothing", () => {
+    const { fx, on, off } = hiddenWith(true);
+    expect(fx.lastFrame().leaves).toEqual([]);
+    expect(on).toBe(off);
+  });
+
+  test("closed: it dissolves, holding its row", () => {
+    const { fx, on } = hiddenWith(false);
+    expect(fx.lastFrame().leaves).toEqual([{ placement: "groups.more", t: 0 }]);
+    expect(stripAnsi(on)).toContain("MORE");
+  });
 });
 
 describe("a write to the session's state ends every dissolve in flight", () => {
@@ -361,10 +348,12 @@ describe("a write to the session's state ends every dissolve in flight", () => {
   });
 });
 
-// [LAW:no-ambient-temporal-coupling] A held row was sized for the width and
-// coloured in the palette of the frame it was drawn in, so a frame drawn at
-// another width or in another palette compares against nothing.
-describe("a frame drawn at another width or in another palette ends every dissolve in flight", () => {
+// [LAW:no-ambient-temporal-coupling] A held row was sized for the width of the
+// frame it was drawn in, so a frame drawn at another width compares against
+// nothing. A palette is not part of that: a rule-chosen theme or style moves
+// on the very payload that hides a placement, and the held row dissolves in
+// the colours it was drawn in.
+describe("another width ends every dissolve in flight; another palette does not", () => {
   const ROW = parseAndValidate(
     "<test>",
     `{
@@ -384,10 +373,7 @@ describe("a frame drawn at another width or in another palette ends every dissol
     DEFAULT_DSL_CONFIG,
   );
 
-  test.each([
-    ["width", { width: 120 }],
-    ["palette", { dark: true }],
-  ] as const)("another %s: the next frame is byte-identical to no transitions", (_, change) => {
+  const leaveThen = (change: Partial<Frame>) => {
     const on = renderer(ROW);
     const off = renderer(ROW);
     try {
@@ -396,15 +382,31 @@ describe("a frame drawn at another width or in another palette ends every dissol
       on.render({ shown: false, when: at(S) }, fx, true);
       expect(fx.lastFrame().leaves).toEqual([{ placement: "middle", t: 0 }]);
       const frame = { shown: false, when: at(S + 1), ...change };
-      const out = on.render(frame, fx, true);
-      expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
-      expect(stripAnsi(out)).not.toContain("MIDDLE");
-      expect(out).toBe(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), false),
-      );
+      return {
+        fx,
+        on: on.render(frame, fx, true),
+        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+      };
     } finally {
       on.dispose();
       off.dispose();
     }
+  };
+
+  test("another width: the next frame is byte-identical to no transitions", () => {
+    const { fx, on, off } = leaveThen({ width: 120 });
+    expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
+    expect(stripAnsi(on)).not.toContain("MIDDLE");
+    expect(on).toBe(off);
+  });
+
+  test("a rule moving the theme on the same payload: it keeps dissolving", () => {
+    const { fx, on } = leaveThen({ dark: true });
+    expect(fx.lastFrame()).toMatchObject({
+      basis: "compared",
+      leaves: [{ placement: "middle", t: 1 }],
+    });
+    expect(stripAnsi(on)).toContain("MIDDLE");
   });
 });
+

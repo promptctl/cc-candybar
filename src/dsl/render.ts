@@ -1188,7 +1188,6 @@ export function renderDsl(
       preset,
       revision: registry.stateRevision(),
       width: opts.width,
-      palette,
     },
     returned: returnedBy,
     hold: heldLine,

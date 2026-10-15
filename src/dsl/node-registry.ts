@@ -23,7 +23,7 @@
 // backgrounds.
 
 import { RichText } from "@promptctl/rich-js";
-import type { Palette, Style } from "@promptctl/rich-js";
+import type { ColorRgba, Palette, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
@@ -293,27 +293,38 @@ export interface NodeRenderCtx {
   closeDisclosure(key: string): RichText;
   // [LAW:locality-or-seam] The session's record of what the last frame drew,
   // as the walk meets it: a placement reports the lines it drew this frame and
-  // returns what comes back — those, led, while it dissolves off the bar, by
-  // the rows it last drew (`SessionEffects.motion`, brandon-effects-2gka.3vt).
+  // returns what comes back — those, or, while it dissolves off the bar, the
+  // rows it last drew in place of its own (`SessionEffects.motion`,
+  // brandon-effects-2gka.3vt).
   placed(id: string, lines: RenderedLines): RenderedLines;
 }
 
 // [LAW:one-source-of-truth] The lines the placement `id` returned, divided as
-// the session's effect record reads them: its own rows and the ground its
-// cells fade from — or nothing, when it laid no cell — and the rows of the
-// deeper bands hung under it. Its own rows come first, so the search stops at
-// its first cell rather than walking the body it opened.
+// the session's effect record reads them, in one pass: what it drew — the rows
+// it would replay leaving and the ground its cells fade from — or nothing,
+// when it laid no cell, and the rows of the deeper bands hung under it. A
+// placement with a menu dropped or a body open under it would replay its row
+// in the open trigger's colour over nothing, so it replays none: it goes at
+// once, with what it opened.
 export function returnedBy(
   id: string,
   lines: RenderedLines,
 ): Returned<RenderedLine> {
-  const own = lines.filter((line) => line.band === "own");
-  const deeper = lines.filter((line) => line.band === "deeper");
-  for (const line of lines)
-    for (const cell of line.cells)
-      if (cell.placement.id === id)
-        return { drawing: { own, ground: cell.placement.ground }, deeper };
-  return { drawing: null, deeper };
+  const own: RenderedLine[] = [];
+  const deeper: RenderedLine[] = [];
+  let ground: ColorRgba | undefined;
+  for (const line of lines) {
+    (line.band === "own" ? own : deeper).push(line);
+    ground ??= line.cells.find((cell) => cell.placement.id === id)?.placement
+      .ground;
+  }
+  return {
+    drawing:
+      ground === undefined
+        ? null
+        : { own: deeper.length === 0 ? own : [], ground },
+    deeper,
+  };
 }
 
 // One row a placement leaving the bar replays of what it last drew: each cell

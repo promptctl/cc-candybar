@@ -2890,7 +2890,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",
@@ -2990,7 +2990,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",

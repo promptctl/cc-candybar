@@ -365,7 +365,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   });
   const fades = {
     transitions: true,
-    source: { config: ROW, preset: "default", revision: 0, width: 80, palette: ROW },
+    source: { config: ROW, preset: "default", revision: 0, width: 80 },
     // A line names the placement that drew it; a line naming another hangs
     // under it.
     returned: (id: string, lines: readonly string[]) => ({

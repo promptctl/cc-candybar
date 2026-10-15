@@ -62,21 +62,21 @@ export interface RowItem {
 // the same preset, the same revision of the session's state
 // (`SessionStateReader.revision`), so whatever a write to it reveals — a
 // click opening a menu, leaving arrange mode, an undo — shows at once, and the
-// same width and palette, which a cell held from the last frame was sized and
-// coloured for.
+// same width, which a row held from the last frame was sized for. Not the
+// palette: a rule-chosen theme or style moves on the very payload that hides a
+// placement, and a held row keeps the colours it was drawn in as it dissolves.
 export interface FrameSource {
   readonly config: object;
   readonly preset: string;
   readonly revision: number;
   readonly width: number;
-  readonly palette: object;
 }
 
 // What one render asks of its transitions: whether placements pass through
 // them at all (globals.transitions), what the frame is drawn from, how the
 // lines a placement returned divide (`Returned`), and how a placement that
 // leaves replays one of its rows.
-export interface FrameFades<Line> {
+export interface FrameTransitions<Line> {
   readonly transitions: boolean;
   readonly source: FrameSource;
   readonly returned: (id: string, lines: readonly Line[]) => Returned<Line>;
@@ -94,9 +94,11 @@ export interface Returned<Line> {
 }
 
 // [LAW:types-are-the-program] What a placement drew in one frame, or nothing
-// when it laid no cell: its own rows — never a menu it dropped or a body it
-// opened, which go at once — and the ground it fades in from and dissolves
-// into (`CellPlacement.ground`).
+// when it laid no cell: the rows it would replay leaving — its own, or none
+// when a menu it dropped or a body it opened hangs under them, since it goes
+// at once with what it opened rather than leaving an open trigger over nothing
+// — and the ground it fades in from and dissolves into
+// (`CellPlacement.ground`).
 export interface Drawing<Line> {
   readonly own: readonly Line[];
   readonly ground: ColorRgba;
@@ -109,9 +111,10 @@ export interface Drawing<Line> {
 // rather than a half-recorded one.
 export interface FrameMotion<Line> {
   // The walk reports each placement with the lines it returned and draws what
-  // comes back: those lines, led — while it leaves the bar — by the rows it
-  // held of its last drawing, not drawn again (brandon-effects-2gka.p04: the
-  // payload that hides a placement is often one its template errors on).
+  // comes back: those lines — or, while it leaves the bar, the rows it held of
+  // its last drawing in place of its own, not drawn again
+  // (brandon-effects-2gka.p04: the payload that hides a placement is often one
+  // its template errors on), beside the deeper lines it returned.
   readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
   readonly row: (row: string, items: readonly RowItem[]) => RowMotion;
   readonly drawn: () => void;
@@ -354,7 +357,7 @@ export class SessionEffects<Line> {
   motion(
     name: EffectName,
     at: Instant,
-    fades: FrameFades<Line>,
+    given: FrameTransitions<Line>,
   ): FrameMotion<Line> {
     const inForce =
       this.inForce?.name === name ? this.inForce : { name, since: at };
@@ -371,14 +374,13 @@ export class SessionEffects<Line> {
     const last = this.drawn;
     // [LAW:dataflow-not-control-flow] What this frame compares against is a
     // value: the last frame's placements, or none to compare at all.
-    const basis: FadeBasis = !fades.transitions
+    const basis: FadeBasis = !given.transitions
       ? "off"
       : last !== null &&
-          last.source.config === fades.source.config &&
-          last.source.preset === fades.source.preset &&
-          last.source.revision === fades.source.revision &&
-          last.source.width === fades.source.width &&
-          last.source.palette === fades.source.palette
+          last.source.config === given.source.config &&
+          last.source.preset === given.source.preset &&
+          last.source.revision === given.source.revision &&
+          last.source.width === given.source.width
         ? "compared"
         : "fresh";
     const before = basis === "compared" ? last!.placements : null;
@@ -392,7 +394,7 @@ export class SessionEffects<Line> {
       reused: 0,
       own,
       basis,
-      revision: fades.source.revision,
+      revision: given.source.revision,
       fades: fading,
       leaves: leaving,
     };
@@ -449,10 +451,12 @@ export class SessionEffects<Line> {
       id: string,
       last: Placed<Line> | undefined,
     ): Placed<Line> | undefined => {
-      if (last === undefined) return undefined;
+      // A placement that held nothing — it laid no row of its own, or went
+      // with what it opened — has nothing to replay, so it is simply gone.
+      if (last === undefined || last.drawing.own.length === 0) return undefined;
       if (last.passage?.name === "dissolve")
         return over(last.passage) ? undefined : last;
-      const held = { ...last.drawing, own: last.drawing.own.map(fades.hold) };
+      const held = { ...last.drawing, own: last.drawing.own.map(given.hold) };
       return { drawing: held, passage: begin("dissolve", id, held) };
     };
     // [LAW:single-enforcer] One placement, one passage per frame: the walk
@@ -462,7 +466,7 @@ export class SessionEffects<Line> {
       if (placed.has(id))
         throw new Error(`placement "${id}" was reached twice in one frame`);
       const last = before?.get(id);
-      const { drawing, deeper } = fades.returned(id, lines);
+      const { drawing, deeper } = given.returned(id, lines);
       const now = drawing === null ? gone(id, last) : shown(id, drawing, last);
       if (now === undefined) return lines;
       placed.set(id, now);
@@ -611,7 +615,7 @@ export class SessionEffects<Line> {
         // A frame drawn with transitions off is kept as no frame at all:
         // nothing can be compared against it.
         this.drawn =
-          basis === "off" ? null : { source: fades.source, placements: placed };
+          basis === "off" ? null : { source: given.source, placements: placed };
         this.frame = frame;
       },
     };

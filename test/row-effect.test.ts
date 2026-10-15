@@ -31,7 +31,7 @@ import { linkUrls, stripAnsi } from "./helpers/ansi";
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
   transitions: false,
-  source: { config: {}, preset: "default", revision: 0, width: 80, palette: {} },
+  source: { config: {}, preset: "default", revision: 0, width: 80 },
   returned: () => ({ drawing: null, deeper: [] }),
   hold: (line: RenderedLine) => line,
 };
