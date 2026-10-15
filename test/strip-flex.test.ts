@@ -1,4 +1,4 @@
-import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
+import { POWERLINE } from "./helpers/powerline";
 import { buildLineStrip } from "../src/render/strip";
 
 const seg = (text: string) => ({ type: "x", text });
@@ -166,8 +166,8 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // Every row, continuations included, is led in by the lead glyph and tailed
       // out by the tail glyph — a wrapped row has the same shape at both ends as the first.
       for (const row of rows) {
-        expect(row.startsWith(POWERLINE_JOINER_GLYPHS.lead)).toBe(true);
-        expect(row.endsWith(POWERLINE_JOINER_GLYPHS.tail)).toBe(true);
+        expect(row.startsWith(POWERLINE.lead)).toBe(true);
+        expect(row.endsWith(POWERLINE.tail)).toBe(true);
       }
     });
   });
@@ -180,7 +180,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     // the ascii renders must contain NONE, not merely different caps.
     const PUA = /[\u{E000}-\u{F8FF}]/u;
 
-    it("powerline + ascii joins with '>' (or '|' between a shared background), caps with '<' and '>', and emits no private-use glyphs", () => {
+    it("powerline + ascii joins and tails with '>', begins each run flat, and emits no private-use glyphs", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb")], {
         endcaps: "powerline",
         colorCompatibility: "none",
@@ -189,9 +189,10 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         charset: "ascii",
         width: 200,
       });
-      // Both cells share #445566, where the arrow would vanish: the seam is the
-      // divider, the caps still the arrow and its mirror.
-      expect(out).toBe("< aaa | bbb >");
+      // An ascii arrow reversed out of the terminal's ground would be a block
+      // of nothing, so the run begins flat; the shared #445566 seam draws the
+      // ascii divider, which is the arrow itself.
+      expect(out).toBe(" aaa > bbb >");
       expect(PUA.test(out)).toBe(false);
     });
 

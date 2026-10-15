@@ -23,7 +23,7 @@ const THEME = listResolvablePaletteNames()[0]!;
 
 describe("a set on a setting key is checked against the setting's domain", () => {
   it.each([
-    ["{ set: 'endcaps', to: 'banana' }", /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of "powerline"/],
+    ["{ set: 'endcaps', to: 'banana' }", /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of .*"powerline"/],
     ["{ set: 'padding', to: '99' }", /actions\.pick\.to: "99" .*an integer from 0 to 16/],
     ["{ set: 'padding', to: '3 ' }", /actions\.pick\.to: "3 "/],
     // The session holds an integer as String(n) writes it, nothing else.

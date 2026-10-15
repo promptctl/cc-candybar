@@ -17,6 +17,7 @@ import {
   ColorDepth,
   resolveColorSystem,
   IDENTITY,
+  JOINERS,
   listThemePalettes,
   type ThemeKey,
 } from "@promptctl/rich-js";
@@ -357,14 +358,16 @@ export function resolveStyleSelection(
 
 // --- Powerline strip-style identifiers ---
 
-// [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
-// of powerline cap/separator shapes a render can take. The `Endcaps` type is
-// DERIVED from this const, so the picker's option domain, the SessionState
-// validator, the `endcaps()` template binding, and `pickJoiner`'s dispatch all
-// trace to one literal — adding a shape here forces a new `pickJoiner` arm at
-// compile time (the joiner switch is total over `Endcaps`). This is where the
-// drift between "what you can pick" and "what actually renders" is closed.
-export const ENDCAPS_SHAPES = ["powerline", "capsule", "plain"] as const;
+// [LAW:one-source-of-truth][LAW:types-are-the-program] The joiners a render can
+// take are rich-js's bundled `JOINERS`, by name: rich-js owns what each one
+// draws, and this list is its keys, so the picker's option domain, the
+// SessionState validator, the `endcaps()` template binding and `pickJoiner`'s
+// lookup all name exactly the joiners that exist — a joiner rich-js adds is
+// offered with no edit here, and one it drops is a compile error wherever a
+// name is spelled.
+export const ENDCAPS_SHAPES = Object.freeze(
+  Object.keys(JOINERS) as Array<keyof typeof JOINERS>,
+);
 export type Endcaps = (typeof ENDCAPS_SHAPES)[number];
 
 // [LAW:types-are-the-program] The trust-boundary narrowing from a raw
@@ -409,10 +412,10 @@ export function effectiveEndcaps(
 // display.charset). Same species as ENDCAPS_SHAPES — a closed render-vocabulary
 // enum hosted in this leaf policy module so the config loader (validation +
 // JSON-schema emit) and the render layer (glyph dispatch) both derive from one
-// literal without a config↔render cycle [LAW:one-way-deps]. "ascii" swaps the
-// powerline-private-use cap glyphs (U+E0Bx and the U+E0D7 lead — tofu without
-// a Nerd Font) for plain-ASCII equivalents; it is orthogonal to Endcaps:
-// endcaps picks the joiner SHAPE, charset picks the glyph VALUES fed to it.
+// literal without a config↔render cycle [LAW:one-way-deps]. "ascii" draws each
+// joiner in the ascii form rich-js gives it, in place of the powerline
+// private-use glyphs (U+E0Bx — tofu without a Nerd Font); it is orthogonal to
+// Endcaps: endcaps picks the joiner, charset picks which of its two forms draws.
 // Unlike endcaps it has no session pick: the config file is its only source
 // (brandon-menu-ia-q30.5y4), and so for COLOR_COMPATIBILITIES below.
 export const CHARSETS = ["unicode", "ascii"] as const;

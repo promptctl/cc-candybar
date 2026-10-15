@@ -18,8 +18,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0
       '@promptctl/rich-js':
-        specifier: ^0.19.0
-        version: 0.19.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)
+        specifier: ^0.21.0
+        version: 0.21.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -1033,8 +1033,8 @@ packages:
     resolution: {integrity: sha512-yi4RcDJ8cTsSpL1qSIUJDjfXYpqVfZFO6BeWwiJ1R/wuoWVn7uI3MnHA6kpmeT4apYStlU6sDl7nSexnQiDvjA==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@0.19.0':
-    resolution: {integrity: sha512-xLzwrvgxQ2xPviwM/SfH+MqUi27UUWqrtS+y9Fd7tfe/JF/x/7lT5U2ydHei1DCdly1+EQZemGWtdfOgY9nykg==}
+  '@promptctl/rich-js@0.21.0':
+    resolution: {integrity: sha512-q5jkKJ6lX6Yf6NavPeAwavBMIRfIvH8fv9tBwY1RD0Yyxb8NA/Lo3c0vsGNUpmpFA0q3urK6xwurgOjM8Gbcvw==}
     engines: {node: '>=20'}
     peerDependencies:
       '@promptctl/go-template-js': ^0.10.0
@@ -1918,6 +1918,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -4514,7 +4515,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.19.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)':
+  '@promptctl/rich-js@0.21.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)':
     dependencies:
       string-width: 8.3.0
     optionalDependencies:

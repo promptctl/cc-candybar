@@ -26,7 +26,18 @@
         "endcaps": {
           "enum": [
             "powerline",
+            "prism",
+            "slant",
+            "backslant",
+            "flame",
+            "pixel",
+            "ice",
+            "bubble",
             "capsule",
+            "wrapper",
+            "metro",
+            "stitch",
+            "torn",
             "plain"
           ]
         },
@@ -1239,7 +1250,18 @@
               "endcaps": {
                 "enum": [
                   "powerline",
+                  "prism",
+                  "slant",
+                  "backslant",
+                  "flame",
+                  "pixel",
+                  "ice",
+                  "bubble",
                   "capsule",
+                  "wrapper",
+                  "metro",
+                  "stitch",
+                  "torn",
                   "plain"
                 ]
               },
@@ -1315,7 +1337,18 @@
         "endcaps": {
           "enum": [
             "powerline",
+            "prism",
+            "slant",
+            "backslant",
+            "flame",
+            "pixel",
+            "ice",
+            "bubble",
             "capsule",
+            "wrapper",
+            "metro",
+            "stitch",
+            "torn",
             "plain"
           ]
         },

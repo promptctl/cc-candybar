@@ -120,7 +120,7 @@ If the user types a name in the free text field, accept it only if the preview l
 ${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-endcaps --theme=${theme} --charset=${charset}
 ```
 
-Tell the user: "The three endcaps previews are in the bash output above, each under its name. Expand it if needed."
+Tell the user: "The endcaps previews are in the bash output above, each under its name. Expand it if needed."
 
 Then ask:
 
@@ -129,7 +129,10 @@ Then ask:
 - **Options**:
   - "powerline" -> Set `endcaps=powerline`
   - "capsule" -> Set `endcaps=capsule`
+  - "bubble" -> Set `endcaps=bubble`
   - "plain" -> Set `endcaps=plain`
+
+Any other name the preview showed is valid as the user's own answer: set `endcaps` to it.
 
 ## Step 5: Preset
 
@@ -204,7 +207,7 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
    | Placeholder | Replace with |
    |-------------|--------------|
    | `replace:THEME` | `theme` (the name chosen in Step 3) |
-   | `replace:ENDCAPS` | `endcaps` (`powerline`, `capsule`, or `plain`) |
+   | `replace:ENDCAPS` | `endcaps` (a name the endcaps preview showed) |
    | `replace:CHARSET` | `charset` (`unicode` or `ascii`) |
    | `replace:PRESET` | `preset` (a name from Step 5's list) |
 
