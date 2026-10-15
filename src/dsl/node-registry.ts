@@ -555,6 +555,10 @@ const segmentType: NodeType<"segment"> = {
     // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
     // this placement's settings; nothing outside the placement does.
     const scope = placementScope(ctx.scope, node.settings);
+    // Every cell this placement lays is its own — its inline rows, the menu
+    // bands it drops, the lead of each row of the body it opens, its ⚠ — and
+    // its `effect` setting moves every one (the per-segment sink's cells).
+    const effect = placementMotion(node.id, node.settings.effect);
 
     // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
     // partial-load consequence (e.g. a variable that failed to declare, leaving a
@@ -623,6 +627,7 @@ const segmentType: NodeType<"segment"> = {
         // value, no per-line-kind branch. The picker reserves 2×padding at its
         // pagination seam so a padded band still fits the width budget.
         padding: ctx.padding,
+        effect,
       } as const;
       const opens = node.opens;
       // [LAW:dataflow-not-control-flow] Where the body's rows go is its
@@ -644,9 +649,7 @@ const segmentType: NodeType<"segment"> = {
       // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
       // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
       // at the segment's edges, never inside it.
-      // Each inline line is a ROW of the band this segment sits on, and its
-      // cell is this placement's own: the one its `effect` setting moves.
-      const motion = placementMotion(node.id, node.settings.effect);
+      // Each inline line is a ROW of the band this segment sits on.
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
       ).map((line, i) => ({
@@ -654,7 +657,7 @@ const segmentType: NodeType<"segment"> = {
           ...layout,
           lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
           trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
-        }).map((cell) => ({ ...cell, ...motion })),
+        }),
         band: "own",
         place: "flow",
       }));
@@ -762,6 +765,7 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
+              effect,
               lead: errorAffix(node.lead, node, scope, ctx),
               trail: errorAffix(node.trail, node, scope, ctx),
             },

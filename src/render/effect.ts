@@ -17,6 +17,7 @@ import {
   type Effect,
   type LoopName,
   type Renderable,
+  type RichText,
 } from "@promptctl/rich-js";
 
 import {
@@ -41,15 +42,15 @@ export interface CellEffect {
 export function placementMotion(
   placement: string,
   setting: PlacementEffect,
-): { readonly effect?: CellEffect } {
-  return setting === FOLLOW_BAR ? {} : { effect: { placement, name: setting } };
+): CellEffect | undefined {
+  return setting === FOLLOW_BAR ? undefined : { placement, name: setting };
 }
 
-// One item of a row's strip — the object the strip stamps its cells with, which
-// `confined` tells one item's cells from another's by — and the effect its cell
-// demands.
+// One item of a row's strip — the strip stamps its cells with the item itself,
+// which is how `confined` tells one item's cells from another's — and the
+// effect its cell demands.
 export interface RowItem {
-  readonly owner: object;
+  readonly owner: RichText;
   readonly effect: CellEffect | undefined;
 }
 
@@ -98,11 +99,17 @@ export interface EffectFrame {
   readonly own: readonly OwnEffectFrame[];
 }
 
+// [LAW:types-are-the-program] Whose effect a part of a row is: the bar's, or
+// the placement's of that id. The bar's is a symbol, which no placement id can
+// equal — a placement is free to be named `bar`.
+const BAR_SCOPE = Symbol("bar");
+type Scope = typeof BAR_SCOPE | string;
+
 // Which effect of a row a cell is drawn under, and on which clock.
 interface Part {
-  // `bar`, or the placement whose effect it is: what the row's made effect is
-  // kept under, so every cell following the bar shares one.
-  readonly scope: string;
+  // What the row's made effect is kept under, so every cell following the bar
+  // shares one.
+  readonly scope: Scope;
   readonly name: EffectName;
   readonly t: number;
   // The item it is confined to, or none: the whole row.
@@ -174,7 +181,7 @@ export class SessionEffects {
   // starts an empty map and keeps only what it draws, so a row that stopped
   // being drawn (a menu closed) takes its effects and their settled shares with
   // it.
-  private made = new Map<string, RowEffect>();
+  private made = new Map<string, Map<Scope, RowEffect>>();
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
@@ -195,7 +202,7 @@ export class SessionEffects {
 
   // The effects this session holds: the ones its latest render drew.
   get heldCount(): number {
-    return this.made.size;
+    return [...this.made.values()].reduce((n, row) => n + row.size, 0);
   }
 
   /**
@@ -211,7 +218,7 @@ export class SessionEffects {
   ): (row: string, items: readonly RowItem[]) => RowMotion {
     if (this.inForce?.name !== name) this.inForce = { name, since: at };
     const bar: Omit<Part, "owner"> = {
-      scope: FOLLOW_BAR,
+      scope: BAR_SCOPE,
       name,
       t: at - this.inForce.since,
     };
@@ -219,7 +226,7 @@ export class SessionEffects {
     const placements = new Map<string, InForce>();
     this.placements = placements;
     const known = this.made;
-    const made = new Map<string, RowEffect>();
+    const made = new Map<string, Map<Scope, RowEffect>>();
     this.made = made;
     const own: OwnEffectFrame[] = [];
     const frame = { effect: name, t: bar.t, made: 0, reused: 0, own };
@@ -242,22 +249,23 @@ export class SessionEffects {
       part: Moving<Part>,
       span: number,
     ): Effect => {
-      const key = `${rowKey}@${part.scope}`;
-      const current = made.get(key);
+      const row = made.get(rowKey) ?? new Map<Scope, RowEffect>();
+      made.set(rowKey, row);
+      const current = row.get(part.scope);
       if (current !== undefined) return current.effect;
-      const last = known.get(key);
+      const last = known.get(rowKey)?.get(part.scope);
       const reuse = last?.name === part.name && last.span === span;
       // [LAW:one-source-of-truth] The bar's noise offset is its row's, as it
       // was before any placement wore its own, so a cell following the bar
       // draws the bytes it always drew.
       const z = noiseOffset(
-        part.scope === FOLLOW_BAR ? rowKey : `${rowKey}@${part.scope}`,
+        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`,
       );
       const effect = reuse
         ? last.effect
         : EFFECT_CATALOGUE.loops[part.name]({ span, z: z * NOISE_DEPTH });
       frame[reuse ? "reused" : "made"]++;
-      made.set(key, { name: part.name, span, effect });
+      row.set(part.scope, { name: part.name, span, effect });
       return effect;
     };
 

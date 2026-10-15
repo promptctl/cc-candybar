@@ -1080,6 +1080,24 @@ export function parseSettingSpelling(
   return inSettingDomain(decl, value) ? value : undefined;
 }
 
+// [LAW:single-enforcer] What one setting of a placement holds: the session's
+// pick through the setting's draft slot (SegmentNode.drafts) when the
+// declaration admits it, else the placement's own value, else the
+// declaration's default. `pick` reads a slot — the render through its draft
+// variable, the doctor through the session's state — so the bar and the
+// doctor cannot disagree about what a placement wears.
+export function placementSetting(
+  node: SegmentNode,
+  name: string,
+  decl: SettingDecl,
+  pick: (draft: DraftSlot) => string | null,
+): SettingValue {
+  const saved = node.settings?.[name] ?? decl.default;
+  const draft = node.drafts?.[name];
+  const raw = draft === undefined ? null : pick(draft);
+  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
+}
+
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or
 // `an integer from 0 to 9`.
 export function describeSettingDomain(decl: SettingDecl): string {

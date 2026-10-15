@@ -23,12 +23,23 @@ import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
-import type { DslConfig } from "../config/dsl-types.js";
+import type { LoopName } from "@promptctl/rich-js";
+import {
+  EFFECT_SETTING,
+  placementId,
+  placementSetting,
+  settingsOf,
+  walkNodes,
+  type DslConfig,
+} from "../config/dsl-types.js";
+import { presetRoot } from "../config/presets.js";
+import { EFFECT_FLOOR, FOLLOW_BAR } from "../themes/policy.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import type {
   ConfigFacts,
   DoctorFacts,
   Fix,
+  PlacementEffectFact,
   TermFeatures,
   TmuxFacts,
   UrlHandlerFacts,
@@ -149,6 +160,34 @@ export function clickArrived(handler: string | null): UrlHandlerFacts {
   return { kind: "arrived", handler, bar: PACKAGE_VERSION };
 }
 
+// Each placement of `preset`'s tree wearing a moving effect of its own, read
+// as the render reads it (placementSetting) — the session's unsaved pick over
+// the file's value. A name label holds its placement's draft slot and wears
+// what it wears, so it reports under that placement, once.
+function placementEffects(
+  config: DslConfig,
+  preset: string,
+  sessionPick: (key: string) => string | null,
+): PlacementEffectFact[] {
+  const moving = new Map<string, LoopName>();
+  for (const node of walkNodes(presetRoot(config, preset).node)) {
+    if (node.kind !== "segment") continue;
+    // [LAW:no-defensive-null-guards] cross-ref proved every placed segment is
+    // declared, and settingsOf declares `effect` for every one.
+    const decl = settingsOf(config.segments[node.name]!)[EFFECT_SETTING]!;
+    const effect = placementSetting(node, EFFECT_SETTING, decl, (draft) =>
+      sessionPick(draft.key),
+    );
+    if (effect === FOLLOW_BAR || effect === EFFECT_FLOOR) continue;
+    // The setting's domain is the placement effects, so what is left is a loop.
+    moving.set(
+      node.drafts?.[EFFECT_SETTING]?.id ?? placementId(node),
+      effect as LoopName,
+    );
+  }
+  return [...moving].map(([placement, effect]) => ({ placement, effect }));
+}
+
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
 // resolves from — never the daemon's own env, which answers for whichever
@@ -165,14 +204,23 @@ export function gatherFacts(
   sessionPick: (key: string) => string | null,
 ): Omit<DoctorFacts, "urlHandler"> {
   const load = edge.loadConfig(origin);
+  // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
+  // the bar cannot disagree about which effect is on. The preset's
+  // customization is a fact no field read here depends on.
+  const globals = resolveEffectiveGlobals(
+    load.config,
+    sessionPick,
+    () => false,
+  );
   return {
     tmux: tmuxFacts(edge, hints.tmux),
     config: configFacts(load),
-    // [LAW:one-source-of-truth] The render's own resolution, so the doctor
-    // and the bar cannot disagree about which effect is on. The preset's
-    // customization is a fact no field read here depends on.
-    effect: resolveEffectiveGlobals(load.config, sessionPick, () => false)
-      .effect,
+    effect: globals.effect,
+    placementEffects: placementEffects(
+      load.config,
+      globals.preset,
+      sessionPick,
+    ),
     claudeSettings: readClaudeSettingsFacts(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

@@ -9,6 +9,7 @@ import {
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
   type DoctorFacts,
+  type PlacementEffectFact,
   type StatusLineFacts,
   type TmuxFacts,
 } from "../src/doctor/checks";
@@ -42,10 +43,12 @@ const facts = (
   config: ConfigFacts = LOADED,
   effect: EffectSelection = STILL,
   statusLine: StatusLineFacts = { kind: "present", refreshInterval: undefined },
+  placementEffects: readonly PlacementEffectFact[] = [],
 ): DoctorFacts => ({
   tmux,
   config,
   effect,
+  placementEffects,
   urlHandler: { kind: "unsupported" },
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
@@ -337,5 +340,43 @@ describe("effectRefresh probe", () => {
 
   test("a still bar needs no statusLine here at all", () => {
     expect(effectRefresh(STILL, { kind: "absent" })).toEqual({ ok: true });
+  });
+
+  // A placement wearing its own effect moves on a still bar
+  // (brandon-effects-2gka.bm1), so it needs the redraw the bar's would.
+  const withPlacements = (
+    effect: EffectSelection,
+    placementEffects: readonly PlacementEffectFact[],
+  ) =>
+    checkByName("effectRefresh")!.probe(
+      facts(
+        { kind: "outside" },
+        {},
+        LOADED,
+        effect,
+        interval(undefined),
+        placementEffects,
+      ),
+    );
+
+  test("a still bar with a placement wearing pulse → failed naming it, WITH the fix", () => {
+    expect(
+      withPlacements(STILL, [{ placement: "context", effect: "pulse" }]),
+    ).toEqual({
+      ok: false,
+      reason:
+        "context wears the pulse effect, but Claude Code redraws it only on events",
+      fix: FIX,
+    });
+  });
+
+  test("the bar's effect and a placement's are both named", () => {
+    expect(
+      withPlacements(SHIMMER, [{ placement: "context", effect: "pulse" }]),
+    ).toMatchObject({
+      ok: false,
+      reason:
+        "the bar wears the shimmer effect and context wears the pulse effect, but Claude Code redraws it only on events",
+    });
   });
 });

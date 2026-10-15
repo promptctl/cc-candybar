@@ -12,6 +12,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { settingsOf, type ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects } from "../src/render/effect";
+import { menuStateKey } from "../src/config/menu-keys";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { decideEffectName, EFFECT_NAMES, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
@@ -42,7 +43,13 @@ const row = (middle: string): ValidatedConfig =>
 const PLAIN = row(`"middle"`);
 const PULSING = row(`{ seg: "middle", settings: { effect: "pulse" } }`);
 
-function renderer(config: ValidatedConfig): {
+// The session every render here draws for, whose state `renderer` seeds.
+const PAYLOAD = { session_id: "s" };
+
+function renderer(
+  config: ValidatedConfig,
+  state: Readonly<Record<string, string>> = {},
+): {
   readonly render: (
     bar: EffectName,
     when: Instant,
@@ -51,7 +58,9 @@ function renderer(config: ValidatedConfig): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const session = new SessionState();
+  for (const [key, value] of Object.entries(state)) session.set("s", key, value);
+  const registry = new SourceRegistry(store, "", undefined, session);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,
@@ -63,7 +72,7 @@ function renderer(config: ValidatedConfig): {
   };
   return {
     render: (bar, when, effects) =>
-      renderDsl(config, compiled, store, registry, {}, when, opts, undefined, {
+      renderDsl(config, compiled, store, registry, PAYLOAD, when, opts, undefined, {
         effect: decideEffectName(bar),
         effects,
       }),
@@ -189,6 +198,65 @@ describe("a placement's effect setting", () => {
       expect(frames.some((frame) => frame !== frames[0])).toBe(true);
     } finally {
       still.dispose();
+    }
+  });
+
+  // The bar's effect is kept under a scope no placement id can equal, so a
+  // placement named `bar` wears its own effect, not the bar's.
+  test("a placement named bar wears its own effect", () => {
+    const plain = renderer(PLAIN);
+    const named = renderer(
+      row(`{ seg: "middle", id: "bar", settings: { effect: "pulse" } }`),
+    );
+    try {
+      const plainFx = new SessionEffects("s");
+      const namedFx = new SessionEffects("s");
+      const differs = INSTANTS.some(
+        (s) =>
+          named.render("shimmer", at(s), namedFx) !==
+          plain.render("shimmer", at(s), plainFx),
+      );
+      expect(differs).toBe(true);
+      expect(namedFx.lastFrame().own).toEqual([
+        expect.objectContaining({ placement: "bar", effect: "pulse" }),
+      ]);
+    } finally {
+      plain.dispose();
+      named.dispose();
+    }
+  });
+
+  // Every cell a placement lays is its own: the band its open menu drops
+  // stands still with it on a moving bar.
+  test("an open menu's band wears its placement's effect", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        actions: { applyTheme: { set: 'theme', from: 'themes' } },
+        segments: {
+          left: { template: 'left cell' },
+          picker: { template: '{{ menu "applyTheme" "▸" "▾" }}' },
+        },
+        root: { h: ["left", { seg: "picker", settings: { effect: "none" } }] },
+      }`,
+      undefined,
+      DEFAULT_DSL_CONFIG,
+    );
+    const open = renderer(config, {
+      [menuStateKey("picker", "applyTheme", undefined)]: "applyTheme",
+    });
+    try {
+      const effects = new SessionEffects("s");
+      const frames = INSTANTS.map((s) =>
+        open.render("shimmer", at(s), effects).split("\n"),
+      );
+      const band = frames.map((lines) => lines.find((l) => l.includes("✕"))!);
+      expect(band[0]).toBeDefined();
+      for (const line of band) expect(line).toBe(band[0]);
+      // [LAW:verifiable-goals] The bar above it did move.
+      expect(frames.some((lines) => lines[0] !== frames[0]![0])).toBe(true);
+    } finally {
+      open.dispose();
     }
   });
 

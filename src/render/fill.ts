@@ -8,8 +8,6 @@
 // immediately before the row is serialized — the one seam where the cells and the
 // width are both in hand [LAW:single-enforcer].
 
-import type { RichText } from "@promptctl/rich-js";
-
 import {
   sizeCell,
   stripItem,
@@ -17,10 +15,13 @@ import {
   type LaidCell,
 } from "../template-engine/layout.js";
 import { drawnCols, renderStripCells, type BuildLineOptions } from "./strip.js";
+import type { RowItem } from "./effect.js";
 
 /**
  * Give every fill-demanding cell in one row its share of the leftover width, and
- * return the row as the strip items it serializes to.
+ * return the row as the strip items it serializes to, each beside the effect
+ * its cell demands — the cell's other demand, settled where its row is drawn,
+ * so it travels with the item it was laid as rather than by position.
  *
  * Leaves every cell content-sized when nothing demanded fill — the common path,
  * which pays one scan — and when the width is not finite, because "the rest of the row"
@@ -38,14 +39,17 @@ import { drawnCols, renderStripCells, type BuildLineOptions } from "./strip.js";
 export function resolveFill(
   row: readonly LaidCell[],
   options: BuildLineOptions,
-): readonly RichText[] {
-  const cells = row.map(stripItem);
+): readonly RowItem[] {
+  // The row's items as its cells stand: once sized, every fill's lead and trail
+  // rejoin it here.
+  const items = (): RowItem[] =>
+    row.map((cell) => ({ owner: stripItem(cell), effect: cell.effect }));
   const demands: Array<{ at: number; how: CellSizing }> = [];
   row.forEach(({ fill }, at) => {
     if (fill !== undefined) demands.push({ at, how: fill });
   });
-  if (demands.length === 0) return cells;
-  if (!Number.isFinite(options.width)) return cells;
+  if (demands.length === 0) return items();
+  if (!Number.isFinite(options.width)) return items();
 
   // The row AS IT STANDS, through the very function that will serialize it for
   // real. No stand-in cell and no chrome model: whatever the joiner costs — caps
@@ -56,10 +60,10 @@ export function resolveFill(
   // measurement would have caught: FlexStrip FOLDS THE LINE at a zero-width cell,
   // so the probe row wrapped and reported the width of its first fragment (4
   // columns instead of 9), and every fill came out five columns too wide.
-  const natural = renderStripCells(cells, options).split("\n");
+  const natural = renderStripCells(row.map(stripItem), options).split("\n");
   // Already wrapping at its natural width: the row has no leftover to give, and
   // line 0 would under-report it anyway. The clamp case, reached honestly.
-  if (natural.length > 1) return cells;
+  if (natural.length > 1) return items();
 
   const deficit = Math.max(0, options.width - drawnCols(natural[0] ?? ""));
   // Even shares of the deficit, remainder to the last demand so the row lands on
@@ -73,7 +77,6 @@ export function resolveFill(
     const grow = share + (i === demands.length - 1 ? remainder : 0);
     const { text } = row[at]!;
     sizeCell(text, text.cellLength + grow, how);
-    cells[at] = stripItem(row[at]!);
   });
-  return cells;
+  return items();
 }

@@ -40,6 +40,7 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
       unused: [],
     },
     effect: { kind: "decided", name: "none", value: "none" },
+    placementEffects: [],
     claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 

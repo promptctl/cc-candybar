@@ -52,6 +52,13 @@ export interface SegmentLayoutOptions {
    * assignment here.
    */
   baseStyle?: Style;
+  /**
+   * The effect the cell's placement wears instead of the bar's, or none: it
+   * follows the bar. [LAW:types-are-the-program] Required, like `padding`, so
+   * every cell a placement lays — inline, a dropped band, a body's lead, its
+   * ⚠ — states it, and none can follow the bar by being forgotten.
+   */
+  effect: CellEffect | undefined;
   /** Cells drawn inside the cell before the sized content (SegmentNode.lead). */
   lead?: readonly RichText[];
   /** Cells drawn inside the cell after the sized content (SegmentNode.trail). */
@@ -183,11 +190,13 @@ export function applySegmentLayout(
     truncate,
     baseStyle,
     padding,
+    effect,
     lead = [],
     trail = [],
   } = options;
 
   if (cells.length === 0) return [];
+  const motion = effect === undefined ? {} : { effect };
 
   // [LAW:one-source-of-truth] The DSL path's ONE intra-cell padding
   // application — the same rich-js pad primitive toCell (render/strip.ts)
@@ -202,6 +211,7 @@ export function applySegmentLayout(
   // separate them from it.
   const pad = new RichText(" ".repeat(padding));
   const tail = {
+    ...motion,
     ...(lead.length > 0 && {
       lead: collapseToCell([pad, ...lead], baseStyle),
     }),
