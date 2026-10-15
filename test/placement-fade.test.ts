@@ -17,6 +17,7 @@ import { SettingsHistory } from "../src/daemon/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { renderLook } from "../src/render/action";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
@@ -83,7 +84,7 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   return {
     session,
     // The palette the latest render wore.
-    palette: () => compiled.menuRuntime.action.palette,
+    palette: () => renderLook(compiled.menuRuntime.action, "the fade test").palette,
     render: (
       { shown, when }: Frame,
       effects: SessionEffects,
