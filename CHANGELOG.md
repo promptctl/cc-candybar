@@ -1,3 +1,15 @@
+# [1.129.0](https://github.com/promptctl/cc-candybar/compare/v1.128.0...v1.129.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **activity:** only a prompt starts the bar's turn ([#336](https://github.com/promptctl/cc-candybar/issues/336)) ([bfb3f0f](https://github.com/promptctl/cc-candybar/commit/bfb3f0f38e1f7b1bbee9aff58d215931f1195fee))
+
+
+### Features
+
+* **plugins:** lit's ticket is the plugin lit ships, read from its statusline file ([#337](https://github.com/promptctl/cc-candybar/issues/337)) ([3489098](https://github.com/promptctl/cc-candybar/commit/3489098d9bd6b5812c3636c2279dcaf7e752afab))
+
 # [1.128.0](https://github.com/promptctl/cc-candybar/compare/v1.127.2...v1.128.0) (2026-10-15)
 
 
