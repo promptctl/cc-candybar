@@ -557,7 +557,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["candybar.menu", "host", "directory", "gitaculous", "ticket"],
+        ["candybar.menu", "host", "directory", "gitaculous"],
         ["model", "context", "ceiling", "autocompact", "cacheTimer", "block", "weekly", "activity"],
       ],
       compact: [["candybar.menu", "directory", "gitaculous", "context"]],
@@ -660,7 +660,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
     const placed = [
-      ["menu", "host", "directory", "gitaculous", "ticket"],
+      ["menu", "host", "directory", "gitaculous"],
       ["model", "context", "ceiling", "autocompact", "cacheTimer", "block", "weekly", "activity"],
     ];
     expect(previewLabels(rt.render())).toEqual(placed);

@@ -9,21 +9,11 @@
 // text the pruning exists to drop. So this module is a PROJECTION run at the one
 // parse site, in exactly the shape the rest of the pruned entry takes:
 // project the bounded scalars, never the array. A tool call keeps its id and
-// name (29 + ~8 bytes), a tool result keeps the id it answers plus what lit
-// said in it (src/utils/transcript-lit.ts), a TodoWrite keeps its list (bounded by the list), and a slash command keeps its name. The
+// name (29 + ~8 bytes), a tool result keeps the id it answers, a TodoWrite keeps
+// its list (bounded by the list), and a slash command keeps its name. The
 // content arrays stay unreachable from here on, as before.
 
 import type { UserEntry } from "./claude";
-import {
-  phaseOf,
-  litClaim,
-  resultLit,
-  toolSubject,
-  type EntryLit,
-  type LitClaim,
-  type LitSaid,
-  type LitSentinel,
-} from "./transcript-lit";
 
 // One tool call, as the transcript names it. The id is retained for exactly one
 // reason: it is the only thing that pairs a `tool_result` back to the call it
@@ -61,7 +51,6 @@ export interface EntryActivity {
   readonly finished?: readonly string[];
   readonly todos?: readonly TodoItem[];
   readonly command?: string;
-  readonly lit?: EntryLit;
 }
 
 // Claude Code writes a slash command into the transcript as the user turn's own
@@ -125,11 +114,6 @@ export function entryActivity(
   const started: ToolCall[] = [];
   const finished: string[] = [];
   let todos: readonly TodoItem[] | undefined;
-  // The lit facts: a later block in the entry is the newer call, so it wins.
-  const claims: LitClaim[] = [];
-  const said: LitSaid[] = [];
-  let phase: string | undefined;
-  const sentinels: LitSentinel[] = [];
 
   if (Array.isArray(content)) {
     for (const block of content) {
@@ -140,10 +124,6 @@ export function entryActivity(
           const { id, name } = b;
           if (typeof id !== "string" || typeof name !== "string") break;
           started.push({ id, name });
-          const call = toolSubject(name, b.input);
-          const claim = litClaim(id, call);
-          if (claim !== undefined) claims.push(claim);
-          phase = phaseOf(call) ?? phase;
           // The todo list rides its own tool call's input. A later block in the
           // same entry supersedes an earlier one: it is the newer state.
           if (name === "TodoWrite") todos = todoItems(b.input) ?? todos;
@@ -151,12 +131,7 @@ export function entryActivity(
         }
         case "tool_result": {
           const id = b.tool_use_id;
-          const answer = resultLit(b.content);
-          sentinels.push(...answer.sentinels);
-          if (typeof id === "string") {
-            finished.push(id);
-            for (const t of answer.said) said.push({ call: id, ...t });
-          }
+          if (typeof id === "string") finished.push(id);
           break;
         }
         default:
@@ -169,18 +144,6 @@ export function entryActivity(
   // assistant echoing the tag back is discussing a command, not running one.
   const command =
     userEntry === "prompt" ? slashCommand(turnText(content)) : undefined;
-  const lit: EntryLit | undefined =
-    claims.length === 0 &&
-    phase === undefined &&
-    sentinels.length === 0 &&
-    said.length === 0
-      ? undefined
-      : {
-          ...(claims.length > 0 && { claims }),
-          ...(phase !== undefined && { phase }),
-          ...(sentinels.length > 0 && { sentinels }),
-          ...(said.length > 0 && { said }),
-        };
 
   // [LAW:polishing-by-subtraction] Undefined when there is nothing to say, so
   // the whole-tree cost scan retains not one extra byte for the entries it folds
@@ -189,8 +152,7 @@ export function entryActivity(
     started.length === 0 &&
     finished.length === 0 &&
     todos === undefined &&
-    command === undefined &&
-    lit === undefined
+    command === undefined
   ) {
     return undefined;
   }
@@ -199,6 +161,5 @@ export function entryActivity(
     ...(finished.length > 0 && { finished }),
     ...(todos !== undefined && { todos }),
     ...(command !== undefined && { command }),
-    ...(lit !== undefined && { lit }),
   };
 }

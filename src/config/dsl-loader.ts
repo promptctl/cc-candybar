@@ -90,6 +90,7 @@ import {
   type PluginLayer,
 } from "./loader/plugins.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
+import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
 // [LAW:locality-or-seam] Consumers import from `dsl-loader`; the internal split
@@ -188,10 +189,11 @@ export interface LoadContext extends PluginContext {
   };
 }
 
-// A load with no session project and nothing beneath the bundled default: a
-// `data: { project }` plugin drops, naming why.
+// A load with no session and nothing beneath the bundled default: a
+// `data: { checkout }` plugin drops, naming why.
 export const NO_PROJECT: LoadContext = {
   projectDir: null,
+  checkout: null,
   beneath: { dropped: [], rendering: new Map() },
 };
 
@@ -250,10 +252,10 @@ export function loadConfigSource(
 }
 
 // [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes, the project, the base and the palettes, so it is
-// memoised on exactly those: a load with nothing installed changed pays one
-// stat per definition, not one reference check per plugin. Per-plugin
-// validation stays — it is what lets one plugin drop alone.
+// definitions' bytes, the project, the checkout, the base and the palettes,
+// so it is memoised on exactly those: a load with nothing installed changed
+// pays one stat per definition, not one reference check per plugin.
+// Per-plugin validation stays — it is what lets one plugin drop alone.
 const installedMemo = new WeakMap<
   DslConfig,
   Map<string, { readonly key: string; readonly layer: PluginLayer }>
@@ -271,7 +273,11 @@ function installedLayer(
   ]);
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
-  const slot = String(ctx.projectDir);
+  // Keyed on the checkout, not the working directory: every directory of one
+  // checkout reads the same data, and the next load after a `.git` appears
+  // above a directory reads the new checkout's. Nothing watches for that
+  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
+  const slot = JSON.stringify([ctx.projectDir, ctx.checkout?.root ?? null]);
   const hit = byProject.get(slot);
   if (hit?.key === key) return hit.layer;
   const layer = applyPlugins(
@@ -320,10 +326,16 @@ export function loadConfigChain(
   paths: readonly string[],
   dflt: DslConfig,
   trace: ChainTrace,
-  ctx: PluginContext,
+  session: SessionDirs,
   read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
+  // [LAW:single-enforcer] The one place a session's working directory
+  // becomes the checkout its plugins' data paths resolve against.
+  const ctx: PluginContext = {
+    projectDir: session.projectDir,
+    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
+  };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
@@ -373,6 +385,7 @@ export function loadConfigChain(
   const unreached = plugins.dropped.filter((d) => !isReached(d));
   trace.warned(surfaced.map(droppedPluginNotice));
   const installed = {
+    checkout: ctx.checkout,
     roots: found.roots,
     loaded: plugins.loaded,
     dropped: surfaced,
@@ -410,6 +423,12 @@ export function loadConfigChain(
   }
 }
 
+// The session a chain loads for: its project, and the directory it works in.
+export interface SessionDirs {
+  readonly projectDir: string | null;
+  readonly cwd: string | null;
+}
+
 export interface ChainTrace {
   // The file a throw is to be blamed on, as the chain learns it.
   readonly entered: (path: string) => void;
@@ -428,6 +447,8 @@ export interface LoadedChain {
   // plugins — the config an absent file reads as.
   readonly base: DslConfig;
   readonly installed: LoadedFile["plugins"] & {
+    // What a `data: { checkout }` path resolved against.
+    readonly checkout: Checkout | null;
     readonly roots: readonly string[];
     // Installed drops no layer reaches: logged, never a warning.
     readonly unreached: readonly DroppedPlugin[];

@@ -1193,6 +1193,16 @@ describe("loadDslConfig — renamed built-in segment", () => {
     ).not.toThrow();
   });
 
+  // brandon-plugins-ktag.d6f: lit's ticket left the bundled bar for the
+  // plugin lit ships.
+  test("the retired lit ticket points at lit's plugin segment", () => {
+    expect(() =>
+      validateAgainstDefault(`{ root: { h: ["directory", "ticket"] } }`),
+    ).toThrow(
+      /the built-in segment "ticket" became "plugins.lit.ticket", a segment of the plugin in cc-candybar's examples\/plugins\/lit — install that folder in a plugin root/,
+    );
+  });
+
   // [LAW:single-enforcer] The pointer rides every path an old name can be
   // written on, not only `root` (brandon-git-segment-ixf.tl0 retired `git`).
   test.each([

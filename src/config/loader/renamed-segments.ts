@@ -1,5 +1,5 @@
-// [LAW:one-source-of-truth] The renamed built-in segments: old name → current
-// name. A user config merges on top of the bundled default, so an old name
+// [LAW:one-source-of-truth] The renamed built-in segments: old name → where it
+// went. A user config merges on top of the bundled default, so an old name
 // resolves to nothing, wherever it appears: a `root` entry, a `segments` delta,
 // a tree-op `anchor`, a `segments.<name>.palette` target. Every one of those
 // messages ends with `renamedHint`, so the migration pointer
@@ -7,19 +7,43 @@
 // someone thought of. A future rename is one row here.
 // A Map, not an object literal: an authored name is user data, and an object
 // would answer `constructor` with Object.prototype's function.
-export const RENAMED_SEGMENTS: ReadonlyMap<string, string> = new Map([
-  ["gitTaculous", "gitaculous"],
+//
+// [LAW:types-are-the-program] A segment that moved into a plugin exists only
+// once that plugin is installed, so its row names the folder that installs it.
+type Renamed =
+  | { readonly kind: "built-in"; readonly to: string }
+  | { readonly kind: "plugin"; readonly to: string; readonly folder: string };
+
+export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
+  string,
+  Renamed
+>([
+  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
   // The one-line summary became the collapsed form of `gitaculous`
   // (brandon-git-segment-ixf.tl0).
-  ["git", "gitaculous"],
+  ["git", { kind: "built-in", to: "gitaculous" }],
   // The settings menu's anchor left `settings.` so `.settings` could be a
   // placement's own settings (brandon-segment-settings-i4n).
-  ["settings.menu", "candybar.menu"],
+  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
+  // lit's ticket moved out of the bundled bar into the plugin lit ships,
+  // which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  [
+    "ticket",
+    {
+      kind: "plugin",
+      to: "plugins.lit.ticket",
+      folder: "examples/plugins/lit",
+    },
+  ],
 ]);
 
 export function renamedHint(name: string): string {
   const renamed = RENAMED_SEGMENTS.get(name);
-  return renamed === undefined
-    ? ""
-    : ` (the built-in segment "${name}" was renamed to "${renamed}" — update this reference)`;
+  if (renamed === undefined) return "";
+  switch (renamed.kind) {
+    case "built-in":
+      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" — update this reference)`;
+    case "plugin":
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin in cc-candybar's ${renamed.folder} — install that folder in a plugin root (docs/segment-authoring.md, "Installing a plugin instead of listing it"), then update this reference)`;
+  }
 }

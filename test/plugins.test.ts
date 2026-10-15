@@ -9,7 +9,7 @@ import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
-import { loadFromDisk, RenderCache } from "../src/daemon/cache/render";
+import { loadFromDisk, pluginLoadLine, RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
@@ -416,17 +416,84 @@ describe("an installed plugin", () => {
     expect(await segmentsIn(path.join(dir, "b"))).toEqual([]);
   });
 
-  test("one installed definition reads each repo's own project data", async () => {
-    install(
-      "data",
-      "lit",
-      `{ data: { project: ".lit/candybar.json" }, segments: { ticket: { template: '#{{ .plugins.lit.data.id }}' } } }`,
-    );
-    write("a/.lit/candybar.json", `{ "id": "a-1" }`);
-    write("b/.lit/candybar.json", `{ "id": "b-2" }`);
+  const CHECKOUT_DEFINITION = `{ data: { checkout: ".lit/state.json" }, segments: { ticket: { template: '#{{ .plugins.lit.data.id }}' } } }`;
+
+  test("one installed definition reads each checkout's own data, from its root", async () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    fs.mkdirSync(path.join(dir, "a/.git"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "b/.git"), { recursive: true });
+    write("a/.lit/state.json", `{ "id": "a-1" }`);
+    write("b/.lit/state.json", `{ "id": "b-2" }`);
+    fs.mkdirSync(path.join(dir, "a/deep/sub"), { recursive: true });
     const p = placing("plugins.lit.ticket");
-    expect(clean(await checkConfig(p, path.join(dir, "a"))).rendered).toContain("#a-1");
+    expect(clean(await checkConfig(p, path.join(dir, "a/deep/sub"))).rendered).toContain("#a-1");
     expect(clean(await checkConfig(p, path.join(dir, "b"))).rendered).toContain("#b-2");
+  });
+
+  // A worktree session's project is the main checkout it was opened from; its
+  // working directory is the worktree, whose `.git` is a file. The data is the
+  // worktree's own.
+  test("a worktree session reads the worktree's data, not its project's", () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    fs.mkdirSync(path.join(dir, "main/.git"), { recursive: true });
+    write("main/.claude/worktrees/w/.git", "gitdir: ../../../.git/worktrees/w\n");
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    try {
+      const loaded = loadFromDisk(
+        path.join(dir, "main"),
+        path.join(dir, "main/.claude/worktrees/w"),
+        placing("plugins.lit.ticket"),
+        { gitService, sessionState: new SessionState() },
+      );
+      expect(loaded.error).toBeNull();
+      const data = path.join(dir, "main/.claude/worktrees/w/.lit/state.json");
+      expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
+      // [LAW:nothing-unseen] The daemon's load line names the file it read,
+      // and the checkout it resolved against.
+      const line = pluginLoadLine(loaded.layers, loaded.state!);
+      expect(line).toContain(
+        ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
+      );
+      expect(line).toContain(` checkout=git:${path.join(dir, "main/.claude/worktrees/w")} `);
+      loaded.state?.registry.dispose();
+    } finally {
+      gitService.close();
+    }
+  });
+
+  test("a working directory in no checkout is its own root", async () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    write("loose/.lit/state.json", `{ "id": "l-3" }`);
+    const p = placing("plugins.lit.ticket");
+    expect(clean(await checkConfig(p, path.join(dir, "loose"))).rendered).toContain("#l-3");
+  });
+
+  // The installed layer is memoised; a `.git` appearing above a directory
+  // moves the checkout its data resolves against, and the next load sees it.
+  test("a checkout created above a directory moves its data on the next load", () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
+    const p = placing("plugins.lit.ticket");
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const load = (): string => {
+      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
+        gitService,
+        sessionState: new SessionState(),
+      });
+      loaded.state?.registry.dispose();
+      return pluginLoadLine(loaded.layers, loaded.state!);
+    };
+    try {
+      const before = load();
+      expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
+      expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
+      fs.mkdirSync(path.join(dir, "outer/.git"));
+      const after = load();
+      expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
+      expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
+    } finally {
+      gitService.close();
+    }
   });
 
   test("a nearer root replaces a farther one's plugin of the same name, whole", async () => {
@@ -651,13 +718,19 @@ describe("an installed plugin", () => {
   });
 
   test.each(["../escape.json", "/abs/data.json", "~/data.json"])(
-    "data.project %s is refused, naming the fix",
+    "data.checkout %s is refused, naming the fix",
     async (rel) => {
-      write("x/plugin.json5", `{ data: { project: "${rel}" }, segments: {} }`);
+      write("x/plugin.json5", `{ data: { checkout: "${rel}" }, segments: {} }`);
       const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
-      expect(fatal(await checkConfig(p, dir))).toContain("must be a path inside the project");
+      expect(fatal(await checkConfig(p, dir))).toContain("must be a path inside the checkout");
     },
   );
+
+  test("data: { project }, the field's spelling before { checkout }, is refused pointing at checkout", async () => {
+    write("x/plugin.json5", `{ data: { project: ".lit/candybar.json" }, segments: {} }`);
+    const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
+    expect(fatal(await checkConfig(p, dir))).toContain("data: { project } is now data: { checkout }");
+  });
 
   test("a file directly in a root is a drop naming where it belongs; a dot-file is nothing", async () => {
     write("data/cc-candybar/plugins/deploy.json5", "{}");

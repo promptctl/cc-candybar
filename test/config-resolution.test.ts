@@ -220,6 +220,7 @@ describe("resolveDslConfig", () => {
         path: xdgJson5,
         above: [projJson],
         projectDir: proj,
+        cwd: dir,
       });
     } finally {
       restore();
@@ -242,7 +243,7 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(durableConfig(undefined, dir)).toEqual({ path: home, above: [], projectDir: null });
+      expect(durableConfig(undefined, dir)).toEqual({ path: home, above: [], projectDir: null, cwd: dir });
     } finally {
       restore();
       cleanup();
@@ -263,7 +264,7 @@ describe("resolveDslConfig", () => {
         home: named,
         unchecked: [],
       });
-      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [], projectDir: dir });
+      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [], projectDir: dir, cwd: dir });
     } finally {
       restore();
       cleanup();
@@ -287,7 +288,7 @@ describe("resolveDslConfig", () => {
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
-      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [], projectDir: dir });
+      expect(durableConfig(dir, dir, named)).toEqual({ path: named, above: [], projectDir: dir, cwd: dir });
     } finally {
       restore();
       cleanup();

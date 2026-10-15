@@ -754,9 +754,11 @@ What the definition can say, and what follows from it:
   blank data reads the same way, and data that is not JSON is a `⚠` on every
   segment reading it. The app may create the file late and rewrite it any
   way it likes: a read caught mid-rewrite keeps the last document showing.
-  `data: { project: ".lit/candybar.json" }` reads it relative to the
-  session's project instead, so one installed definition shows each repo's
-  own data.
+  `data: { checkout: ".lit/statusline.json" }` reads it relative to the
+  root of the git checkout the session works in instead — each worktree its
+  own, a session in no checkout reading from its working directory — so one
+  installed definition shows each checkout's own data. lit's plugin
+  (`examples/plugins/lit`) reads lit's state this way.
 - **Only `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
   nothing) and never edits `root` — placing a segment is your choice. A
@@ -810,8 +812,8 @@ a plugin root:
 
 A plugin is a folder: a file sitting directly in a root is a drop naming
 where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A
-`data: { project }` path stays inside the project — an absolute path, `~` or
-a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
+`data: { checkout }` path stays inside the checkout — an absolute path, `~`
+or a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
 user over package manager). An installed plugin's segments are in the
 add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads

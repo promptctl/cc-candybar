@@ -22,6 +22,7 @@ import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { expandHome } from "./discovery.js";
+import { type Checkout } from "../../utils/git-root.js";
 import {
   isPlainObject,
   describeType,
@@ -78,9 +79,12 @@ export interface DropCause {
 
 // What a definition's paths resolve against beyond its own directory.
 export interface PluginContext {
-  // The session's project, for a `data: { project }` path; null where no
+  // The session's project: where its repo-shipped plugins live. Null where no
   // project is known.
   readonly projectDir: string | null;
+  // The checkout the session works in, for a `data: { checkout }` path; null
+  // where no session is known.
+  readonly checkout: Checkout | null;
 }
 
 // The spelling of a drop, shared by the diagnostic strip and `check`.
@@ -515,7 +519,7 @@ function fragmentOf(
   file: string,
   ns: string,
   { source, json }: { readonly source: string; readonly json: unknown },
-  { projectDir }: PluginContext,
+  { checkout }: PluginContext,
 ): RawDslConfig {
   const issues: ConfigIssue[] = [];
   const fail = (): never => {
@@ -539,7 +543,7 @@ function fragmentOf(
       });
     }
   }
-  const dataPath = dataPathOf(json.data, file, projectDir, issues);
+  const dataPath = dataPathOf(json.data, file, checkout, issues);
   if (!isPlainObject(json.segments)) {
     issues.push({
       path: "segments",
@@ -630,13 +634,17 @@ function prefixed<T>(
 }
 
 // [LAW:types-are-the-program] Where a plugin's data lives: a path relative to
-// its definition (an app that keeps one state file), or `{ project }`, a path
-// relative to the session's project — one installed definition, a data file
-// per repo (lit writes `<repo>/.lit/candybar.json`).
+// its definition (an app that keeps one state file), or `{ checkout }`, a path
+// relative to the root of the git checkout the session works in — one
+// installed definition, a data file per checkout (lit writes
+// `<checkout>/.lit/statusline.json`). A linked worktree is its own checkout,
+// so a worktree session reads the worktree's file, not the main repo's: the
+// session's project is the repo it was opened in, which for a worktree is the
+// main checkout. A working directory in no checkout is its own root.
 function dataPathOf(
   data: unknown,
   file: string,
-  projectDir: string | null,
+  checkout: Checkout | null,
   issues: ConfigIssue[],
 ): string | undefined {
   if (typeof data === "string" && data !== "") {
@@ -645,35 +653,44 @@ function dataPathOf(
   if (
     isPlainObject(data) &&
     Object.keys(data).length === 1 &&
-    typeof data.project === "string" &&
-    data.project !== ""
+    typeof data.checkout === "string" &&
+    data.checkout !== ""
   ) {
-    // Inside the project, always: one installed definition reads every
-    // repo's own file, never a path that leaves the repo.
-    const rel = data.project;
+    // Inside the checkout, always: one installed definition reads every
+    // checkout's own file, never a path that leaves it.
+    const rel = data.checkout;
     if (
       path.isAbsolute(rel) ||
       rel.startsWith("~") ||
       path.normalize(rel).split(path.sep)[0] === ".."
     ) {
       issues.push({
-        path: "data.project",
-        message: `data.project "${rel}" must be a path inside the project, relative to its root (like ".lit/candybar.json"): no absolute path, "~" or ".."`,
+        path: "data.checkout",
+        message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`,
       });
       return undefined;
     }
-    if (projectDir === null) {
+    if (checkout === null) {
       issues.push({
-        path: "data.project",
-        message: `data is read from the session's project, and this load has none`,
+        path: "data.checkout",
+        message: `data is read from the session's checkout, and this load has no session`,
       });
       return undefined;
     }
-    return path.resolve(projectDir, rel);
+    return path.resolve(checkout.root, rel);
+  }
+  // [LAW:no-silent-failure] `{ project }` was this field's spelling until
+  // `{ checkout }` replaced it (brandon-plugins-ktag.d6f).
+  if (isPlainObject(data) && "project" in data) {
+    issues.push({
+      path: "data.project",
+      message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`,
+    });
+    return undefined;
   }
   issues.push({
     path: "data",
-    message: `"data" must be the path of the plugin's JSON data file relative to this definition, or { project: "<path>" } relative to the session's project`,
+    message: `"data" must be the path of the plugin's JSON data file relative to this definition, or { checkout: "<path>" } relative to the root of the session's checkout`,
   });
   return undefined;
 }
