@@ -12,6 +12,7 @@ import {
   type RenderToStringOptions,
 } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import { isAsciiText } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
@@ -116,10 +117,9 @@ function plainWith(separator: string): CellJoiner {
     return { ...shape, seam, divider: seam };
   };
   const { shape, ascii } = JOINERS.plain;
-  const isAscii = [...separator].every((c) => c.codePointAt(0)! <= 0x7f);
   const joiner = new CellJoiner(
     withGlyph(shape),
-    isAscii ? withGlyph(ascii) : ascii,
+    isAsciiText(separator) ? withGlyph(ascii) : ascii,
   );
   separatorJoiners.set(separator, joiner);
   return joiner;

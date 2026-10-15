@@ -13,7 +13,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         width: 200,
       });
       expect(out.split("\n")).toHaveLength(1);
-      // PlainJoiner default separator is " | ".
+      // The bundled plain joiner's separator is " | ".
       expect(out).toBe(" alpha  |  beta  |  gamma ");
     });
 

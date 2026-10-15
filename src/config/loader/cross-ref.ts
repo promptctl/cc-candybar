@@ -53,7 +53,8 @@ import {
 import {
   DEFAULT_CHARSET,
   isExpression,
-  isEndcaps,
+  isAsciiText,
+  isStyleEraEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
 import { endcapsNameMessage } from "./styles.js";
@@ -179,7 +180,7 @@ export function validateCrossReferences(
     const where = `${at.join(".")}.style`;
     ctx.issues.push({
       path: where,
-      message: isEndcaps(name)
+      message: isStyleEraEndcaps(name)
         ? endcapsNameMessage(where, name, `${at.join(".")}.endcaps`)
         : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
       line: findKeyLine(ctx.source, [...at, "style"]),
@@ -861,11 +862,13 @@ function checkSettingWrites(
     (w) => !controlDomainAdmits(domain, w.value, optionDomains),
   );
   if (outside.length === 0) return;
-  // An action writing nothing but endcaps shapes under `style` is the old
-  // name for `endcaps`: renaming its key is the whole fix.
+  // An action drawing from the endcaps domain, or writing nothing but the
+  // endcaps `style` held before the rename, under `style` is the old name for
+  // `endcaps`: renaming its key is the whole fix.
   if (
     key === SETTINGS.style.sessionKey &&
-    writes.every((w) => isEndcaps(w.value))
+    (("from" in a && a.from === "endcaps") ||
+      writes.every((w) => isStyleEraEndcaps(w.value)))
   ) {
     const endcaps = SETTINGS.endcaps.sessionKey;
     ctx.issues.push(
@@ -1235,10 +1238,7 @@ function asciiSeparators(ctx: ValidateCtx, cfg: DslConfig): void {
     for (const staged of fragments) {
       const charset = staged.charset ?? globals.charset ?? DEFAULT_CHARSET;
       const separator = staged.default_separator ?? globals.default_separator;
-      const nonAscii = [...(separator ?? "")].some(
-        (c) => c.codePointAt(0)! > 0x7f,
-      );
-      if (charset !== "ascii" || !nonAscii) continue;
+      if (charset !== "ascii" || isAsciiText(separator ?? "")) continue;
       const at =
         staged.default_separator !== undefined
           ? ["editGlobals"]

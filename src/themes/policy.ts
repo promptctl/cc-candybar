@@ -376,6 +376,20 @@ export function isEndcaps(value: string): value is Endcaps {
   return (ENDCAPS_SHAPES as readonly string[]).includes(value);
 }
 
+// [LAW:one-source-of-truth] The endcaps `style` could hold before it was
+// renamed (brandon-menu-ia-q30.xuz) — history, so not derived from the live
+// joiner list, and typed `Endcaps` so a migration message never points at a
+// shape that no longer exists. Only these names unambiguously mean "the old
+// key": a joiner added since is a name a style may take.
+const STYLE_ERA_ENDCAPS: readonly string[] = [
+  "powerline",
+  "capsule",
+  "plain",
+] satisfies readonly Endcaps[];
+export function isStyleEraEndcaps(value: string): value is Endcaps {
+  return STYLE_ERA_ENDCAPS.includes(value);
+}
+
 // The endcaps a render should use, as data.
 // [LAW:one-type-per-behavior] `effectiveGlobal` over a closed registry-static
 // vocabulary: the narrowing guard IS the parse. `pickJoiner` would render an
@@ -420,6 +434,12 @@ export function effectiveEndcaps(
 // (brandon-menu-ia-q30.5y4), and so for COLOR_COMPATIBILITIES below.
 export const CHARSETS = ["unicode", "ascii"] as const;
 export type Charset = (typeof CHARSETS)[number];
+
+// [LAW:single-enforcer] What `charset: "ascii"` can draw: the loader refuses
+// authored text that fails it, and the strip relies on that refusal.
+export function isAsciiText(text: string): boolean {
+  return [...text].every((c) => c.codePointAt(0)! <= 0x7f);
+}
 
 // [LAW:one-source-of-truth] The one statement of the globals.charset default
 // (powerline unicode glyphs, matching the legacy display.charset).

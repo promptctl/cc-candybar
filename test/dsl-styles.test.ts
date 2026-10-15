@@ -169,6 +169,12 @@ describe("the renamed keys refuse their old spellings", () => {
     },
   );
 
+  test("an undeclared style named after a joiner `style` never held is a missing style", () => {
+    const message = issues(`{ globals: { style: "flame" } }`);
+    expect(message).toContain(`globals.style "flame" does not match any declared style`);
+    expect(message).not.toContain("renamed");
+  });
+
   test("a style may share a name with an endcaps shape `style` never held", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<renames>", `{ styles: { flame: {} } }`, ALLOWED),

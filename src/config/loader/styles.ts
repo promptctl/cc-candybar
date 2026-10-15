@@ -25,16 +25,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
-import type { Endcaps } from "../../themes/policy.js";
-
-// The endcaps `style` could hold before the rename — history, so not derived
-// from the live joiner list; typed `Endcaps` so the migration never points at
-// a shape that no longer exists.
-const STYLE_ERA_ENDCAPS: readonly string[] = [
-  "powerline",
-  "capsule",
-  "plain",
-] satisfies readonly Endcaps[];
+import { isStyleEraEndcaps } from "../../themes/policy.js";
 
 // The one spelling of "that is an endcaps name, not a style": a style may not
 // be named after one, and a `style` may not hold one.
@@ -104,7 +95,7 @@ export function validateStyles(
     // q30.xuz, so one of the names it held then is the old meaning of the word:
     // refused, pointing at the key that holds it now. Only those names — a
     // joiner added since was never a style, so a style may be called "flame".
-    if (STYLE_ERA_ENDCAPS.includes(name)) {
+    if (isStyleEraEndcaps(name)) {
       ctx.issues.push({
         path: `styles.${name}`,
         message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
