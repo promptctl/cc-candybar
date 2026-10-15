@@ -98,7 +98,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`effectCache`);
   lines.push(`  sessions      ${s.effectCache.sessions}`);
-  lines.push(`  rows          ${s.effectCache.rows}`);
+  lines.push(`  effects       ${s.effectCache.effects}`);
   lines.push(``);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);

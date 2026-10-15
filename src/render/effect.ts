@@ -1,9 +1,11 @@
-// The looping effect a session's bar wears, row by row (brandon-effects-2gka.d2i).
+// The looping effects a session's bar wears, row by row: the bar's own
+// (brandon-effects-2gka.d2i) and each placement's that sets one
+// (brandon-effects-2gka.bm1).
 //
-// rich-js owns the effects themselves (`EFFECT_CATALOGUE.loops`, `Effected`):
-// pure functions of a time `t` and the colours a frame draws. This module owns
-// the two facts about a SESSION those functions need and cannot know — when the
-// session's effect came into force, which is the effect's own t = 0, and the
+// rich-js owns the effects themselves (`EFFECT_CATALOGUE.loops`, `Effected`,
+// `confined`): pure functions of a time `t` and the colours a frame draws. This
+// module owns the facts about a SESSION those functions need and cannot know —
+// when each effect came into force, which is that effect's own t = 0, and the
 // effect objects already made for its rows, which rich-js reuses a frame's
 // settled shares on only when it is handed the same object again.
 
@@ -11,12 +13,46 @@ import {
   DEFAULT_TERMINAL_THEME,
   EFFECT_CATALOGUE,
   Effected,
+  confined,
   type Effect,
+  type LoopName,
   type Renderable,
+  type RichText,
 } from "@promptctl/rich-js";
 
-import { EFFECT_FLOOR, type EffectName } from "../themes/policy.js";
+import {
+  EFFECT_FLOOR,
+  FOLLOW_BAR,
+  type EffectName,
+  type PlacementEffect,
+} from "../themes/policy.js";
 import type { Instant } from "../utils/instant.js";
+
+// [LAW:types-are-the-program] A cell whose placement wears its own effect, and
+// the placement whose clock that effect keeps: what a laid cell demands of its
+// row (`LaidCell.effect`). A cell following the bar demands nothing.
+export interface CellEffect {
+  readonly placement: string;
+  readonly name: EffectName;
+}
+
+// The demand a placement's cells carry for its `effect` setting: none while it
+// follows the bar, else its own effect — `none` included, a still cell on a
+// moving bar.
+export function placementMotion(
+  placement: string,
+  setting: PlacementEffect,
+): CellEffect | undefined {
+  return setting === FOLLOW_BAR ? undefined : { placement, name: setting };
+}
+
+// One item of a row's strip — the strip stamps its cells with the item itself,
+// which is how `confined` tells one item's cells from another's — and the
+// effect its cell demands.
+export interface RowItem {
+  readonly owner: RichText;
+  readonly effect: CellEffect | undefined;
+}
 
 // [LAW:types-are-the-program] What one row is drawn under: nothing, or an
 // effect made for the row once the row's span is known. A still row has no
@@ -30,20 +66,74 @@ export type RowMotion =
 
 export const STILL: RowMotion = { kind: "still" };
 
-// The effect one row was drawn under, and the span it was made for.
+// An effect made for one row — the bar's, or one placement's on that row — and
+// the name and span it was made for.
 interface RowEffect {
+  readonly name: EffectName;
   readonly span: number;
   readonly effect: Effect;
 }
 
-// One render's effect, as its event reports it.
+// When an effect came into force: its own t = 0.
+interface InForce {
+  readonly name: EffectName;
+  readonly since: Instant;
+}
+
+// A placement wearing its own effect in one render, as its event reports it.
+export interface OwnEffectFrame {
+  readonly placement: string;
+  readonly effect: EffectName;
+  readonly t: number;
+}
+
+// One render's effects, as its event reports them.
 export interface EffectFrame {
   readonly effect: EffectName;
   // Seconds since the effect came into force: the effect's own clock.
   readonly t: number;
-  // Rows whose effect was made this render, and rows that reused last frame's.
+  // Effects made for rows this render, and ones that reused last frame's.
   readonly made: number;
   readonly reused: number;
+  // Each placement the render drew wearing its own effect, on its own clock.
+  readonly own: readonly OwnEffectFrame[];
+}
+
+// [LAW:types-are-the-program] Whose effect a part of a row is: the bar's, or
+// the placement's of that id. The bar's is a symbol, which no placement id can
+// equal — a placement is free to be named `bar`.
+const BAR_SCOPE = Symbol("bar");
+type Scope = typeof BAR_SCOPE | string;
+
+// Which effect of a row a cell is drawn under, and on which clock.
+interface Part {
+  // What the row's made effect is kept under, so every cell following the bar
+  // shares one.
+  readonly scope: Scope;
+  readonly name: EffectName;
+  readonly t: number;
+  // The items it is confined to, or none: the whole row.
+  readonly owners: readonly RichText[] | undefined;
+}
+
+// A part wearing a catalogue loop: every effect name but the floor.
+type Moving<P extends { name: EffectName }> = P & { readonly name: LoopName };
+function isMoving<P extends { name: EffectName }>(part: P): part is Moving<P> {
+  return part.name !== EFFECT_FLOOR;
+}
+
+// [LAW:one-type-per-behavior] Several effects, each on its own clock, as the one
+// `Effect` an `Effected` takes: every first stage is called with the frame's
+// `drawn` at its own t, then the second stages fold over the cell. Each is
+// confined to its own items' colours, so for any one colour of a cell at most
+// one of them moves it. The `t` the `Effected` passes is not read: no clock
+// here is the row's.
+function together(parts: ReadonlyArray<{ t: number; effect: Effect }>): Effect {
+  return (_t, drawn) => {
+    const frames = parts.map(({ t, effect }) => effect(t, drawn));
+    return (colors, cell) =>
+      frames.reduce((moved, frame) => frame(moved, cell), colors);
+  };
 }
 
 // [LAW:one-source-of-truth] The terminal an effect measures and writes against
@@ -79,78 +169,157 @@ export class SessionEffects {
   // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
-  private inForce: {
-    readonly name: EffectName;
-    readonly since: Instant;
-  } | null = null;
-  // The effect made for each row the latest render drew, with the span it was
-  // made for. A row whose span changes gets a new one; the effect's clock does
-  // not restart. Each render starts an empty map and keeps only the rows it
-  // draws, so a row that stopped being drawn (a menu closed) takes its effect
-  // and its settled shares with it.
-  private rows = new Map<string, RowEffect>();
+  private inForce: InForce | null = null;
+  // The same fact for each placement wearing its own effect, by placement id,
+  // kept for the placements the latest render drew: one that stopped being
+  // drawn starts its effect again at t = 0 when it is drawn again, as the
+  // effect comes into force for it again.
+  private placements = new Map<string, InForce>();
+  // The effects made for the rows the latest render drew, by row and scope (the
+  // bar's, or one placement's), with the name and span each was made for. One
+  // whose span changes gets a new one; its clock does not restart. Each render
+  // starts an empty map and keeps only what it draws, so a row that stopped
+  // being drawn (a menu closed) takes its effects and their settled shares with
+  // it.
+  private made = new Map<string, Map<Scope, RowEffect>>();
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
     t: 0,
     made: 0,
     reused: 0,
+    own: [],
   };
 
   constructor(private readonly key: string) {}
 
-  // The latest render's effect: which one, at what t, and how many of its rows'
-  // effects were made fresh rather than reused — a row made every frame pays
-  // rich-js's share settling every frame.
+  // The latest render's effects: the bar's, at what t, how many of its rows'
+  // effects were made fresh rather than reused — one made every frame pays
+  // rich-js's share settling every frame — and each placement's own.
   lastFrame(): EffectFrame {
     return this.frame;
   }
 
-  // The rows whose effect this session holds: the rows its latest render drew.
-  get rowCount(): number {
-    return this.rows.size;
+  // The effects this session holds: the ones its latest render drew.
+  get heldCount(): number {
+    return [...this.made.values()].reduce((n, row) => n + row.size, 0);
   }
 
   /**
-   * The motion of each row of a render drawn at `at` wearing `name`. Records
-   * `name` coming into force when it differs from the last render's, so every
-   * catalogue effect starts calm at its t = 0 — pulse at rest, shimmer entering
+   * The motion of each row of a render drawn at `at` whose bar wears `name`,
+   * given the row's strip items. Records an effect coming into force — the
+   * bar's, or a placement's — when it differs from the last render's, so every
+   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
    * from off the row, wheel at the theme's own hues.
    */
-  motion(name: EffectName, at: Instant): (row: string) => RowMotion {
-    if (this.inForce?.name !== name) {
-      this.inForce = { name, since: at };
-      this.rows.clear();
-    }
-    const known = this.rows;
-    const drawn = new Map<string, RowEffect>();
-    this.rows = drawn;
-    const t = at - this.inForce.since;
-    const frame = { effect: name, t, made: 0, reused: 0 };
+  motion(
+    name: EffectName,
+    at: Instant,
+  ): (row: string, items: readonly RowItem[]) => RowMotion {
+    if (this.inForce?.name !== name) this.inForce = { name, since: at };
+    const bar: Omit<Part, "owners"> = {
+      scope: BAR_SCOPE,
+      name,
+      t: at - this.inForce.since,
+    };
+    const knownPlacements = this.placements;
+    const placements = new Map<string, InForce>();
+    this.placements = placements;
+    const known = this.made;
+    const made = new Map<string, Map<Scope, RowEffect>>();
+    this.made = made;
+    const own: OwnEffectFrame[] = [];
+    const frame = { effect: name, t: bar.t, made: 0, reused: 0, own };
     this.frame = frame;
-    // [LAW:dataflow-not-control-flow] The domain's own discriminator: `none` is
-    // the floor of the effect domain and has no catalogue entry, so its rows
-    // are still; every other name is a loop the catalogue makes.
-    if (name === EFFECT_FLOOR) return () => STILL;
-    const make = EFFECT_CATALOGUE.loops[name];
-    return (row) => ({
-      kind: "moving",
-      wrap: (strip, span) => {
-        const rowKey = `${this.key}#${row}`;
-        const last = known.get(row);
-        const reuse = last?.span === span;
-        const effect = reuse
-          ? last.effect
-          : make({ span, z: noiseOffset(rowKey) * NOISE_DEPTH });
-        frame[reuse ? "reused" : "made"]++;
-        drawn.set(row, { span, effect });
-        return new Effected(strip, effect, {
-          t,
-          key: rowKey,
-          theme: ASSUMED_TERMINAL,
-        });
-      },
-    });
+
+    const ownPart = ({ placement, name }: CellEffect): Omit<Part, "owners"> => {
+      const last = placements.get(placement) ?? knownPlacements.get(placement);
+      const since = last?.name === name ? last : { name, since: at };
+      const t = at - since.since;
+      if (!placements.has(placement)) {
+        placements.set(placement, since);
+        own.push({ placement, effect: name, t });
+      }
+      return { scope: placement, name, t };
+    };
+    // The effect a moving part's cells are drawn under, made once per row and
+    // scope: every cell following the bar shares the bar's.
+    const effectOf = (
+      rowKey: string,
+      part: Moving<Part>,
+      span: number,
+    ): Effect => {
+      const row = made.get(rowKey) ?? new Map<Scope, RowEffect>();
+      made.set(rowKey, row);
+      const current = row.get(part.scope);
+      if (current !== undefined) return current.effect;
+      const last = known.get(rowKey)?.get(part.scope);
+      const reuse = last?.name === part.name && last.span === span;
+      // [LAW:one-source-of-truth] The bar's noise offset is its row's, as it
+      // was before any placement wore its own, so a cell following the bar
+      // draws the bytes it always drew.
+      const z = noiseOffset(
+        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`,
+      );
+      const effect = reuse
+        ? last.effect
+        : EFFECT_CATALOGUE.loops[part.name]({ span, z: z * NOISE_DEPTH });
+      frame[reuse ? "reused" : "made"]++;
+      row.set(part.scope, { name: part.name, span, effect });
+      return effect;
+    };
+
+    // [LAW:one-type-per-behavior] A row's parts by scope: each effect the row
+    // wears, once, confined to every item wearing it.
+    const byScope = (items: readonly RowItem[]): Part[] => {
+      const parts = new Map<Scope, Part & { owners: RichText[] }>();
+      for (const { owner, effect } of items) {
+        const part = effect === undefined ? bar : ownPart(effect);
+        const seen = parts.get(part.scope);
+        if (seen === undefined)
+          parts.set(part.scope, { ...part, owners: [owner] });
+        else seen.owners.push(owner);
+      }
+      return [...parts.values()];
+    };
+
+    return (row, items) => {
+      // [LAW:dataflow-not-control-flow] Each item is drawn under its own
+      // effect or the bar's. rich-js confines an effect to the colours of the
+      // items it names and has no complement, so "the bar's everywhere else" is
+      // the bar's confined to every item following it; with no item wearing
+      // its own, everywhere else is the whole row, and the bar's needs no
+      // confining.
+      const parts: readonly Part[] = items.some((i) => i.effect !== undefined)
+        ? byScope(items)
+        : [{ ...bar, owners: undefined }];
+      // `none` is the floor of the effect domain and has no catalogue entry:
+      // a part wearing it is drawn as it stands, and a row of such parts is
+      // still — no `Effected` at all, so it draws the bytes it always drew.
+      const moving = parts.filter(isMoving);
+      if (moving.length === 0) return STILL;
+      const rowKey = `${this.key}#${row}`;
+      return {
+        kind: "moving",
+        wrap: (strip, span) =>
+          new Effected(
+            strip,
+            together(
+              moving.map((part) => {
+                const effect = effectOf(rowKey, part, span);
+                return {
+                  t: part.t,
+                  effect:
+                    part.owners === undefined
+                      ? effect
+                      : confined(effect, ...part.owners),
+                };
+              }),
+            ),
+            { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL },
+          ),
+      };
+    };
   }
 }
 
@@ -180,11 +349,11 @@ export class EffectSessions {
   }
 
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // row's effect keeps rich-js's settled shares, so the row count is the size
-  // that grows.
-  getStats(): { sessions: number; rows: number } {
-    let rows = 0;
-    for (const session of this.sessions.values()) rows += session.rowCount;
-    return { sessions: this.sessions.size, rows };
+  // effect made for a row keeps rich-js's settled shares, so their count is the
+  // size that grows.
+  getStats(): { sessions: number; effects: number } {
+    let effects = 0;
+    for (const session of this.sessions.values()) effects += session.heldCount;
+    return { sessions: this.sessions.size, effects };
   }
 }

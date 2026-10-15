@@ -33,6 +33,7 @@ import {
   FOLLOW_BAR,
   isPlacementThemeName,
   parseSessionInt,
+  PLACEMENT_EFFECTS,
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -901,17 +902,21 @@ export interface SegmentDecl {
   readonly settings?: Readonly<Record<string, SettingDecl>>;
 }
 
-// The setting every placement has without its segment declaring it.
+// The settings every placement has without its segment declaring them.
 export const THEME_SETTING = "theme";
+export const EFFECT_SETTING = "effect";
+export const IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING] as const;
+export type ImpliedSetting = (typeof IMPLIED_SETTINGS)[number];
 
 // [LAW:single-enforcer] THE settings a segment's placements have: what its
-// definition declares, plus `theme`, which every placement has
-// (brandon-settings-menu-6c5) — so the loader's placement check, configure
-// mode's controls, the render's resolution, and save all read one set. The
-// definition's `palette:` is that setting's default for every copy; a
-// placement's own `settings.theme` overrides it for that copy alone. A
-// segment cannot declare `theme` itself (loader/settings.ts), so nothing here
-// shadows another.
+// definition declares, plus the IMPLIED_SETTINGS every placement has — `theme`
+// (brandon-settings-menu-6c5) and `effect` (brandon-effects-2gka.bm1) — so the
+// loader's placement check, configure mode's controls, the render's
+// resolution, and save all read one set. The definition's `palette:` is the
+// theme's default for every copy; every copy follows the bar's effect unless
+// it sets its own. A placement's own value overrides either for that copy
+// alone. A segment cannot declare an implied setting itself
+// (loader/settings.ts), so nothing here shadows another.
 export function settingsOf(
   seg: SegmentDecl,
 ): Readonly<Record<string, SettingDecl>> {
@@ -921,6 +926,14 @@ export function settingsOf(
       label: THEME_SETTING,
       domain: "theme",
       default: seg.palette ?? FOLLOW_BAR,
+    },
+    // [LAW:one-type-per-behavior] A closed list of names, so the word-list arm
+    // every authored setting uses: the loader's membership test, configure
+    // mode's picker and save need nothing of their own for it.
+    [EFFECT_SETTING]: {
+      label: EFFECT_SETTING,
+      domain: PLACEMENT_EFFECTS,
+      default: FOLLOW_BAR,
     },
   };
 }
@@ -1065,6 +1078,24 @@ export function parseSettingSpelling(
           : raw
       : raw;
   return inSettingDomain(decl, value) ? value : undefined;
+}
+
+// [LAW:single-enforcer] What one setting of a placement holds: the session's
+// pick through the setting's draft slot (SegmentNode.drafts) when the
+// declaration admits it, else the placement's own value, else the
+// declaration's default. `pick` reads a slot — the render through its draft
+// variable, the doctor through the session's state — so the bar and the
+// doctor cannot disagree about what a placement wears.
+export function placementSetting(
+  node: SegmentNode,
+  name: string,
+  decl: SettingDecl,
+  pick: (draft: DraftSlot) => string | null,
+): SettingValue {
+  const saved = node.settings?.[name] ?? decl.default;
+  const draft = node.drafts?.[name];
+  const raw = draft === undefined ? null : pick(draft);
+  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

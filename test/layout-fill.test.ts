@@ -68,7 +68,10 @@ function serialize(
   cells: readonly LaidCell[],
   options: BuildLineOptions,
 ): string[] {
-  return renderStripCells(resolveFill(cells, options), options).split("\n");
+  return renderStripCells(
+    resolveFill(cells, options).map((item) => item.owner),
+    options,
+  ).split("\n");
 }
 
 describe("a fill segment absorbs the row's leftover width", () => {
@@ -176,7 +179,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
   test("a row with no fill serializes its cells untouched", () => {
     const cells = [fixed("left"), fixed("right")];
     const out = resolveFill(cells, opts());
-    cells.forEach((c, i) => expect(out[i]).toBe(c.text));
+    cells.forEach((c, i) => expect(out[i]!.owner).toBe(c.text));
   });
 });
 

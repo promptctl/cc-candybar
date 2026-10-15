@@ -26,11 +26,7 @@ import type {
   SettingValue,
   SourceDefault,
 } from "../config/dsl-types.js";
-import {
-  parseArm,
-  parseSettingSpelling,
-  settingsOf,
-} from "../config/dsl-types.js";
+import { parseArm, placementSetting, settingsOf } from "../config/dsl-types.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import {
   themeDefaultsOf,
@@ -729,22 +725,17 @@ export function registerDslConfig(
     const declared = settingsOf(config.segments[node.name]!);
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(declared)) {
-      const saved = node.settings?.[name] ?? decl.default;
-      const draft = node.drafts?.[name];
       Object.defineProperty(out, name, {
         enumerable: true,
-        get:
-          draft === undefined
-            ? () => saved
-            : () =>
-                parseSettingSpelling(
-                  decl,
-                  String(store.read(draft.variable)),
-                ) ?? saved,
+        get: () =>
+          placementSetting(node, name, decl, (draft) =>
+            String(store.read(draft.variable)),
+          ),
       });
     }
-    // settingsOf always declares `theme`, over the theme domain, whose values
-    // are names — the one cast from the record to what it provably holds.
+    // settingsOf always declares `theme` and `effect`, over domains whose
+    // values are names (an effect's, the placement effects) — the one cast from
+    // the record to what it provably holds.
     return Object.freeze(out) as PlacementSettings;
   };
   const compileNode = <N extends LayoutNode>(
@@ -1412,9 +1403,16 @@ export function renderDsl(
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
     // [LAW:one-source-of-truth] A row's motion follows the row, not its line
     // number, so a menu opening over it does not move it onto another's.
-    .map(({ line, row }) =>
-      renderStripCells(resolveFill(line.cells, opts), opts, rowMotion(row)),
-    )
+    // Its items are what the strip stamps their cells with, each beside the
+    // effect its cell demands.
+    .map(({ line, row }) => {
+      const items = resolveFill(line.cells, opts);
+      return renderStripCells(
+        items.map((item) => item.owner),
+        opts,
+        rowMotion(row, items),
+      );
+    })
     .join("\n");
   for (const message of shortfalls)
     onRenderWarning?.({ kind: "band-floor", message });

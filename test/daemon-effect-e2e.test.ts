@@ -1,6 +1,7 @@
 // [LAW:nothing-unseen] brandon-effects-2gka.d2i, measured on a REAL daemon: the
 // render event — its `render sid=…` log line — names the effect the bar wore,
-// the effect's own clock, and whether each row's effect was made or reused.
+// the effect's own clock, and whether each row's effect was made or reused —
+// and (brandon-effects-2gka.bm1) each placement wearing its own, on its clock.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -31,7 +32,7 @@ describe("a daemon render's event names the effect it wore", () => {
     config = path.join(projectDir, "shimmer.json5");
     writeFileSync(
       config,
-      `{ globals: { effect: "shimmer" }, segments: { a: { template: 'steady' } }, root: { h: ['a'] } }`,
+      `{ globals: { effect: "shimmer" }, segments: { a: { template: 'steady' }, b: { template: 'own' } }, root: { h: ['a', { seg: 'b', settings: { effect: 'pulse' } }] } }`,
     );
     daemon = await spawnDaemonWithEnv(prepared.env);
   });
@@ -57,7 +58,10 @@ describe("a daemon render's event names the effect it wore", () => {
         t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
         made: Number(l.match(/ effectRows=(\d+)made\//)?.[1]),
         reused: Number(l.match(/\/(\d+)reused /)?.[1]),
+        own: l.match(/ effectOwn=(\S+) /)?.[1],
       }));
+    const ownT = (own: string | undefined): number =>
+      Number(own?.match(/^b:pulse@(\d+\.\d{3})$/)?.[1]);
 
     // A request the helper retried after a reply timeout is logged once per
     // attempt (the daemon finishes the attempt it was too slow to answer). A
@@ -72,5 +76,9 @@ describe("a daemon render's event names the effect it wore", () => {
     expect(last.effect).toBe("shimmer");
     expect(last.t).toBeGreaterThan(0);
     expect(last).toMatchObject({ made: 0, reused: first.made });
+    // The placement's pulse came into force with the first render too, and
+    // keeps its own clock.
+    expect(ownT(first.own)).toBe(0);
+    expect(ownT(last.own)).toBeGreaterThan(0);
   });
 });

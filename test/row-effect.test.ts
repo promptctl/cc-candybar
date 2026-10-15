@@ -211,16 +211,16 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion("shimmer", when);
       for (let row = 0; row < rows; row++) {
-        const moving = motion(`flow.own#${row}`);
+        const moving = motion(`flow.own#${row}`, []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
         moving.wrap(new RichText("x"), 10);
       }
     };
     // A menu opens: five rows. It closes: one row, whose effect is reused.
     draw(at(0), 5);
-    expect(sessions.getStats()).toEqual({ sessions: 1, rows: 5 });
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 5 });
     draw(at(1), 1);
-    expect(sessions.getStats()).toEqual({ sessions: 1, rows: 1 });
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 1 });
     expect(effects.lastFrame()).toMatchObject({ made: 0, reused: 1 });
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);

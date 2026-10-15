@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
@@ -102,6 +103,11 @@ export type StatusLineFacts =
   | { readonly kind: "not-an-object"; readonly value: unknown }
   | { readonly kind: "present"; readonly refreshInterval: unknown };
 
+export interface PlacementEffectFact {
+  readonly placement: string;
+  readonly effect: LoopName;
+}
+
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
   readonly config: ConfigFacts;
@@ -110,6 +116,10 @@ export interface DoctorFacts {
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
   readonly effect: EffectSelection;
+  // Each placement of the session's preset that wears a moving effect of its
+  // own (brandon-effects-2gka.bm1) — saved, or the session's unsaved pick —
+  // which moves whatever the bar's effect is.
+  readonly placementEffects: readonly PlacementEffectFact[];
   // The session's Claude Code settings file and the entries read from it — a
   // second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
@@ -324,18 +334,24 @@ export const EFFECT_REFRESH_INTERVAL = 1;
 // an effect's frames land seconds apart and an idle session stops moving.
 // `cc-candybar install` does not write it — a render a second costs every
 // session whether or not anything animates — so the doctor asks for it exactly
-// when the bar wears an effect. A rule counts: it can turn one on at any render.
+// when anything on the bar moves: the bar's effect, or a placement's own. A rule
+// counts: it can turn one on at any render.
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
-  probe: ({ effect, claudeSettings }) => {
-    if (effect.kind === "decided" && effect.value === EFFECT_FLOOR) {
-      return { ok: true };
-    }
-    const wearing =
-      effect.kind === "decided"
-        ? `the bar wears the ${effect.name} effect`
-        : "a globals.effect rule can give the bar an effect";
+  probe: ({ effect, placementEffects, claudeSettings }) => {
+    const moving = [
+      ...(effect.kind !== "decided"
+        ? ["a globals.effect rule can give the bar an effect"]
+        : effect.value === EFFECT_FLOOR
+          ? []
+          : [`the bar wears the ${effect.name} effect`]),
+      ...placementEffects.map(
+        ({ placement, effect }) => `${placement} wears the ${effect} effect`,
+      ),
+    ];
+    if (moving.length === 0) return { ok: true };
+    const wearing = moving.join(" and ");
     const { path, statusLine } = claudeSettings;
     switch (statusLine.kind) {
       case "absent":

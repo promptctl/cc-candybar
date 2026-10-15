@@ -27,7 +27,7 @@ import {
   placementId,
   settingSpelling,
   settingsOf,
-  THEME_SETTING,
+  IMPLIED_SETTINGS,
   walkNodes,
   type ContainerNode,
   type DisclosureRef,
@@ -453,9 +453,10 @@ export function arrangedSegment(name: string): string | undefined {
 // preset — the configure member it shows under — is on the node.
 //
 // The label holds its placement's cell in the names view, so it wears that
-// placement's theme: the definition's default on the declaration, the
-// placement's own value and its unsaved pick on the node — the same draft
-// slot the placement reads, so the two cannot show different themes.
+// placement's theme and effect: the definition's default theme on the
+// declaration, the placement's own values and its unsaved picks on the node —
+// the same draft slots the placement reads, so the two cannot show different
+// ones.
 function labelChrome(
   child: SegmentNode,
   decl: SegmentDecl,
@@ -469,7 +470,15 @@ function labelChrome(
     template: `{{ "${escapeTemplateLiteral(id)}" }}`,
     ...(decl.palette !== undefined && { palette: decl.palette }),
   };
-  const theme = child.settings?.[THEME_SETTING];
+  // [LAW:one-source-of-truth] Every implied setting rides across — the theme
+  // and the effect the placement wears, saved and unsaved — so a name moves as
+  // its placement would.
+  const settings = Object.fromEntries(
+    IMPLIED_SETTINGS.flatMap((setting) => {
+      const value = child.settings?.[setting];
+      return value === undefined ? [] : [[setting, value]];
+    }),
+  );
   return {
     ...disclosureNode(
       name,
@@ -478,8 +487,10 @@ function labelChrome(
       "drop",
       shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`),
     ),
-    ...(theme !== undefined && { settings: { [THEME_SETTING]: theme } }),
-    drafts: { [THEME_SETTING]: configure.drafts[THEME_SETTING]! },
+    ...(Object.keys(settings).length > 0 && { settings }),
+    drafts: Object.fromEntries(
+      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]!]),
+    ),
   };
 }
 

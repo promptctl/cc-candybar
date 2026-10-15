@@ -18,6 +18,8 @@ import { applyFix, gatherFacts, type DoctorEdge } from "../src/doctor/edge";
 import type { ClientHints } from "../src/daemon/protocol";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
+import { placementDraftKey } from "../src/config/edit-chrome";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 
 const FIX: Fix = {
   kind: "claude-settings",
@@ -261,6 +263,40 @@ describe("gatherFacts", () => {
       kind: "expression",
       source: rule,
     });
+  });
+
+  // A placement's own effect, read as the render reads it: the session's
+  // unsaved pick over the file's value, `bar` and `none` moving nothing.
+  test("placement effects are each placement's own, the session's pick over the file's", () => {
+    const absent = configDir("absent");
+    const edge: DoctorEdge = {
+      ...NO_TMUX,
+      loadConfig: loadsConfig(
+        parseAndValidate(
+          "/tmp/proj/.cc-candybar.json5",
+          `{
+            segments: { a: { template: "a" } },
+            root: { h: ["a", { seg: "a", id: "b", settings: { effect: "pulse" } }] },
+          }`,
+        ),
+      ),
+    };
+    const pick =
+      (picks: Record<string, string>) =>
+      (key: string): string | null =>
+        picks[key] ?? null;
+    const draft = (id: string) => placementDraftKey("default", id, "effect");
+    const effectsOf = (picks: Record<string, string>) =>
+      [...factsIn(absent, null, edge, pick(picks)).placementEffects].sort(
+        (x, y) => x.placement.localeCompare(y.placement),
+      );
+    expect(effectsOf({})).toEqual([{ placement: "b", effect: "pulse" }]);
+    expect(effectsOf({ [draft("a")]: "shimmer" })).toEqual([
+      { placement: "a", effect: "shimmer" },
+      { placement: "b", effect: "pulse" },
+    ]);
+    expect(effectsOf({ [draft("b")]: "bar" })).toEqual([]);
+    expect(effectsOf({ [draft("b")]: "none" })).toEqual([]);
   });
 
   test("a missing, blank, or env-less settings file is an empty env", () => {

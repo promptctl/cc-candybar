@@ -634,25 +634,33 @@ The segment's `when`, `bg:` and `fg:` read the same `.settings` as its
 template. No variable may be named `settings` or `settings.<x>` — inside a
 segment that name is the placement's.
 
-Every placement also has one setting its segment never declares: `theme`,
+Every placement also has two settings its segment never declares. `theme` is
 the palette that placement renders in. It is `"bar"` (the bar's own theme,
 style included) or an installed theme name, which pins that placement to that
 theme whatever the bar's theme and style are. A segment's `palette:` is the
 default for every placement of it; a placement's own `theme` overrides it for
-that placement alone, `"bar"` included. A template reads it as
-`.settings.theme` like any other setting.
+that placement alone, `"bar"` included. `effect` is the looping effect that
+placement's cell wears: `"bar"` (the default: whatever `globals.effect` puts on
+the bar), `"none"`, or a catalogue loop (`shimmer`, `pulse`, `sparkle`,
+`wheel`). An effect of its own replaces the bar's on that placement's cell and
+the seams beside it, with its own clock starting when it comes into force;
+every other cell of the row moves as the bar's effect moves it. A template
+reads either as `.settings.theme` / `.settings.effect` like any other setting.
 
 ```json5 check:pass
 {
   segments: {
     modelTag: { template: "{{ .model.display_name }}", palette: "nord" },
   },
-  root: { h: ["modelTag", { seg: "modelTag", id: "barTag", settings: { theme: "bar" } }] },
+  root: { h: [
+    "modelTag",
+    { seg: "modelTag", id: "barTag", settings: { theme: "bar", effect: "pulse" } },
+  ] },
 }
 ```
 
 A setting is also changeable from the bar. In edit mode every placement
-carries a `⚙️` after its name (every placement has `theme`); clicking it
+carries a `⚙️` after its name (every placement has `theme` and `effect`); clicking it
 configures that one placement: the `+`/`-` chrome goes away and one control
 per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
 list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel
@@ -1301,7 +1309,7 @@ placement "modelTag" of segment "modelTag" sets "length" to "tiny", but it must 
 ```
 
 ```error
-Template reads ".settings.icon", but segment "modelTag" has no setting "icon" (it has: theme)
+Template reads ".settings.icon", but segment "modelTag" has no setting "icon" (it has: theme, effect)
 ```
 
 ### A segment declaring `theme`
