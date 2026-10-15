@@ -46,7 +46,7 @@ These are the existing pieces each part of the proposal touches. They are facts 
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
 - **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
 - **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Today an option in the theme picker is painted in that theme's own background and primary colour, and an option in the style picker is painted in the base theme with that style applied. Every other picker's options wear the band's colours.
-- **The gear (`[🔧]`) opening a separate menu.** This is how configure mode works today: `🔧` on a placement opens a body of that placement's settings.
+- **The gear (`[⚙️]`) opening a separate menu.** This is how configure mode works today: `🔧` on a placement opens a body of that placement's settings.
 - **`[Done]`.** Edit mode's `✓ done` / `✓ save` is the nearest element. Every other open body closes with `✕`.
 - **`(random)`.** No element today picks a random value.
 - **Moving style and variation into the theme picker.** Today theme, style, endcaps and variation are four sibling rings in the `🎨 look` tab.

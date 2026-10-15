@@ -42,17 +42,22 @@ const lines = sourceFiles(SRC).flatMap((file) =>
     })),
 );
 
+const matches = (pattern: RegExp, text: string): readonly string[] =>
+  [...text.matchAll(pattern)].map(([glyph]) => glyph);
+
 const scan = (pattern: RegExp): readonly Found[] =>
   lines.flatMap(({ where, text }) =>
-    [...text.matchAll(pattern)].map(([glyph]) => ({ where, glyph })),
+    matches(pattern, text).map((glyph) => ({ where, glyph })),
   );
 
 const pictographs = scan(/\p{Extended_Pictographic}/gu).filter(
   ({ glyph }) => glyph.codePointAt(0)! >= SUPPLEMENTARY,
 );
 
-// Each VS16 with the glyph it selects, so the label names the glyph.
-const selected = scan(/.\uFE0F/gu);
+// Each VS16 with the glyph it selects, so the label names the glyph; one
+// leading its line selects nothing on it and is named itself.
+const VS16 = /.?\uFE0F/gu;
+const selected = scan(VS16);
 
 const label = ({ where, glyph }: Found): string =>
   `${where} U+${glyph.codePointAt(0)!.toString(16).toUpperCase()} ${glyph}`;
@@ -80,6 +85,14 @@ describe("pictographs above U+1F000 in src/", () => {
 });
 
 describe("variation selectors in src/", () => {
+  test("the scan sees a selected glyph", () => {
+    // An empty scan passes the check below; src/ holds no selector to find,
+    // so the pattern is held to the gear this guard was written for.
+    const gear = String.fromCodePoint(0x2699, 0xfe0f);
+    expect(matches(VS16, `a ${gear} b`)).toEqual([gear]);
+    expect(matches(VS16, gear.slice(1))).toEqual([gear.slice(1)]);
+  });
+
   test("no glyph is two cells only through VS16", () => {
     expect(selected.map(label)).toEqual([]);
   });

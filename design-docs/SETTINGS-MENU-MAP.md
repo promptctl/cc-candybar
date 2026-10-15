@@ -37,7 +37,7 @@ brandon-edit-mode-8ps (#251) put `✎ done` on a row of its own above the bar, d
 
 ```
 ✓ save  ↩ cancel  ↺ reset layout  ☐ live
-🍫 | ✚ | host ⚙✖ | ✚ | directory ⚙✖ | ✚ | gitaculous ⚙✖ | ✚
+🍫 | ✚ | ✖ host🔧 | ✚ | ✖ directory🔧 | ✚ | ✖ gitaculous🔧 | ✚
 ```
 
 - **Save** writes the session's unsaved settings (a placement's configure-mode values among them; layout changes are already written) and leaves edit mode. With nothing to keep it reads `✓ done`, and cancel is hidden.
@@ -146,7 +146,7 @@ Added by me, at Brandon's request to fill out the list:
 
 - The drift marker is the reset. `↺` appears on a control only when it has a session draft or a config-file value, which are what the reset clears. A value the active preset pins shows none, since a reset could not move it. This narrows brandon-menu-ia-q30.nk8, which counts preset-set values as drift.
 - Clicking `directory` copies the full path, which the fish-abbreviated text hides, through the bundled `copyDir` action.
-- Placed outside the menu: the context ceiling widget (xta.asv) and the lit widget (3xo.btb) are segments added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `⚙` beside each cell while arranging.
+- Placed outside the menu: the context ceiling widget (xta.asv) and the lit widget (3xo.btb) are segments added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `🔧` beside each cell while arranging.
 
 ## Tickets
 
