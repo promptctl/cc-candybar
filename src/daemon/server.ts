@@ -883,6 +883,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
         renderCacheSize: renderCache.size,
+        effectCache: effectSessions.getStats(),
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),

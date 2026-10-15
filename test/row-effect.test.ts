@@ -7,6 +7,7 @@ import {
   ColorSpec,
   DEFAULT_TERMINAL_THEME,
   EFFECT_CATALOGUE,
+  RichText,
 } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
@@ -15,7 +16,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { SessionEffects } from "../src/render/effect";
+import { EffectSessions, SessionEffects } from "../src/render/effect";
 import {
   decideEffectName,
   EFFECT_NAMES,
@@ -202,5 +203,27 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     } finally {
       dispose();
     }
+  });
+
+  test("a session holds the effects of the rows its latest render drew, and no others", () => {
+    const sessions = new EffectSessions();
+    const effects = sessions.of("s");
+    const draw = (when: Instant, rows: number): void => {
+      const motion = effects.motion("shimmer", when);
+      for (let row = 0; row < rows; row++) {
+        const moving = motion(row);
+        if (moving.kind !== "moving") throw new Error("shimmer is still");
+        moving.wrap(new RichText("x"), 10);
+      }
+    };
+    // A menu opens: five rows. It closes: one row, whose effect is reused.
+    draw(at(0), 5);
+    expect(sessions.getStats()).toEqual({ sessions: 1, rows: 5 });
+    draw(at(1), 1);
+    expect(sessions.getStats()).toEqual({ sessions: 1, rows: 1 });
+    expect(effects.lastFrame()).toMatchObject({ made: 0, reused: 1 });
+    // The menu opens again: the rows it released are made afresh.
+    draw(at(2), 5);
+    expect(effects.lastFrame()).toMatchObject({ made: 4, reused: 1 });
   });
 });

@@ -44,6 +44,7 @@ import { SessionState } from "../daemon/session-state.js";
 import { settingCounts } from "../daemon/setting-drafts.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { renderDsl } from "../dsl/render.js";
+import { SessionEffects } from "../render/effect.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug } from "../utils/logger.js";
@@ -131,6 +132,9 @@ async function renderFrames(): Promise<void> {
         `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`,
     );
 
+    // The session's effect memory, held across the frames as the daemon holds
+    // it across a session's requests, so a `globals.effect` moves frame to frame.
+    const effects = new SessionEffects(sessionId);
     for (let frame = 0; frame < FRAMES; frame++) {
       // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
       // instant, sampled here as the daemon samples it per request.
@@ -161,7 +165,7 @@ async function renderFrames(): Promise<void> {
         at,
         renderOptionsOf(effective, width),
         { onRenderWarning: ({ message }) => warn(message) },
-        renderSelectionOf(effective),
+        { ...renderSelectionOf(effective), effects },
       );
       process.stdout.write(
         line

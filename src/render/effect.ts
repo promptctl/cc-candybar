@@ -30,6 +30,12 @@ export type RowMotion =
 
 export const STILL: RowMotion = { kind: "still" };
 
+// The effect one row was drawn under, and the span it was made for.
+interface RowEffect {
+  readonly span: number;
+  readonly effect: Effect;
+}
+
 // One render's effect, as its event reports it.
 export interface EffectFrame {
   readonly effect: EffectName;
@@ -77,12 +83,12 @@ export class SessionEffects {
     readonly name: EffectName;
     readonly since: Instant;
   } | null = null;
-  // The effect made for each row, with the span it was made for. A row whose
-  // span changes gets a new one; the effect's clock does not restart.
-  private readonly rows = new Map<
-    number,
-    { readonly span: number; readonly effect: Effect }
-  >();
+  // The effect made for each row the latest render drew, with the span it was
+  // made for. A row whose span changes gets a new one; the effect's clock does
+  // not restart. Each render starts an empty map and keeps only the rows it
+  // draws, so a row that stopped being drawn (a menu closed) takes its effect
+  // and its settled shares with it.
+  private rows = new Map<number, RowEffect>();
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
@@ -100,6 +106,11 @@ export class SessionEffects {
     return this.frame;
   }
 
+  // The rows whose effect this session holds: the rows its latest render drew.
+  get rowCount(): number {
+    return this.rows.size;
+  }
+
   /**
    * The motion of each row of a render drawn at `at` wearing `name`. Records
    * `name` coming into force when it differs from the last render's, so every
@@ -111,6 +122,9 @@ export class SessionEffects {
       this.inForce = { name, since: at };
       this.rows.clear();
     }
+    const known = this.rows;
+    const drawn = new Map<number, RowEffect>();
+    this.rows = drawn;
     const t = at - this.inForce.since;
     const frame = { effect: name, t, made: 0, reused: 0 };
     this.frame = frame;
@@ -123,13 +137,13 @@ export class SessionEffects {
       kind: "moving",
       wrap: (strip, span) => {
         const rowKey = `${this.key}#${row}`;
-        const known = this.rows.get(row);
-        const reuse = known?.span === span;
+        const last = known.get(row);
+        const reuse = last?.span === span;
         const effect = reuse
-          ? known.effect
+          ? last.effect
           : make({ span, z: noiseOffset(rowKey) * NOISE_DEPTH });
         frame[reuse ? "reused" : "made"]++;
-        this.rows.set(row, { span, effect });
+        drawn.set(row, { span, effect });
         return new Effected(strip, effect, {
           t,
           key: rowKey,
@@ -163,5 +177,14 @@ export class EffectSessions {
       this.sessions.delete(oldest);
     }
     return known;
+  }
+
+  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
+  // row's effect keeps rich-js's settled shares, so the row count is the size
+  // that grows.
+  getStats(): { sessions: number; rows: number } {
+    let rows = 0;
+    for (const session of this.sessions.values()) rows += session.rowCount;
+    return { sessions: this.sessions.size, rows };
   }
 }
