@@ -59,31 +59,39 @@ export interface RowItem {
 
 // What a frame is drawn from. A placement appears only between two frames
 // drawn from the same config — one object per load, so a reload is another —
-// the same preset, and the same revision of the session's state
+// the same preset, the same revision of the session's state
 // (`SessionStateReader.revision`), so whatever a write to it reveals — a
-// click opening a menu, leaving arrange mode, an undo — shows at once.
+// click opening a menu, leaving arrange mode, an undo — shows at once, and the
+// same width and palette, which a cell held from the last frame was sized and
+// coloured for.
 export interface FrameSource {
   readonly config: object;
   readonly preset: string;
   readonly revision: number;
+  readonly width: number;
+  readonly palette: object;
 }
 
 // What one render asks of its transitions: whether placements pass through
-// them at all (globals.transitions), what the frame is drawn from, and what a
-// placement that leaves replays of its last drawing.
-export interface FrameFades<Lines> {
+// them at all (globals.transitions), what the frame is drawn from, what a
+// placement drew of its own among the lines it returned, and how a placement
+// that leaves replays one of those rows.
+export interface FrameFades<Line> {
   readonly transitions: boolean;
   readonly source: FrameSource;
-  readonly hold: (lines: Lines) => Lines;
+  readonly drawing: (
+    id: string,
+    lines: readonly Line[],
+  ) => Drawing<Line> | null;
+  readonly hold: (line: Line) => Line;
 }
 
-// [LAW:types-are-the-program] What a placement drew in one frame, as the walk
-// reports it: its lines, which this module only keeps and hands back, the
-// width of the first row its cells sit on, and the ground it fades in from and
-// dissolves into (`CellPlacement.ground`).
-export interface Drawing<Lines> {
-  readonly lines: Lines;
-  readonly span: number;
+// [LAW:types-are-the-program] What a placement drew in one frame, or nothing
+// when it laid no cell: its own rows — never a menu it dropped or a body it
+// opened, which go at once — and the ground it fades in from and dissolves
+// into (`CellPlacement.ground`).
+export interface Drawing<Line> {
+  readonly own: readonly Line[];
   readonly ground: ColorRgba;
 }
 
@@ -92,12 +100,12 @@ export interface Drawing<Lines> {
 // drawn. What the frame drew becomes what the next one compares against only
 // then, so a render that throws part-way leaves the last drawn frame in place
 // rather than a half-recorded one.
-export interface FrameMotion<Lines> {
-  // The walk reports each placement with what it drew, or nothing, and draws
-  // what comes back: what it drew, or — while it leaves the bar — what it held
-  // of its last drawing, not drawn again (brandon-effects-2gka.p04: the payload
-  // that hides a placement is often one its template errors on).
-  readonly placed: (id: string, drawing: Drawing<Lines> | null) => Lines | null;
+export interface FrameMotion<Line> {
+  // The walk reports each placement with the lines it returned and draws what
+  // comes back: those lines, led — while it leaves the bar — by the rows it
+  // held of its last drawing, not drawn again (brandon-effects-2gka.p04: the
+  // payload that hides a placement is often one its template errors on).
+  readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
   readonly row: (row: string, items: readonly RowItem[]) => RowMotion;
   readonly drawn: () => void;
 }
@@ -179,16 +187,16 @@ interface Passage {
 
 // A placement the frame drew — for one leaving, what it held of its last
 // drawing — and the transition it is passing through, or none.
-interface Placed<Lines> {
-  readonly drawing: Drawing<Lines>;
+interface Placed<Line> {
+  readonly drawing: Drawing<Line>;
   readonly passage: Passage | null;
 }
 
 // The last frame, as the next one compares against it: what it was drawn from,
 // and each placement it drew.
-interface DrawnFrame<Lines> {
+interface DrawnFrame<Line> {
   readonly source: FrameSource;
-  readonly placements: Map<string, Placed<Lines>>;
+  readonly placements: Map<string, Placed<Line>>;
 }
 
 // [LAW:types-are-the-program] Whose effect a part of a row is: the bar's, or
@@ -274,7 +282,7 @@ const NOISE_DEPTH = 4096;
  * keeps the session (the daemon, per session id; a compile-only render, for the
  * one render it draws). Its only writer is `motion`, called once per render.
  */
-export class SessionEffects<Lines> {
+export class SessionEffects<Line> {
   // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
@@ -294,7 +302,7 @@ export class SessionEffects<Lines> {
   // The last frame drawn, which a placement's appearing and leaving are
   // measured against when the next is drawn from the same source; none before
   // the session's first.
-  private drawn: DrawnFrame<Lines> | null = null;
+  private drawn: DrawnFrame<Line> | null = null;
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
@@ -339,8 +347,8 @@ export class SessionEffects<Lines> {
   motion(
     name: EffectName,
     at: Instant,
-    fades: FrameFades<Lines>,
-  ): FrameMotion<Lines> {
+    fades: FrameFades<Line>,
+  ): FrameMotion<Line> {
     const inForce =
       this.inForce?.name === name ? this.inForce : { name, since: at };
     const bar: Omit<Part, "owners"> = {
@@ -361,11 +369,13 @@ export class SessionEffects<Lines> {
       : last !== null &&
           last.source.config === fades.source.config &&
           last.source.preset === fades.source.preset &&
-          last.source.revision === fades.source.revision
+          last.source.revision === fades.source.revision &&
+          last.source.width === fades.source.width &&
+          last.source.palette === fades.source.palette
         ? "compared"
         : "fresh";
     const before = basis === "compared" ? last!.placements : null;
-    const placed = new Map<string, Placed<Lines>>();
+    const placed = new Map<string, Placed<Line>>();
     const fading: PassageFrame[] = [];
     const leaving: PassageFrame[] = [];
     const frame = {
@@ -385,10 +395,13 @@ export class SessionEffects<Lines> {
     const begin = (
       transition: TransitionName,
       id: string,
-      { span, ground }: Drawing<Lines>,
+      { ground }: Drawing<Line>,
     ): Passage => {
       const made = EFFECT_CATALOGUE.transitions[transition]({
-        span,
+        // [LAW:types-are-the-program] exception: rich-js's transitions take
+        // the loops' `EffectTarget` and read only its `z` (`fadeIn`,
+        // `dissolveOut`); no width is measured for them, so none is claimed.
+        span: 0,
         z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
       });
       return {
@@ -412,9 +425,9 @@ export class SessionEffects<Lines> {
     // over, when it is gone.
     const shown = (
       id: string,
-      drawing: Drawing<Lines>,
-      last: Placed<Lines> | undefined,
-    ): Placed<Lines> => ({
+      drawing: Drawing<Line>,
+      last: Placed<Line> | undefined,
+    ): Placed<Line> => ({
       drawing,
       passage:
         before === null
@@ -427,31 +440,31 @@ export class SessionEffects<Lines> {
     });
     const gone = (
       id: string,
-      last: Placed<Lines> | undefined,
-    ): Placed<Lines> | undefined => {
+      last: Placed<Line> | undefined,
+    ): Placed<Line> | undefined => {
       if (last === undefined) return undefined;
       if (last.passage?.name === "dissolve")
         return over(last.passage) ? undefined : last;
-      const held = {
-        ...last.drawing,
-        lines: fades.hold(last.drawing.lines),
-      };
+      const held = { ...last.drawing, own: last.drawing.own.map(fades.hold) };
       return { drawing: held, passage: begin("dissolve", id, held) };
     };
-    const reached = (
-      id: string,
-      drawing: Drawing<Lines> | null,
-    ): Lines | null => {
+    // [LAW:single-enforcer] One placement, one passage per frame: the walk
+    // reaches each placement once, and an id reached twice would settle two
+    // passages under one name, the second overwriting the first.
+    const reached = (id: string, lines: readonly Line[]): readonly Line[] => {
+      if (placed.has(id))
+        throw new Error(`placement "${id}" was reached twice in one frame`);
       const last = before?.get(id);
+      const drawing = fades.drawing(id, lines);
       const now = drawing === null ? gone(id, last) : shown(id, drawing, last);
-      if (now === undefined) return null;
+      if (now === undefined) return lines;
       placed.set(id, now);
       if (now.passage !== null)
         (now.passage.name === "fade" ? fading : leaving).push({
           placement: id,
           t: at - now.passage.since,
         });
-      return now.drawing.lines;
+      return drawing === null ? [...now.drawing.own, ...lines] : lines;
     };
 
     const ownPart = (
@@ -518,11 +531,11 @@ export class SessionEffects<Lines> {
       items: readonly RowItem[],
     ): Array<{ t: number; effect: Effect }> => {
       const byPlacement = new Map<string, RichText[]>();
-      for (const { owner, placement } of items)
-        byPlacement.set(placement.id, [
-          ...(byPlacement.get(placement.id) ?? []),
-          owner,
-        ]);
+      for (const { owner, placement } of items) {
+        const mine = byPlacement.get(placement.id);
+        if (mine === undefined) byPlacement.set(placement.id, [owner]);
+        else mine.push(owner);
+      }
       return [...byPlacement].flatMap(([id, owners]) => {
         const passage = placed.get(id)?.passage ?? null;
         return passage === null
@@ -580,7 +593,9 @@ export class SessionEffects<Lines> {
     };
 
     return {
-      placed: reached,
+      // [LAW:dataflow-not-control-flow] With transitions off nothing is
+      // compared or kept, so every placement draws exactly what it returned.
+      placed: basis === "off" ? (_id, lines) => lines : reached,
       row,
       drawn: () => {
         this.inForce = inForce;
@@ -605,14 +620,14 @@ const MAX_SESSIONS = 256;
  * single owner, hard cap, least-recently-rendered evicted first. A session whose
  * memory was evicted (or a restarted daemon) starts its effect again at t = 0.
  */
-export class EffectSessions<Lines> {
-  private readonly sessions = new Map<string, SessionEffects<Lines>>();
+export class EffectSessions<Line> {
+  private readonly sessions = new Map<string, SessionEffects<Line>>();
 
   constructor(private readonly maxSessions: number = MAX_SESSIONS) {}
 
-  of(sessionId: string): SessionEffects<Lines> {
+  of(sessionId: string): SessionEffects<Line> {
     const known =
-      this.sessions.get(sessionId) ?? new SessionEffects<Lines>(sessionId);
+      this.sessions.get(sessionId) ?? new SessionEffects<Line>(sessionId);
     this.sessions.delete(sessionId);
     this.sessions.set(sessionId, known);
     for (const oldest of this.sessions.keys()) {

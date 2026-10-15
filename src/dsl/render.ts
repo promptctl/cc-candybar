@@ -128,7 +128,7 @@ import {
 // capabilities; it never re-switches on node kind.
 import {
   drawingOf,
-  heldLines,
+  heldLine,
   layoutRows,
   nodeType,
   rowIdentities,
@@ -138,6 +138,7 @@ import {
   type CompiledSegments,
   type CompiledSegmentNode,
   type PlacementSettings,
+  type RenderedLine,
   type RenderedLines,
   type NodeCompileCtx,
   type NodeRenderCtx,
@@ -969,7 +970,7 @@ export interface RenderSelection {
   // its last frame drew. The daemon hands each session its own; an omitting
   // caller draws with a fresh one, so its render is the effect's calm first
   // frame and nothing in it fades in or dissolves out.
-  readonly effects?: SessionEffects<RenderedLines>;
+  readonly effects?: SessionEffects<RenderedLine>;
   // Whether a placement the last frame did not draw fades in, and one it drew
   // and this frame does not dissolves out: the resolved `transitions` setting
   // (effectiveTransitions over staged/session/globals).
@@ -1175,7 +1176,7 @@ export function renderDsl(
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
   const motion = (
-    selection?.effects ?? new SessionEffects<RenderedLines>("")
+    selection?.effects ?? new SessionEffects<RenderedLine>("")
   ).motion(effect.value, at, {
     // [LAW:one-source-of-truth] An omitting caller fades as the config
     // declares, the same true default the decor above honours.
@@ -1186,8 +1187,11 @@ export function renderDsl(
       config: compiled,
       preset,
       revision: registry.stateRevision(),
+      width: opts.width,
+      palette,
     },
-    hold: heldLines,
+    drawing: drawingOf,
+    hold: heldLine,
   });
 
   perSegmentSink?.clear();
@@ -1343,7 +1347,7 @@ export function renderDsl(
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
-      placed: (id, lines) => motion.placed(id, drawingOf(id, lines)) ?? [],
+      placed: motion.placed,
     };
     return nodeType(node.kind).render(node, ctx);
   };

@@ -4,7 +4,7 @@
 // vanishing: the bar replays what it last drew — its own rows, nothing to
 // click — under rich-js's dissolve, never evaluating it again, keeps its width
 // until the dissolve is over, then closes up in one step. A write to the
-// session's state ends every dissolve in flight.
+// session's state, the width or the palette ends every dissolve in flight.
 
 import { decodeAnsi } from "@promptctl/rich-js";
 
@@ -14,7 +14,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import type { RenderedLines } from "../src/dsl/node-registry";
+import type { RenderedLine } from "../src/dsl/node-registry";
 import { SessionEffects } from "../src/render/effect";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { decideEffectName, type EffectName } from "../src/themes";
@@ -61,6 +61,8 @@ const config = (gated: "segment" | "container"): ValidatedConfig =>
 interface Frame {
   readonly shown: boolean;
   readonly when: Instant;
+  readonly width?: number;
+  readonly dark?: boolean;
 }
 
 // A renderer over one load of `cfg`, as a render cache entry's frames are
@@ -80,8 +82,8 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   return {
     session,
     render: (
-      { shown, when }: Frame,
-      effects: SessionEffects<RenderedLines>,
+      { shown, when, width = 160, dark = false }: Frame,
+      effects: SessionEffects<RenderedLine>,
       transitions: boolean,
       bar: EffectName = "none",
     ): string =>
@@ -90,9 +92,9 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         compiled,
         store,
         registry,
-        { session_id: "s", shown },
+        { session_id: "s", shown, dark },
         when,
-        opts,
+        { ...opts, width },
         undefined,
         { effect: decideEffectName(bar), effects, transitions },
       ),
@@ -138,8 +140,8 @@ describe.each(["segment", "container"] as const)(
         const on = renderer(ROW);
         const off = renderer(ROW);
         try {
-          const onFx = new SessionEffects<RenderedLines>("s");
-          const offFx = new SessionEffects<RenderedLines>("s");
+          const onFx = new SessionEffects<RenderedLine>("s");
+          const offFx = new SessionEffects<RenderedLine>("s");
           const both = (frame: Frame) => ({
             on: on.render(frame, onFx, true, bar),
             off: off.render(frame, offFx, false, bar),
@@ -191,7 +193,7 @@ describe.each(["segment", "container"] as const)(
     test("it offers nothing to click while it leaves, and is never evaluated again", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLines>("s");
+        const fx = new SessionEffects<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         expect(linkUrls(on.render(before, fx, true))).toContain(LINK);
         for (const since of [0, 1, 15, 29]) {
@@ -209,7 +211,7 @@ describe.each(["segment", "container"] as const)(
     test("its event names it leaving on its dissolve's clock", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLines>("s");
+        const fx = new SessionEffects<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         on.render(before, fx, true);
         expect(fx.lastFrame()).toMatchObject({ fades: [], leaves: [] });
@@ -231,7 +233,7 @@ describe.each(["segment", "container"] as const)(
     test("drawn again before its dissolve is over, it stops leaving and fades in", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLines>("s");
+        const fx = new SessionEffects<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         on.render(before, fx, true);
         on.render(leaving(0), fx, true);
@@ -269,7 +271,7 @@ test("it holds its own row only: a body it opened goes at once", () => {
   try {
     // Opened before the frames compared below, so none of them is fresh.
     on.session.set("s", "groups.more", "more");
-    const fx = new SessionEffects<RenderedLines>("s");
+    const fx = new SessionEffects<RenderedLine>("s");
     on.render({ shown: true, when: at(0) }, fx, true);
     expect(stripAnsi(on.render({ shown: true, when: at(1) }, fx, true))).toContain(
       "EXTRA",
@@ -291,7 +293,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
-      const fx = new SessionEffects<RenderedLines>("s");
+      const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
       on.render({ shown: false, when: at(S) }, fx, true);
       on.render({ shown: false, when: at(S + 10) }, fx, true);
@@ -300,7 +302,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
       const frame = { shown: false, when: at(S + 11) };
       const result = {
         on: on.render(frame, fx, true),
-        off: off.render(frame, new SessionEffects<RenderedLines>("s"), false),
+        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
       };
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
       return result;
@@ -324,5 +326,53 @@ describe("a write to the session's state ends every dissolve in flight", () => {
       session.set("s", "edit.mode", "arrange"),
     );
     expect(on).toBe(off);
+  });
+});
+
+// [LAW:no-ambient-temporal-coupling] A held row was sized for the width and
+// coloured in the palette of the frame it was drawn in, so a frame drawn at
+// another width or in another palette compares against nothing.
+describe("a frame drawn at another width or in another palette ends every dissolve in flight", () => {
+  const ROW = parseAndValidate(
+    "<test>",
+    `{
+      globals: { palette: '{{ if .dark }}nord{{ else }}dracula{{ end }}' },
+      variables: {
+        shown: { kind: "input", path: "shown", type: "boolean", default: false },
+        dark: { kind: "input", path: "dark", type: "boolean", default: false },
+      },
+      segments: {
+        left: { template: 'left cell' },
+        middle: { template: 'MIDDLE', when: '{{ .shown }}' },
+        right: { template: 'right cell' },
+      },
+      root: { v: [{ h: ["left", "middle", "right"] }] },
+    }`,
+    undefined,
+    DEFAULT_DSL_CONFIG,
+  );
+
+  test.each([
+    ["width", { width: 120 }],
+    ["palette", { dark: true }],
+  ] as const)("another %s: the next frame is byte-identical to no transitions", (_, change) => {
+    const on = renderer(ROW);
+    const off = renderer(ROW);
+    try {
+      const fx = new SessionEffects<RenderedLine>("s");
+      on.render({ shown: true, when: at(0) }, fx, true);
+      on.render({ shown: false, when: at(S) }, fx, true);
+      expect(fx.lastFrame().leaves).toEqual([{ placement: "middle", t: 0 }]);
+      const frame = { shown: false, when: at(S + 1), ...change };
+      const out = on.render(frame, fx, true);
+      expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
+      expect(stripAnsi(out)).not.toContain("MIDDLE");
+      expect(out).toBe(
+        off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+      );
+    } finally {
+      on.dispose();
+      off.dispose();
+    }
   });
 });

@@ -104,7 +104,7 @@ import {
   type RenderPayloadDeps,
 } from "./render-payload.js";
 import { EffectSessions, type PassageFrame } from "../render/effect.js";
-import type { RenderedLines } from "../dsl/node-registry.js";
+import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
   collectDiagnostics,
@@ -156,7 +156,7 @@ const settingsHistory = new SettingsHistory(sessionState, dlog);
 const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
-const effectSessions = new EffectSessions<RenderedLines>();
+const effectSessions = new EffectSessions<RenderedLine>();
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.

@@ -165,8 +165,8 @@ export function cellParts({ lead, text, trail }: LaidCell): RichText[] {
 // A laid cell as a placement leaving the bar replays it
 // (brandon-effects-2gka.3vt): sized as its row last drew it — the row's fill
 // grows a cell in place, so the copy keeps that width and asks the row for
-// nothing — and with every link removed, since a placement on its way out
-// offers nothing to click.
+// nothing — and with every link and click handler removed, since a placement
+// on its way out offers nothing to click.
 export function heldCell({ text, placement, lead, trail }: LaidCell): LaidCell {
   return {
     text: unlinked(text),
@@ -178,9 +178,9 @@ export function heldCell({ text, placement, lead, trail }: LaidCell): LaidCell {
 
 function unlinked(text: RichText): RichText {
   const copy = text.blankCopy(text.plain);
-  copy.style = resolvedStyle(text.style).withLink(undefined);
+  copy.style = resolvedStyle(text.style).clearMetaAndLinks();
   for (const { start, end, style } of text.spans)
-    copy.stylize(resolvedStyle(style).withLink(undefined), start, end);
+    copy.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
   return copy;
 }
 

@@ -293,40 +293,34 @@ export interface NodeRenderCtx {
   closeDisclosure(key: string): RichText;
   // [LAW:locality-or-seam] The session's record of what the last frame drew,
   // as the walk meets it: a placement reports the lines it drew this frame and
-  // returns what comes back — those, or, while it dissolves off the bar, the
-  // rows it last drew (`SessionEffects.motion`, brandon-effects-2gka.3vt).
+  // returns what comes back — those, led, while it dissolves off the bar, by
+  // the rows it last drew (`SessionEffects.motion`, brandon-effects-2gka.3vt).
   placed(id: string, lines: RenderedLines): RenderedLines;
 }
 
 // [LAW:one-source-of-truth] What the placement `id` drew, as the session's
-// effect record keeps it: the lines its segment returned, the width of the
-// first row its own cells sit on, and the ground those cells fade from — or
-// nothing, when it laid no cell.
+// effect record keeps it: its own rows and the ground its cells fade from — or
+// nothing, when it laid no cell. Its own rows come first among the lines it
+// returns, so the search stops at its first cell rather than walking the body
+// it opened.
 export function drawingOf(
   id: string,
   lines: RenderedLines,
-): Drawing<RenderedLines> | null {
-  const first = lines
-    .map((line) => line.cells.filter((cell) => cell.placement.id === id))
-    .find((cells) => cells.length > 0);
-  return first === undefined
-    ? null
-    : {
-        lines,
-        span: first
-          .flatMap(cellParts)
-          .reduce((width, part) => width + part.cellLength, 0),
-        ground: first[0]!.placement.ground,
-      };
+): Drawing<RenderedLine> | null {
+  for (const line of lines)
+    for (const cell of line.cells)
+      if (cell.placement.id === id)
+        return {
+          own: lines.filter((row) => row.band === "own"),
+          ground: cell.placement.ground,
+        };
+  return null;
 }
 
-// What a placement leaving the bar replays of what it last drew: its own rows
-// — never a menu it dropped or a body it opened — each cell as it was drawn,
-// with nothing to click (`heldCell`).
-export function heldLines(lines: RenderedLines): RenderedLines {
-  return lines
-    .filter((line) => line.band === "own")
-    .map((line) => ({ ...line, cells: line.cells.map(heldCell) }));
+// One row a placement leaving the bar replays of what it last drew: each cell
+// as it was drawn, with nothing to click (`heldCell`).
+export function heldLine(line: RenderedLine): RenderedLine {
+  return { ...line, cells: line.cells.map(heldCell) };
 }
 
 // [LAW:types-are-the-program] Every Style a segment can wear, resolved at
