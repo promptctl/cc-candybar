@@ -292,6 +292,10 @@ export interface ParsedEntry {
   };
   costUSD?: number;
   isSidechain?: boolean;
+  // Claude Code's own `isMeta` flag: a "user" entry Claude Code wrote, not one a
+  // person typed — a local-command caveat, a skill's expanded body, a nudge to
+  // continue after an empty response.
+  isMeta: boolean;
   // [LAW:one-source-of-truth] What this entry says Claude is DOING, projected
   // here rather than by a second scanner (src/utils/transcript-activity.ts).
   // Same discipline as `firstContentType`: bounded scalars out of
@@ -301,15 +305,15 @@ export interface ParsedEntry {
   raw: PrunedRaw;
 }
 
-// [LAW:one-source-of-truth] A real user turn vs. a tool_result echoed back as a
-// "user" line. Two folds ask this — the message count and the activity turn
+// [LAW:one-source-of-truth] A real user turn vs. a "user" line nobody typed: a
+// tool_result echoed back, or a meta entry Claude Code wrote itself. Two folds ask this — the message count and the activity turn
 // boundary — so it is spelled once, over the projected scalars, beside the type
 // it classifies.
 export function isRealUserMessage(entry: ParsedEntry): boolean {
   const messageType = entry.type || entry.message?.role || entry.message?.type;
   const isToolResult =
     entry.type === "user" && entry.message?.firstContentType === "tool_result";
-  return messageType === "user" && !isToolResult;
+  return messageType === "user" && !isToolResult && !entry.isMeta;
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
@@ -439,6 +443,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
     isSidechain: parsed.isSidechain === true,
+    isMeta: parsed.isMeta === true,
     activity: entryActivity(parsed),
     raw: {
       model: typeof parsed.model === "string" ? parsed.model : undefined,

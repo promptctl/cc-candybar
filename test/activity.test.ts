@@ -47,6 +47,17 @@ const userText = (text: string): string =>
     message: { role: "user", content: text },
   });
 
+// A "user" entry Claude Code writes itself (`isMeta: true`), never typed by a
+// person — here the nudge it sends after an empty response, seen mid-turn in
+// a real transcript (brandon-effects-2gka.2rm).
+const metaUser = (text: string): string =>
+  JSON.stringify({
+    timestamp: stamp(),
+    type: "user",
+    isMeta: true,
+    message: { role: "user", content: [{ type: "text", text }] },
+  });
+
 const toolUse = (
   ...calls: Array<{ id: string; name: string; input?: unknown }>
 ): string =>
@@ -315,6 +326,20 @@ describe("the fold reports what is happening now", () => {
       { name: "Read", count: 2 },
       { name: "Bash", count: 1 },
     ]);
+  });
+
+  test("a meta user entry is not a turn boundary, so the tally and the command survive it", async () => {
+    const info = await activityOf(
+      userText("<command-name>/next</command-name>"),
+      metaUser("Base directory for this skill: …"),
+      toolUse({ id: "a", name: "Bash" }),
+      toolResult("a"),
+      metaUser(
+        "Your previous response had no visible output. Please continue and produce a user-visible response.",
+      ),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
   });
 
   test("a real user message resets the tool activity but keeps the todo list", async () => {

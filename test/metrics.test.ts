@@ -85,6 +85,30 @@ describe("Metrics Provider", () => {
     expect(metrics.linesRemoved).toBe(10);
   });
 
+  // brandon-effects-2gka.2rm: Claude Code writes `isMeta: true` user entries no
+  // person typed (a skill's body, a nudge to continue); none is a message.
+  it("does not count a meta user entry as a message", async () => {
+    const t0 = Date.now() - 60 * 60 * 1000;
+    const at = (s: number) => new Date(t0 + s * 1000).toISOString();
+    const transcriptPath = join(tempDir, "test.jsonl");
+    writeFileSync(
+      transcriptPath,
+      [
+        `{"timestamp": "${at(0)}", "type": "user", "message": {"role": "user", "content": "go"}}`,
+        `{"timestamp": "${at(1)}", "type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Bash", "input": {}}]}}`,
+        `{"timestamp": "${at(2)}", "type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "a", "content": "ok"}]}}`,
+        `{"timestamp": "${at(4)}", "type": "user", "isMeta": true, "message": {"role": "user", "content": [{"type": "text", "text": "Your previous response had no visible output. Please continue and produce a user-visible response."}]}}`,
+        "",
+      ].join("\n"),
+    );
+
+    const outcome = await metricsProvider.getMetricsInfo(
+      "meta-session",
+      createMockHookData("meta-session", transcriptPath),
+    );
+    expect(outcome.kind === "ok" && outcome.value.messageCount).toBe(1);
+  });
+
   // A transcript that doesn't exist yet is the domain's "no entries" (new
   // session pre-first-write): the cost-block fields are real, the
   // transcript-derived counts are genuinely zero.
