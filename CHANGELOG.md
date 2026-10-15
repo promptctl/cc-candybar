@@ -1,3 +1,10 @@
+# [1.127.0](https://github.com/promptctl/cc-candybar/compare/v1.126.0...v1.127.0) (2026-10-15)
+
+
+### Features
+
+* **effects:** a placement fades in when it appears ([#333](https://github.com/promptctl/cc-candybar/issues/333)) ([01689b7](https://github.com/promptctl/cc-candybar/commit/01689b73c1180712e649014d173adf88d3c29fe3))
+
 # [1.126.0](https://github.com/promptctl/cc-candybar/compare/v1.125.0...v1.126.0) (2026-10-15)
 
 
