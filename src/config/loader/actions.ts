@@ -151,6 +151,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   rewind: markerArm("rewind"),
   save: markerArm("save"),
   preset: presetArm,
+  themeDefault: themeDefaultArm,
   doctor: doctorArm,
   ceiling: ceilingArm,
   slash: slashArm,
@@ -186,6 +187,7 @@ function actionDeclJson(): JsonNode {
       markerArmJson("rewind"),
       markerArmJson("save"),
       ...presetArmJson(),
+      THEME_DEFAULT_ARM_JSON,
       ...doctorArmJson(),
       ...CEILING_ARM_JSON,
       SLASH_ARM_JSON,
@@ -346,6 +348,42 @@ function presetArmJson(): readonly JsonNode[] {
     },
   ];
 }
+
+// [LAW:types-are-the-program] `themeDefault` (candybar-theme-colours-6fq5.ix8)
+// is `preset: "save"`'s shape with nothing beside it: one verb, `"save"`, and
+// no other key — which theme and which look are the daemon's to read at click
+// time. `function`, not a const arrow, so ACTION_ARMS above can reference it
+// directly via hoisting.
+function themeDefaultArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (k !== "themeDefault")
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`,
+      );
+  }
+  if (raw.themeDefault !== "save") {
+    issue(
+      ctx,
+      `${path}.themeDefault`,
+      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`,
+    );
+    return null;
+  }
+  return { themeDefault: "save" };
+}
+
+const THEME_DEFAULT_ARM_JSON: JsonNode = {
+  type: "object",
+  properties: { themeDefault: { const: "save" } },
+  required: ["themeDefault"],
+  additionalProperties: false,
+};
 
 // [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a two-member
 // enum on its own key — `"run"` alone, or `"fix"` with the `check` it repairs.

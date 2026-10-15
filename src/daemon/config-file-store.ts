@@ -47,6 +47,7 @@ import type {
   Root,
   RootFragment,
   SettingValue,
+  ThemeDefaultField,
 } from "../config/dsl-types.js";
 import { isRowsFragment } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
@@ -852,6 +853,30 @@ export function writePreset(
   );
   commit(store, home, before, placed, refuseHidden);
   return name;
+}
+
+/**
+ * A theme's default look, as ONE tracked write: `themeDefaults.<theme>` set
+ * whole to `look`, so the entry says exactly the look the click saw. Every
+ * field is written, a field equal to the floor included: the entry is the
+ * default someone chose for that theme, and a floor that moves later must not
+ * move it. The values are names as the session spells them; the commit's
+ * load is what proves they are a theme default the loader accepts.
+ */
+export function writeThemeDefault(
+  store: EditStore,
+  home: ConfigHome,
+  theme: string,
+  look: Readonly<Record<ThemeDefaultField, string>>,
+): void {
+  const before = readConfigText(home.path);
+  const after = setValue(
+    before ?? "",
+    ["themeDefaults", theme],
+    json5Text(look),
+    JSON5_DIALECT,
+  );
+  commit(store, home, before, after, refuseHidden);
 }
 
 /**

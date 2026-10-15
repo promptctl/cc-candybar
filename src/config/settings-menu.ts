@@ -158,6 +158,20 @@ export const SAVE_SEG = `${SETTINGS_NS}save`;
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
 const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 
+// ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
+//
+// `⤓ default for <theme>` in the 🎨 look tab: save the shade, variation and
+// style the bar wears as the active theme's default. The cell shows exactly
+// while saving would change something — a fact the daemon publishes every
+// render (RenderPayload.themeDefault, src/daemon/setting-drafts.ts), never one
+// a template computes.
+const THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
+const THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+const THEME_DEFAULT_CELL: SegmentDecl = {
+  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${SETTINGS.theme.effectiveVar}) }}`,
+};
+
 // ─── Reset all (brandon-save-undo-bwi.wt5) ──────────────────────────────────
 //
 // [LAW:composability] `⟲ reset all` is every control's ↺ fired as one click —
@@ -533,11 +547,14 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 
 // [LAW:one-source-of-truth] What each tab holds (design-docs/SETTINGS-MENU-MAP.md,
 // "Structure"), keyed by every tab so none can be left without a body: its own
-// segments, then the controls `PLACE` puts in it. Every body takes the
-// controls, so `PLACE` naming any tab is a placement the bar renders.
+// segments, then the controls `PLACE` puts in it, then what follows them.
+// Every body takes the controls, so `PLACE` naming any tab is a placement the
+// bar renders. A cell that comes and goes sits `after` the controls, so its
+// coming and going moves none of them.
 interface TabBody {
   readonly direction: ContainerNode["direction"];
   readonly content: readonly LayoutNode[];
+  readonly after: readonly LayoutNode[];
 }
 const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
   // The quick actions, then the commands typed into Claude Code beside the
@@ -552,22 +569,35 @@ const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
         children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)],
       },
     ],
+    after: [],
   },
-  look: { direction: "horizontal", content: [] },
+  // The look controls, then — while the look differs from the theme's own
+  // default — the cell that saves it as that default.
+  look: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)],
+  },
   layout: {
     direction: "horizontal",
     content: [seg(PRESET_SAVE), seg(EDIT_SEG)],
+    after: [],
   },
-  config: { direction: "horizontal", content: [] },
+  config: { direction: "horizontal", content: [], after: [] },
   tools: {
     direction: "vertical",
     content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
+    after: [],
   },
 };
 const tabBody = (tab: TabName): ContainerNode => ({
   kind: "container",
   direction: TAB_CONTENT[tab].direction,
-  children: [...TAB_CONTENT[tab].content, ...controlsAt(tab)],
+  children: [
+    ...TAB_CONTENT[tab].content,
+    ...controlsAt(tab),
+    ...TAB_CONTENT[tab].after,
+  ],
 });
 
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
@@ -698,6 +728,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
       [REDO_ACTION]: { redo: true },
       [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
       [PRESET_DELETE]: {
         preset: "delete",
         name: `{{ .${SETTINGS.preset.effectiveVar} }}`,
@@ -734,6 +765,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       },
       [BACK_SEG]: BACK_CELL,
       [SAVE_SEG]: SAVE_CELL,
+      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
       [PRESET_SAVE]: {
         template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,
       },
@@ -744,6 +776,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         template: `{{ action "${EDIT_SEG}" "✎ arrange" "✎ done" }}`,
       },
     },
+  };
+  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
+    kind: "input",
+    path: "themeDefault.differs",
+    type: "boolean",
+    default: false,
   };
   artifacts.variables[BACK_COUNT] = {
     kind: "input",

@@ -1102,6 +1102,18 @@
           {
             "type": "object",
             "properties": {
+              "themeDefault": {
+                "const": "save"
+              }
+            },
+            "required": [
+              "themeDefault"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "doctor": {
                 "const": "run"
               }
@@ -1209,6 +1221,39 @@
           },
           "lightnessShift": {
             "type": "number"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "themeDefaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "shade": {
+            "enum": [
+              "muted",
+              "deepest",
+              "deeper",
+              "middle",
+              "brighter",
+              "brightest"
+            ]
+          },
+          "variation": {
+            "enum": [
+              "accent",
+              "duo",
+              "mono",
+              "alt"
+            ]
+          },
+          "style": {
+            "type": "string",
+            "not": {
+              "pattern": "\\{\\{"
+            }
           }
         },
         "additionalProperties": false

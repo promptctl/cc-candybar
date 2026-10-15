@@ -53,6 +53,10 @@ import {
   type ThemeSelection,
 } from "../themes/palette-resolvers.js";
 import { walkNodes } from "../config/dsl-types.js";
+import {
+  themeDefaultsOf,
+  underThemeDefault,
+} from "../config/theme-defaults.js";
 import { templateReads } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
@@ -184,7 +188,7 @@ export function resolveEffectiveGlobals(
     config.globals.preset,
     config.presets,
   );
-  const globals = presetGlobals(config, preset);
+  const declared = presetGlobals(config, preset);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as
   // PRESET_FLOOR's is. Every field below is resolved by the same expression
@@ -193,14 +197,22 @@ export function resolveEffectiveGlobals(
   // here either, so there is none to leak downstream.
   const staged: Partial<Globals> =
     sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
+  // The theme resolves before the look, because the look's config-default
+  // rung is the THEME's default folded under the declared globals
+  // (src/config/theme-defaults.ts): which theme decides which fragment.
+  const theme = resolveThemeSelection(
+    staged.palette,
+    sessionPick("theme"),
+    declared.palette,
+  );
+  const globals = underThemeDefault(
+    declared,
+    themeDefaultsOf(theme, config.themeDefaults),
+  );
   return {
     preset,
     presetCustomized: presetCustomized(preset),
-    theme: resolveThemeSelection(
-      staged.palette,
-      sessionPick("theme"),
-      globals.palette,
-    ),
+    theme,
     style: resolveStyleSelection(
       staged.style,
       sessionPick("style"),
@@ -415,6 +427,12 @@ export interface RenderPayload extends ClaudeHookData {
   // so each control's `↺`, each tab's `•`, and the menu's `⟲` show exactly
   // while they would do something.
   readonly resettable: Readonly<Record<SettingName, boolean>>;
+  // Whether the look this session draws — shade, variation, style — differs
+  // from what the active theme's default resolves to (themeDefaultSave,
+  // src/daemon/setting-drafts.ts), so the menu's `⤓ default for <theme>`
+  // shows exactly while saving it would change something. False under a
+  // rule-chosen theme or style: there is no name to save.
+  readonly themeDefault: { readonly differs: boolean };
   // The config file this session's saves and resets edit (the render cache
   // entry's home); absent while that file does not exist, so the menu's
   // `↗ config` shows exactly while there is a file to open.
@@ -1141,7 +1159,10 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  * the DSL declaration's `default` field, owned by the config, not buried
  * here.
  */
-export type SettingCounts = Pick<RenderPayload, "unsaved" | "resettable">;
+export type SettingCounts = Pick<
+  RenderPayload,
+  "unsaved" | "resettable" | "themeDefault"
+>;
 
 // Facts about the config the session renders with: the save cell's counts
 // (that config against the session's picks) and the home file's path,

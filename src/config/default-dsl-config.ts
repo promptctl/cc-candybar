@@ -31,6 +31,7 @@
 import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
+import { BUNDLED_THEME_DEFAULTS } from "./bundled-theme-defaults.js";
 import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -1261,6 +1262,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // test/default-dsl-config.test.ts (the same checkPayload fixture check.ts
   // uses) — curated by actually rendering each arrangement, not by reading
   // the segment names off the page.
+  // Each bundled theme's default look — data in its own file
+  // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
+  // in the bar rather than authored with the rest of this literal.
+  themeDefaults: BUNDLED_THEME_DEFAULTS,
+
   presets: {
     // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
     // — the resolution floor as a value, not a special case. An empty fragment
@@ -1702,7 +1708,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
 // [LAW:locality-or-seam] The palette names this module-level parse is allowed
 // to accept — DERIVED from RAW_DEFAULT_DSL_CONFIG itself (globals.palette +
-// every per-segment palette: pin), never from the live theme registry
+// every theme a bundled theme default is keyed by + every per-segment
+// palette: pin), never from the live theme registry
 // (listResolvablePaletteNames()). A real user file must validate against the
 // live registry (an author can type any name); this file validates against
 // ITSELF (every name here is a literal we wrote and every render test below
@@ -1714,6 +1721,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 const AUTHORED_PALETTE_NAMES = new Set(
   [
     RAW_DEFAULT_DSL_CONFIG.globals.palette,
+    ...Object.keys(RAW_DEFAULT_DSL_CONFIG.themeDefaults),
     ...(Object.values(RAW_DEFAULT_DSL_CONFIG.segments) as SegmentDecl[]).map(
       (s) => s.palette,
     ),

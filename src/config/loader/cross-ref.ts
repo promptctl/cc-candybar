@@ -157,9 +157,10 @@ export function validateCrossReferences(
   // cannot be wider or narrower than what the render will actually evaluate.
   //
   // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
-  // is checked the same way — the config's own, each preset's, and editGlobals —
-  // because each is a rung the resolution reads, and a name no rung can decide
-  // falls through to the next in silence (brandon-themes-owl).
+  // is checked the same way — the config's own, each preset's, editGlobals, and
+  // each theme's default — because each is a rung the resolution reads, and a
+  // name no rung can decide falls through to the next in silence
+  // (brandon-themes-owl).
   const styleFragments: ReadonlyArray<
     readonly [readonly string[], string | undefined]
   > = [
@@ -168,6 +169,10 @@ export function validateCrossReferences(
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
         [["presets", name, "globals"], preset.globals?.style] as const,
+    ),
+    ...Object.entries(cfg.themeDefaults).map(
+      ([theme, fragment]) =>
+        [["themeDefaults", theme], fragment.style] as const,
     ),
   ];
   for (const [at, name] of styleFragments) {

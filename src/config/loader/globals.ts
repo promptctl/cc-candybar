@@ -3,7 +3,11 @@
 // engine. This file changes when a global default field is added or removed —
 // add a key to GLOBALS_FIELDS and Globals; the engine does the rest.
 
-import { type Globals } from "../dsl-types.js";
+import {
+  THEME_DEFAULT_FIELDS,
+  type Globals,
+  type ThemeDefault,
+} from "../dsl-types.js";
 import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
@@ -13,9 +17,12 @@ import {
   SHADE_NAMES,
   ENDCAPS_SHAPES,
   isExpression,
+  retiredThemeNote,
   type ColorCompatibility,
 } from "../../themes/policy.js";
 import {
+  describeType,
+  isPlainObject,
   optionalBooleanSpec,
   optionalEnum,
   optionalEnumSpec,
@@ -287,6 +294,7 @@ function nestedMenuGlyphSpec(subject: string): FieldSpec<string> {
 function nameOnlySpec(
   spec: FieldSpec<string>,
   subject: string,
+  why: string,
 ): FieldSpec<string> {
   return {
     ...spec,
@@ -297,8 +305,8 @@ function nameOnlySpec(
         ctx.issues.push({
           path: `${path}.${field}`,
           message:
-            `${path}.${field}: a rule is not allowed here — ${subject} is decided ` +
-            `later than any rule could be settled, so it names a value. Write the rule ` +
+            `${path}.${field}: a rule is not allowed here — ${subject} ${why}, ` +
+            `so it names a value. Write the rule ` +
             `in globals.${field} (or a preset's globals.${field}) instead.`,
           line: findKeyLine(ctx.source, [...path.split("."), field]),
         });
@@ -365,6 +373,7 @@ export function isPresetGlobalsField(key: string): key is keyof Globals {
 // rung later in the precedence chain, so they reuse the same table rather than
 // declaring which fields edit mode "supports" — a field added to Globals is
 // edit-settable the same day, with no edit here.
+const EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
 const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "editGlobals key",
   removed: REMOVED_GLOBALS,
@@ -372,10 +381,81 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
     ...GLOBALS_FIELDS,
     preset: nestedPresetSpec("the editGlobals fragment"),
     menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(GLOBALS_FIELDS.palette, "the editGlobals fragment"),
-    style: nameOnlySpec(GLOBALS_FIELDS.style, "the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY,
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY,
+    ),
   },
 };
+
+// [LAW:one-source-of-truth] A theme's default look (candybar-theme-colours-
+// 6fq5.ix8) is the SAME field table cut to THEME_DEFAULT_FIELDS, so its shade
+// and variation accept exactly the members `globals` does, and the record
+// engine refuses any other key. Its style is a name only: the rung sits under
+// the config's globals, and a rule is something only a render can settle — a
+// theme's default is a choice made once, by name. Whether that name is a
+// declared style is cross-ref's (it needs the merged `styles` block).
+const THEME_DEFAULT_SCHEMA: RecordSchema<ThemeDefault> = {
+  noun: "theme default key",
+  fields: {
+    ...(Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]]),
+    ) as FieldSpecMap<ThemeDefault>),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name",
+    ),
+  },
+};
+
+// `themeDefaults:` — theme name → that theme's default look. A key must name
+// an installed theme: a default for a theme nothing installs could never
+// apply, and silently carrying it would hide the typo [LAW:no-silent-failure].
+export function validateThemeDefaults(
+  ctx: ValidateCtx,
+  raw: unknown,
+): Readonly<Record<string, ThemeDefault>> {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"]),
+    });
+    return {};
+  }
+  const out: Record<string, ThemeDefault> = {};
+  for (const [theme, value] of Object.entries(raw)) {
+    const path = `themeDefaults.${theme}`;
+    if (!ctx.allowedPalettes.has(theme)) {
+      ctx.issues.push({
+        path,
+        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme]),
+      });
+      continue;
+    }
+    const parsed = record(ctx, THEME_DEFAULT_SCHEMA, path, value);
+    if (parsed !== null) out[theme] = parsed;
+  }
+  return out;
+}
+
+// [LAW:one-source-of-truth] The schema emitter over the same declaration —
+// shape only; which names are installed themes is the loader's to check, as
+// for `globals.palette`.
+export function themeDefaultsJson(): JsonNode {
+  return {
+    type: "object",
+    additionalProperties: recordJson(THEME_DEFAULT_SCHEMA),
+  };
+}
 
 // An absent globals block is the empty default (no issue); a non-object is a
 // reported error that recovers to the empty default, since parseDslConfig throws

@@ -17,12 +17,14 @@ import {
   settingOrderProblems,
   settingSpelling,
   settingsOf,
+  THEME_DEFAULT_FIELDS,
   walkNodes,
   type DslConfig,
   type Globals,
   type RawDslConfig,
   type SettingDecl,
   type SettingValue,
+  type ThemeDefaultField,
 } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import {
@@ -105,6 +107,48 @@ function sessionGlobals(
   );
 }
 
+// [LAW:one-source-of-truth] The settings other settings resolve THROUGH, in
+// the order the resolution reads them: the preset chooses the globals every
+// later field reads, and the theme chooses the theme default the look falls
+// back to (src/config/theme-defaults.ts). A setting is measured against the
+// file under the session's picks of every selector resolved BEFORE it — what
+// a fresh session would draw once those picks were saved too — so picking a
+// theme does not turn that theme's own default look into drafts, and a pick
+// equal to it is none. A selector is measured without its own pick, or it
+// could never differ.
+const SELECTORS: readonly SettingName[] = ["preset", "theme"];
+
+// The file's bar under the session's picks of the first `depth` selectors.
+function fileThrough(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  depth: number,
+): EffectiveGlobals {
+  const held = new Set<string>(
+    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey),
+  );
+  return resolveEffectiveGlobals(
+    config,
+    (key) => (held.has(key) ? sessionPick(key) : null),
+    NOT_CUSTOMIZED,
+  );
+}
+
+// [LAW:dataflow-not-control-flow] Each setting's base, as one lookup: the
+// selectors' own depth, every other setting under all of them.
+function baseOf(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): (name: SettingName) => EffectiveGlobals {
+  const bases = Array.from({ length: SELECTORS.length + 1 }, (_, depth) =>
+    fileThrough(config, sessionPick, depth),
+  );
+  return (name) => {
+    const depth = SELECTORS.indexOf(name);
+    return bases[depth === -1 ? SELECTORS.length : depth]!;
+  };
+}
+
 // [LAW:one-source-of-truth] THE comparison a draft and a saved preset are both
 // made of: each of `rows` whose value the session renders differs from the
 // value `baseOf` it resolves to, and names a value at all (a theme or style
@@ -148,17 +192,8 @@ export function settingDrafts(
   sessionPick: (key: string) => string | null,
 ): readonly SettingDraft[] {
   const session = sessionGlobals(config, sessionPick);
-  const file = resolveEffectiveGlobals(config, () => null, NOT_CUSTOMIZED);
-  const landed = resolveEffectiveGlobals(
-    config,
-    (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
-    NOT_CUSTOMIZED,
-  );
-  return differing(
-    SETTING_ROWS,
-    session,
-    (name) => (name === "preset" ? file : landed),
-    (row) => landingKey(config, session.preset, row.configKey),
+  return differing(SETTING_ROWS, session, baseOf(config, sessionPick), (row) =>
+    landingKey(config, session.preset, row.configKey),
   );
 }
 
@@ -335,11 +370,6 @@ export function presetSnapshot(
   sessionPick: (key: string) => string | null,
 ): PresetSnapshot {
   const session = sessionGlobals(config, sessionPick);
-  const from = resolveEffectiveGlobals(
-    config,
-    (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
-    NOT_CUSTOMIZED,
-  );
   return {
     from: session.preset,
     globals: presetByName(config.presets, session.preset).globals ?? {},
@@ -348,10 +378,66 @@ export function presetSnapshot(
     picks: differing(
       SETTING_ROWS.filter(([n]) => n !== "preset"),
       session,
-      () => from,
+      baseOf(config, sessionPick),
       (row) => row.configKey,
     ),
     placements: placementDrafts(config, sessionPick),
+  };
+}
+
+// ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
+
+// [LAW:types-are-the-program] What `⤓ default for <theme>` would save: the
+// active theme's name and the look the session draws, every field a NAME — or
+// the one field that has no name to save, because a rule chose it (a
+// `globals.palette` or `globals.style` holding a template has no answer until
+// a render evaluates it, and a theme's default is written by name).
+export type ThemeDefaultSave =
+  | { readonly kind: "rule"; readonly field: "theme" | ThemeDefaultField }
+  | {
+      readonly kind: "look";
+      readonly theme: string;
+      readonly look: Readonly<Record<ThemeDefaultField, string>>;
+      // Whether the look differs from what the theme's default already
+      // resolves to — a save would change the file.
+      readonly differs: boolean;
+    };
+
+// The look a config declaring nothing but `theme` would draw: the theme's
+// own default over the floors — the bar every session opens on once the look
+// is that theme's default and nothing above the rung says otherwise.
+function themeOwnLook(config: DslConfig, theme: string): EffectiveGlobals {
+  return resolveEffectiveGlobals(
+    { ...config, globals: { palette: theme }, presets: {} },
+    () => null,
+    NOT_CUSTOMIZED,
+  );
+}
+
+// [LAW:one-source-of-truth] One reading, two readers: the render publishes
+// `differs` (the control shows exactly while a save would change something)
+// and the verb writes `look`, both over the same session and config, so the
+// control and its click cannot describe different looks. Edit mode's staged
+// globals are chrome and never part of the look saved.
+export function themeDefaultSave(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): ThemeDefaultSave {
+  const session = sessionGlobals(config, sessionPick);
+  const theme = SPELLING.theme(session);
+  if (theme === null) return { kind: "rule", field: "theme" };
+  const named = THEME_DEFAULT_FIELDS.map((f) => [f, SPELLING[f](session)]);
+  const ruled = named.find(([, v]) => v === null);
+  if (ruled !== undefined) {
+    return { kind: "rule", field: ruled[0] as ThemeDefaultField };
+  }
+  const look = Object.fromEntries(named) as Record<ThemeDefaultField, string>;
+  const own = themeOwnLook(config, theme);
+  return {
+    kind: "look",
+    theme,
+    look,
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== SPELLING[f](own)),
   };
 }
 
@@ -419,9 +505,13 @@ export function settingCounts(
       drafted.has(SETTINGS[name].configKey) ||
       fileHeld.has(SETTINGS[name].configKey),
   );
+  const themeDefault = themeDefaultSave(config, sessionPick);
   return {
     unsaved: drafts.length + placementDrafts(config, sessionPick).length,
     resettable,
+    themeDefault: {
+      differs: themeDefault.kind === "look" && themeDefault.differs,
+    },
   };
 }
 

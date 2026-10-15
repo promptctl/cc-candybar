@@ -30,6 +30,7 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
  *                declaration under a bundled name is a delta over it), and
  *                `settings` by setting name within that
  *   presets    : merge by name, then by field, the same overlay
+ *   themeDefaults : merge by theme name, then by field, the same overlay
  *   root       : merge by row name (user wins per-name) when the user wrote a
  *                `{ rows }` map; a whole tree replaces the default's rows
  *                (root.ts's mergeRoot — the one fold presets reuse); absent
@@ -67,6 +68,10 @@ export function mergeWithDefault(
       dflt.presets,
       presetDeltas(dflt.presets, raw.presets ?? {}),
     ),
+    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
+    // field, the presets overlay — a file setting one theme's shade keeps the
+    // variation and style the bundled entry for that theme carries.
+    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
     // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
     // `globals` cascade above, not the by-name cascades around it, because it
     // IS a globals fragment: a user retuning edit mode's separator says nothing
