@@ -120,12 +120,12 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
- ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
+ 🍫  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
+ ✱ Opus 4.8  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
 The bundled `identity` row is above and this config's `status` row below it,
-with the budget segment last; the `` between cells and the `` that opens each row are the powerline joiner,
+with the budget segment last; the `` between cells and the `` that opens each row are the powerline joiner,
 and `check` renders the settings door (`🍫`) into the first row exactly as the
 daemon does — so what you read there is the whole bar, chrome included.
 
@@ -521,7 +521,7 @@ want in your order:
 ```
 
 ```render
- 🍫  ⎇ main SU? (1 stashed) ▸ 
+ 🍫  ⎇ main SU? (1 stashed) ▸ 
 ```
 
 Start every session expanded — redeclare the state variable with the other
@@ -537,7 +537,7 @@ default. The arrow still collapses it for the session that clicks:
 ```
 
 ```render
- 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+ 🍫  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
 ```
 
 Hide one fact — override its piece with an empty body. A piece is shared, so
@@ -551,7 +551,7 @@ the fact leaves both forms:
 ```
 
 ```render
- 🍫  ⎇ main +2/-1 ▸ 
+ 🍫  ⎇ main +2/-1 ▸ 
 ```
 
 Hide a fact from one copy only — each optional piece also reads a setting of
@@ -570,7 +570,7 @@ it does not):
 ```
 
 ```render
- 🍫  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+ 🍫  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -585,7 +585,7 @@ or re-spell it by overriding its piece:
 ```
 
 ```render
- 🍫  on main +2/-1 SU? ▸ 
+ 🍫  on main +2/-1 SU? ▸ 
 ```
 
 ## One segment, many placements: settings
@@ -627,7 +627,7 @@ as `.settings.<name>`:
 ```
 
 ```render
- 🍫  Opus 4.8  ◆ Opus 
+ 🍫  Opus 4.8  ◆ Opus 
 ```
 
 The segment's `when`, `bg:` and `fg:` read the same `.settings` as its

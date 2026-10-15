@@ -6,7 +6,7 @@
 // the facts of the session's "last render" exactly as production does.
 
 import fs from "node:fs";
-import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
+import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
 import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -183,10 +183,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // The tools body leads with one ✕ (brandon-disclosure-43z), on its first
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
-    expect(lines[toolsRow + 1]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
+    expect(lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
     const reports = lines.slice(toolsRow + 2, toolsRow + 5);
     for (const report of reports) {
-      expect(report.startsWith(`${POWERLINE_JOINER_GLYPHS.lead} `)).toBe(true);
+      expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
     expect(reports[1]).toContain("✓ URL handler");

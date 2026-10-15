@@ -25,7 +25,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
-import { isEndcaps } from "../../themes/policy.js";
+import { isStyleEraEndcaps } from "../../themes/policy.js";
 
 // The one spelling of "that is an endcaps name, not a style": a style may not
 // be named after one, and a `style` may not hold one.
@@ -92,9 +92,10 @@ export function validateStyles(
       continue;
     }
     // [LAW:no-silent-failure] `style` named the endcaps until brandon-menu-ia-
-    // q30.xuz, so an endcaps name here is the old meaning of the word: refused,
-    // pointing at the key that holds it now.
-    if (isEndcaps(name)) {
+    // q30.xuz, so one of the names it held then is the old meaning of the word:
+    // refused, pointing at the key that holds it now. Only those names — a
+    // joiner added since was never a style, so a style may be called "flame".
+    if (isStyleEraEndcaps(name)) {
       ctx.issues.push({
         path: `styles.${name}`,
         message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),

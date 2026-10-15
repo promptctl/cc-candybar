@@ -1484,8 +1484,8 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 
- ◀ nord ▶ 
+ 🍫  ✱ Opus 4.8 
+ ◀ nord ▶ 
 ```
 
 A third argument names a declared action the centre fires instead of applying
@@ -1659,9 +1659,10 @@ declared style (checked after the merge, so naming a stdlib style is fine):
 Unknown style key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift
 ```
 
-`powerline`, `capsule` and `plain` are **endcaps** — the joiner shape, set with
-`globals.endcaps` — never styles. A style may not take one of those names, and a
-`style` holding one is refused with the key to use:
+`powerline`, `capsule`, `plain` and the other joiner names are **endcaps** — the joiner shape, set with
+`globals.endcaps` — never styles. A `style` holding one is refused with the key
+to use, and a style may not be named `powerline`, `capsule` or `plain` — the
+endcaps `style` held before it was renamed:
 
 ```json5 check:fail
 { globals: { style: "capsule" } }

@@ -23,7 +23,7 @@ const THEME = listResolvablePaletteNames()[0]!;
 
 describe("a set on a setting key is checked against the setting's domain", () => {
   it.each([
-    ["{ set: 'endcaps', to: 'banana' }", /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of "powerline"/],
+    ["{ set: 'endcaps', to: 'banana' }", /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of .*"powerline"/],
     ["{ set: 'padding', to: '99' }", /actions\.pick\.to: "99" .*an integer from 0 to 16/],
     ["{ set: 'padding', to: '3 ' }", /actions\.pick\.to: "3 "/],
     // The session holds an integer as String(n) writes it, nothing else.
@@ -46,6 +46,8 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     // Not every value is an endcaps shape, so moving the key is not the fix.
     ["{ set: 'style', cycle: ['capsule', 'vivid'] }", /actions\.pick\.cycle: "capsule" is outside the style domain/],
     ["{ set: 'style', cycle: ['capsule', 'banana'] }", /actions\.pick\.cycle: "capsule", "banana" are outside/],
+    // A joiner added since the rename is a name a style may take: no such style.
+    ["{ set: 'style', to: 'slant' }", /actions\.pick\.to: "slant" is outside the style domain/],
   ])("%s is a load error", (action, message) => {
     expect(() => load(action)).toThrow(message);
   });

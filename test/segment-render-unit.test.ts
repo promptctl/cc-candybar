@@ -21,12 +21,14 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { POWERLINE } from "./helpers/powerline";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-// U+E0B0 — the powerline right-arrow the PowerlineJoiner paints between items.
-const CHEVRON = "\uE0B0";
-const DIVIDER = "\uE0B1";
+// The powerline arrow, drawn at the lead, between items and at the tail, and
+// the divider drawn where two items share a ground.
+const CHEVRON = POWERLINE.glyph;
+const DIVIDER = POWERLINE.divider;
 
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
@@ -53,8 +55,9 @@ function render(src: string, hookData: Record<string, unknown>): string {
 describe("segment is the rendering unit (2de.10)", () => {
   test("a unit with internal clickable regions renders as ONE strip item — no internal chevron", () => {
     // A segment whose template emits three OSC-8 links. The segment collapses to
-    // one strip item, so the only chevron in its line is the single end-cap —
-    // never one between X/Y/Z — while all three link spans survive inside it.
+    // one strip item, so the only chevrons in its line are its lead and its
+    // tail — never one between X/Y/Z — while all three link spans survive
+    // inside it.
     // The settings door, present in every bar, is placed on its own row so the
     // unit's row holds the unit alone.
     const src = `{
@@ -70,8 +73,9 @@ describe("segment is the rendering unit (2de.10)", () => {
     }`;
     const line = render(src, {}).split("\n")[1]!;
 
-    // One unit ⇒ one item ⇒ only the end-cap chevron, none between the regions.
-    expect(chevronCount(line)).toBe(1);
+    // One unit ⇒ one item ⇒ only the lead and tail chevrons, none between the
+    // regions.
+    expect(chevronCount(line)).toBe(2);
     // All three clickable regions survive as their own OSC-8 spans inside the
     // single item.
     expect(linkUrls(line)).toHaveLength(3);
@@ -118,10 +122,11 @@ describe("segment is the rendering unit (2de.10)", () => {
 
     // Two items ⇒ one mid-join + one end-cap. Pre-fix the equal bg suppressed
     // the mid-join. The a↔b join is now the DIVIDER — the arrow would be drawn
-    // in the shared background and vanish (rich-js PowerlineJoiner) — so the
-    // arrows are the end cap and the join to the global settings menu every
-    // bar carries (candybar-settings-ui-aok.1), and a↔b is the one divider.
-    expect(chevronCount(out)).toBe(2);
+    // in the shared background and vanish (rich-js CellJoiner) — so the
+    // arrows are the lead, the join to the global settings menu every bar
+    // carries (candybar-settings-ui-aok.1) and the tail, and a↔b is the one
+    // divider.
+    expect(chevronCount(out)).toBe(3);
     expect(out.split(DIVIDER).length - 1).toBe(1);
     expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${DIVIDER}\\s*BBB`));
     expect(out).toContain("AAA");

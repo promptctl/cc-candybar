@@ -21,7 +21,7 @@
 
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { POWERLINE_JOINER_GLYPHS } from "@promptctl/rich-js";
+import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -741,7 +741,7 @@ describe("the default placement never inherits an author's gate", () => {
     const opened = stripAnsi(render()).split("\n");
     // The door's own row rises with it to lead the menu.
     expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
-    expect(opened[0]!.startsWith(POWERLINE_JOINER_GLYPHS.lead + DOOR_CLOSE_GLYPH)).toBe(true);
+    expect(opened[0]!.startsWith(POWERLINE.lead + DOOR_CLOSE_GLYPH)).toBe(true);
     expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
   });
 

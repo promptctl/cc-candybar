@@ -2,19 +2,17 @@ import {
   Strip,
   RichText,
   Style,
-  PowerlineJoiner,
-  POWERLINE_JOINER_GLYPHS,
-  CapsuleJoiner,
-  PlainJoiner,
+  CellJoiner,
+  JOINERS,
   FlexStrip,
   renderToString,
   type Joiner,
+  type JoinShape,
   type Renderable,
   type RenderToStringOptions,
-  type PowerlineJoinerOptions,
-  type CapsuleJoinerOptions,
 } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import { isAsciiText } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
@@ -103,52 +101,47 @@ export interface BuildLineOptions {
   charset: Charset;
 }
 
-// [LAW:dataflow-not-control-flow] Charset variability lives in these VALUES,
-// not in branches: per endcaps shape, each charset names the joiner-construction
-// options. The unicode entries are rich-js's own — it owns the canonical
-// powerline glyphs (U+E0B0 / U+E0B1 / U+E0D7 / U+E0B6+U+E0B4), and restating them here
-// would be a second source that could drift [LAW:one-source-of-truth]. The
-// ascii glyphs are single-column, the same display width as the unicode caps;
-// the strip's geometry is measured per charset (stripGeometry below), so a
-// wider glyph would cost its real width rather than break a declared one.
-const POWERLINE_GLYPHS: Record<Charset, PowerlineJoinerOptions> = {
-  unicode: POWERLINE_JOINER_GLYPHS,
-  // The divider is drawn between neighbours whose backgrounds match, where the
-  // arrow would vanish; `|` is its single-column ascii form. `<` leads a row
-  // and `>` tails it, so the ascii row has the same shape at both ends.
-  ascii: { glyph: ">", divider: "|", lead: "<", tail: ">" },
-};
-const CAPSULE_GLYPHS: Record<Charset, CapsuleJoinerOptions> = {
-  unicode: {},
-  ascii: { left: "(", right: ")" },
-};
-
-function pickJoiner(
-  endcaps: Endcaps,
-  charset: Charset,
-  separator?: string,
-): Joiner {
-  // [LAW:dataflow-not-control-flow] joiner choice is data-driven; one arm per
-  // shape. Endcaps pick the joiner CLASS, charset indexes the glyph options fed
-  // to it — the two dimensions stay orthogonal (any endcaps render under either
-  // charset). Plain takes no charset lookup: its separator is already user
-  // data (globals.default_separator) and its default (" | ") is ASCII-safe.
-  // [LAW:types-are-the-program] Total over Endcaps — the `never`
-  // default makes adding an ENDCAPS_SHAPES member a compile error here until it
-  // gets a joiner, so the picker's domain can never offer an unrenderable shape.
-  switch (endcaps) {
-    case "capsule":
-      return new CapsuleJoiner(CAPSULE_GLYPHS[charset]);
-    case "plain":
-      return new PlainJoiner(separator !== undefined ? { separator } : {});
-    case "powerline":
-      return new PowerlineJoiner(POWERLINE_GLYPHS[charset]);
-    default: {
-      const _exhaustive: never = endcaps;
-      return _exhaustive;
-    }
-  }
+// Plain drawn with an authored separator (globals.default_separator): the
+// bundled plain shape with the separator as its one glyph, drawn as written.
+// rich-js builds a joiner's ascii form up front and refuses a non-ASCII glyph
+// in it, so a non-ASCII separator keeps plain's own ascii form in that slot —
+// never drawn, since the loader refuses that separator under charset ascii
+// ([LAW:single-enforcer], cross-ref's `asciiSeparators`). Memoised per
+// separator, so a render does not re-parse it.
+const separatorJoiners = new Map<string, CellJoiner>();
+function plainWith(separator: string): CellJoiner {
+  const known = separatorJoiners.get(separator);
+  if (known !== undefined) return known;
+  const withGlyph = (shape: JoinShape): JoinShape => {
+    const seam = shape.seam.map((cell) => ({ ...cell, glyph: separator }));
+    return { ...shape, seam, divider: seam };
+  };
+  const { shape, ascii } = JOINERS.plain;
+  const joiner = new CellJoiner(
+    withGlyph(shape),
+    isAsciiText(separator) ? withGlyph(ascii) : ascii,
+  );
+  separatorJoiners.set(separator, joiner);
+  return joiner;
 }
+
+// [LAW:dataflow-not-control-flow] The joiner is a lookup: rich-js's `JOINERS`
+// holds every one by the name `Endcaps` admits, so there is no arm per shape
+// to keep in step with the list. Charset is not an argument — it reaches the
+// render as rich-js's `asciiOnly` (`drawOptions`), which picks the joiner's
+// ascii form, so the two stay orthogonal. Plain alone reads the authored
+// separator, which is user data.
+function pickJoiner(endcaps: Endcaps, separator?: string): Joiner {
+  return endcaps === "plain" && separator !== undefined
+    ? plainWith(separator)
+    : JOINERS[endcaps];
+}
+
+// What the strip shape puts in a render's options: charset, as the one
+// option rich-js reads to choose a joiner's ascii form.
+const drawOptions = (charset: Charset): { asciiOnly: boolean } => ({
+  asciiOnly: charset === "ascii",
+});
 
 type StripShape = Pick<BuildLineOptions, "endcaps" | "charset" | "separator">;
 
@@ -167,11 +160,7 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
   ]);
   const known = geometryMemo.get(key);
   if (known !== undefined) return known;
-  const joiner = pickJoiner(
-    options.endcaps,
-    options.charset,
-    options.separator,
-  );
+  const joiner = pickJoiner(options.endcaps, options.separator);
   const cell = (bgcolor: string): RichText =>
     new RichText("x", {
       end: "",
@@ -180,7 +169,10 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
     });
   const width = (cells: RichText[]): number =>
     new RichText(
-      draw(new Strip(cells, joiner), { colorSystem: null }).replace(/\n$/, ""),
+      draw(new Strip(cells, joiner), {
+        colorSystem: null,
+        ...drawOptions(options.charset),
+      }).replace(/\n$/, ""),
     ).cellLength;
   const one = width([cell("#101010")]);
   const geometry = {
@@ -238,19 +230,18 @@ export function renderStripCells(
   options: BuildLineOptions,
 ): string {
   if (cells.length === 0) return "";
-  const joiner = pickJoiner(
-    options.endcaps,
-    options.charset,
-    options.separator,
-  );
-  const colorSystem = options.colorCompatibility;
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const drawn = {
+    colorSystem: options.colorCompatibility,
+    ...drawOptions(options.charset),
+  };
   const out =
     options.wrap && Number.isFinite(options.width)
       ? draw(new FlexStrip([...cells], { joiner }), {
           width: options.width,
-          colorSystem,
+          ...drawn,
         })
-      : draw(new Strip([...cells], joiner), { colorSystem });
+      : draw(new Strip([...cells], joiner), drawn);
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

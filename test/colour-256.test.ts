@@ -19,8 +19,8 @@ import {
   Oklch,
   ColorRgba,
   SEAM_MIN_DELTA_E,
-  POWERLINE_JOINER_GLYPHS,
 } from "@promptctl/rich-js";
+import { POWERLINE } from "./helpers/powerline";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
 import {
@@ -81,7 +81,7 @@ const deltaE = (a: Rgb, b: Rgb): number =>
 // cell's text and is measured as text. Whether a seam is an arrow or a
 // divider is decided on the drawn colours, so a seam is compared as one
 // position, whichever glyph each depth drew there.
-const { glyph, divider, lead, tail } = POWERLINE_JOINER_GLYPHS;
+const { glyph, divider, lead, tail } = POWERLINE;
 const ARROWS = new Set([glyph, lead, tail]);
 const JOINERS = new Set([...ARROWS, "\uE0B4", "\uE0B6"]);
 const DIVIDERS: Readonly<Record<string, string>> = { [divider]: glyph };
