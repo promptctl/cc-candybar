@@ -1238,6 +1238,22 @@ export class SourceRegistry {
     });
   }
 
+  // [LAW:one-source-of-truth] The revision of the session state this render's
+  // `state` variables read (SessionStateReader.revision), found the way they
+  // find it: through the session id the render was handed. A registry with no
+  // session state, or a render naming no session, reads none — one state that
+  // never changes.
+  stateRevision(): number {
+    const sessionId = this.store.has(SESSION_ID_VAR_NAME)
+      ? this.store.read(SESSION_ID_VAR_NAME)
+      : "";
+    return this.sessionState !== undefined &&
+      typeof sessionId === "string" &&
+      sessionId !== ""
+      ? this.sessionState.revision(sessionId)
+      : 0;
+  }
+
   // ─── Render-cycle driver ──────────────────────────────────────────────────
 
   // Called at the start of each render request. Pushes all input-kind boxes in

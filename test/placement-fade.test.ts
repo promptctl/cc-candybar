@@ -1,23 +1,33 @@
 // [LAW:verifiable-goals] brandon-effects-2gka.631: a placement fades in when it
 // appears. One whose `when` turns true between two frames drawn from the same
-// config fades in over 20 s, its cells alone; a first render, a click and a
-// reload settle the bar, so nothing they reveal fades.
+// config, preset and session state fades in over 20 s, its cells alone, from
+// its own palette's ground; a first render, a write to the session's state —
+// a click, an undo — and a reload draw from another source, so nothing they
+// reveal fades.
 
-import { decodeAnsi, resolveColorRef } from "@promptctl/rich-js";
+import {
+  DEFAULT_TERMINAL_THEME,
+  RichText,
+  decodeAnsi,
+  resolveColorRef,
+} from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
-import { VERBS } from "../src/daemon/verbs";
+import { SettingsHistory } from "../src/daemon/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { EffectSessions, SessionEffects } from "../src/render/effect";
+import { SessionEffects, type RowItem } from "../src/render/effect";
 import { resolvedStyle } from "../src/render/rich-theme";
-import { decideEffectName, type EffectName } from "../src/themes";
+import {
+  decideEffectName,
+  paletteForThemeName,
+  type EffectName,
+} from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { recordRender, testVerbContext } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 
 const START = 1_800_000_000 as Instant;
@@ -25,9 +35,9 @@ const at = (seconds: number): Instant => (START + seconds) as Instant;
 // The instant the middle placement's `when` turns true.
 const S = 30;
 
-// A row whose middle placement shows while the payload says so, and a group
-// whose body a click opens.
-const config = (globals = "{}"): ValidatedConfig =>
+// A row whose middle placement shows while the payload says so, placed as
+// `middle` spells it, and a group whose body a click opens.
+const config = (globals = "{}", middle = '"middle"'): ValidatedConfig =>
   parseAndValidate(
     "<test>",
     `{
@@ -42,7 +52,7 @@ const config = (globals = "{}"): ValidatedConfig =>
         extra: { template: 'EXTRA' },
       },
       root: { v: [
-        { h: ["left", "middle", "right"] },
+        { h: ["left", ${middle}, "right"] },
         { kind: "group", name: "more", label: "more", children: ["extra"] },
       ] },
     }`,
@@ -163,27 +173,50 @@ describe("a placement that appears fades in", () => {
     },
   );
 
-  test("it rises from the theme's background, not the terminal the loops assume", () => {
-    const on = renderer(ROW);
+  // Wholly veiled at its t = 0, the middle placement's ink and fill are both
+  // the ground it rises from.
+  const risesFrom = (cfg: ValidatedConfig): { row: string; bar: string } => {
+    const on = renderer(cfg);
     try {
       const fx = new SessionEffects("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
-      const row = on.render({ shown: true, when: at(S) }, fx, { transitions: true }).split("\n")[0]!;
-      const ground = resolveColorRef(on.palette(), "background").hex.toLowerCase();
-      const text = decodeAnsi(row);
-      const col = text.plain.indexOf("MIDDLE");
-      for (let i = col; i < col + "MIDDLE".length; i++) {
-        const style = resolvedStyle(
-          text.spans.find(({ start, end }) => start <= i && i < end)!.style,
-        );
-        // Wholly veiled at its t = 0: ink and fill both the ground.
-        expect(style.bgcolor?.name.toLowerCase()).toBe(ground);
-        expect(style.color?.name.toLowerCase()).toBe(ground);
-      }
-      expect(ground).not.toBe("#000000");
+      const row = on
+        .render({ shown: true, when: at(S) }, fx, { transitions: true })
+        .split("\n")[0]!;
+      const bar = resolveColorRef(on.palette(), "background").hex.toLowerCase();
+      return { row, bar };
     } finally {
       on.dispose();
     }
+  };
+  const expectGround = (row: string, ground: string): void => {
+    const text = decodeAnsi(row);
+    const col = text.plain.indexOf("MIDDLE");
+    for (let i = col; i < col + "MIDDLE".length; i++) {
+      const style = resolvedStyle(
+        text.spans.find(({ start, end }) => start <= i && i < end)!.style,
+      );
+      expect(style.bgcolor?.name.toLowerCase()).toBe(ground);
+      expect(style.color?.name.toLowerCase()).toBe(ground);
+    }
+  };
+
+  test("it rises from the theme's background, not the terminal the loops assume", () => {
+    const { row, bar } = risesFrom(ROW);
+    expectGround(row, bar);
+    expect(bar).not.toBe("#000000");
+  });
+
+  test("a placement pinned to a theme rises from that theme's background", () => {
+    const { row, bar } = risesFrom(
+      config("{}", '{ seg: "middle", settings: { theme: "nord" } }'),
+    );
+    const nord = resolveColorRef(
+      paletteForThemeName("nord"),
+      "background",
+    ).hex.toLowerCase();
+    expect(nord).not.toBe(bar);
+    expectGround(row, nord);
   });
 
   test("its event says what the frame compared against, and what is fading in on what clock", () => {
@@ -203,6 +236,9 @@ describe("a placement that appears fades in", () => {
       expect(fx.lastFrame()).toMatchObject({ basis: "compared", fades: [] });
       on.render({ shown: true, when: at(S + 21) }, fx, { transitions: false });
       expect(fx.lastFrame().basis).toBe("off");
+      // A frame drawn with transitions off recorded nothing to compare against.
+      on.render({ shown: true, when: at(S + 22) }, fx, { transitions: true });
+      expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
     } finally {
       on.dispose();
     }
@@ -226,7 +262,7 @@ describe("a placement that appears fades in", () => {
   });
 });
 
-describe("nothing fades in where the bar settles", () => {
+describe("nothing fades in where the frame is drawn from another source", () => {
   test("the first render draws every placement at once", () => {
     const on = renderer(ROW);
     const off = renderer(ROW);
@@ -241,20 +277,24 @@ describe("nothing fades in where the bar settles", () => {
     }
   });
 
-  test("a click settles: a disclosure it opens, and a fade in flight, show at once", () => {
+  test("a write to the session's state shows what it reveals at once, and ends a fade in flight", () => {
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
       const fx = new SessionEffects("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
-      // Mid-fade, the click lands: the group opens, the fade ends.
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
+      expect(fx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
+      // Mid-fade, a click opens the group.
       on.session.set("s", "groups.more", "more");
-      fx.settle();
       const frame = { shown: true, when: at(S + 5) };
       const opened = on.render(frame, fx, { transitions: true });
       expect(stripAnsi(opened)).toContain("EXTRA");
-      expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
+      expect(fx.lastFrame()).toMatchObject({
+        basis: "fresh",
+        revision: on.session.revision("s"),
+        fades: [],
+      });
       expect(opened).toBe(
         off.render(frame, new SessionEffects("s"), { transitions: false }),
       );
@@ -264,20 +304,26 @@ describe("nothing fades in where the bar settles", () => {
     }
   });
 
-  test("without the click's settle, the body it opened would fade in", () => {
+  test("an undo is a write like a click's: the frame after it compares against nothing", () => {
     const on = renderer(ROW);
     try {
+      const history = new SettingsHistory(on.session, () => {});
+      const journal = history.begin();
+      journal.sessionState.set("s", "theme", "nord");
+      journal.commit();
       const fx = new SessionEffects("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
-      on.session.set("s", "groups.more", "more");
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
-      expect(fx.lastFrame().fades.map((f) => f.placement)).toContain("extra");
+      expect(fx.lastFrame().basis).toBe("compared");
+      history.undo("s");
+      on.render({ shown: false, when: at(2) }, fx, { transitions: true });
+      expect(fx.lastFrame().basis).toBe("fresh");
     } finally {
       on.dispose();
     }
   });
 
-  test("a reload settles: a frame drawn from another load of the config compares against nothing", () => {
+  test("a reload: a frame drawn from another load of the config compares against nothing", () => {
     const first = renderer(ROW);
     const reloaded = renderer(ROW);
     try {
@@ -297,9 +343,7 @@ describe("nothing fades in where the bar settles", () => {
       const fx = new SessionEffects("s");
       on.session.set("s", "edit.mode", "arrange");
       on.render({ shown: true, when: at(0) }, fx, { transitions: true });
-      // ✓ done is a click: it writes edit.mode, and the journal settles.
       on.session.set("s", "edit.mode", "closed");
-      fx.settle();
       on.render({ shown: true, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
     } finally {
@@ -308,48 +352,82 @@ describe("nothing fades in where the bar settles", () => {
   });
 });
 
-describe("the verb journal settles every session a click changed", () => {
-  const click = (value: string, settled: string[]) => {
-    const session = new SessionState();
-    recordRender(session, "s");
-    const ctx = {
-      ...testVerbContext(session, undefined, ROW),
-      settle: (sid: string) => settled.push(sid),
-    };
-    VERBS.get("set-state")!(value, ctx);
-    return { session, ctx };
+describe("a render that throws leaves the last drawn frame to compare against", () => {
+  const item = (id: string): RowItem => ({
+    owner: new RichText(id, { end: "" }),
+    placement: {
+      id,
+      effect: "bar",
+      ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+    },
+  });
+  const fades = {
+    transitions: true,
+    source: { config: ROW, preset: "default", revision: 0 },
   };
 
-  test("a write that changes the session's state settles it", () => {
-    const settled: string[] = [];
-    click("s/theme/nord", settled);
-    expect(settled).toEqual(["s"]);
+  test("a frame never drawn is never compared against", () => {
+    const fx = new SessionEffects("s");
+    const first = fx.motion("none", at(0), fades);
+    first.row("r", [item("left")]);
+    first.drawn();
+    // The next render throws before its first row: it is never drawn.
+    fx.motion("none", at(1), fades);
+    const after = fx.motion("none", at(2), fades);
+    after.row("r", [item("left")]);
+    after.drawn();
+    expect(fx.lastFrame()).toMatchObject({ basis: "compared", fades: [] });
+  });
+});
+
+describe("a session's state revision moves with every change to it, whoever writes it", () => {
+  test("a write of a value it did not hold moves it; one it held does not", () => {
+    const state = new SessionState();
+    expect(state.revision("s")).toBe(0);
+    state.set("s", "theme", "nord");
+    const set = state.revision("s");
+    expect(set).toBeGreaterThan(0);
+    state.set("s", "theme", "nord");
+    state.setBatch("s", [{ key: "theme", value: "nord" }]);
+    expect(state.revision("s")).toBe(set);
+    state.setBatch("s", [
+      { key: "theme", value: "nord" },
+      { key: "style", value: "dim" },
+    ]);
+    expect(state.revision("s")).toBeGreaterThan(set);
   });
 
-  test("a write of the value already there changes nothing and settles nothing", () => {
-    const settled: string[] = [];
-    const { ctx } = click("s/theme/nord", settled);
-    settled.length = 0;
-    VERBS.get("set-state")!("s/theme/nord", ctx);
-    expect(settled).toEqual([]);
+  test("a clear of a key it held moves it; of one it did not, does not", () => {
+    const state = new SessionState();
+    state.set("s", "theme", "nord");
+    state.set("s", "style", "dim");
+    const before = state.revision("s");
+    state.clear("s", "endcaps");
+    expect(state.revision("s")).toBe(before);
+    state.clear("s", "style");
+    expect(state.revision("s")).toBeGreaterThan(before);
   });
 
-  test("the daemon's memory settles the session the click named, and no other", () => {
-    const sessions = new EffectSessions();
-    const on = renderer(ROW);
-    try {
-      for (const sid of ["s", "t"]) {
-        on.render({ shown: false, when: at(0) }, sessions.of(sid), { transitions: true });
-      }
-      sessions.settle("s");
-      on.render({ shown: true, when: at(1) }, sessions.of("s"), { transitions: true });
-      on.render({ shown: true, when: at(1) }, sessions.of("t"), { transitions: true });
-      expect(sessions.of("s").lastFrame().fades).toEqual([]);
-      expect(sessions.of("t").lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
-      // A session it holds no memory for has nothing to settle.
-      expect(() => sessions.settle("nobody")).not.toThrow();
-    } finally {
-      on.dispose();
-    }
+  test("another session's write leaves it alone; an emptied session reads 0, and never repeats a revision", () => {
+    const state = new SessionState();
+    state.set("s", "theme", "nord");
+    const mine = state.revision("s");
+    state.set("t", "theme", "nord");
+    expect(state.revision("s")).toBe(mine);
+    state.clear("s", "theme");
+    expect(state.revision("s")).toBe(0);
+    state.set("s", "theme", "nord");
+    expect(state.revision("s")).toBeGreaterThan(state.revision("t"));
+  });
+
+  test("the settings history's undo moves it, though it writes past the click's journal", () => {
+    const state = new SessionState();
+    const history = new SettingsHistory(state, () => {});
+    const journal = history.begin();
+    journal.sessionState.set("s", "theme", "nord");
+    journal.commit();
+    const before = state.revision("s");
+    history.undo("s");
+    expect(state.revision("s")).not.toBe(before);
   });
 });

@@ -514,6 +514,7 @@ describe("settings history: a step lands whole, and records only what landed", (
         throw new Error("store refused");
       },
       clear: (sid: string, key: string) => inner.clear(sid, key),
+      revision: (sid: string) => inner.revision(sid),
     };
     const history = new SettingsHistory(throwing, () => {});
     const journal = history.begin();

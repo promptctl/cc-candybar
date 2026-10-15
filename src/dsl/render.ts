@@ -84,7 +84,6 @@ import {
   type ThemeSelection,
 } from "../themes/index.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
-import { groundOf } from "../template-engine/colors.js";
 import {
   createCcCandybarEngine,
   evaluateWhen,
@@ -1188,8 +1187,8 @@ export function renderDsl(
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
   // and the placements this frame draws, so one the last frame — drawn from
-  // this config and preset — did not draw fades in from the theme's ground.
-  const rowMotion = (selection?.effects ?? new SessionEffects("")).motion(
+  // this config, preset and session state — did not draw fades in.
+  const motion = (selection?.effects ?? new SessionEffects("")).motion(
     effect.value,
     at,
     {
@@ -1198,8 +1197,11 @@ export function renderDsl(
       transitions:
         selection?.transitions ??
         effectiveTransitions(undefined, null, declared.transitions),
-      source: { config: compiled, preset },
-      ground: groundOf(palette),
+      source: {
+        config: compiled,
+        preset,
+        revision: registry.stateRevision(),
+      },
     },
   );
 
@@ -1427,10 +1429,11 @@ export function renderDsl(
       return renderStripCells(
         items.map((item) => item.owner),
         opts,
-        rowMotion(row, items),
+        motion.row(row, items),
       );
     })
     .join("\n");
+  motion.drawn();
   for (const message of shortfalls)
     onRenderWarning?.({ kind: "band-floor", message });
   return rendered;

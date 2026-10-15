@@ -30,8 +30,7 @@ import { linkUrls, stripAnsi } from "./helpers/ansi";
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
   transitions: false,
-  source: { config: {}, preset: "default" },
-  ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+  source: { config: {}, preset: "default", revision: 0 },
 };
 
 const LOOPS = Object.keys(EFFECT_CATALOGUE.loops) as EffectName[];
@@ -218,10 +217,11 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion("shimmer", when, STILL_FRAME);
       for (let row = 0; row < rows; row++) {
-        const moving = motion(`flow.own#${row}`, []);
+        const moving = motion.row(`flow.own#${row}`, []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
         moving.wrap(new RichText("x"), 10);
       }
+      motion.drawn();
     };
     // A menu opens: five rows. It closes: one row, whose effect is reused.
     draw(at(0), 5);

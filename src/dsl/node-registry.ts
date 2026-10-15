@@ -40,6 +40,7 @@ import {
   placementId,
 } from "../config/dsl-types.js";
 import { placementPalette } from "../themes/palette-resolvers.js";
+import { groundOf } from "../template-engine/colors.js";
 import { FOLLOW_BAR, type PlacementEffect } from "../themes/policy.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
@@ -575,8 +576,13 @@ const segmentType: NodeType<"segment"> = {
       // Every cell this placement lays is its own — its inline rows, the menu
       // bands it drops, the lead of each row of the body it opens — and names
       // it: its `effect` setting moves every one (the per-segment sink's
-      // cells), and every one fades in when the placement appears.
-      const placement = { id: node.id, effect: node.settings.effect };
+      // cells), and every one fades in from its palette's ground when the
+      // placement appears.
+      const placement = {
+        id: node.id,
+        effect: node.settings.effect,
+        ground: groundOf(palette),
+      };
 
       // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
       // `fg:`, and every `{{ color }}` in its body resolve from this same
@@ -765,9 +771,14 @@ const segmentType: NodeType<"segment"> = {
               justify: "left",
               truncate: "right",
               padding: 0,
-              // It follows the bar: the failure it reports may be the read of
-              // this placement's own settings.
-              placement: { id: node.id, effect: FOLLOW_BAR },
+              // It follows the bar, and fades in from the bar's ground: the
+              // failure it reports may be the read of this placement's own
+              // settings.
+              placement: {
+                id: node.id,
+                effect: FOLLOW_BAR,
+                ground: groundOf(ctx.palette),
+              },
               lead: errorAffix(node.lead, node, scope, ctx),
               trail: errorAffix(node.trail, node, scope, ctx),
             },

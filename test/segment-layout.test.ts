@@ -8,7 +8,12 @@
 // that one cell exactly to `width`, with truncation/padding applied.
 // Span-preserving across every op (OSC-8 links survive as interior spans).
 
-import { Style, cellLen, RichText } from "@promptctl/rich-js";
+import {
+  DEFAULT_TERMINAL_THEME,
+  Style,
+  cellLen,
+  RichText,
+} from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
 import { resolvedStyle } from "../src/render/rich-theme.js";
@@ -37,7 +42,11 @@ function texts(cells: readonly RichText[]): string[] {
 }
 
 // The placement every cell here is laid for, following the bar.
-const PLACEMENT = { id: "seg", effect: "bar" } as const;
+const PLACEMENT = {
+  id: "seg",
+  effect: "bar",
+  ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+} as const;
 
 const autoOptions = {
   width: "auto" as const,
