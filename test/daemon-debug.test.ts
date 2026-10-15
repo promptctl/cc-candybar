@@ -35,6 +35,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { instantOf } from "../src/utils/instant";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -221,6 +222,24 @@ describe("introspectVars with populated state", () => {
     expect(byName.get("user_path")?.ageMs).toBeGreaterThanOrEqual(0);
     // 'derived' is a template → computed → age is null.
     expect(byName.get("derived")?.ageMs).toBeNull();
+  });
+
+  // A time variable no segment reads is never read by a render, so its error
+  // and its value must come from the snapshot's own read: before any render it
+  // is the missing instant on both sides, after one it is the time, clean.
+  test("a time variable nothing rendered reads: lastError agrees with the value", () => {
+    const state = buildPopulatedState();
+    state.registry.declareTime("year", { format: "2006" });
+    const year = () => introspectVars(state).find((v) => v.name === "year");
+
+    const before = year();
+    expect(before?.lastError?.message).toContain("before any render");
+    expect(String(before?.value)).toContain("before any render");
+
+    state.registry.renderAt(instantOf(new Date(2031, 5, 1)));
+    const after = year();
+    expect(after?.value).toBe("2031");
+    expect(after?.lastError).toBeNull();
   });
 
   test("type matches each variable's declared type", () => {

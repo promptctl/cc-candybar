@@ -204,8 +204,9 @@ export function ccCandybarFuncs(): FuncMap {
 // [LAW:single-enforcer] minutesUntilReset reads "now" from the injected
 // `clock` — the SAME seam createCcCandybarEngine threads to sprigDatetime
 // (now/unixEpoch) and createEngine. One clock governs every time-dependent
-// evaluation; tests inject a frozen clock for determinism.
-export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
+// evaluation. Required, as the engine's is: a default would be a wall clock a
+// caller could fall onto by omission, beside the render's instant.
+export function formatterFuncs(clock: () => Date): FuncMap {
   return {
     // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
     // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the

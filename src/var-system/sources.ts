@@ -1090,7 +1090,10 @@ export class SourceRegistry {
   }
 
   // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
-  // template and a time variable differ only in what they compute.
+  // template and a time variable differ only in what they compute. Evaluated at
+  // its first read, never at declaration: there is no instant to read the time
+  // at until a render publishes one, and cycles are the loader's to refuse
+  // (validateNoCycles) [LAW:single-enforcer].
   private declareDerived(
     name: string,
     derive: () => string,
@@ -1131,23 +1134,6 @@ export class SourceRegistry {
         return varDefault;
       }
     });
-    // Force eager evaluation so any cycle is detected here (at config load)
-    // rather than silently at the first render.  MobX keepAlive computeds are
-    // otherwise lazy.
-    //
-    // The throw above is not a load failure: the deriver recorded it before
-    // rethrowing, and a template that throws against declare-time values may
-    // evaluate cleanly against a real payload (a field that is empty now and
-    // populated per render). Loudness belongs where the value is READ — the
-    // segment that reads it — not at registration, which would reject configs
-    // that render correctly. [LAW:no-silent-failure] the failure is not
-    // swallowed here, it is deferred to the read that actually needs the value.
-    try {
-      this.store.read(name);
-    } catch {
-      // Recorded by the deriver; MobX has cached the failure and every read of
-      // this variable will surface it.
-    }
   }
 
   // git: first-class git fields delivered by the shared GitDataProvider.

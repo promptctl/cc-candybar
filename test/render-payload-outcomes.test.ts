@@ -177,6 +177,63 @@ describe("buildRenderPayload — git outcome lane", () => {
       },
     ]);
   });
+
+  // The provider caches one GitInfo for a whole TTL window; the age must move
+  // with each render's instant, not stay frozen at the fetch.
+  test("commit age is the render's instant minus the commit date", async () => {
+    const committedAt = Date.UTC(2026, 9, 15, 12, 0, 0);
+    const deps = depsWith(
+      ok({
+        branch: "main",
+        status: "clean",
+        aheadBehind: ABSENT,
+        committedAt: ok(committedAt),
+      }),
+      [],
+    );
+    const ageAt = async (secondsLater: number) =>
+      (
+        await buildRenderPayload(
+          hookData("/no/such/transcript.jsonl"),
+          instantOf(new Date(committedAt + secondsLater * 1000)),
+          deps,
+          undefined,
+          new Set(["git.timeSinceCommit"]),
+          EFFECTIVE_GLOBALS,
+          NO_HINTS,
+          NO_CONFIG_FILE,
+        )
+      ).git?.timeSinceCommit;
+
+    expect(await ageAt(90.5)).toBe(90);
+    expect(await ageAt(3600)).toBe(3600);
+  });
+});
+
+describe("buildRenderPayload — today lane", () => {
+  test("asks the usage store for the day of the render's instant", async () => {
+    const at = instantOf(new Date(Date.UTC(2031, 0, 2, 12, 0, 0)));
+    const asked: unknown[] = [];
+    await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      at,
+      depsWith(ABSENT, [], {
+        usageStore: {
+          getUsageInfo: async () => ABSENT,
+          getTodayInfo: async (_hook: unknown, _dir: unknown, when: unknown) => {
+            asked.push(when);
+            return ABSENT;
+          },
+        },
+      }),
+      undefined,
+      new Set(["today.cost"]),
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      NO_CONFIG_FILE,
+    );
+    expect(asked).toEqual([at]);
+  });
 });
 
 describe("buildRenderPayload — cache outcome lane", () => {

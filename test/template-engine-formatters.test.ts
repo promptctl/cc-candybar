@@ -156,7 +156,7 @@ describe("shortenModelName wrapper", () => {
 
 describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
-    const funcs = formatterFuncs();
+    const funcs = formatterFuncs(() => new Date(0));
     expect(Object.keys(funcs).sort()).toEqual([
       "formatInteger",
       "formatModelName",
@@ -167,7 +167,7 @@ describe("formatterFuncs registry", () => {
   });
 
   test("all entries have argTypes arrays", () => {
-    for (const [, entry] of Object.entries(formatterFuncs())) {
+    for (const [, entry] of Object.entries(formatterFuncs(() => new Date(0)))) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
   });
@@ -178,7 +178,7 @@ describe("formatterFuncs registry", () => {
   // an engine.ts refactor that drops the spread.
   test("each registered name is callable from the engine", () => {
     const engine = createCcCandybarEngine({ clock: () => new Date() });
-    for (const name of Object.keys(formatterFuncs())) {
+    for (const name of Object.keys(formatterFuncs(() => new Date(0)))) {
       // Parse-only smoke: a missing func is reported at evaluate time, but the
       // engine pre-validates that referenced names exist in the registry.
       // Calling parse alone doesn't trigger the check (Go templates resolve

@@ -1303,10 +1303,11 @@ describe("SourceRegistry — template: basic", () => {
   // values and evaluate cleanly against a real payload, so the eager read
   // records the failure without rejecting the config. Loudness belongs at the
   // read that needs the value.
-  it("a throwing template does not make registration throw", () => {
+  it("a throwing template does not make registration throw; its read records the error", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     expect(() => registry.declareTemplate("c", "{{ .nope }}")).not.toThrow();
+    expect(() => store.read("c")).toThrow();
     expect(registry.getLastError("c")).toBeDefined();
     registry.dispose();
   });
@@ -1339,10 +1340,11 @@ describe("SourceRegistry — template: basic", () => {
 });
 
 describe("SourceRegistry — template: cycle detection", () => {
-  it("self-referencing template records a last_error at declaration", () => {
+  it("self-referencing template records a last_error when read", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     registry.declareTemplate("self", "{{ .self }}");
+    expect(() => store.read("self")).toThrow();
     expect(registry.getLastError("self")).toBeDefined();
     registry.dispose();
   });

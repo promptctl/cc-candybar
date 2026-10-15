@@ -101,6 +101,7 @@ import {
   renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
+  type RenderPayloadDeps,
 } from "./render-payload.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
@@ -1392,14 +1393,11 @@ function serializeSegmentCells(
 
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.
-const payloadDeps = {
+const payloadDeps: Omit<RenderPayloadDeps, "navigation"> = {
   // [LAW:single-enforcer] The providers carry `dlog` as `log`:
   // buildRenderPayload is the one log site for the outcome-carrying provider
   // lanes (git, cache).
   ...payloadProviders,
-  // [LAW:single-enforcer] The daemon's wall clock — the same instant source
-  // the rate-limit ETA projection and the template's reset countdown read.
-  clock: () => new Date(),
   history: (sessionId: string) => settingsHistory.depth(sessionId),
 };
 

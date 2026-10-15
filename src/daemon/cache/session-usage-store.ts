@@ -25,6 +25,7 @@ import {
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../log";
+import { dateOf, type Instant } from "../../utils/instant";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -413,8 +414,10 @@ export class SessionUsageStore {
   async getTodayInfo(
     hookData: ClaudeHookData | undefined,
     claudeConfigDir: string | undefined,
+    // The instant the render is drawn at: its local date is the day summed.
+    at: Instant,
   ): Promise<Outcome<TodayInfo>> {
-    const today = dayKey(new Date());
+    const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
     try {
       await this.ensureSeeded(today, claudePaths);

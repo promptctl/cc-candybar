@@ -1230,7 +1230,7 @@ export async function buildRenderPayload(
       () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
     ),
     lane("today", wants("today"), () =>
-      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir),
+      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir, at),
     ),
     // autocompact's controls are capped to the model's context window, so
     // the lane runs for either family, as metrics runs for burn.
@@ -1308,7 +1308,7 @@ export async function buildRenderPayload(
     return oc.kind === "ok" ? oc.value : undefined;
   };
 
-  const gitProjection = projectGitInfo(gitOutcome);
+  const gitProjection = projectGitInfo(gitOutcome, nowMs);
   failures.push(...gitProjection.failures);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
@@ -1644,7 +1644,10 @@ function posixify(s: string | undefined): string | undefined {
 // fallback chain fills the declared default and records a last_error), and
 // every `failed` contributes a description for the boundary to log — this
 // function performs no effect itself ([LAW:effects-at-boundaries]).
-function projectGitInfo(outcome: Outcome<GitInfo>): {
+function projectGitInfo(
+  outcome: Outcome<GitInfo>,
+  nowMs: number,
+): {
   readonly git?: GitPayload;
   readonly failures: readonly string[];
 } {
@@ -1668,7 +1671,13 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
   const aheadBehind = field("aheadBehind", info.aheadBehind);
   const sha = field("sha", info.sha);
   const operation = field("operation", info.operation);
-  const timeSinceCommit = field("timeSinceCommit", info.timeSinceCommit);
+  // [LAW:one-source-of-truth] The age is the commit's date subtracted from the
+  // render's instant — the "now" every other time read in this render sees.
+  const committedAt = field("timeSinceCommit", info.committedAt);
+  const timeSinceCommit =
+    committedAt === undefined
+      ? undefined
+      : Math.floor((nowMs - committedAt) / 1000);
   const stash = field("stash", info.stashCount);
   const upstream = field("upstream", info.upstream);
   const repoName = field("repoName", info.repoName);

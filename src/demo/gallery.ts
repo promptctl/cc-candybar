@@ -39,6 +39,9 @@ const prepared = await prepareConfig(
   process.cwd(),
   warnings,
 );
+// [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
+// only in the theme they wear.
+const at = instantOf(new Date());
 try {
   for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
   for (const theme of THEMES) {
@@ -51,7 +54,7 @@ try {
       prepared,
       effective,
       WIDTH,
-      instantOf(new Date()),
+      at,
     );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
