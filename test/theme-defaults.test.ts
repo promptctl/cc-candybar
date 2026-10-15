@@ -31,6 +31,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 
@@ -261,12 +262,14 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   };
   try {
     const effective = resolveEffectiveGlobals(config, () => null, () => false);
+    const at = instantOf(new Date());
     renderDsl(
       config,
       compiled,
       store,
       registry,
       { session_id: SID },
+      at,
       renderOptionsOf(effective, OPTS_WIDTH),
       { perSegmentSink: sink },
       renderSelectionOf(effective),
@@ -278,6 +281,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       store,
       registry,
       { session_id: SID },
+      at,
       renderOptionsOf(effective, OPTS_WIDTH),
       { perSegmentSink: sink },
     );
