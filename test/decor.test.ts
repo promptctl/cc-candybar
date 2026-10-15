@@ -702,6 +702,36 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     },
   );
 
+  // Black and white end every ray the search walks. In truecolor the ray
+  // toward black can stop a hair off it (#000002); a depth that draws from a
+  // table rounds both ends onto its own black and white.
+  test.each(
+    [ColorDepth.EIGHT_BIT, ColorDepth.STANDARD].flatMap((drawnAt) =>
+      STYLE_NAMES.map((style) => [drawnAt, style] as const),
+    ),
+  )(
+    "a state that stands short as drawn stands at least as far off its nearest cell as black or white would (depth %s, style %s)",
+    (drawnAt, style) => {
+      const shown = shownAt(drawnAt);
+      const ends = [new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255)];
+      const wrong: string[] = [];
+      for (const { name, palette } of STYLED.filter((styled) => styled.style === style)) {
+        for (const { name: where, ground } of GROUNDS) {
+          const cells = groundCells(palette, ground).map((c) => shown(drawnGround(c)));
+          const stands = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(shown(c), x)));
+          const furthestEnd = Math.max(...ends.map(stands));
+          for (const hue of DEPTH_HUES) {
+            const { state, short } = stateFor(palette, hue, groundCells(palette, ground), drawnAt);
+            if (short !== null && stands(state) < furthestEnd) {
+              wrong.push(`${name} ${where} ${hue}: ${stands(state).toFixed(3)}:1, an end ${furthestEnd.toFixed(3)}:1`);
+            }
+          }
+        }
+      }
+      expect(wrong).toEqual([]);
+    },
+  );
+
   test("the search falls short only where no colour at all stands off the row — it never gives up while one does", () => {
     const wrong: string[] = [];
     const short: Ground[] = [];

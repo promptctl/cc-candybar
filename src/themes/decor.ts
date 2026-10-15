@@ -645,8 +645,9 @@ export interface StateSearch {
   /**
    * The candidate the search settled on, before the depth draws it: `state`
    * is drawn from it, and the band's plane and items are blended from it
-   * (`trueBand`), so a trigger and its band have one colour to agree on at
-   * every depth. Where no twelfth clears, the depth chooses it.
+   * (`unroundedBand`), so a trigger and its band have one colour to agree on
+   * at every depth. Where no twelfth clears — in truecolor, or as the depth
+   * draws it — the depth chooses it.
    */
   readonly anchor: ColorRgba;
   readonly state: ColorRgba;
@@ -678,14 +679,16 @@ const shownTrue = shownAt(ColorDepth.TRUECOLOR);
  * trigger and every cell are rounded independently, and a trigger whose
  * rounding lands too near a rounded cell is replaced by the nearest drawn
  * colour that clears the floor against all of them (rich-js `ensureDrawn`).
+ * A depth that draws no such colour clears no twelfth.
  *
  * [LAW:dataflow-not-control-flow] The candidates nearest first, one predicate,
  * the first that passes; the values decide, not a branch per theme.
  * [LAW:no-silent-failure] Cells no colour clears — a row turning between
- * textual-dark's navy and orange under `alt` — get that furthest colour, and
- * `short` says how far it stands as drawn, for the render to report. It does
- * not throw: the settings door is a trigger too, and a throw there would leave
- * no way to turn the setting back.
+ * textual-dark's navy and orange under `alt` — or no colour the depth draws
+ * does — that row placed by `golden-angle`, at ansi — get that furthest
+ * colour, and `short` says how far it stands as drawn, for the render to
+ * report. It does not throw: the settings door is a trigger too, and a throw
+ * there would leave no way to turn the setting back.
  */
 export function stateFor(
   palette: Palette,
@@ -744,8 +747,22 @@ function searchState(
       Math.min(Infinity, ...drawn.map((cell) => contrastRatio(shown(c), cell)));
   };
   const standsTrue = standsAt(ColorDepth.TRUECOLOR);
-  const clears = (c: ColorRgba): boolean => standsTrue(c) >= STATE_FLOOR;
   const standsAsDrawn = standsAt(drawnAt);
+  // What the depth draws for `c` that stands STATE_FLOOR off every cell as
+  // drawn: `c`, or the nearest colour the depth draws that does — none where
+  // it draws no such colour, whichever `c` it starts from (rich-js
+  // `ensureDrawn`).
+  const drawnClear = (c: ColorRgba): ColorRgba | undefined =>
+    ensureDrawn(c, drawnAt, (candidate, draw) =>
+      cells.every(
+        (cell) => contrastRatio(candidate, draw(cell)) >= STATE_FLOOR,
+      ),
+    );
+  // A step clears in truecolor and as the depth draws it: where the depth
+  // draws no colour that clears, it shows a step as the step's own rounding,
+  // which can land on a cell.
+  const clears = (c: ColorRgba): boolean =>
+    standsTrue(c) >= STATE_FLOOR && drawnClear(c) !== undefined;
   // Between two cells adjacent in luminance, the colour standing furthest off
   // both is their balance: a contrast ratio multiplies, so the colour there
   // stands the root of their ratio off each, and no other cell comes nearer
@@ -802,12 +819,7 @@ function searchState(
   // replaces it by the nearest colour it draws that clears every cell as
   // drawn, where one does, and the shortfall is measured on the pair the
   // terminal shows — never on truecolor's while the label names the depth.
-  const state =
-    ensureDrawn(chosen, drawnAt, (candidate, draw) =>
-      cells.every(
-        (cell) => contrastRatio(candidate, draw(cell)) >= STATE_FLOOR,
-      ),
-    ) ?? chosen;
+  const state = drawnClear(chosen) ?? chosen;
   const stands = standsAsDrawn(state);
   return {
     anchor: chosen,
@@ -939,7 +951,7 @@ const enclosingPlane = (
   disclosure.depth === 0
     ? []
     : [
-        trueBand(
+        unroundedBand(
           palette,
           { ...disclosure, depth: disclosure.depth - 1 },
           drawnAt,
@@ -979,9 +991,9 @@ const planeShortfall = (
 /**
  * How far a band's plane recedes from its state colour toward `background`:
  * `base + perDepth × depth`, capped — and where that plane breaks a band floor,
- * toward `foreground`, then either as far as the cap (`computeTrueBand`). Two
- * cues move with depth — the hue
- * advances and the plane recedes. The cap is the limit: between depths 2 and
+ * toward `foreground`, then either as far as the cap (`computeUnroundedBand`).
+ * Two cues move with depth — the hue advances and the plane recedes. The cap
+ * is the limit: between depths 2 and
  * 3 only 0.05 of recession remains while `hueAtDepth` has wrapped onto a hue
  * already used, so adjacent planes are guaranteed apart only through depth 2
  * (the bundled door → ⚙ → picker). A trigger still stands off its plane at
@@ -1034,7 +1046,7 @@ export const BAND_FLOORS = {
  * A disclosure's band: two colours of one hue. `state` is its peak — the
  * colour the trigger that opened it wears, so a trigger is drawn from what it
  * OPENS, not from where it sits — and `plane` is its floor, the state receded
- * toward `background` (`computeTrueBand`).
+ * toward `background` (`computeUnroundedBand`).
  */
 export interface BandColours {
   readonly state: ColorRgba;
@@ -1088,7 +1100,7 @@ export function bandFor(
     // the state is drawn from, never blended from a state already rounded.
     const floors = planeFloors(palette, disclosure, state, drawnAt);
     const plane = ensureDrawn(
-      trueBand(palette, disclosure, drawnAt).plane,
+      unroundedBand(palette, disclosure, drawnAt).plane,
       drawnAt,
       (candidate, drawn) => floors.every((holds) => holds(candidate, drawn)),
     );
@@ -1134,21 +1146,24 @@ const deltaE = (a: ColorRgba, b: ColorRgba): number =>
 // The band before `drawnAt` rounds it — its state the anchor the search settled
 // on at that depth (`StateSearch`), the colours that depth rounds from, and the
 // pair whose floors decide which floors a drawn band is held to. Where a
-// twelfth clears, every depth settles on it, and so on one band.
-function trueBand(
+// twelfth clears in truecolor and as each depth draws it, every depth settles
+// on it, and so on one band.
+function unroundedBand(
   palette: Palette,
   disclosure: Disclosure,
   drawnAt: ColorDepth,
 ): BandColours {
-  return TRUE_BANDS(palette, `${disclosureKey(disclosure)}|${drawnAt}`, () =>
-    computeTrueBand(palette, disclosure, drawnAt),
+  return UNROUNDED_BANDS(
+    palette,
+    `${disclosureKey(disclosure)}|${drawnAt}`,
+    () => computeUnroundedBand(palette, disclosure, drawnAt),
   );
 }
 // Memoised beside the drawn bands: every band's floors and every band item
 // round from it, so the render walk asks for it once per item.
-const TRUE_BANDS = memoPerPalette<BandColours>();
+const UNROUNDED_BANDS = memoPerPalette<BandColours>();
 
-function computeTrueBand(
+function computeUnroundedBand(
   palette: Palette,
   disclosure: Disclosure,
   drawnAt: ColorDepth,
@@ -1209,13 +1224,13 @@ function planeFloors(
   drawnAt: ColorDepth,
 ): readonly PlaneFloor[] {
   const { hue, depth, ground } = disclosure;
-  // The unrounded band is the unrepaired one (`trueBand`),
-  // so no floor asks `bandFor` for the band it is computing.
-  const trueState = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d, ground }, drawnAt).state;
-  const truePlane = (d: number): ColorRgba =>
-    trueBand(palette, { hue, depth: d, ground }, drawnAt).plane;
-  const plane = truePlane(depth);
+  // Read from the band before any repair (`unroundedBand`), so no floor asks
+  // `bandFor` for the band it is computing.
+  const unroundedState = (d: number): ColorRgba =>
+    unroundedBand(palette, { hue, depth: d, ground }, drawnAt).state;
+  const unroundedPlane = (d: number): ColorRgba =>
+    unroundedBand(palette, { hue, depth: d, ground }, drawnAt).plane;
+  const plane = unroundedPlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
   const nested = stateFor(
@@ -1233,14 +1248,14 @@ function planeFloors(
     (candidate, drawn) =>
       deltaE(candidate, drawn(other)) >= floor;
   return [
-    apart(state, keptApart(BAND_FLOORS.triggerPlane, trueState(depth))),
+    apart(state, keptApart(BAND_FLOORS.triggerPlane, unroundedState(depth))),
     (candidate, drawn) =>
       contrastRatio(candidate, drawn(nested.state)) >= keptUnder,
     ...(depth > 0
       ? [
           apart(
             bandFor(palette, { hue, depth: depth - 1, ground }, drawnAt).plane,
-            keptApart(BAND_FLOORS.nestedPlane, truePlane(depth - 1)),
+            keptApart(BAND_FLOORS.nestedPlane, unroundedPlane(depth - 1)),
           ),
         ]
       : []),
@@ -1264,9 +1279,9 @@ export function bandItemFor(
   drawnAt: ColorDepth,
 ): ColorRgba {
   const band = bandFor(palette, disclosure, drawnAt);
-  const truecolor = trueBand(palette, disclosure, drawnAt);
+  const unrounded = unroundedBand(palette, disclosure, drawnAt);
   const at = (place: number): ColorRgba =>
-    blendRgb(truecolor.plane, truecolor.state, place);
+    blendRgb(unrounded.plane, unrounded.state, place);
   const own = BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address);
   const middle = BAND_WINDOW.floor + BAND_WINDOW.span / 2;
   // An item is never the plane it sits on and never its own trigger — as
