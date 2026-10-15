@@ -31,7 +31,7 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
     config = path.join(projectDir, "epoch.json5");
     writeFileSync(
       config,
-      `{ segments: { epoch: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['epoch'] } }`,
+      `{ segments: { epoch: { template: 'EPOCH={{ unixEpoch now }}{{ date ".000" now }}' } }, root: { h: ['epoch'] } }`,
     );
     daemon = await spawnDaemonWithEnv(prepared.env);
   });
@@ -54,14 +54,19 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
     );
     const after = Date.now() / 1000;
 
-    const shown = Number(bar.match(/EPOCH=(\d+)/)?.[1]);
-    const line = readFileSync(logPath(env), "utf8")
+    const shown = bar.match(/EPOCH=(\d+\.\d{3})/)?.[1];
+    // A request the helper retried after a reply timeout is logged once per
+    // attempt, so the reply's render is the event whose instant the bar shows,
+    // to the millisecond — which is the claim itself.
+    const instants = readFileSync(logPath(env), "utf8")
       .split("\n")
-      .find((l) => l.includes(`render sid=${sessionId} `));
-    const at = Number(line?.match(/ at=(\d+\.\d{3}) /)?.[1]);
+      .filter((l) => l.includes(`render sid=${sessionId} `))
+      .map((l) => l.match(/ at=(\d+\.\d{3}) /)?.[1]);
 
+    expect(shown).toMatch(/^\d+\.\d{3}$/);
+    expect(instants).toContain(shown);
+    const at = Number(shown);
     expect(at).toBeGreaterThanOrEqual(Math.floor(before));
     expect(at).toBeLessThanOrEqual(after);
-    expect(shown).toBe(Math.floor(at));
   });
 });

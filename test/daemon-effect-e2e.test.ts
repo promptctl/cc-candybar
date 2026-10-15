@@ -59,12 +59,18 @@ describe("a daemon render's event names the effect it wore", () => {
         reused: Number(l.match(/\/(\d+)reused /)?.[1]),
       }));
 
-    expect(events).toHaveLength(2);
-    const [first, second] = events;
+    // A request the helper retried after a reply timeout is logged once per
+    // attempt (the daemon finishes the attempt it was too slow to answer). A
+    // render logs in the same synchronous step that draws it, so log order is
+    // render order: the FIRST event brought the effect into force, and the LAST
+    // is a later render of the same row.
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    const first = events[0]!;
+    const last = events[events.length - 1]!;
     expect(first).toMatchObject({ effect: "shimmer", t: 0, reused: 0 });
-    expect(first!.made).toBeGreaterThan(0);
-    expect(second!.effect).toBe("shimmer");
-    expect(second!.t).toBeGreaterThan(0);
-    expect(second).toMatchObject({ made: 0, reused: first!.made });
+    expect(first.made).toBeGreaterThan(0);
+    expect(last.effect).toBe("shimmer");
+    expect(last.t).toBeGreaterThan(0);
+    expect(last).toMatchObject({ made: 0, reused: first.made });
   });
 });
