@@ -661,10 +661,11 @@ const shownTrue = shownAt(ColorDepth.TRUECOLOR);
  * `STATE_FLOOR` off every cell — the enforcement is a floor, not a transform.
  * Otherwise the hue slid along its own OKLCH lightness, its angle and chroma
  * kept, the least distance that stands off every cell: toward white and toward
- * black in twelfths, a step each way in turn, and where no twelfth clears, the
- * balance in a window between two cells the twelfths stepped over. Cells that
- * are dim take a bright state and cells that are vivid a deep one, with no
- * branch on which.
+ * black in twelfths, a step each way in turn. Where no twelfth clears, the
+ * colour standing furthest off its nearest cell as drawn: an end of the axis,
+ * or the balance between two cells adjacent in luminance, which clears where
+ * the twelfths stepped over a window between them. Cells that are dim take a
+ * bright state and cells that are vivid a deep one, with no branch on which.
  *
  * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
  * trigger and every cell are rounded independently, and a trigger whose
@@ -674,10 +675,10 @@ const shownTrue = shownAt(ColorDepth.TRUECOLOR);
  * [LAW:dataflow-not-control-flow] The candidates nearest first, one predicate,
  * the first that passes; the values decide, not a branch per theme.
  * [LAW:no-silent-failure] Cells no colour clears — a row turning between
- * textual-dark's navy and orange under `alt` — get the candidate standing
- * furthest off its nearest cell, and `short` says how far it stands as drawn,
- * for the render to report. It does not throw: the settings door is a trigger too,
- * and a throw there would leave no way to turn the setting back.
+ * textual-dark's navy and orange under `alt` — get that furthest colour, and
+ * `short` says how far it stands as drawn, for the render to report. It does
+ * not throw: the settings door is a trigger too, and a throw there would leave
+ * no way to turn the setting back.
  */
 export function stateFor(
   palette: Palette,
@@ -728,26 +729,28 @@ function searchState(
     // [LAW:no-defensive-null-guards] Both rays are one length by construction.
     ...ray(white).flatMap((c, k) => [c, toBlack[k]!]),
   ];
-  // The contrast against the nearest cell: what the floor holds, and what
-  // cells no colour clears are drawn to the most of. No cell at all is
-  // nothing to stand off.
-  const nearest = (candidate: ColorRgba): number =>
-    Math.min(
-      Infinity,
-      ...cells.map((cell) => contrastRatio(shownTrue(candidate), cell)),
-    );
-  const clears = (c: ColorRgba): boolean => nearest(c) >= STATE_FLOOR;
-  // Between two cells adjacent in luminance lies a window of colours standing
-  // STATE_FLOOR off both exactly when the two stand STATE_FLOOR² apart: a
-  // contrast ratio multiplies, so the colour at their balance stands the root
-  // of their ratio off each, and no other cell comes nearer to it. A window
-  // can be narrower than a twelfth — rows an authored distribution deals on
-  // textual-dark leave them as narrow as .002 of luminance between its navy
-  // and its orange — and the twelfths step over it, so the balance is found
-  // on the ray toward it by halving: past it, the colour stands nearer the
-  // cell beyond it than the one it left.
+  // How far a colour stands off its nearest cell as the terminal draws both at
+  // `depth`. No cell at all is nothing to stand off.
+  const standsAt = (depth: ColorDepth): ((c: ColorRgba) => number) => {
+    const shown = shownAt(depth);
+    const drawn = cells.map(shown);
+    return (c) =>
+      Math.min(Infinity, ...drawn.map((cell) => contrastRatio(shown(c), cell)));
+  };
+  const standsTrue = standsAt(ColorDepth.TRUECOLOR);
+  const clears = (c: ColorRgba): boolean => standsTrue(c) >= STATE_FLOOR;
+  const standsAsDrawn = standsAt(drawnAt);
+  // Between two cells adjacent in luminance, the colour standing furthest off
+  // both is their balance: a contrast ratio multiplies, so the colour there
+  // stands the root of their ratio off each, and no other cell comes nearer
+  // to it — STATE_FLOOR off both exactly when the two stand STATE_FLOOR²
+  // apart. A balance can fall between twelfths — rows an authored
+  // distribution deals on textual-dark leave windows as narrow as .002 of
+  // luminance between its navy and its orange — so it is found on the ray
+  // toward it by halving: past it, the colour stands nearer the cell beyond
+  // it than the one it left.
   // The ray is drawn in 8-bit steps that can be wider than half a window, so
-  // both colours either side of the balance are offered, the nearer first.
+  // both colours either side of the balance are offered.
   const aroundBalance = (
     lighter: ColorRgba,
     darker: ColorRgba,
@@ -767,24 +770,28 @@ function searchState(
     }
     return [along(end, near), along(end, far)];
   };
-  const windows = (): ColorRgba[] => {
+  const balances = (): ColorRgba[] => {
     const rising = [...cells].sort(
       (a, b) => relativeLuminance(a) - relativeLuminance(b),
     );
-    return rising.slice(1).flatMap((lighter, i) => {
-      // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
-      const darker = rising[i]!;
-      return contrastRatio(lighter, darker) >= STATE_FLOOR ** 2
-        ? aroundBalance(lighter, darker)
-        : [];
-    });
+    // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
+    return rising
+      .slice(1)
+      .flatMap((lighter, i) => aroundBalance(lighter, rising[i]!));
   };
-  // Black and white are steps, so a colour beyond every cell is found among
-  // them; the windows between cells are searched only where no step clears.
+  // The least step that clears; where none does, the candidate standing
+  // furthest off its nearest cell, the balances between cells among them: in
+  // truecolor the furthest any colour stands is an end of the axis, which is a
+  // step, or a balance, which clears exactly where two cells leave room
+  // between them. It is measured as the terminal draws it, since where nothing
+  // clears it is what the terminal shows: a balance sits between two cells,
+  // and at 256 colours or ansi it rounds onto one of them where an end of the
+  // axis does not.
   const chosen =
     candidates.find(clears) ??
-    windows().find(clears) ??
-    candidates.reduce((a, b) => (nearest(b) > nearest(a) ? b : a));
+    [...candidates, ...balances()].reduce((a, b) =>
+      standsAsDrawn(b) > standsAsDrawn(a) ? b : a,
+    );
   // [LAW:dataflow-not-control-flow] One path whichever was chosen: the depth
   // replaces it by the nearest colour it draws that clears every cell as
   // drawn, where one does, and the shortfall is measured on the pair the
@@ -795,11 +802,7 @@ function searchState(
         (cell) => contrastRatio(candidate, draw(cell)) >= STATE_FLOOR,
       ),
     ) ?? chosen;
-  const asDrawn = shownAt(drawnAt);
-  const stands = Math.min(
-    Infinity,
-    ...cells.map((cell) => contrastRatio(asDrawn(state), asDrawn(cell))),
-  );
+  const stands = standsAsDrawn(state);
   return { state, short: stands >= STATE_FLOOR ? null : stands };
 }
 

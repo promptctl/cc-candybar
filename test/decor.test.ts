@@ -13,6 +13,7 @@ import {
   ColorRgba,
   contrastFor,
   contrastRatio,
+  ensureContrast,
   getThemePalette,
   listThemePalettes,
   Oklch,
@@ -396,10 +397,13 @@ describe("the colour is its role at a shade, as the palette names it", () => {
                 if (text.hex !== textOn(palette, tint, drawnAt).hex) wrong.push(`${where}: not the pole`);
                 continue;
               }
+              // Its role's own text, slid by rich-js until it reads — the hue
+              // kept, the lightness moved — and untouched where it already does.
               const own = paletteRole(palette, `text-${hue}`);
-              if (contrastRatio(shown(tint), shown(own)) < TEXT_MIN_CONTRAST) moved++;
-              else if (text.hex === own.hex) kept++;
-              else wrong.push(`${where}: ${text.hex}, not its own ${own.hex}, which reads`);
+              const slid = ensureContrast(own, tint, TEXT_MIN_CONTRAST, drawnAt);
+              if (text.hex !== slid.hex) wrong.push(`${where}: ${text.hex}, not its own ${own.hex} slid to the floor (${slid.hex})`);
+              else if (slid.hex === own.hex) kept++;
+              else moved++;
             }
           }
         }
@@ -658,6 +662,22 @@ function someColourClears(cells: readonly ColorRgba[]): boolean {
   return free <= 1;
 }
 
+/**
+ * How far the colour standing furthest off its nearest cell stands, as drawn.
+ * A contrast ratio reads luminance alone, so that colour is black, white, or
+ * the balance of the two cells adjacent in luminance that stand furthest
+ * apart, which stands the root of their ratio off each — answered here in the
+ * test's own words, independent of any search.
+ */
+function furthestAnyColourStands(cells: readonly ColorRgba[]): number {
+  const rising = cells.map((c) => relativeLuminance(drawnGround(c)) + 0.05).sort((x, y) => x - y);
+  return Math.max(
+    rising[0]! / 0.05,
+    1.05 / rising[rising.length - 1]!,
+    ...rising.slice(1).map((l, i) => Math.sqrt(l / rising[i]!)),
+  );
+}
+
 describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of the row it stands in", () => {
   // One test per depth and style: together they walk every theme × ground ×
   // depth hue, past what one test's timeout allows.
@@ -703,10 +723,10 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     expect(short.every((ground) => new Set(ground.map((e) => e.hue)).size > 1)).toBe(true);
   });
 
-  test("a row no colour stands off draws the colour standing furthest off its nearest cell, and says how far that is", () => {
+  test("a row no colour stands off draws the colour standing furthest off its nearest cell as the terminal draws both, and says how far that is", () => {
     // A row of black, grey and white: every colour sits within 2.2:1 of one.
     const roles = new Map<string, ColorRgba>([
-      ["accent", new ColorRgba(0xd0, 0x70, 0x30)],
+      ["accent", new ColorRgba(0xfe, 0xa6, 0x2b)],
       ["secondary-darken-1", new ColorRgba(0, 0, 0)],
       ["secondary", new ColorRgba(0x77, 0x77, 0x77)],
       ["secondary-lighten-1", new ColorRgba(0xff, 0xff, 0xff)],
@@ -715,15 +735,22 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     const ground: Ground = SHADES.middle.tones.map((shade) => ({ hue: "secondary", shade }));
     const cells = groundCells(straddling, ground);
     expect(someColourClears(cells)).toBe(false);
-    const { state, short } = stateFor(straddling, "accent", cells, ColorDepth.TRUECOLOR);
-    const nearest = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(c, x)));
-    expect(short).toBe(nearest(state));
-    expect(short!).toBeLessThan(STATE_FLOOR);
-    // At least as far off its nearest cell as the hue itself or either end of
-    // the lightness axis.
-    for (const other of [paletteRole(straddling, "accent"), new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255)]) {
-      expect(nearest(state)).toBeGreaterThanOrEqual(nearest(other) - 1e-9);
+    for (const drawnAt of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT]) {
+      const shown = shownAt(drawnAt);
+      const stands = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(shown(c), shown(x))));
+      const { state, short } = stateFor(straddling, "accent", cells, drawnAt);
+      expect(short).toBe(stands(state));
+      expect(short!).toBeLessThan(STATE_FLOOR);
+      // At 256 colours the deep orange truecolor picks rounds nearer the black
+      // than the hue itself stands off the white.
+      expect(stands(state)).toBeGreaterThanOrEqual(stands(paletteRole(straddling, "accent")) - 1e-9);
     }
+    // In truecolor, as far as any colour stands — at the balance of the black
+    // and the grey — short of it only by the 8-bit step the hue's ray is
+    // drawn in.
+    const { state } = stateFor(straddling, "accent", cells, ColorDepth.TRUECOLOR);
+    const nearest = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(c, x)));
+    expect(nearest(state)).toBeGreaterThan(furthestAnyColourStands(cells) * 0.99);
   });
 
   test("the search reaches the end of the lightness axis when only that end clears", () => {
