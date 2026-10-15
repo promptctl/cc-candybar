@@ -15,7 +15,10 @@ import {
   claudeConfigDir,
   claudeSettingsPath,
   detectClaudeConfigDir,
+  readClaudeSettings,
+  readClaudeSettingsText,
 } from "../claude-settings";
+import { JSON_DIALECT, setValue } from "../config/json5-edit";
 import {
   assessCurrency,
   currencyReport,
@@ -525,19 +528,11 @@ function updateClaudeSettings(
     );
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let settings: Record<string, any> = {};
-  if (fs.existsSync(target)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(target, "utf-8"));
-    } catch (err) {
-      throw new Error(
-        `Could not parse ${target}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  const existing = settings.statusLine?.command as string | undefined;
+  const statusLine = readClaudeSettings(target).statusLine;
+  const existing =
+    typeof statusLine === "object" && statusLine !== null
+      ? (statusLine as Record<string, unknown>).command
+      : undefined;
   // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
   // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
   // a version suffix follows) or has the staged bin path — quoted or bare —
@@ -564,12 +559,25 @@ function updateClaudeSettings(
     return;
   }
 
-  settings.statusLine = {
-    type: "command",
-    command: buildStatusLineCommand(binPath, rendererArgs),
-  };
-
-  writeAtomic(target, JSON.stringify(settings, null, 2));
+  // [LAW:one-source-of-truth] A splice through the editor the doctor's fixes
+  // use, not a rewrite: the two keys install owns change, and every other
+  // `statusLine` key — the `refreshInterval` the doctor sets, a `padding` —
+  // and every other byte of the file survive an upgrade.
+  const withType = setValue(
+    readClaudeSettingsText(target),
+    ["statusLine", "type"],
+    JSON.stringify("command"),
+    JSON_DIALECT,
+  );
+  writeAtomic(
+    target,
+    setValue(
+      withType,
+      ["statusLine", "command"],
+      JSON.stringify(buildStatusLineCommand(binPath, rendererArgs)),
+      JSON_DIALECT,
+    ),
+  );
   process.stdout.write(`Updated ${target}\n`);
 }
 

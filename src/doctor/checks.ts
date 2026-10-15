@@ -341,18 +341,20 @@ const effectRefresh: Check = {
       };
     }
     // [LAW:one-source-of-truth] Claude Code's own reading: a number of
-    // seconds. Anything else — absent, a string — runs on events only, and
-    // the fix overwrites it.
+    // seconds, no fewer than the minimum, so the minimum itself is the one
+    // value that redraws every second. Unset runs on events only; anything
+    // under the minimum or not a number is a value the docs give no meaning,
+    // so the reason names it rather than guess, and the fix overwrites it.
     const interval = statusLine.refreshInterval;
-    if (typeof interval === "number" && interval <= EFFECT_REFRESH_INTERVAL) {
-      return { ok: true };
-    }
+    if (interval === EFFECT_REFRESH_INTERVAL) return { ok: true };
     return {
       ok: false,
       reason:
-        typeof interval === "number"
-          ? `${wearing}, but Claude Code redraws it only every ${interval} s`
-          : `${wearing}, but Claude Code redraws it only on events`,
+        interval === undefined
+          ? `${wearing}, but Claude Code redraws it only on events`
+          : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
+            ? `${wearing}, but Claude Code redraws it only every ${interval} s`
+            : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`,
       fix: {
         kind: "claude-settings",
         path: ["statusLine", "refreshInterval"],

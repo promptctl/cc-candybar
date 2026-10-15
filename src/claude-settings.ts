@@ -36,9 +36,10 @@ export function claudeConfigDir(detected: string | undefined): string {
 }
 
 // [LAW:one-source-of-truth] THE location of Claude Code's user settings file
-// in a configuration directory. Two writers touch it — `cc-candybar install`
-// (the statusLine command) and the doctor's claude-settings-env fix
-// (src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
+// in a configuration directory. Two writers touch it, both splicing through
+// one editor so neither drops the other's keys — `cc-candybar install` (the
+// statusLine command) and the doctor's claude-settings fixes (`env`,
+// `statusLine.refreshInterval`; src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
 // shows (src/segments/autocompact.ts), which Claude Code's own `/autocompact`
 // writes here. They must all mean the file Claude Code reads, so the path is
 // spelled once and imported by each.

@@ -209,6 +209,34 @@ describe("install — clobber protection", () => {
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
+  // brandon-effects-2gka.21e: the doctor's effectRefresh fix writes
+  // `statusLine.refreshInterval`, and the update notice's [upgrade] re-runs
+  // install — which must change only the command it owns.
+  test("re-install keeps every other statusLine key and every other byte", () => {
+    const p = tmpSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const before = `{
+    "env": { "A": "1" },
+    "statusLine": {
+        "type": "command",
+        "command": ${JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"]))},
+        "refreshInterval": 1,
+        "padding": 2
+    }
+}
+`;
+    fs.writeFileSync(p, before);
+
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+
+    expect(fs.readFileSync(p, "utf-8")).toBe(
+      before.replace(
+        JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"])),
+        JSON.stringify(buildStatusLineCommand(BIN, [])),
+      ),
+    );
+  });
+
   test("settings without statusLine gets statusLine written", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });

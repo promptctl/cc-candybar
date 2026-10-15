@@ -301,14 +301,19 @@ describe("effectRefresh probe", () => {
     });
   });
 
-  // Claude Code reads a number of seconds; a string is no interval at all,
-  // so the fix overwrites it.
-  test("a non-number interval runs on events only, and offers the fix", () => {
-    expect(effectRefresh(SHIMMER, interval("1"))).toMatchObject({
-      ok: false,
-      fix: FIX,
-    });
-  });
+  // Claude Code reads a number of seconds no fewer than 1: anything else is a
+  // value its docs give no meaning, named as it stands and overwritten by the
+  // fix — 0, a common spelling of "off", included.
+  test.each([["1"], [0], [0.5], [-1]])(
+    "%j is not an interval Claude Code accepts → failed naming it, WITH the fix",
+    (value) => {
+      expect(effectRefresh(SHIMMER, interval(value))).toEqual({
+        ok: false,
+        reason: `the bar wears the shimmer effect, but statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)`,
+        fix: FIX,
+      });
+    },
+  );
 
   // A statusLine holding only a refresh interval is one Claude Code cannot
   // run, so with no statusLine in the file there is nothing to add it beside.
