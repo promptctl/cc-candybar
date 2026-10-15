@@ -1,3 +1,10 @@
+## [1.129.4](https://github.com/promptctl/cc-candybar/compare/v1.129.3...v1.129.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **usage-store:** today catches up with never-rendering sessions by a background rescan ([#343](https://github.com/promptctl/cc-candybar/issues/343)) ([128c1c0](https://github.com/promptctl/cc-candybar/commit/128c1c0255e44c880f72c4c84263893fd9934bc9))
+
 ## [1.129.3](https://github.com/promptctl/cc-candybar/compare/v1.129.2...v1.129.3) (2026-10-15)
 
 
