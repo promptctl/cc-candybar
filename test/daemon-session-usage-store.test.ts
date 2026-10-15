@@ -22,6 +22,7 @@ import {
   writeFileSync,
   rmSync,
   utimesSync,
+  appendFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -367,6 +368,53 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     } finally {
       store.close();
       rmSync(many, { recursive: true, force: true });
+    }
+  });
+
+  // brandon-unfiled-3248.7xp: a session that never renders (headless
+  // `claude -p`, the Agent SDK) reaches `today` through the next rescan, both
+  // one that started after the day's seed and one the seed saw that kept going.
+  test("today counts never-rendering sessions' work by the next rescan", async () => {
+    clearParseCache();
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-"));
+    const RESCAN_MS = 60_000;
+    const store = new SessionUsageStore({ sweepIntervalMs: 0, rescanIntervalMs: RESCAN_MS });
+    try {
+      const pdir = join(tree, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      const active = join(pdir, "active.jsonl");
+      const ongoing = join(pdir, "ongoing.jsonl");
+      writeFileSync(active, usageLine("active", new Date(), 1));
+      writeFileSync(ongoing, usageLine("ongoing-0", new Date(), 2));
+      const t0 = Date.now();
+      const render = (afterMs: number) =>
+        store.getTodayInfo(hook("active", active), tree, instantOf(new Date(t0 + afterMs)));
+      const cost = async (afterMs: number) => {
+        const info = await render(afterMs);
+        return info.kind === "ok" ? info.value.cost : info.kind;
+      };
+
+      expect(await cost(0)).toBeCloseTo(3, 5);
+      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", new Date(), 4));
+      appendFileSync(ongoing, usageLine("ongoing-1", new Date(), 8));
+
+      // Inside the interval nothing is rescanned.
+      expect(await cost(RESCAN_MS - 1)).toBeCloseTo(3, 5);
+      await store.scanned();
+      expect(await cost(RESCAN_MS - 1)).toBeCloseTo(3, 5);
+      expect(store.getStats().seeds).toBe(1);
+
+      // The first render past it starts one rescan in the background; a render
+      // while it runs starts no second one, even an interval later (both calls
+      // reach the memo before the rescan's first fs op); once it settles both
+      // sessions count.
+      await Promise.all([render(RESCAN_MS), render(2 * RESCAN_MS)]);
+      await store.scanned();
+      expect(store.getStats().seeds).toBe(2);
+      expect(await cost(2 * RESCAN_MS)).toBeCloseTo(15, 5);
+    } finally {
+      store.close();
+      rmSync(tree, { recursive: true, force: true });
     }
   });
 

@@ -38,9 +38,13 @@ import { dateOf, type Instant } from "../../utils/instant";
 // [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
 // (where the staleness probe — a whole-tree mtime sweep — cost as much as the
 // recompute it guarded). The aggregate is derived state maintained
-// incrementally: the whole transcript tree is scanned EXACTLY ONCE, lazily, to
+// incrementally: the whole transcript tree is scanned lazily, once a day, to
 // seed records for sessions that did work before this daemon saw them; every
-// render after that is a single-file stat plus a fold.
+// render after that is a single-file stat plus a fold. A session that never
+// renders (headless `claude -p`, the Agent SDK) is kept current by RESCANNING
+// the tree in the background at most once per `rescanIntervalMs` — the seed
+// again, which over warm records is a stat per transcript plus the bytes
+// appended since the last scan (measured: ~75 ms over 6k transcripts).
 
 // [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
 // "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
@@ -123,11 +127,26 @@ interface SessionRecord {
   lastSeenAt: number;
 }
 
+// One set of Claude Code directories' scans on `seededDay`.
+interface DaySeed {
+  // What a `today` render awaits: the day's first scan. A rescan never
+  // replaces it — the records it refreshes are read as each ingest lands, and
+  // an append-only fold only grows, so a render mid-rescan sums no less than
+  // the last scan did.
+  readonly done: Promise<void>;
+  // The scan in flight, the first included: at most one per directory set.
+  scanning: Promise<void> | undefined;
+  // The render instant (ms) the latest scan started at.
+  startedAtMs: number;
+}
+
 const DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// How far behind a never-rendering session's work `today` may run.
+const DEFAULT_RESCAN_INTERVAL_MS = 60 * 1000;
 // Mirrors the transcript-fs gate width: the seed's parse fan-out is bounded by
-// the same constant as the I/O it drives, so the once-a-day scan can never
-// re-create the unbounded burst gn4 exists to kill.
+// the same constant as the I/O it drives, so a scan can never re-create the
+// unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
 
 const EMPTY_DAY: DayUsage = {
@@ -309,11 +328,13 @@ export class SessionUsageStore {
   // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
   // per set of Claude Code directories a session's client resolves to (keyed
   // by the directories themselves, so a default that resolves to one directory
-  // shares a scan with that directory named outright). Unlike SingleFlight this RETAINS the resolved promise, so
-  // after a seed completes every later read awaits an already-settled promise
-  // — zero rescan. A rejected seed is dropped so the next read retries.
-  private readonly seeded = new Map<string, Promise<void>>();
+  // shares a scan with that directory named outright). Unlike SingleFlight
+  // this RETAINS the resolved promise, so after a seed completes every later
+  // read awaits an already-settled promise. A rejected scan is dropped so the
+  // next read seeds afresh.
+  private readonly seeded = new Map<string, DaySeed>();
   private seededDay = "";
+  private readonly rescanIntervalMs: number;
   // [LAW:one-source-of-truth] The recent tok/s observations per session, a
   // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
   // the records map already owns; the baseline (prior counts + time) is the ring's
@@ -339,6 +360,7 @@ export class SessionUsageStore {
     opts: {
       staleAgeMs?: number;
       sweepIntervalMs?: number;
+      rescanIntervalMs?: number;
       // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
       // daemon passes `dlog`; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
@@ -347,6 +369,7 @@ export class SessionUsageStore {
   ) {
     this.log = opts.logger ?? quietLogger;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+    this.rescanIntervalMs = opts.rescanIntervalMs ?? DEFAULT_RESCAN_INTERVAL_MS;
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
       this.sweepTimer = setInterval(() => this.sweepStale(), interval);
@@ -420,7 +443,7 @@ export class SessionUsageStore {
     const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
     try {
-      await this.ensureSeeded(today, claudePaths);
+      await this.ensureSeeded(today, claudePaths, at * 1000);
     } catch (error) {
       return failed(
         `usage seed: ${error instanceof Error ? error.message : String(error)}`,
@@ -642,7 +665,14 @@ export class SessionUsageStore {
     return ok({ files: newFiles, ...mergeFolds(newFiles), mainMtime });
   }
 
-  private ensureSeeded(day: string, claudePaths: string[]): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] `atMs` is the render's instant: a
+  // rescan is due by the clock the render is drawn at, and the memo owns that
+  // at most one scan per directory set runs.
+  private ensureSeeded(
+    day: string,
+    claudePaths: string[],
+    atMs: number,
+  ): Promise<void> {
     // Drop other days' memos so the map holds only the current day's.
     if (this.seededDay !== day) {
       this.seeded.clear();
@@ -650,19 +680,58 @@ export class SessionUsageStore {
     }
     const key = claudePaths.join("\0");
     const existing = this.seeded.get(key);
-    if (existing) return existing;
-    const promise = this.seed(claudePaths);
-    this.seeded.set(key, promise);
-    promise.catch(() => {
-      if (this.seeded.get(key) === promise) this.seeded.delete(key);
-    });
-    return promise;
+    if (!existing) {
+      const done = this.seed(claudePaths, "seed");
+      const memo: DaySeed = { done, scanning: done, startedAtMs: atMs };
+      this.seeded.set(key, memo);
+      this.settle(key, memo, done);
+      return done;
+    }
+    if (
+      existing.scanning === undefined &&
+      atMs - existing.startedAtMs >= this.rescanIntervalMs
+    ) {
+      existing.startedAtMs = atMs;
+      existing.scanning = this.seed(claudePaths, "rescan");
+      this.settle(key, existing, existing.scanning);
+    }
+    return existing.done;
   }
 
-  // The one and only whole-tree scan: lazily, once per day and Claude Code
-  // directory, ingest every session whose transcript was touched recently
-  // enough to hold a today entry.
-  private async seed(claudePaths: string[]): Promise<void> {
+  // [LAW:no-silent-failure] A failed scan drops its memo, so the next render
+  // seeds afresh and awaits it — `today` is `failed` if that fails too, never
+  // a total silently frozen at the last scan that worked.
+  private settle(key: string, memo: DaySeed, scan: Promise<void>): void {
+    scan.then(
+      () => {
+        memo.scanning = undefined;
+      },
+      (error: unknown) => {
+        this.log(
+          "warn",
+          `usageStore scan: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        if (this.seeded.get(key) === memo) this.seeded.delete(key);
+      },
+    );
+  }
+
+  // Resolves once every scan in flight has settled, whatever its outcome.
+  async scanned(): Promise<void> {
+    await Promise.allSettled(
+      [...this.seeded.values()].map((memo) => memo.scanning),
+    );
+  }
+
+  // The one whole-tree scan, per day and Claude Code directory set: ingest
+  // every session whose transcript was touched recently enough to hold a today
+  // entry. A rescan is the same scan over warm records, so it costs a stat per
+  // transcript plus the bytes appended since the last one.
+  private async seed(
+    claudePaths: string[],
+    kind: "seed" | "rescan",
+  ): Promise<void> {
+    const startedMs = Date.now();
     const cutoff = seedCutoffMs();
     const projectPaths = await findProjectPaths(claudePaths);
     const candidates: Array<{
@@ -708,15 +777,16 @@ export class SessionUsageStore {
     this.seeds++;
     this.log(
       "info",
-      `usageStore seed sessions=${candidates.length} dirs=${claudePaths.join(",")}`,
+      `usageStore ${kind} sessions=${candidates.length} dirs=${claudePaths.join(",")} ms=${Date.now() - startedMs}`,
     );
   }
 
   // Public for tests; called periodically from the timer. Drops what nothing
   // reads any more: a session unseen for `staleAgeMs` holding no bucket for the
   // day `today` last summed. A stale record holding one is `held`, since
-  // `today` sums it — a seeded session is seen once a day, and a day can run
-  // past `staleAgeMs` (a 25-hour DST day).
+  // `today` sums it — a session whose transcript the scans have stopped
+  // visiting is seen no more, and a day can run past `staleAgeMs` (a 25-hour
+  // DST day).
   // [LAW:one-source-of-truth] That day is `seededDay`, taken from the render's
   // instant, not this timer's clock: which day counts is the projection's.
   sweepStale(): number {
