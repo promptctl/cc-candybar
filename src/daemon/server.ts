@@ -81,7 +81,7 @@ import { ProbeArrivals } from "../doctor/handler-probe";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import { renderDsl } from "../dsl/render.js";
+import { renderDsl, type RenderWarning } from "../dsl/render.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -1060,14 +1060,13 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
             : null,
         },
       );
-      // [LAW:no-silent-failure] A resolution renderDsl had to finish for itself
-      // and could not honour — today a `globals.palette` rule naming no installed
-      // theme (brandon-themes-dzl). Collected per render into a local, so there is
-      // no cross-render state to clear, and folded into the strip's WARNING
-      // channel below: the bar renders in the floor theme with a line above it
-      // saying why, which is this repo's answer everywhere else that a render can
-      // proceed but an author needs to know.
-      const renderWarnings: string[] = [];
+      // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
+      // not honour (`RenderWarning`). Collected per render into a local, so there
+      // is no cross-render state to clear, and folded into the strip's WARNING
+      // channel below: the bar still renders, with a line above it saying why,
+      // which is this repo's answer everywhere else that a render can proceed but
+      // an author needs to know.
+      const renderWarnings: RenderWarning[] = [];
       // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
       // `effective` struct the payload was just built from, projected by the one
       // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
@@ -1095,7 +1094,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         // debug handler so normal renders pay no extra serializer cost.
         {
           perSegmentSink: entry.state.lastRenderCellsBySegment,
-          onRenderWarning: ({ message }) => renderWarnings.push(message),
+          onRenderWarning: (warning) => renderWarnings.push(warning),
         },
         // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
         // and name together, so renderDsl publishes the `theme.effective` the
@@ -1131,13 +1130,20 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const failedConfigFile =
         entry.lastError === null ? null : entry.failedFile;
       // [LAW:one-source-of-truth] One warning channel: the load-time warning this
-      // config carries and whatever this render could not honour, joined into the
-      // one string collectDiagnostics splits into rows. A second channel would be a
-      // second place a warning could be dropped.
+      // config carries and whatever this render could not honour, in one list.
+      // The strip's rows are its messages, joined into the one string
+      // collectDiagnostics splits; the render event's `warn=` is its kinds. A
+      // second channel would be a second place a warning could be dropped.
+      const warnings = [
+        ...(entry.lastWarning === null
+          ? []
+          : [{ kind: "load" as const, message: entry.lastWarning }]),
+        ...renderWarnings,
+      ];
       const diagnostics = collectDiagnostics(
         combinedError,
         updates,
-        [entry.lastWarning ?? "", ...renderWarnings].filter(Boolean).join("\n"),
+        warnings.map((w) => w.message).join("\n"),
       );
       // [LAW:effects-at-boundaries] The one write the strip depends on, at
       // the edge: the session's dump file mirrors this render's diagnostics
@@ -1175,9 +1181,12 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const fades =
         fx.fades.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") ||
         "-";
+      // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
+      // order, including any its row cap left undrawn; `-` for none.
+      const warned = warnings.map((w) => w.kind).join(",") || "-";
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${fades} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${fades} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
