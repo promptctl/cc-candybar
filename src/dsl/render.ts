@@ -72,6 +72,7 @@ import {
   declaredBasePalette,
   drawnDepth,
   effectiveShade,
+  effectiveTransitions,
   effectiveVariation,
   isExpression,
   STYLE_FLOOR,
@@ -978,10 +979,14 @@ export interface RenderSelection {
   // style's twin (`resolveEffectSelection`), finished here under a rule.
   readonly effect?: EffectSelection;
   // The session's effect memory: when its effect came into force (the effect's
-  // own t = 0) and the effects already made for its rows. The daemon hands each
-  // session its own; an omitting caller draws with a fresh one, so its render
-  // is the effect's calm first frame.
+  // own t = 0), the effects already made for its rows, and the placements its
+  // last frame drew. The daemon hands each session its own; an omitting caller
+  // draws with a fresh one, so its render is the effect's calm first frame and
+  // nothing in it fades in.
   readonly effects?: SessionEffects;
+  // Whether a placement the last frame did not draw fades in: the resolved
+  // `transitions` setting (effectiveTransitions over staged/session/globals).
+  readonly transitions?: boolean;
   // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
   // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
   // base PALETTE beside the name, which is why renderDsl takes no `basePalette`
@@ -1163,12 +1168,6 @@ export function renderDsl(
     effect !== selectedEffect
   )
     registry.applyInput(payloadWith(theme.name, style.name, effect.name));
-  // The motion of each row this render draws: the session's effect memory
-  // records the settled effect coming into force, so its clock starts there.
-  const rowMotion = (selection?.effects ?? new SessionEffects("")).motion(
-    effect.value,
-    at,
-  );
   // [LAW:one-source-of-truth] The render's BASE palette, published beside the
   // style and padding: a picker over a colour-valued domain paints each option in
   // the palette picking it would put in force, and a style's answer is this base
@@ -1185,6 +1184,26 @@ export function renderDsl(
   // transposition, not one per segment.
   const palette = transposedPalette(basePalette, style.value);
   compiled.menuRuntime.action.palette = palette;
+  // The motion of each row this render draws: the session's effect memory
+  // records the settled effect coming into force, so its clock starts there,
+  // and the placements this frame draws, so one the last frame — drawn from
+  // this config, preset and session state — did not draw fades in.
+  const motion = (selection?.effects ?? new SessionEffects("")).motion(
+    effect.value,
+    at,
+    {
+      // [LAW:one-source-of-truth] An omitting caller fades as the config
+      // declares, the same true default the decor above honours.
+      transitions:
+        selection?.transitions ??
+        effectiveTransitions(undefined, null, declared.transitions),
+      source: {
+        config: compiled,
+        preset,
+        revision: registry.stateRevision(),
+      },
+    },
+  );
 
   perSegmentSink?.clear();
 
@@ -1410,10 +1429,11 @@ export function renderDsl(
       return renderStripCells(
         items.map((item) => item.owner),
         opts,
-        rowMotion(row, items),
+        motion.row(row, items),
       );
     })
     .join("\n");
+  motion.drawn();
   for (const message of shortfalls)
     onRenderWarning?.({ kind: "band-floor", message });
   return rendered;

@@ -43,7 +43,7 @@ export function resolveFill(
   // The row's items as its cells stand: once sized, every fill's lead and trail
   // rejoin it here.
   const items = (): RowItem[] =>
-    row.map((cell) => ({ owner: stripItem(cell), effect: cell.effect }));
+    row.map((cell) => ({ owner: stripItem(cell), placement: cell.placement }));
   const demands: Array<{ at: number; how: CellSizing }> = [];
   row.forEach(({ fill }, at) => {
     if (fill !== undefined) demands.push({ at, how: fill });

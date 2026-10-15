@@ -18,6 +18,10 @@ import { createAtom, type IAtom, runInAction } from "mobx";
 
 export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
+  // The store's revision when this session's state last changed — a write
+  // of a value it did not hold, a clear of a key it did — or 0 while it holds
+  // none. Two reads that return one revision read one state, whoever wrote it.
+  revision(sessionId: string): number;
 }
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
@@ -70,6 +74,7 @@ export function recordingView(
   };
   return {
     get: (sessionId, key) => store.get(sessionId, key),
+    revision: (sessionId) => store.revision(sessionId),
     set: (sessionId, key, value) =>
       recorded(sessionId, [key], () => store.set(sessionId, key, value)),
     setBatch: (sessionId, pairs) =>
@@ -105,12 +110,12 @@ const EPHEMERAL_STORAGE: SessionStorage = {
   flush: () => {},
 };
 
-function hydrate(snapshot: SessionSnapshot): Map<string, Map<string, string>> {
-  const sessions = new Map<string, Map<string, string>>();
-  for (const [sessionId, kv] of Object.entries(snapshot)) {
-    sessions.set(sessionId, new Map(Object.entries(kv)));
-  }
-  return sessions;
+// One session's state, and the store's revision when it last changed.
+// [LAW:one-source-of-truth] The revision lives on the entry it describes, so a
+// session the store drops takes its revision with it.
+interface Session {
+  readonly values: Map<string, string>;
+  revision: number;
 }
 
 // Generous headroom over realistic concurrent-session counts; matches the
@@ -122,8 +127,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:types-are-the-program] Insertion order is recency order: the store
   // cannot hold more than maxSessions, so "bounded on disk" is structural, not
   // dependent on an external prune caller.
-  private sessions: Map<string, Map<string, string>>;
+  private sessions: Map<string, Session>;
   private storage: SessionStorage;
+  // [LAW:single-enforcer] The store's revision: counts every change any
+  // writer makes, so it never repeats while the store lives.
+  private head = 0;
   // [LAW:single-enforcer] One atom; every read reports observed against it,
   // every mutation reports changed. Coarse-grained reactivity is correct for
   // session-state's load — mutations are rare and computeds are cheap.
@@ -149,7 +157,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private hydrateFromStorage(): void {
-    this.sessions = hydrate(this.storage.load());
+    this.sessions = new Map(
+      Object.entries(this.storage.load()).map(([sessionId, kv]) => [
+        sessionId,
+        { values: new Map(Object.entries(kv)), revision: ++this.head },
+      ]),
+    );
     this.evictOldest();
     // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
     // in-memory state. An over-cap file trimmed by evictOldest is written back
@@ -167,7 +180,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // triggers a disk write itself; the reordered insertion order only reaches
     // disk if a later mutation persists.
     this.touch(sessionId, session);
-    return session.get(key) ?? null;
+    return session.values.get(key) ?? null;
+  }
+
+  revision(sessionId: string): number {
+    this.atom.reportObserved();
+    return this.sessions.get(sessionId)?.revision ?? 0;
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
@@ -201,8 +219,13 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   ): void {
     if (pairs.length === 0) return;
     runInAction(() => {
-      const session = this.sessions.get(sessionId) ?? new Map<string, string>();
-      for (const { key, value } of pairs) session.set(key, value);
+      const session = this.sessions.get(sessionId) ?? {
+        values: new Map<string, string>(),
+        revision: 0,
+      };
+      if (pairs.some(({ key, value }) => session.values.get(key) !== value))
+        session.revision = ++this.head;
+      for (const { key, value } of pairs) session.values.set(key, value);
       this.touch(sessionId, session);
       this.evictOldest();
       this.persist();
@@ -214,12 +237,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     runInAction(() => {
       const session = this.sessions.get(sessionId);
       if (session) {
-        session.delete(key);
+        if (session.values.delete(key)) session.revision = ++this.head;
         // An emptied session is a non-state — drop it so it neither occupies a
         // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
         // A surviving session is promoted: every interaction is a recency signal,
         // uniform with get()/set(). [LAW:one-type-per-behavior]
-        if (session.size === 0) this.sessions.delete(sessionId);
+        if (session.values.size === 0) this.sessions.delete(sessionId);
         else this.touch(sessionId, session);
       }
       this.persist();
@@ -239,7 +262,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
-  private touch(sessionId: string, session: Map<string, string>): void {
+  private touch(sessionId: string, session: Session): void {
     this.sessions.delete(sessionId);
     this.sessions.set(sessionId, session);
   }
@@ -272,8 +295,8 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // own keys instead of prototype-mutation vectors — pollution is
     // unrepresentable rather than guarded against.
     const snapshot = Object.create(null) as SessionSnapshot;
-    for (const [sessionId, kv] of this.sessions) {
-      snapshot[sessionId] = Object.fromEntries(kv);
+    for (const [sessionId, { values }] of this.sessions) {
+      snapshot[sessionId] = Object.fromEntries(values);
     }
     return snapshot;
   }

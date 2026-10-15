@@ -81,6 +81,12 @@ export const SETTINGS = {
     effectiveVar: "shade.effective",
     label: "🔆",
   },
+  transitions: {
+    configKey: "transitions",
+    sessionKey: "transitions",
+    effectiveVar: "transitions.effective",
+    label: "fade in",
+  },
   autoWrap: {
     configKey: "autoWrap",
     sessionKey: "autoWrap",

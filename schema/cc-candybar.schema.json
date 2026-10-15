@@ -93,6 +93,9 @@
         "updateNotice": {
           "type": "boolean"
         },
+        "transitions": {
+          "type": "boolean"
+        },
         "colorCompatibility": {
           "enum": [
             "truecolor",
@@ -1374,6 +1377,9 @@
               "updateNotice": {
                 "type": "boolean"
               },
+              "transitions": {
+                "type": "boolean"
+              },
               "colorCompatibility": {
                 "enum": [
                   "truecolor",
@@ -1489,6 +1495,9 @@
           ]
         },
         "updateNotice": {
+          "type": "boolean"
+        },
+        "transitions": {
           "type": "boolean"
         },
         "colorCompatibility": {

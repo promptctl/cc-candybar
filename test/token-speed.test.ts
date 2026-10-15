@@ -288,6 +288,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   autoWrap: true,
   padding: 1,
   updateNotice: true,
+  transitions: false,
   separator: undefined,
 };
 

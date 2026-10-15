@@ -44,11 +44,13 @@ const facts = (
   effect: EffectSelection = STILL,
   statusLine: StatusLineFacts = { kind: "present", refreshInterval: undefined },
   placementEffects: readonly PlacementEffectFact[] = [],
+  transitions = false,
 ): DoctorFacts => ({
   tmux,
   config,
   effect,
   placementEffects,
+  transitions,
   urlHandler: { kind: "unsupported" },
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
@@ -377,6 +379,29 @@ describe("effectRefresh probe", () => {
       ok: false,
       reason:
         "the bar wears the shimmer effect and context wears the pulse effect, but Claude Code redraws it only on events",
+    });
+  });
+
+  // A placement fading in moves for 20 s on a still bar
+  // (brandon-effects-2gka.631), so transitions need the redraw too.
+  test("a still bar with transitions on → failed naming them, WITH the fix", () => {
+    expect(
+      checkByName("effectRefresh")!.probe(
+        facts(
+          { kind: "outside" },
+          {},
+          LOADED,
+          STILL,
+          interval(undefined),
+          [],
+          true,
+        ),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        "placements fade in as they appear, but Claude Code redraws it only on events",
+      fix: FIX,
     });
   });
 });

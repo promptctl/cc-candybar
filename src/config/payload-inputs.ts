@@ -129,6 +129,12 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "colorCompatibility.effective",
     default: "",
   },
+  "transitions.effective": {
+    kind: "input",
+    path: "transitions.effective",
+    type: "boolean",
+    default: false,
+  },
   "autoWrap.effective": {
     kind: "input",
     path: "autoWrap.effective",

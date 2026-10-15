@@ -1504,6 +1504,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // from a fresh SessionState that disagrees with it about edit mode.
     const registry = new SourceRegistry(store, "", undefined, {
       get: (_sessionId, key) => sessionPick(key, name),
+      revision: () => 0,
     });
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {

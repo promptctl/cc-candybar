@@ -218,6 +218,7 @@ const GLOBALS: {
   // JSON-Schema `enum` from the same CHARSETS literal.
   charset: enumGlobal(CHARSETS),
   updateNotice: boolGlobal(),
+  transitions: boolGlobal(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: {
     spec: colorCompatibilitySpec,

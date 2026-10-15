@@ -18,7 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
-import { cellLen, RichText } from "@promptctl/rich-js";
+import { DEFAULT_TERMINAL_THEME, cellLen, RichText } from "@promptctl/rich-js";
 
 import { resolveFill } from "../src/render/fill";
 import { renderStripCells } from "../src/render/strip";
@@ -61,6 +61,11 @@ function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {
 // ending the row. A default `end` ("\n") would break the row after each cell.
 const fixed = (text: string): LaidCell => ({
   text: new RichText(text, { end: "" }),
+  placement: {
+    id: text,
+    effect: "bar",
+    ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+  },
 });
 const fill = (text: string): LaidCell => ({ ...fixed(text), fill: SIZING });
 

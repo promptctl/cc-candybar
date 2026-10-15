@@ -120,6 +120,9 @@ export interface DoctorFacts {
   // own (brandon-effects-2gka.bm1) — saved, or the session's unsaved pick —
   // which moves whatever the bar's effect is.
   readonly placementEffects: readonly PlacementEffectFact[];
+  // Whether a placement that appears fades in (brandon-effects-2gka.631),
+  // resolved as the render resolves it: a fade moves over 20 s.
+  readonly transitions: boolean;
   // The session's Claude Code settings file and the entries read from it — a
   // second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
@@ -334,12 +337,13 @@ export const EFFECT_REFRESH_INTERVAL = 1;
 // an effect's frames land seconds apart and an idle session stops moving.
 // `cc-candybar install` does not write it — a render a second costs every
 // session whether or not anything animates — so the doctor asks for it exactly
-// when anything on the bar moves: the bar's effect, or a placement's own. A rule
-// counts: it can turn one on at any render.
+// when anything on the bar moves: the bar's effect, a placement's own, or a
+// placement fading in as it appears. A rule counts: it can turn one on at any
+// render.
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
-  probe: ({ effect, placementEffects, claudeSettings }) => {
+  probe: ({ effect, placementEffects, transitions, claudeSettings }) => {
     const moving = [
       ...(effect.kind !== "decided"
         ? ["a globals.effect rule can give the bar an effect"]
@@ -349,6 +353,7 @@ const effectRefresh: Check = {
       ...placementEffects.map(
         ({ placement, effect }) => `${placement} wears the ${effect} effect`,
       ),
+      ...(transitions ? ["placements fade in as they appear"] : []),
     ];
     if (moving.length === 0) return { ok: true };
     const wearing = moving.join(" and ");

@@ -19,7 +19,7 @@
 import { RichText } from "@promptctl/rich-js";
 import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
-import type { CellEffect } from "../render/effect.js";
+import type { CellPlacement } from "../render/effect.js";
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";
@@ -53,12 +53,13 @@ export interface SegmentLayoutOptions {
    */
   baseStyle?: Style;
   /**
-   * The effect the cell's placement wears instead of the bar's, or none: it
-   * follows the bar. [LAW:types-are-the-program] Required, like `padding`, so
-   * every cell a placement lays — inline, a dropped band, a body's lead, its
-   * ⚠ — states it, and none can follow the bar by being forgotten.
+   * The placement the cell belongs to and the effect it wears.
+   * [LAW:types-are-the-program] Required, like `padding`, so every cell a
+   * placement lays — inline, a dropped band, a body's lead, its ⚠ — names it:
+   * none can follow the bar, or be missed when its placement appears, by being
+   * forgotten.
    */
-  effect: CellEffect | undefined;
+  placement: CellPlacement;
   /** Cells drawn inside the cell before the sized content (SegmentNode.lead). */
   lead?: readonly RichText[];
   /** Cells drawn inside the cell after the sized content (SegmentNode.trail). */
@@ -136,11 +137,13 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 export interface LaidCell {
   readonly text: RichText;
   readonly fill?: CellSizing;
-  // The effect the cell's placement wears instead of the bar's
-  // (brandon-effects-2gka.bm1): a demand like `fill`, settled where the row's
-  // strip is drawn (`SessionEffects.motion`), the one place the row's items and
-  // the bar's effect are both in hand. Absent, the cell wears the bar's.
-  readonly effect?: CellEffect;
+  // The placement the cell belongs to and the effect it wears — the bar's or
+  // its own (brandon-effects-2gka.bm1): a demand like `fill`, settled where the
+  // row's strip is drawn (`SessionEffects.motion`), the one place the row's
+  // items, the bar's effect and the last frame's placements are all in hand —
+  // which is where a placement the last frame did not draw fades in
+  // (brandon-effects-2gka.631).
+  readonly placement: CellPlacement;
   // Drawn inside the cell before / after `text`, never resized with it
   // (SegmentNode.lead / .trail). Joined by `stripItem` once sizing is final.
   readonly lead?: RichText;
@@ -190,13 +193,12 @@ export function applySegmentLayout(
     truncate,
     baseStyle,
     padding,
-    effect,
+    placement,
     lead = [],
     trail = [],
   } = options;
 
   if (cells.length === 0) return [];
-  const motion = effect === undefined ? {} : { effect };
 
   // [LAW:one-source-of-truth] The DSL path's ONE intra-cell padding
   // application — the same rich-js pad primitive toCell (render/strip.ts)
@@ -211,7 +213,7 @@ export function applySegmentLayout(
   // separate them from it.
   const pad = new RichText(" ".repeat(padding));
   const tail = {
-    ...motion,
+    placement,
     ...(lead.length > 0 && {
       lead: collapseToCell([pad, ...lead], baseStyle),
     }),

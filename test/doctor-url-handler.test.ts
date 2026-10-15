@@ -41,6 +41,7 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
     },
     effect: { kind: "decided", name: "none", value: "none" },
     placementEffects: [],
+    transitions: false,
     claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 
