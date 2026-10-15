@@ -24,6 +24,7 @@ export {
   VARIATION_NAMES,
   DEFAULT_VARIATION,
   effectiveShade,
+  effectiveTransitions,
   isShadeName,
   SHADE_NAMES,
   DEFAULT_SHADE,

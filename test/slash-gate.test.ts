@@ -54,6 +54,7 @@ const EFFECTIVE: EffectiveGlobals = {
   autoWrap: true,
   padding: 0,
   updateNotice: true,
+  transitions: false,
   separator: undefined,
 };
 const HOOK_DATA = {

@@ -92,6 +92,9 @@ export function testVerbContext(
     // cache hands in its own — test/settings-config-menu.test.ts records each
     // reload to pin write → reload → release.
     reloadConfig: () => {},
+    // No render here keeps a session's effect memory, so a click has no bar
+    // to settle.
+    settle: () => {},
   };
 }
 

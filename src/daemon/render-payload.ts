@@ -45,6 +45,7 @@ import {
   effectiveVariation,
   effectiveShade,
   effectiveUpdateNotice,
+  effectiveTransitions,
   EXPRESSION_SLOTS,
   isExpression,
   DEFAULT_CHARSET,
@@ -165,6 +166,9 @@ export interface EffectiveGlobals {
   // every other setting the menu controls. The per-version dismissal is a
   // separate thing, keyed on the update's identity.
   readonly updateNotice: boolean;
+  // Whether a placement that appears fades in (Globals.transitions) — carried
+  // into the walk by the render's selection (RenderSelection.transitions).
+  readonly transitions: boolean;
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -261,6 +265,11 @@ export function resolveEffectiveGlobals(
       sessionPick("updateNotice"),
       globals.updateNotice,
     ),
+    transitions: effectiveTransitions(
+      staged.transitions,
+      sessionPick("transitions"),
+      globals.transitions,
+    ),
     colorCompatibility:
       staged.colorCompatibility ??
       globals.colorCompatibility ??
@@ -299,6 +308,7 @@ export function renderSelectionOf(
     preset: effective.preset,
     variation: effective.variation,
     shade: effective.shade,
+    transitions: effective.transitions,
   };
 }
 
@@ -320,6 +330,7 @@ export type EffectiveInputs = Pick<
   | "autoWrap"
   | "padding"
   | "updateNotice"
+  | "transitions"
 >;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
@@ -337,6 +348,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     autoWrap: { effective: effective.autoWrap },
     padding: { effective: effective.padding },
     updateNotice: { effective: effective.updateNotice },
+    transitions: { effective: effective.transitions },
   };
 }
 
@@ -419,6 +431,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly autoWrap: { readonly effective: boolean };
   readonly padding: { readonly effective: number };
   readonly updateNotice: { readonly effective: boolean };
+  readonly transitions: { readonly effective: boolean };
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is

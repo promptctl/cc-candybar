@@ -27,6 +27,13 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 
+// A frame that fades nothing in: what the effects under test here draw alone.
+const STILL_FRAME = {
+  transitions: false,
+  source: { config: {}, preset: "default" },
+  ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+};
+
 const LOOPS = Object.keys(EFFECT_CATALOGUE.loops) as EffectName[];
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -209,7 +216,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const sessions = new EffectSessions();
     const effects = sessions.of("s");
     const draw = (when: Instant, rows: number): void => {
-      const motion = effects.motion("shimmer", when);
+      const motion = effects.motion("shimmer", when, STILL_FRAME);
       for (let row = 0; row < rows; row++) {
         const moving = motion(`flow.own#${row}`, []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");

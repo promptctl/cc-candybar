@@ -19,7 +19,7 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import type { SessionStateRW } from "../session-state";
+import { recordingView, type SessionStateRW } from "../session-state";
 import { stateGate, stateKeySeed } from "./state-validators";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -165,6 +165,11 @@ export interface VerbContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // [LAW:effects-at-boundaries] What a click that changed a session's state
+  // does to that session's bar (src/render/effect.ts): settles it, so its next
+  // frame fades nothing in — a menu opening, arrange mode closing, a preset
+  // switch all show at once.
+  readonly settle: (sessionId: string) => void;
 }
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -1469,12 +1474,23 @@ function journaled(
 ): (value: string, ctx: VerbContext) => void {
   return (value, ctx) => {
     const journal = ctx.history.begin();
-    const navigation = ctx.navigation.begin(journal.sessionState);
+    // [LAW:single-enforcer] Every session whose state this click changed, seen
+    // on the one write path every click takes, so each settles however its
+    // state was written.
+    const changed = new Set<string>();
+    const sessionState = recordingView(
+      journal.sessionState,
+      () => true,
+      (sessionId, _key, before, after) => {
+        if (before !== after) changed.add(sessionId);
+      },
+    );
+    const navigation = ctx.navigation.begin(sessionState);
     const failures: unknown[] = [];
     try {
       handler(value, {
         ...ctx,
-        sessionState: journal.sessionState,
+        sessionState,
         journal,
         navigating: navigation.sessionState,
       });
@@ -1487,6 +1503,7 @@ function journaled(
     } catch (e) {
       failures.push(e);
     }
+    for (const sessionId of changed) ctx.settle(sessionId);
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
       throw new Error(

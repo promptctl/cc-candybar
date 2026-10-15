@@ -1171,9 +1171,13 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
         fx.own
           .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
           .join(",") || "-";
+      // Each placement fading in, on its own clock; `-` for none.
+      const fades =
+        fx.fades.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") ||
+        "-";
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} fades=${fades} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
@@ -1348,6 +1352,7 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  settle: (sessionId: string) => effectSessions.settle(sessionId),
 };
 
 /**

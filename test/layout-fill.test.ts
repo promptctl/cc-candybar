@@ -61,6 +61,7 @@ function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {
 // ending the row. A default `end` ("\n") would break the row after each cell.
 const fixed = (text: string): LaidCell => ({
   text: new RichText(text, { end: "" }),
+  placement: { id: text, effect: "bar" },
 });
 const fill = (text: string): LaidCell => ({ ...fixed(text), fill: SIZING });
 

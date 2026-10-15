@@ -106,6 +106,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   padding: "number",
   charset: "string",
   updateNotice: "boolean",
+  transitions: "boolean",
   colorCompatibility: "string",
   menuGlyph: "string",
 };

@@ -662,6 +662,9 @@ export const DEFAULT_WRAP = true;
 // running a stale checkout, or a user on a superseded release, is told so
 // by default and opts OUT durably through the notice's own `[disable]`.
 export const DEFAULT_UPDATE_NOTICE = true;
+// A placement that appears does not fade in unless a config or a session asks
+// for it (brandon-effects-2gka.631): a 20 s bloom is a look somebody chooses.
+export const DEFAULT_TRANSITIONS = false;
 
 // [LAW:one-source-of-truth] The spelling of a boolean as a SessionState string.
 // SessionState holds strings, so "true"/"false" is the wire vocabulary for every
@@ -756,6 +759,22 @@ export function effectiveUpdateNotice(
     sessionUpdateNotice,
     globalsUpdateNotice,
     DEFAULT_UPDATE_NOTICE,
+    parseSessionBoolean,
+  );
+}
+
+// Whether a placement that appears fades in, as data — effectiveAutoWrap's
+// twin over the transitions setting, with its own floor.
+export function effectiveTransitions(
+  stagedTransitions: boolean | undefined,
+  sessionTransitions: string | null,
+  globalsTransitions: boolean | undefined,
+): boolean {
+  return effectiveGlobal(
+    stagedTransitions,
+    sessionTransitions,
+    globalsTransitions,
+    DEFAULT_TRANSITIONS,
     parseSessionBoolean,
   );
 }

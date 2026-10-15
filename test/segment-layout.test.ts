@@ -36,11 +36,14 @@ function texts(cells: readonly RichText[]): string[] {
   return cells.map((c) => c.plain);
 }
 
+// The placement every cell here is laid for, following the bar.
+const PLACEMENT = { id: "seg", effect: "bar" } as const;
+
 const autoOptions = {
   width: "auto" as const,
   justify: "left" as const,
   padding: 0,
-  effect: undefined,
+  placement: PLACEMENT,
   truncate: "right" as const,
 };
 
@@ -107,7 +110,7 @@ describe("auto width — collapse to one cell, no width constraint", () => {
 // A fill width is content-sized here and carries its demand to the row
 // (src/render/fill.ts) as a field of the laid cell; no other width does.
 describe("fill width — content-sized, carrying its demand", () => {
-  const sizing = { justify: "right", truncate: "middle", padding: 0, effect: undefined } as const;
+  const sizing = { justify: "right", truncate: "middle", padding: 0, placement: PLACEMENT } as const;
 
   test("fill states its demand with the sizing the row will honour", () => {
     const [laid] = applySegmentLayout([cell("hi")], { ...sizing, width: "fill" });
@@ -133,7 +136,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
     const result = laidText([cell("hi")], {
       ...autoOptions,
       padding: 2,
-      effect: undefined,
+      placement: PLACEMENT,
     });
     expect(texts(result)).toEqual(["  hi  "]);
   });
@@ -144,7 +147,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
       justify: "left",
       truncate: "right",
       padding: 1,
-      effect: undefined,
+      placement: PLACEMENT,
     });
     expect(texts(result)).toEqual([" hi     "]);
     expect(totalWidth(result)).toBe(8);
@@ -167,7 +170,7 @@ describe("fixed width — exact fit", () => {
       width: 5,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -185,7 +188,7 @@ describe("justify — left", () => {
       width: 5,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -199,7 +202,7 @@ describe("justify — right", () => {
       width: 5,
       justify: "right",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -213,7 +216,7 @@ describe("justify — center", () => {
       width: 6,
       justify: "center",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(6);
@@ -225,7 +228,7 @@ describe("justify — center", () => {
       width: 5,
       justify: "center",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -243,7 +246,7 @@ describe("truncate — right", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(6);
@@ -257,7 +260,7 @@ describe("truncate — left", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "left",
     });
     expect(totalWidth(result)).toBe(6);
@@ -271,7 +274,7 @@ describe("truncate — middle", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "middle",
     });
     expect(totalWidth(result)).toBe(6);
@@ -290,7 +293,7 @@ describe("multi-cell truncation", () => {
       width: 8,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(result).toHaveLength(1);
@@ -310,7 +313,7 @@ describe("baseStyle on the merged cell", () => {
       width: 5,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
       baseStyle,
     });
@@ -333,7 +336,7 @@ describe("baseStyle on the merged cell", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
       baseStyle,
     });
@@ -367,7 +370,7 @@ describe("truncation preserves per-character styling through the cut", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "right",
     });
     expect(result[0]!.plain).toBe("hello…");
@@ -385,7 +388,7 @@ describe("truncation preserves per-character styling through the cut", () => {
       width: 6,
       justify: "left",
       padding: 0,
-      effect: undefined,
+      placement: PLACEMENT,
       truncate: "left",
     });
     expect(result[0]!.plain).toBe("…world");

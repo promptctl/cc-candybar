@@ -37,6 +37,14 @@ import { textOn } from "../themes/decor.js";
 // ABSENCE of a colour rather than a colour.
 export const NO_FILL = "none";
 
+// [LAW:one-source-of-truth] The stand-in for the terminal's own ground, which
+// the detached daemon cannot see: the theme's `background`. A `NO_FILL` cell's
+// `{{ bgOf }}` answers with it, and a placement fading in rises from it
+// (brandon-effects-2gka.631).
+export function groundOf(palette: Palette): ColorRgba {
+  return resolveColorRef(palette, "background");
+}
+
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg", detail: string) {
     super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
@@ -106,7 +114,7 @@ export function resolveSegmentColors(
   // `bgOf`: the theme's own background, the stand-in for the terminal's that
   // an authored `fg:` floors against. The Style carries no `bgcolor`.
   const bgColor = !filled
-    ? resolveRef(palette, "background", "bg")
+    ? groundOf(palette)
     : bgSpec !== undefined
       ? resolveRef(palette, bgSpec, "bg")
       : tint;

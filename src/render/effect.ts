@@ -1,23 +1,28 @@
-// The looping effects a session's bar wears, row by row: the bar's own
-// (brandon-effects-2gka.d2i) and each placement's that sets one
-// (brandon-effects-2gka.bm1).
+// The effects a session's bar wears, row by row: the bar's own loop
+// (brandon-effects-2gka.d2i), each placement's that sets one
+// (brandon-effects-2gka.bm1), and the fade a placement wears when it appears
+// (brandon-effects-2gka.631).
 //
-// rich-js owns the effects themselves (`EFFECT_CATALOGUE.loops`, `Effected`,
+// rich-js owns the effects themselves (`EFFECT_CATALOGUE`, `Effected`,
 // `confined`): pure functions of a time `t` and the colours a frame draws. This
 // module owns the facts about a SESSION those functions need and cannot know —
-// when each effect came into force, which is that effect's own t = 0, and the
+// when each effect came into force, which is that effect's own t = 0, the
 // effect objects already made for its rows, which rich-js reuses a frame's
-// settled shares on only when it is handed the same object again.
+// settled shares on only when it is handed the same object again, and which
+// placements the last frame drew, which is what makes a placement appear.
 
 import {
   DEFAULT_TERMINAL_THEME,
   EFFECT_CATALOGUE,
   Effected,
+  TerminalTheme,
   confined,
+  type ColorRgba,
   type Effect,
   type LoopName,
   type Renderable,
   type RichText,
+  type Transition,
 } from "@promptctl/rich-js";
 
 import {
@@ -28,30 +33,39 @@ import {
 } from "../themes/policy.js";
 import type { Instant } from "../utils/instant.js";
 
-// [LAW:types-are-the-program] A cell whose placement wears its own effect, and
-// the placement whose clock that effect keeps: what a laid cell demands of its
-// row (`LaidCell.effect`). A cell following the bar demands nothing.
-export interface CellEffect {
-  readonly placement: string;
-  readonly name: EffectName;
-}
-
-// The demand a placement's cells carry for its `effect` setting: none while it
-// follows the bar, else its own effect — `none` included, a still cell on a
-// moving bar.
-export function placementMotion(
-  placement: string,
-  setting: PlacementEffect,
-): CellEffect | undefined {
-  return setting === FOLLOW_BAR ? undefined : { placement, name: setting };
+// [LAW:types-are-the-program] The placement a laid cell belongs to and its
+// `effect` setting: what a laid cell demands of its row (`LaidCell.placement`).
+// Its id keys the clock of the placement's own effect and of its fade; its
+// effect is the bar's (`FOLLOW_BAR`) or its own — `none` included, a still cell
+// on a moving bar.
+export interface CellPlacement {
+  readonly id: string;
+  readonly effect: PlacementEffect;
 }
 
 // One item of a row's strip — the strip stamps its cells with the item itself,
 // which is how `confined` tells one item's cells from another's — and the
-// effect its cell demands.
+// placement whose cell it is.
 export interface RowItem {
   readonly owner: RichText;
-  readonly effect: CellEffect | undefined;
+  readonly placement: CellPlacement;
+}
+
+// What a frame is drawn from. A placement appears only between two frames
+// drawn from the same config — one object per load, so a reload is another —
+// and the same preset.
+export interface FrameSource {
+  readonly config: object;
+  readonly preset: string;
+}
+
+// What one render asks of its fades: whether placements fade in at all
+// (globals.transitions), what the frame is drawn from, and the ground a cell
+// fades in from.
+export interface FrameFades {
+  readonly transitions: boolean;
+  readonly source: FrameSource;
+  readonly ground: ColorRgba;
 }
 
 // [LAW:types-are-the-program] What one row is drawn under: nothing, or an
@@ -87,6 +101,18 @@ export interface OwnEffectFrame {
   readonly t: number;
 }
 
+// A placement fading in, on its own clock, as a render's event reports it.
+export interface FadeFrame {
+  readonly placement: string;
+  readonly t: number;
+}
+
+// [LAW:types-are-the-program] What a render's placements were compared
+// against: nothing, because transitions are off; nothing, because there is no
+// earlier frame to compare (the session's first render, or the first after a
+// click or a reload settled it — `fresh`); or the last frame (`compared`).
+export type FadeBasis = "off" | "fresh" | "compared";
+
 // One render's effects, as its event reports them.
 export interface EffectFrame {
   readonly effect: EffectName;
@@ -97,6 +123,23 @@ export interface EffectFrame {
   readonly reused: number;
   // Each placement the render drew wearing its own effect, on its own clock.
   readonly own: readonly OwnEffectFrame[];
+  // What the render's placements were compared against, and each one fading in.
+  readonly basis: FadeBasis;
+  readonly fades: readonly FadeFrame[];
+}
+
+// A placement that appeared, fading in: the instant it appeared, its fade's own
+// t = 0, and the fade, made once — rich-js keeps each cell's place in it.
+interface Arrival {
+  readonly since: Instant;
+  readonly fade: Transition;
+}
+
+// The last frame, as the next one compares against it: what it was drawn from,
+// and each placement it drew, fading in or arrived (`null`).
+interface DrawnFrame {
+  readonly source: FrameSource;
+  readonly placements: Map<string, Arrival | null>;
 }
 
 // [LAW:types-are-the-program] Whose effect a part of a row is: the bar's, or
@@ -144,6 +187,21 @@ function together(parts: ReadonlyArray<{ t: number; effect: Effect }>): Effect {
 // to the colours rich-js resolves for an unnamed terminal.
 const ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
 
+// [LAW:one-source-of-truth] rich-js veils a fade toward the ground of the
+// terminal its frame is drawn on (`Drawn.theme`), and the daemon cannot see the
+// client's: a cell fades in from the theme's `background`, the stand-in a
+// `bg: "none"` cell's `{{ bgOf }}` answers with. Only the fade sees that
+// ground; every contrast the loops measure stays on ASSUMED_TERMINAL.
+function fromGround(effect: Effect, ground: ColorRgba): Effect {
+  const terminal = new TerminalTheme(
+    ground,
+    ASSUMED_TERMINAL.foregroundColor,
+    ASSUMED_TERMINAL.ansiColors,
+    ASSUMED_TERMINAL.palette,
+  );
+  return (t, drawn) => effect(t, { ...drawn, theme: terminal });
+}
+
 // FNV-1a over a string, as a fraction in [0, 1): where an element sits in an
 // effect's noise, so two sessions' bars — and two rows of one bar — do not move
 // in lockstep.
@@ -182,6 +240,12 @@ export class SessionEffects {
   // being drawn (a menu closed) takes its effects and their settled shares with
   // it.
   private made = new Map<string, Map<Scope, RowEffect>>();
+  // [LAW:no-ambient-temporal-coupling] The last frame a placement's appearing
+  // is measured against, or none: before the session's first render, and once
+  // a click or a reload has settled the bar (`settle`, and a frame drawn from
+  // another source) — so opening a menu, leaving arrange mode or switching
+  // preset shows the new bar at once rather than fading it in.
+  private drawn: DrawnFrame | null = null;
   // [LAW:nothing-unseen] What the latest render wore, for the render's event.
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
@@ -189,6 +253,8 @@ export class SessionEffects {
     made: 0,
     reused: 0,
     own: [],
+    basis: "off",
+    fades: [],
   };
 
   constructor(private readonly key: string) {}
@@ -200,9 +266,19 @@ export class SessionEffects {
     return this.frame;
   }
 
-  // The effects this session holds: the ones its latest render drew.
+  // The effects this session holds: the ones its latest render drew, and the
+  // fades still in flight.
   get heldCount(): number {
-    return [...this.made.values()].reduce((n, row) => n + row.size, 0);
+    const fading = [...(this.drawn?.placements.values() ?? [])].filter(
+      (arrival) => arrival !== null,
+    ).length;
+    return [...this.made.values()].reduce((n, row) => n + row.size, fading);
+  }
+
+  // A click wrote this session's state: every fade in flight ends, and the
+  // next frame has nothing to compare against.
+  settle(): void {
+    this.drawn = null;
   }
 
   /**
@@ -210,11 +286,13 @@ export class SessionEffects {
    * given the row's strip items. Records an effect coming into force — the
    * bar's, or a placement's — when it differs from the last render's, so every
    * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
-   * from off the row, wheel at the theme's own hues.
+   * from off the row, wheel at the theme's own hues. Records every placement
+   * the render draws, and fades in each one the last frame did not.
    */
   motion(
     name: EffectName,
     at: Instant,
+    fades: FrameFades,
   ): (row: string, items: readonly RowItem[]) => RowMotion {
     if (this.inForce?.name !== name) this.inForce = { name, since: at };
     const bar: Omit<Part, "owners"> = {
@@ -229,10 +307,60 @@ export class SessionEffects {
     const made = new Map<string, Map<Scope, RowEffect>>();
     this.made = made;
     const own: OwnEffectFrame[] = [];
-    const frame = { effect: name, t: bar.t, made: 0, reused: 0, own };
+    const last = this.drawn;
+    // [LAW:dataflow-not-control-flow] What this frame compares against is a
+    // value: the last frame's placements, or none to compare at all.
+    const basis: FadeBasis = !fades.transitions
+      ? "off"
+      : last !== null &&
+          last.source.config === fades.source.config &&
+          last.source.preset === fades.source.preset
+        ? "compared"
+        : "fresh";
+    const before = basis === "compared" ? last!.placements : null;
+    const drawn = new Map<string, Arrival | null>();
+    this.drawn = { source: fades.source, placements: drawn };
+    const fading: FadeFrame[] = [];
+    const frame = {
+      effect: name,
+      t: bar.t,
+      made: 0,
+      reused: 0,
+      own,
+      basis,
+      fades: fading,
+    };
     this.frame = frame;
 
-    const ownPart = ({ placement, name }: CellEffect): Omit<Part, "owners"> => {
+    // Whether a placement drawn in this frame is fading in, settled once per
+    // frame: it appears now when the last frame, compared, did not draw it,
+    // and keeps fading until its fade is done, when it has arrived.
+    const arrivalOf = (id: string, span: number): Arrival | null => {
+      if (drawn.has(id)) return drawn.get(id)!;
+      const known =
+        before === null
+          ? null
+          : before.has(id)
+            ? before.get(id)!
+            : {
+                since: at,
+                fade: EFFECT_CATALOGUE.transitions.fade({
+                  span,
+                  z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
+                }),
+              };
+      const arrival =
+        known === null || known.fade.done(at - known.since) ? null : known;
+      drawn.set(id, arrival);
+      if (arrival !== null)
+        fading.push({ placement: id, t: at - arrival.since });
+      return arrival;
+    };
+
+    const ownPart = (
+      placement: string,
+      name: EffectName,
+    ): Omit<Part, "owners"> => {
       const last = placements.get(placement) ?? knownPlacements.get(placement);
       const since = last?.name === name ? last : { name, since: at };
       const t = at - since.since;
@@ -273,14 +401,42 @@ export class SessionEffects {
     // wears, once, confined to every item wearing it.
     const byScope = (items: readonly RowItem[]): Part[] => {
       const parts = new Map<Scope, Part & { owners: RichText[] }>();
-      for (const { owner, effect } of items) {
-        const part = effect === undefined ? bar : ownPart(effect);
+      for (const { owner, placement } of items) {
+        const part =
+          placement.effect === FOLLOW_BAR
+            ? bar
+            : ownPart(placement.id, placement.effect);
         const seen = parts.get(part.scope);
         if (seen === undefined)
           parts.set(part.scope, { ...part, owners: [owner] });
         else seen.owners.push(owner);
       }
       return [...parts.values()];
+    };
+
+    // Each placement of a row that is fading in, confined to its own items:
+    // one fade per placement, drawn over whatever loop lights its cells.
+    const fadesOf = (
+      items: readonly RowItem[],
+    ): Array<{ t: number; effect: Effect }> => {
+      const owners = new Map<string, RichText[]>();
+      for (const { owner, placement } of items)
+        owners.set(placement.id, [...(owners.get(placement.id) ?? []), owner]);
+      return [...owners].flatMap(([id, mine]) => {
+        const span = mine.reduce((n, item) => n + item.cellLength, 0);
+        const arrival = arrivalOf(id, span);
+        return arrival === null
+          ? []
+          : [
+              {
+                t: at - arrival.since,
+                effect: confined(
+                  fromGround(arrival.fade.effect, fades.ground),
+                  ...mine,
+                ),
+              },
+            ];
+      });
     };
 
     return (row, items) => {
@@ -290,22 +446,26 @@ export class SessionEffects {
       // the bar's confined to every item following it; with no item wearing
       // its own, everywhere else is the whole row, and the bar's needs no
       // confining.
-      const parts: readonly Part[] = items.some((i) => i.effect !== undefined)
+      const parts: readonly Part[] = items.some(
+        (i) => i.placement.effect !== FOLLOW_BAR,
+      )
         ? byScope(items)
         : [{ ...bar, owners: undefined }];
       // `none` is the floor of the effect domain and has no catalogue entry:
-      // a part wearing it is drawn as it stands, and a row of such parts is
-      // still — no `Effected` at all, so it draws the bytes it always drew.
+      // a part wearing it is drawn as it stands, and a row of such parts with
+      // nothing fading in is still — no `Effected` at all, so it draws the
+      // bytes it always drew.
       const moving = parts.filter(isMoving);
-      if (moving.length === 0) return STILL;
+      const appearing = fadesOf(items);
+      if (moving.length === 0 && appearing.length === 0) return STILL;
       const rowKey = `${this.key}#${row}`;
       return {
         kind: "moving",
         wrap: (strip, span) =>
           new Effected(
             strip,
-            together(
-              moving.map((part) => {
+            together([
+              ...moving.map((part) => {
                 const effect = effectOf(rowKey, part, span);
                 return {
                   t: part.t,
@@ -315,7 +475,8 @@ export class SessionEffects {
                       : confined(effect, ...part.owners),
                 };
               }),
-            ),
+              ...appearing,
+            ]),
             { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL },
           ),
       };
@@ -346,6 +507,13 @@ export class EffectSessions {
       this.sessions.delete(oldest);
     }
     return known;
+  }
+
+  // A click wrote this session's state: its bar settles
+  // (`SessionEffects.settle`). A session this memory does not hold has drawn no
+  // frame to settle.
+  settle(sessionId: string): void {
+    this.sessions.get(sessionId)?.settle();
   }
 
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every

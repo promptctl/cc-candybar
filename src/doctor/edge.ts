@@ -221,6 +221,7 @@ export function gatherFacts(
       globals.preset,
       sessionPick,
     ),
+    transitions: globals.transitions,
     claudeSettings: readClaudeSettingsFacts(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

@@ -335,6 +335,7 @@ const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
   variation: "look",
   shade: "look",
   endcaps: "look",
+  transitions: "look",
   autoWrap: "layout",
   padding: "layout",
   updateNotice: "config",
