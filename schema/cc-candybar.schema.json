@@ -49,6 +49,16 @@
             "alt"
           ]
         },
+        "shade": {
+          "enum": [
+            "muted",
+            "deepest",
+            "deeper",
+            "middle",
+            "brighter",
+            "brightest"
+          ]
+        },
         "autoWrap": {
           "type": "boolean"
         },
@@ -1257,6 +1267,16 @@
                   "alt"
                 ]
               },
+              "shade": {
+                "enum": [
+                  "muted",
+                  "deepest",
+                  "deeper",
+                  "middle",
+                  "brighter",
+                  "brightest"
+                ]
+              },
               "autoWrap": {
                 "type": "boolean"
               },
@@ -1342,6 +1362,16 @@
             "duo",
             "mono",
             "alt"
+          ]
+        },
+        "shade": {
+          "enum": [
+            "muted",
+            "deepest",
+            "deeper",
+            "middle",
+            "brighter",
+            "brightest"
           ]
         },
         "autoWrap": {

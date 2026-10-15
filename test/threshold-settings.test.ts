@@ -34,7 +34,10 @@ import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
-const THEME = "textual-dark";
+// A theme whose decoration never wears its `warning`: textual-dark's `accent`
+// IS its warning (#FEA62B), so a calm accent cell there draws the very colour
+// this test reads as "past the threshold".
+const THEME = "nord";
 const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
 
 const withRoot = (root: string): string => `{ root: ${root} }`;

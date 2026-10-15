@@ -14,8 +14,9 @@
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
 // whether steps run. An absent bg spec resolves to the region's tint; an
-// absent fg resolves to `textOn` of the background the cell resolved to, in
-// every region — so a Style always carries both colours.
+// absent fg resolves to the text the decoration pairs with that tint wherever
+// the cell wears it, and to `textOn` of any other background the cell resolved
+// to, in every region — so a Style always carries both colours.
 
 import {
   Style,
@@ -68,9 +69,11 @@ export class ColorSpecError extends Error {
  * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
  * segment type is the discriminator: no segment is asked whether it "looks
  * decorative", the absence of an authored spec IS the decorated case. The
- * foreground has the same kind of floor: an unauthored `fg:` is the theme
- * pole that reads better on the background phase 1 resolved (tint, band
- * item, or an authored threshold colour alike), floored at TEXT_MIN_CONTRAST.
+ * foreground has the same kind of floor: an unauthored `fg:` on a cell that
+ * wears its tint is the text its decoration pairs with it (the muted shade's
+ * own role text, the pole on any other), and on any other background (an
+ * authored threshold colour) the theme pole that reads better on it — floored
+ * at TEXT_MIN_CONTRAST either way.
  * A filled cell paints its own background, so the terminal's own text cannot
  * be assumed to read on it: it measured 1.05:1 on the dark themes under a
  * light terminal and on the light themes under a dark one
@@ -94,7 +97,7 @@ export function resolveSegmentColors(
   // Phase 0 — the record is already published (`openSegment`), so
   // `{{ color … }}` in the bg template, the fg template, and the body all read
   // its one palette. `bg` is still undefined: it is what phase 1 computes.
-  const { palette, tint } = active;
+  const { palette, tint, text } = active;
 
   // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
@@ -111,13 +114,18 @@ export function resolveSegmentColors(
   // Phase 2 — publish it, then foreground, which may now ask about it.
   active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
-  // An unauthored fg is chosen for the ground the cell paints; on no fill the
-  // ground is the terminal's, and its own text is what reads there.
+  // An unauthored fg is chosen for the ground the cell paints: the text the
+  // decoration pairs with its tint wherever the cell wears that tint — a
+  // threshold resting on its calm arm included — and text chosen for any other
+  // ground; on no fill the ground is the terminal's, and its own text is what
+  // reads there.
+  const chosen = (ground: ColorRgba): ColorRgba =>
+    ground.hex === tint.hex ? text : textOn(palette, ground, drawnAt);
   const fgColor: ColorRgba | undefined =
     fgSpec !== undefined
       ? resolveRef(palette, fgSpec, "fg")
       : filled
-        ? textOn(palette, bgColor, drawnAt)
+        ? chosen(bgColor)
         : undefined;
 
   return new Style({

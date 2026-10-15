@@ -60,6 +60,12 @@ export interface ActiveSegment {
    */
   readonly tint: ColorRgba;
   /**
+   * The text the decoration pairs with `tint`: an unauthored `fg:` on a cell
+   * that wears its tint — decorated, or a threshold resting on its calm arm —
+   * is this; on any other background it is chosen for that background.
+   */
+  readonly text: ColorRgba;
+  /**
    * The segment's resolved background, once known: the authored `bg:`, else
    * the tint its address was dealt.
    *
@@ -113,6 +119,7 @@ export function openSegment(
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
+  text: ColorRgba,
 ): ActiveSegment {
   const active: ActiveSegment = {
     segName,
@@ -120,6 +127,7 @@ export function openSegment(
     palette,
     disclosure,
     tint,
+    text,
     bg: undefined,
     drops: [],
   };

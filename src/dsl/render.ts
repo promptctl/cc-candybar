@@ -64,6 +64,7 @@ import {
   finishSelection,
   declaredBasePalette,
   drawnDepth,
+  effectiveShade,
   effectiveVariation,
   isExpression,
   STYLE_FLOOR,
@@ -105,8 +106,11 @@ import {
   bandRoot,
   decorationFor,
   descend,
+  SHADES,
   VARIATIONS,
   type AddressStep,
+  type Decor,
+  type ShadeName,
   type VariationName,
   type Region,
 } from "../themes/decor.js";
@@ -399,12 +403,21 @@ function compileHelpers(
  * ref's meaning depend on which segment is rendering instead of on the ref
  * string alone.
  */
-// [LAW:one-source-of-truth] The variation the CONFIG declares — what a caller
-// that resolved no session renders: the same fold, minus the rungs only a
-// session could supply. Registration's floor and renderDsl's omitted selection
-// both read it here.
-const configVariation = (config: ValidatedConfig): VariationName =>
-  effectiveVariation(undefined, null, config.globals.variation);
+// [LAW:one-source-of-truth] The decor a globals block declares — what a caller
+// that resolved no session renders: the same folds, minus the rungs only a
+// session could supply — under whichever names a caller did resolve.
+// Registration's floor and renderDsl's selection both read it here.
+const declaredDecor = (
+  globals: Globals,
+  variation?: VariationName,
+  shade?: ShadeName,
+): Decor => ({
+  variation:
+    VARIATIONS[
+      variation ?? effectiveVariation(undefined, null, globals.variation)
+    ],
+  shade: SHADES[shade ?? effectiveShade(undefined, null, globals.shade)],
+});
 
 export function registerDslConfig(
   config: ValidatedConfig,
@@ -450,8 +463,8 @@ export function registerDslConfig(
     basePalette: floorPalette,
     // The compile-only floor for the drawn palette: the base under no style.
     palette: floorPalette,
-    // Same contract: the compile-only floor is the config's own variation.
-    variation: VARIATIONS[configVariation(config)],
+    // Same contract: the compile-only floor is the config's own decor.
+    decor: declaredDecor(config.globals),
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -949,6 +962,10 @@ export interface RenderSelection {
   // closed bar wears; the walk roots the bar region at it, so every closed
   // cell's tint is read under this one value.
   readonly variation?: VariationName;
+  // The resolved SHADE name: effectiveShade over staged/session/globals
+  // (candybar-theme-colours-6fq5.e5n). Which of its role's shades each cell of
+  // the closed bar wears; it roots the bar region beside the variation.
+  readonly shade?: ShadeName;
 }
 
 export function renderDsl(
@@ -965,6 +982,9 @@ export function renderDsl(
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
+  // The state-floor shortfalls of the triggers this render opens, each
+  // reported once after the walk however many triggers stand on its ground.
+  const shortfalls = new Set<string>();
   // [LAW:one-source-of-truth] The instant and the depth this render draws at,
   // published once before the walk into the registry's clocks: every time read
   // below — a template's `now`, a `time` variable — reads the one instant, and
@@ -978,14 +998,10 @@ export function renderDsl(
   // config's (`presetGlobals`, the one merge `resolveEffectiveGlobals` uses), so
   // the bar's colours and its layout come from the same preset.
   const declared = presetGlobals(config, preset);
-  // [LAW:one-source-of-truth] An omitting caller renders the variation the
-  // CONFIG declares — the same true default the theme below honours.
-  const variation =
-    VARIATIONS[
-      selection?.variation ??
-        effectiveVariation(undefined, null, declared.variation)
-    ];
-  compiled.menuRuntime.action.variation = variation;
+  // [LAW:one-source-of-truth] An omitting caller renders the decor the CONFIG
+  // declares — the same true default the theme below honours.
+  const decor = declaredDecor(declared, selection?.variation, selection?.shade);
+  compiled.menuRuntime.action.decor = decor;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `styles` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
@@ -1152,7 +1168,11 @@ export function renderDsl(
   ): EvaluatedSegment => {
     try {
       const drawnAt = registry.drawnAt();
-      const { tint, disclosure } = decorationFor(palette, region, drawnAt);
+      const { tint, text, disclosure } = decorationFor(
+        palette,
+        region,
+        drawnAt,
+      );
       const active = openSegment(
         compiled.activeSegment,
         placement.name,
@@ -1160,6 +1180,7 @@ export function renderDsl(
         palette,
         disclosure,
         tint,
+        text,
       );
       const closed = resolveSegmentColors(
         active,
@@ -1182,7 +1203,13 @@ export function renderDsl(
       // or an open disclosure body. Decided once, here, and returned — the
       // walk picks the cell's Style by this same value.
       const open = active.drops.length > 0 || bodyOpen;
-      if (open) active.bg = state();
+      if (open) {
+        const band = bandFor(palette, disclosure, drawnAt);
+        active.bg = band.state;
+        // [LAW:no-silent-failure] A trigger whose row leaves no colour that
+        // clears the state floor is drawn as near as one comes, and said so.
+        if (band.shortfall !== null) shortfalls.add(band.shortfall);
+      }
       const lead = templates.lead?.evaluate(segScope) ?? [];
       const trail = templates.trail?.evaluate(segScope) ?? [];
       // Read only where something hangs open under the segment: a band that
@@ -1303,11 +1330,11 @@ export function renderDsl(
             ];
       }),
     );
-  return (
-    renderNode(root, true, barRoot(variation))
-      // A row's fill demands resolve here and nowhere else: this is the one place a
-      // composed row and the width it must fit are both in hand (brandon-layout-0c2).
-      .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
-      .join("\n")
-  );
+  const rendered = renderNode(root, true, barRoot(decor))
+    // A row's fill demands resolve here and nowhere else: this is the one place a
+    // composed row and the width it must fit are both in hand (brandon-layout-0c2).
+    .map((line) => renderStripCells(resolveFill(line.cells, opts), opts))
+    .join("\n");
+  for (const shortfall of shortfalls) onRenderWarning?.(shortfall);
+  return rendered;
 }

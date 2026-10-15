@@ -1402,7 +1402,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // [LAW:dataflow-not-control-flow] The default amount is 0 — the
       // budgetStatus helper's non-displayable value — so the suffix
       // contributes zero bytes through the same unconditional template.
-      // Oracle: the same segment with the retired (suffix-less) template.
+      // Oracle: the same segment with the retired (suffix-less) template —
+      // and nothing else of its own, so its text is chosen as the real one's.
       const preBudget = renderSession(
         PAYLOAD,
         JSON.stringify({
@@ -1410,7 +1411,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             session: {
               template:
                 '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
-              fg: "foreground",
             },
           },
         }),

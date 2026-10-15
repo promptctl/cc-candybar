@@ -17,6 +17,7 @@ import {
   paletteRole,
   TEXT_MIN_CONTRAST,
   textOn,
+  type Decoration,
   type PlacedStep,
   type Distribution,
   type Position,
@@ -40,6 +41,21 @@ export function stateCell(
   return new Style({
     bgcolor: ColorSpec.fromRgba(background),
     color: ColorSpec.fromRgba(textOn(palette, background, drawnAt)),
+  });
+}
+
+/**
+ * The Style of a closed cell wearing its decoration: the tint, and the text
+ * the decoration pairs with it — what the walk draws a decorated cell in
+ * (resolveSegmentColors), so a preview of the bar draws a cell as the bar does.
+ */
+export function decoratedCell({
+  tint,
+  text,
+}: Pick<Decoration, "tint" | "text">): Style {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(tint),
+    color: ColorSpec.fromRgba(text),
   });
 }
 

@@ -113,7 +113,7 @@ its state is synthesized, see below.) A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,
-`endcaps`, `variation`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
+`endcaps`, `variation`, `shade`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
 action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
@@ -121,9 +121,11 @@ selection" highlight.
 No example below authors `bg:` or `fg:`. A segment with no `bg:` wears a tint
 the theme derives from its position: row n wears step n of the
 `globals.variation` — an ordered list of the theme's decorative roles,
-`secondary` then `accent` by default — and each cell of the row one of three
-tones of it, so neighbours differ without anyone choosing colours, and a segment with no `fg:` gets text chosen
-to read on whatever its background is. An authored `bg:` is reserved for
+`secondary` then `accent` by default — and each cell of the row one of that
+role's own shades, from the window `globals.shade` is turned to, so neighbours
+differ without anyone choosing colours and every colour is one the theme
+names, and a segment with no `fg:` gets text chosen to read on whatever its
+background is. An authored `bg:` is reserved for
 meaning — a threshold's `error`, an alert's `warning` — and paints over the
 tint. `bg: "none"` is the one word that is no colour: the cell draws its text
 on the terminal's own ground with no fill behind it. With no `fg:` the text
@@ -271,8 +273,8 @@ click still carries the session id, for error-surfacing — every config has
 
 ### Drafts and `save`
 
-A setting the menu offers — theme, style, variation, endcaps, wrap, padding,
-preset — is a **draft** while the bar your session
+A setting the menu offers — theme, style, variation, shade, endcaps, wrap,
+padding, preset — is a **draft** while the bar your session
 renders differs from the bar your config file renders on its own. Nothing
 records that: the daemon compares the two on every render and publishes how
 many differ as the payload input `unsaved`. Pick a value and then pick your
@@ -377,7 +379,7 @@ row starts on its own step, in order, and a variation may turn along the row
 too. `"accent"` (the default: secondary, then accent), `"duo"` (primary,
 then secondary), `"mono"` (every row in primary), or `"alt"` (secondary and
 accent, also turning along the row every three cells, each row starting on
-its own). Cells side by side still differ by tone. It resolves like `endcaps` — the session's pick
+its own). Cells side by side still differ by shade. It resolves like `endcaps` — the session's pick
 over the config value over the default — and the settings menu's `🎨 look`
 tab carries a `🎼` carousel over it. `variations` is a registered domain and
 `{{ .variation.effective }}` its projection, so a control of your own is the
@@ -411,6 +413,52 @@ A name outside the table is a load error that lists the ones there are:
 
 ```error
 globals.variation must be one of: accent, duo, mono, alt; got "accent-primary"
+```
+
+### The bar's shade
+
+`globals.shade` names which of its role's shades each closed cell wears —
+the shades Textual generates for every role of every theme, so every colour
+the closed bar draws is one the theme names. It is a dial over a window of
+three neighbouring shades: `"deepest"` (the role's three darkenings),
+`"deeper"`, `"middle"` (the default: one darkening, the role itself, one
+lightening), `"brighter"` and `"brightest"` (its three lightenings) — and,
+below the deepest window, `"muted"`: every cell of a row in the role's muted
+form under the role's own text colour, as Textual's labels wear them, the
+cells parted by the joiner's divider. Under a window, cells side by side step
+up and down it a shade at a time. It resolves like `variation`, and the
+settings menu's `🎨 look` tab carries a `🎚` carousel over it. `shades` is a
+registered domain and `{{ .shade.effective }}` its projection:
+
+```json5 check:pass
+{
+  globals: { shade: "muted" },
+  actions: {
+    applyShade: { persist: "shade", from: "shades" },
+  },
+  segments: {
+    shadeControl: {
+      template: '{{ .shade.effective }} {{ menu "applyShade" "▸" "▾" }}',
+    },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { h: ["shadeControl"] },
+  ] },
+}
+```
+
+A name outside the dial is a load error that lists its positions, lowest
+first:
+
+```json5 check:fail
+{
+  globals: { shade: "darkest" },
+}
+```
+
+```error
+globals.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
 ```
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
@@ -771,7 +819,7 @@ each shown only while it has a step to take.
 A step is one click. A click that writes several things — a save and the
 session picks it releases — is one step, undone together. What counts as
 a settings change is a session pick of a setting the menu offers (theme,
-style, variation, endcaps, wrap, padding, preset) and
+style, variation, shade, endcaps, wrap, padding, preset) and
 every write to a config file; opening a menu or paging a picker is not, so
 undo never walks back through navigation. A click that changes nothing (a
 pick of the value already in place) records no step.
@@ -1238,7 +1286,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   because switching arrangement is what you most often open this menu to do.
   Under its carousel, `🗑 delete <name>` removes the preset you are in when you
   made it (see "Save as preset" above).
-- **`🎨 look`** holds theme, style, variation and endcaps; **`📐 layout`**
+- **`🎨 look`** holds theme, style, variation, shade and endcaps; **`📐 layout`**
   holds `+ preset`, which keeps the bar as a new preset and switches to it,
   `✎ arrange`, wrap and padding; **`⚙ config`** holds the update notice.
   Every setting is ONE control, in
@@ -1279,13 +1327,14 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   session started in that directory would load; `cc-candybar doctor <file>`
   checks the file a statusline command names with `--config`.
 
-Preset, theme, style, variation and endcaps are each `◀ value ▶`: `◀` and
+Preset, theme, style, variation, shade and endcaps are each `◀ value ▶`: `◀` and
 `▶` apply the previous and next value, so stepping through themes recolours the
 bar at each step, and clicking the value opens the list of every choice under
 the row, paged to the width. A theme or style in that list is written in its own
 colour on the menu's one background. The theme and style lists carry
-`{{ themePreview }}` in the row beneath; the preset list carries
-`{{ layoutPreview }}`, the whole arrangement drawn small. Every one of these
+`{{ themePreview }}` in the row beneath; the preset, variation and shade lists
+carry `{{ layoutPreview }}`, the whole arrangement drawn small in the colours
+it would wear. Every one of these
 shares one accordion key, so opening the style list closes the theme list: the
 panel is narrow, and two open drop-downs would overflow it. A pick leaves its
 list open, so you can try several in a row; the `✕` leading it closes it.
@@ -1538,7 +1587,7 @@ segment sits.
 
 The apply action must hold a value to centre on: a `{ set, from }` action
 whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `style`,
-`preset`, `endcaps`, `variation`, `autoWrap`, `padding` —
+`preset`, `endcaps`, `variation`, `shade`, `autoWrap`, `padding` —
 needs no `state` variable: it reads back through its `.effective` projection
 (`theme.effective`), which wins over a `state` variable on the same key, so the
 centre is the value the bar is rendering with even before the session picks
@@ -1775,8 +1824,8 @@ or not any group/menu exists in your config.
 A segment with no `bg:` wears a tint selected from the theme's vocabulary by
 its position (the convention stated above every example): the placement of
 its row among the rows chooses the hue, and its placement among the cells of
-that row chooses the tone. A container nested inside a cell does not re-place
-the bar — everything in it wears that cell's hue and tone, so a `distribution`
+that row chooses the shade. A container nested inside a cell does not re-place
+the bar — everything in it wears that cell's hue and shade, so a `distribution`
 there is a load error (`sets "distribution" on a container inside a bar cell`)
 — though inside a disclosure body every level still places its cells along
 the band.
@@ -1802,7 +1851,7 @@ its own placement.
 | `van-der-corput` (default) | no | bit-reversal sequence 0, ½, ¼, ¾, ⅛, … — neighbours land far apart |
 | `golden-angle` | no | index × φ mod 1 — the same isolation, a different spread |
 | `uniform` | no | every child at ½ — one tint for the whole row |
-| `monotonic` | yes | evenly spaced positions in declaration order — a row steps through its three tones in order and wraps (four cells: deep, mid, tinted, deep), so past three cells some neighbours share a tone |
+| `monotonic` | yes | evenly spaced positions in declaration order — a row steps through its window's three shades in the order the window lists them and wraps (four cells: entries 0, 1, 2, 0), so past three cells some neighbours share a shade |
 | `ends-interleaved` | yes | evenly spaced, alternating from both ends inward |
 
 Isolation is a property of the distribution you chose, not of the system.
@@ -2108,7 +2157,7 @@ Give the second its own id and each copy's menu opens on its own:
 ### A setting value the setting does not have
 
 A `set` on a setting's key (`theme`, `style`, `preset`, `endcaps`,
-`variation`, `autoWrap`, `padding`, `updateNotice`) may only write members of
+`variation`, `shade`, `autoWrap`, `padding`, `updateNotice`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
 `from`'s options and a stepper's ends, and refuses an `int` cursor, which

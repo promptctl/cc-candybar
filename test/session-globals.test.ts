@@ -21,6 +21,7 @@ import {
   resolveStyleSelection,
   effectivePadding,
   effectiveEndcaps,
+  effectiveShade,
   effectiveVariation,
 } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
@@ -271,6 +272,13 @@ describe("a stale session pick falls to the config default, not the floor", () =
     expect(effectiveVariation(undefined, "accent-primary", "duo")).toBe("duo");
     expect(effectiveVariation(undefined, "accent-primary", undefined)).toBe("accent");
     expect(effectiveVariation("mono", "duo", undefined)).toBe("mono");
+  });
+
+  it("shade: the session pick over the configured one, a stale pick falling through", () => {
+    expect(effectiveShade(undefined, "muted", "deepest")).toBe("muted");
+    expect(effectiveShade(undefined, "darkest", "deepest")).toBe("deepest");
+    expect(effectiveShade(undefined, "darkest", undefined)).toBe("middle");
+    expect(effectiveShade("brighter", "muted", undefined)).toBe("brighter");
   });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {

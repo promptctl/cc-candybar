@@ -245,10 +245,11 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   ],
   theme: PALETTE_PREVIEW,
   style: PALETTE_PREVIEW,
-  // A variation says which role each ROW wears — `{{ layoutPreview }}`
-  // draws every row, each block in the tint the ring's current variation
-  // deals it.
+  // A variation says which role each ROW wears, and a shade which of the
+  // role's shades each CELL wears — `{{ layoutPreview }}` draws every row,
+  // each block in the tint the ring's current variation and shade deal it.
   variation: [LAYOUT_PREVIEW],
+  shade: [LAYOUT_PREVIEW],
 };
 
 // [LAW:one-source-of-truth] A control's names, derived from its setting's
@@ -315,6 +316,7 @@ const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
   theme: "look",
   style: "look",
   variation: "look",
+  shade: "look",
   endcaps: "look",
   autoWrap: "layout",
   padding: "layout",
@@ -713,12 +715,14 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
       // with no contrast floor: a floor moves its lightness until the red no
       // longer reads as red on the state colour, and the ✖ must be red on
-      // every theme. Closed, the author's glyph keeps the cell's own text.
+      // every theme. `keptOn` only stops the terminal's rounding from costing
+      // it the contrast it has. Closed, the author's glyph keeps the cell's
+      // own text.
       [SETTINGS_ANCHOR]: {
         template:
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
-          `{{ fg (color "${DOOR_CLOSE_ROLE}") $door }}` +
+          `{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}` +
           `{{ else }}{{ $door }}{{ end }}`,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },

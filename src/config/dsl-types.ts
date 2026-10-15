@@ -21,7 +21,12 @@ import type { ActionDecl } from "./action.js";
 // dependency enters the config layer.
 import type { ThemeKey } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
-import type { Axis, DistributionName, VariationName } from "../themes/decor.js";
+import type {
+  Axis,
+  DistributionName,
+  ShadeName,
+  VariationName,
+} from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SegmentGroup } from "./segment-groups.js";
 import {
@@ -74,7 +79,7 @@ export type Direction = (typeof DIRECTIONS)[number];
 
 // [LAW:one-source-of-truth] What a container's children are to the bar's
 // colour: a vertical container stacks ROWS (which choose the hue), a
-// horizontal one lines up the CELLS of a row (which choose the tone). Read by
+// horizontal one lines up the CELLS of a row (which choose the shade). Read by
 // the address builder (`childStep`) and by the loader's refusal of a
 // `distribution` inside a cell. [LAW:types-are-the-program] Total over
 // Direction, so a new direction is a compile error here.
@@ -554,6 +559,13 @@ export interface Globals {
   // The config default under a session pick — `effectiveVariation` resolves
   // both into the render's selection.
   readonly variation?: VariationName;
+
+  // Which of its role's shades each CELL of the closed bar wears — a named
+  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
+  // role's darkenings and lightenings, or its muted form. Default "middle".
+  // The config default under a session pick — `effectiveShade` resolves both
+  // into the render's selection.
+  readonly shade?: ShadeName;
 
   readonly menuGlyph?: string;
 

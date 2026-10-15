@@ -21,7 +21,12 @@ import {
   listThemePalettes,
   type ThemeKey,
 } from "@promptctl/rich-js";
-import { VARIATIONS, type VariationName } from "./decor.js";
+import {
+  SHADES,
+  VARIATIONS,
+  type ShadeName,
+  type VariationName,
+} from "./decor.js";
 
 // [LAW:one-source-of-truth] Theme names the registry no longer installs: old
 // name → the theme that replaced it. `dark`/`light` were second names for the
@@ -529,6 +534,39 @@ export function effectiveVariation(
     globalsVariation,
     DEFAULT_VARIATION,
     (raw) => (isVariationName(raw) ? raw : null),
+  );
+}
+
+// --- Bar shade identifiers ---
+
+// [LAW:one-source-of-truth] The names a `globals.shade` may hold — the keys of
+// decor.ts's SHADES table, lowest position first, so the loader's enum, the
+// option domain, the settings control and the session parse cannot admit a
+// position the render has no shades for.
+export const SHADE_NAMES = Object.keys(SHADES) as readonly ShadeName[];
+
+// [LAW:one-source-of-truth] The one statement of the globals.shade default:
+// the window centred on each role's own colour — "the default will be
+// 'middle' (standard role)" (candybar-theme-colours-6fq5.e5n).
+export const DEFAULT_SHADE: ShadeName = "middle";
+
+export function isShadeName(value: string): value is ShadeName {
+  return (SHADE_NAMES as readonly string[]).includes(value);
+}
+
+// [LAW:one-type-per-behavior] effectiveVariation's twin: the narrowing guard
+// IS the parse, and a stale session entry falls through to the config default.
+export function effectiveShade(
+  stagedShade: ShadeName | undefined,
+  sessionShade: string | null,
+  globalsShade: ShadeName | undefined,
+): ShadeName {
+  return effectiveGlobal(
+    stagedShade,
+    sessionShade,
+    globalsShade,
+    DEFAULT_SHADE,
+    (raw) => (isShadeName(raw) ? raw : null),
   );
 }
 

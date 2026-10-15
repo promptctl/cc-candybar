@@ -41,6 +41,7 @@ import {
   effectivePadding,
   effectiveEndcaps,
   effectiveVariation,
+  effectiveShade,
   effectiveUpdateNotice,
   EXPRESSION_SLOTS,
   isExpression,
@@ -81,7 +82,7 @@ import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
-import type { VariationName } from "../themes/decor.js";
+import type { ShadeName, VariationName } from "../themes/decor.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 
 // ─── Effective globals ─────────────────────────────────────────────────────
@@ -134,6 +135,9 @@ export interface EffectiveGlobals {
   // Which theme role each row of the closed bar wears — the render's
   // selection carries it into the walk (RenderSelection.variation).
   readonly variation: VariationName;
+  // Which of its role's shades each cell of the closed bar wears — carried
+  // into the walk beside the variation (RenderSelection.shade).
+  readonly shade: ShadeName;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
   // segments (globals.default_separator). `string | undefined`, not a resolved
   // string, precisely because its floor is NOT ours: rich-js's bundled `plain`
@@ -213,6 +217,7 @@ export function resolveEffectiveGlobals(
       sessionPick("variation"),
       globals.variation,
     ),
+    shade: effectiveShade(staged.shade, sessionPick("shade"), globals.shade),
     // [LAW:one-source-of-truth] The fields with no SessionState half (this one,
     // charset, colorCompatibility) resolve as `staged ?? config ?? floor` — the
     // same chain minus the rung they do not have, spelled with the same `??`
@@ -243,7 +248,7 @@ export function resolveEffectiveGlobals(
 
 // The resolved globals as the two arguments renderDsl draws with: the options
 // its joiner and cells read, and the selection it finishes (theme, style, preset,
-// variation). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
+// variation, shade). [LAW:one-source-of-truth] The daemon, `cc-candybar check` and
 // the demo all project THROUGH these, so a field added to EffectiveGlobals
 // reaches every renderer at once and no caller can leave one out — a hand copy
 // of this projection had already dropped `separator` (brandon-menu-ia-zyf).
@@ -270,6 +275,7 @@ export function renderSelectionOf(
     style: effective.style,
     preset: effective.preset,
     variation: effective.variation,
+    shade: effective.shade,
   };
 }
 
@@ -284,6 +290,7 @@ export type EffectiveInputs = Pick<
   | "preset"
   | "endcaps"
   | "variation"
+  | "shade"
   | "charset"
   | "colorCompatibility"
   | "autoWrap"
@@ -300,6 +307,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     },
     endcaps: { effective: effective.endcaps },
     variation: { effective: effective.variation },
+    shade: { effective: effective.shade },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
@@ -380,6 +388,7 @@ export interface RenderPayload extends ClaudeHookData {
   // fields gets real exhaustiveness checking.
   readonly endcaps: { readonly effective: Endcaps };
   readonly variation: { readonly effective: VariationName };
+  readonly shade: { readonly effective: ShadeName };
   readonly charset: { readonly effective: Charset };
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };

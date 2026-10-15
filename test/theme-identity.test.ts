@@ -1,22 +1,30 @@
-// Every bundled theme's bar reads as that theme (brandon-theme-picker-bgw.8fp).
+// Every bundled theme's bar reads as that theme (brandon-theme-picker-bgw.8fp,
+// candybar-theme-colours-6fq5.e5n).
 //
-// Three facts, each measured on what the user sees — the bundled default bar,
+// Facts, each measured on what the user sees — the bundled default bar,
 // rendered under every palette through renderDsl — in ΔE_OK (rich-js
 // `Oklch.deltaE`), where ~.02 is the smallest difference the eye resolves:
 //
-//   1. A tint carries its theme's colour: its chroma is DECOR_CHROMA_SHARE of
-//      the way to its hue's, unless the sRGB gamut at the tint's lightness
-//      cannot hold that much, in which case it holds all the gamut allows.
-//   2. Two distinct themes' bars differ cell by cell — the difference a user
-//      sees when they switch — by at least THEME_FLOOR on average.
-//   3. Two neighbouring cells never blur: every arrow joins two backgrounds at
+//   1. Every background the closed bar draws is a colour its theme names:
+//      within PALETTE_FLOOR of a colour in its palette, under every variation
+//      and every position of the shade dial, at the `none` style.
+//   2. Two neighbouring cells never blur: every arrow joins two backgrounds at
 //      least SEAM_MIN_DELTA_E apart, and where a theme's own colours put two
 //      neighbours on one background the joiner draws the divider — with the
 //      rate-limit windows hot and with them calm (the calm block and weekly
 //      used to share `panel`, joined by an arrow nobody could see).
+//
+// A third fact held two distinct themes' bars ΔE .02 apart cell by cell while
+// the bar's tints were synthesised and could erode a theme into its neighbour.
+// A closed cell is now its theme's own role at a shade, so two themes that
+// share their roles share their bars — Solarized's dark and light variants
+// name every accent alike, as Textual draws them — and fact 1 is what holds
+// a bar to its theme.
 
 import {
+  ColorDepth,
   ColorRgba,
+  drawnColour,
   getThemePalette,
   listThemePalettes,
   Oklch,
@@ -28,39 +36,25 @@ import { checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { DEFAULT_SHADE } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  DECOR_CHROMA_SHARE,
-  DECOR_VOCABULARY,
+  DECOR_HUES,
   decorEntryColour,
   paletteRole,
+  SHADES,
   VARIATIONS,
+  type ShadeName,
   type VariationName,
 } from "../src/themes/decor";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 
-// The eye's resolution: two bars closer than ~.02 read as one theme. The
-// measured minimum over the registry, under the default variation and no
-// style, is .031, between rose-pine and rose-pine-moon — two variants of one
-// family sharing their accents — on the seven-cell bundled bar (.024 under
-// `duo`, the bar's rows before brandon-theme-picker-bgw.7g6).
-// Before 8fp, dracula and rose-pine-moon sat at .018, under it.
-const THEME_FLOOR = 0.02;
-
-// Where the floor is NOT met, measured, by variation/style: the one-step
-// `mono` variation paints every row in one hue, so two themes that share
-// a primary converge once a style narrows what else differs — rose-pine and
-// rose-pine-moon at .019 under `dim`, dracula and rose-pine-moon at .015 under
-// `bright`. Every other combination of the variations × 6 styles clears it
-// (design-docs/COLOUR-FROM-THEME-VOCABULARY.md, "The variation"). Pinned
-// exactly, so a new convergence fails and a recovered one says to delete it.
-const CONVERGED: Readonly<Record<string, readonly string[]>> = {
-  "mono/dim": ["rose-pine~rose-pine-moon"],
-  "mono/bright": ["dracula~rose-pine-moon"],
-};
+// About one just-noticeable step: how near a drawn background must sit to a
+// colour its palette names (the ticket's own bound).
+const PALETTE_FLOOR = 0.02;
 
 const ARROW = "\u{e0b0}";
 const DIVIDER = "\u{e0b1}";
@@ -121,15 +115,32 @@ function seams(rendered: string): Seam[] {
 const THEMES = listThemePalettes();
 const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>");
 
-// Every variation × every bundled style (brandon-theme-picker-bgw.7g6): each
-// is a runtime pick, so each fact below holds whichever one the user is in,
-// not only under the defaults.
+// Each variation, position of the shade dial and bundled style is a runtime
+// pick (brandon-theme-picker-bgw.7g6, candybar-theme-colours-6fq5.e5n), so
+// each fact below holds whichever one the user is in, not only under the
+// defaults: every variation × every position of the dial, unstyled, and every
+// variation × every style at the default position. A style moves every colour
+// of a palette alike, and the full cross-product of all three — 6.6k bars —
+// held every fact when the dial was added; the suite keeps these two planes
+// of it, which reach every pair the dial or a style can fold.
 const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
+const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
 const STYLES = Object.keys(CONFIG.styles);
-const VARIANTS = VARIATION_NAMES.flatMap((variation) =>
-  STYLES.map((look) => ({ variation, look })),
+interface Variant {
+  readonly variation: VariationName;
+  readonly shade: ShadeName;
+  readonly look: string;
+}
+const named = ({ variation, shade, look }: Variant): string => `${variation}/${shade}/${look}`;
+const UNSTYLED: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
+  SHADE_NAMES.map((shade) => ({ variation, shade, look: "none" })),
 );
-type Variant = (typeof VARIANTS)[number];
+const VARIANTS: readonly Variant[] = [
+  ...UNSTYLED,
+  ...VARIATION_NAMES.flatMap((variation) =>
+    STYLES.filter((look) => look !== "none").map((look) => ({ variation, shade: DEFAULT_SHADE, look })),
+  ),
+];
 
 // Every rate-limit window and the context calm: the case where the threshold
 // cells wear their calm arm side by side.
@@ -139,181 +150,177 @@ const CALM = {
   weekly: { percentage: 4 },
 };
 
-function render(theme: string, calm: boolean, { variation, look }: Variant): string {
-  const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
-  try {
-    const compiled = registerDslConfig(CONFIG, registry, { cwd: process.cwd() });
-    const e = resolveEffectiveGlobals(
-      CONFIG,
-      (key) =>
-        key === "theme" ? theme : key === "variation" ? variation : key === "style" ? look : null,
-      () => false,
-    );
-    const hot = checkPayload(e, null, instantOf(new Date())) as Record<string, Record<string, unknown>>;
-    const payload = calm
-      ? Object.fromEntries(
-          Object.entries(hot).map(([k, v]) => [
-            k,
-            k in CALM ? { ...v, ...CALM[k as keyof typeof CALM] } : v,
-          ]),
-        )
-      : hot;
-    return renderDsl(
-      CONFIG,
-      compiled,
-      store,
-      registry,
-      payload,
-      instantOf(new Date()),
-      {
-        endcaps: e.endcaps,
-        separator: e.separator,
-        width: 400,
-        colorCompatibility: e.colorCompatibility,
-        wrap: e.autoWrap,
-        padding: e.padding,
-        charset: e.charset,
-      },
-      undefined,
-      { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation },
-    );
-  } finally {
-    registry.dispose();
-  }
+// One compiled bar, rendered under each pick the way the daemon renders one
+// config for many sessions: the selection is an argument, so nothing carries
+// over between renders but the compiled config itself. One instant for every
+// render, so the renders differ only in the pick.
+const STORE = new VariableStore();
+const REGISTRY = new SourceRegistry(STORE, "", undefined, new SessionState());
+const COMPILED = registerDslConfig(CONFIG, REGISTRY, { cwd: process.cwd() });
+const AT = instantOf(new Date());
+afterAll(() => REGISTRY.dispose());
+
+function render(theme: string, calm: boolean, { variation, shade, look }: Variant): string {
+  const e = resolveEffectiveGlobals(
+    CONFIG,
+    (key) =>
+      key === "theme"
+        ? theme
+        : key === "variation"
+          ? variation
+          : key === "shade"
+            ? shade
+            : key === "style"
+              ? look
+              : null,
+    () => false,
+  );
+  const hot = checkPayload(e, null, AT) as Record<string, Record<string, unknown>>;
+  const payload = calm
+    ? Object.fromEntries(
+        Object.entries(hot).map(([k, v]) => [
+          k,
+          k in CALM ? { ...v, ...CALM[k as keyof typeof CALM] } : v,
+        ]),
+      )
+    : hot;
+  return renderDsl(
+    CONFIG,
+    COMPILED,
+    STORE,
+    REGISTRY,
+    payload,
+    AT,
+    {
+      endcaps: e.endcaps,
+      separator: e.separator,
+      width: 400,
+      colorCompatibility: e.colorCompatibility,
+      wrap: e.autoWrap,
+      padding: e.padding,
+      charset: e.charset,
+    },
+    undefined,
+    { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation, shade: e.shade },
+  );
 }
 
 // Each (theme, calm, variant) bar is rendered once, on first read INSIDE a
 // test, so a render that throws fails that theme's test by name rather than
-// the suite's collection.
-const SEAMS = new Map<string, Seam[]>();
-function seamsOf(theme: string, calm: boolean, variant: Variant): Seam[] {
-  const key = `${theme}|${calm}|${variant.variation}|${variant.look}`;
-  const hit = SEAMS.get(key);
+// the suite's collection — and both facts read the one render.
+const BARS = new Map<string, string>();
+function bar(theme: string, calm: boolean, variant: Variant): string {
+  const key = `${theme}|${calm}|${named(variant)}`;
+  const hit = BARS.get(key);
   if (hit !== undefined) return hit;
-  const measured = seams(render(theme, calm, variant));
-  SEAMS.set(key, measured);
-  return measured;
+  const rendered = render(theme, calm, variant);
+  BARS.set(key, rendered);
+  return rendered;
 }
+const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
+  seams(bar(theme, calm, variant));
 
-describe("a tint carries its theme's colour", () => {
-  test.each(THEMES)("%s: chroma is the share of its hue's, or all the gamut allows, under every style", (name) => {
-    const wrong: string[] = [];
-    for (const look of STYLES) {
-      const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
-      for (const entry of DECOR_VOCABULARY) {
-      const tint = oklch(decorEntryColour(palette, entry));
-      // Both ends of the tone axis keep `surface`'s chroma and move it the
-      // share of the way to the hue's, so every tone aims at the same chroma.
-      const base = oklch(paletteRole(palette, "surface"));
-      const hue = oklch(paletteRole(palette, entry.hue));
-      const target = base.c + (hue.c - base.c) * DECOR_CHROMA_SHARE;
-      // The most chroma sRGB can show at this lightness and hue: rich-js
-      // clamps an out-of-gamut request to exactly that.
-      const gamut = oklch(new Oklch(tint.l, 0.5, hue.h).toRgba()).c;
-      // What 8-bit channels can store of that aim: the aimed colour, stored.
-      // Near black one channel step is most of the chroma there is (inverted's
-      // deepest tones on the light themes store .021 where .033 is aimed), so
-      // the bar is held to the stored aim, and .004 absorbs the rest.
-      const stored = oklch(new Oklch(tint.l, Math.min(target, gamut), hue.h).toRgba()).c;
-      if (tint.c < stored - 0.004)
-        wrong.push(`${look}/${entry.hue}/${entry.tone} c=${tint.c.toFixed(4)} stored aim ${stored.toFixed(4)}`);
+// Every background colour a rendered bar draws, in order: each 48;2 SGR.
+function backgrounds(rendered: string): ColorRgba[] {
+  return [...rendered.matchAll(/\x1b\[([0-9;]*)m/g)].flatMap((m) => {
+    const p = m[1]!.split(";").map(Number);
+    const out: ColorRgba[] = [];
+    for (let i = 0; i < p.length; i++) {
+      if (p[i] === 48 && p[i + 1] === 2) {
+        out.push(new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!));
+        i += 4;
       }
     }
-    expect(wrong).toEqual([]);
+    return out;
   });
-});
+}
 
-describe("the bar under one theme reads as that theme", () => {
-  const cells = (theme: string, variant: Variant) => seamsOf(theme, false, variant).map((s) => s.right);
-  const pairs = THEMES.flatMap((a, i) => THEMES.slice(i + 1).map((b) => [a, b] as const));
-
-  test.each(VARIANTS.map((v) => [v.variation, v.look, v] as const))(
-    "under %s / %s every two themes differ cell by cell",
-    (_p, _l, variant) => {
-      const wrong: string[] = [];
-      for (const [a, b] of pairs) {
-        const A = cells(a, variant);
-        const B = cells(b, variant);
-        // One config, one payload: the two bars have the same cells in the same
-        // order, so the k-th seam of each is the same cell under two themes.
-        expect(A.length).toBe(B.length);
-        const mean = A.reduce((sum, c, k) => sum + dE(c, B[k]!), 0) / A.length;
-        if (mean < THEME_FLOOR) wrong.push(`${a}~${b}`);
+describe("done-when: every background the closed bar draws is a colour its theme names", () => {
+  // The `none` style: the theme as it ships. A style transposes the whole
+  // palette, shades and all, so under one the bar wears the transposed palette.
+  test.each(UNSTYLED.map((v) => [named(v), v] as const))("under %s, within ΔE .02 of its palette, hot and calm, on every theme", (_name, variant) => {
+    const wrong: string[] = [];
+    let measured = 0;
+    for (const theme of THEMES) {
+      const palette = [...getThemePalette(theme)!.vars.values()].map((c) => drawnColour(c, ColorDepth.TRUECOLOR));
+      // A colour the palette names exactly is ΔE 0 from it; only another is measured.
+      const exact = new Set(palette.map((c) => c.hex));
+      for (const calm of [false, true]) {
+        for (const bg of backgrounds(bar(theme, calm, variant))) {
+          measured++;
+          if (exact.has(bg.hex)) continue;
+          const nearest = Math.min(...palette.map((c) => dE(bg, c)));
+          if (nearest > PALETTE_FLOOR) wrong.push(`${theme}${calm ? " calm" : ""} ${bg.hex} ${nearest.toFixed(3)}`);
+        }
       }
-      expect(wrong).toEqual(CONVERGED[`${variant.variation}/${variant.look}`] ?? []);
-    },
-  );
+    }
+    expect(measured).toBeGreaterThan(THEMES.length * 2 * 5);
+    expect([...new Set(wrong)]).toEqual([]);
+  });
 });
 
 describe("no two neighbouring cells blur", () => {
-  const all = () =>
-    VARIANTS.flatMap((variant) =>
-      THEMES.flatMap((theme) =>
-        [false, true].flatMap((calm) =>
-          seamsOf(theme, calm, variant).map((seam) => ({
-            theme: `${theme}/${variant.variation}/${variant.look}`,
-            palette: theme,
-            look: variant.look,
-            calm,
-            ...seam,
-          })),
-        ),
+  const seamsUnder = (variant: Variant) =>
+    THEMES.flatMap((theme) =>
+      [false, true].flatMap((calm) =>
+        seamsOf(theme, calm, variant).map((seam) => ({ theme, calm, ...seam })),
       ),
     );
 
-  test("every theme, hot and calm, under every variation and style, is measured", () => {
-    expect(all().length).toBeGreaterThan(VARIANTS.length * THEMES.length * 2 * 5);
-  });
-
-  test("an arrow always joins two backgrounds the eye tells apart", () => {
-    for (const s of all().filter((s) => s.glyph === ARROW)) {
-      expect([s.theme, s.calm, s.left.hex, s.right.hex, dE(s.left, s.right) >= SEAM_MIN_DELTA_E]).toEqual([
-        s.theme,
-        s.calm,
-        s.left.hex,
-        s.right.hex,
-        true,
-      ]);
-    }
-  });
-
   // Two colours a row can put side by side meet when they sit closer than the
-  // eye resolves, and only the theme (under its style) can make them: two tones
-  // of one hue fold when the hue sits at its surface's lightness
-  // (textual-ansi), since the tone axis runs from `surface` receded toward
-  // `background` to `surface` pulled toward the hue; and a tint can meet an
-  // alert cell's `warning`/`error` beside it (atom-one-light under `inverted`
-  // pulls its warning and its accent's middle tone onto one near-black).
-  // Neighbours share a background because the THEME says so, and the divider
-  // keeps that seam. The one other shared background is not a seam between
-  // cells at all: segments nested in one bar cell (context beside autocompact,
-  // and ceiling) wear that cell's tint byte for byte (decorEntryFor), and the
-  // divider is how the joiner separates them on it.
+  // eye resolves, and only the theme (under its style) can make them: two of
+  // the shades the dial puts on the bar fold where the theme draws them alike
+  // (textual-ansi's every shade of a role is one colour), and a cell can meet
+  // an alert cell's `warning`/`error` beside it (atom-one-light under
+  // `inverted` pulls its warning and its accent's middle shade onto one
+  // near-black). Neighbours share a background because the THEME says so, and
+  // the divider keeps that seam. The one other shared background is not a seam
+  // between cells at all: segments nested in one bar cell (context beside
+  // autocompact, and ceiling) wear that cell's colour byte for byte
+  // (decorEntryFor), as do the cells of a muted row, and the divider is how
+  // the joiner separates them on it.
   const oneCell = (s: { left: ColorRgba; right: ColorRgba }): boolean =>
     s.left.hex === s.right.hex;
-  const ownColoursMeet = (name: string, look: string): boolean => {
+  const MEET = new Map<string, boolean>();
+  const ownColoursMeet = (name: string, variant: Variant): boolean => {
+    const key = `${name}|${named(variant)}`;
+    const hit = MEET.get(key);
+    if (hit !== undefined) return hit;
+    const meet = coloursMeet(name, variant);
+    MEET.set(key, meet);
+    return meet;
+  };
+  const coloursMeet = (name: string, { shade, look }: Variant): boolean => {
     const palette = transposePalette(getThemePalette(name)!, CONFIG.styles[look]!);
     const alerts = (["warning", "error"] as const).map((role) => paletteRole(palette, role));
-    return DECOR_VOCABULARY.some((a) => {
-      const tint = decorEntryColour(palette, a);
-      return (
-        DECOR_VOCABULARY.some(
-          (b) => a.hue === b.hue && a.tone !== b.tone && dE(tint, decorEntryColour(palette, b)) < SEAM_MIN_DELTA_E,
-        ) || alerts.some((alert) => dE(tint, alert) < SEAM_MIN_DELTA_E)
-      );
-    });
+    const cells = DECOR_HUES.flatMap((hue) =>
+      SHADES[shade].tones.map((tone) => decorEntryColour(palette, { hue, shade: tone })),
+    );
+    return cells.some(
+      (a, i) =>
+        cells.some((b, j) => i !== j && dE(a, b) < SEAM_MIN_DELTA_E) ||
+        alerts.some((alert) => dE(a, alert) < SEAM_MIN_DELTA_E),
+    );
   };
 
-  test("a divider joins only backgrounds the eye cannot, in a theme whose own colours meet", () => {
-    const dividers = all().filter((s) => s.glyph === DIVIDER);
-    // Non-vacuous: some bundled theme (textual-ansi) folds its tones, so the
-    // loop below has seams to judge.
-    expect(dividers.length).toBeGreaterThan(0);
-    const wrong = dividers
-      .filter((s) => !oneCell(s))
-      .filter((s) => !(dE(s.left, s.right) < SEAM_MIN_DELTA_E && ownColoursMeet(s.palette, s.look)))
+  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider joins only what the theme's own colours put on one", (_name, variant) => {
+    const seams = seamsUnder(variant);
+    expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
+    const arrows = seams
+      .filter((s) => s.glyph === ARROW && dE(s.left, s.right) < SEAM_MIN_DELTA_E)
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
-    expect([...new Set(wrong)]).toEqual([]);
+    expect([...new Set(arrows)]).toEqual([]);
+    const dividers = seams
+      .filter((s) => s.glyph === DIVIDER)
+      .filter((s) => !oneCell(s))
+      .filter((s) => !(dE(s.left, s.right) < SEAM_MIN_DELTA_E && ownColoursMeet(s.theme, variant)))
+      .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
+    expect([...new Set(dividers)]).toEqual([]);
+  });
+
+  test("dividers are drawn, so the divider rule has seams to judge", () => {
+    // Non-vacuous: a muted row is one colour, and textual-ansi draws every
+    // shade of a role alike.
+    expect(VARIANTS.some((variant) => seamsUnder(variant).some((s) => s.glyph === DIVIDER))).toBe(true);
   });
 });
