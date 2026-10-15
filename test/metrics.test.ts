@@ -85,9 +85,9 @@ describe("Metrics Provider", () => {
     expect(metrics.linesRemoved).toBe(10);
   });
 
-  // brandon-effects-2gka.2rm: Claude Code writes `isMeta: true` user entries no
-  // person typed (a skill's body, a nudge to continue); none is a message.
-  it("does not count a meta user entry as a message", async () => {
+  // brandon-effects-2gka.2rm: Claude Code writes user entries no person typed (a
+  // skill's body, a nudge to continue, a task notification); none is a message.
+  it("counts prompts, and the user entries Claude Code wrote itself apart from them", async () => {
     const t0 = Date.now() - 60 * 60 * 1000;
     const at = (s: number) => new Date(t0 + s * 1000).toISOString();
     const transcriptPath = join(tempDir, "test.jsonl");
@@ -98,6 +98,7 @@ describe("Metrics Provider", () => {
         `{"timestamp": "${at(1)}", "type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Bash", "input": {}}]}}`,
         `{"timestamp": "${at(2)}", "type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "a", "content": "ok"}]}}`,
         `{"timestamp": "${at(4)}", "type": "user", "isMeta": true, "message": {"role": "user", "content": [{"type": "text", "text": "Your previous response had no visible output. Please continue and produce a user-visible response."}]}}`,
+        `{"timestamp": "${at(5)}", "type": "user", "origin": {"kind": "task-notification"}, "message": {"role": "user", "content": "<task-notification>done</task-notification>"}}`,
         "",
       ].join("\n"),
     );
@@ -106,7 +107,32 @@ describe("Metrics Provider", () => {
       "meta-session",
       createMockHookData("meta-session", transcriptPath),
     );
-    expect(outcome.kind === "ok" && outcome.value.messageCount).toBe(1);
+    expect(outcome.kind === "ok" && outcome.value).toMatchObject({
+      messageCount: 1,
+      claudeCodeEntries: 2,
+    });
+  });
+
+  it("times the last response from the prompt, not from an entry Claude Code wrote mid-turn", async () => {
+    const t0 = Date.now() - 60 * 60 * 1000;
+    const at = (s: number) => new Date(t0 + s * 1000).toISOString();
+    const transcriptPath = join(tempDir, "test.jsonl");
+    writeFileSync(
+      transcriptPath,
+      [
+        `{"timestamp": "${at(0)}", "type": "user", "message": {"role": "user", "content": "go"}}`,
+        `{"timestamp": "${at(10)}", "type": "assistant", "message": {"content": [{"type": "text", "text": "working"}]}}`,
+        `{"timestamp": "${at(20)}", "type": "user", "isMeta": true, "message": {"role": "user", "content": [{"type": "text", "text": "Base directory for this skill: x"}]}}`,
+        `{"timestamp": "${at(25)}", "type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}}`,
+        "",
+      ].join("\n"),
+    );
+
+    const outcome = await metricsProvider.getMetricsInfo(
+      "clock-session",
+      createMockHookData("clock-session", transcriptPath),
+    );
+    expect(outcome.kind === "ok" && outcome.value.lastResponseTime).toBe(25);
   });
 
   // A transcript that doesn't exist yet is the domain's "no entries" (new

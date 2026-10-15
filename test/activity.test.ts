@@ -23,7 +23,11 @@ import type {
 import { ABSENT, ok } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
-import { clearParseCache, type ClaudeHookData } from "../src/utils/claude";
+import {
+  clearParseCache,
+  userEntryOf,
+  type ClaudeHookData,
+} from "../src/utils/claude";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
@@ -56,6 +60,17 @@ const metaUser = (text: string): string =>
     type: "user",
     isMeta: true,
     message: { role: "user", content: [{ type: "text", text }] },
+  });
+
+// A task notification: Claude Code wakes Claude for another turn of the same
+// prompt when a background task finishes. Not isMeta — its `origin` says who.
+const taskNotification = (): string =>
+  JSON.stringify({
+    timestamp: stamp(),
+    type: "user",
+    origin: { kind: "task-notification", producer: "session-task" },
+    promptSource: "system",
+    message: { role: "user", content: "<task-notification>done</task-notification>" },
   });
 
 const toolUse = (
@@ -159,12 +174,17 @@ beforeEach(() => {
 
 // ─── the per-entry projection ────────────────────────────────────────────────
 
+// The projection as the parse site runs it: classified first, then projected.
+const project = (
+  parsed: Record<string, unknown>,
+): ReturnType<typeof entryActivity> => entryActivity(parsed, userEntryOf(parsed));
+
 describe("the entry projection carries the scalars and never the content array", () => {
   test("a tool call keeps its id and name; the input is not retained", () => {
     const parsed = JSON.parse(
       toolUse({ id: "t1", name: "Bash", input: { command: "x".repeat(5000) } }),
     );
-    expect(entryActivity(parsed)).toEqual({
+    expect(project(parsed)).toEqual({
       started: [{ id: "t1", name: "Bash" }],
     });
   });
@@ -179,7 +199,7 @@ describe("the entry projection carries the scalars and never the content array",
         },
       ]),
     );
-    expect(entryActivity(parsed)).toEqual({
+    expect(project(parsed)).toEqual({
       started: [{ id: "t1", name: "TodoWrite" }],
       todos: [{ text: "Writing the gate", active: true, done: false }],
     });
@@ -200,7 +220,7 @@ describe("the entry projection carries the scalars and never the content array",
         },
       ]),
     );
-    expect(entryActivity(parsed)?.todos).toEqual([
+    expect(project(parsed)?.todos).toEqual([
       { text: "Write the gate", active: false, done: true },
       { text: "Mutating it", active: true, done: false },
     ]);
@@ -212,14 +232,14 @@ describe("the entry projection carries the scalars and never the content array",
     const parsed = JSON.parse(
       todoWrite("t1", [{ content: "Later", status: "deferred" }]),
     );
-    expect(entryActivity(parsed)?.todos).toEqual([
+    expect(project(parsed)?.todos).toEqual([
       { text: "Later", active: false, done: false },
     ]);
   });
 
   test("a user turn's slash command is projected, from either content shape", () => {
     expect(
-      entryActivity(
+      project(
         JSON.parse(
           userText(
             "<command-name>/next</command-name>\n  <command-args></command-args>",
@@ -228,7 +248,7 @@ describe("the entry projection carries the scalars and never the content array",
       ),
     ).toEqual({ command: "/next" });
     expect(
-      entryActivity(
+      project(
         JSON.parse(
           JSON.stringify({
             timestamp: stamp(),
@@ -265,13 +285,19 @@ describe("the entry projection carries the scalars and never the content array",
           },
         }),
       );
-      expect(entryActivity(echoed)).toBeUndefined();
+      expect(project(echoed)).toBeUndefined();
     },
   );
 
+  test("a command tag in an entry Claude Code wrote itself is not a command", () => {
+    expect(
+      project(JSON.parse(metaUser("<command-name>/next</command-name>"))),
+    ).toBeUndefined();
+  });
+
   test("an entry with nothing to say projects nothing at all", () => {
     expect(
-      entryActivity(JSON.parse(userText("just a question"))),
+      project(JSON.parse(userText("just a question"))),
     ).toBeUndefined();
   });
 });
@@ -340,6 +366,27 @@ describe("the fold reports what is happening now", () => {
     );
     expect(info.command).toBe("/next");
     expect(info.done).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("a task notification is another turn of the same prompt, so the tally and the command survive it", async () => {
+    const info = await activityOf(
+      userText("<command-name>/next</command-name>"),
+      toolUse({ id: "a", name: "Agent" }),
+      toolResult("a"),
+      taskNotification(),
+      toolUse({ id: "b", name: "Bash" }),
+    );
+    expect(info.command).toBe("/next");
+    expect(info.done).toEqual([{ name: "Agent", count: 1 }]);
+    expect(info.running).toEqual([{ name: "Bash", count: 1 }]);
+  });
+
+  test("a local command's output is not a prompt, so the command it answers stays", async () => {
+    const info = await activityOf(
+      userText("<command-name>/model</command-name>"),
+      userText("<local-command-stdout>Set model to Opus</local-command-stdout>"),
+    );
+    expect(info.command).toBe("/model");
   });
 
   test("a real user message resets the tool activity but keeps the todo list", async () => {

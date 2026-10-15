@@ -275,12 +275,11 @@ export type PrunedRaw = {
 export interface ParsedEntry {
   timestamp: Date;
   // [LAW:one-source-of-truth] The pruned projection carries every scalar any
-  // consumer reads. `type`, `message.role/type/firstContentType` are the
+  // consumer reads. `type`, `message.role/type` and `userEntry` are the
   // message-classification discriminators the metrics segment needs; they are
   // small enum-like strings, so projecting them keeps metrics on this one parse
   // path WITHOUT retaining the multi-MB `message.content[]` arrays the pruning
-  // exists to drop. `firstContentType` is the `type` of the first content block
-  // only (undefined when content is text/absent) — never the array itself.
+  // exists to drop.
   type?: string;
   message?: {
     id?: string;
@@ -288,32 +287,60 @@ export interface ParsedEntry {
     model?: string;
     role?: string;
     type?: string;
-    firstContentType?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
-  // Claude Code's own `isMeta` flag: a "user" entry Claude Code wrote, not one a
-  // person typed — a local-command caveat, a skill's expanded body, a nudge to
-  // continue after an empty response.
-  isMeta: boolean;
+  // Who wrote a "user" entry; undefined on every other entry.
+  userEntry?: UserEntry;
   // [LAW:one-source-of-truth] What this entry says Claude is DOING, projected
   // here rather than by a second scanner (src/utils/transcript-activity.ts).
-  // Same discipline as `firstContentType`: bounded scalars out of
+  // Same discipline as `userEntry`: bounded scalars out of
   // `message.content[]`, never the array. Undefined for every entry that
   // contributes no activity, which is most of them.
   activity?: EntryActivity;
   raw: PrunedRaw;
 }
 
-// [LAW:one-source-of-truth] A real user turn vs. a "user" line nobody typed: a
-// tool_result echoed back, or a meta entry Claude Code wrote itself. Two folds ask this — the message count and the activity turn
-// boundary — so it is spelled once, over the projected scalars, beside the type
-// it classifies.
-export function isRealUserMessage(entry: ParsedEntry): boolean {
-  const messageType = entry.type || entry.message?.role || entry.message?.type;
-  const isToolResult =
-    entry.type === "user" && entry.message?.firstContentType === "tool_result";
-  return messageType === "user" && !isToolResult && !entry.isMeta;
+// A "user" entry is one of three things. A `prompt` is what a person wrote, the
+// input Claude Code's own `turnPosition.promptIndex` counts. A `tool-result` is
+// a tool's answer echoed back. A `claude-code` entry is one Claude Code marks as
+// its own: `isMeta` (a skill's expanded body, a local-command caveat, a nudge to
+// continue), a compaction summary, an `origin` other than human (a task
+// notification wakes Claude for a new TURN of the same prompt), or a local
+// command's output, which Claude Code wraps in its own tag and marks no other way.
+export type UserEntry = "prompt" | "tool-result" | "claude-code";
+
+// [LAW:one-source-of-truth] Classified once, at the parse site, from the marks
+// Claude Code writes — the message count, the response clock and the activity
+// fold all read the one projected value.
+export function userEntryOf(
+  parsed: Record<string, unknown>,
+): UserEntry | undefined {
+  const msg = parsed.message as Record<string, unknown> | undefined;
+  const messageType = parsed.type || msg?.role || msg?.type;
+  if (messageType !== "user") return undefined;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin =
+    typeof parsed.origin === "object" && parsed.origin !== null
+      ? (parsed.origin as { kind?: unknown }).kind
+      : undefined;
+  return parsed.isMeta === true ||
+    parsed.isCompactSummary === true ||
+    (origin !== undefined && origin !== "human") ||
+    (typeof msg?.content === "string" && LOCAL_COMMAND_OUTPUT.test(msg.content))
+    ? "claude-code"
+    : "prompt";
+}
+
+const LOCAL_COMMAND_OUTPUT = /^\s*<local-command-std(?:out|err)>/;
+
+// The first content block's `type`; the array (full LLM text) is never
+// retained. Text content (a bare string) has no block type.
+function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0]
+    ? (content[0] as { type?: unknown }).type
+    : undefined;
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
@@ -420,13 +447,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   if (!parsed.timestamp) return null;
   const msg = parsed.message as Record<string, unknown> | undefined;
   const usage = msg?.usage as UsageCounts | undefined;
-  // Project only the first content block's `type` scalar; the array (full LLM
-  // text) is never retained. Text content (a bare string) has no block type.
-  const content = msg?.content;
-  const firstBlock =
-    Array.isArray(content) && typeof content[0] === "object" && content[0]
-      ? (content[0] as { type?: unknown })
-      : undefined;
+  const userEntry = userEntryOf(parsed);
   return {
     timestamp: new Date(parsed.timestamp as string),
     type: typeof parsed.type === "string" ? parsed.type : undefined,
@@ -437,14 +458,12 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
           usage,
           role: typeof msg.role === "string" ? msg.role : undefined,
           type: typeof msg.type === "string" ? msg.type : undefined,
-          firstContentType:
-            typeof firstBlock?.type === "string" ? firstBlock.type : undefined,
         }
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
     isSidechain: parsed.isSidechain === true,
-    isMeta: parsed.isMeta === true,
-    activity: entryActivity(parsed),
+    userEntry,
+    activity: entryActivity(parsed, userEntry),
     raw: {
       model: typeof parsed.model === "string" ? parsed.model : undefined,
       message: msg

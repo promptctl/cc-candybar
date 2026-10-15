@@ -21,7 +21,6 @@
 // O(bytes appended since the last render).
 
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
-import { isRealUserMessage } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import type {
   EntryLit,
@@ -157,19 +156,21 @@ function bump(tally: readonly ToolTally[], name: string): readonly ToolTally[] {
 }
 
 // [LAW:dataflow-not-control-flow] One entry onto the prior state, producing a
-// FRESH state. A real user message is the turn boundary: the per-turn facts (the
-// command and the tool activity) start over, the todo list does not — it is state
-// the user carries across turns until a TodoWrite replaces it.
+// FRESH state. A prompt is the turn boundary: the per-turn facts (the command and
+// the tool activity) start over, the todo list does not — it is state the user
+// carries across turns until a TodoWrite replaces it. An entry Claude Code wrote
+// itself (a skill's body, a task notification) is part of the prompt's work.
 function step(state: ActivityState, entry: ParsedEntry): ActivityState {
   if (entry.isSidechain) return state;
-  const turn = isRealUserMessage(entry)
-    ? {
-        ...state,
-        command: entry.activity?.command ?? null,
-        pending: [],
-        done: [],
-      }
-    : state;
+  const turn =
+    entry.userEntry === "prompt"
+      ? {
+          ...state,
+          command: entry.activity?.command ?? null,
+          pending: [],
+          done: [],
+        }
+      : state;
 
   const activity = entry.activity;
   if (activity === undefined) return turn;

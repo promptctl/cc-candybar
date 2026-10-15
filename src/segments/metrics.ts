@@ -9,7 +9,6 @@ import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 // full re-parse here would have re-inherited the very stall that fix removed.
 // The fold machinery itself moved out when the activity provider became its
 // second instance (brandon-activity-ue7): what is left here is the projection.
-import { isRealUserMessage } from "../utils/claude";
 import { TranscriptFold } from "../utils/transcript-fold";
 import { debug } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
@@ -23,6 +22,9 @@ export interface MetricsInfo {
   lastResponseTime: number | null;
   sessionDuration: number;
   messageCount: number;
+  // User entries Claude Code wrote itself — a fact for the render event, so a
+  // count of prompts that stops moving can be told from a session with none.
+  claudeCodeEntries: number;
   linesAdded: number;
   linesRemoved: number;
 }
@@ -32,16 +34,22 @@ export interface MetricsInfo {
 // per-session retained memory at O(1) regardless of transcript length.
 const RECENT_WINDOW = 20;
 
-// [LAW:types-are-the-program] The immutable fold state: the running real-user
-// message count and the recent-entry ring. Canonical; MetricsInfo's
+// [LAW:types-are-the-program] The immutable fold state: the running prompt
+// count, the running count of user entries Claude Code wrote itself, and the
+// recent-entry ring. Canonical; MetricsInfo's
 // transcript-derived fields derive from it, the hookData-derived fields
 // (durations, lines) are always fresh.
 interface MetricsState {
   readonly messageCount: number;
+  readonly claudeCodeEntries: number;
   readonly recent: readonly ParsedEntry[];
 }
 
-const EMPTY: MetricsState = { messageCount: 0, recent: [] };
+const EMPTY: MetricsState = {
+  messageCount: 0,
+  claudeCodeEntries: 0,
+  recent: [],
+};
 
 // [LAW:dataflow-not-control-flow] One entry onto the prior state, producing a
 // FRESH state — so two concurrent renders of one session both fold from the same
@@ -51,7 +59,9 @@ function step(state: MetricsState, entry: ParsedEntry): MetricsState {
   if (entry.isSidechain) return state;
   const grown = [...state.recent, entry];
   return {
-    messageCount: state.messageCount + (isRealUserMessage(entry) ? 1 : 0),
+    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
+    claudeCodeEntries:
+      state.claudeCodeEntries + (entry.userEntry === "claude-code" ? 1 : 0),
     recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown,
   };
 }
@@ -64,7 +74,9 @@ function lastResponseTime(entries: readonly ParsedEntry[]): number | null {
     const messageType =
       entry.type || entry.message?.role || entry.message?.type;
 
-    if (isRealUserMessage(entry)) {
+    // The clock starts at the person's prompt; a skill's body or a nudge
+    // Claude Code writes mid-turn does not restart it.
+    if (entry.userEntry === "prompt") {
       lastUserTime = entry.timestamp;
     } else if (messageType === "assistant" && lastUserTime) {
       const elapsed =
@@ -103,6 +115,7 @@ export class MetricsProvider {
       lastResponseTime: lastResponseTime(folded.value.recent),
       sessionDuration: hookData.cost.total_duration_ms / 1000,
       messageCount: folded.value.messageCount,
+      claudeCodeEntries: folded.value.claudeCodeEntries,
       linesAdded: hookData.cost.total_lines_added,
       linesRemoved: hookData.cost.total_lines_removed,
     });
