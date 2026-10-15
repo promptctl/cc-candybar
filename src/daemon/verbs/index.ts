@@ -833,13 +833,13 @@ const savePreset: VerbHandler = (value, ctx) => {
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
 // home file takes the session's shade, variation and style, and each of the
 // session's picks of those three that the reloaded file now draws is released,
-// so the session follows the file again, as a save's do. A pick the file still
-// would not draw — the user's own `globals.shade` outranks a theme's default —
+// so the session follows the file again, as a save's do. A field the config's
+// globals declare is not the rung's to save (themeDefaultSave), so a pick of it
 // is still a draft, and stays, so the bar does not move under the click.
 // [LAW:no-ambient-temporal-coupling] Save's order: write, reload, release.
-// [LAW:no-silent-failure] A theme or style chosen by a rule has no name until
-// a render evaluates it, and a theme's default is written by name: refused,
-// naming the rule, never a guess at what it would have rendered.
+// [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
+// evaluates it, and a theme's default is keyed by name: refused, naming the
+// rule, never a guess at what it would have rendered.
 const saveThemeDefault: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -849,9 +849,8 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
     ctx.sessionState.get(sid, key),
   );
   if (save.kind === "rule") {
-    const field = save.field === "theme" ? "palette" : save.field;
     throw new BadVerbArgs(
-      `save-theme-default: the ${save.field} is chosen by a rule (globals.${field}), so there is no name to save as a theme's default — pick one in the menu first`,
+      "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
   const home = originHome(origin);

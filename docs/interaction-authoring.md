@@ -90,14 +90,14 @@ declares exactly one value source:
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the field into your **config file** (every session, survives daemon restart) instead of one session: `globals.<field>`, or `presets.<name>.globals.<field>` when the preset your session renders names that field, since a top-level value is shadowed there — see below. No `int` arm: a page cursor is never persisted. |
-| `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment) from your config file and clear this session's pick of it |
+| `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment and, for `shade`, `variation` or `style`, in every theme's default) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
 | `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
-| `{ themeDefault: "save" }` | write this session's shade, variation and style into your config file as the active theme's default (`themeDefaults.<theme>`), and drop the session's picks of the three; refused when a rule chose the theme or the style — see below |
+| `{ themeDefault: "save" }` | write this session's shade, variation and style into your config file as the active theme's default (`themeDefaults.<theme>`), and drop the session's picks the file now draws; refused when a rule chose the theme — see below |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -490,11 +490,14 @@ The settings menu's `🎨 look` tab sets one from the bar: while the look you
 are wearing differs from the theme's default, it shows `⤓ default for
 <theme>`. That is `{ themeDefault: "save" }`: it writes the session's current
 shade, variation and style into `themeDefaults.<theme>` in your config file
-in one write, then drops the session's picks of the three, since the theme's
-default now draws them. It is one undo step. A theme chosen by a rule (a
-template in `globals.palette`) has no name until a render evaluates it, so it
-takes no default from this block, and the click is refused. The same goes for
-a style chosen by a rule.
+in one write, then drops the session's picks the theme's default now draws.
+It is one undo step. A field your `globals` (or the active preset's) sets is
+not the theme's to hold, since it outranks the theme's default: the entry
+keeps the theme's own value there, and a pick of that field stays a draft for
+`💾 save`. A theme chosen by a rule (a template in `globals.palette`) has no
+name until a render evaluates it, so it takes no default from this block, and
+the click is refused. Resetting `shade`, `variation` or `style` (`↺`, `⟲ reset
+all`) clears that field from every theme's default too.
 
 Each key must be an installed theme, each value a member of the field's own
 domain, and a style a name your `styles` declare:

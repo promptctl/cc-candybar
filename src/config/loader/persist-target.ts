@@ -17,7 +17,11 @@
 // `reset` deletes it, and "is this preset customized" asks whether the file
 // authors it.
 
-import type { Globals } from "../dsl-types.js";
+import {
+  THEME_DEFAULT_FIELDS,
+  type Globals,
+  type ThemeDefaultField,
+} from "../dsl-types.js";
 import { isGlobalsField, isPresetGlobalsField } from "./globals.js";
 
 export type PersistTarget =
@@ -31,6 +35,14 @@ export type PersistTarget =
       readonly scope: "preset-globals";
       readonly preset: string;
       readonly field: keyof Globals;
+    }
+  // One theme's default look (src/config/theme-defaults.ts) — the rung under
+  // the config's globals, so a reset that returns a look field to the bundled
+  // default clears it too.
+  | {
+      readonly scope: "theme-default";
+      readonly theme: string;
+      readonly field: ThemeDefaultField;
     }
   // The layout one preset renders. A structural edit (remove/insert a
   // segment) lands in the ROW of the cascade that holds the segment —
@@ -57,6 +69,9 @@ const PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
 // The same greedy name and anchored suffix; the field is one a preset fragment
 // may author (never a dotted name).
 const PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+// A theme name is an installed theme's (dotless); the field one of
+// THEME_DEFAULT_FIELDS.
+const THEME_DEFAULT_KEY = /^themeDefaults\.([^.]+)\.([^.]+)$/;
 
 // [LAW:one-source-of-truth] THE builder for a preset's root key — the
 // inverse of PRESET_ROOT_KEY's parse. edit-chrome.ts's synthesis and
@@ -65,6 +80,17 @@ const PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
 export function presetRootKey(name: string): string {
   return `presets.${name}.root`;
 }
+
+// THE builder for a theme-default key — the inverse of THEME_DEFAULT_KEY.
+export function themeDefaultKey(
+  theme: string,
+  field: ThemeDefaultField,
+): string {
+  return `themeDefaults.${theme}.${field}`;
+}
+
+export const isThemeDefaultField = (key: string): key is ThemeDefaultField =>
+  (THEME_DEFAULT_FIELDS as readonly string[]).includes(key);
 
 // THE builder for a preset-globals key — the inverse of PRESET_GLOBALS_KEY.
 export function presetGlobalsKey(name: string, field: keyof Globals): string {
@@ -82,6 +108,14 @@ export function parsePersistTarget(key: string): PersistTarget | null {
       scope: "preset-globals",
       preset: globalsMatch[1]!,
       field: globalsMatch[2],
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2]!)) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1]!,
+      field: themeMatch[2],
     };
   }
   const presetMatch = PRESET_ROOT_KEY.exec(key);
@@ -103,5 +137,7 @@ export function persistPath(
       return ["presets", target.preset, "globals", target.field];
     case "segment-palette":
       return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
   }
 }

@@ -164,12 +164,14 @@ const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 // style the bar wears as the active theme's default. The cell shows exactly
 // while saving would change something — a fact the daemon publishes every
 // render (RenderPayload.themeDefault, src/daemon/setting-drafts.ts), never one
-// a template computes.
+// a template computes — and so is the theme it names: the one the click
+// writes, not `theme.effective`, which edit mode's staged palette can move.
 const THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
 const THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+const THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
 const THEME_DEFAULT_CELL: SegmentDecl = {
   when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${SETTINGS.theme.effectiveVar}) }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${THEME_DEFAULT_THEME}) }}`,
 };
 
 // ─── Reset all (brandon-save-undo-bwi.wt5) ──────────────────────────────────
@@ -782,6 +784,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     path: "themeDefault.differs",
     type: "boolean",
     default: false,
+  };
+  artifacts.variables[THEME_DEFAULT_THEME] = {
+    kind: "input",
+    path: "themeDefault.theme",
+    type: "string",
+    default: "",
   };
   artifacts.variables[BACK_COUNT] = {
     kind: "input",

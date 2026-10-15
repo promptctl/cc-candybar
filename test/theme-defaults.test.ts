@@ -81,6 +81,21 @@ describe("themeDefaults at load", () => {
       "themeDefaults.nord.style: a rule is not allowed here — a theme's default is the look that theme wears by name, so it names a value",
     ],
     [
+      "an endcaps shape in place of a style, pointing at where endcaps live",
+      `{ themeDefaults: { nord: { style: 'powerline' } } }`,
+      'themeDefaults.nord.style: "powerline" is an endcaps shape, not a style — endcaps were renamed from "style" to "endcaps"; write globals.endcaps: "powerline"',
+    ],
+    [
+      "a reset of a theme default for a theme nothing installs",
+      `{ actions: { r: { reset: 'themeDefaults.no-such-theme.shade' } } }`,
+      'actions.r: "themeDefaults.no-such-theme.shade" names theme "no-such-theme" which is not installed',
+    ],
+    [
+      "a reset of a theme default field that is not part of a look",
+      `{ actions: { r: { reset: 'themeDefaults.nord.padding' } } }`,
+      'a "themeDefaults.<theme>.<shade|variation|style>" target',
+    ],
+    [
       "a field that is not part of a look",
       `{ themeDefaults: { nord: { padding: 2 } } }`,
       'Unknown theme default key "padding"',
@@ -92,6 +107,11 @@ describe("themeDefaults at load", () => {
     ],
   ])("refuses %s", (_what, source, message) => {
     expect(() => load(source)).toThrow(message);
+  });
+
+  test("a reset may name one theme's default field", () => {
+    const config = load(`{ actions: { r: { reset: 'themeDefaults.nord.shade' } } }`);
+    expect(config.actions.r).toEqual({ reset: "themeDefaults.nord.shade" });
   });
 
   test("a style the FILE declares is a name a theme default may use", () => {

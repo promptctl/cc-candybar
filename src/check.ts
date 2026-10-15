@@ -177,7 +177,7 @@ export function checkPayload(
     resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
     // A look that differs from the theme's default, so the 🎨 look tab's
     // `⤓ default for <theme>` renders and gets its template checked.
-    themeDefault: { differs: true },
+    themeDefault: { differs: true, theme: "<theme>" },
     // A resume command (the daemon's own projection) and a config file, so
     // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
     // and get checked. The config file is the one being checked, as the

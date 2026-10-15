@@ -82,7 +82,7 @@ const PAYLOAD = {
   unsaved: 1,
   // A look that differs from the theme's own default, so the 🎨 look body's
   // `⤓ default for <theme>` renders and its colour is checked with the rest.
-  themeDefault: { differs: true },
+  themeDefault: { differs: true, theme: THEME },
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },

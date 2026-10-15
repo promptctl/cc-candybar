@@ -1296,21 +1296,67 @@ describe("a theme's default look, set from the bar", () => {
     );
   });
 
-  test("a pick the user's own globals still outrank is saved, and kept, so the bar does not move", () => {
+  test("a field the user's own globals declare is not the theme's to save", () => {
     const source = `{
   globals: { palette: 'nord', shade: 'brighter' },
 }`;
     start(source);
+    // globals.shade outranks the theme's default, so it is no difference the
+    // theme's default could hold — with or without a pick over it.
+    expect(plain(r.render())).not.toContain("⤓ default");
+    pick({ shade: "deepest" });
+    expect(plain(r.render())).not.toContain("⤓ default");
+    pick({ variation: "duo" });
+    r.click(link(SAVE_LABEL)!);
+    // The entry keeps the theme's own shade; the variation is saved.
+    expect(durable.parsed().themeDefaults).toEqual({
+      nord: { shade: "middle", variation: "duo", style: "none" },
+    });
+    // The shade pick is still a draft, and still held, so the bar does not
+    // move; the variation the file now draws is released.
+    expect(r.sessionState.get(SID, "shade")).toBe("deepest");
+    expect(r.sessionState.get(SID, "variation")).toBeNull();
+    expect(look()).toEqual(["deepest", "duo", "none"]);
+    expect(plain(r.render())).toContain("💾 save 1");
+  });
+
+  test("a field the active preset pins does not leak into the theme's default", () => {
+    // The bundled zen preset pins style "dim".
+    expect(DEFAULT_DSL_CONFIG.presets.zen!.globals?.style).toBe("dim");
+    start(`{
+  globals: { palette: 'nord' },
+}`);
+    pick({ preset: "zen" });
+    expect(look()[2]).toBe("dim");
+    expect(plain(r.render())).not.toContain("⤓ default");
     pick({ shade: "deepest" });
     r.click(link(SAVE_LABEL)!);
     expect(durable.parsed().themeDefaults).toEqual({
       nord: { shade: "deepest", variation: "accent", style: "none" },
     });
-    // globals.shade outranks the theme's default, so the pick is still a
-    // draft and still held; the others the file now draws are released.
-    expect(r.sessionState.get(SID, "shade")).toBe("deepest");
-    expect(look()).toEqual(["deepest", "accent", "none"]);
-    expect(plain(r.render())).toContain("💾 save 1");
+  });
+
+  test("↺ clears the theme's default with the rest, so the bar shows the bundled default", () => {
+    start(THEMED);
+    pick({ shade: "deepest" });
+    r.click(link(SAVE_LABEL)!);
+    expect(durable.parsed().themeDefaults).toMatchObject({
+      nord: { shade: "deepest" },
+    });
+    const reset = links(r.render()).find(
+      (l) =>
+        stripAnsi(l.text) === "↺" &&
+        effectsOf(l.url).some(
+          (e) => e.verb === "reset-config" && e.args[1] === "shade",
+        ),
+    );
+    expect(reset).toBeDefined();
+    r.click(reset!.url);
+    const saved = durable.parsed().themeDefaults as Record<string, object>;
+    expect(saved.nord).not.toHaveProperty("shade");
+    // Every other theme's entry loses its shade too; its other fields stay.
+    expect(saved.dracula).toBeUndefined();
+    expect(look()[0]).toBe("middle");
   });
 
   test("the click is one undo step, restoring the exact bytes and picks", () => {

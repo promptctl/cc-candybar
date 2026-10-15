@@ -427,12 +427,14 @@ export interface RenderPayload extends ClaudeHookData {
   // so each control's `↺`, each tab's `•`, and the menu's `⟲` show exactly
   // while they would do something.
   readonly resettable: Readonly<Record<SettingName, boolean>>;
-  // Whether the look this session draws — shade, variation, style — differs
-  // from what the active theme's default resolves to (themeDefaultSave,
-  // src/daemon/setting-drafts.ts), so the menu's `⤓ default for <theme>`
-  // shows exactly while saving it would change something. False under a
-  // rule-chosen theme or style: there is no name to save.
-  readonly themeDefault: { readonly differs: boolean };
+  // Whether saving the look this session draws as the active theme's default
+  // would change it (themeDefaultSave, src/daemon/setting-drafts.ts), and, when
+  // it would, the theme the save writes — so the menu's `⤓ default for
+  // <theme>` shows exactly while a save would change something and names the
+  // theme its click writes. Never under a rule-chosen theme: there is no name.
+  readonly themeDefault:
+    | { readonly differs: false }
+    | { readonly differs: true; readonly theme: string };
   // The config file this session's saves and resets edit (the render cache
   // entry's home); absent while that file does not exist, so the menu's
   // `↗ config` shows exactly while there is a file to open.
