@@ -49,6 +49,7 @@ import {
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
@@ -214,6 +215,8 @@ export type CompiledActionDecl =
   // Save the bar as a new preset, or delete the preset the template names.
   | { readonly kind: "preset-save" }
   | { readonly kind: "preset-delete"; readonly name: Template<RichText> }
+  // Save the session's look as the active theme's default.
+  | { readonly kind: "theme-default-save" }
   // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
   // the check name is compiled in from the declaration (already gated against
   // CHECKS at load), so the click carries only what the config declared.
@@ -506,6 +509,7 @@ function compileAction(
           name: parseActionTemplate(parse, action.name, name),
         };
   }
+  if ("themeDefault" in action) return { kind: "theme-default-save" };
   // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
   // entry compiled for that name, so there is no second statement of what any
   // of them writes. The loader proves every name resolves; a config assembled
@@ -563,6 +567,7 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "save":
     case "preset-save":
     case "preset-delete":
+    case "theme-default-save":
     case "doctor-run":
     case "doctor-fix":
     case "ceiling":
@@ -823,6 +828,11 @@ export function realize(
     case "preset-save":
       return {
         effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId] }],
+        active: false,
+      };
+    case "theme-default-save":
+      return {
+        effects: [{ verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId] }],
         active: false,
       };
     case "preset-delete":

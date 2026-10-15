@@ -30,6 +30,7 @@ import {
   readValue,
   writePreset,
   writeDrafts,
+  writeThemeDefault,
   writeValues,
   type EditStore,
 } from "../config-file-store";
@@ -44,6 +45,7 @@ import { durableConfig, type ConfigHome } from "../../config/loader/discovery";
 import {
   placementId,
   settingSpelling,
+  THEME_DEFAULT_FIELDS,
   walkNodes,
   type DslConfig,
   type Globals,
@@ -63,6 +65,7 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
+  themeDefaultSave,
 } from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
@@ -86,6 +89,7 @@ import {
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
@@ -825,6 +829,47 @@ const savePreset: VerbHandler = (value, ctx) => {
   );
 };
 
+// Save the look the session draws as the active theme's default
+// (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
+// home file takes the session's shade, variation and style, and each of the
+// session's picks of those three that the reloaded file now draws is released,
+// so the session follows the file again, as a save's do. A field the config's
+// globals declare is not the rung's to save (themeDefaultSave), so a pick of it
+// is still a draft, and stays, so the bar does not move under the click.
+// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, release.
+// [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
+// evaluates it, and a theme's default is keyed by name: refused, naming the
+// rule, never a guess at what it would have rendered.
+const saveThemeDefault: VerbHandler = (value, ctx) => {
+  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const config = ctx.configFor(origin);
+  const save = themeDefaultSave(config, (key) =>
+    ctx.sessionState.get(sid, key),
+  );
+  if (save.kind === "rule") {
+    throw new BadVerbArgs(
+      "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
+    );
+  }
+  const home = originHome(origin);
+  writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
+  ctx.reloadConfig(origin);
+  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const drafted = new Set(
+    settingDrafts(ctx.configFor(origin), pick).map((d) => d.sessionKey),
+  );
+  const released = THEME_DEFAULT_FIELDS.map(
+    (f) => SETTINGS[f].sessionKey,
+  ).filter((key) => !drafted.has(key));
+  for (const key of released) ctx.sessionState.clear(sid, key);
+  ctx.dlog(
+    "info",
+    `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
+  );
+};
+
 // Delete a preset the session's config file authors. A session that was in
 // it returns to the file's default arrangement; any other session in it
 // falls to the floor, as it would for a name deleted by hand.
@@ -1283,6 +1328,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_RESET_CONFIG, resetConfig],
   [VERB_SAVE, save],
   [VERB_SAVE_PRESET, savePreset],
+  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
   [VERB_DELETE_PRESET, deletePreset],
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
   [VERB_UNDO, undo],
@@ -1313,6 +1359,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
@@ -1334,6 +1381,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,

@@ -70,6 +70,7 @@ export const ACTION_KEYS = [
   "rewind",
   "save",
   "preset",
+  "themeDefault",
   "doctor",
   "ceiling",
   "slash",
@@ -129,6 +130,10 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //     + name              render) from the config file -> no gate of its own:
 //                         the daemon refuses a bundled preset or one the file
 //                         does not declare
+//   themeDefault: "save" — write the look the session draws (shade,
+//                         variation, style) into the config file as the active
+//                         theme's default -> no gate of its own: the values are
+//                         the daemon's own resolution, never wire input
 //   slash               — type the declared slash command into this
 //                         session's Claude Code prompt -> no gate: the verb
 //                         honours only lines the config declares
@@ -230,6 +235,10 @@ export type ActionDecl =
   // declaration serves "delete the preset I am in" and "delete this one".
   | { readonly preset: "save" }
   | { readonly preset: "delete"; readonly name: string }
+  // The active theme's default look (candybar-theme-colours-6fq5.ix8): the
+  // daemon reads the theme and the look at click time, as `preset: "save"`
+  // reads the bar it copies, so the declaration carries nothing but the verb.
+  | { readonly themeDefault: "save" }
   // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a): `run` folds
   // every check over the session's recorded client facts and writes the
   // report into SessionState; `fix` performs the repair the named check's

@@ -17,18 +17,22 @@ import {
   settingOrderProblems,
   settingSpelling,
   settingsOf,
+  THEME_DEFAULT_FIELDS,
   walkNodes,
   type DslConfig,
   type Globals,
   type RawDslConfig,
   type SettingDecl,
   type SettingValue,
+  type ThemeDefaultField,
 } from "../config/dsl-types.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import {
   parsePersistTarget,
   persistPath,
   presetGlobalsKey,
+  isThemeDefaultField,
+  themeDefaultKey,
   type ConfigPath,
 } from "../config/loader/persist-target.js";
 import {
@@ -46,7 +50,11 @@ import {
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
-import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
+import {
+  BOOLEAN_FALSE,
+  BOOLEAN_TRUE,
+  listResolvablePaletteNames,
+} from "../themes/policy.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -105,6 +113,48 @@ function sessionGlobals(
   );
 }
 
+// [LAW:one-source-of-truth] The settings other settings resolve THROUGH, in
+// the order the resolution reads them: the preset chooses the globals every
+// later field reads, and the theme chooses the theme default the look falls
+// back to (src/config/theme-defaults.ts). A setting is measured against the
+// file under the session's picks of every selector resolved BEFORE it — what
+// a fresh session would draw once those picks were saved too — so picking a
+// theme does not turn that theme's own default look into drafts, and a pick
+// equal to it is none. A selector is measured without its own pick, or it
+// could never differ.
+const SELECTORS: readonly SettingName[] = ["preset", "theme"];
+
+// The file's bar under the session's picks of the first `depth` selectors.
+function fileThrough(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  depth: number,
+): EffectiveGlobals {
+  const held = new Set<string>(
+    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey),
+  );
+  return resolveEffectiveGlobals(
+    config,
+    (key) => (held.has(key) ? sessionPick(key) : null),
+    NOT_CUSTOMIZED,
+  );
+}
+
+// [LAW:dataflow-not-control-flow] Each setting's base, as one lookup: the
+// selectors' own depth, every other setting under all of them.
+function baseOf(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): (name: SettingName) => EffectiveGlobals {
+  const bases = Array.from({ length: SELECTORS.length + 1 }, (_, depth) =>
+    fileThrough(config, sessionPick, depth),
+  );
+  return (name) => {
+    const depth = SELECTORS.indexOf(name);
+    return bases[depth === -1 ? SELECTORS.length : depth]!;
+  };
+}
+
 // [LAW:one-source-of-truth] THE comparison a draft and a saved preset are both
 // made of: each of `rows` whose value the session renders differs from the
 // value `baseOf` it resolves to, and names a value at all (a theme or style
@@ -148,17 +198,8 @@ export function settingDrafts(
   sessionPick: (key: string) => string | null,
 ): readonly SettingDraft[] {
   const session = sessionGlobals(config, sessionPick);
-  const file = resolveEffectiveGlobals(config, () => null, NOT_CUSTOMIZED);
-  const landed = resolveEffectiveGlobals(
-    config,
-    (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
-    NOT_CUSTOMIZED,
-  );
-  return differing(
-    SETTING_ROWS,
-    session,
-    (name) => (name === "preset" ? file : landed),
-    (row) => landingKey(config, session.preset, row.configKey),
+  return differing(SETTING_ROWS, session, baseOf(config, sessionPick), (row) =>
+    landingKey(config, session.preset, row.configKey),
   );
 }
 
@@ -335,11 +376,6 @@ export function presetSnapshot(
   sessionPick: (key: string) => string | null,
 ): PresetSnapshot {
   const session = sessionGlobals(config, sessionPick);
-  const from = resolveEffectiveGlobals(
-    config,
-    (key) => (key === SETTINGS.preset.sessionKey ? session.preset : null),
-    NOT_CUSTOMIZED,
-  );
   return {
     from: session.preset,
     globals: presetByName(config.presets, session.preset).globals ?? {},
@@ -348,19 +384,88 @@ export function presetSnapshot(
     picks: differing(
       SETTING_ROWS.filter(([n]) => n !== "preset"),
       session,
-      () => from,
+      baseOf(config, sessionPick),
       (row) => row.configKey,
     ),
     placements: placementDrafts(config, sessionPick),
   };
 }
 
+// ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
+
+// [LAW:types-are-the-program] What `⤓ default for <theme>` would save: the
+// active theme's name and the look its rung would hold, every field a NAME —
+// or nothing, because a rule chose the theme (a `globals.palette` holding a
+// template has no answer until a render evaluates it, and a theme's default
+// is keyed by name). A style rule cannot reach the look: it lives in the
+// config's globals, which outrank the rung, so that field is the rung's own.
+export type ThemeDefaultSave =
+  | { readonly kind: "rule" }
+  | {
+      readonly kind: "look";
+      readonly theme: string;
+      readonly look: Readonly<Record<ThemeDefaultField, string>>;
+      // Whether the look differs from what the theme's default already
+      // resolves to — a save would change the file.
+      readonly differs: boolean;
+    };
+
+// The look a config declaring nothing but `theme` would draw: the theme's
+// own default over the floors — the bar every session opens on once the look
+// is that theme's default and nothing above the rung says otherwise.
+function themeOwnLook(config: DslConfig, theme: string): EffectiveGlobals {
+  return resolveEffectiveGlobals(
+    { ...config, globals: { palette: theme }, presets: {} },
+    () => null,
+    NOT_CUSTOMIZED,
+  );
+}
+
+// [LAW:one-source-of-truth] One reading, two readers: the render publishes
+// `theme` and `differs` (the control names the theme a click would write, and
+// shows exactly while a save would change something) and the verb writes
+// `look`, both over the same session and config, so the control and its click
+// cannot describe different looks. Edit mode's staged globals are chrome and
+// never part of the look saved.
+//
+// The look is what the theme's rung can show: a field the config's globals
+// declare — the file's own, or the active preset's — outranks the rung
+// (src/config/theme-defaults.ts), so whatever the session draws there is not
+// the theme's to keep, and the entry keeps the theme's own value. Without
+// that, a preset's pin (the bundled `zen` preset's `style: "dim"`) would leak
+// into a default every preset wears, and a file's `globals.shade` would offer
+// a save on every theme that could never take effect.
+export function themeDefaultSave(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): ThemeDefaultSave {
+  const session = sessionGlobals(config, sessionPick);
+  const theme = SPELLING.theme(session);
+  if (theme === null) return { kind: "rule" };
+  const own = themeOwnLook(config, theme);
+  const declared = presetGlobals(config, session.preset);
+  const look = Object.fromEntries(
+    THEME_DEFAULT_FIELDS.map((f) => [
+      f,
+      SPELLING[f](declared[f] === undefined ? session : own),
+    ]),
+  ) as Record<ThemeDefaultField, string>;
+  return {
+    kind: "look",
+    theme,
+    look,
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== SPELLING[f](own)),
+  };
+}
+
 // [LAW:one-source-of-truth] What a `reset` of one config key clears: every
-// layer between the bundled default and the bar. A setting lives in three
-// places: the session's pick, the file's top-level `globals.<field>`, and a
+// layer between the bundled default and the bar. A setting lives in up to four
+// places: the session's pick, the file's top-level `globals.<field>`, a
 // preset's own fragment (`presets.<p>.globals.<field>`, where a save lands when
-// that preset names the field). Reset clears all three, so the bar returns to
-// the bundled default under whichever bundled preset is showing. A fragment is
+// that preset names the field), and — for a look field — each theme's default
+// (`themeDefaults.<theme>.<field>`, where `⤓ default for <theme>` lands). Reset
+// clears all of them, so the bar returns to the bundled default under whichever
+// bundled preset and theme are showing. A fragment is
 // cleared only for a preset the BUNDLED default declares: there the file's
 // entry is a delta over the bundled one, while a preset the user authored is
 // the user's own content, its pin included — even one a save overwrote, since
@@ -381,6 +486,11 @@ export function resetLayers(key: string): ResetLayers {
       key,
       ...(isPresetGlobalsField(key)
         ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key))
+        : []),
+      ...(isThemeDefaultField(key)
+        ? listResolvablePaletteNames().map((theme) =>
+            themeDefaultKey(theme, key),
+          )
         : []),
     ],
   };
@@ -419,9 +529,14 @@ export function settingCounts(
       drafted.has(SETTINGS[name].configKey) ||
       fileHeld.has(SETTINGS[name].configKey),
   );
+  const themeDefault = themeDefaultSave(config, sessionPick);
   return {
     unsaved: drafts.length + placementDrafts(config, sessionPick).length,
     resettable,
+    themeDefault:
+      themeDefault.kind === "look" && themeDefault.differs
+        ? { differs: true, theme: themeDefault.theme }
+        : { differs: false },
   };
 }
 

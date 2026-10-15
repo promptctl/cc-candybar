@@ -72,6 +72,11 @@ export const VERB_SAVE = "save";
 // session to it. Args: `[sessionId]` — the name, the arrangement and the
 // settings are all read at click time, like `save`'s drafts.
 export const VERB_SAVE_PRESET = "save-preset";
+// Save the look the session draws as the active theme's default
+// (candybar-theme-colours-6fq5.ix8): write its shade, variation and style into
+// `themeDefaults.<theme>` in the config file, then release those picks. Args:
+// `[sessionId]` — the theme and the look are read at click time.
+export const VERB_SAVE_THEME_DEFAULT = "save-theme-default";
 // Delete a preset the config file authors (never a bundled one). Args:
 // `[sessionId, name]` — the name the bar showed, so the click removes the
 // preset its label named, and a name the file no longer declares is refused.

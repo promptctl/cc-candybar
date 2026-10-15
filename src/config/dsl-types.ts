@@ -380,6 +380,26 @@ export interface PresetDecl {
   readonly globals?: Globals;
 }
 
+// [LAW:one-source-of-truth] The globals a theme may carry a default for — the
+// three "look" settings that decide which of the theme's own colours each cell
+// wears (candybar-theme-colours-6fq5.ix8). Spelled once: the loader's schema,
+// the resolution's rung, the save that writes an entry and the release of the
+// picks it saves all range this list, so a field added here is a theme default
+// everywhere at once.
+export const THEME_DEFAULT_FIELDS = [
+  "shade",
+  "variation",
+  "style",
+] as const satisfies ReadonlyArray<keyof Globals>;
+export type ThemeDefaultField = (typeof THEME_DEFAULT_FIELDS)[number];
+
+// [LAW:types-are-the-program] One theme's default look: a globals fragment
+// over exactly THEME_DEFAULT_FIELDS, names only. It sits one rung BELOW the
+// config's own globals in the precedence chain (src/config/theme-defaults.ts),
+// so a theme's default never outranks what a user's file says; it only fills
+// what the file leaves unsaid.
+export type ThemeDefault = Partial<Pick<Globals, ThemeDefaultField>>;
+
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
@@ -404,6 +424,10 @@ export interface RawDslConfig {
   // active theme at render — a transform composing with every theme, selected
   // per session exactly like theme/style (session key `style`).
   readonly styles?: Readonly<Record<string, ThemeKey>>;
+  // Each installed theme's default look, keyed by theme name — see DslConfig's
+  // own `themeDefaults`. A file's entry is a delta over the bundled one of the
+  // same name, laid over it field by field (loader/merge.ts).
+  readonly themeDefaults?: Readonly<Record<string, ThemeDefault>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
   // body. Each compiles to one `{{ define "name" }}body{{ end }}` unit, and the
   // whole set into one shared define set every template this config parses
@@ -449,6 +473,13 @@ export interface DslConfig {
   // `{ set: …, from: "presets" }` ranges these names; the derived click gate and
   // the rendered options read this one map.
   readonly presets: Readonly<Record<string, PresetDecl>>;
+  // [LAW:one-source-of-truth] Each installed theme's default look
+  // (candybar-theme-colours-6fq5.ix8): theme name → the shade, variation and
+  // style that theme wears when nothing above its rung says otherwise. Merges
+  // by theme name, then field by field, over the bundled default's — the
+  // presets overlay. Read only through `themeDefaultsOf`
+  // (src/config/theme-defaults.ts), which is where the rung sits in the chain.
+  readonly themeDefaults: Readonly<Record<string, ThemeDefault>>;
   // [LAW:one-source-of-truth] The display globals edit mode stages while it is
   // on — the `globals` half of the fragment whose `root` half edit chrome
   // already stages (src/config/edit-chrome.ts). Merges FIELD BY FIELD with the

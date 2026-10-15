@@ -90,13 +90,14 @@ declares exactly one value source:
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the field into your **config file** (every session, survives daemon restart) instead of one session: `globals.<field>`, or `presets.<name>.globals.<field>` when the preset your session renders names that field, since a top-level value is shadowed there — see below. No `int` arm: a page cursor is never persisted. |
-| `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment) from your config file and clear this session's pick of it |
+| `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment and, for `shade`, `variation` or `style`, in every theme's default) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
 | `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
+| `{ themeDefault: "save" }` | write this session's shade, variation and style into your config file as the active theme's default (`themeDefaults.<theme>`), and drop the session's picks the file now draws; refused when a rule chose the theme — see below |
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -205,7 +206,9 @@ other byte of the file (comments, blank lines, key order, quote style, trailing
 commas) is preserved. There is no second durable store: the precedence chain is
 bundled default < config file < active preset < session pick < edit mode, so a
 session's own `set` pick still wins over the file's default for that one
-session. A `persist` click is a hand edit as far as the file can tell:
+session. (For shade, variation and style, the active theme's own default,
+`themeDefaults`, sits just under the config file's value: see "A theme's own
+default look" below.) A `persist` click is a hand edit as far as the file can tell:
 `git diff` on your config shows it, `cc-candybar check` validates it, and
 nothing in the file records which of the two made it. No config file for any
 software on the planet shows whether the application's settings menu updated
@@ -459,6 +462,54 @@ first:
 
 ```error
 globals.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
+```
+
+### A theme's own default look: `themeDefaults`
+
+Different themes look best with different shades, variations and styles. A
+top-level `themeDefaults:` block gives each theme its own: keyed by theme
+name, each entry names any of `shade`, `variation` and `style`. The entry for
+the theme the bar wears fills in what nothing above it says. Above it are your
+config's own `globals` (and the active preset's), so a theme's default never
+overrides a value you set yourself. Above those are the session's pick and edit
+mode, as for every setting. Under it are the floors: `middle`, `accent`,
+`none`. Your file's entries merge over the bundled ones by theme name, then
+field by field.
+
+```json5 check:pass
+{
+  globals: { palette: "nord" },
+  themeDefaults: {
+    nord: { shade: "deepest", variation: "duo" },
+    dracula: { shade: "brighter", style: "muted" },
+  },
+}
+```
+
+The settings menu's `🎨 look` tab sets one from the bar: while the look you
+are wearing differs from the theme's default, it shows `⤓ default for
+<theme>`. That is `{ themeDefault: "save" }`: it writes the session's current
+shade, variation and style into `themeDefaults.<theme>` in your config file
+in one write, then drops the session's picks the theme's default now draws.
+It is one undo step. A field your `globals` (or the active preset's) sets is
+not the theme's to hold, since it outranks the theme's default: the entry
+keeps the theme's own value there, and a pick of that field stays a draft for
+`💾 save`. A theme chosen by a rule (a template in `globals.palette`) has no
+name until a render evaluates it, so it takes no default from this block, and
+the click is refused. Resetting `shade`, `variation` or `style` (`↺`, `⟲ reset
+all`) clears that field from every theme's default too.
+
+Each key must be an installed theme, each value a member of the field's own
+domain, and a style a name your `styles` declare:
+
+```json5 check:fail
+{
+  themeDefaults: { nord: { shade: "darkest" } },
+}
+```
+
+```error
+themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
 ```
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding

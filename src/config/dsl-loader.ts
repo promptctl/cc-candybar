@@ -46,7 +46,11 @@ import {
   type ValidateCtx,
 } from "./loader/validate-core.js";
 import { mergeWithDefault } from "./loader/merge.js";
-import { validateEditGlobals, validateGlobals } from "./loader/globals.js";
+import {
+  validateEditGlobals,
+  validateGlobals,
+  validateThemeDefaults,
+} from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import {
   inheritableSegmentNames,
@@ -740,6 +744,8 @@ function validateTopLevel(
     });
   }
   if (raw.styles !== undefined) out.styles = validateStyles(ctx, raw.styles);
+  if (raw.themeDefaults !== undefined)
+    out.themeDefaults = validateThemeDefaults(ctx, raw.themeDefaults);
   // [LAW:one-source-of-truth] Parsed BEFORE the synthesis passes below, because
   // a preset's `root` runs through the same validateRootFragment and therefore collects
   // its group sugar into the same `ctx.groups` the top-level root does — the
@@ -800,6 +806,7 @@ const TOP_LEVEL_KEYS = new Set([
   "root",
   "actions",
   "styles",
+  "themeDefaults",
   "presets",
   "editGlobals",
   "helpers",

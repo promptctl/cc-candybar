@@ -6,5 +6,6 @@ import { perSetting } from "../../src/config/setting-projections.js";
 export const NO_CONFIG_FILE: ConfigFileFacts = {
   unsaved: 0,
   resettable: perSetting(() => false),
+  themeDefault: { differs: false },
   configPath: null,
 };

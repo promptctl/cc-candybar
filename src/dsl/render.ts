@@ -15,6 +15,7 @@ import type { RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type {
+  DslConfig,
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
@@ -31,6 +32,10 @@ import {
   settingsOf,
 } from "../config/dsl-types.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
+import {
+  themeDefaultsOf,
+  underThemeDefault,
+} from "../config/theme-defaults.js";
 import {
   PRESET_FLOOR,
   presetGlobals,
@@ -407,18 +412,31 @@ function compileHelpers(
 // [LAW:one-source-of-truth] The decor a globals block declares — what a caller
 // that resolved no session renders: the same folds, minus the rungs only a
 // session could supply — under whichever names a caller did resolve.
-// Registration's floor and renderDsl's selection both read it here.
+// Registration's floor and renderDsl's selection both read it here. The
+// config-default rung is the declared theme's default under the globals
+// (src/config/theme-defaults.ts) — the fold resolveEffectiveGlobals makes — so
+// a compile-only render draws the shade and variation the daemon would. Its
+// style is RenderSelection's identity, theme default or not: an omitting
+// caller renders the unadapted config.
 const declaredDecor = (
+  config: DslConfig,
   globals: Globals,
+  theme: ThemeSelection,
   variation?: VariationName,
   shade?: ShadeName,
-): Decor => ({
-  variation:
-    VARIATIONS[
-      variation ?? effectiveVariation(undefined, null, globals.variation)
-    ],
-  shade: SHADES[shade ?? effectiveShade(undefined, null, globals.shade)],
-});
+): Decor => {
+  const defaults = underThemeDefault(
+    globals,
+    themeDefaultsOf(theme, config.themeDefaults),
+  );
+  return {
+    variation:
+      VARIATIONS[
+        variation ?? effectiveVariation(undefined, null, defaults.variation)
+      ],
+    shade: SHADES[shade ?? effectiveShade(undefined, null, defaults.shade)],
+  };
+};
 
 export function registerDslConfig(
   config: ValidatedConfig,
@@ -465,7 +483,11 @@ export function registerDslConfig(
     // The compile-only floor for the drawn palette: the base under no style.
     palette: floorPalette,
     // Same contract: the compile-only floor is the config's own decor.
-    decor: declaredDecor(config.globals),
+    decor: declaredDecor(
+      config,
+      config.globals,
+      resolveThemeSelection(undefined, null, config.globals.palette),
+    ),
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
@@ -1012,10 +1034,6 @@ export function renderDsl(
   // config's (`presetGlobals`, the one merge `resolveEffectiveGlobals` uses), so
   // the bar's colours and its layout come from the same preset.
   const declared = presetGlobals(config, preset);
-  // [LAW:one-source-of-truth] An omitting caller renders the decor the CONFIG
-  // declares — the same true default the theme below honours.
-  const decor = declaredDecor(declared, selection?.variation, selection?.shade);
-  compiled.menuRuntime.action.decor = decor;
   // [LAW:one-source-of-truth] The floor honours a config that declares its own
   // `none` — `styles` merges BY NAME, so the identity adaptation is whatever this
   // config says it is, not a constant this file repeats.
@@ -1031,6 +1049,17 @@ export function renderDsl(
   const selectedTheme =
     selection?.theme ??
     resolveThemeSelection(undefined, null, declared.palette);
+  // [LAW:one-source-of-truth] An omitting caller renders the decor the CONFIG
+  // declares — the same true default the theme above honours, its default look
+  // included.
+  const decor = declaredDecor(
+    config,
+    declared,
+    selectedTheme,
+    selection?.variation,
+    selection?.shade,
+  );
+  compiled.menuRuntime.action.decor = decor;
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
   // ActionRuntime.width), so a template reads the exact wrap width — never a

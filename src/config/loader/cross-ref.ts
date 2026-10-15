@@ -157,20 +157,33 @@ export function validateCrossReferences(
   // cannot be wider or narrower than what the render will actually evaluate.
   //
   // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
-  // is checked the same way — the config's own, each preset's, and editGlobals —
-  // because each is a rung the resolution reads, and a name no rung can decide
-  // falls through to the next in silence (brandon-themes-owl).
+  // is checked the same way — the config's own, each preset's, editGlobals, and
+  // each theme's default — because each is a rung the resolution reads, and a
+  // name no rung can decide falls through to the next in silence
+  // (brandon-themes-owl).
+  //
+  // Each fragment carries where an endcaps name written in its `style` belongs:
+  // beside it in a globals fragment, and in `globals` for a theme's default,
+  // which holds no endcaps.
   const styleFragments: ReadonlyArray<
-    readonly [readonly string[], string | undefined]
+    readonly [readonly string[], string | undefined, string]
   > = [
-    [["globals"], cfg.globals.style],
-    [["editGlobals"], cfg.editGlobals.style],
+    [["globals"], cfg.globals.style, "globals.endcaps"],
+    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [["presets", name, "globals"], preset.globals?.style] as const,
+        [
+          ["presets", name, "globals"],
+          preset.globals?.style,
+          `presets.${name}.globals.endcaps`,
+        ] as const,
+    ),
+    ...Object.entries(cfg.themeDefaults).map(
+      ([theme, fragment]) =>
+        [["themeDefaults", theme], fragment.style, "globals.endcaps"] as const,
     ),
   ];
-  for (const [at, name] of styleFragments) {
+  for (const [at, name, endcapsAt] of styleFragments) {
     if (
       name === undefined ||
       isExpression(name) ||
@@ -181,7 +194,7 @@ export function validateCrossReferences(
     ctx.issues.push({
       path: where,
       message: isStyleEraEndcaps(name)
-        ? endcapsNameMessage(where, name, `${at.join(".")}.endcaps`)
+        ? endcapsNameMessage(where, name, endcapsAt)
         : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
       line: findKeyLine(ctx.source, [...at, "style"]),
     });
@@ -1061,7 +1074,7 @@ export function validateDeclarations(
     if (target === null) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, or a "presets.<name>.root" target`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, a "themeDefaults.<theme>.<shade|variation|style>" target, or a "presets.<name>.root" target`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
@@ -1098,6 +1111,17 @@ export function validateDeclarations(
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
         message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    if (
+      target.scope === "theme-default" &&
+      !ctx.allowedPalettes.has(target.theme)
+    ) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
