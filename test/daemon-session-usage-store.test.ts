@@ -183,7 +183,7 @@ describe("SessionUsageStore — session projection", () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ sweeps: 1, size: 0 });
-      expect(lines).toContain("usageStore sweep dropped=1 held=0");
+      expect(lines).toContain("usageStore sweep dropped=1 noRecord=0 held=0");
     } finally {
       store.close();
     }
@@ -208,7 +208,7 @@ describe("SessionUsageStore — session projection", () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ sweeps: 0, size: 1 });
-      expect(lines).toContain("usageStore sweep dropped=0 held=1");
+      expect(lines).toContain("usageStore sweep dropped=0 noRecord=0 held=1");
     } finally {
       store.close();
     }
@@ -224,6 +224,60 @@ describe("SessionUsageStore — session projection", () => {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  // brandon-unfiled-3248.59m: a session that renders before its transcript
+  // has bytes holds a speed ring and no record; it is swept on the same clock.
+  test("sweepStale drops a session seen only by a speed observation", async () => {
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 1,
+      logger: (_level, msg) => lines.push(msg),
+    });
+    try {
+      await store.observeSpeed("R", undefined, 1_000);
+      expect(store.getStats()).toMatchObject({ size: 1 });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(store.sweepStale()).toBe(1);
+      expect(store.getStats()).toMatchObject({ size: 0 });
+      expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
+      // The ring went with it: the next observation starts a new baseline.
+      const next = await store.observeSpeed("R", undefined, 2_000);
+      expect(next.kind).toBe("ok");
+      if (next.kind !== "ok") return;
+      expect(next.value.prev).toBeUndefined();
+    } finally {
+      store.close();
+    }
+  });
+
+  // A render reporting no transcript_path still sees its session, so the
+  // record and its tok/s baseline outlive `staleAgeMs` while it renders.
+  test("a render with no transcript path keeps its session seen", async () => {
+    const a = join(dir, "A.jsonl");
+    const b = join(dir, "B.jsonl");
+    writeFileSync(a, usageLine("a", new Date(), 0.01));
+    writeFileSync(b, usageLine("b", new Date(), 0.01));
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 300,
+    });
+    try {
+      await store.getUsageInfo("A", hook("A", a));
+      await store.getUsageInfo("B", hook("B", b));
+      await new Promise((r) => setTimeout(r, 400));
+      await store.getUsageInfo("B", { session_id: "B" } as ClaudeHookData);
+      expect(store.sweepStale()).toBe(1);
+      const info = await store.getUsageInfo("B", {
+        session_id: "B",
+      } as ClaudeHookData);
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
+      expect(info.value.session.calculatedCost).toBeCloseTo(0.01, 5);
     } finally {
       store.close();
     }
