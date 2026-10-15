@@ -19,6 +19,7 @@
 import { RichText } from "@promptctl/rich-js";
 import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
+import type { CellEffect } from "../render/effect.js";
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";
@@ -128,6 +129,11 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 export interface LaidCell {
   readonly text: RichText;
   readonly fill?: CellSizing;
+  // The effect the cell's placement wears instead of the bar's
+  // (brandon-effects-2gka.bm1): a demand like `fill`, settled where the row's
+  // strip is drawn (`SessionEffects.motion`), the one place the row's items and
+  // the bar's effect are both in hand. Absent, the cell wears the bar's.
+  readonly effect?: CellEffect;
   // Drawn inside the cell before / after `text`, never resized with it
   // (SegmentNode.lead / .trail). Joined by `stripItem` once sizing is final.
   readonly lead?: RichText;

@@ -8,8 +8,10 @@
 
 import {
   inSettingDomain,
+  IMPLIED_SETTINGS,
   THEME_SETTING,
   describeSettingDomain,
+  type ImpliedSetting,
   type SettingDecl,
   type SettingValue,
 } from "../dsl-types.js";
@@ -200,6 +202,18 @@ export function isSettingValue(v: unknown): v is SettingValue {
   );
 }
 
+// How a placement sets each implied setting, for the refusal of a segment that
+// declares one. Keyed by every implied setting, so a new one is a compile error
+// here until its refusal says how.
+const IMPLIED_HINTS: Readonly<Record<ImpliedSetting, string>> = {
+  theme: `its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
+  effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`,
+};
+
+function isImplied(name: string): name is ImpliedSetting {
+  return (IMPLIED_SETTINGS as readonly string[]).includes(name);
+}
+
 // A segment's `settings` block: name → declaration.
 export function settingsDeclSpec(): FieldSpec<
   Readonly<Record<string, SettingDecl>>
@@ -210,7 +224,7 @@ export function settingsDeclSpec(): FieldSpec<
       type: "object",
       propertyNames: {
         ...SETTING_NAME_JSON,
-        not: { const: THEME_SETTING },
+        not: { enum: [...IMPLIED_SETTINGS] },
       },
       additionalProperties: SETTING_DECL_JSON,
     },
@@ -235,13 +249,13 @@ export function settingsDeclSpec(): FieldSpec<
           );
           continue;
         }
-        // [LAW:one-source-of-truth] Every placement already has `theme`
-        // (settingsOf); a declaration of its own would be a second one.
-        if (name === THEME_SETTING) {
+        // [LAW:one-source-of-truth] Every placement already has the implied
+        // settings (settingsOf); a declaration of its own would be a second one.
+        if (isImplied(name)) {
           issue(
             ctx,
             `${at}.${name}`,
-            `setting "${THEME_SETTING}" is one every placement already has — its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
+            `setting "${name}" is one every placement already has — ${IMPLIED_HINTS[name]}`,
           );
           continue;
         }

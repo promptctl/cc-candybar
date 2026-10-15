@@ -2093,7 +2093,10 @@
           "propertyNames": {
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
             "not": {
-              "const": "theme"
+              "enum": [
+                "theme",
+                "effect"
+              ]
             }
           },
           "additionalProperties": {
@@ -2742,7 +2745,10 @@
           "propertyNames": {
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
             "not": {
-              "const": "theme"
+              "enum": [
+                "theme",
+                "effect"
+              ]
             }
           },
           "additionalProperties": {

@@ -66,7 +66,7 @@ export interface StatsSnapshot {
   };
   effectCache: {
     sessions: number;
-    rows: number;
+    effects: number;
   };
   watchers: {
     active: number;

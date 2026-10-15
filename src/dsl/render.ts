@@ -743,8 +743,9 @@ export function registerDslConfig(
                 ) ?? saved,
       });
     }
-    // settingsOf always declares `theme`, over the theme domain, whose values
-    // are names — the one cast from the record to what it provably holds.
+    // settingsOf always declares `theme` and `effect`, over domains whose
+    // values are names (an effect's, the placement effects) — the one cast from
+    // the record to what it provably holds.
     return Object.freeze(out) as PlacementSettings;
   };
   const compileNode = <N extends LayoutNode>(
@@ -1412,9 +1413,19 @@ export function renderDsl(
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
     // [LAW:one-source-of-truth] A row's motion follows the row, not its line
     // number, so a menu opening over it does not move it onto another's.
-    .map(({ line, row }) =>
-      renderStripCells(resolveFill(line.cells, opts), opts, rowMotion(row)),
-    )
+    // Its items are what the strip stamps their cells with, so each cell's
+    // effect demand rides beside the item it was laid as.
+    .map(({ line, row }) => {
+      const items = resolveFill(line.cells, opts);
+      return renderStripCells(
+        items,
+        opts,
+        rowMotion(
+          row,
+          items.map((owner, i) => ({ owner, effect: line.cells[i]!.effect })),
+        ),
+      );
+    })
     .join("\n");
   for (const message of shortfalls)
     onRenderWarning?.({ kind: "band-floor", message });

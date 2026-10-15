@@ -382,6 +382,18 @@ export const EFFECT_NAMES: readonly EffectName[] = Object.freeze([
   ...(Object.keys(EFFECT_CATALOGUE.loops) as LoopName[]),
 ]);
 
+// [LAW:types-are-the-program] What a placement's `effect` setting may hold
+// (brandon-effects-2gka.bm1): the bar's own effect — `globals.effect` as the
+// session resolves it, the setting's default — or any effect by name, `none`
+// included, so a placement can stand still on a moving bar. Following the bar
+// is a MEMBER, as it is for a placement's theme, and no catalogue loop is
+// named `bar`.
+export type PlacementEffect = typeof FOLLOW_BAR | EffectName;
+export const PLACEMENT_EFFECTS: readonly PlacementEffect[] = Object.freeze([
+  FOLLOW_BAR,
+  ...EFFECT_NAMES,
+]);
+
 // An effect's selection carries its NAME as its value: what a settled name
 // denotes is a catalogue entry made per row by the render (a row's span is a
 // fact only the render has), so the name is the whole of what crosses here.

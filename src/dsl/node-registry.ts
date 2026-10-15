@@ -40,6 +40,8 @@ import {
   placementId,
 } from "../config/dsl-types.js";
 import { placementPalette } from "../themes/palette-resolvers.js";
+import type { PlacementEffect } from "../themes/policy.js";
+import { placementMotion } from "../render/effect.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -185,11 +187,12 @@ export interface NodeCompileCtx {
 }
 
 // What a placement's templates read as `.settings`: a frozen, null-prototype
-// record, so no inherited name resolves as a setting. `theme` is always there
-// (settingsOf) and always a theme's name or `bar` — the domain it resolves
-// against holds nothing else.
+// record, so no inherited name resolves as a setting. The implied settings are
+// always there (settingsOf), each a member of the domain it resolves against:
+// `theme` a theme's name or `bar`, `effect` an effect's name or `bar`.
 export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
   readonly theme: string;
+  readonly effect: PlacementEffect;
 };
 
 // [LAW:single-enforcer] The render-time context. `visible` is THIS node's
@@ -641,7 +644,9 @@ const segmentType: NodeType<"segment"> = {
       // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
       // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
       // at the segment's edges, never inside it.
-      // Each inline line is a ROW of the band this segment sits on.
+      // Each inline line is a ROW of the band this segment sits on, and its
+      // cell is this placement's own: the one its `effect` setting moves.
+      const motion = placementMotion(node.id, node.settings.effect);
       const inlineLines: RenderedLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
       ).map((line, i) => ({
@@ -649,7 +654,7 @@ const segmentType: NodeType<"segment"> = {
           ...layout,
           lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
           trail: i === 0 ? fragmentsToCells(trail, baseStyle) : [],
-        }),
+        }).map((cell) => ({ ...cell, ...motion })),
         band: "own",
         place: "flow",
       }));
