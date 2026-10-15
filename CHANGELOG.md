@@ -1,3 +1,10 @@
+## [1.129.2](https://github.com/promptctl/cc-candybar/compare/v1.129.1...v1.129.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **edit-mode:** the configure glyph is a default emoji, not a gear made wide by VS16 ([#340](https://github.com/promptctl/cc-candybar/issues/340)) ([fed719c](https://github.com/promptctl/cc-candybar/commit/fed719cef5c9b66dfc7e9b6fb2758dcc89bf483d))
+
 ## [1.129.1](https://github.com/promptctl/cc-candybar/compare/v1.129.0...v1.129.1) (2026-10-15)
 
 
