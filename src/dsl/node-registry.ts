@@ -63,7 +63,7 @@ import {
   heldCell,
   type LaidCell,
 } from "../template-engine/layout.js";
-import type { Drawing } from "../render/effect.js";
+import type { Returned } from "../render/effect.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -298,23 +298,22 @@ export interface NodeRenderCtx {
   placed(id: string, lines: RenderedLines): RenderedLines;
 }
 
-// [LAW:one-source-of-truth] What the placement `id` drew, as the session's
-// effect record keeps it: its own rows and the ground its cells fade from — or
-// nothing, when it laid no cell. Its own rows come first among the lines it
-// returns, so the search stops at its first cell rather than walking the body
-// it opened.
-export function drawingOf(
+// [LAW:one-source-of-truth] The lines the placement `id` returned, divided as
+// the session's effect record reads them: its own rows and the ground its
+// cells fade from — or nothing, when it laid no cell — and the rows of the
+// deeper bands hung under it. Its own rows come first, so the search stops at
+// its first cell rather than walking the body it opened.
+export function returnedBy(
   id: string,
   lines: RenderedLines,
-): Drawing<RenderedLine> | null {
+): Returned<RenderedLine> {
+  const own = lines.filter((line) => line.band === "own");
+  const deeper = lines.filter((line) => line.band === "deeper");
   for (const line of lines)
     for (const cell of line.cells)
       if (cell.placement.id === id)
-        return {
-          own: lines.filter((row) => row.band === "own"),
-          ground: cell.placement.ground,
-        };
-  return null;
+        return { drawing: { own, ground: cell.placement.ground }, deeper };
+  return { drawing: null, deeper };
 }
 
 // One row a placement leaving the bar replays of what it last drew: each cell

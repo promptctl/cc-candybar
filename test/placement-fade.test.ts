@@ -366,11 +366,17 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   const fades = {
     transitions: true,
     source: { config: ROW, preset: "default", revision: 0, width: 80, palette: ROW },
-    // A line names the placement that drew it.
-    drawing: (id: string, lines: readonly string[]) =>
-      lines.includes(id)
-        ? { own: lines, ground: DEFAULT_TERMINAL_THEME.backgroundColor }
+    // A line names the placement that drew it; a line naming another hangs
+    // under it.
+    returned: (id: string, lines: readonly string[]) => ({
+      drawing: lines.includes(id)
+        ? {
+            own: lines.filter((line) => line === id),
+            ground: DEFAULT_TERMINAL_THEME.backgroundColor,
+          }
         : null,
+      deeper: lines.filter((line) => line !== id),
+    }),
     hold: (line: string) => line,
   };
   const left = ["left"];

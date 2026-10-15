@@ -285,6 +285,38 @@ test("it holds its own row only: a body it opened goes at once", () => {
   }
 });
 
+test("one whose template renders empty holds its row and adds none beneath it", () => {
+  const cfg = parseAndValidate(
+    "<test>",
+    `{
+      variables: {
+        shown: { kind: "input", path: "shown", type: "boolean", default: false },
+      },
+      segments: {
+        left: { template: 'left cell' },
+        middle: { template: '{{ if .shown }}MIDDLE{{ end }}' },
+        right: { template: 'right cell' },
+      },
+      root: { v: [{ h: ["left", "middle", "right"] }] },
+    }`,
+    undefined,
+    DEFAULT_DSL_CONFIG,
+  );
+  const on = renderer(cfg);
+  try {
+    const fx = new SessionEffects<RenderedLine>("s");
+    on.render({ shown: true, when: at(0) }, fx, true);
+    const drawn = on.render({ shown: true, when: at(1) }, fx, true);
+    const leaving = on.render({ shown: false, when: at(S) }, fx, true);
+    expect(fx.lastFrame().leaves).toEqual([{ placement: "middle", t: 0 }]);
+    expect(stripAnsi(leaving).split("\n")).toEqual(
+      stripAnsi(drawn).split("\n"),
+    );
+  } finally {
+    on.dispose();
+  }
+});
+
 describe("a write to the session's state ends every dissolve in flight", () => {
   const ROW = config("segment");
   const midDissolve = (

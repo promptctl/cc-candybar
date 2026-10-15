@@ -127,7 +127,7 @@ import {
 // render.ts threads the recursion (compileChild/renderChild) in as
 // capabilities; it never re-switches on node kind.
 import {
-  drawingOf,
+  returnedBy,
   heldLine,
   layoutRows,
   nodeType,
@@ -1190,7 +1190,7 @@ export function renderDsl(
       width: opts.width,
       palette,
     },
-    drawing: drawingOf,
+    returned: returnedBy,
     hold: heldLine,
   });
 

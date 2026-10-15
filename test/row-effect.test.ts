@@ -32,7 +32,7 @@ import { linkUrls, stripAnsi } from "./helpers/ansi";
 const STILL_FRAME = {
   transitions: false,
   source: { config: {}, preset: "default", revision: 0, width: 80, palette: {} },
-  drawing: () => null,
+  returned: () => ({ drawing: null, deeper: [] }),
   hold: (line: RenderedLine) => line,
 };
 

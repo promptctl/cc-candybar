@@ -73,17 +73,24 @@ export interface FrameSource {
 }
 
 // What one render asks of its transitions: whether placements pass through
-// them at all (globals.transitions), what the frame is drawn from, what a
-// placement drew of its own among the lines it returned, and how a placement
-// that leaves replays one of those rows.
+// them at all (globals.transitions), what the frame is drawn from, how the
+// lines a placement returned divide (`Returned`), and how a placement that
+// leaves replays one of its rows.
 export interface FrameFades<Line> {
   readonly transitions: boolean;
   readonly source: FrameSource;
-  readonly drawing: (
-    id: string,
-    lines: readonly Line[],
-  ) => Drawing<Line> | null;
+  readonly returned: (id: string, lines: readonly Line[]) => Returned<Line>;
   readonly hold: (line: Line) => Line;
+}
+
+// [LAW:types-are-the-program] The lines a placement returned, divided: what
+// it drew of its own, and the lines of deeper bands hung under it — a menu it
+// dropped, a body it opened — which are never held. While it leaves, its held
+// rows take the place of its own rows (one that renders empty still returns an
+// empty one), and only the deeper lines are drawn beside them.
+export interface Returned<Line> {
+  readonly drawing: Drawing<Line> | null;
+  readonly deeper: readonly Line[];
 }
 
 // [LAW:types-are-the-program] What a placement drew in one frame, or nothing
@@ -455,7 +462,7 @@ export class SessionEffects<Line> {
       if (placed.has(id))
         throw new Error(`placement "${id}" was reached twice in one frame`);
       const last = before?.get(id);
-      const drawing = fades.drawing(id, lines);
+      const { drawing, deeper } = fades.returned(id, lines);
       const now = drawing === null ? gone(id, last) : shown(id, drawing, last);
       if (now === undefined) return lines;
       placed.set(id, now);
@@ -464,7 +471,7 @@ export class SessionEffects<Line> {
           placement: id,
           t: at - now.passage.since,
         });
-      return drawing === null ? [...now.drawing.own, ...lines] : lines;
+      return drawing === null ? [...now.drawing.own, ...deeper] : lines;
     };
 
     const ownPart = (
