@@ -1,3 +1,10 @@
+## [1.129.5](https://github.com/promptctl/cc-candybar/compare/v1.129.4...v1.129.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* **usage-store:** a session's record and speed ring live exactly as long as it is seen ([#344](https://github.com/promptctl/cc-candybar/issues/344)) ([e7ea90e](https://github.com/promptctl/cc-candybar/commit/e7ea90eaaa3a87e6b0a8de8c0211e9a3d81fc6f0))
+
 ## [1.129.4](https://github.com/promptctl/cc-candybar/compare/v1.129.3...v1.129.4) (2026-10-15)
 
 
