@@ -162,6 +162,15 @@ describe("2de.12 — literal set action", () => {
       [{ verb: "set-state", args: ["s1", "flavor", "chocolate"] }],
     ]);
   });
+
+  test("a display is drawn content: one its author made bold stays bold while the region is not active", () => {
+    const { render } = buildRuntime(
+      SRC.replace(`{{ action "pick" "🍫" }}`, `{{ action "pick" (bold "🍫") }}`),
+    );
+    expect(boldUrls(render()).map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: ["s1", "flavor", "chocolate"] }],
+    ]);
+  });
 });
 
 // ─── Literal set on a BASELINE key reuses the baseline gate ─────────────────────

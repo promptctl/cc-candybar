@@ -643,14 +643,14 @@ export function linkFragment(
 // [LAW:one-source-of-truth] The same link, laid into a cell already drawn:
 // the cell's own style and each of its runs keep their colours and carry the
 // click, so a cell of several colours (a name beside its swatch) is one click
-// target, and a cell of one colour is exactly what `linkFragment` draws —
-// `bold` included, the current-mark an `{{ action }}` display carries.
+// target. `current` is the current-mark an `{{ action }}` display carries: it
+// makes the cell bold, and never unbolds a display its author made bold.
 export function linkOver(
   cell: RichText,
   url: string,
-  bold?: boolean,
+  current = false,
 ): RichText {
-  const link = new Style({ link: url, bold });
+  const link = new Style({ link: url, bold: current ? true : undefined });
   const linked = new RichText(cell.plain, {
     style: Style.combine([resolvedStyle(cell.style), link]),
   });
