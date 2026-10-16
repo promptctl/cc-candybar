@@ -782,7 +782,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     );
   });
 
-  test("a doctor mark names a declared check and a mark", () => {
+  test("a doctor mark names a check that takes one, and a mark", () => {
     expectIssue(
       base(`{ a: { doctor: 'mark', check: 'nerdFont', mark: 'maybe' } }`),
       /doctor mark must be "drawn" or "boxes", got "maybe"/,
@@ -790,6 +790,11 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expectIssue(
       base(`{ a: { doctor: 'mark', check: 'ghost', mark: 'drawn' } }`),
       /doctor mark must name a check/,
+    );
+    // A check that takes no mark is not one a mark may name.
+    expectIssue(
+      base(`{ a: { doctor: 'mark', check: 'config', mark: 'drawn' } }`),
+      /doctor mark must name a check \(have: nerdFont\), got "config"/,
     );
     expectIssue(
       base(`{ a: { doctor: 'fix', check: 'nerdFont', mark: 'drawn' } }`),

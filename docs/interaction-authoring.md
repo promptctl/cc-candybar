@@ -103,7 +103,7 @@ declares exactly one value source:
 | `{ open: "template" }` | open the evaluated target in the editor |
 | `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
 | `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
-| `{ doctor: "mark", check: "nerdFont", mark: "drawn" }` | record what you saw of the glyphs that check's fresh verdict shows — `"drawn"` (shapes) or `"boxes"` — then re-run; refused loudly when the verdict shows nothing to look at. The mark holds for that terminal and those glyphs only |
+| `{ doctor: "mark", check: "nerdFont", mark: "drawn" }` | record what you saw of the glyphs that check's fresh verdict shows — `"drawn"` (shapes) or `"boxes"` — then re-run; refused loudly when the verdict shows nothing to look at. Only a check that takes a mark (`nerdFont`) may be named. The mark holds for that terminal, the font it was read to draw with, and those glyphs only |
 | `{ ceiling: "set", to: "+100_000" }` | move this session's context ceiling in the memento plugin — `to` is memento's own value grammar (`350000`, `+100_000`, `-100_000`, `off`), handed to its `ceiling set session` and judged only by memento; its refusal is the click's error. A click is honoured only as a move the config declares |
 | `{ ceiling: "clear" }` | drop this session's own ceiling layer (memento's `ceiling clear session`), so the project's or user's ceiling applies again |
 | `{ slash: "/compact" }` | type the slash command into THIS session's Claude Code prompt and submit it, through its tmux pane. The line is `/` then a command name, one line, no control characters — anything else is a load error. A draft in the prompt is stashed and comes back after; mid-turn, Claude Code runs the command or queues it. The click is refused in the bar, typing nothing, outside tmux, while a dialog or picker is open, while you hold a ctrl+s stash, or while the pane is in tmux copy mode. A click is honoured only as a line the config declares |
@@ -1375,9 +1375,11 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   the terminal drawing the bar has the private-use glyphs your joiner draws
   (none under `charset: "ascii"`): kitty from 0.36, WezTerm and Ghostty ship
   their own, and for iTerm2 and Alacritty the doctor reads the font they are
-  set to and asks the system whether it has them. When it cannot tell, or the
+  set to and asks the system whether it has them (counting the glyphs
+  iTerm2's built-in Powerline glyphs draw). A terminal across ssh is on
+  another machine, so its font is not read. When it cannot tell, or the
   font lacks them, the row shows the glyphs with `[✓ shapes] [✗ boxes]` —
-  what you mark is the answer for that terminal and those glyphs. The checks reason over
+  what you mark is the answer for that terminal, that font and those glyphs. The checks reason over
   the facts the statusline client reported on the session's last render —
   not the daemon's own environment. `cc-candybar doctor` runs the same checks
   from a shell, with the exit code as the verdict; where the bar's row names

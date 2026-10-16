@@ -16,8 +16,7 @@
 import process from "node:process";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
-import { detectTmuxHint } from "../tmux-hint.js";
-import { detectTerminalEnv } from "../terminal-hint.js";
+import { detectClientHints } from "../client-hints.js";
 import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
 import {
   gatherFacts,
@@ -35,7 +34,6 @@ import { detectConfigEnv } from "../config-hint.js";
 import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
-import { detectClaudeConfigDir } from "../claude-settings.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -43,8 +41,9 @@ const EXIT_USAGE = 2;
 
 const FIX_HINT = ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)`;
 
-// The CLI cannot take a mark: it shows what to look at, and where to mark it.
-const MARK_HINT = `if these draw as shapes, not boxes, mark them ✓ in the bar: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
+// The CLI has no session, so it can neither take a mark nor read one: it shows
+// what to look at, and the bar's doctor, where a mark is made and counted.
+const MARK_HINT = `this command cannot see what your terminal draws; mark them ✓ shapes or ✗ boxes in the bar's doctor: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
 
 // A failed check's line, then one indented line per further problem it found,
 // then what it asks the user to look at.
@@ -95,11 +94,9 @@ export async function doctorPlan(
   try {
     const gathered = gatherFacts(
       edge,
-      {
-        tmux: detectTmuxHint(env),
-        claudeConfigDir: detectClaudeConfigDir(env, cwd),
-        terminalEnv: detectTerminalEnv(env),
-      },
+      // [LAW:one-source-of-truth] The hints a statusline client started here
+      // would report, by the client's own detection.
+      detectClientHints(env, cwd, {}),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client

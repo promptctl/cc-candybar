@@ -29,12 +29,14 @@ import {
 
 // [LAW:types-are-the-program] What tmux says about the client attached to the
 // session's pane, or why it could not be asked: its verdict on the terminal's
-// features (`#{client_termfeatures}`), and what that terminal is
-// (TmuxClientTerm). No `absent` arm: the query either answers or fails —
-// there is no "tmux has no opinion", so a probe never has to decide what an
-// absent answer would mean.
+// features (`#{client_termfeatures}`), what that terminal is
+// (TmuxClientTerm), and the client's process (`#{client_pid}`), whose
+// ancestry says whether it was attached over a remote login. No `absent` arm:
+// the query either answers or fails — there is no "tmux has no opinion", so a
+// probe never has to decide what an absent answer would mean.
 export interface TmuxClient extends TmuxClientTerm {
   readonly features: readonly string[];
+  readonly pid: number;
 }
 
 // A question put to the system: it answers or it fails, never "no opinion".
@@ -160,15 +162,19 @@ export interface RecordedMark {
   readonly sighting: string;
 }
 
-export interface NerdFontFacts {
-  // The private-use glyphs the session's bar draws (its joiner, in the
-  // charset in force — src/render/strip.ts measures them), "" for none.
-  readonly glyphs: string;
-  readonly terminal: TerminalFacts;
-  // The user's mark on these glyphs in this terminal, recorded under the
-  // sighting it answered; a mark on another sighting is no mark at all.
-  readonly mark: RecordedMark | null;
-}
+// [LAW:types-are-the-program] A bar that draws no private-use glyph has no
+// terminal to ask about, so `none` carries none and nothing is read for it.
+// `glyphs` are the private-use glyphs the session's bar draws (its joiner, in
+// the charset in force — src/render/strip.ts measures them), never empty.
+export type NerdFontFacts =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "glyphs";
+      readonly glyphs: string;
+      readonly terminal: TerminalFacts;
+    };
+
+export type DrawnGlyphs = Extract<NerdFontFacts, { kind: "glyphs" }>;
 
 export interface PlacementEffectFact {
   readonly placement: string;
@@ -180,6 +186,9 @@ export interface DoctorFacts {
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   readonly nerdFont: NerdFontFacts;
+  // The user's mark, per check that takes one (MARKED_CHECKS), recorded under
+  // the sighting it answered; a mark on another sighting is no mark at all.
+  readonly marks: Readonly<Partial<Record<string, RecordedMark>>>;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -229,28 +238,43 @@ export interface Sighting {
 // the bar's row has room for one and counts the others, the CLI prints them all.
 // A `sighting` is the user's way to settle what the check could not: the row
 // shows its glyphs with a ✓ and a ✗ to mark them.
-export type Verdict =
+// `S` is `never` for a check that takes no mark, so its verdict cannot carry
+// a sighting nobody could answer.
+export type Verdict<S extends Sighting = Sighting> =
   | { readonly ok: true }
   | {
       readonly ok: false;
       readonly reason: string;
       readonly more?: readonly string[];
       readonly fix?: Fix;
-      readonly sighting?: Sighting;
+      readonly sighting?: S;
     };
 
-function problemsVerdict(problems: readonly string[]): Verdict {
+function problemsVerdict(problems: readonly string[]): Verdict<never> {
   const [reason, ...more] = problems;
   return reason === undefined ? { ok: true } : { ok: false, reason, more };
 }
 
-export interface Check {
+interface CheckBase {
   // camelCase: the name splices into state-variable and action names
   // (`candybar.doctor.<name>.verdict`), where a hyphen is not an identifier.
   readonly name: string;
   readonly label: string;
-  readonly probe: (facts: DoctorFacts) => Verdict;
 }
+
+// [LAW:types-are-the-program] Whether a check takes the user's mark is a fact
+// of the check, and only one that does may show a sighting: the menu declares
+// mark actions for it alone, and the loader and the verb refuse a mark on any
+// other.
+export type Check =
+  | (CheckBase & {
+      readonly takesMark: false;
+      readonly probe: (facts: DoctorFacts) => Verdict<never>;
+    })
+  | (CheckBase & {
+      readonly takesMark: true;
+      readonly probe: (facts: DoctorFacts) => Verdict;
+    });
 
 export interface CheckReport {
   readonly check: Check;
@@ -271,6 +295,7 @@ export const TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
 const tmuxTruecolor: Check = {
   name: "tmuxTruecolor",
   label: "tmux truecolor",
+  takesMark: false,
   probe: ({ tmux, claudeSettings }) => {
     switch (tmux.kind) {
       case "unreported":
@@ -331,6 +356,7 @@ const UNUSED: Readonly<Record<DeclKind, string>> = {
 const config: Check = {
   name: "config",
   label: "config",
+  takesMark: false,
   probe: ({ config }) => {
     switch (config.kind) {
       case "failed": {
@@ -382,6 +408,7 @@ function handlerAppProblems(opener: Asked<HandlerApp | null>): string[] {
 const urlHandler: Check = {
   name: "urlHandler",
   label: "URL handler",
+  takesMark: false,
   probe: ({ urlHandler }) => {
     switch (urlHandler.kind) {
       case "unsupported":
@@ -424,6 +451,7 @@ export const EFFECT_REFRESH_INTERVAL = 1;
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
+  takesMark: false,
   probe: ({ effect, placementEffects, transitions, claudeSettings }) => {
     const moving = [
       ...(effect.kind !== "decided"
@@ -500,16 +528,26 @@ function terminalCalled(terminal: TerminalFacts): string {
   }
 }
 
+// What a mark answers for: the terminal, and the font it was read to draw
+// with where one was read — so a mark made under one font answers nothing
+// once the terminal is set to another, and the fresh reading speaks again.
+function sightedIn(terminal: TerminalFacts): string {
+  const called = terminalCalled(terminal);
+  return terminal.kind === "configured" && terminal.font.kind === "ok"
+    ? `${called} with ${terminal.font.value.font}`
+    : called;
+}
+
 // [LAW:one-source-of-truth] The sighting the Nerd Font check shows, and the
 // one spelling of its id: the doctor verb records a mark under it, and the
-// probe honours a mark only under it, so a mark made in one terminal, or on
-// another joiner's glyphs, answers nothing here.
+// probe honours a mark only under it, so a mark made in one terminal, under
+// another font, or on another joiner's glyphs, answers nothing here.
 export function glyphSighting(
-  facts: Pick<NerdFontFacts, "glyphs" | "terminal">,
+  facts: Pick<DrawnGlyphs, "glyphs" | "terminal">,
 ): Sighting {
   return {
     glyphs: facts.glyphs,
-    id: `${terminalCalled(facts.terminal)}|${codePoints(facts.glyphs)}`,
+    id: `${sightedIn(facts.terminal)}|${codePoints(facts.glyphs)}`,
   };
 }
 
@@ -528,8 +566,9 @@ export const NERD_FONT_CHECK = "nerdFont";
 const nerdFont: Check = {
   name: NERD_FONT_CHECK,
   label: "Nerd Font",
-  probe: ({ nerdFont: facts }) => {
-    if (facts.glyphs === "") return { ok: true };
+  takesMark: true,
+  probe: ({ nerdFont: facts, marks }) => {
+    if (facts.kind === "none") return { ok: true };
     const sighting = glyphSighting(facts);
     const failed = (reason: string): Verdict => ({
       ok: false,
@@ -538,7 +577,8 @@ const nerdFont: Check = {
     });
     const terminal = facts.terminal;
     const called = terminalCalled(terminal);
-    const mark = facts.mark?.sighting === sighting.id ? facts.mark.mark : null;
+    const recorded = marks[NERD_FONT_CHECK];
+    const mark = recorded?.sighting === sighting.id ? recorded.mark : null;
     switch (mark) {
       case "drawn":
         return { ok: true };
@@ -603,6 +643,11 @@ export const CHECKS: readonly Check[] = [
   effectRefresh,
   nerdFont,
 ];
+
+// The checks that take the user's mark — the only ones a mark may name.
+export const MARKED_CHECKS: readonly Check[] = CHECKS.filter(
+  (c) => c.takesMark,
+);
 
 // [LAW:single-enforcer] THE fold. The bar's 🩺 click and `cc-candybar doctor`
 // both call this over facts their own edge gathered, so the two surfaces

@@ -23,6 +23,43 @@ export const BUNDLED_SINCE = {
   ghostty: null,
 } as const satisfies Record<string, string | null>;
 
+// The private-use glyphs iTerm2 draws itself, whatever the font, when a
+// profile's "Use built-in Powerline glyphs" (`Draw Powerline Glyphs`) is on,
+// and the release that first drew each run — iTerm2's source,
+// sources/Drawing/iTermBoxDrawingBezierCurveFactory.m
+// (`boxDrawingCharactersWithBezierPathsIncludingPowerline`,
+// `powerlineExtendedSymbols`). The extended set came in 3.5.0 and U+E0D6–E0D7
+// in 3.5.6; no release before 3.5.0 is verified, so none is counted. The set
+// assumes iTerm2's advanced settings at their defaults
+// (`supportPowerlineExtendedSymbols` on, `disableCustomBoxDrawing` off); a
+// user who changed them settles it with a mark.
+const ITERM_POWERLINE: ReadonlyArray<{
+  readonly since: string;
+  readonly from: number;
+  readonly to: number;
+}> = [
+  { since: "3.5.0", from: 0xe0a0, to: 0xe0a3 },
+  { since: "3.5.0", from: 0xe0b0, to: 0xe0d2 },
+  { since: "3.5.0", from: 0xe0d4, to: 0xe0d4 },
+  { since: "3.5.6", from: 0xe0d6, to: 0xe0d7 },
+];
+
+// Whether iTerm2 at `version` draws `glyph` itself under its built-in
+// Powerline glyphs; an unsaid release draws none the doctor can count on.
+export function itermDrawsItself(
+  version: string | null,
+  glyph: string,
+): boolean {
+  const point = glyph.codePointAt(0)!;
+  return ITERM_POWERLINE.some(
+    ({ since, from, to }) =>
+      from <= point &&
+      point <= to &&
+      version !== null &&
+      releasedSince(version, since) === true,
+  );
+}
+
 export type BundlingTerminal = keyof typeof BUNDLED_SINCE;
 export type ConfiguredTerminal = "iterm2" | "alacritty";
 export type TerminalName = BundlingTerminal | ConfiguredTerminal;

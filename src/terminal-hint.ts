@@ -1,5 +1,6 @@
 // The client's terminal probe — the variables a terminal emulator sets to name
-// itself, read from the client's own environment.
+// itself, and the one that says where its config is, read from the client's
+// own environment.
 //
 // [LAW:single-enforcer] Only the statusline CLIENT can observe these: Claude
 // Code spawns it with Claude Code's exact environment, while the daemon is
@@ -20,6 +21,8 @@ export const TERMINAL_ENV_VARS = [
   "TERM",
   // The iTerm2 profile the session's window was opened with.
   "ITERM_PROFILE",
+  // Where a terminal that reads a config file (Alacritty) finds it.
+  "XDG_CONFIG_HOME",
 ] as const;
 
 export type TerminalEnvVar = (typeof TERMINAL_ENV_VARS)[number];

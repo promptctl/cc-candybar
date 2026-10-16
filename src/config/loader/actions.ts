@@ -28,7 +28,8 @@ import { findKeyLine } from "./diagnostics.js";
 import {
   CHECKS,
   GLYPH_MARKS,
-  checkByName,
+  MARKED_CHECKS,
+  type Check,
   type GlyphMark,
 } from "../../doctor/checks.js";
 import {
@@ -437,11 +438,13 @@ function doctorArm(
   }
   if (verb === "run") return { doctor: "run" };
   const check = raw.check;
-  if (typeof check !== "string" || checkByName(check) === undefined) {
+  // A mark names a check that takes one; a fix may name any.
+  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
+  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
     issue(
       ctx,
       `${path}.check`,
-      `doctor ${verb} must name a check (have: ${CHECKS.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
+      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
     );
     return null;
   }
@@ -547,9 +550,12 @@ const SLASH_ARM_JSON: JsonNode = {
 };
 
 // [LAW:one-source-of-truth] One schema member per arm `doctorArm` parses, the
-// check enum drawn from the same CHECKS list, the mark enum from GLYPH_MARKS.
+// check enums drawn from the same lists it names, the mark enum from
+// GLYPH_MARKS.
 function doctorArmJson(): readonly JsonNode[] {
-  const check = { enum: CHECKS.map((c) => c.name) };
+  const names = (checks: readonly Check[]) => ({
+    enum: checks.map((c) => c.name),
+  });
   return [
     {
       type: "object",
@@ -559,7 +565,7 @@ function doctorArmJson(): readonly JsonNode[] {
     },
     {
       type: "object",
-      properties: { doctor: { const: "fix" }, check },
+      properties: { doctor: { const: "fix" }, check: names(CHECKS) },
       required: ["doctor", "check"],
       additionalProperties: false,
     },
@@ -567,7 +573,7 @@ function doctorArmJson(): readonly JsonNode[] {
       type: "object",
       properties: {
         doctor: { const: "mark" },
-        check,
+        check: names(MARKED_CHECKS),
         mark: { enum: [...GLYPH_MARKS] },
       },
       required: ["doctor", "check", "mark"],

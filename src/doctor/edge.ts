@@ -21,6 +21,7 @@ import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
+import { launchSync } from "../proc/launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { LoopName } from "@promptctl/rich-js";
@@ -36,7 +37,7 @@ import { presetRoot } from "../config/presets.js";
 import { EFFECT_FLOOR, FOLLOW_BAR } from "../themes/policy.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import {
-  NERD_FONT_CHECK,
+  MARKED_CHECKS,
   type Asked,
   type ConfigFacts,
   type DoctorFacts,
@@ -64,10 +65,16 @@ export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
   readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient>;
+  // Whether a process came in through a remote login (sshd, mosh-server) —
+  // asked of the tmux client attached to the session's pane.
+  readonly remoteLogin: (pid: number) => Asked<boolean>;
   // The font a configured terminal draws the bar's glyphs with, read where
   // the terminal reads it (src/doctor/font-edge.ts).
   readonly fontInUse: (
-    terminal: ConfiguredTerminal,
+    terminal: {
+      readonly name: ConfiguredTerminal;
+      readonly version: string | null;
+    },
     env: TerminalEnvHint,
     glyphs: string,
   ) => Asked<FontInUse>;
@@ -103,31 +110,81 @@ export interface ConfigLoad {
 // the client attached to the pane — `RGB` in it is tmux saying both it and the
 // outer terminal do truecolor (verified on tmux 3.6a: `…,osc7,RGB,sixel,…`).
 // `#{client_termtype}` is that terminal's XTVERSION reply (`iTerm2 3.7.2`,
-// empty from one that does not answer) and `#{client_termname}` the TERM it
-// was started under. One display call, the three tab-separated.
+// empty from one that does not answer), `#{client_termname}` the TERM it
+// was started under, and `#{client_pid}` the client's process. One display
+// call, the four tab-separated.
 const TMUX_CLIENT_FORMAT =
-  "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}";
+  "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}\t#{client_pid}";
 
-// [LAW:parse-dont-validate] tmux's answer, read as the three fields it was
-// asked for — a line that is not three fields is a failure naming what came
-// back, never a client with blank fields.
+// [LAW:parse-dont-validate] tmux's answer, read as the four fields it was
+// asked for — a line that is not four fields, or a pid that is not one, is a
+// failure naming what came back, never a client with blank fields.
 export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
   const fields = stdout.replace(/\n$/, "").split("\t");
-  if (fields.length !== 3) {
+  const [features, termtype, termname, pid] = fields;
+  if (fields.length !== 4 || !/^[1-9]\d*$/.test(pid!)) {
     return {
       kind: "failed",
-      reason: `tmux answered ${JSON.stringify(stdout)}, not the three fields asked for`,
+      reason: `tmux answered ${JSON.stringify(stdout)}, not the four fields asked for`,
     };
   }
-  const [features, termtype, termname] = fields as [string, string, string];
   return {
     kind: "ok",
     value: {
-      features: features.split(",").filter((f) => f !== ""),
-      termtype,
-      termname,
+      features: features!.split(",").filter((f) => f !== ""),
+      termtype: termtype!,
+      termname: termname!,
+      pid: Number(pid),
     },
   };
+}
+
+// The servers a remote login runs its session under: OpenSSH's `sshd` (and
+// the `sshd-session` it hands each login to since 9.8) and mosh's
+// `mosh-server`.
+const REMOTE_LOGIN = /^(sshd|mosh-server)\b/;
+
+// [LAW:effects-at-boundaries] Pure over `ps -A -o pid=,ppid=,comm=`: whether
+// `pid` or any process it descends from is a remote login server. A pid the
+// table does not hold is a failure, never "local".
+export function descendsFromRemoteLogin(
+  table: string,
+  pid: number,
+): Asked<boolean> {
+  const procs = new Map<number, { ppid: number; name: string }>();
+  for (const line of table.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (m === null) continue;
+    const command = m[3]!.trim();
+    procs.set(Number(m[1]), {
+      ppid: Number(m[2]),
+      name: command.slice(command.lastIndexOf("/") + 1),
+    });
+  }
+  if (!procs.has(pid)) {
+    return { kind: "failed", reason: `process ${pid} is not running` };
+  }
+  const seen = new Set<number>();
+  for (let p = procs.get(pid); p !== undefined; p = procs.get(p.ppid)) {
+    if (REMOTE_LOGIN.test(p.name)) return { kind: "ok", value: true };
+    if (seen.has(p.ppid)) break;
+    seen.add(p.ppid);
+  }
+  return { kind: "ok", value: false };
+}
+
+function remoteLogin(pid: number): Asked<boolean> {
+  const run = launchSync({
+    bin: "ps",
+    args: ["-A", "-o", "pid=,ppid=,comm="],
+    timeoutMs: 2000,
+    category: "doctor.process",
+  });
+  if (!run.ok) {
+    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    return { kind: "failed", reason: `ps failed (${detail})` };
+  }
+  return descendsFromRemoteLogin(run.stdout, pid);
 }
 
 function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
@@ -145,7 +202,7 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
 export function productionEdge(
   loadConfig: DoctorEdge["loadConfig"],
 ): DoctorEdge {
-  return { probeTmux, fontInUse, loadConfig };
+  return { probeTmux, remoteLogin, fontInUse, loadConfig };
 }
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
@@ -204,9 +261,10 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
 function terminalFacts(
   edge: DoctorEdge,
   tmux: TmuxFacts,
-  env: TerminalEnvHint | undefined,
+  hints: Pick<ClientHints, "terminalEnv" | "ssh">,
   glyphs: string,
 ): TerminalFacts {
+  const env = hints.terminalEnv;
   if (tmux.kind === "unreported") return { kind: "unreported" };
   if (tmux.kind === "inside" && tmux.client.kind === "failed") {
     return { kind: "unasked", reason: tmux.client.reason };
@@ -220,14 +278,42 @@ function terminalFacts(
       : identifyFromEnv(env ?? {});
   if (identified.kind === "unknown") return identified;
   const { name, version } = identified.terminal;
-  return isBundling(name)
-    ? { kind: "bundling", name, version }
-    : {
-        kind: "configured",
-        name,
-        version,
-        font: edge.fontInUse(name, env ?? {}, glyphs),
-      };
+  if (isBundling(name)) return { kind: "bundling", name, version };
+  // Inside tmux the session's environment is the one the tmux server was
+  // started in, so what it says of the terminal — its iTerm2 profile, whether
+  // it came over ssh — is that first window's, not the attached one's: the
+  // reader is handed no profile (and reads every one), and whether the
+  // terminal is remote is asked of the attached client's own process.
+  const { ITERM_PROFILE: startedIn, ...unattached } = env ?? {};
+  const inside = tmux.kind === "inside" ? tmux.client : null;
+  const remote: Asked<boolean> =
+    inside?.kind === "ok"
+      ? edge.remoteLogin(inside.value.pid)
+      : { kind: "ok", value: hints.ssh === true };
+  return {
+    kind: "configured",
+    name,
+    version,
+    // A remote terminal runs on the machine the login came from, so no font
+    // on this one says what it draws with.
+    font:
+      remote.kind === "failed"
+        ? {
+            kind: "failed",
+            reason: `whether the terminal is remote could not be asked: ${remote.reason}`,
+          }
+        : remote.value
+          ? {
+              kind: "failed",
+              reason:
+                "the terminal is on the far side of a remote login, so its font is on the machine it runs on",
+            }
+          : edge.fontInUse(
+              { name, version },
+              inside === null ? (env ?? {}) : unattached,
+              glyphs,
+            ),
+  };
 }
 
 // A click the daemon is handling IS a link that came back through the URL
@@ -275,7 +361,7 @@ function placementEffects(
 // the clicking session, `() => null` for the CLI, which has no session.
 export function gatherFacts(
   edge: DoctorEdge,
-  hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv">,
+  hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
 ): Omit<DoctorFacts, "urlHandler"> {
@@ -290,14 +376,24 @@ export function gatherFacts(
   );
   const tmux = tmuxFacts(edge, hints.tmux);
   const glyphs = stripPrivateGlyphs(globals);
-  const mark = sessionPick(doctorMarkKey(NERD_FONT_CHECK));
   return {
     tmux,
-    nerdFont: {
-      glyphs,
-      terminal: terminalFacts(edge, tmux, hints.terminalEnv, glyphs),
-      mark: mark === null ? null : parseMark(mark),
-    },
+    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
+    // union: none to draw is the arm with no terminal to read.
+    nerdFont:
+      glyphs === ""
+        ? { kind: "none" }
+        : {
+            kind: "glyphs",
+            glyphs,
+            terminal: terminalFacts(edge, tmux, hints, glyphs),
+          },
+    marks: Object.fromEntries(
+      MARKED_CHECKS.flatMap((c) => {
+        const raw = sessionPick(doctorMarkKey(c.name));
+        return raw === null ? [] : [[c.name, parseMark(raw)]];
+      }),
+    ),
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(

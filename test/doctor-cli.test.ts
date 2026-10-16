@@ -34,8 +34,12 @@ const EDGE: DoctorEdge = {
       features: ["osc7", "RGB", "sixel"],
       termtype: "ghostty 1.3.1",
       termname: "xterm-ghostty",
+      pid: 4242,
     },
   }),
+  remoteLogin: () => {
+    throw new Error("remoteLogin must not run in this case");
+  },
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -117,7 +121,8 @@ describe("doctorPlan", () => {
     });
   });
 
-  // The CLI cannot take a mark: it shows the glyphs and where to mark them.
+  // The CLI can neither take nor read a mark: it shows the glyphs and the
+  // bar's doctor, where a mark is made and counted.
   test("a check that shows glyphs to look at prints them, and where to mark them", async () => {
     const plan = await doctorPlan(
       EDGE,
@@ -129,7 +134,8 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toMatch(
       new RegExp(
         "\n✗ Nerd Font — the doctor cannot read vscode's font\n" +
-          "    look:  — if these draw as shapes, not boxes, mark them ✓ in the bar: " +
+          "    look:  — this command cannot see what your terminal draws; " +
+          "mark them ✓ shapes or ✗ boxes in the bar's doctor: " +
           `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n$`,
         "u",
       ),

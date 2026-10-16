@@ -42,7 +42,8 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
     effect: { kind: "decided", name: "none", value: "none" },
     placementEffects: [],
     transitions: false,
-    nerdFont: { glyphs: "", terminal: { kind: "unreported" }, mark: null },
+    nerdFont: { kind: "none" },
+    marks: {},
     claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 
@@ -414,8 +415,11 @@ describe("the daemon's side of the round trip", () => {
       doctor: {
         probeTmux: () => ({
           kind: "ok",
-          value: { features: [], termtype: "", termname: "" },
+          value: { features: [], termtype: "", termname: "", pid: 4242 },
         }),
+        remoteLogin: () => {
+          throw new Error("remoteLogin must not run in this case");
+        },
         fontInUse: () => {
           throw new Error("fontInUse must not run in this case");
         },
@@ -485,7 +489,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
+      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- marks=- (session=s1)",
     ]);
   });
 
@@ -496,7 +500,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
+      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- marks=- (session=s1)",
     ]);
   });
 

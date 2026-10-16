@@ -125,6 +125,7 @@ import {
   doctorMarkKey,
   doctorReportPairs,
   markValue,
+  marksField,
   nerdFontFields,
 } from "../../doctor/report";
 import {
@@ -1140,7 +1141,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont)} ${marksField(facts.marks)} (session=${sid})`,
   );
 }
 
@@ -1208,7 +1209,10 @@ const doctorFix: VerbHandler = (value, ctx) => {
 // Record what the user saw of the glyphs THIS check's fresh verdict shows,
 // under the sighting they are — never a sighting cached from the render that
 // drew the ✓ and ✗, since the session's terminal or joiner may have moved —
-// then re-run over the facts the mark is now part of.
+// then re-run over those same facts with the mark folded in.
+// [LAW:single-enforcer] One gathering per click, as doctorFix: a second would
+// spawn the rate-limited tmux and font probes again inside their window, and
+// the refused spawn would read as a different terminal than the one marked.
 const doctorMark: VerbHandler = (value, ctx) => {
   const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -1223,22 +1227,23 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
     );
   }
-  const verdict = check.probe(clickFacts(ctx, sid));
+  const facts = clickFacts(ctx, sid);
+  const verdict = check.probe(facts);
   if (verdict.ok || verdict.sighting === undefined) {
     throw new BadVerbArgs(
       `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
     );
   }
-  ctx.sessionState.set(
-    sid,
-    doctorMarkKey(check.name),
-    markValue({ mark: mark as GlyphMark, sighting: verdict.sighting.id }),
-  );
+  const recorded = { mark: mark as GlyphMark, sighting: verdict.sighting.id };
+  ctx.sessionState.set(sid, doctorMarkKey(check.name), markValue(recorded));
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  writeReport(ctx, sid, clickFacts(ctx, sid));
+  writeReport(ctx, sid, {
+    ...facts,
+    marks: { ...facts.marks, [check.name]: recorded },
+  });
 };
 
 // ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────

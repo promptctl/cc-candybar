@@ -15,6 +15,7 @@ import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import {
   GLYPH_MARKS,
   type CheckReport,
+  type DoctorFacts,
   type GlyphMark,
   type NerdFontFacts,
   type RecordedMark,
@@ -74,16 +75,14 @@ export function parseMark(raw: string): RecordedMark {
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
-// fields for the doctor's event: the glyphs it needed (`-` for none), the
-// terminal it found (`<name>@<release>`, `-` for an unsaid release, else the
-// arm that kept it from finding one), the font it read (`-` where none is
-// read) and the mark it honoured. A value a terminal or font chose is a JSON
-// string, since it may hold a space.
-export function nerdFontFields({
-  glyphs,
-  terminal,
-  mark,
-}: NerdFontFacts): string {
+// fields for the doctor's event: the glyphs it needed, the terminal it found
+// (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it
+// from finding one) and the font it read — every field `-` where there was
+// nothing to find. A value a terminal or font chose is a JSON string, since it
+// may hold a space.
+export function nerdFontFields(facts: NerdFontFacts): string {
+  if (facts.kind === "none") return "glyphs=- terminal=- font=-";
+  const { glyphs, terminal } = facts;
   const codes = [...glyphs].map((g) => g.codePointAt(0)!.toString(16));
   const found = ((): string => {
     switch (terminal.kind) {
@@ -103,7 +102,14 @@ export function nerdFontFields({
     const { font: name, lacks } = terminal.font.value;
     return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
   })();
-  return `glyphs=${codes.join(",") || "-"} terminal=${found} font=${font} mark=${mark?.mark ?? "-"}`;
+  return `glyphs=${codes.join(",")} terminal=${found} font=${font}`;
+}
+
+// [LAW:nothing-unseen] The marks a doctor run reasoned over, as one logfmt
+// field: `<check>:<mark>` each, `-` for none.
+export function marksField(marks: DoctorFacts["marks"]): string {
+  const each = Object.entries(marks).map(([check, m]) => `${check}:${m!.mark}`);
+  return `marks=${each.join(",") || "-"}`;
 }
 
 // The bar's row has room for one problem: it names the first and counts the

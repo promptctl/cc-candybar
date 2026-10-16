@@ -926,22 +926,30 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
       artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
     }
     artifacts.actions[fix] = { doctor: "fix", check: c.name };
-    for (const mark of GLYPH_MARKS) {
+    // Only a check that takes a mark gets the actions that make one.
+    const marks = c.takesMark ? GLYPH_MARKS : [];
+    for (const mark of marks) {
       artifacts.actions[doctorMarkAction(c.name, mark)] = {
         doctor: "mark",
         check: c.name,
         mark,
       };
     }
+    const markCells = marks
+      .map(
+        (mark) =>
+          ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`,
+      )
+      .join("");
     artifacts.segments[doctorRowSeg(c.name)] = {
       when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
       template:
         `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}` +
         `{{ else }}✗ ${c.label} — {{ .${keys.reason} }}` +
         `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
-        `{{ if ne .${keys.sighting} "" }} {{ .${keys.sighting} }}` +
-        ` {{ action "${doctorMarkAction(c.name, "drawn")}" "${MARK_GLYPH.drawn}" }}` +
-        ` {{ action "${doctorMarkAction(c.name, "boxes")}" "${MARK_GLYPH.boxes}" }}{{ end }}` +
+        (markCells === ""
+          ? ""
+          : `{{ if ne .${keys.sighting} "" }} {{ .${keys.sighting} }}${markCells}{{ end }}`) +
         `{{ end }}`,
     };
   }

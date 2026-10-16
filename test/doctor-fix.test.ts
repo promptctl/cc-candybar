@@ -38,6 +38,9 @@ const NO_TMUX: DoctorEdge = {
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
+  remoteLogin: () => {
+    throw new Error("remoteLogin must not run in this case");
+  },
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -342,9 +345,10 @@ describe("gatherFacts", () => {
         asked.push(hint);
         return {
           kind: "ok",
-          value: { features: ["osc7", "RGB"], termtype: "", termname: "" },
+          value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
         };
       },
+      remoteLogin: NO_TMUX.remoteLogin,
       fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };
@@ -353,7 +357,7 @@ describe("gatherFacts", () => {
       hint: HINT,
       client: {
         kind: "ok",
-        value: { features: ["osc7", "RGB"], termtype: "", termname: "" },
+        value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
       },
     });
     expect(asked).toEqual([HINT]);

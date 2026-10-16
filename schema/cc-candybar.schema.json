@@ -1102,10 +1102,6 @@
               },
               "check": {
                 "enum": [
-                  "config",
-                  "urlHandler",
-                  "tmuxTruecolor",
-                  "effectRefresh",
                   "nerdFont"
                 ]
               },

@@ -24,7 +24,7 @@ const inside = (
 ): TmuxFacts => ({
   kind: "inside",
   hint: { ...HINT, truecolor },
-  client: { kind: "ok", value: { features, termtype: "", termname: "" } },
+  client: { kind: "ok", value: { features, termtype: "", termname: "", pid: 4242 } },
 });
 
 const LOADED: ConfigFacts = {
@@ -52,7 +52,8 @@ const facts = (
   placementEffects,
   transitions,
   urlHandler: { kind: "unsupported" },
-  nerdFont: { glyphs: "", terminal: { kind: "unreported" }, mark: null },
+  nerdFont: { kind: "none" },
+  marks: {},
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 

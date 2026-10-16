@@ -611,11 +611,12 @@ fn memento_env_hint(
 // TERMINAL_ENV_VARS in src/terminal-hint.ts, diffed by
 // scripts/check-protocol.mjs. They cross raw, by name: which terminal a value
 // means is the doctor's reading (src/doctor/terminal.ts).
-const TERMINAL_ENV_VARS: [&str; 4] = [
+const TERMINAL_ENV_VARS: [&str; 5] = [
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",
     "TERM",
     "ITERM_PROFILE",
+    "XDG_CONFIG_HOME",
 ];
 
 fn detect_terminal_env() -> serde_json::Value {
