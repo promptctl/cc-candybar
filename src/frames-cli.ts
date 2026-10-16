@@ -24,11 +24,16 @@ import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
-import { openFrameStream, type FrameStream } from "./daemon/client-frames";
+import {
+  openFrameStream,
+  type FrameStream,
+  type StreamEnd,
+} from "./daemon/client-frames";
 import { describeFailure } from "./daemon/client-transport";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { socketPath } from "./daemon/paths";
 import { detectClientHints } from "./client-hints";
+import { newestWins } from "./utils/newest-wins";
 
 const RECONNECT_FIRST_MS = 250;
 const RECONNECT_MAX_MS = 2000;
@@ -54,9 +59,20 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
   const say = (line: string): void => {
     process.stderr.write(`cc-candybar frames: ${line}\n`);
   };
+  // [LAW:no-silent-failure] --config is a render arg, sent only with the data
+  // this client forwards; under --session it forwards none.
+  if (values.session !== undefined && values.config !== undefined) {
+    say(
+      "--config has no effect with --session: the session's own statusline client sends its config",
+    );
+    process.exit(2);
+  }
   // [LAW:no-silent-failure] A reader that went away is the end of the stream,
   // not an error to keep writing into.
   process.stdout.on("error", () => process.exit(0));
+  // A reader slower than the frames gets the newest one when it is ready for
+  // it, as a subscriber of the daemon does.
+  const emit = newestWins(process.stdout);
 
   let sessionId: string | null = values.session ?? null;
   let lastHook: ClaudeHookData | null = null;
@@ -78,17 +94,20 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
       socketPath(),
       id,
       (resp) => {
-        retryMs = RECONNECT_FIRST_MS;
-        process.stdout.write(`${JSON.stringify(resp)}\n`);
+        // A drawn bar is a stream that works: the next failure starts the
+        // backoff over.
+        if (resp.ok) retryMs = RECONNECT_FIRST_MS;
+        emit(`${JSON.stringify(resp)}\n`);
       },
       (end) => {
         if (end.kind === "closed-here") return;
-        say(
-          end.kind === "failed"
-            ? `stream failed (${end.error.message}); reconnecting in ${retryMs}ms`
-            : `daemon closed the stream; reconnecting in ${retryMs}ms`,
-        );
-        if (end.kind === "failed") obtainDaemonKick();
+        const next = afterStreamEnd(end);
+        if (next.kind === "exit") {
+          say(next.reason);
+          process.exit(1);
+        }
+        say(`${next.reason}; reconnecting in ${retryMs}ms`);
+        if (next.kick) obtainDaemonKick();
         const wait = retryMs;
         retryMs = Math.min(RECONNECT_MAX_MS, retryMs * 2);
         setTimeout(() => {
@@ -123,4 +142,46 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     }
   }
   process.exit(0);
+}
+
+// [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
+// reconnect, kicking a daemon into existence when none answered — or, when the
+// daemon refuses this request or speaks another protocol version, which it
+// will do the same way however often it is asked, the end of this client.
+export type AfterEnd =
+  | {
+      readonly kind: "reconnect";
+      readonly reason: string;
+      readonly kick: boolean;
+    }
+  | { readonly kind: "exit"; readonly reason: string };
+
+export function afterStreamEnd(
+  end: Exclude<StreamEnd, { kind: "closed-here" }>,
+): AfterEnd {
+  switch (end.kind) {
+    case "failed":
+      return {
+        kind: "reconnect",
+        reason: `stream failed (${end.error.message})`,
+        kick: true,
+      };
+    case "closed-there":
+      return {
+        kind: "reconnect",
+        reason: "daemon closed the stream",
+        kick: false,
+      };
+    case "refused":
+      return end.resp.code === "TIMEOUT"
+        ? {
+            kind: "reconnect",
+            reason: `the daemon was too busy to open the stream (${end.resp.error})`,
+            kick: false,
+          }
+        : {
+            kind: "exit",
+            reason: `the daemon refused the stream: ${end.resp.code}: ${end.resp.error}`,
+          };
+  }
 }

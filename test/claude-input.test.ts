@@ -30,6 +30,7 @@ import { __resetRateLimitsForTest } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
+import { heldClickError } from "../src/daemon/click-error";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -279,7 +280,7 @@ describe("a slash click", () => {
     const rt = runtime(HINT);
     clickUrl(rt.urls[0]!, rt.ctx);
     expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/typed a command moments ago/);
-    expect(rt.sessionState.get("s1", "click.error")).toMatch(/\/compact was not typed/);
+    expect(heldClickError(rt.sessionState, "s1")?.text ?? null).toMatch(/\/compact was not typed/);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
 
@@ -295,7 +296,7 @@ describe("a slash click", () => {
   test("outside tmux: refused in the bar, and tmux is never run", () => {
     const rt = runtime(null);
     expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/not running inside tmux/);
-    expect(rt.sessionState.get("s1", "click.error")).toMatch(
+    expect(heldClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
       /\/compact was not typed: this Claude Code is not running inside tmux/,
     );
     expect(invocations()).toEqual([]);
@@ -439,7 +440,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       rt.ctx,
     );
     expect(() => clickUrl(armed()!.url, rt.ctx)).toThrow(/not running inside tmux/);
-    expect(rt.sessionState.get("s1", "click.error")).toMatch(
+    expect(heldClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );
     expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
