@@ -1,3 +1,10 @@
+## [1.130.3](https://github.com/promptctl/cc-candybar/compare/v1.130.2...v1.130.3) (2026-10-16)
+
+
+### Bug Fixes
+
+* **daemon:** a render that throws or is refused still writes its render event ([#348](https://github.com/promptctl/cc-candybar/issues/348)) ([4755db7](https://github.com/promptctl/cc-candybar/commit/4755db7ab84de541dbc5600d7cfbc21e148f99a6))
+
 ## [1.130.2](https://github.com/promptctl/cc-candybar/compare/v1.130.1...v1.130.2) (2026-10-16)
 
 
