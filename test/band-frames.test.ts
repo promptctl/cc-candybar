@@ -2,19 +2,35 @@
 // the mod: the bar the daemon pushed, as rows of styled runs whose links
 // survive, and what the statusline would print when the render was refused.
 
+import {
+  ColorDepth,
+  Segment,
+  Style,
+  segmentsToString,
+} from "@promptctl/rich-js";
 import { bandFrame, bandLine } from "../src/band/frames";
 import { frameFormat } from "../src/frames-cli";
+import { DIAGNOSTIC_ERROR_COLORS } from "../src/render/diagnostic-style";
 
 const ESC = "\x1b";
-const link = (url: string, text: string) =>
-  `${ESC}]8;;${url}${ESC}\\${text}${ESC}]8;;${ESC}\\`;
 
 describe("bandFrame", () => {
   test("a truecolor cell keeps its colours, and a link its href", () => {
-    const ansi = `${ESC}[38;2;24;24;37;48;2;181;146;225m ${link(
-      "cc-candybar://dispatch/e=x",
-      "🍫",
-    )} ${ESC}[0m\n`;
+    // Written by rich-js's one encoder, as the bar is: each link carries the
+    // `id=` its URL derives.
+    const cell = { color: "#181825", bgcolor: "#b592e1" };
+    const ansi = `${segmentsToString(
+      [
+        new Segment(" ", new Style(cell)),
+        new Segment(
+          "🍫",
+          new Style({ ...cell, link: "cc-candybar://dispatch/e=x" }),
+        ),
+        new Segment(" ", new Style(cell)),
+      ],
+      { colorSystem: ColorDepth.TRUECOLOR, hyperlinks: true },
+    )}\n`;
+    expect(ansi).toContain(`${ESC}]8;id=`);
     expect(bandFrame(ansi).rows).toEqual([
       [
         { text: " ", color: "#181825", backgroundColor: "#b592e1" },
@@ -102,5 +118,19 @@ describe("bandLine", () => {
 
   test("an ok response with no bar is the statusline's malformed glyph, not a blank band", () => {
     expect(textOf(bandLine({ ok: true } as never))).not.toBe("");
+  });
+
+  test("a bar the band cannot draw is a frame saying why, in the diagnostic colours", () => {
+    expect(
+      JSON.parse(bandLine({ ok: true, output: `${ESC}[5mx${ESC}[0m\n` })).rows,
+    ).toEqual([
+      [
+        {
+          text: "⚠ cc-candybar frames: the band cannot draw blink text",
+          color: DIAGNOSTIC_ERROR_COLORS.fg,
+          backgroundColor: DIAGNOSTIC_ERROR_COLORS.bg,
+        },
+      ],
+    ]);
   });
 });

@@ -15,6 +15,12 @@ import type { ColorSpec } from "@promptctl/rich-js";
 import type { BandFrame, BandRun, RunColor } from "../../mod/types";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
+import {
+  ANSI_RESET,
+  DIAGNOSTIC_ERROR_BG,
+  DIAGNOSTIC_ERROR_FG,
+} from "../render/diagnostic-style";
+import { sanitizeText } from "../render/diagnostic-text";
 import { planOutcome } from "../render/outcome-plan";
 
 // The sixteen colours a terminal's theme draws, by the names the mod's `Text`
@@ -135,6 +141,22 @@ export function bandFrame(ansi: string): BandFrame {
 }
 
 // One pushed render response as the line the mod reads.
+// [LAW:no-silent-failure] A bar the band cannot draw is a frame saying why,
+// in the diagnostic strip's colours. The stream goes on, so the next bar it
+// can draw takes its place, as the statusline's next render replaces its
+// error glyph: a config fixed brings the band back.
 export function bandLine(resp: Response): string {
-  return JSON.stringify(bandFrame(planOutcome(renderOutcomeOf(resp)).output));
+  const ansi = planOutcome(renderOutcomeOf(resp)).output;
+  try {
+    return JSON.stringify(bandFrame(ansi));
+  } catch (error) {
+    const why = sanitizeText(
+      error instanceof Error ? error.message : String(error),
+    );
+    return JSON.stringify(
+      bandFrame(
+        `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}⚠ cc-candybar ${why}${ANSI_RESET}\n`,
+      ),
+    );
+  }
 }

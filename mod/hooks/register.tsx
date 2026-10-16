@@ -46,10 +46,12 @@ export const register: Register = on => {
     return result
   })
 
-  // A /clear is a new session id, and no `session.start` follows it.
+  // A /clear or a resume goes on under a new session id, and no
+  // `session.start` follows it. [LAW:dataflow-not-control-flow] Every end
+  // asks: `follow` keeps the child of a session id that did not change.
   on('session.end', async ($, e, next) => {
     const result = await next(e)
-    if (e.reason === 'clear') $.clock.after(0, () => void follow($))
+    $.clock.after(0, () => void follow($))
     return result
   })
 
@@ -101,6 +103,7 @@ function start($: EngineInterface, sessionId: string): Child {
       'band',
     ],
   })
+  $.ui.log(`candybar-band: frames started for ${sessionId}`, { to: 'debug' })
   // [LAW:no-ambient-temporal-coupling] A stopped child's pieces can still be
   // in flight; once `stop` runs, none of them is the session's frame.
   let stopped = false
@@ -111,7 +114,7 @@ function start($: EngineInterface, sessionId: string): Child {
       for await (const { stream: pipe, text } of stream) {
         if (stopped) break
         if (pipe === 'stderr') {
-          stderr = (stderr + text).slice(-500)
+          stderr = (stderr + text).slice(-2000)
           $.ui.log(text, { to: 'debug' })
           continue
         }
@@ -122,10 +125,13 @@ function start($: EngineInterface, sessionId: string): Child {
         if (newest !== undefined) await $.state.set(frameRef, JSON.parse(newest) as BandFrame)
       }
       const { code, signal } = await stream.result
+      const how = signal ?? `exit ${code}`
+      $.ui.log(`candybar-band: frames for ${sessionId} ended (${how})`, { to: 'debug' })
       if (!stopped) {
-        await $.state.set(failureRef, `candybar: frames stopped (${signal ?? `exit ${code}`}) ${stderr}`)
+        await $.state.set(failureRef, `candybar: frames stopped (${how}) ${lastLine(stderr)}`)
       }
     } catch (error) {
+      $.ui.log(`candybar-band: frames for ${sessionId} failed: ${String(error)}`, { to: 'debug' })
       if (!stopped) await $.state.set(failureRef, `candybar: frames failed: ${String(error)}`)
     }
   })()
@@ -133,7 +139,15 @@ function start($: EngineInterface, sessionId: string): Child {
     sessionId,
     stop: () => {
       stopped = true
+      $.ui.log(`candybar-band: frames for ${sessionId} stopped`, { to: 'debug' })
       void stream.return(undefined as never)
     },
   }
+}
+
+// The band's failure row is one line: the child's last word on stderr, which
+// is why it stopped. Its whole stderr is in the debug log.
+function lastLine(text: string): string {
+  const said = text.trimEnd()
+  return said.slice(said.lastIndexOf('\n') + 1)
 }
