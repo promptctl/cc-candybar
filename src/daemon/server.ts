@@ -50,7 +50,7 @@ import {
   refusedHintsError,
   sanitizeClientVersion,
 } from "./protocol";
-import type { Request, Response } from "./protocol";
+import type { RenderRequest, Request, Response } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
@@ -116,7 +116,13 @@ import {
   formatDiagnosticDump,
 } from "../render/diagnostic-strip.js";
 import { DiagnosticDump } from "./diagnostic-dump.js";
-import { instantOf } from "../utils/instant.js";
+import { instantOf, type Instant } from "../utils/instant.js";
+import {
+  noteFacts,
+  renderEvent,
+  type RenderFacts,
+  type RenderOutcome,
+} from "./render-event.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -903,315 +909,22 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
     const started = new Date();
     const at = instantOf(started);
     const t0 = started.getTime();
+    // [LAW:nothing-unseen] One render event per render request, written here
+    // on every exit — a refusal and a throw included — from the facts the
+    // render reached, so a failing render is described like any other.
+    const facts: RenderFacts = [];
+    const emit = (outcome: RenderOutcome): void => {
+      if (outcome.kind !== "ok") stats.requestsErrored++;
+      const { level, line } = renderEvent(facts, outcome, Date.now() - t0);
+      dlog(level, line);
+    };
     try {
-      // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
-      // The validator reports missing/wrong-typed required fields and unknown
-      // top-level keys. Required-field problems are *protocol* failures
-      // (Claude Code's schema guarantees these — their absence means the
-      // sender is broken or malicious); unknown fields are advisory (Anthropic
-      // may have added something).
-      const { report } = validateHookData(req.hookData as unknown);
-      for (const field of report.unknownTopLevelFields) {
-        dlog(
-          "info",
-          `schema: unknown field '${field}' — Anthropic may have added it`,
-        );
-      }
-      // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
-      // schema violations. Continuing with `workspace?.project_dir` would
-      // collapse "absent" into an empty-string cache key — silently sharing
-      // one entry across every malformed request — and downstream code would
-      // have to defend against an empty projectDir forever. Reject here so
-      // the types downstream carry the strongest true theorem: by the time
-      // a cache entry is built, projectDir/cwd are real non-empty strings.
-      const wireProblems: string[] = [];
-      for (const path of report.missingRequired) {
-        wireProblems.push(`missing required field '${path}'`);
-      }
-      for (const { path, expected, got } of report.typeMismatches) {
-        wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
-      }
-      // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
-      // request's cwd anchors a relative `--config` (parseRenderArgs), and a
-      // relative anchor would resolve against the daemon's own cwd
-      // (brandon-config-nuq6). Both clients send their process cwd.
-      if (!isAbsolute(req.cwd)) {
-        wireProblems.push(
-          `request 'cwd' is not an absolute path: "${req.cwd}"`,
-        );
-      }
-      if (wireProblems.length > 0) {
-        stats.requestsErrored++;
-        dlog("warn", `BAD_REQUEST: ${wireProblems.join("; ")}`);
-        return stay({
-          ok: false,
-          error: `malformed hookData: ${wireProblems.join("; ")}`,
-          code: "BAD_REQUEST",
-          daemonV: PROTOCOL_VERSION,
-        });
-      }
-      const projectDir = req.hookData.workspace.project_dir;
-      // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
-      // daemon's process.cwd(), so config resolution depends only on request
-      // data — the daemon's own working directory must not influence output.
-      const { configFile, unknownFlagsError } = parseRenderArgs(
-        req.args,
-        req.cwd,
-      );
-      const sessionId = req.hookData.session_id;
-      // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
-      // observed and the daemon cannot. Raw `req.*` hint fields are not read
-      // past this line; `hints` is the stamped type the render path consumes.
-      //
-      // [LAW:single-enforcer] Every hint is captured client-side because the
-      // daemon is detached and shared: its env answers for whichever shell
-      // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
-      // for width, and we do NOT consult SSH_* for remoteness — both would
-      // describe a different session than the one being rendered.
-      // [LAW:one-source-of-truth] Both branches feed raw cols through
-      // applyClaudeCodeReserve, so `width` always means "usable cells
-      // post-reserve" with no semantic split between wire-supplied and
-      // fallback values.
-      const hints = parseClientHints(req);
-      const refused = refusedHints(req, hints);
-      const hintsError = refusedHintsError(refused);
-      // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
-      // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
-      // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
-      // this session's last render from here, re-parsed through the same
-      // checkpoint. Compared before writing for the same reason as the origin.
-      const hintRecord = JSON.stringify(hints);
-      if (
-        sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord
-      ) {
-        sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
-      }
-      // [LAW:effects-at-boundaries] The load-config verb writes per-session
-      // config overrides into SessionState; this is the one read point.
-      // [LAW:one-source-of-truth] The explicit config path has three
-      // spellings and ONE precedence, composed here: a load-config pick, the
-      // `--config` flag, the client's `CC_CANDYBAR_CONFIG` hint. All three are
-      // client facts; the daemon's own env is never consulted
-      // (brandon-config-5g8).
-      const sessionConfigFile =
-        sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
-        configFile ??
-        hints.configEnv;
-      const entry = renderCache.getOrCreate(
-        projectDir,
-        req.cwd,
-        sessionConfigFile,
-      );
-      // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
-      // config from, so a durable click on this session resolves the same
-      // chain and writes the file the next reload reads (verbs/index.ts
-      // sessionConfigFile) — never a path re-derived from the daemon's own
-      // cwd. Compared before writing: every
-      // set() persists and fires the session's MobX atom, so an unconditional
-      // per-render write would invalidate every state-driven computed each
-      // render.
-      const origin = encodeRenderOrigin({
-        projectDir,
-        cwd: req.cwd,
-        configFile: sessionConfigFile ?? null,
-      });
-      if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-        sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-      }
-      const termCols = hints.termCols;
-      const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
-      const rowCap = diagnosticRowCap(hints.termRows);
-      // [LAW:dataflow-not-control-flow] One composition every render: the
-      // entry always holds a renderable state (the bundled default until a
-      // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
-      // and output = diagnostics + body, with no "did the config load" branch.
-      // [LAW:one-source-of-truth] Every globals field resolved ONCE per
-      // render, here — before the payload build, so the same struct feeds
-      // BOTH the payload's `*.effective` fields (what a trigger label says)
-      // AND renderOpts below (what actually renders). One resolution, two
-      // readers, so a label can never disagree with the bar. The precedence
-      // the resolver applies, and why each rung sits where it does, lives
-      // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-      // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
-      // authoredRoots — the set computed from the SAME raw parse that
-      // produced entry.state.config, on the same reload — never a fresh
-      // file read here that could race a concurrent write and disagree
-      // with the tree that actually rendered. That is why it arrives as
-      // a closure over this entry rather than a lookup inside the resolver.
-      const { authoredRoots } = entry.state;
-      const sessionPick = (key: string): string | null =>
-        sessionState.get(req.hookData.session_id, key);
-      const effective: EffectiveGlobals = resolveEffectiveGlobals(
-        entry.state.config,
-        sessionPick,
-        (preset: string) => authoredRoots.has(preset),
-      );
-      const payload = await buildRenderPayload(
-        req.hookData,
-        at,
-        {
-          ...payloadDeps,
-          // Measured against the gate of the config this render draws with.
-          navigation: (sessionId: string) =>
-            navigationHistory.depth(
-              sessionId,
-              sessionState,
-              stateGate(entry.state.config),
-            ),
-        },
-        req.cwd,
-        entry.state.neededInputPaths(effective.preset),
-        effective,
-        hints,
-        {
-          ...settingCounts(
-            entry.state.config,
-            entry.state.fileHeldSettings,
-            sessionPick,
-          ),
-          // The file the menu's saves and resets edit, once it exists.
-          configPath: entry.configLayers.includes(entry.configHome)
-            ? entry.configHome
-            : null,
-        },
-      );
-      // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
-      // not honour (`RenderWarning`). Collected per render into a local, so there
-      // is no cross-render state to clear, and folded into the strip's WARNING
-      // channel below: the bar still renders, with a line above it saying why,
-      // which is this repo's answer everywhere else that a render can proceed but
-      // an author needs to know.
-      const renderWarnings: RenderWarning[] = [];
-      // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
-      // `effective` struct the payload was just built from, projected by the one
-      // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
-      // computation to drift from it.
-      const renderOpts = renderOptionsOf(effective, width);
-      const effects = effectSessions.of(sessionId);
-      // [LAW:single-enforcer] renderDsl internally calls
-      // `registry.applyInput(payload)` as its first step (see step 1 in
-      // src/dsl/render.ts). The daemon must not pre-apply — doing so
-      // would run the MobX action twice per render and clear last_error
-      // diagnostics on the round trip.
-      const body = renderDsl(
-        entry.state.config,
-        entry.state.compiled,
-        entry.state.store,
-        entry.state.registry,
-        payload,
-        at,
-        renderOpts,
-        // [LAW:single-enforcer] The per-segment StripCell sink for the
-        // `debug segments` projection. Its identity stays stable for the
-        // cache entry's lifetime; renderDsl clears + repopulates it
-        // in place. Cells are cheap (already computed during the render);
-        // the per-segment ANSI serialization happens lazily inside the
-        // debug handler so normal renders pay no extra serializer cost.
-        {
-          perSegmentSink: entry.state.lastRenderCellsBySegment,
-          onRenderWarning: (warning) => renderWarnings.push(warning),
-        },
-        // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
-        // and name together, so renderDsl publishes the `theme.effective` the
-        // bar was actually painted from. No separate basePalette argument: one
-        // would be a second clock free to disagree with that name.
-        { ...renderSelectionOf(effective), effects },
-      );
-      // [LAW:one-source-of-truth] Consume the transient click error written by
-      // dispatch on partial/total effect failure, then clear it so it shows
-      // exactly once. Only called when non-null to avoid a no-op persist+MobX
-      // tick on every render.
-      const clickError = sessionState.get(
-        req.hookData.session_id,
-        "click.error",
-      );
-      if (clickError)
-        sessionState.clear(req.hookData.session_id, "click.error");
-      const combinedError = [
-        unknownFlagsError,
-        hintsError,
-        entry.lastError,
-        clickError,
-      ]
-        .filter(Boolean)
-        .join("\n");
-      // [LAW:one-source-of-truth] The daemon-wide update notice, read for
-      // THIS session: what it dismissed and whether its config allows the
-      // notice — both values, folded by the notice into zero or one channel.
-      const updates = updateWatch.notice({
-        sessionId,
-        dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
-        enabled: effective.updateNotice,
-      });
-      // [LAW:no-silent-failure] The file whose load failed rides beside its
-      // error so the strip can offer it as a file:// link — the way back into
-      // the file when our own click path may be the thing that is broken.
-      // Null when the error is not a load error, or no file resolved.
-      const failedConfigFile =
-        entry.lastError === null ? null : entry.failedFile;
-      // [LAW:one-source-of-truth] One warning channel: the load-time warning this
-      // config carries and whatever this render could not honour, in one list.
-      // The strip's rows are its messages, joined into the one string
-      // collectDiagnostics splits; the render event's `warn=` is its kinds. A
-      // second channel would be a second place a warning could be dropped.
-      const warnings = [
-        ...(entry.lastWarning === null
-          ? []
-          : [{ kind: "load" as const, message: entry.lastWarning }]),
-        ...renderWarnings,
-      ];
-      const diagnostics = collectDiagnostics(
-        combinedError,
-        updates,
-        warnings.map((w) => w.message).join("\n"),
-      );
-      // [LAW:effects-at-boundaries] The one write the strip depends on, at
-      // the edge: the session's dump file mirrors this render's diagnostics
-      // (present with the full text, absent when there are none) before the
-      // strip that links it goes out — and the link is built from the
-      // write's outcome, so the trailer never names a file that is not there.
-      const dumpFailure = diagnosticDump.sync(
-        sessionId,
-        diagnostics === null ? null : formatDiagnosticDump(diagnostics),
-      );
-      if (dumpFailure !== null)
-        dlog("warn", `diagnostic dump failed: ${dumpFailure}`);
-      const output = composeWithDiagnostics(
-        body,
-        diagnostics,
-        {
-          fullText:
-            dumpFailure === null
-              ? { kind: "file", path: diagnosticDump.pathFor(sessionId) }
-              : { kind: "unavailable", reason: dumpFailure },
-          failedConfigFile,
-        },
-        { width, rowCap, colorCompatibility: effective.colorCompatibility },
-      );
-      const ms = Date.now() - t0;
-      const g = gitService.getStats();
-      const u = usageStore.getStats();
-      const fx = effects.lastFrame();
-      // Each placement wearing its own effect, on its own clock; `-` for none.
-      const own =
-        fx.own
-          .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
-          .join(",") || "-";
-      // Each placement fading in, and each dissolving out, on its own clock;
-      // `-` for none.
-      const passages = (frames: readonly PassageFrame[]): string =>
-        frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-      // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
-      // order, including any its row cap left undrawn; `-` for none.
-      const warned = warnings.map((w) => w.kind).join(",") || "-";
-      dlog(
-        "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} prompts=${payload.metrics?.messageCount ?? "-"} nonPrompts=${payload.metrics?.nonPrompts ?? "-"} err=${combinedError ? "Y" : "N"} refused=${refused.map((r) => r.hint).join(",") || "-"} upd=${updates.length} warn=${warned}`,
-      );
-      return stay({ ok: true, output: output + "\n" });
-    } catch (e) {
-      stats.requestsErrored++;
-      throw e;
+      const rendered = await renderRequest(req, at, facts);
+      emit(rendered.outcome);
+      return stay(rendered.resp);
+    } catch (error) {
+      emit({ kind: "threw", error });
+      throw error;
     }
   }
 
@@ -1477,4 +1190,333 @@ function handleClick(
       daemonV: PROTOCOL_VERSION,
     };
   }
+}
+
+// --- render ---
+
+// One render request: the bar, or the refusal of a request no client of ours
+// builds. A throw is the third outcome, recorded by the caller. `facts` is the
+// render event's record, filled as each stage learns its part.
+async function renderRequest(
+  req: RenderRequest,
+  at: Instant,
+  facts: RenderFacts,
+): Promise<{
+  outcome: Exclude<RenderOutcome, { kind: "threw" }>;
+  resp: Response;
+}> {
+  // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
+  // The validator reports missing/wrong-typed required fields and unknown
+  // top-level keys. Required-field problems are *protocol* failures
+  // (Claude Code's schema guarantees these — their absence means the
+  // sender is broken or malicious); unknown fields are advisory (Anthropic
+  // may have added something).
+  const { report } = validateHookData(req.hookData as unknown);
+  for (const field of report.unknownTopLevelFields) {
+    dlog(
+      "info",
+      `schema: unknown field '${field}' — Anthropic may have added it`,
+    );
+  }
+  // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
+  // schema violations. Continuing with `workspace?.project_dir` would
+  // collapse "absent" into an empty-string cache key — silently sharing
+  // one entry across every malformed request — and downstream code would
+  // have to defend against an empty projectDir forever. Reject here so
+  // the types downstream carry the strongest true theorem: by the time
+  // a cache entry is built, projectDir/cwd are real non-empty strings.
+  const wireProblems: string[] = [];
+  for (const path of report.missingRequired) {
+    wireProblems.push(`missing required field '${path}'`);
+  }
+  for (const { path, expected, got } of report.typeMismatches) {
+    wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
+  }
+  // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
+  // request's cwd anchors a relative `--config` (parseRenderArgs), and a
+  // relative anchor would resolve against the daemon's own cwd
+  // (brandon-config-nuq6). Both clients send their process cwd.
+  if (!isAbsolute(req.cwd)) {
+    wireProblems.push(`request 'cwd' is not an absolute path: "${req.cwd}"`);
+  }
+  if (wireProblems.length > 0) {
+    return {
+      outcome: { kind: "bad-request", problems: wireProblems },
+      resp: {
+        ok: false,
+        error: `malformed hookData: ${wireProblems.join("; ")}`,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      },
+    };
+  }
+  noteFacts(facts, {
+    sid: req.hookData.session_id,
+    at: at.toFixed(3),
+  });
+  const projectDir = req.hookData.workspace.project_dir;
+  // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
+  // daemon's process.cwd(), so config resolution depends only on request
+  // data — the daemon's own working directory must not influence output.
+  const { configFile, unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  const sessionId = req.hookData.session_id;
+  // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
+  // observed and the daemon cannot. Raw `req.*` hint fields are not read
+  // past this line; `hints` is the stamped type the render path consumes.
+  //
+  // [LAW:single-enforcer] Every hint is captured client-side because the
+  // daemon is detached and shared: its env answers for whichever shell
+  // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
+  // for width, and we do NOT consult SSH_* for remoteness — both would
+  // describe a different session than the one being rendered.
+  // [LAW:one-source-of-truth] Both branches feed raw cols through
+  // applyClaudeCodeReserve, so `width` always means "usable cells
+  // post-reserve" with no semantic split between wire-supplied and
+  // fallback values.
+  const hints = parseClientHints(req);
+  const refused = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused);
+  noteFacts(facts, {
+    termCols: String(hints.termCols ?? "?"),
+    termRows: String(hints.termRows ?? "?"),
+    refused: refused.map((r) => r.hint).join(",") || "-",
+  });
+  // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
+  // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
+  // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
+  // this session's last render from here, re-parsed through the same
+  // checkpoint. Compared before writing for the same reason as the origin.
+  const hintRecord = JSON.stringify(hints);
+  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
+    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
+  }
+  // [LAW:effects-at-boundaries] The load-config verb writes per-session
+  // config overrides into SessionState; this is the one read point.
+  // [LAW:one-source-of-truth] The explicit config path has three
+  // spellings and ONE precedence, composed here: a load-config pick, the
+  // `--config` flag, the client's `CC_CANDYBAR_CONFIG` hint. All three are
+  // client facts; the daemon's own env is never consulted
+  // (brandon-config-5g8).
+  const sessionConfigFile =
+    sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
+    configFile ??
+    hints.configEnv;
+  const entry = renderCache.getOrCreate(projectDir, req.cwd, sessionConfigFile);
+  // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
+  // config from, so a durable click on this session resolves the same
+  // chain and writes the file the next reload reads (verbs/index.ts
+  // sessionConfigFile) — never a path re-derived from the daemon's own
+  // cwd. Compared before writing: every
+  // set() persists and fires the session's MobX atom, so an unconditional
+  // per-render write would invalidate every state-driven computed each
+  // render.
+  const origin = encodeRenderOrigin({
+    projectDir,
+    cwd: req.cwd,
+    configFile: sessionConfigFile ?? null,
+  });
+  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
+    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
+  }
+  const termCols = hints.termCols;
+  const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
+  const rowCap = diagnosticRowCap(hints.termRows);
+  noteFacts(facts, { width: String(width) });
+  // [LAW:dataflow-not-control-flow] One composition every render: the
+  // entry always holds a renderable state (the bundled default until a
+  // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
+  // and output = diagnostics + body, with no "did the config load" branch.
+  // [LAW:one-source-of-truth] Every globals field resolved ONCE per
+  // render, here — before the payload build, so the same struct feeds
+  // BOTH the payload's `*.effective` fields (what a trigger label says)
+  // AND renderOpts below (what actually renders). One resolution, two
+  // readers, so a label can never disagree with the bar. The precedence
+  // the resolver applies, and why each rung sits where it does, lives
+  // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+  // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
+  // authoredRoots — the set computed from the SAME raw parse that
+  // produced entry.state.config, on the same reload — never a fresh
+  // file read here that could race a concurrent write and disagree
+  // with the tree that actually rendered. That is why it arrives as
+  // a closure over this entry rather than a lookup inside the resolver.
+  const { authoredRoots } = entry.state;
+  const sessionPick = (key: string): string | null =>
+    sessionState.get(req.hookData.session_id, key);
+  const effective: EffectiveGlobals = resolveEffectiveGlobals(
+    entry.state.config,
+    sessionPick,
+    (preset: string) => authoredRoots.has(preset),
+  );
+  const payload = await buildRenderPayload(
+    req.hookData,
+    at,
+    {
+      ...payloadDeps,
+      // Measured against the gate of the config this render draws with.
+      navigation: (sessionId: string) =>
+        navigationHistory.depth(
+          sessionId,
+          sessionState,
+          stateGate(entry.state.config),
+        ),
+    },
+    req.cwd,
+    entry.state.neededInputPaths(effective.preset),
+    effective,
+    hints,
+    {
+      ...settingCounts(
+        entry.state.config,
+        entry.state.fileHeldSettings,
+        sessionPick,
+      ),
+      // The file the menu's saves and resets edit, once it exists.
+      configPath: entry.configLayers.includes(entry.configHome)
+        ? entry.configHome
+        : null,
+    },
+  );
+  noteFacts(facts, {
+    prompts: String(payload.metrics?.messageCount ?? "-"),
+    nonPrompts: String(payload.metrics?.nonPrompts ?? "-"),
+  });
+  // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
+  // not honour (`RenderWarning`). Collected per render into a local, so there
+  // is no cross-render state to clear, and folded into the strip's WARNING
+  // channel below: the bar still renders, with a line above it saying why,
+  // which is this repo's answer everywhere else that a render can proceed but
+  // an author needs to know.
+  const renderWarnings: RenderWarning[] = [];
+  // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
+  // `effective` struct the payload was just built from, projected by the one
+  // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
+  // computation to drift from it.
+  const renderOpts = renderOptionsOf(effective, width);
+  const effects = effectSessions.of(sessionId);
+  // [LAW:single-enforcer] renderDsl internally calls
+  // `registry.applyInput(payload)` as its first step (see step 1 in
+  // src/dsl/render.ts). The daemon must not pre-apply — doing so
+  // would run the MobX action twice per render and clear last_error
+  // diagnostics on the round trip.
+  const body = renderDsl(
+    entry.state.config,
+    entry.state.compiled,
+    entry.state.store,
+    entry.state.registry,
+    payload,
+    at,
+    renderOpts,
+    // [LAW:single-enforcer] The per-segment StripCell sink for the
+    // `debug segments` projection. Its identity stays stable for the
+    // cache entry's lifetime; renderDsl clears + repopulates it
+    // in place. Cells are cheap (already computed during the render);
+    // the per-segment ANSI serialization happens lazily inside the
+    // debug handler so normal renders pay no extra serializer cost.
+    {
+      perSegmentSink: entry.state.lastRenderCellsBySegment,
+      onRenderWarning: (warning) => renderWarnings.push(warning),
+    },
+    // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
+    // and name together, so renderDsl publishes the `theme.effective` the
+    // bar was actually painted from. No separate basePalette argument: one
+    // would be a second clock free to disagree with that name.
+    { ...renderSelectionOf(effective), effects },
+  );
+  // [LAW:one-source-of-truth] Consume the transient click error written by
+  // dispatch on partial/total effect failure, then clear it so it shows
+  // exactly once. Only called when non-null to avoid a no-op persist+MobX
+  // tick on every render.
+  const clickError = sessionState.get(req.hookData.session_id, "click.error");
+  if (clickError) sessionState.clear(req.hookData.session_id, "click.error");
+  const combinedError = [
+    unknownFlagsError,
+    hintsError,
+    entry.lastError,
+    clickError,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  // [LAW:one-source-of-truth] The daemon-wide update notice, read for
+  // THIS session: what it dismissed and whether its config allows the
+  // notice — both values, folded by the notice into zero or one channel.
+  const updates = updateWatch.notice({
+    sessionId,
+    dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
+    enabled: effective.updateNotice,
+  });
+  // [LAW:no-silent-failure] The file whose load failed rides beside its
+  // error so the strip can offer it as a file:// link — the way back into
+  // the file when our own click path may be the thing that is broken.
+  // Null when the error is not a load error, or no file resolved.
+  const failedConfigFile = entry.lastError === null ? null : entry.failedFile;
+  // [LAW:one-source-of-truth] One warning channel: the load-time warning this
+  // config carries and whatever this render could not honour, in one list.
+  // The strip's rows are its messages, joined into the one string
+  // collectDiagnostics splits; the render event's `warn=` is its kinds. A
+  // second channel would be a second place a warning could be dropped.
+  const warnings = [
+    ...(entry.lastWarning === null
+      ? []
+      : [{ kind: "load" as const, message: entry.lastWarning }]),
+    ...renderWarnings,
+  ];
+  const diagnostics = collectDiagnostics(
+    combinedError,
+    updates,
+    warnings.map((w) => w.message).join("\n"),
+  );
+  // [LAW:effects-at-boundaries] The one write the strip depends on, at
+  // the edge: the session's dump file mirrors this render's diagnostics
+  // (present with the full text, absent when there are none) before the
+  // strip that links it goes out — and the link is built from the
+  // write's outcome, so the trailer never names a file that is not there.
+  const dumpFailure = diagnosticDump.sync(
+    sessionId,
+    diagnostics === null ? null : formatDiagnosticDump(diagnostics),
+  );
+  if (dumpFailure !== null)
+    dlog("warn", `diagnostic dump failed: ${dumpFailure}`);
+  const output = composeWithDiagnostics(
+    body,
+    diagnostics,
+    {
+      fullText:
+        dumpFailure === null
+          ? { kind: "file", path: diagnosticDump.pathFor(sessionId) }
+          : { kind: "unavailable", reason: dumpFailure },
+      failedConfigFile,
+    },
+    { width, rowCap, colorCompatibility: effective.colorCompatibility },
+  );
+  const g = gitService.getStats();
+  const u = usageStore.getStats();
+  const fx = effects.lastFrame();
+  // Each placement wearing its own effect, on its own clock; `-` for none.
+  const own =
+    fx.own
+      .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
+      .join(",") || "-";
+  // Each placement fading in, and each dissolving out, on its own clock;
+  // `-` for none.
+  const passages = (frames: readonly PassageFrame[]): string =>
+    frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
+  // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
+  // order, including any its row cap left undrawn; `-` for none.
+  const warned = warnings.map((w) => w.kind).join(",") || "-";
+  noteFacts(facts, {
+    git: `${g.size}/${g.hits}h/${g.misses}m`,
+    usage: `${u.size}/${u.hits}h/${u.misses}m`,
+    effect: fx.effect,
+    effectT: fx.t.toFixed(3),
+    effectRows: `${fx.made}made/${fx.reused}reused`,
+    effectOwn: own,
+    fadeBasis: fx.basis,
+    stateRev: String(fx.revision),
+    fades: passages(fx.fades),
+    leaves: passages(fx.leaves),
+    err: combinedError ? "Y" : "N",
+    upd: String(updates.length),
+    warn: warned,
+  });
+  return { outcome: { kind: "ok" }, resp: { ok: true, output: output + "\n" } };
 }
