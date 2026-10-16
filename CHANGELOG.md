@@ -1,3 +1,10 @@
+## [1.132.2](https://github.com/promptctl/cc-candybar/compare/v1.132.1...v1.132.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **var-system:** a cache key that throws is the variable's error, not the empty key ([#359](https://github.com/promptctl/cc-candybar/issues/359)) ([72bcbe1](https://github.com/promptctl/cc-candybar/commit/72bcbe12ba05a312b724267cb1332552d184688f))
+
 ## [1.132.1](https://github.com/promptctl/cc-candybar/compare/v1.132.0...v1.132.1) (2026-10-16)
 
 
