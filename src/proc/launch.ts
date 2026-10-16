@@ -101,6 +101,9 @@ export const LAUNCH_CATEGORIES = [
   // over a published install). One click, one long-running child; the
   // notice's own running/failed state serialises clicks, so no rate limit.
   "update.apply",
+  // Which panes each watched session's tmux server shows (pane-visibility.ts):
+  // one query per server a second, paced by its own clock, so no rate limit.
+  "frames.visibility",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

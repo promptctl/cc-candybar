@@ -120,7 +120,7 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
   expect(changes.has("s")).toBe(false);
   expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
   expect(log.at(-1)).toMatch(
-    /^feed sid="s" closed subscribers=0 .* drawn=\d+ pushed=\d+/,
+    /^feed sid="s" closed subscribers=0 .* drawn=(\d+) moving=\1 pushed=\d+/,
   );
   // A request noted for a session nobody watches draws nothing.
   feeds.note("s", "again");

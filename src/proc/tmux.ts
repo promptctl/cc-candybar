@@ -22,7 +22,7 @@ export type TmuxRun =
   | { readonly kind: "failed"; readonly reason: string };
 
 function invocation(
-  hint: TmuxHint,
+  hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
   stdinInput?: string,
@@ -65,7 +65,7 @@ export function runTmux(
 
 // The same invocation off the loop: for a render lane.
 export async function runTmuxAsync(
-  hint: TmuxHint,
+  hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
 ): Promise<TmuxRun> {
