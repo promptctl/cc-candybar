@@ -13,8 +13,10 @@
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import {
+  LINKS_CHECK,
   NERD_FONT_CHECK,
   glyphSighting,
+  linkSighting,
   type Asked,
   type CheckReport,
   type MarkBook,
@@ -50,12 +52,26 @@ export function doctorReportKeys(checkName: string): ReportKeys {
   };
 }
 
-// [LAW:nothing-unseen] Whether tmux writes OSC 8 to the client the bar's
-// terminal is attached as — `-` outside tmux, or where no client was seen.
-// The links check does not read it on a click, which is its own proof.
-export function linkFields(terminal: TerminalIdentity): string {
+// [LAW:nothing-unseen] What the links check reasoned over, as logfmt fields:
+// whether tmux writes OSC 8 to the client the bar's terminal is attached as
+// (`-` outside tmux, or where no client was seen), and the links mark on the
+// terminal — `clicked` once a doctor click came back from it (a click's own
+// run carries the mark it just filed), `unread` when the book could not be
+// read, `-` for none or a terminal nothing names.
+export function linkFields(
+  terminal: TerminalIdentity,
+  marks: Asked<MarkBook>,
+): string {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"}`;
+  const sighting =
+    terminal.kind === "seen" ? linkSighting(terminal.identified) : null;
+  const mark =
+    marks.kind === "failed"
+      ? "unread"
+      : sighting === null
+        ? "-"
+        : (marks.value[LINKS_CHECK]?.[sighting] ?? "-");
+  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} linkMark=${mark}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
@@ -80,6 +96,7 @@ export function nerdFontFields(
       case "unknown":
         return `unknown:${JSON.stringify(terminal.called)}`;
       case "bundling":
+      case "unread":
       case "configured":
         return `${terminal.name}@${terminal.version ?? "-"}`;
     }

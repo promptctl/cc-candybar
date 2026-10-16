@@ -115,11 +115,12 @@ import { ceilingScope, type CeilingMove } from "../../memento/edge";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
-  GLYPH_MARKS,
+  LINKS_CHECK,
   checkByName,
+  linkSighting,
+  markOf,
   runDoctor,
   type DoctorFacts,
-  type GlyphMark,
 } from "../../doctor/checks";
 import {
   doctorReportPairs,
@@ -1141,7 +1142,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.marks)} (session=${sid})`,
   );
 }
 
@@ -1166,7 +1167,25 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     ...gathered,
     urlHandler: clickArrived(ctx.clientVersion),
     askedBy: "click",
+    marks: clickedFrom(ctx, gathered),
   };
+}
+
+// [LAW:one-source-of-truth] A doctor click is a link the session's terminal
+// drew and the user clicked, so it settles for good that this terminal draws
+// links: filed in the mark book, where `cc-candybar doctor` — which cannot
+// click — reads it. Nothing is filed where nothing names the terminal, or
+// over a book that cannot be read (the doctor's rows say why).
+function clickedFrom(
+  ctx: VerbContext,
+  { terminal, marks }: ReturnType<typeof gatherFacts>,
+): DoctorFacts["marks"] {
+  const sighting =
+    terminal.kind === "seen" ? linkSighting(terminal.identified) : null;
+  if (sighting === null || marks.kind === "failed") return marks;
+  const clicked = { check: LINKS_CHECK, mark: "clicked" } as const;
+  ctx.doctor.marks.record(clicked, sighting);
+  return { kind: "ok", value: withMark(marks.value, clicked, sighting) };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
@@ -1232,9 +1251,10 @@ const doctorMark: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
   }
-  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
+  const marking = markOf(check.name, mark);
+  if (marking === null) {
     throw new BadVerbArgs(
-      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
+      `doctor-mark: ${check.label} takes no mark ${JSON.stringify(mark)}`,
     );
   }
   const facts = clickFacts(ctx, sid);
@@ -1248,15 +1268,17 @@ const doctorMark: VerbHandler = (value, ctx) => {
   if (facts.marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${facts.marks.reason}`);
   }
-  const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  ctx.doctor.marks.record(...made);
+  ctx.doctor.marks.record(marking, verdict.sighting.id);
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
   writeReport(ctx, sid, {
     ...facts,
-    marks: { kind: "ok", value: withMark(facts.marks.value, ...made) },
+    marks: {
+      kind: "ok",
+      value: withMark(facts.marks.value, marking, verdict.sighting.id),
+    },
   });
 };
 

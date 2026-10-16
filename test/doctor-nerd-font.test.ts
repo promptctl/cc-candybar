@@ -57,7 +57,7 @@ const facts = (
   mark: Made | null = null,
   marks: DoctorFacts["marks"] = {
     kind: "ok",
-    value: mark === null ? {} : withMark({}, "nerdFont", mark.sighting, mark.mark),
+    value: mark === null ? {} : withMark({}, { check: "nerdFont", mark: mark.mark }, mark.sighting),
   },
 ): DoctorFacts => ({ ...HEALTHY_FACTS, nerdFont, marks });
 
@@ -151,11 +151,17 @@ describe("nerdFont probe", () => {
     );
   });
 
-  test("a terminal the doctor has no reading for, but a name, asks the user to look", () => {
-    const t: TerminalFacts = { kind: "unknown", called: "Apple_Terminal" };
-    expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
-      "the doctor cannot read Apple_Terminal's font",
-    );
+  test("a terminal the doctor does not know, but a name, asks the user to look", () => {
+    const t: TerminalFacts = { kind: "unknown", called: "Hyper" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Hyper's font");
+  });
+
+  // Known by name, its font unread: the sighting is the name a sentence calls
+  // it, never its release, as for every terminal the doctor knows.
+  test("a terminal the doctor knows but reads no font for asks the user to look, under its label", () => {
+    const t: TerminalFacts = { kind: "unread", name: "apple-terminal", version: "455.1" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Terminal 455.1's font");
+    expect(idIn(t)).toMatch(/^Terminal\|/);
   });
 
   // A mark there would answer for whichever terminal next goes unnamed.
@@ -249,12 +255,12 @@ describe("the mark book", () => {
   const ID = "iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B1";
 
   test("files each mark under its check and sighting; the latest mark on a sighting answers", () => {
-    const once = withMark({}, "nerdFont", ID, "boxes");
+    const once = withMark({}, { check: "nerdFont", mark: "boxes" }, ID);
     expect(once).toEqual({ nerdFont: { [ID]: "boxes" } });
-    expect(withMark(once, "nerdFont", "other", "drawn")).toEqual({
+    expect(withMark(once, { check: "nerdFont", mark: "drawn" }, "other")).toEqual({
       nerdFont: { [ID]: "boxes", other: "drawn" },
     });
-    expect(withMark(once, "nerdFont", ID, "drawn")).toEqual({ nerdFont: { [ID]: "drawn" } });
+    expect(withMark(once, { check: "nerdFont", mark: "drawn" }, ID)).toEqual({ nerdFont: { [ID]: "drawn" } });
   });
 
   test("text that does not read is a failure naming the file, never an empty book", () => {
@@ -274,6 +280,10 @@ describe("the mark book", () => {
     expect(reason('{"nerdFont":{"x":"maybe"}}')).toBe(
       '/b.json marks "x" "maybe", not drawn or boxes',
     );
+    // Each check takes its own marks, and a check that takes none, none.
+    expect(reason('{"links":{"kitty":"clicked"}}')).toBe("read");
+    expect(reason('{"links":{"kitty":"drawn"}}')).toBe('/b.json marks "kitty" "drawn", not clicked');
+    expect(reason('{"config":{}}')).toBe('/b.json holds marks for "config", which takes none');
   });
 
   test("as a file: absent is the empty book, a mark made is read back by the next reader", () => {
@@ -281,7 +291,7 @@ describe("the mark book", () => {
     try {
       const file = path.join(dir, "state", "doctor-marks.json");
       expect(fileMarkBook(file).read()).toEqual({ kind: "ok", value: {} });
-      fileMarkBook(file).record("nerdFont", ID, "drawn");
+      fileMarkBook(file).record({ check: "nerdFont", mark: "drawn" }, ID);
       // Another process — the CLI, a later daemon — reads the same answer.
       expect(fileMarkBook(file).read()).toEqual({
         kind: "ok",
@@ -290,7 +300,7 @@ describe("the mark book", () => {
       fs.writeFileSync(file, "junk");
       expect(fileMarkBook(file).read()).toMatchObject({ kind: "failed" });
       // A mark is never filed over a book whose other marks would be lost.
-      expect(() => fileMarkBook(file).record("nerdFont", ID, "boxes")).toThrow(
+      expect(() => fileMarkBook(file).record({ check: "nerdFont", mark: "boxes" }, ID)).toThrow(
         /the mark book could not be read/,
       );
       expect(fs.readFileSync(file, "utf8")).toBe("junk");
@@ -309,7 +319,11 @@ describe("the doctor event's Nerd Font fields", () => {
     // The mark on the sighting shown is the one honoured; one on another is not.
     const book: DoctorFacts["marks"] = {
       kind: "ok",
-      value: withMark(withMark({}, "nerdFont", idIn(MENLO), "boxes"), "nerdFont", "elsewhere", "drawn"),
+      value: withMark(
+        withMark({}, { check: "nerdFont", mark: "boxes" }, idIn(MENLO)),
+        { check: "nerdFont", mark: "drawn" },
+        "elsewhere",
+      ),
     };
     expect(nerdFontFields(menlo, book)).toMatch(/ mark=boxes$/);
     expect(
@@ -631,7 +645,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
   });
 
   test("the marks are the mark book's, whichever session made them", () => {
-    const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B1", "drawn");
+    const book = withMark({}, { check: "nerdFont", mark: "drawn" }, "Ghostty 1.3.1|U+E0B0 U+E0B1");
     const { e } = edge(tmuxSays("ghostty 1.3.1"), DEFAULT_DSL_CONFIG, LOCAL, book);
     expect(gathered(e, { tmux: HINT }).marks).toEqual({ kind: "ok", value: book });
   });

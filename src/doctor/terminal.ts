@@ -7,21 +7,135 @@
 
 import type { TerminalEnvHint } from "../terminal-hint.js";
 
-// [LAW:types-are-the-program] The terminals the doctor knows how glyphs reach
-// the screen in, split by HOW: a bundling terminal draws Nerd Font symbols from
-// a copy of Symbols Nerd Font it ships, as a fallback behind whatever font is
-// set, so its font setting cannot take them away; a configured terminal draws
-// them only from the font it is set to use, which the doctor has to read.
+// [LAW:types-are-the-program] How Nerd Font symbols reach the screen in a
+// terminal: a `bundled` terminal draws them from a copy of Symbols Nerd Font
+// it ships, as a fallback behind whatever font is set, so its font setting
+// cannot take them away (`since`: the release it first shipped the copy in,
+// null when every release did); a `configured` terminal draws them only from
+// the font it is set to use, which the doctor reads; an `unread` terminal
+// draws them from its font too, but the doctor has no reader for its font.
+type GlyphSource =
+  | { readonly kind: "bundled"; readonly since: string | null }
+  | { readonly kind: "configured" }
+  | { readonly kind: "unread" };
+
+// [LAW:one-source-of-truth] Everything the doctor knows about one terminal:
+// how a sentence names it; how it names itself in the three places it does —
+// its XTVERSION reply (a prefix, the version after it), TERM_PROGRAM (and
+// whether TERM_PROGRAM_VERSION beside it is this terminal's own release), and
+// TERM, `null` where it does not; whether it draws OSC 8 links (`since`: the
+// release it first did, null when every release did; `null`: it draws none);
+// and how it draws Nerd Font symbols.
+interface TerminalRow {
+  readonly label: string;
+  readonly xtversion: string | null;
+  readonly program: string | null;
+  readonly programVersion: boolean;
+  readonly term: string | null;
+  readonly links: { readonly since: string | null } | null;
+  readonly glyphs: GlyphSource;
+}
+
+// Bundled symbols: kitty's changelog, 0.36.0 "Add NERD fonts builtin";
+// WezTerm's, 20220319 "Symbols Nerd Font Mono is now bundled"; Ghostty embeds
+// Symbols Nerd Font in its binary, and its first public release did.
 //
-// The release each bundling terminal first shipped its copy in (`null`: every
-// release did) — kitty's changelog, 0.36.0 "Add NERD fonts builtin"; WezTerm's,
-// 20220319 "Symbols Nerd Font Mono is now bundled"; Ghostty embeds Symbols Nerd
-// Font in its binary, and its first public release did.
-export const BUNDLED_SINCE = {
-  kitty: "0.36.0",
-  wezterm: "20220319",
-  ghostty: null,
-} as const satisfies Record<string, string | null>;
+// Links: OSC 8 adoption in terminal emulators,
+// github.com/Alhadis/OSC8-Adoption — kitty 0.19, Alacritty 0.11, VS Code
+// 1.72, iTerm2 3.1; WezTerm since early 2018, Ghostty before its first public
+// release. Apple's Terminal is in no release of that list, and its users
+// report it ignores OSC 8 (apple.stackexchange.com/questions/460189).
+//
+// VS Code's forks (Cursor, Windsurf) set TERM_PROGRAM=vscode too, each with
+// its own release in TERM_PROGRAM_VERSION, so that release says nothing about
+// the VS Code it was built from.
+export const TERMINALS = {
+  kitty: {
+    label: "kitty",
+    xtversion: "kitty",
+    program: null,
+    programVersion: true,
+    term: "xterm-kitty",
+    links: { since: "0.19.0" },
+    glyphs: { kind: "bundled", since: "0.36.0" },
+  },
+  wezterm: {
+    label: "WezTerm",
+    xtversion: "WezTerm",
+    program: "WezTerm",
+    programVersion: true,
+    term: "wezterm",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: "20220319" },
+  },
+  ghostty: {
+    label: "Ghostty",
+    xtversion: "ghostty",
+    program: "ghostty",
+    programVersion: true,
+    term: "xterm-ghostty",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: null },
+  },
+  iterm2: {
+    label: "iTerm2",
+    xtversion: "iTerm2",
+    program: "iTerm.app",
+    programVersion: true,
+    term: null,
+    links: { since: "3.1" },
+    glyphs: { kind: "configured" },
+  },
+  alacritty: {
+    label: "Alacritty",
+    xtversion: "alacritty",
+    program: null,
+    programVersion: true,
+    term: "alacritty",
+    links: { since: "0.11.0" },
+    glyphs: { kind: "configured" },
+  },
+  "apple-terminal": {
+    label: "Terminal",
+    xtversion: null,
+    program: "Apple_Terminal",
+    programVersion: true,
+    term: null,
+    links: null,
+    glyphs: { kind: "unread" },
+  },
+  vscode: {
+    label: "VS Code",
+    xtversion: null,
+    program: "vscode",
+    programVersion: false,
+    term: null,
+    links: { since: "1.72" },
+    glyphs: { kind: "unread" },
+  },
+} as const satisfies Record<string, TerminalRow>;
+
+export type TerminalName = keyof typeof TERMINALS;
+type DrawingGlyphs<K extends GlyphSource["kind"]> = {
+  [N in TerminalName]: (typeof TERMINALS)[N]["glyphs"]["kind"] extends K
+    ? N
+    : never;
+}[TerminalName];
+export type BundlingTerminal = DrawingGlyphs<"bundled">;
+export type ConfiguredTerminal = DrawingGlyphs<"configured">;
+export type UnreadTerminal = DrawingGlyphs<"unread">;
+
+const row = (name: TerminalName): TerminalRow => TERMINALS[name];
+
+export function isBundling(name: TerminalName): name is BundlingTerminal {
+  return row(name).glyphs.kind === "bundled";
+}
+
+export function isConfigured(name: TerminalName): name is ConfiguredTerminal {
+  return row(name).glyphs.kind === "configured";
+}
+
+export const terminalLabel = (name: TerminalName): string => row(name).label;
 
 // The private-use glyphs iTerm2 draws itself, whatever the font, when a
 // profile's "Use built-in Powerline glyphs" (`Draw Powerline Glyphs`) is on,
@@ -60,58 +174,10 @@ export function itermDrawsItself(
   );
 }
 
-export type BundlingTerminal = keyof typeof BUNDLED_SINCE;
-const CONFIGURED = ["iterm2", "alacritty"] as const;
-export type ConfiguredTerminal = (typeof CONFIGURED)[number];
-// Terminals the doctor knows by name but reads no font for.
-export type UnreadTerminal = "apple-terminal" | "vscode";
-export type TerminalName =
-  | BundlingTerminal
-  | ConfiguredTerminal
-  | UnreadTerminal;
-
-export function isConfigured(name: TerminalName): name is ConfiguredTerminal {
-  return (CONFIGURED as readonly TerminalName[]).includes(name);
-}
-
-// [LAW:one-source-of-truth] Whether each terminal draws OSC 8 links, and the
-// release it first did (`since: null`: every release did); `null` is a
-// terminal that draws none. From OSC 8 adoption in terminal emulators,
-// github.com/Alhadis/OSC8-Adoption: kitty 0.19, Alacritty 0.11, VS Code 1.72,
-// iTerm2 3.1; WezTerm since early 2018, Ghostty before its first public
-// release. Apple's Terminal is in no release of that list, and its users
-// report it ignores OSC 8 (apple.stackexchange.com/questions/460189).
-export const LINKS_SINCE: Readonly<
-  Record<TerminalName, { readonly since: string | null } | null>
-> = {
-  kitty: { since: "0.19.0" },
-  wezterm: { since: null },
-  ghostty: { since: null },
-  iterm2: { since: "3.1" },
-  alacritty: { since: "0.11.0" },
-  vscode: { since: "1.72" },
-  "apple-terminal": null,
-};
-
 // A terminal named, and the release it reported, or null when nothing said.
 export interface Terminal {
   readonly name: TerminalName;
   readonly version: string | null;
-}
-
-// How the doctor names each terminal in a sentence.
-export const TERMINAL_LABEL: Readonly<Record<TerminalName, string>> = {
-  kitty: "kitty",
-  wezterm: "WezTerm",
-  ghostty: "Ghostty",
-  iterm2: "iTerm2",
-  alacritty: "Alacritty",
-  "apple-terminal": "Terminal",
-  vscode: "VS Code",
-};
-
-export function isBundling(name: TerminalName): name is BundlingTerminal {
-  return Object.hasOwn(BUNDLED_SINCE, name);
 }
 
 // What tmux says about the client attached to the session's pane: its
@@ -123,30 +189,7 @@ export interface TmuxClientTerm {
   readonly termname: string;
 }
 
-// [LAW:one-source-of-truth] Every spelling a terminal names itself with, in
-// the three places it does: its XTVERSION reply (a prefix, the version after
-// it), TERM_PROGRAM, and TERM. One table, read by every route below; `null`
-// is a place the terminal does not name itself.
-const SPELLINGS: Readonly<
-  Record<
-    TerminalName,
-    {
-      readonly xtversion: string | null;
-      readonly program: string | null;
-      readonly term: string | null;
-    }
-  >
-> = {
-  kitty: { xtversion: "kitty", program: null, term: "xterm-kitty" },
-  wezterm: { xtversion: "WezTerm", program: "WezTerm", term: "wezterm" },
-  ghostty: { xtversion: "ghostty", program: "ghostty", term: "xterm-ghostty" },
-  iterm2: { xtversion: "iTerm2", program: "iTerm.app", term: null },
-  alacritty: { xtversion: "alacritty", program: null, term: "alacritty" },
-  "apple-terminal": { xtversion: null, program: "Apple_Terminal", term: null },
-  vscode: { xtversion: null, program: "vscode", term: null },
-};
-
-const NAMES = Object.keys(SPELLINGS) as TerminalName[];
+const NAMES = Object.keys(TERMINALS) as TerminalName[];
 
 // The leading release number of a version string — `0.45.0`, or `20240203`
 // of WezTerm's `20240203-110809-5046fc22` — as numbers to compare.
@@ -173,7 +216,7 @@ export function releasedSince(version: string, since: string): boolean | null {
 // what follows it — past a space or an opening parenthesis — its version.
 function fromXtversion(termtype: string): Terminal | null {
   for (const name of NAMES) {
-    const prefix = SPELLINGS[name].xtversion;
+    const prefix = row(name).xtversion;
     if (
       prefix !== null &&
       termtype.toLowerCase().startsWith(prefix.toLowerCase())
@@ -187,7 +230,7 @@ function fromXtversion(termtype: string): Terminal | null {
 }
 
 function fromTerm(term: string | undefined): Terminal | null {
-  const name = NAMES.find((n) => SPELLINGS[n].term === term);
+  const name = NAMES.find((n) => row(n).term === term);
   return name === undefined ? null : { name, version: null };
 }
 
@@ -209,12 +252,47 @@ export function identifyInTmux(client: TmuxClientTerm): Identified {
 
 export function identifyFromEnv(env: TerminalEnvHint): Identified {
   const program = env.TERM_PROGRAM;
-  const byProgram = NAMES.find((n) => SPELLINGS[n].program === program);
+  const byProgram = NAMES.find((n) => row(n).program === program);
   const terminal =
     byProgram === undefined
       ? fromTerm(env.TERM)
-      : { name: byProgram, version: env.TERM_PROGRAM_VERSION ?? null };
+      : {
+          name: byProgram,
+          version: row(byProgram).programVersion
+            ? (env.TERM_PROGRAM_VERSION ?? null)
+            : null,
+        };
   return terminal === null
     ? { kind: "unknown", called: program ?? env.TERM ?? "" }
     : { kind: "known", terminal };
 }
+
+// Whether a known terminal draws OSC 8 links: it does, it draws none, or its
+// release decides and either went unsaid or is too old.
+export type LinkSupport =
+  | { readonly kind: "draws" }
+  | { readonly kind: "none" }
+  | { readonly kind: "unsaid"; readonly since: string }
+  | {
+      readonly kind: "older";
+      readonly since: string;
+      readonly version: string;
+    };
+
+export function linkSupport({ name, version }: Terminal): LinkSupport {
+  const links = row(name).links;
+  if (links === null) return { kind: "none" };
+  if (links.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links.since };
+  const drawn = releasedSince(version, links.since);
+  return drawn === null
+    ? { kind: "unsaid", since: links.since }
+    : drawn
+      ? { kind: "draws" }
+      : { kind: "older", since: links.since, version };
+}
+
+// The terminals that draw links, as a sentence lists them.
+export const LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null)
+  .map(terminalLabel)
+  .join(", ");

@@ -66,9 +66,14 @@ describe("identifyFromEnv", () => {
     expect(
       identifyFromEnv({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1", TERM: "xterm-256color" }),
     ).toEqual({ kind: "known", terminal: { name: "apple-terminal", version: "455.1" } });
+  });
+
+  // Cursor and Windsurf set TERM_PROGRAM=vscode with their own release beside
+  // it, so the release says nothing about VS Code's.
+  test("VS Code is named by TERM_PROGRAM, and its release is never read from TERM_PROGRAM_VERSION", () => {
     expect(
-      identifyFromEnv({ TERM_PROGRAM: "vscode", TERM_PROGRAM_VERSION: "1.95.3" }),
-    ).toEqual({ kind: "known", terminal: { name: "vscode", version: "1.95.3" } });
+      identifyFromEnv({ TERM_PROGRAM: "vscode", TERM_PROGRAM_VERSION: "0.45.11" }),
+    ).toEqual({ kind: "known", terminal: { name: "vscode", version: null } });
   });
 
   test("anything else is unknown, under the name it went by", () => {

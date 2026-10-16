@@ -56,7 +56,6 @@ import {
   identifyInTmux,
   isBundling,
   isConfigured,
-  TERMINAL_LABEL,
   type ConfiguredTerminal,
 } from "./terminal.js";
 import { fontInUse } from "./font-edge.js";
@@ -320,9 +319,7 @@ function terminalFacts(
   if (identified.kind === "unknown") return identified;
   const { name, version } = identified.terminal;
   if (isBundling(name)) return { kind: "bundling", name, version };
-  if (!isConfigured(name)) {
-    return { kind: "unknown", called: TERMINAL_LABEL[name] };
-  }
+  if (!isConfigured(name)) return { kind: "unread", name, version };
   // Inside tmux the session's environment is the one the tmux server was
   // started in, so what it says of the terminal — its iTerm2 profile, whether
   // it came over ssh — is that first window's, not the attached one's: the

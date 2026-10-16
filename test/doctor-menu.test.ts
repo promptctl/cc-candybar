@@ -130,6 +130,7 @@ function buildRuntime(
   recordRender(sessionState, "s1");
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
+  const marks = memoryMarkBook();
   const doctor: DoctorEdge = {
     probeTmux: () => {
       probes += 1;
@@ -146,7 +147,7 @@ function buildRuntime(
     remoteLogin: () => {
       throw new Error("remoteLogin must not run in this case");
     },
-    marks: memoryMarkBook(),
+    marks,
     fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
   };
@@ -195,6 +196,7 @@ function buildRuntime(
     urlOfVerb,
     openTools,
     logs,
+    marks,
     ctx,
     renderRaw,
     probes: () => probes,
@@ -258,24 +260,27 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
     ]);
   });
 
   // brandon-doctor-v62x.ryu: the 🩺 click is a link the terminal drew and the
-  // user clicked, so the links row is ok in a terminal the CLI would fail.
-  test("the links row is ok on a click, even in a terminal said to draw none", () => {
+  // user clicked, so the links row is ok in a terminal the CLI would fail —
+  // and the click files that proof in the mark book, for the CLI to read.
+  test("the links row is ok on a click, even in a terminal said to draw none, and the click is remembered", () => {
     const rt = buildRuntime(null, CLEAN_LOAD, {
       env: { TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" },
       fontInUse: GHOSTTY.fontInUse,
     });
     rt.openTools();
+    expect(rt.marks.book()).toEqual({});
     rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain("✓ links");
-    expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal's font");
+    expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
+    expect(rt.marks.book()).toEqual({ links: { Terminal: "clicked" } });
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=unknown:"Terminal" font=- mark=- tmuxLinks=- (session=s1)',
+      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
     ]);
   });
 
@@ -407,7 +412,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, "\ue0b0\ue0b1"],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- (session=s1)',
+        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- linkMark=clicked (session=s1)',
       ]);
     });
 
@@ -425,7 +430,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         'doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1 (session=s1)',
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- linkMark=clicked \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {
@@ -449,7 +454,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       ).toThrow(BadVerbArgs);
       expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
-      ).toThrow(/the mark is "perhaps"/);
+      ).toThrow(/Nerd Font takes no mark "perhaps"/);
     });
 
     test("a probe the rate limit refused refuses the click, and the report stands", () => {

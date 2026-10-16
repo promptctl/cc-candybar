@@ -16,10 +16,12 @@ import path from "node:path";
 import { stateDir } from "../daemon/paths.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import {
-  GLYPH_MARKS,
+  MARKS,
+  markOf,
   type Asked,
-  type GlyphMark,
+  type Mark,
   type MarkBook,
+  type MarkedCheck,
 } from "./checks.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -47,10 +49,15 @@ export function parseMarkBook(text: string, file: string): Asked<MarkBook> {
         `holds ${JSON.stringify(check)} as something other than its sightings`,
       );
     }
+    if (!Object.hasOwn(MARKS, check)) {
+      return fault(
+        `holds marks for ${JSON.stringify(check)}, which takes none`,
+      );
+    }
     for (const [id, mark] of Object.entries(sightings)) {
-      if (!(GLYPH_MARKS as readonly unknown[]).includes(mark)) {
+      if (typeof mark !== "string" || markOf(check, mark) === null) {
         return fault(
-          `marks ${JSON.stringify(id)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
+          `marks ${JSON.stringify(id)} ${JSON.stringify(mark)}, not ${MARKS[check as MarkedCheck].join(" or ")}`,
         );
       }
     }
@@ -61,9 +68,8 @@ export function parseMarkBook(text: string, file: string): Asked<MarkBook> {
 // The book with one mark made: the latest mark on a sighting is its answer.
 export function withMark(
   book: MarkBook,
-  check: string,
+  { check, mark }: Mark,
   sighting: string,
-  mark: GlyphMark,
 ): MarkBook {
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
@@ -72,7 +78,7 @@ export interface MarkBookStore {
   readonly read: () => Asked<MarkBook>;
   // Throws when the book cannot be read: a mark is never filed over a book
   // whose other marks would be lost.
-  readonly record: (check: string, sighting: string, mark: GlyphMark) => void;
+  readonly record: (mark: Mark, sighting: string) => void;
 }
 
 // The book as a file: absent is the empty book, anything else must read.
@@ -93,7 +99,7 @@ export function fileMarkBook(
   };
   return {
     read,
-    record: (check, sighting, mark) => {
+    record: (mark, sighting) => {
       const book = read();
       if (book.kind === "failed") {
         throw new Error(
@@ -103,7 +109,7 @@ export function fileMarkBook(
       fs.mkdirSync(path.dirname(file), { recursive: true });
       writeAtomic(
         file,
-        `${JSON.stringify(withMark(book.value, check, sighting, mark), null, 2)}\n`,
+        `${JSON.stringify(withMark(book.value, mark, sighting), null, 2)}\n`,
       );
     },
   };

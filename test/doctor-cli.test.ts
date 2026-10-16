@@ -158,6 +158,21 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toMatch(/\n✗ links — Terminal draws no links \(OSC 8\)/);
   });
 
+  // kitty names itself only in TERM, which carries no release; the bar's
+  // doctor, clicked in kitty, files the proof this command reads.
+  test("a terminal whose release went unsaid is settled by a doctor click remembered for it", async () => {
+    const kitty = inDir({ TERM_PROGRAM: "", TERM: "xterm-kitty" });
+    const unsettled = await doctorPlan(EDGE, NO_HANDLER, kitty, "/");
+    expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
+    const settled = await doctorPlan(
+      { ...EDGE, marks: memoryMarkBook(withMark({}, { check: "links", mark: "clicked" }, "kitty")) },
+      NO_HANDLER,
+      kitty,
+      "/",
+    );
+    expect(settled.stdout).toContain("\n✓ links\n");
+  });
+
   // The CLI cannot take a mark: it shows the glyphs, and the bar's doctor
   // where one is made — and reads the marks made there.
   test("a check that shows glyphs to look at prints them, and where to mark them", async () => {
@@ -185,7 +200,7 @@ describe("doctorPlan", () => {
     const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
     const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
-      { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
+      { ...EDGE, marks: memoryMarkBook(withMark({}, { check: "nerdFont", mark: "drawn" }, id)) },
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
