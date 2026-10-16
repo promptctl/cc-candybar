@@ -1,3 +1,10 @@
+## [1.130.2](https://github.com/promptctl/cc-candybar/compare/v1.130.1...v1.130.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **daemon:** the render event names the client hints it refused ([#347](https://github.com/promptctl/cc-candybar/issues/347)) ([53b513c](https://github.com/promptctl/cc-candybar/commit/53b513c99bddb97b8328c24ec1eba253aec0bf86))
+
 ## [1.130.1](https://github.com/promptctl/cc-candybar/compare/v1.130.0...v1.130.1) (2026-10-16)
 
 
