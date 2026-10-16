@@ -33,10 +33,16 @@ describe("identifyInTmux", () => {
     });
   });
 
-  test("a terminal the doctor has no reading for keeps the name it gave itself", () => {
-    expect(
-      identifyInTmux({ termtype: "Apple_Terminal 455", termname: "xterm-256color" }),
-    ).toEqual({ kind: "unknown", called: "Apple_Terminal 455" });
+  // The release is not the terminal: an update keeps what it is called.
+  test("a terminal the doctor has no reading for keeps the name it gave itself, its release aside", () => {
+    expect(identifyInTmux({ termtype: "foot(1.16.2)", termname: "foot" })).toEqual({
+      kind: "unknown",
+      called: "foot",
+    });
+    expect(identifyInTmux({ termtype: "XTerm 390", termname: "xterm-256color" })).toEqual({
+      kind: "unknown",
+      called: "XTerm",
+    });
   });
 
   test("one that gives no name is unnamed, only its TERM said of it", () => {
@@ -83,6 +89,15 @@ describe("identifyFromEnv", () => {
     expect(identifyFromEnv({ TERM_PROGRAM: "Hyper", TERM: "xterm-256color" })).toEqual({
       kind: "unknown",
       called: "Hyper",
+    });
+  });
+
+  // tmux names itself in its panes' TERM_PROGRAM: that is every terminal
+  // behind it, so it names none of them.
+  test("TERM_PROGRAM=tmux names no terminal", () => {
+    expect(identifyFromEnv({ TERM_PROGRAM: "tmux", TERM: "tmux-256color" })).toEqual({
+      kind: "unnamed",
+      term: "tmux-256color",
     });
   });
 

@@ -20,5 +20,6 @@ export const HEALTHY_FACTS: DoctorFacts = {
   urlHandler: { kind: "unsupported" },
   nerdFont: { kind: "none" },
   marks: { kind: "ok", value: {} },
+  clicked: { kind: "ok", value: [] },
   claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
 };

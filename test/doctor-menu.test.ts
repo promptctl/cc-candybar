@@ -7,6 +7,7 @@
 
 import { DoctorBusy } from "../src/doctor/busy";
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
@@ -100,7 +101,7 @@ function buildRuntime(
   tmux: TmuxHint | null,
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
-  marks: ReturnType<typeof memoryMarkBook> = memoryMarkBook(),
+  clicked: ReturnType<typeof memoryClickedTerminals> = memoryClickedTerminals(),
 ) {
   const config = parseAndValidate(
     "<user>",
@@ -147,7 +148,8 @@ function buildRuntime(
     remoteLogin: () => {
       throw new Error("remoteLogin must not run in this case");
     },
-    marks,
+    marks: memoryMarkBook(),
+    clicked,
     fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
   };
@@ -196,7 +198,7 @@ function buildRuntime(
     urlOfVerb,
     openTools,
     logs,
-    marks,
+    clicked,
     ctx,
     renderRaw,
     probes: () => probes,
@@ -260,35 +262,35 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
     ]);
   });
 
   // brandon-doctor-v62x.ryu: the 🩺 click is a link the terminal drew and the
   // user clicked, so the links row is ok in a terminal the CLI would fail —
-  // and the click files that proof in the mark book, for the CLI to read.
+  // and the click files its terminal, for the CLI to read.
   test("the links row is ok on a click, even in a terminal said to draw none, and the click is remembered", () => {
     const rt = buildRuntime(null, CLEAN_LOAD, {
       env: { TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" },
       fontInUse: GHOSTTY.fontInUse,
     });
     rt.openTools();
-    expect(rt.marks.book()).toEqual({});
+    expect(rt.clicked.list()).toEqual([]);
     rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain("✓ links");
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
-    expect(rt.marks.book()).toEqual({ links: { Terminal: "clicked" } });
+    expect(rt.clicked.list()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
+      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
     ]);
   });
 
-  // Filing the click rides along with the run: a book that cannot be written
+  // Filing the click rides along with the run: a list that cannot be written
   // is logged, and the doctor still reports.
-  test("a mark book that cannot be written does not stop the run, and says so in the log", () => {
+  test("a clicked-terminals list that cannot be written does not stop the run, and says so in the log", () => {
     const unwritable = {
-      ...memoryMarkBook(),
+      ...memoryClickedTerminals(),
       record: () => {
         throw new Error("EROFS: read-only file system");
       },
@@ -297,8 +299,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✓ links");
-    expect(rt.logs).toContain('warn: doctor: links mark not filed for "Ghostty": EROFS: read-only file system');
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ linkMark=- \(session=s1\)$/);
+    expect(rt.logs).toContain(
+      'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
+    );
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -429,7 +433,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, "\ue0b0\ue0b1"],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- linkMark=clicked (session=s1)',
+        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- clicked=yes (session=s1)',
       ]);
     });
 
@@ -447,7 +451,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         'doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1 (session=s1)',
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- linkMark=clicked \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {
@@ -471,7 +475,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       ).toThrow(BadVerbArgs);
       expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
-      ).toThrow(/Nerd Font takes no mark "perhaps"/);
+      ).toThrow(/the mark is "perhaps"/);
     });
 
     test("a probe the rate limit refused refuses the click, and the report stands", () => {

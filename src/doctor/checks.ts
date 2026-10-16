@@ -24,6 +24,7 @@ import {
   identifiedAs,
   linkSupport,
   releasedSince,
+  sightingOf,
   terminalLabel,
   type BundlingTerminal,
   type ConfiguredTerminal,
@@ -161,8 +162,7 @@ export interface FontInUse {
 export type TerminalFacts =
   | { readonly kind: "unreported" }
   | { readonly kind: "unasked"; readonly reason: string }
-  | { readonly kind: "unknown"; readonly called: string }
-  | { readonly kind: "unnamed"; readonly term: string }
+  | Exclude<Identified, { readonly kind: "known" }>
   | {
       readonly kind: "bundling";
       readonly name: BundlingTerminal;
@@ -185,33 +185,11 @@ export type TerminalFacts =
 export const GLYPH_MARKS = ["drawn", "boxes"] as const;
 export type GlyphMark = (typeof GLYPH_MARKS)[number];
 
-// [LAW:types-are-the-program] The marks the book holds for each check: the
-// user's word on the glyphs the Nerd Font check showed, and a doctor click
-// that came back from a terminal — a link it drew and the user clicked, so it
-// draws links (src/daemon/verbs/index.ts records it on every doctor click).
-export const MARKS = {
-  nerdFont: GLYPH_MARKS,
-  links: ["clicked"],
-} as const;
-export type MarkedCheck = keyof typeof MARKS;
-type MarkOf<C extends MarkedCheck> = (typeof MARKS)[C][number];
-export type Mark = {
-  readonly [C in MarkedCheck]: { readonly check: C; readonly mark: MarkOf<C> };
-}[MarkedCheck];
-
-// [LAW:parse-dont-validate] A check name and a mark as one the book holds,
-// or null — the book's parse and the mark verb both gate through this.
-export function markOf(check: string, mark: string): Mark | null {
-  if (!Object.hasOwn(MARKS, check)) return null;
-  const marks: readonly string[] = MARKS[check as MarkedCheck];
-  return marks.includes(mark) ? ({ check, mark } as Mark) : null;
-}
-
-// Every mark made: per check, the mark on each sighting it was made on
-// (src/doctor/mark-book.ts keeps it).
-export type MarkBook = {
-  readonly [C in MarkedCheck]?: Readonly<Record<string, MarkOf<C>>>;
-};
+// Every mark the user has made: per check that takes one, the mark on each
+// sighting (Sighting.id) it was made on (src/doctor/mark-book.ts keeps it).
+export type MarkBook = Readonly<
+  Partial<Record<string, Readonly<Record<string, GlyphMark>>>>
+>;
 
 // [LAW:types-are-the-program] A bar that draws no private-use glyph has no
 // terminal to ask about, so `none` carries none and nothing is read for it.
@@ -244,6 +222,10 @@ export interface DoctorFacts {
   // The user's marks, or why the book could not be read; a check honours
   // only the mark on the sighting it shows.
   readonly marks: Asked<MarkBook>;
+  // The terminals a doctor click has come back from, by their sightings
+  // (`sightingOf`), or why they could not be read
+  // (src/doctor/clicked-terminals.ts).
+  readonly clicked: Asked<readonly string[]>;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -494,65 +476,41 @@ const urlHandler: Check = {
   },
 };
 
-export const LINKS_CHECK = "links";
-
 type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
-
-// What a links mark answers for: the terminal, by the name it goes by — never
-// its release (an update draws what it drew), nor whether tmux stands between,
-// which tmux says for itself on every run — or null where nothing names it,
-// since a mark there would answer for whichever terminal next goes unnamed.
-export function linkSighting(identified: Identified): string | null {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return null;
-  }
-}
 
 const CLICK_TO_SEE =
   "click 🩺 doctor in the bar's settings menu: if it runs, links work";
-const PROVE_BY_CLICK = `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
 
 // Whether the terminal draws the bar's links: a doctor click that came back
 // from it settles that for good; otherwise what the doctor knows of its
 // releases, and of a terminal it does not know, nothing.
 function drawsLinks(
   identified: Identified,
-  marks: Asked<MarkBook>,
-):
-  | LinkSupport
-  | { readonly kind: "unknown" }
-  | { readonly kind: "unnamed"; readonly term: string } {
-  const id = linkSighting(identified);
-  if (
-    marks.kind === "ok" &&
-    id !== null &&
-    marks.value.links?.[id] === "clicked"
-  ) {
+  clicked: Asked<readonly string[]>,
+): LinkSupport | { readonly kind: "unknown" } {
+  const id = sightingOf(identified);
+  if (clicked.kind === "ok" && id !== null && clicked.value.includes(id)) {
     return { kind: "draws" };
   }
-  switch (identified.kind) {
-    case "known":
-      return linkSupport(identified.terminal);
-    case "unknown":
-      return { kind: "unknown" };
-    case "unnamed":
-      return identified;
-  }
+  return identified.kind === "known"
+    ? linkSupport(identified.terminal)
+    : { kind: "unknown" };
 }
 
 // Why the bar's links do not reach the user, the terminal's own reason first:
 // tmux passing links through helps only a terminal that draws them.
 function linkProblems(
   { identified, tmuxClient }: SeenTerminal,
-  marks: Asked<MarkBook>,
+  clicked: Asked<readonly string[]>,
 ): string[] {
   const called = identifiedAs(identified);
-  const support = drawsLinks(identified, marks);
+  const support = drawsLinks(identified, clicked);
+  // A click is remembered under the terminal's sighting, so one with none is
+  // proved afresh by every click.
+  const prove =
+    sightingOf(identified) === null
+      ? CLICK_TO_SEE
+      : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
   const terminal = ((): string[] => {
     switch (support.kind) {
       case "draws":
@@ -567,25 +525,21 @@ function linkProblems(
         ];
       case "unsaid":
         return [
-          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is — ${PROVE_BY_CLICK}`,
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is — ${prove}`,
         ];
       case "unknown":
         return [
-          `the doctor does not know whether ${called} draws links (OSC 8) — ${PROVE_BY_CLICK}`,
-        ];
-      // Nothing to remember a click under: its TERM is shared by many.
-      case "unnamed":
-        return [
-          `nothing names this terminal${support.term === "" ? "" : ` but its TERM (${support.term})`}, so the doctor cannot tell whether it draws links (OSC 8) — ${CLICK_TO_SEE}`,
+          `the doctor does not know whether ${called} draws links (OSC 8) — ${prove}`,
         ];
     }
   })();
-  // A click is remembered in the mark book, so one that cannot be read
-  // leaves the question open however often the doctor is clicked.
-  const book =
-    marks.kind === "failed" &&
-    (support.kind === "unsaid" || support.kind === "unknown")
-      ? [`the mark book could not be read: ${marks.reason}`]
+  // A remembered click overturns any verdict but `draws`, so a list that
+  // cannot be read is named beside every other.
+  const remembered =
+    clicked.kind === "failed" && support.kind !== "draws"
+      ? [
+          `the terminals a doctor click came back from could not be read: ${clicked.reason}`,
+        ]
       : [];
   // `hyperlinks` in `#{client_termfeatures}` is tmux's word that it writes
   // OSC 8 to the client (tmux 3.4 and later; measured on 3.6a, where
@@ -599,20 +553,20 @@ function linkProblems(
       : [
           `tmux does not pass links through to ${called} — add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`,
         ];
-  return [...terminal, ...book, ...tmux];
+  return [...terminal, ...remembered, ...tmux];
 }
 
 // "Links are available and clickable" (brandon-doctor-v62x.ryu): the terminal
 // drawing the bar draws OSC 8 links, and inside tmux, tmux passes them
 // through. A click on the bar's 🩺 doctor is such a link, drawn and clicked,
-// so a run it asked for is its own proof — and the click files that proof in
-// the mark book, where the command, which reasons from what tmux and the
-// terminal say about themselves, reads it.
+// so a run it asked for is its own proof — and the click files its terminal
+// (src/doctor/clicked-terminals.ts), where the command, which reasons from
+// what tmux and the terminal say about themselves, reads it.
 const links: Check = {
-  name: LINKS_CHECK,
+  name: "links",
   label: "links",
   takesMark: false,
-  probe: ({ askedBy, terminal, marks }) => {
+  probe: ({ askedBy, terminal, clicked }) => {
     if (askedBy === "click") return { ok: true };
     switch (terminal.kind) {
       case "unreported":
@@ -627,7 +581,7 @@ const links: Check = {
           reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`,
         };
       case "seen":
-        return problemsVerdict(linkProblems(terminal, marks));
+        return problemsVerdict(linkProblems(terminal, clicked));
     }
   },
 };
@@ -716,9 +670,8 @@ function terminalCalled(terminal: TerminalFacts): string {
     case "unasked":
       return "this terminal";
     case "unknown":
-      return terminal.called;
     case "unnamed":
-      return terminal.term || "this terminal";
+      return identifiedAs(terminal);
     case "bundling":
     case "unread":
     case "configured":
@@ -728,21 +681,18 @@ function terminalCalled(terminal: TerminalFacts): string {
   }
 }
 
-// What a mark answers for, or null where nothing names the terminal — its
-// TERM at most, which many terminals share, so a mark there would answer for
-// whichever terminal next goes unnamed under it. A named
-// terminal is its name, never its release (an update draws what it drew), and
-// for one whose font was read, the font and where it was read — so a mark
+// What a mark answers for: the terminal's sighting (`sightingOf`), and for
+// one whose font was read, the font and where it was read too — so a mark
 // made under one font, or before the built-in glyphs were turned on, answers
 // nothing once the reading changes, and the fresh reading speaks again.
 function sightedIn(terminal: TerminalFacts): string | null {
   switch (terminal.kind) {
     case "unreported":
     case "unasked":
-    case "unnamed":
       return null;
     case "unknown":
-      return terminal.called;
+    case "unnamed":
+      return sightingOf(terminal);
     case "bundling":
     case "unread":
       return terminalLabel(terminal.name);

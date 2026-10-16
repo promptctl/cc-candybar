@@ -237,8 +237,7 @@ function fromTerm(term: string | undefined): Terminal | null {
 // [LAW:types-are-the-program] What identifying the terminal found: one the
 // doctor knows; one it does not, by the name it gave itself (its XTVERSION
 // reply, or TERM_PROGRAM); or one that gave none, so only the TERM it runs
-// under is said of it (empty when unset) — a value many terminals share, so
-// it names none of them, and nothing is remembered under it.
+// under is said of it (empty when unset) — a value many terminals share.
 export type Identified =
   | { readonly kind: "known"; readonly terminal: Terminal }
   | { readonly kind: "unknown"; readonly called: string }
@@ -250,9 +249,12 @@ export type Identified =
 export function identifyInTmux(client: TmuxClientTerm): Identified {
   const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
   if (terminal !== null) return { kind: "known", terminal };
-  return client.termtype === ""
+  // An XTVERSION reply is a name and the release after it (`foot(1.16.2)`):
+  // the name alone is the terminal, so an update keeps what it was called.
+  const called = /^[^\s(]*/.exec(client.termtype)![0];
+  return called === ""
     ? { kind: "unnamed", term: client.termname }
-    : { kind: "unknown", called: client.termtype };
+    : { kind: "unknown", called };
 }
 
 export function identifyFromEnv(env: TerminalEnvHint): Identified {
@@ -268,9 +270,29 @@ export function identifyFromEnv(env: TerminalEnvHint): Identified {
             : null,
         };
   if (terminal !== null) return { kind: "known", terminal };
-  return program === undefined
+  // tmux sets TERM_PROGRAM in its panes to its own name, which every
+  // terminal behind it shares: no name of a terminal.
+  return program === undefined || program === "tmux"
     ? { kind: "unnamed", term: env.TERM ?? "" }
     : { kind: "unknown", called: program };
+}
+
+// What a remembered answer about the terminal is filed under — a doctor
+// click that came back from it, a mark on its glyphs: the name a sentence
+// calls it, never its release (an update draws what it drew); for one nothing
+// names, the TERM it runs under, which this machine's terminals under that
+// TERM share, so an answer for one is an answer for each (the better failure
+// than a check no answer can settle); null where not even a TERM was said,
+// since an answer there would hold for whichever terminal next said nothing.
+export function sightingOf(identified: Identified): string | null {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || null;
+  }
 }
 
 // The identified terminal as a sentence names it.

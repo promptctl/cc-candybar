@@ -6,6 +6,7 @@ import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { stripPrivateGlyphs } from "../src/render/strip";
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,6 +47,7 @@ const EDGE: DoctorEdge = {
     throw new Error("remoteLogin must not run in this case");
   },
   marks: memoryMarkBook(),
+  clicked: memoryClickedTerminals(),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -165,7 +167,7 @@ describe("doctorPlan", () => {
     const unsettled = await doctorPlan(EDGE, NO_HANDLER, kitty, "/");
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
-      { ...EDGE, marks: memoryMarkBook(withMark({}, { check: "links", mark: "clicked" }, "kitty")) },
+      { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
       NO_HANDLER,
       kitty,
       "/",
@@ -200,7 +202,7 @@ describe("doctorPlan", () => {
     const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
     const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
-      { ...EDGE, marks: memoryMarkBook(withMark({}, { check: "nerdFont", mark: "drawn" }, id)) },
+      { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",

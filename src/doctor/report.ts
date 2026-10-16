@@ -12,11 +12,10 @@
 // `CHECKS` is static, so a fixed set of scalar keys needs no series encoding.
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
+import { sightingOf } from "./terminal.js";
 import {
-  LINKS_CHECK,
   NERD_FONT_CHECK,
   glyphSighting,
-  linkSighting,
   type Asked,
   type CheckReport,
   type MarkBook,
@@ -54,24 +53,26 @@ export function doctorReportKeys(checkName: string): ReportKeys {
 
 // [LAW:nothing-unseen] What the links check reasoned over, as logfmt fields:
 // whether tmux writes OSC 8 to the client the bar's terminal is attached as
-// (`-` outside tmux, or where no client was seen), and the links mark on the
-// terminal — `clicked` once a doctor click came back from it (a click's own
-// run carries the mark it just filed), `unread` when the book could not be
-// read, `-` for none or a terminal nothing names.
+// (`-` outside tmux, or where no client was seen), and whether a doctor click
+// has come back from the terminal — a click's own run carries the terminal it
+// just filed, so `no` there is a filing that failed; `unread` when the list
+// could not be read, `-` where nothing names the terminal.
 export function linkFields(
   terminal: TerminalIdentity,
-  marks: Asked<MarkBook>,
+  clicked: Asked<readonly string[]>,
 ): string {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
   const sighting =
-    terminal.kind === "seen" ? linkSighting(terminal.identified) : null;
-  const mark =
-    marks.kind === "failed"
+    terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  const from =
+    clicked.kind === "failed"
       ? "unread"
       : sighting === null
         ? "-"
-        : (marks.value[LINKS_CHECK]?.[sighting] ?? "-");
-  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} linkMark=${mark}`;
+        : clicked.value.includes(sighting)
+          ? "yes"
+          : "no";
+  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

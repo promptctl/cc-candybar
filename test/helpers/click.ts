@@ -64,6 +64,14 @@ export function testVerbContext(
           throw new Error("doctor: no mark book in this test");
         },
       },
+      clicked: {
+        read: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
+        record: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
+      },
       fontInUse: () => {
         throw new Error("doctor: no font edge in this test");
       },

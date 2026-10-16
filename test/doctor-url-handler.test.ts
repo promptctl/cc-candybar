@@ -6,6 +6,7 @@
 // app's script against the installer that writes it.
 
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
@@ -408,6 +409,7 @@ describe("the daemon's side of the round trip", () => {
           throw new Error("remoteLogin must not run in this case");
         },
         marks: memoryMarkBook(),
+        clicked: memoryClickedTerminals(),
         fontInUse: () => {
           throw new Error("fontInUse must not run in this case");
         },
@@ -477,7 +479,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
+      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
     ]);
   });
 
@@ -488,7 +490,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
+      "doctor: config=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
     ]);
   });
 

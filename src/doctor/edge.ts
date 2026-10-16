@@ -62,6 +62,10 @@ import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
 import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
+import {
+  fileClickedTerminals,
+  type ClickedTerminalsStore,
+} from "./clicked-terminals.js";
 
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
@@ -70,6 +74,9 @@ export interface DoctorEdge {
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).
   readonly marks: MarkBookStore;
+  // The terminals a doctor click has come back from, kept for good
+  // (src/doctor/clicked-terminals.ts).
+  readonly clicked: ClickedTerminalsStore;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
   readonly remoteLogin: (pid: number) => Asked<boolean>;
@@ -220,6 +227,7 @@ export function productionEdge(
     fontInUse,
     loadConfig,
     marks: fileMarkBook(),
+    clicked: fileClickedTerminals(),
   };
 }
 
@@ -439,6 +447,7 @@ export function gatherFacts(
             terminal: terminalFacts(edge, terminal, hints, glyphs),
           },
     marks: edge.marks.read(),
+    clicked: edge.clicked.read(),
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(
