@@ -331,7 +331,19 @@ describe("the carousel rotates by applying", () => {
         ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
-    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu, carousel, swatch or swatches\)/);
+    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/);
+  });
+
+  test("a themePreview naming an undeclared action is a load error too", () => {
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        `{ segments: { demo: { template: '{{ themePreview "noSuchApply" }}' } },
+           root: { rows: { identity: { h: ['demo'] }, status: { h: [] } } } }`,
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      ),
+    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/);
   });
 
   test("a carousel over the wrong kind of action names the carousel, not the picker", () => {

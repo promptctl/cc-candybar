@@ -115,6 +115,12 @@ describe("{{ swatch }}", () => {
       /swatch references action "applyWord", whose options are not colour-valued/,
     );
   });
+
+  test("an option outside the domain is refused, naming it, before any palette is asked for it", () => {
+    expect(stripAnsi(rig('{{ swatch "applyTheme" "no-such-theme" }}').rendered)).toMatch(
+      /swatch "applyTheme": "no-such-theme" is not one of its options/,
+    );
+  });
 });
 
 describe('{{ themePreview "applyAction" }}', () => {

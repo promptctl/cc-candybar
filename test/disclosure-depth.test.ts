@@ -342,6 +342,23 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     expect(rt.bgOf(list)).toBe(
       bandItemFor(palette, band2, regionAddress(rt, list), ColorDepth.TRUECOLOR).hex,
     );
+
+    // The ⚙ beside the theme control is a trigger in the depth-1 band too, so
+    // it opens depth 2, and the style control behind it opens depth 3 — the
+    // deepest the bundled menu reaches, and its list a depth-3 item.
+    const gear = "candybar.gear";
+    rt.clickWriting(gear, pickers, "gear");
+    rt.render();
+    expect(rt.bgOf(gear)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
+    const style = "candybar.style";
+    rt.clickWriting(style, sharedMenuStateKey("candybar.gearPickers"), "candybar.apply.style");
+    rt.render();
+    const band3: Disclosure = { ...band0, depth: 3 };
+    expect(rt.bgOf(style)).toBe(bandFor(palette, band3, ColorDepth.TRUECOLOR).state.hex);
+    const styles = "candybar.list.style.0";
+    expect(rt.bgOf(styles)).toBe(
+      bandItemFor(palette, band3, regionAddress(rt, styles), ColorDepth.TRUECOLOR).hex,
+    );
     rt.dispose();
   });
 });

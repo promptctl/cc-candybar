@@ -101,13 +101,19 @@ export function optionPalette(
   runtime: ActionRuntime,
   applyName: string,
   helper: "swatch" | "themePreview",
-  option?: string,
+  chosen?: string,
 ): Palette {
   const apply = requireSwatchable(runtime, applyName, helper);
-  return apply.paletteOf(
-    option ?? readVar(runtime.store, apply.stateVar),
-    renderLook(runtime, `{{ ${helper} }}`),
-  );
+  const option = chosen ?? readVar(runtime.store, apply.stateVar);
+  // [LAW:parse-dont-validate] A domain's `paletteOf` answers for its members;
+  // an option named in a template, or a value the key held before a reload
+  // took its member away, is checked here, where it crosses into it.
+  if (!apply.options.includes(option)) {
+    throw new Error(
+      `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`,
+    );
+  }
+  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 
 export function swatchFuncs(

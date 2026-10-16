@@ -992,12 +992,11 @@ const planeShortfall = (
  * How far a band's plane recedes from its state colour toward `background`:
  * `base + perDepth × depth`, capped — and where that plane breaks a band floor,
  * toward `foreground`, then either as far as the cap (`computeUnroundedBand`).
- * Two cues move with depth — the hue advances and the plane recedes. The cap
- * is the limit: between depths 2 and
- * 3 only 0.05 of recession remains while `hueAtDepth` has wrapped onto a hue
- * already used, so adjacent planes are guaranteed apart only through depth 2
- * (the bundled door → ⚙ → picker). A trigger still stands off its plane at
- * depth 3; `test/decor.test.ts` pins the covered depths.
+ * Two cues move with depth — the hue advances and the plane recedes. Past the
+ * cap the recession stops moving (only 0.05 lies between depths 2 and 3, and
+ * `hueAtDepth` has wrapped onto a hue already used), so from there the plane
+ * search's twelfths keep adjacent planes apart; `test/decor.test.ts` pins the
+ * depths the bundled menu reaches (door → tab → ⚙ → list, 0–3).
  */
 export const BAND_RECESSION = {
   base: 0.42,
@@ -1030,8 +1029,7 @@ export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
  * How far apart (ΔE in OKLab) the colours of nested bands stand, the eye's
  * ~.02 threshold of a visible difference being the unit: a trigger off the
  * plane it opens, and a plane off the plane it is nested in. They hold over
- * the depths a bar reaches (0–2; depth 3 is the model's limit, see
- * BAND_RECESSION) in truecolor by the construction below —
+ * the depths a bar reaches (0–3) in truecolor by the construction below —
  * `test/decor.test.ts` measures every lineage against them — and `bandFor`
  * holds each one again on the colours drawn at 256 and ansi. A nested trigger is held off the
  * plane it sits on by STATE_FLOOR, as every open trigger is held off what it
@@ -1075,8 +1073,8 @@ export interface Band extends BandColours {
  * `stateFor`'s at that depth, and a plane whose rounding breaks a
  * `BAND_FLOORS` distance its unrounded colours kept is replaced by the
  * nearest drawn colour that keeps it (`ensureDrawn`). A distance the
- * unrounded band itself misses (depth 3) is not one rounding broke, so it is
- * not asked of the drawn colours either.
+ * unrounded band itself misses is not one rounding broke, so it is not asked
+ * of the drawn colours either.
  *
  * Memoised per (palette, disclosure, drawnAt): the render walk asks for every
  * segment's band on every render, and palettes are memoised objects
@@ -1181,8 +1179,12 @@ function computeUnroundedBand(
   // The plane recedes into the background, as a band always has — or, where
   // that plane would stand too near its trigger or the plane it hangs in (a
   // state the search carried to the background to stand off a row of vivid
-  // shades), into the foreground, then into either as far as the cap: the
+  // shades), into the foreground, then into either as far as the cap, then
+  // the twelfth of the way to either pole nearest the depth's recession: the
   // first that holds the band's floors, and the background where none does.
+  // The twelfths are what keep a deep band off the plane it hangs in once the
+  // cap leaves two depths' recessions a hair apart (the settings menu's ⚙ →
+  // style list is depth 3), by receding it less.
   const into = (pole: ThemePole, amount: number): ColorRgba =>
     blendRgb(state, paletteRole(palette, pole), amount);
   const enclosing = enclosingPlane(palette, disclosure, drawnAt);
@@ -1201,9 +1203,19 @@ function computeUnroundedBand(
         into("foreground", recession),
         into("background", BAND_RECESSION.cap),
         into("foreground", BAND_RECESSION.cap),
+        ...PLANE_STEPS.toSorted(
+          (a, b) => Math.abs(a - recession) - Math.abs(b - recession),
+        ).flatMap((amount) => [
+          into("background", amount),
+          into("foreground", amount),
+        ]),
       ].find(holds) ?? intoBackground,
   };
 }
+
+// Every twelfth of the way from a state to a pole, the fine end of the plane
+// search above.
+const PLANE_STEPS = Array.from({ length: 12 }, (_, i) => (i + 1) / 12);
 
 // A floor a band's drawn plane must hold: true when `candidate`, already drawn,
 // holds it against the neighbour `drawn` shows it beside.

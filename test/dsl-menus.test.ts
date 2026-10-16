@@ -395,7 +395,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       expect((e as ConfigError).message).toMatch(
-        /unknown action "noSuchApply" \(in a picker, menu, carousel, swatch or swatches\)/,
+        /unknown action "noSuchApply" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/,
       );
     }
   });

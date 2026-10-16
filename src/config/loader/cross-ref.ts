@@ -1212,7 +1212,7 @@ export function validateDeclarations(
         if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
         const inOptions =
           site === "options"
-            ? " (in a picker, menu, carousel, swatch or swatches)"
+            ? " (in a picker, menu, carousel, swatch, swatches or themePreview)"
             : "";
         if (via !== null) {
           checkHelperIssue(
