@@ -39,13 +39,15 @@ import {
 import { dlog } from "./log";
 import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { REGISTRY_URL } from "../install/currency";
+import { isAbsolute } from "node:path";
+import { explicitConfigPath } from "../utils/user-path";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
   parseClientHints,
+  refusedHintsError,
   sanitizeClientVersion,
-  sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
@@ -928,8 +930,14 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       for (const { path, expected, got } of report.typeMismatches) {
         wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
       }
-      if (req.cwd === "") {
-        wireProblems.push("request 'cwd' is empty");
+      // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
+      // request's cwd anchors a relative `--config` (parseRenderArgs), and a
+      // relative anchor would resolve against the daemon's own cwd
+      // (brandon-config-nuq6). Both clients send their process cwd.
+      if (!isAbsolute(req.cwd)) {
+        wireProblems.push(
+          `request 'cwd' is not an absolute path: "${req.cwd}"`,
+        );
       }
       if (wireProblems.length > 0) {
         stats.requestsErrored++;
@@ -945,7 +953,10 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
+      const { configFile, unknownFlagsError } = parseRenderArgs(
+        req.args,
+        req.cwd,
+      );
       const sessionId = req.hookData.session_id;
       // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
       // observed and the daemon cannot. Raw `req.*` hint fields are not read
@@ -961,6 +972,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // post-reserve" with no semantic split between wire-supplied and
       // fallback values.
       const hints = parseClientHints(req);
+      const hintsError = refusedHintsError(req, hints);
       // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
       // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
       // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
@@ -1113,7 +1125,12 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       );
       if (clickError)
         sessionState.clear(req.hookData.session_id, "click.error");
-      const combinedError = [unknownFlagsError, entry.lastError, clickError]
+      const combinedError = [
+        unknownFlagsError,
+        hintsError,
+        entry.lastError,
+        clickError,
+      ]
         .filter(Boolean)
         .join("\n");
       // [LAW:one-source-of-truth] The daemon-wide update notice, read for
@@ -1274,14 +1291,18 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
 // diagnostic icon (caller composes it alongside config errors). The
-// `--config` value crosses `sanitizeConfigPath`, the same rule as the
+// `--config` value crosses `explicitConfigPath` against the CLIENT's cwd (the
+// request's, brandon-config-nuq6), the rule the client applies to its
 // `configEnv` hint: empty is no override, `~` is expanded once, here.
 //
 // `tokens: true, strict: false, allowPositionals: true` together let the
 // parser emit a token entry for every flag (known or unknown) without
 // throwing on unknown ones, and without mis-classifying their values as
 // positionals.
-function parseRenderArgs(args: string[]): {
+function parseRenderArgs(
+  args: string[],
+  cwd: string,
+): {
   configFile: string | undefined;
   unknownFlagsError: string | null;
 } {
@@ -1303,7 +1324,7 @@ function parseRenderArgs(args: string[]): {
     ),
   ];
   return {
-    configFile: sanitizeConfigPath(values.config),
+    configFile: explicitConfigPath(cwd, values.config),
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };

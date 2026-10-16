@@ -747,12 +747,24 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     expect(blind.kind).toBe("clean");
     if (blind.kind === "clean") expect(blind.layers).toEqual([]);
     // ...the CLI edge lifts it into the target.
-    const viaEnv = await checkConfig(detectConfigEnv(process.env), cwd);
+    const viaEnv = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
     if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([p]);
     process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
-    const absent = await checkConfig(detectConfigEnv(process.env), cwd);
+    const absent = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
+  });
+
+  // brandon-config-nuq6: a relative target names a file from the cwd the
+  // check runs in — its parameter — never the process's.
+  it("resolves a relative target against its cwd", async () => {
+    const p = write(
+      "rel/target.json5",
+      `{ segments: { a: { template: 'rel' } }, root: { h: ['a'] } }`,
+    );
+    const outcome = await checkConfig("target.json5", path.join(dir, "rel"));
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", async () => {

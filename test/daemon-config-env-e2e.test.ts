@@ -18,6 +18,7 @@ import {
   hookData,
   killAndWait,
   render,
+  renderRequest,
   stripAnsi,
 } from "./helpers/daemon-e2e";
 import {
@@ -156,13 +157,62 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(pickOverBoth).not.toContain("Config file not found");
   });
 
+  // brandon-config-nuq6: `--config` arrives as the client's raw argv, so a
+  // relative path is resolved against the cwd the client reported, never the
+  // daemon's own.
+  test("a relative --config resolves against the client's cwd", async () => {
+    const bar = stripAnsi(
+      await render(
+        sockPath,
+        "cfg-flag-relative",
+        projectDir,
+        {},
+        configFlag(path.basename(override)),
+      ),
+    );
+    expect(bar).toContain("OVERRIDE-WINS");
+    expect(bar).not.toContain("Config file not found");
+  });
+
+  // brandon-config-nuq6: a client older than the daemon sends the variable
+  // raw. The checkpoint refuses it — the daemon would read it against its own
+  // cwd — and the bar says so rather than rendering another config unexplained.
+  test("a relative configEnv hint is refused on the bar, not resolved against the daemon's cwd", async () => {
+    const bar = stripAnsi(
+      await render(sockPath, "cfg-env-stale-client", projectDir, {
+        configEnv: path.basename(override),
+      }),
+    );
+    expect(bar).toContain('Client hints refused: configEnv="override.json5"');
+    expect(bar).not.toContain("OVERRIDE-WINS");
+  });
+
+  // The request's cwd anchors a relative --config, so a relative cwd is a
+  // frame no client of ours builds: refused, never anchored at the daemon's.
+  test("a render request whose cwd is not absolute is a bad request", async () => {
+    await expect(
+      renderRequest(sockPath, {
+        hookData: hookData("cfg-relative-cwd", projectDir),
+        args: configFlag("override.json5"),
+        cwd: "proj",
+      }),
+    ).rejects.toThrow(/request 'cwd' is not an absolute path: "proj".*BAD_REQUEST/);
+  });
+
   // The production wiring end to end: the REAL client (`dist/index.mjs`,
   // the bundle `cc-candybar install` stages) reads the hook payload from
   // stdin, lifts CC_CANDYBAR_CONFIG from ITS OWN environment into the
   // `configEnv` hint (src/index.ts), and relays it over the socket — the
   // daemon, spawned without the variable, renders the hinted file's bar.
-  test("the real client carries its own CC_CANDYBAR_CONFIG to the daemon", async () => {
-    const sid = "cfg-env-real-client";
+  //
+  // brandon-config-nuq6: a RELATIVE value names a file relative to the
+  // client's cwd. The daemon runs in another directory, so the client must
+  // resolve it before it crosses the wire.
+  test.each([
+    ["an absolute", () => override],
+    ["a relative", () => path.basename(override)],
+  ])("the real client carries %s CC_CANDYBAR_CONFIG to the daemon", async (_, value) => {
+    const sid = `cfg-env-real-client-${path.isAbsolute(value()) ? "abs" : "rel"}`;
     // Warm the entry so the client's one bounded request cannot hit a cold
     // first-load timeout (a real client shows a blank line and retries on
     // the next tick; a test has no next tick). The cache key is
@@ -175,7 +225,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       [path.join(process.cwd(), "dist", "index.mjs")],
       {
         cwd: projectDir,
-        env: { ...env, CC_CANDYBAR_CONFIG: override },
+        env: { ...env, CC_CANDYBAR_CONFIG: value() },
         input: JSON.stringify(hookData(sid, projectDir)),
         encoding: "utf8",
         timeout: 10_000,

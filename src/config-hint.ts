@@ -1,3 +1,5 @@
+import { explicitConfigPath } from "./utils/user-path";
+
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own
 // environment.
@@ -19,12 +21,15 @@ export const CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 
 // [LAW:dataflow-not-control-flow] Total over the client's environment: an
 // unset or empty variable is the affirmative "no override" — `undefined`, the
-// hint left off the wire — never a failure to determine. The value is raw;
-// each consumer makes it literal (`sanitizeConfigPath` on the daemon side,
-// `checkConfig` on the CLI side), never this probe.
+// hint left off the wire — never a failure to determine. A set value is made
+// absolute HERE, against this client's cwd (brandon-config-nuq6): the daemon
+// is detached, so a relative path it resolved would name a file relative to
+// whichever shell spawned it, and it records the hint for clicks that carry
+// no cwd of their own. So the daemon accepts only an absolute hint, like
+// `claudeConfigDir` (src/claude-settings.ts).
 export function detectConfigEnv(
   env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
 ): string | undefined {
-  const value = env[CONFIG_ENV] ?? "";
-  return value === "" ? undefined : value;
+  return explicitConfigPath(cwd, env[CONFIG_ENV]);
 }

@@ -3,10 +3,9 @@
 // integer ≤ MAX) or undefined before the renderer ever sees it. The renderer
 // is allowed to trust the type.
 
-import os from "node:os";
-import path from "node:path";
 import {
   parseClientHints,
+  refusedHintsError,
   sanitizeSsh,
   sanitizeTermExtent,
   sanitizeTmux,
@@ -147,17 +146,32 @@ describe("parseClientHints (the one wire checkpoint)", () => {
     });
   });
 
-  // brandon-config-5g8: the client's CC_CANDYBAR_CONFIG crosses the wire raw
-  // and is made literal at this one checkpoint — the same `~` rule
-  // parseRenderArgs applies to `--config`. Empty or non-string is "no
-  // override": absent, never an empty path the resolver would look for.
-  test("configEnv is ~-expanded, and junk or empty is absent", () => {
-    expect(parseClientHints(req({ configEnv: "~/c.json5" })).configEnv).toBe(
-      path.join(os.homedir(), "c.json5"),
+  // brandon-config-nuq6: both clients resolve CC_CANDYBAR_CONFIG against
+  // their own cwd before sending it, so the checkpoint admits only an absolute
+  // path — a relative one would be resolved against the detached daemon's
+  // cwd. Anything else is "no override": absent, never a path to look for.
+  test("configEnv is admitted only absolute; relative, junk or empty is absent", () => {
+    expect(parseClientHints(req({ configEnv: "/etc/c.json5" })).configEnv).toBe(
+      "/etc/c.json5",
     );
-    expect("configEnv" in parseClientHints(req({ configEnv: "" }))).toBe(false);
-    expect("configEnv" in parseClientHints(req({ configEnv: 42 }))).toBe(false);
+    for (const configEnv of ["c.json5", "~/c.json5", "", 42]) {
+      expect("configEnv" in parseClientHints(req({ configEnv }))).toBe(false);
+    }
     expect("configEnv" in parseClientHints(req({}))).toBe(false);
+  });
+
+  // A hint the client sent and the checkpoint refused is named on the bar;
+  // one never sent, and one taken, are not.
+  test("refusedHintsError names exactly the sent hints the checkpoint refused", () => {
+    const refused = (extra: Record<string, unknown>) =>
+      refusedHintsError(extra, parseClientHints(req(extra)));
+    expect(refused({})).toBeNull();
+    expect(
+      refused({ termCols: 80, tmux: null, configEnv: "/etc/c.json5" }),
+    ).toBeNull();
+    expect(refused({ termCols: 80, configEnv: "c.json5", ssh: "yes" })).toMatch(
+      /^Client hints refused: ssh="yes", configEnv="c.json5" — /,
+    );
   });
 
   // termRows is the third hint: same sanitizer as termCols, same absence

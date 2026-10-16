@@ -5,7 +5,6 @@ import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
 import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
-import { expandHome } from "../config/dsl-loader";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -94,7 +93,8 @@ export interface RenderRequest {
 //   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
-//     the `~`-expanded path the client named; server.ts composes it beneath
+//     the absolute path the client resolved the variable to against its own
+//     cwd (detectConfigEnv, src/config-hint.ts); server.ts composes it beneath
 //     a load-config pick and `--config`, never with the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
 //   • `claudeConfigDir` absent — the client's Claude Code runs with no
@@ -119,6 +119,20 @@ export interface ClientHints {
   readonly mementoEnv?: MementoEnvHint;
 }
 
+// [LAW:one-source-of-truth] Every field of ClientHints, keyed by the type so
+// a new hint is a compile error here until it is listed.
+const CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  mementoEnv: true,
+} satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
+  keyof ClientHints
+>;
+
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
 // own validity rule) but every hint crosses HERE, so a new hint cannot reach
@@ -133,7 +147,7 @@ export function parseClientHints(
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeConfigPath(req.configEnv);
+  const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   const mementoEnv = sanitizeMementoEnv(req.mementoEnv);
   return {
@@ -145,6 +159,30 @@ export function parseClientHints(
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(mementoEnv !== undefined && { mementoEnv }),
   };
+}
+
+// [LAW:no-silent-failure] A hint the client SENT that the checkpoint refused
+// is not the same fact as one it never sent: the render goes on without it
+// (one malformed field must not cost the bar), but the bar says so — the red
+// strip's line, null when every sent hint was taken. The producer that reaches
+// this is a client older than the daemon whose hint contract has since
+// tightened (brandon-config-nuq6: `configEnv` was raw, now absolute), which
+// would otherwise render a different config with no word why. Derived from
+// the raw request and the stamped hints, so no sanitizer learns a third state.
+export function refusedHintsError(
+  req: Partial<Record<keyof ClientHints, unknown>>,
+  hints: ClientHints,
+): string | null {
+  const refused = CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== undefined && hints[k] === undefined,
+  );
+  return refused.length === 0
+    ? null
+    : `Client hints refused: ${refused
+        .map((k) => `${k}=${JSON.stringify(req[k])}`)
+        .join(
+          ", ",
+        )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
@@ -162,20 +200,11 @@ export function sanitizeMementoEnv(v: unknown): MementoEnvHint | undefined {
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary. Both clients
-// resolve the directory against their own cwd before sending it, so anything
+// resolve the path against their own cwd before sending it, so anything
 // but an absolute path is a frame no client of ours builds — "not reported"
 // (`undefined`), never a path the daemon would resolve against ITS cwd.
 function sanitizeAbsolutePath(v: unknown): string | undefined {
   return typeof v === "string" && path.isAbsolute(v) ? v : undefined;
-}
-
-// [LAW:single-enforcer] The one rule for a client-supplied explicit config
-// path, whichever spelling carried it — the `configEnv` hint here, the
-// `--config` flag in server.ts's parseRenderArgs. A non-string or empty value
-// is "no override" (`undefined`), never an empty path; `~` is expanded, so the
-// resolver only ever sees a literal path.
-export function sanitizeConfigPath(v: unknown): string | undefined {
-  return typeof v === "string" && v !== "" ? expandHome(v) : undefined;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as

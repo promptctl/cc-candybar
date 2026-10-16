@@ -241,7 +241,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let (term_cols, term_rows) = detect_term_extents();
     let ssh = detect_ssh();
     let tmux = detect_tmux();
-    let config_env = detect_config_env();
+    let config_env = detect_config_env(std::path::Path::new(&cwd));
     let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
     let memento_env = detect_memento_env(std::path::Path::new(&cwd));
 
@@ -494,13 +494,38 @@ const TMUX_ENV: TmuxEnv = TmuxEnv {
 // in src/config-hint.ts, diffed by scripts/check-protocol.mjs. The daemon is
 // detached and reads no CC_CANDYBAR_CONFIG of its own (brandon-config-5g8:
 // an override set on the client never reached a running daemon), so only the
-// client can report it. Raw here; `~` is expanded where the daemon stamps it.
+// client can report it — absolute, resolved against this client's cwd, since
+// the daemon would resolve a relative one against whichever shell spawned it
+// (brandon-config-nuq6) and accepts only an absolute hint.
 const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
+
+fn detect_config_env(cwd: &std::path::Path) -> Option<String> {
+    let home = env::home_dir().and_then(|h| h.to_str().map(String::from));
+    config_env_hint(env::var(CONFIG_ENV).ok(), cwd, home)
+}
 
 // [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
 // unset-or-empty is the affirmative "no override" (`None`), never a failure.
-fn detect_config_env() -> Option<String> {
-    env::var(CONFIG_ENV).ok().filter(|v| !v.is_empty())
+// A set value is detectConfigEnv's rule (src/config-hint.ts →
+// resolveUserPath): `~` expanded against `home`, then resolved against `cwd`.
+fn config_env_hint(
+    raw: Option<String>,
+    cwd: &std::path::Path,
+    home: Option<String>,
+) -> Option<String> {
+    let raw = raw.filter(|v| !v.is_empty())?;
+    Some(resolve_against(cwd, &expand_home(&raw, home)))
+}
+
+// expandHome in src/utils/user-path.ts: only bare `~` and `~/…` name the
+// home directory; `~alice/…` stays literal. `home` is env::home_dir, which
+// on POSIX — the one platform this client ships for — reads HOME and falls
+// back to the password database, as Node's os.homedir() does.
+fn expand_home(value: &str, home: Option<String>) -> String {
+    match home {
+        Some(home) if value == "~" || value.starts_with("~/") => format!("{home}{}", &value[1..]),
+        _ => value.to_string(),
+    }
 }
 
 // The variable that moves Claude Code's configuration directory — mirrors
@@ -516,7 +541,7 @@ fn detect_claude_config_dir(cwd: &std::path::Path) -> Option<String> {
 }
 
 // [LAW:dataflow-not-control-flow] Total by construction, like
-// detect_config_env: unset, empty, or a blank first entry is the default
+// config_env_hint: unset, empty, or a blank first entry is the default
 // directory (`None`).
 fn claude_config_dir_hint(raw: Option<String>, cwd: &std::path::Path) -> Option<String> {
     let raw = raw?;
@@ -1127,6 +1152,23 @@ mod tests {
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
         assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
         assert_eq!(hint(Some("../x/./y/")), Some("/work/x/y".into()));
+    }
+
+    // The same table as test/config-hint.test.ts.
+    #[test]
+    fn config_env_hint_resolves_against_cwd_and_home() {
+        let cwd = std::path::Path::new("/work/proj");
+        let hint = |raw: Option<&str>| {
+            config_env_hint(raw.map(String::from), cwd, Some("/home/u".into()))
+        };
+        assert_eq!(hint(None), None);
+        assert_eq!(hint(Some("")), None);
+        assert_eq!(hint(Some("/etc/bar.json5")), Some("/etc/bar.json5".into()));
+        assert_eq!(hint(Some("examples/demo.json5")), Some("/work/proj/examples/demo.json5".into()));
+        assert_eq!(hint(Some("../x/./y.json5")), Some("/work/x/y.json5".into()));
+        assert_eq!(hint(Some("~/bar.json5")), Some("/home/u/bar.json5".into()));
+        assert_eq!(hint(Some("~")), Some("/home/u".into()));
+        assert_eq!(hint(Some("~alice/c.json5")), Some("/work/proj/~alice/c.json5".into()));
     }
 
     // The same table as test/memento-hint.test.ts.

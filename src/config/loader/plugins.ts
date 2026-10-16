@@ -21,7 +21,7 @@ import JSON5 from "json5";
 import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
-import { expandHome } from "./discovery.js";
+import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
 import {
   isPlainObject,
@@ -162,7 +162,7 @@ export function listedPlugins(
   refs: readonly string[],
   from: string,
 ): readonly string[] {
-  return refs.map((ref) => path.resolve(path.dirname(from), expandHome(ref)));
+  return refs.map((ref) => resolveUserPath(path.dirname(from), ref));
 }
 
 /**
@@ -648,7 +648,7 @@ function dataPathOf(
   issues: ConfigIssue[],
 ): string | undefined {
   if (typeof data === "string" && data !== "") {
-    return path.resolve(path.dirname(file), expandHome(data));
+    return resolveUserPath(path.dirname(file), data);
   }
   if (
     isPlainObject(data) &&

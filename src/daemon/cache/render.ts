@@ -213,7 +213,7 @@ export function pluginLoadLine(
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
 // the time a cache entry is built they are real non-empty paths. `configFile`
 // is the client's explicit path (server.ts composes a load-config pick,
-// `--config`, and the `configEnv` hint; `~` already expanded) — present when
+// `--config`, and the `configEnv` hint; absolute) — present when
 // overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
   projectDir: string;

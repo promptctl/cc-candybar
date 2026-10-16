@@ -13,7 +13,6 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
-import path from "node:path";
 import process from "node:process";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
@@ -32,10 +31,9 @@ import {
   type HandlerProbeEdge,
 } from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
-import { expandHome } from "../config/dsl-loader.js";
+import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
-import { sanitizeConfigPath } from "../daemon/protocol.js";
 import { detectClaudeConfigDir } from "../claude-settings.js";
 
 const EXIT_OK = 0;
@@ -101,7 +99,9 @@ export async function doctorPlan(
         projectDir: cwd,
         cwd,
         configFile:
-          sanitizeConfigPath(configFile ?? detectConfigEnv(env)) ?? null,
+          explicitConfigPath(cwd, configFile) ??
+          detectConfigEnv(env, cwd) ??
+          null,
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -138,7 +138,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
-    args[0] === undefined ? undefined : path.resolve(cwd, expandHome(args[0])),
+    args[0],
   );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);

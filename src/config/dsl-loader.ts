@@ -104,7 +104,6 @@ export {
 } from "./loader/diagnostics.js";
 export type { ConfigIssue } from "./loader/diagnostics.js";
 export {
-  expandHome,
   dslConfigCandidatePaths,
   resolveDslConfig,
   configResolutionNotice,
