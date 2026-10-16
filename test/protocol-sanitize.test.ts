@@ -3,8 +3,6 @@
 // integer ≤ MAX) or undefined before the renderer ever sees it. The renderer
 // is allowed to trust the type.
 
-import os from "node:os";
-import path from "node:path";
 import {
   parseClientHints,
   sanitizeSsh,
@@ -147,16 +145,17 @@ describe("parseClientHints (the one wire checkpoint)", () => {
     });
   });
 
-  // brandon-config-5g8: the client's CC_CANDYBAR_CONFIG crosses the wire raw
-  // and is made literal at this one checkpoint — the same `~` rule
-  // parseRenderArgs applies to `--config`. Empty or non-string is "no
-  // override": absent, never an empty path the resolver would look for.
-  test("configEnv is ~-expanded, and junk or empty is absent", () => {
-    expect(parseClientHints(req({ configEnv: "~/c.json5" })).configEnv).toBe(
-      path.join(os.homedir(), "c.json5"),
+  // brandon-config-nuq6: both clients resolve CC_CANDYBAR_CONFIG against
+  // their own cwd before sending it, so the checkpoint admits only an absolute
+  // path — a relative one would be resolved against the detached daemon's
+  // cwd. Anything else is "no override": absent, never a path to look for.
+  test("configEnv is admitted only absolute; relative, junk or empty is absent", () => {
+    expect(parseClientHints(req({ configEnv: "/etc/c.json5" })).configEnv).toBe(
+      "/etc/c.json5",
     );
-    expect("configEnv" in parseClientHints(req({ configEnv: "" }))).toBe(false);
-    expect("configEnv" in parseClientHints(req({ configEnv: 42 }))).toBe(false);
+    for (const configEnv of ["c.json5", "~/c.json5", "", 42]) {
+      expect("configEnv" in parseClientHints(req({ configEnv }))).toBe(false);
+    }
     expect("configEnv" in parseClientHints(req({}))).toBe(false);
   });
 

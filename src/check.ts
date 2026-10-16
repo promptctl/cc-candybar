@@ -23,7 +23,6 @@
 // cold render does not (its next render shows what check showed).
 
 import fs from "node:fs";
-import path from "node:path";
 import process from "node:process";
 import {
   loadConfigChain,
@@ -31,7 +30,7 @@ import {
   configResolutionNotice,
   detectConfigCollisions,
   ConfigError,
-  expandHome,
+  resolveUserPath,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
@@ -263,7 +262,7 @@ export async function checkConfig(
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
   const configPath =
-    target === undefined ? null : path.resolve(expandHome(target));
+    target === undefined ? null : resolveUserPath(process.cwd(), target);
   const layers =
     configPath === null ? searchedLayers(cwd, warnings) : [configPath];
   if (configPath !== null) {
@@ -731,7 +730,9 @@ export async function runCheck(args: readonly string[]): Promise<never> {
     parsed.kind === "usage"
       ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
       : checkPlan(
-          await checkConfig(parsed.target ?? detectConfigEnv(process.env)),
+          await checkConfig(
+            parsed.target ?? detectConfigEnv(process.env, process.cwd()),
+          ),
           parsed.render,
         );
   process.stdout.write(plan.stdout);

@@ -50,7 +50,7 @@ export function detectClientHints(
     tmux: detectTmuxHint(env),
     // Conditional like termCols: absent IS "no override", so the daemon
     // resolves the precedence chain. The daemon reads no env of its own.
-    configEnv: detectConfigEnv(env),
+    configEnv: detectConfigEnv(env, cwd),
     // Conditional too: absent is the default directory. The daemon reads
     // settings.json from THIS session's Claude Code directory.
     claudeConfigDir: detectClaudeConfigDir(env, cwd),

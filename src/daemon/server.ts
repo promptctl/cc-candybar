@@ -39,13 +39,13 @@ import {
 import { dlog } from "./log";
 import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { REGISTRY_URL } from "../install/currency";
+import { resolveUserPath } from "../config/loader/discovery";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
   parseClientHints,
   sanitizeClientVersion,
-  sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
@@ -945,7 +945,10 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
+      const { configFile, unknownFlagsError } = parseRenderArgs(
+        req.args,
+        req.cwd,
+      );
       const sessionId = req.hookData.session_id;
       // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
       // observed and the daemon cannot. Raw `req.*` hint fields are not read
@@ -1274,14 +1277,18 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
 // diagnostic icon (caller composes it alongside config errors). The
-// `--config` value crosses `sanitizeConfigPath`, the same rule as the
+// `--config` value crosses `resolveUserPath` against the CLIENT's cwd (the
+// request's, brandon-config-nuq6), the rule the client applies to its
 // `configEnv` hint: empty is no override, `~` is expanded once, here.
 //
 // `tokens: true, strict: false, allowPositionals: true` together let the
 // parser emit a token entry for every flag (known or unknown) without
 // throwing on unknown ones, and without mis-classifying their values as
 // positionals.
-function parseRenderArgs(args: string[]): {
+function parseRenderArgs(
+  args: string[],
+  cwd: string,
+): {
   configFile: string | undefined;
   unknownFlagsError: string | null;
 } {
@@ -1303,7 +1310,10 @@ function parseRenderArgs(args: string[]): {
     ),
   ];
   return {
-    configFile: sanitizeConfigPath(values.config),
+    configFile:
+      typeof values.config === "string" && values.config !== ""
+        ? resolveUserPath(cwd, values.config)
+        : undefined,
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };

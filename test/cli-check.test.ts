@@ -747,11 +747,11 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     expect(blind.kind).toBe("clean");
     if (blind.kind === "clean") expect(blind.layers).toEqual([]);
     // ...the CLI edge lifts it into the target.
-    const viaEnv = await checkConfig(detectConfigEnv(process.env), cwd);
+    const viaEnv = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
     if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([p]);
     process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
-    const absent = await checkConfig(detectConfigEnv(process.env), cwd);
+    const absent = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
   });
 
