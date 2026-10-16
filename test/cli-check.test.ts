@@ -393,6 +393,24 @@ describe("checkConfig — explicit target", () => {
     expect((await checkConfig(p, dir)).kind).toBe("clean");
   });
 
+  // brandon-var-system-7wl9. A shell variable whose cache key throws renders
+  // its first run's value cleanly, so no ⚠ reaches the bar — the key is what
+  // never moves again. Check fails on it by the variable's name.
+  it("reports a variable whose cache key throws as fatal, naming the variable", async () => {
+    const p = write(
+      "key-throws.json5",
+      `{
+        variables: { stamp: { kind: "shell", command: "echo hi", parse: { text: true }, cache: { key: '{{ fail "no key" }}' } } },
+        segments: { x: { template: "v=[{{ .stamp }}]" } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toMatch(
+      /1 render error[^\n]*\n {2}variable "stamp": cannot refresh: cache key: .*no key/,
+    );
+  });
+
   // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`
   // are gated on their values, so check's fixture supplies both and a broken
   // override of either action is caught rather than hidden behind its gate.

@@ -29,9 +29,12 @@ const GLOBALS = `globals: { palette: '${RULE}', style: '${STYLE_RULE}' }`;
 
 // `dup` repeats a key, which loads (last wins) but earns the load's warning that
 // the settings menu cannot edit the file; `clean` is the same config without it.
+// `stuck` declares a variable whose cache key always throws, so it can never
+// refresh (brandon-var-system-7wl9).
 const CONFIGS = {
   clean: `{ ${GLOBALS}, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
+  stuck: `{ ${GLOBALS}, variables: { stamp: { kind: "shell", command: "echo hi", cache: { key: '{{ fail "no key" }}' } } }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
 describe("a daemon render's event names every warning its strip carried", () => {
@@ -83,6 +86,12 @@ describe("a daemon render's event names every warning its strip carried", () => 
       sessionId: "dup-bad",
       warn: "load,rule:palette",
       shown: ["duplicate", "no-such-theme"],
+    },
+    {
+      config: "stuck",
+      sessionId: "stuck-bad",
+      warn: "rule:palette,refresh:stamp",
+      shown: ["no-such-theme", "refresh"],
     },
   ] as const)(
     "$config config, session $sessionId: the strip shows $shown and the event says warn=$warn",

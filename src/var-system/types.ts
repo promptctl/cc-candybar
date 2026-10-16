@@ -99,3 +99,26 @@ export function toBool(v: VarValue): boolean {
     `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`,
   );
 }
+
+// [LAW:types-are-the-program] A read of a variable that has no value yet — a
+// document whose source has not completed a scan — thrown as its own type so
+// a consumer that waits on it (a cache key) can tell "not yet" (`Outcome`'s
+// `absent`) from a failure, which a message string cannot carry.
+export class AbsentValueError extends Error {
+  constructor(
+    readonly variable: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+// Whether `e`, or what it was raised from, is a read of a variable with no
+// value yet: the template engine re-raises a throw from inside a function call
+// with the original as its `cause`.
+export function readAbsentValue(e: unknown): boolean {
+  return (
+    e instanceof AbsentValueError ||
+    (e instanceof Error && e.cause !== undefined && readAbsentValue(e.cause))
+  );
+}

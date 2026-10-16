@@ -451,6 +451,14 @@ export function renderEffective(
       case "when":
         failures.set(warning.where, warning.error);
         return;
+      // A variable that cannot refresh draws its last value; a headless pass
+      // would bless a bar that has quietly stopped moving.
+      case "refresh":
+        failures.set(
+          `variable "${warning.variable}"`,
+          `cannot refresh: ${warning.error}`,
+        );
+        return;
       // An open band the chosen look leaves short of a floor: the bar draws it
       // as near as it comes, and the message names what clears it.
       case "band-floor":

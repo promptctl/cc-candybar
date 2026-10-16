@@ -972,6 +972,153 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       cleanup();
     }
   });
+
+  it("a key that throws is the variable's error until it evaluates again", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "bad");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: {
+          kind: "key",
+          template:
+            '{{ if hasPrefix "bad" .trigger }}{{ fail "no key" }}{{ end }}{{ .trigger }}',
+        },
+      });
+      const fault = /^cache key: .*no key/;
+      expect(registry.getLastError("val")?.message).toMatch(fault);
+      expect([...registry.cachePolicyFaults().keys()]).toEqual(["val"]);
+
+      // The first run's outcome lands later and does not clear the fault.
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+      expect(registry.getLastError("val")?.message).toMatch(fault);
+
+      // A key that throws again is no key change: nothing re-runs.
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "bad again");
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+
+      // The key evaluating again is a key: the source re-runs, the fault clears.
+      store.setBox("trigger", "a");
+      await ran(registry);
+      expect(store.read("val")).toBe("v2");
+      expect(registry.getLastError("val")).toBeUndefined();
+      expect(registry.cachePolicyFaults().size).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a key that throws and comes back unchanged runs nothing", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "ok");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: {
+          kind: "key",
+          template: '{{ if eq .trigger "bad" }}{{ fail "no key" }}{{ end }}a',
+        },
+      });
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "bad");
+      expect(registry.cachePolicyFaults().has("val")).toBe(true);
+      // The key is "a" again, the key the source last ran under.
+      store.setBox("trigger", "fine");
+      await elapse(250);
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+      expect(registry.cachePolicyFaults().size).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  // A key over a document that has not completed its first scan is waiting,
+  // not stuck: the reaction tracks the document and fires when it arrives.
+  // Read directly, inside a function call (where the engine re-raises with a
+  // cause), and through a template variable. A document whose scan FAILED is
+  // a fault the key reports (the tests above), since the bar stops moving.
+  it("a key over a value that is not there yet is no fault", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const docFile = path.join(dir, "doc.json");
+      fs.writeFileSync(docFile, '{"x":"a"}');
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      registry.declareFile("doc", docFile, {
+        parse: { kind: "json", default: undefined },
+        cache: { kind: "never" },
+      });
+      registry.declareTemplate("t", "{{ .doc.x }}");
+      const keys = {
+        direct: "{{ .doc.x }}",
+        called: '{{ index (index . "doc") "x" }}',
+        derived: "{{ .t }}",
+      };
+      for (const [name, template] of Object.entries(keys))
+        registry.declareShell(name, "echo v", {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "key", template },
+        });
+      expect([...registry.cachePolicyFaults()]).toEqual([]);
+      await ran(registry);
+      expect([...registry.cachePolicyFaults()]).toEqual([]);
+      for (const name of Object.keys(keys)) {
+        expect(store.read(name)).toBe("v");
+        expect(registry.getLastError(name)).toBeUndefined();
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a key over a variable declared after it follows that variable", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "key", template: "{{ .later }}" },
+      });
+      expect(registry.cachePolicyFaults().has("val")).toBe(true);
+
+      // Declaring it is what the key was missing: the fault goes.
+      store.defineBox("later", "string", "a");
+      expect(registry.cachePolicyFaults().size).toBe(0);
+      await ran(registry);
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("later", "b");
+      await ran(registry);
+      expect(store.read("val")).toBe("v2");
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── file — basic ─────────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@ import {
   type Parser,
   type SourceParse,
 } from "./parse.js";
-import type { JsonValue } from "./types.js";
+import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 import { dateOf, type Instant } from "../utils/instant.js";
@@ -677,10 +677,12 @@ function zeroValue(type: VarType): VarValue {
 export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
-  // A watch the OS refused is a STANDING fault, not a read's outcome: a read
-  // that succeeds afterwards says nothing about whether writes will be seen,
-  // so no outcome clears it. It lives until the registry does.
-  private readonly watchFaults = new Map<string, LastError>();
+  // A cache policy that cannot fire is a STANDING fault, not a read's
+  // outcome: a read that succeeds afterwards says nothing about whether the
+  // source will ever run again, so no read outcome clears it. A watch the OS
+  // refused lives until the registry does; a key template that throws lives
+  // until the key evaluates again. One map, since a variable has one policy.
+  private readonly policyFaults = new Map<string, LastError>();
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -1128,8 +1130,12 @@ export class SourceRegistry {
         // global cosmetic floor for absent values, and letting it stand in for a
         // per-variable `default` would let one unrelated global silently switch
         // this loudness back off for every template in the config.
+        // A derivation over a value that is not there yet is itself not there
+        // yet, so whatever waits on it can wait on this variable too.
         if (varDefault === undefined) {
-          throw new Error(`variable "${name}": ${message}`);
+          throw readAbsentValue(e)
+            ? new AbsentValueError(name, `variable "${name}": ${message}`)
+            : new Error(`variable "${name}": ${message}`);
         }
         return varDefault;
       }
@@ -1305,7 +1311,7 @@ export class SourceRegistry {
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
     const read = this.lastErrors.get(name);
-    const fault = this.watchFaults.get(name);
+    const fault = this.policyFaults.get(name);
     if (fault === undefined) return read;
     return read === undefined
       ? fault
@@ -1313,6 +1319,13 @@ export class SourceRegistry {
           timestamp: read.timestamp,
           message: `${fault.message}; ${read.message}`,
         };
+  }
+
+  // Every variable whose cache policy cannot fire, with why: each render
+  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value with nothing of its own to say it has stopped.
+  cachePolicyFaults(): ReadonlyMap<string, LastError> {
+    return this.policyFaults;
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -1358,7 +1371,7 @@ export class SourceRegistry {
 
       case "watch_file": {
         const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.watchFaults.set(name, { timestamp: Date.now(), message }),
+          this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
         break;
@@ -1371,17 +1384,43 @@ export class SourceRegistry {
         // [LAW:dataflow-not-control-flow] The key template is the sole
         // selector — no manual dep declarations, no conditional checks.
         const parsedKey = this.engine.parse(policy.template);
-        const disposer: IReactionDisposer = reaction(() => {
-          const scope = buildScope(this.store);
+        // [LAW:no-silent-failure] A key that throws is no key: it is the
+        // variable's standing fault until the key evaluates again, and the
+        // source keeps what its last run yielded. Folding the throw into a
+        // key value made a key that always throws a constant one — the
+        // source never ran again and nothing said why. A key over a value
+        // that is not there yet is `absent`, not a fault: the reaction
+        // tracks that value and fires when it arrives, and the value's own
+        // variable says why it is missing.
+        const keyOf = (): Outcome<string> => {
           try {
-            return parsedKey
-              .evaluate(scope)
-              .map((f) => f.plain)
-              .join("");
-          } catch {
-            return "";
+            return ok(
+              parsedKey
+                .evaluate(buildScope(this.store))
+                .map((f) => f.plain)
+                .join(""),
+            );
+          } catch (e) {
+            return readAbsentValue(e)
+              ? ABSENT
+              : failed(
+                  `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                );
           }
-        }, update);
+        };
+        // The key the source last ran under: the declare-time run's, until a
+        // key that differs from it runs the source again. Measured against
+        // that rather than the previous evaluation, so a key that throws for a
+        // moment and comes back unchanged runs nothing.
+        const declared = keyOf();
+        this.notePolicy(name, declared);
+        let ranUnder = declared.kind === "ok" ? declared.value : undefined;
+        const disposer: IReactionDisposer = reaction(keyOf, (key) => {
+          this.notePolicy(name, key);
+          if (key.kind !== "ok" || key.value === ranUnder) return;
+          ranUnder = key.value;
+          update();
+        });
         this.cleanups.push(disposer);
         break;
       }
@@ -1442,6 +1481,17 @@ export class SourceRegistry {
 
   private recordError(name: string, message: string): void {
     this.lastErrors.set(name, { timestamp: Date.now(), message });
+  }
+
+  // The one fold from a policy's own outcome — whether it can fire — to the
+  // variable's standing fault.
+  private notePolicy(name: string, outcome: Outcome<unknown>): void {
+    if (outcome.kind === "failed")
+      this.policyFaults.set(name, {
+        timestamp: Date.now(),
+        message: outcome.reason,
+      });
+    else this.policyFaults.delete(name);
   }
 
   // [LAW:single-enforcer] The one fold from a source outcome to the
