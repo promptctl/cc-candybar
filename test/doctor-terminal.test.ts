@@ -33,13 +33,22 @@ describe("identifyInTmux", () => {
     });
   });
 
-  test("a terminal the doctor has no reading for keeps the name it went by", () => {
-    expect(
-      identifyInTmux({ termtype: "Apple_Terminal 455", termname: "xterm-256color" }),
-    ).toEqual({ kind: "unknown", called: "Apple_Terminal 455" });
-    expect(identifyInTmux({ termtype: "", termname: "xterm-256color" })).toEqual({
+  // The release is not the terminal: an update keeps what it is called.
+  test("a terminal the doctor has no reading for keeps the name it gave itself, its release aside", () => {
+    expect(identifyInTmux({ termtype: "foot(1.16.2)", termname: "foot" })).toEqual({
       kind: "unknown",
-      called: "xterm-256color",
+      called: "foot",
+    });
+    expect(identifyInTmux({ termtype: "XTerm 390", termname: "xterm-256color" })).toEqual({
+      kind: "unknown",
+      called: "XTerm",
+    });
+  });
+
+  test("one that gives no name is unnamed, only its TERM said of it", () => {
+    expect(identifyInTmux({ termtype: "", termname: "xterm-256color" })).toEqual({
+      kind: "unnamed",
+      term: "xterm-256color",
     });
   });
 });
@@ -62,12 +71,39 @@ describe("identifyFromEnv", () => {
     });
   });
 
-  test("anything else is unknown, under the name it went by", () => {
-    expect(identifyFromEnv({ TERM_PROGRAM: "vscode", TERM: "xterm-256color" })).toEqual({
+  test("Apple's Terminal and VS Code are named by TERM_PROGRAM alone", () => {
+    expect(
+      identifyFromEnv({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1", TERM: "xterm-256color" }),
+    ).toEqual({ kind: "known", terminal: { name: "apple-terminal", version: "455.1" } });
+  });
+
+  // Cursor and Windsurf set TERM_PROGRAM=vscode with their own release beside
+  // it, so the release says nothing about VS Code's.
+  test("VS Code is named by TERM_PROGRAM, and its release is never read from TERM_PROGRAM_VERSION", () => {
+    expect(
+      identifyFromEnv({ TERM_PROGRAM: "vscode", TERM_PROGRAM_VERSION: "0.45.11" }),
+    ).toEqual({ kind: "known", terminal: { name: "vscode", version: null } });
+  });
+
+  test("a TERM_PROGRAM the doctor does not know is unknown, under that name", () => {
+    expect(identifyFromEnv({ TERM_PROGRAM: "Hyper", TERM: "xterm-256color" })).toEqual({
       kind: "unknown",
-      called: "vscode",
+      called: "Hyper",
     });
-    expect(identifyFromEnv({})).toEqual({ kind: "unknown", called: "" });
+  });
+
+  // tmux names itself in its panes' TERM_PROGRAM: that is every terminal
+  // behind it, so it names none of them.
+  test("TERM_PROGRAM=tmux names no terminal", () => {
+    expect(identifyFromEnv({ TERM_PROGRAM: "tmux", TERM: "tmux-256color" })).toEqual({
+      kind: "unnamed",
+      term: "tmux-256color",
+    });
+  });
+
+  test("no TERM_PROGRAM and a TERM no terminal owns is unnamed", () => {
+    expect(identifyFromEnv({ TERM: "xterm-256color" })).toEqual({ kind: "unnamed", term: "xterm-256color" });
+    expect(identifyFromEnv({})).toEqual({ kind: "unnamed", term: "" });
   });
 });
 

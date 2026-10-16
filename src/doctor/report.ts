@@ -12,6 +12,7 @@
 // `CHECKS` is static, so a fixed set of scalar keys needs no series encoding.
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
+import { sightingOf } from "./terminal.js";
 import {
   NERD_FONT_CHECK,
   glyphSighting,
@@ -19,6 +20,7 @@ import {
   type CheckReport,
   type MarkBook,
   type NerdFontFacts,
+  type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
@@ -49,6 +51,30 @@ export function doctorReportKeys(checkName: string): ReportKeys {
   };
 }
 
+// [LAW:nothing-unseen] What the links check reasoned over, as logfmt fields:
+// whether tmux writes OSC 8 to the client the bar's terminal is attached as
+// (`-` outside tmux, or where no client was seen), and whether a doctor click
+// has come back from the terminal — a click's own run carries the terminal it
+// just filed, so `no` there is a filing that failed; `unread` when the list
+// could not be read, `-` where nothing names the terminal.
+export function linkFields(
+  terminal: TerminalIdentity,
+  clicked: Asked<readonly string[]>,
+): string {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  const sighting =
+    terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  const from =
+    clicked.kind === "failed"
+      ? "unread"
+      : sighting === null
+        ? "-"
+        : clicked.value.includes(sighting)
+          ? "yes"
+          : "no";
+  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
+}
+
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
 // fields for the doctor's event: the glyphs it needed, the terminal it found
 // (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it
@@ -70,7 +96,10 @@ export function nerdFontFields(
         return terminal.kind;
       case "unknown":
         return `unknown:${JSON.stringify(terminal.called)}`;
+      case "unnamed":
+        return `unnamed:${JSON.stringify(terminal.term)}`;
       case "bundling":
+      case "unread":
       case "configured":
         return `${terminal.name}@${terminal.version ?? "-"}`;
     }

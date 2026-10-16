@@ -1082,6 +1082,7 @@
                 "enum": [
                   "config",
                   "urlHandler",
+                  "links",
                   "tmuxTruecolor",
                   "effectRefresh",
                   "nerdFont"

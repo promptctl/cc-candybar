@@ -114,7 +114,11 @@ export async function doctorPlan(
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.
-    facts = { ...gathered, urlHandler: await probeUrlHandler(handler) };
+    facts = {
+      ...gathered,
+      urlHandler: await probeUrlHandler(handler),
+      askedBy: "command",
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };

@@ -14,6 +14,7 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
+import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 import type { EffectSelection } from "../src/themes/policy";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
@@ -46,14 +47,12 @@ const facts = (
   placementEffects: readonly PlacementEffectFact[] = [],
   transitions = false,
 ): DoctorFacts => ({
+  ...HEALTHY_FACTS,
   tmux,
   config,
   effect,
   placementEffects,
   transitions,
-  urlHandler: { kind: "unsupported" },
-  nerdFont: { kind: "none" },
-  marks: { kind: "ok", value: {} },
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 
@@ -241,6 +240,7 @@ describe("config probe", () => {
     ).toEqual([
       ["config", true],
       ["urlHandler", true],
+      ["links", true],
       ["tmuxTruecolor", true],
       ["effectRefresh", true],
       ["nerdFont", true],

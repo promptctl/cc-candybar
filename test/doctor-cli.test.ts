@@ -6,6 +6,7 @@ import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { stripPrivateGlyphs } from "../src/render/strip";
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,10 +33,11 @@ afterEach(() => {
 const EDGE: DoctorEdge = {
   probeTmux: () => ({
     kind: "ok",
-    // A terminal that ships its own Nerd Font symbols, so the Nerd Font
-    // check is ok and these tests are about the others.
+    // A terminal that ships its own Nerd Font symbols and draws links, which
+    // tmux passes through, so the Nerd Font and links checks are ok and
+    // these tests are about the others.
     value: {
-      features: ["osc7", "RGB", "sixel"],
+      features: ["hyperlinks", "osc7", "RGB", "sixel"],
       termtype: "ghostty 1.3.1",
       termname: "xterm-ghostty",
       pid: 4242,
@@ -45,6 +47,7 @@ const EDGE: DoctorEdge = {
     throw new Error("remoteLogin must not run in this case");
   },
   marks: memoryMarkBook(),
+  clicked: memoryClickedTerminals(),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -120,10 +123,56 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/")).toEqual({
-      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
+      stdout: "✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 0,
     });
+  });
+
+  // brandon-doctor-v62x.ryu: the command has no click to prove links work, so
+  // it reads tmux's word on its client and the terminal's own name.
+  test("tmux without hyperlinks for its client fails links, naming the line to add", async () => {
+    const edge: DoctorEdge = {
+      ...EDGE,
+      probeTmux: (hint) => {
+        const asked = EDGE.probeTmux(hint);
+        if (asked.kind !== "ok" || asked.value === null) throw new Error("EDGE answers a client");
+        return {
+          kind: "ok",
+          value: { ...asked.value, features: asked.value.features.filter((f) => f !== "hyperlinks") },
+        };
+      },
+    };
+    const plan = await doctorPlan(edge, NO_HANDLER, inDir(IN_TMUX), "/");
+    expect(plan.stdout).toContain(
+      '\n✗ links — tmux does not pass links through to Ghostty — add `set -as terminal-features ",xterm-ghostty:hyperlinks"` to tmux.conf, then detach and reattach (tmux 3.4 or later)\n',
+    );
+  });
+
+  test("outside tmux the terminal's own name decides links", async () => {
+    const plan = await doctorPlan(
+      EDGE,
+      NO_HANDLER,
+      inDir({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" }),
+      "/",
+    );
+    expect(plan.code).toBe(1);
+    expect(plan.stdout).toMatch(/\n✗ links — Terminal draws no links \(OSC 8\)/);
+  });
+
+  // kitty names itself only in TERM, which carries no release; the bar's
+  // doctor, clicked in kitty, files the proof this command reads.
+  test("a terminal whose release went unsaid is settled by a doctor click remembered for it", async () => {
+    const kitty = inDir({ TERM_PROGRAM: "", TERM: "xterm-kitty" });
+    const unsettled = await doctorPlan(EDGE, NO_HANDLER, kitty, "/");
+    expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
+    const settled = await doctorPlan(
+      { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
+      NO_HANDLER,
+      kitty,
+      "/",
+    );
+    expect(settled.stdout).toContain("\n✓ links\n");
   });
 
   // The CLI cannot take a mark: it shows the glyphs, and the bar's doctor
@@ -132,13 +181,13 @@ describe("doctorPlan", () => {
     const plan = await doctorPlan(
       EDGE,
       NO_HANDLER,
-      inDir({ TERM_PROGRAM: "vscode" }),
+      inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
     );
     expect(plan.code).toBe(1);
     expect(plan.stdout).toMatch(
       new RegExp(
-        "\n✗ Nerd Font — the doctor cannot read vscode's font\n" +
+        "\n✗ Nerd Font — the doctor cannot read Hyper's font\n" +
           "    look:  — mark them ✓ shapes or ✗ boxes in the bar's doctor, " +
           "and this command reads your mark: " +
           `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n$`,
@@ -151,11 +200,11 @@ describe("doctorPlan", () => {
   // mark made in the bar's doctor and passes on it.
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
     const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
-    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "vscode" } })!.id;
+    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
       { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,
-      inDir({ TERM_PROGRAM: "vscode" }),
+      inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
     );
     expect(plan.stdout).toContain("\n✓ Nerd Font\n");
@@ -166,7 +215,7 @@ describe("doctorPlan", () => {
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
-      "✓ config\n✓ URL handler\n" +
+      "✓ config\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ effect refresh\n✓ Nerd Font\n",
@@ -178,7 +227,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/")).stdout).toBe(
-      `✓ config\n✓ URL handler\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ effect refresh\n✓ Nerd Font\n`,
+      `✓ config\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ effect refresh\n✓ Nerd Font\n`,
     );
   });
 });
@@ -205,7 +254,7 @@ describe("doctorPlan over a real config", () => {
     doctorPlan(REAL, NO_HANDLER, inDir(env), project);
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n");
+    expect((await plan()).stdout).toBe("✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -215,7 +264,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
+      stdout: "✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 0,
     });
@@ -238,7 +287,7 @@ describe("doctorPlan over a real config", () => {
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
-        "✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
+        "✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 1,
     });
@@ -281,7 +330,7 @@ describe("doctorPlan over a real config", () => {
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n`);
+    ).toBe(`✗ config — helper "h" is never called\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n`);
   });
 
   // brandon-effects-2gka.21e: the config the bar draws decides the effect, and
@@ -294,7 +343,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await plan()).toEqual({
       stdout:
-        "✓ config\n✓ URL handler\n✓ tmux truecolor\n" +
+        "✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n" +
         "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n",
@@ -313,7 +362,7 @@ describe("doctorPlan over a real config", () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ URL handler\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n`,
+      `✗ config — helper "h" is never called\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ effect refresh\n✓ Nerd Font\n`,
     );
   });
 
@@ -331,6 +380,7 @@ describe("doctorPlan over a real config", () => {
         () => null,
       ),
       urlHandler: { kind: "unsupported" },
+      askedBy: "command",
     });
     const pairs = new Map(
       doctorReportPairs(reports).map((p) => [p.key, p.value]),

@@ -7,6 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +44,7 @@ const NO_TMUX: DoctorEdge = {
     throw new Error("remoteLogin must not run in this case");
   },
   marks: memoryMarkBook(),
+  clicked: memoryClickedTerminals(),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -79,6 +81,7 @@ const factsIn = (
 ({
     ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick),
     urlHandler: { kind: "unsupported" } as const,
+    askedBy: "command" as const,
   });
 // Outside tmux: the settings half alone.
 const factsOf = (conf: string) => factsIn(conf, null);
@@ -352,6 +355,7 @@ describe("gatherFacts", () => {
       },
       remoteLogin: NO_TMUX.remoteLogin,
       marks: NO_TMUX.marks,
+      clicked: NO_TMUX.clicked,
       fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };

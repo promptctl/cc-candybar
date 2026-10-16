@@ -19,12 +19,19 @@ import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
-  BUNDLED_SINCE,
-  TERMINAL_LABEL,
+  LINK_TERMINALS,
+  TERMINALS,
+  identifiedAs,
+  linkSupport,
   releasedSince,
+  sightingOf,
+  terminalLabel,
   type BundlingTerminal,
   type ConfiguredTerminal,
+  type Identified,
+  type LinkSupport,
   type TmuxClientTerm,
+  type UnreadTerminal,
 } from "./terminal.js";
 
 // [LAW:types-are-the-program] What tmux says about the client attached to the
@@ -119,6 +126,20 @@ export type StatusLineFacts =
   | { readonly kind: "not-an-object"; readonly value: unknown }
   | { readonly kind: "present"; readonly refreshInterval: unknown };
 
+// [LAW:types-are-the-program] Which terminal draws the session's bar, or why
+// the doctor could not tell: a client too old to say, or a tmux server that
+// could not be asked about its client. A terminal seen is `identified` by
+// what named it, and `tmuxClient` is the client tmux attached it as — null
+// outside tmux, where nothing stands between the bar and the terminal.
+export type TerminalIdentity =
+  | { readonly kind: "unreported" }
+  | { readonly kind: "unasked"; readonly reason: string }
+  | {
+      readonly kind: "seen";
+      readonly identified: Identified;
+      readonly tmuxClient: TmuxClient | null;
+    };
+
 // The font a configured terminal draws private-use glyphs with, where that
 // was read from (`iTerm2 profile "Default"`, an Alacritty config file), and
 // which of the bar's glyphs it lacks — null when no installed font goes by
@@ -131,19 +152,25 @@ export interface FontInUse {
 
 // [LAW:types-are-the-program] What the doctor knows about the terminal that
 // draws the session's bar. `unreported` is a client too old to say,
-// `unasked` a tmux server that could not be asked about its client, and
-// `unknown` a terminal the doctor has no reading for (`called` is the name it
-// went by, empty when nothing named it). A known terminal is one of two
-// kinds (src/doctor/terminal.ts): one that ships its own Nerd Font symbols,
-// whose release is the whole question, and one that draws them only from the
-// font it is set to, which is read.
+// `unasked` a tmux server that could not be asked about its client, `unknown`
+// a terminal the doctor does not know by the name it gave itself, and
+// `unnamed` one that gave none, only its TERM said of it (Identified, in
+// src/doctor/terminal.ts). A known terminal is one of three kinds
+// (src/doctor/terminal.ts): one that ships its own Nerd Font symbols, whose
+// release is the whole question; one that draws them only from the font it is
+// set to, which is read; and one whose font the doctor has no reader for.
 export type TerminalFacts =
   | { readonly kind: "unreported" }
   | { readonly kind: "unasked"; readonly reason: string }
-  | { readonly kind: "unknown"; readonly called: string }
+  | Exclude<Identified, { readonly kind: "known" }>
   | {
       readonly kind: "bundling";
       readonly name: BundlingTerminal;
+      readonly version: string | null;
+    }
+  | {
+      readonly kind: "unread";
+      readonly name: UnreadTerminal;
       readonly version: string | null;
     }
   | {
@@ -185,12 +212,20 @@ export interface PlacementEffectFact {
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
+  readonly terminal: TerminalIdentity;
+  // What asked for this run: a click on the bar's 🩺 doctor — a link the
+  // terminal drew and the user clicked — or the `cc-candybar doctor` command.
+  readonly askedBy: "click" | "command";
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   readonly nerdFont: NerdFontFacts;
   // The user's marks, or why the book could not be read; a check honours
   // only the mark on the sighting it shows.
   readonly marks: Asked<MarkBook>;
+  // The terminals a doctor click has come back from, by their sightings
+  // (`sightingOf`), or why they could not be read
+  // (src/doctor/clicked-terminals.ts).
+  readonly clicked: Asked<readonly string[]>;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -441,6 +476,116 @@ const urlHandler: Check = {
   },
 };
 
+type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
+
+const CLICK_TO_SEE =
+  "click 🩺 doctor in the bar's settings menu: if it runs, links work";
+
+// Whether the terminal draws the bar's links: a doctor click that came back
+// from it settles that for good; otherwise what the doctor knows of its
+// releases, and of a terminal it does not know, nothing.
+function drawsLinks(
+  identified: Identified,
+  clicked: Asked<readonly string[]>,
+): LinkSupport | { readonly kind: "unknown" } {
+  const id = sightingOf(identified);
+  if (clicked.kind === "ok" && id !== null && clicked.value.includes(id)) {
+    return { kind: "draws" };
+  }
+  return identified.kind === "known"
+    ? linkSupport(identified.terminal)
+    : { kind: "unknown" };
+}
+
+// Why the bar's links do not reach the user, the terminal's own reason first:
+// tmux passing links through helps only a terminal that draws them.
+function linkProblems(
+  { identified, tmuxClient }: SeenTerminal,
+  clicked: Asked<readonly string[]>,
+): string[] {
+  const called = identifiedAs(identified);
+  const support = drawsLinks(identified, clicked);
+  // A click is remembered under the terminal's sighting, so one with none is
+  // proved afresh by every click.
+  const prove =
+    sightingOf(identified) === null
+      ? CLICK_TO_SEE
+      : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
+  const terminal = ((): string[] => {
+    switch (support.kind) {
+      case "draws":
+        return [];
+      case "none":
+        return [
+          `${called} draws no links (OSC 8), so nothing on the bar can be clicked — run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`,
+        ];
+      case "older":
+        return [
+          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) — update ${called}`,
+        ];
+      case "unsaid":
+        return [
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is — ${prove}`,
+        ];
+      case "unknown":
+        return [
+          `the doctor does not know whether ${called} draws links (OSC 8) — ${prove}`,
+        ];
+    }
+  })();
+  // A remembered click overturns any verdict but `draws`, so a list that
+  // cannot be read is named beside every other.
+  const remembered =
+    clicked.kind === "failed" && support.kind !== "draws"
+      ? [
+          `the terminals a doctor click came back from could not be read: ${clicked.reason}`,
+        ]
+      : [];
+  // `hyperlinks` in `#{client_termfeatures}` is tmux's word that it writes
+  // OSC 8 to the client (tmux 3.4 and later; measured on 3.6a, where
+  // XTVERSION turns it on for iTerm2) — without it tmux keeps the bar's links
+  // to itself. The pattern tmux matches a client's features by is its TERM.
+  const tmux =
+    support.kind === "none" ||
+    tmuxClient === null ||
+    tmuxClient.features.includes("hyperlinks")
+      ? []
+      : [
+          `tmux does not pass links through to ${called} — add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`,
+        ];
+  return [...terminal, ...remembered, ...tmux];
+}
+
+// "Links are available and clickable" (brandon-doctor-v62x.ryu): the terminal
+// drawing the bar draws OSC 8 links, and inside tmux, tmux passes them
+// through. A click on the bar's 🩺 doctor is such a link, drawn and clicked,
+// so a run it asked for is its own proof — and the click files its terminal
+// (src/doctor/clicked-terminals.ts), where the command, which reasons from
+// what tmux and the terminal say about themselves, reads it.
+const links: Check = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ askedBy, terminal, clicked }) => {
+    if (askedBy === "click") return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason:
+            "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`,
+        };
+      case "seen":
+        return problemsVerdict(linkProblems(terminal, clicked));
+    }
+  },
+};
+
 // Claude Code's fastest statusline cadence, in seconds (`refreshInterval`'s
 // minimum; design-docs/ANTHROPIC-STATUSLINE-DOCS.md) — the frame rate every
 // effect curve is tuned for.
@@ -525,19 +670,19 @@ function terminalCalled(terminal: TerminalFacts): string {
     case "unasked":
       return "this terminal";
     case "unknown":
-      return terminal.called === "" ? "this terminal" : terminal.called;
+    case "unnamed":
+      return identifiedAs(terminal);
     case "bundling":
+    case "unread":
     case "configured":
-      return [TERMINAL_LABEL[terminal.name], terminal.version]
+      return [terminalLabel(terminal.name), terminal.version]
         .filter((part) => part !== null)
         .join(" ");
   }
 }
 
-// What a mark answers for, or null where nothing names the terminal — a
-// mark there would answer for whichever terminal next goes unnamed. A named
-// terminal is its name, never its release (an update draws what it drew), and
-// for one whose font was read, the font and where it was read — so a mark
+// What a mark answers for: the terminal's sighting (`sightingOf`), and for
+// one whose font was read, the font and where it was read too — so a mark
 // made under one font, or before the built-in glyphs were turned on, answers
 // nothing once the reading changes, and the fresh reading speaks again.
 function sightedIn(terminal: TerminalFacts): string | null {
@@ -546,11 +691,13 @@ function sightedIn(terminal: TerminalFacts): string | null {
     case "unasked":
       return null;
     case "unknown":
-      return terminal.called === "" ? null : terminal.called;
+    case "unnamed":
+      return sightingOf(terminal);
     case "bundling":
-      return TERMINAL_LABEL[terminal.name];
+    case "unread":
+      return terminalLabel(terminal.name);
     case "configured": {
-      const label = TERMINAL_LABEL[terminal.name];
+      const label = terminalLabel(terminal.name);
       return terminal.font.kind === "ok"
         ? `${label} with ${terminal.font.value.font} (${terminal.font.value.from})`
         : `${label}, its font unread: ${terminal.font.reason}`;
@@ -628,16 +775,18 @@ const nerdFont: Check = {
           `tmux could not be asked which terminal is attached: ${terminal.reason}`,
         );
       case "unknown":
+      case "unnamed":
+      case "unread":
         return failed(`the doctor cannot read ${called}'s font`);
       case "bundling": {
-        const since = BUNDLED_SINCE[terminal.name];
+        const since = TERMINALS[terminal.name].glyphs.since;
         if (since === null) return { ok: true };
         const shipped =
           terminal.version === null
             ? null
             : releasedSince(terminal.version, since);
         if (shipped === true) return { ok: true };
-        const label = TERMINAL_LABEL[terminal.name];
+        const label = terminalLabel(terminal.name);
         return failed(
           shipped === null
             ? `${label} ships Nerd Font symbols since ${since}, and did not say which release this is`
@@ -668,6 +817,7 @@ const nerdFont: Check = {
 export const CHECKS: readonly Check[] = [
   config,
   urlHandler,
+  links,
   tmuxTruecolor,
   effectRefresh,
   nerdFont,

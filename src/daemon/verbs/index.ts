@@ -121,7 +121,12 @@ import {
   type DoctorFacts,
   type GlyphMark,
 } from "../../doctor/checks";
-import { doctorReportPairs, nerdFontFields } from "../../doctor/report";
+import { sightingOf } from "../../doctor/terminal";
+import {
+  doctorReportPairs,
+  linkFields,
+  nerdFontFields,
+} from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
 import { DoctorBusy } from "../../doctor/busy";
 import {
@@ -1137,7 +1142,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} (session=${sid})`,
   );
 }
 
@@ -1158,7 +1163,44 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  return { ...gathered, urlHandler: clickArrived(ctx.clientVersion) };
+  return {
+    ...gathered,
+    urlHandler: clickArrived(ctx.clientVersion),
+    askedBy: "click",
+    clicked: clickedFrom(ctx, gathered),
+  };
+}
+
+// [LAW:one-source-of-truth] A doctor click is a link the session's terminal
+// drew and the user clicked, so it settles for good that this terminal draws
+// links: filed (src/doctor/clicked-terminals.ts) where `cc-candybar doctor` —
+// which cannot click — reads it. Nothing is filed where nothing names the
+// terminal, or over a list that cannot be read (the CLI's links row says why).
+// [LAW:no-silent-failure] The filing rides along with the run it came with,
+// so a write that fails is logged — and the event's `clicked=no` shows
+// nothing was filed — while the run reports over the list as it was read.
+function clickedFrom(
+  ctx: VerbContext,
+  { terminal, clicked }: ReturnType<typeof gatherFacts>,
+): DoctorFacts["clicked"] {
+  const sighting =
+    terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  if (sighting === null || clicked.kind === "failed") return clicked;
+  try {
+    ctx.doctor.clicked.record(sighting);
+  } catch (e) {
+    ctx.dlog(
+      "warn",
+      `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return clicked;
+  }
+  return {
+    kind: "ok",
+    value: clicked.value.includes(sighting)
+      ? clicked.value
+      : [...clicked.value, sighting],
+  };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {

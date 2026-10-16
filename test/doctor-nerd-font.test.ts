@@ -35,6 +35,8 @@ import {
 } from "../src/doctor/report";
 import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryClickedTerminals } from "./helpers/clicked-terminals";
+import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,17 +60,7 @@ const facts = (
     kind: "ok",
     value: mark === null ? {} : withMark({}, "nerdFont", mark.sighting, mark.mark),
   },
-): DoctorFacts => ({
-  tmux: { kind: "outside" },
-  config: { kind: "loaded", layers: [], warnings: [], unused: [] },
-  effect: { kind: "decided", name: "none", value: "none" },
-  placementEffects: [],
-  transitions: false,
-  urlHandler: { kind: "unsupported" },
-  nerdFont,
-  marks,
-  claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
-});
+): DoctorFacts => ({ ...HEALTHY_FACTS, nerdFont, marks });
 
 const verdictIn = (terminal: TerminalFacts, mark: Made | null = null): Verdict =>
   probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal }, mark));
@@ -160,17 +152,31 @@ describe("nerdFont probe", () => {
     );
   });
 
-  test("a terminal the doctor has no reading for, but a name, asks the user to look", () => {
-    const t: TerminalFacts = { kind: "unknown", called: "Apple_Terminal" };
-    expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
-      "the doctor cannot read Apple_Terminal's font",
-    );
+  test("a terminal the doctor does not know, but a name, asks the user to look", () => {
+    const t: TerminalFacts = { kind: "unknown", called: "Hyper" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Hyper's font");
+  });
+
+  // Known by name, its font unread: the sighting is the name a sentence calls
+  // it, never its release, as for every terminal the doctor knows.
+  test("a terminal the doctor knows but reads no font for asks the user to look, under its label", () => {
+    const t: TerminalFacts = { kind: "unread", name: "apple-terminal", version: "455.1" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Terminal 455.1's font");
+    expect(idIn(t)).toMatch(/^Terminal\|/);
+  });
+
+  // Apple's Terminal inside tmux answers no XTVERSION: its TERM is all that is
+  // said of it, shared only by this machine's terminals under that TERM.
+  test("a terminal nothing names but its TERM asks the user to look, under that TERM", () => {
+    const t: TerminalFacts = { kind: "unnamed", term: "xterm-256color" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read xterm-256color's font");
+    expect(idIn(t)).toMatch(/^xterm-256color\|/);
   });
 
   // A mark there would answer for whichever terminal next goes unnamed.
   test("where nothing names the terminal, there is nothing to mark", () => {
     const cases: Array<[TerminalFacts, string]> = [
-      [{ kind: "unknown", called: "" }, "the doctor cannot read this terminal's font"],
+      [{ kind: "unnamed", term: "" }, "the doctor cannot read this terminal's font"],
       [
         { kind: "unasked", reason: "tmux display failed (no server)" },
         "tmux could not be asked which terminal is attached: tmux display failed (no server)",
@@ -481,6 +487,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       },
       loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config }),
       marks: memoryMarkBook(book),
+      clicked: memoryClickedTerminals(),
     };
     return { e, asked, pids };
   };

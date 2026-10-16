@@ -44,6 +44,7 @@ import {
   type FontInUse,
   type PlacementEffectFact,
   type TerminalFacts,
+  type TerminalIdentity,
   type TmuxClient,
   type TmuxFacts,
   type UrlHandlerFacts,
@@ -54,12 +55,17 @@ import {
   identifyFromEnv,
   identifyInTmux,
   isBundling,
+  isConfigured,
   type ConfiguredTerminal,
 } from "./terminal.js";
 import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
 import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
+import {
+  fileClickedTerminals,
+  type ClickedTerminalsStore,
+} from "./clicked-terminals.js";
 
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
@@ -68,6 +74,9 @@ export interface DoctorEdge {
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).
   readonly marks: MarkBookStore;
+  // The terminals a doctor click has come back from, kept for good
+  // (src/doctor/clicked-terminals.ts).
+  readonly clicked: ClickedTerminalsStore;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
   readonly remoteLogin: (pid: number) => Asked<boolean>;
@@ -218,6 +227,7 @@ export function productionEdge(
     fontInUse,
     loadConfig,
     marks: fileMarkBook(),
+    clicked: fileClickedTerminals(),
   };
 }
 
@@ -272,41 +282,52 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
 
 // [LAW:dataflow-not-control-flow] Which terminal draws the bar: inside tmux
 // the client tmux has attached (its answer, or why it gave none), outside it
-// what the session's client environment says — and for a terminal that draws
+// what the session's client environment says.
+function terminalIdentity(
+  tmux: TmuxFacts,
+  env: TerminalEnvHint | undefined,
+): TerminalIdentity {
+  switch (tmux.kind) {
+    case "unreported":
+      return { kind: "unreported" };
+    case "outside":
+      return env === undefined
+        ? { kind: "unreported" }
+        : { kind: "seen", identified: identifyFromEnv(env), tmuxClient: null };
+    case "inside": {
+      if (tmux.client.kind === "failed") {
+        return { kind: "unasked", reason: tmux.client.reason };
+      }
+      const client = tmux.client.value;
+      return client === null
+        ? {
+            kind: "unasked",
+            reason: "tmux has no client attached to the pane's session",
+          }
+        : {
+            kind: "seen",
+            identified: identifyInTmux(client),
+            tmuxClient: client,
+          };
+    }
+  }
+}
+
+// How the terminal drawing the bar gets its glyphs — and for one that draws
 // only from its font, that font, read once, exactly when there is one to read.
 function terminalFacts(
   edge: DoctorEdge,
-  tmux: TmuxFacts,
+  identity: TerminalIdentity,
   hints: Pick<ClientHints, "terminalEnv" | "ssh">,
   glyphs: string,
 ): TerminalFacts {
+  if (identity.kind !== "seen") return identity;
+  const { identified, tmuxClient: client } = identity;
   const env = hints.terminalEnv;
-  if (tmux.kind === "unreported") return { kind: "unreported" };
-  if (tmux.kind === "inside" && tmux.client.kind === "failed") {
-    return { kind: "unasked", reason: tmux.client.reason };
-  }
-  if (
-    tmux.kind === "inside" &&
-    tmux.client.kind === "ok" &&
-    tmux.client.value === null
-  ) {
-    return {
-      kind: "unasked",
-      reason: "tmux has no client attached to the pane's session",
-    };
-  }
-  if (tmux.kind === "outside" && env === undefined) {
-    return { kind: "unreported" };
-  }
-  const client =
-    tmux.kind === "inside" && tmux.client.kind === "ok"
-      ? tmux.client.value
-      : null;
-  const identified =
-    client === null ? identifyFromEnv(env ?? {}) : identifyInTmux(client);
-  if (identified.kind === "unknown") return identified;
+  if (identified.kind !== "known") return identified;
   const { name, version } = identified.terminal;
   if (isBundling(name)) return { kind: "bundling", name, version };
+  if (!isConfigured(name)) return { kind: "unread", name, version };
   // Inside tmux the session's environment is the one the tmux server was
   // started in, so what it says of the terminal — its iTerm2 profile, whether
   // it came over ssh — is that first window's, not the attached one's: the
@@ -382,7 +403,8 @@ function placementEffects(
 // resolves from — never the daemon's own env, which answers for whichever
 // session spawned it. The URL handler's facts are not gathered here: the
 // daemon has them in the click it is handling, the CLI has to send a link and
-// wait (src/doctor/handler-probe.ts), and each adds them to these.
+// wait (src/doctor/handler-probe.ts), and each adds them to these — and what
+// asked for the run, which only the caller knows.
 //
 // `sessionPick` reads the session's own picks — the daemon's SessionState for
 // the clicking session, `() => null` for the CLI, which has no session.
@@ -391,7 +413,7 @@ export function gatherFacts(
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
-): Omit<DoctorFacts, "urlHandler"> {
+): Omit<DoctorFacts, "urlHandler" | "askedBy"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
   // the bar cannot disagree about which effect is on, or which joiner draws
@@ -402,6 +424,7 @@ export function gatherFacts(
     () => false,
   );
   const tmux = tmuxFacts(edge, hints.tmux);
+  const terminal = terminalIdentity(tmux, hints.terminalEnv);
   // The joiner's glyphs, then every one the config's own text writes — a
   // Nerd icon in a template or a menu glyph is drawn as surely as a cap.
   const glyphs = [
@@ -412,6 +435,7 @@ export function gatherFacts(
   ].join("");
   return {
     tmux,
+    terminal,
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.
     nerdFont:
@@ -420,9 +444,10 @@ export function gatherFacts(
         : {
             kind: "glyphs",
             glyphs,
-            terminal: terminalFacts(edge, tmux, hints, glyphs),
+            terminal: terminalFacts(edge, terminal, hints, glyphs),
           },
     marks: edge.marks.read(),
+    clicked: edge.clicked.read(),
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(
