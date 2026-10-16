@@ -9,7 +9,7 @@
 // proxy must define a `has` trap as well as `get`.
 
 import type { VariableStore } from "../var-system/store.js";
-import type { JsonValue } from "../var-system/types.js";
+import { AbsentValueError, type JsonValue } from "../var-system/types.js";
 import type { Outcome } from "../utils/outcome.js";
 
 // Build the scope object the engine receives as `.` (dot).
@@ -90,7 +90,8 @@ function unwrapDocument(name: string, doc: Outcome<JsonValue>): JsonValue {
     case "ok":
       return doc.value;
     case "absent":
-      throw new Error(
+      throw new AbsentValueError(
+        name,
         `variable "${name}" has no value yet: its source has not completed a scan`,
       );
     case "failed":

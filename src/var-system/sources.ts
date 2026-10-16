@@ -39,7 +39,7 @@ import {
   type Parser,
   type SourceParse,
 } from "./parse.js";
-import type { JsonValue } from "./types.js";
+import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 import { dateOf, type Instant } from "../utils/instant.js";
@@ -1130,8 +1130,12 @@ export class SourceRegistry {
         // global cosmetic floor for absent values, and letting it stand in for a
         // per-variable `default` would let one unrelated global silently switch
         // this loudness back off for every template in the config.
+        // A derivation over a value that is not there yet is itself not there
+        // yet, so whatever waits on it can wait on this variable too.
         if (varDefault === undefined) {
-          throw new Error(`variable "${name}": ${message}`);
+          throw readAbsentValue(e)
+            ? new AbsentValueError(name, `variable "${name}": ${message}`)
+            : new Error(`variable "${name}": ${message}`);
         }
         return varDefault;
       }
@@ -1384,7 +1388,10 @@ export class SourceRegistry {
         // variable's standing fault until the key evaluates again, and the
         // source keeps what its last run yielded. Folding the throw into a
         // key value made a key that always throws a constant one — the
-        // source never ran again and nothing said why.
+        // source never ran again and nothing said why. A key over a value
+        // that is not there yet is `absent`, not a fault: the reaction
+        // tracks that value and fires when it arrives, and the value's own
+        // variable says why it is missing.
         const keyOf = (): Outcome<string> => {
           try {
             return ok(
@@ -1394,9 +1401,11 @@ export class SourceRegistry {
                 .join(""),
             );
           } catch (e) {
-            return failed(
-              `cache key: ${e instanceof Error ? e.message : String(e)}`,
-            );
+            return readAbsentValue(e)
+              ? ABSENT
+              : failed(
+                  `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                );
           }
         };
         // The key the source last ran under: the declare-time run's, until a

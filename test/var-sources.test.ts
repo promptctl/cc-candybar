@@ -1051,6 +1051,46 @@ describe("SourceRegistry — shell: key: cache policy", () => {
     }
   });
 
+  // A key over a document that has not completed its first scan is waiting,
+  // not stuck: the reaction tracks the document and fires when it arrives.
+  // Read directly, inside a function call (where the engine re-raises with a
+  // cause), and through a template variable. A document whose scan FAILED is
+  // a fault the key reports (the tests above), since the bar stops moving.
+  it("a key over a value that is not there yet is no fault", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const docFile = path.join(dir, "doc.json");
+      fs.writeFileSync(docFile, '{"x":"a"}');
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      registry.declareFile("doc", docFile, {
+        parse: { kind: "json", default: undefined },
+        cache: { kind: "never" },
+      });
+      registry.declareTemplate("t", "{{ .doc.x }}");
+      const keys = {
+        direct: "{{ .doc.x }}",
+        called: '{{ index (index . "doc") "x" }}',
+        derived: "{{ .t }}",
+      };
+      for (const [name, template] of Object.entries(keys))
+        registry.declareShell(name, "echo v", {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "key", template },
+        });
+      expect([...registry.cachePolicyFaults()]).toEqual([]);
+      await ran(registry);
+      expect([...registry.cachePolicyFaults()]).toEqual([]);
+      for (const name of Object.keys(keys)) {
+        expect(store.read(name)).toBe("v");
+        expect(registry.getLastError(name)).toBeUndefined();
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
   it("a key over a variable declared after it follows that variable", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
