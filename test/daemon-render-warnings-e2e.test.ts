@@ -20,16 +20,18 @@ import {
 
 jest.setTimeout(30_000);
 
-// The rule branches on the session id, payload the daemon carries per render,
-// so one config draws a render that reports a theme-rule warning and one that
-// does not.
+// The rules branch on the session id, payload the daemon carries per render,
+// so one config draws a render whose palette rule names no theme, one whose
+// style rule throws (brandon-unfiled-3248.2gq), and one that warns of nothing.
 const RULE = `{{ if hasSuffix "-bad" .session.id }}no-such-theme{{ else }}dracula{{ end }}`;
+const STYLE_RULE = `{{ if hasSuffix "-threw" .session.id }}{{ fail "the rule broke" }}{{ else }}none{{ end }}`;
+const GLOBALS = `globals: { palette: '${RULE}', style: '${STYLE_RULE}' }`;
 
 // `dup` repeats a key, which loads (last wins) but earns the load's warning that
 // the settings menu cannot edit the file; `clean` is the same config without it.
 const CONFIGS = {
-  clean: `{ globals: { palette: '${RULE}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
-  dup: `{ globals: { palette: '${RULE}' }, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
+  clean: `{ ${GLOBALS}, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
+  dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
 describe("a daemon render's event names every warning its strip carried", () => {
@@ -61,8 +63,14 @@ describe("a daemon render's event names every warning its strip carried", () => 
     {
       config: "clean",
       sessionId: "clean-bad",
-      warn: "theme-rule",
+      warn: "rule:palette",
       shown: ["no-such-theme"],
+    },
+    {
+      config: "clean",
+      sessionId: "clean-threw",
+      warn: "rule:style",
+      shown: ["broke"],
     },
     {
       config: "dup",
@@ -73,7 +81,7 @@ describe("a daemon render's event names every warning its strip carried", () => 
     {
       config: "dup",
       sessionId: "dup-bad",
-      warn: "load,theme-rule",
+      warn: "load,rule:palette",
       shown: ["duplicate", "no-such-theme"],
     },
   ] as const)(

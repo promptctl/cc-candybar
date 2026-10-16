@@ -371,6 +371,26 @@ export function resolveStyleSelection(
 // all land on the same name.
 export const EFFECT_FLOOR = "none";
 
+// [LAW:one-source-of-truth] Each rule slot's floor, by slot: what a render draws
+// when that slot's rule cannot be honoured. Keyed by every `ExpressionSlot`, so
+// a new slot is a compile error here until it names its floor.
+export const SLOT_FLOORS: Readonly<Record<ExpressionSlot, string>> = {
+  style: STYLE_FLOOR,
+  palette: THEME_FLOOR,
+  effect: EFFECT_FLOOR,
+};
+
+// [LAW:one-source-of-truth] The one spelling of "this slot's rule could not be
+// honoured": where the rule was written, the floor it wears instead, and why —
+// a template that threw, or a palette result naming no installed theme.
+export function ruleFloorMessage(
+  where: string,
+  slot: ExpressionSlot,
+  why: string,
+): string {
+  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why}`;
+}
+
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The looping effects a bar
 // can wear are rich-js's catalogue, by name: this list is the floor and the
 // catalogue's keys, so a loop rich-js adds is offered by the loader, the settings

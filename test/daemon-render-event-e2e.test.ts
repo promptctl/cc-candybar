@@ -25,12 +25,12 @@ import {
 
 jest.setTimeout(30_000);
 
-// `drawn` draws a bar. `broken` chooses its style by a rule whose template
-// fails when it is evaluated — inside renderDsl, after the payload is built —
-// so the render throws partway through.
+// `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
+// evaluated — inside renderDsl's walk, after the payload is built — so the
+// render throws partway through.
 const CONFIGS = {
   drawn: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
-  broken: `{ globals: { style: '{{ fail "the rule broke" }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
+  broken: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'], when: '{{ fail "the gate broke" }}' } }`,
 };
 
 type Event = {
@@ -108,7 +108,7 @@ describe("every render request writes one render event, whatever its outcome", (
     await render(sockPath, FORGING_SID, projectDir, hints, configFlag("drawn"));
     await expect(
       render(sockPath, "ev-threw", projectDir, hints, configFlag("broken")),
-    ).rejects.toThrow(/the rule broke.*RENDER_FAILED/);
+    ).rejects.toThrow(/the gate broke.*RENDER_FAILED/);
     await expect(
       renderRequest(sockPath, {
         hookData: hookData("ev-refused", projectDir),
@@ -135,7 +135,7 @@ describe("every render request writes one render event, whatever its outcome", (
     const thrown = attempts("ev-threw", "threw", "error");
     expect(thrown.level).toBe("error");
     expect(field(thrown, "outcome")).toBe("threw");
-    expect(field(thrown, "error")).toContain("the rule broke");
+    expect(field(thrown, "error")).toContain("the gate broke");
     // What the render learned before it threw, as a finished render names it.
     expect(field(thrown, "termCols")).toBe("120");
     expect(field(thrown, "termRows")).toBe("40");

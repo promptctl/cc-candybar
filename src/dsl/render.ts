@@ -62,8 +62,8 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
-  EFFECT_FLOOR,
   resolveEffectSelection,
+  ruleFloorMessage,
   type EffectSelection,
   type Selection,
   EXPRESSION_SLOTS,
@@ -74,10 +74,10 @@ import {
   effectiveTransitions,
   effectiveVariation,
   isExpression,
+  SLOT_FLOORS,
   STYLE_FLOOR,
   placementPalette,
   resolveThemeSelection,
-  THEME_FLOOR,
   transposedPalette,
   type StyleSelection,
   type ThemeSelection,
@@ -850,19 +850,48 @@ function compiledRule(
   return rule;
 }
 
-function evalRule(rule: CompiledRule, scope: object): string {
-  return rule.template
-    .evaluate(scope)
-    .map((f) => f.plain)
-    .join("");
+// [LAW:single-enforcer] THE evaluation of a globals rule: its result, or —
+// when its template throws (a `fail`, a missing field) — its slot's floor,
+// reported. Thrown on, a rule's own fault would take the whole statusline away
+// (brandon-unfiled-3248.2gq), where a failing segment costs one ⚠ cell; a
+// globals slot has no cell of its own, so the strip is where it says so
+// [LAW:no-silent-failure]. The floor is a NAME, so each slot's `decide` turns
+// it into that slot's floor value exactly as it would a rule naming it.
+function evalRule(
+  slot: ExpressionSlot,
+  rule: CompiledRule,
+  scope: object,
+  warn: (warning: RenderWarning) => void,
+): string {
+  try {
+    return rule.template
+      .evaluate(scope)
+      .map((f) => f.plain)
+      .join("");
+  } catch (e) {
+    warn({
+      kind: "rule",
+      slot,
+      message: ruleFloorMessage(
+        rule.where,
+        slot,
+        `the rule failed — ${e instanceof Error ? e.message : String(e)}`,
+      ),
+    });
+    return SLOT_FLOORS[slot];
+  }
 }
 
 // The name a render publishes for a slot BEFORE its fold has finished: the
-// decided name, or that field's floor when only this render can settle it.
+// decided name, or that slot's floor when only this render can settle it — the
+// floor a failing rule collapses to, read from the one table.
 // [LAW:dataflow-not-control-flow] One total projection of the union to one value,
-// shared by both slots, rather than a per-slot branch at the push site.
-function provisionalName<T>(selected: Selection<T>, floorName: string): string {
-  return selected.kind === "decided" ? selected.name : floorName;
+// shared by every slot, rather than a per-slot branch at the push site.
+function provisionalName<T>(
+  selected: Selection<T>,
+  slot: ExpressionSlot,
+): string {
+  return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -925,7 +954,7 @@ export interface RenderObservers {
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
   // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a theme rule, so a rule's
+  // warning channel, and `cc-candybar check` fails a globals rule, so a rule's
   // failure is visible whether or not anyone is looking at a bar. Check lists
   // a band-floor shortfall only where its own renders open a trigger — one open
   // by default; it opens none itself, so a shortfall behind a closed trigger
@@ -937,10 +966,15 @@ export interface RenderObservers {
 // the kind is what a consumer that treats them differently reads, never the
 // prose.
 export type RenderWarning =
-  // A `globals.palette` RULE whose result names no installed theme
-  // (brandon-themes-dzl): the bar renders in the floor theme, and a palette has
-  // no cell of its own to show a ⚠ in the way a failing segment does.
-  | { readonly kind: "theme-rule"; readonly message: string }
+  // A globals RULE the render could not honour, so `slot` wears its floor: its
+  // template threw (brandon-unfiled-3248.2gq), or a palette rule's result named
+  // no installed theme (brandon-themes-dzl). A globals slot has no cell of its
+  // own to show a ⚠ in the way a failing segment does.
+  | {
+      readonly kind: "rule";
+      readonly slot: ExpressionSlot;
+      readonly message: string;
+    }
   // A floor an open band stands short of as drawn (decor.ts `bandFor`): its
   // trigger off the cells of the row it stands in, or its plane off its
   // trigger. Drawn as near as it comes, and the message names the setting that
@@ -1018,6 +1052,7 @@ export function renderDsl(
   selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
+  const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
   // The band-floor shortfalls of the bands this render opens, each reported
   // once after the walk however many triggers open a band that falls short.
   const shortfalls = new Set<string>();
@@ -1102,9 +1137,9 @@ export function renderDsl(
   // slot's rule may be written to depend on the other's result.
   registry.applyInput(
     payloadWith(
-      provisionalName(selectedTheme, THEME_FLOOR),
-      provisionalName(selectedStyle, STYLE_FLOOR),
-      provisionalName(selectedEffect, EFFECT_FLOOR),
+      provisionalName(selectedTheme, "palette"),
+      provisionalName(selectedStyle, "style"),
+      provisionalName(selectedEffect, "effect"),
     ),
   );
   // [LAW:single-enforcer] Publish the columns the render's strip spends on a
@@ -1134,18 +1169,22 @@ export function renderDsl(
     // [LAW:effects-at-boundaries] The message belongs to the theme domain, the
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
-    return decideThemeName(evalRule(rule, scope), rule.where, (message) =>
-      onRenderWarning?.({ kind: "theme-rule", message }),
+    return decideThemeName(
+      evalRule("palette", rule, scope, warn),
+      rule.where,
+      (message) => warn({ kind: "rule", slot: "palette", message }),
     );
   });
   const style = finishSelection(selectedStyle, (source) =>
     decideStyleName(
-      evalRule(compiledRule(compiled, "style", source), scope),
+      evalRule("style", compiledRule(compiled, "style", source), scope, warn),
       config.styles,
     ),
   );
   const effect = finishSelection(selectedEffect, (source) =>
-    decideEffectName(evalRule(compiledRule(compiled, "effect", source), scope)),
+    decideEffectName(
+      evalRule("effect", compiledRule(compiled, "effect", source), scope, warn),
+    ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
   // carry, so push it: without this the settings menu's `🎨 theme` / `◐ style`
@@ -1427,7 +1466,6 @@ export function renderDsl(
     })
     .join("\n");
   motion.drawn();
-  for (const message of shortfalls)
-    onRenderWarning?.({ kind: "band-floor", message });
+  for (const message of shortfalls) warn({ kind: "band-floor", message });
   return rendered;
 }

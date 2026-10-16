@@ -1778,6 +1778,20 @@ Four things to know about that slot:
   not override it.
 - **A result naming no declared style becomes `none`**, exactly as a stale
   session pick does. A typo makes the bar plain, never broken.
+- **A template that fails when it runs also wears `none`, and says so** — a
+  `fail`, or a field the payload does not carry. The bar still renders, the
+  reason shows above it, and `cc-candybar check` fails on it, naming the slot:
+
+```json5 check:fail
+{
+  globals: { style: '{{ fail "not wired yet" }}' },
+}
+```
+
+```error
+style rule: globals.style rendered "none": the rule failed — not wired yet
+```
+
 - **A malformed template is a load error**, reported against `globals.style` when
   the config loads — not once per repaint:
 
@@ -1846,9 +1860,10 @@ temperature — which checkout you are in, which cluster you are pointed at:
 ```
 
 Everything the `style` slot promises holds here — a plain name still works, a
-session pick or an edit-mode staging outranks the expression, and a malformed
+session pick or an edit-mode staging outranks the expression, a malformed
 template is a load error against `globals.palette` rather than a per-repaint
-throw. `.theme.effective` reads back whatever the expression chose, so a
+throw, and a template that fails when it runs wears the default theme under a
+reason above the bar. `.theme.effective` reads back whatever the expression chose, so a
 `🎨 {{ .theme.effective }}` label always names the theme you are looking at.
 
 Both rules may also live in a preset's own `globals` (`presets.<name>.globals.palette`),
@@ -1892,8 +1907,9 @@ and every click target stay exactly as they are. The settings menu's
 ```
 
 It is the same slot as `style`: a template there picks the effect from live
-data, a session pick outranks it, and a result naming no effect becomes `none`
-in silence. Shimmer while a tool runs, still otherwise:
+data, a session pick outranks it, a result naming no effect becomes `none`
+in silence, and a template that fails when it runs becomes `none` under a
+reason above the bar. Shimmer while a tool runs, still otherwise:
 
 ```json5 check:pass
 {

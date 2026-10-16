@@ -486,8 +486,26 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain("no-such-theme");
     // Under the rule's own label, naming where it was written — a globals slot
     // is not a segment, and a report calling it one misdirects the reader.
-    expect(message).toContain("theme rule: globals.palette rendered");
+    expect(message).toContain("palette rule: globals.palette rendered");
     expect(message).not.toContain('segment "');
+  });
+
+  it("a globals rule whose template throws is FATAL, named by its slot", async () => {
+    // brandon-unfiled-3248.2gq: the bar renders the slot's floor rather than
+    // vanishing, which is exactly why a headless pass must not call it clean.
+    const p = write(
+      "style-rule-throws.json5",
+      `{
+        globals: { style: '{{ fail "the rule broke" }}' },
+        segments: { a: { template: 'a' } },
+        root: { h: ['a'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain(
+      'style rule: globals.style rendered "none": the rule failed',
+    );
+    expect(message).toContain("the rule broke");
   });
 
   it("a rule in the active preset's globals is reported at the preset's path", async () => {
@@ -505,7 +523,7 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain(
-      "theme rule: presets.ruled.globals.palette rendered",
+      "palette rule: presets.ruled.globals.palette rendered",
     );
   });
 
@@ -527,7 +545,24 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain(
-      'theme rule: presets.b.globals.palette rendered',
+      'palette rule: presets.b.globals.palette rendered',
+    );
+    expect(message).toContain('(under preset "b"');
+  });
+
+  it("a rule that throws in a preset the session does not open in is FATAL, at the preset's path and tagged with it", async () => {
+    const p = write(
+      "style-rule-throws-other-preset.json5",
+      `{
+        globals: { preset: 'a' },
+        presets: { a: {}, b: { globals: { style: '{{ .nope }}' } } },
+        segments: { x: { template: 'x' } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain(
+      'style rule: presets.b.globals.style rendered "none": the rule failed',
     );
     expect(message).toContain('(under preset "b"');
   });
@@ -537,7 +572,7 @@ describe("checkConfig — explicit target", () => {
     // row (the door, three cells and the group's trigger) turns between them,
     // and no colour stands 2.2:1 off both. The daemon draws the nearest under
     // an amber warning; check lists the same warning and passes — neither a
-    // fault of the config nor a theme rule.
+    // fault of the config nor a globals rule.
     const p = write(
       "state-floor-short.json5",
       `{
@@ -663,7 +698,7 @@ describe("checkConfig — explicit target", () => {
       `{
         globals: { preset: 'a' },
         actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
-        presets: { a: {}, b: { globals: { style: '{{ .nope }}' } } },
+        presets: { a: {}, b: { root: { h: ['broken'], when: '{{ fail "nope" }}' } } },
         segments: {
           broken: { template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}' },
         },

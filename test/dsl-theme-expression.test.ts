@@ -273,7 +273,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       const bad = rt.render(90);
       expect(bad.bg("plain")).toBe(byName(THEME_FLOOR));
       expect(stripAnsi(bad.text)).toContain(`T=${THEME_FLOOR}`);
-      expect(rt.warnings.map((w) => w.kind)).toEqual(["theme-rule"]);
+      expect(rt.warnings.map((w) => [w.kind, w.kind === "rule" && w.slot])).toEqual([["rule", "palette"]]);
       expect(rt.warnings[0]!.message).toContain("globals.palette");
       expect(rt.warnings[0]!.message).toContain("gruvbux-dark");
       expect(rt.warnings[0]!.message).toContain(THEME_FLOOR);
@@ -646,7 +646,7 @@ describe("a rule inside a preset's globals", () => {
           { preset: "ruled" },
         );
         expect(said).toEqual([
-          { kind: "theme-rule", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
+          { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
         ]);
       },
     );
@@ -669,7 +669,7 @@ describe("a rule inside a preset's globals", () => {
         { preset: "ruled" },
       );
       expect(said).toEqual([
-        { kind: "theme-rule", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
+        { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
       ]);
     });
   });
