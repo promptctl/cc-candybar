@@ -1,3 +1,10 @@
+# [1.130.0](https://github.com/promptctl/cc-candybar/compare/v1.129.5...v1.130.0) (2026-10-16)
+
+
+### Features
+
+* **settings:** the theme picker — a swatch beside every theme name, a two-row demo, style/variation/shade behind its gear ([#345](https://github.com/promptctl/cc-candybar/issues/345)) ([44ed949](https://github.com/promptctl/cc-candybar/commit/44ed949658c0ebba128f97c0b6fa154926c6996d))
+
 ## [1.129.5](https://github.com/promptctl/cc-candybar/compare/v1.129.4...v1.129.5) (2026-10-16)
 
 
