@@ -74,6 +74,11 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
+  bar-pane PANE [--fps N]  Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, N frames a second
+                           (default 20), while its window is shown. Needs
+                           scripts/bar-pane/record-statusline in front of that
+                           session's statusline command. Prototype.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's 🩺 doctor does —

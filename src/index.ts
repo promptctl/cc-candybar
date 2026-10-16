@@ -20,6 +20,7 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
 import { runDoctorCli } from "./doctor/cli";
+import { runBarPane } from "./bar-pane";
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
@@ -84,6 +85,10 @@ async function main(): Promise<void> {
     if (subcommand === "doctor") {
       await runDoctorCli(process.argv.slice(3)); // owns its own exit code
       return;
+    }
+    if (subcommand === "bar-pane") {
+      await runBarPane(process.argv.slice(3)); // runs until the pane closes
+      process.exit(0);
     }
     // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
     // parameterized by `what` — the subcommand name IS the DebugWhat. The guard

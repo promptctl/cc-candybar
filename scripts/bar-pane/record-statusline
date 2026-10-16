@@ -1,0 +1,23 @@
+#!/bin/sh
+# Put in front of a statusline command to let `cc-candybar bar-pane` draw that
+# session's bar beside it:
+#
+#   "statusLine": { "type": "command",
+#                   "command": "/path/to/record-statusline cc-candybar" }
+#
+# Records the hook payload Claude Code hands the statusline, keyed by the tmux
+# tmux server and pane the session runs in, then runs the command on the same payload. Outside
+# tmux there is no pane to draw beside, and it records nothing.
+#
+# A stopgap: once the daemon pushes a session's frames
+# (candybar-animation-wbxz.jmm.usl) it holds the payload itself.
+# The directory is src/bar-pane/recording.ts's recordingPath.
+
+[ -n "$TMUX_PANE" ] || exec "$@"
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/cc-candybar/bar-pane"
+mkdir -p "$dir" || exit 1
+socket="${TMUX%%,*}"
+file="$dir/${socket##*/}$TMUX_PANE.json"
+# Renamed into place whole, so the bar pane never reads half a payload.
+cat > "$file.$$" && mv "$file.$$" "$file" || exit 1
+exec "$@" < "$file"

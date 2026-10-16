@@ -101,6 +101,10 @@ export const LAUNCH_CATEGORIES = [
   // over a published install). One click, one long-running child; the
   // notice's own running/failed state serialises clicks, so no rate limit.
   "update.apply",
+  // `cc-candybar bar-pane` (src/bar-pane), in its own process: where the
+  // session's pane sits, twice a second, and the pane's height when the frame's
+  // changes. Never in the daemon.
+  "bar-pane.tmux",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
