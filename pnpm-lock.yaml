@@ -19,7 +19,7 @@ importers:
         version: 0.10.0
       '@promptctl/rich-js':
         specifier: ^0.23.0
-        version: 0.23.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)
+        version: 0.23.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -72,8 +72,8 @@ importers:
         specifier: 4.80.0
         version: 4.80.0
       mobx:
-        specifier: ^6.15.0
-        version: 6.15.1
+        specifier: ^7.0.6
+        version: 7.0.6
       path-browserify:
         specifier: 1.0.1
         version: 1.0.1
@@ -2658,8 +2658,8 @@ packages:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
 
-  mobx@6.15.1:
-    resolution: {integrity: sha512-QW37HNiD87H4Dy7PkPVBSwXrTYCSTH5Nwo8Yr52cPwiRIjSYFpvOOfUOhYUUkpq2U/XjWLTTAYvXYsRrdnNZxg==}
+  mobx@7.0.6:
+    resolution: {integrity: sha512-VJwjVS5K/rojqPSOoDYlXaYl38Lj+gDfLOFeJ/3Pbdh5ITbAO4ks9RgL0TeRI0bydRZ7b/7WrtPPb9Onuj/pcA==}
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
@@ -4515,12 +4515,12 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.23.0(@promptctl/go-template-js@0.10.0)(mobx@6.15.1)':
+  '@promptctl/rich-js@0.23.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)':
     dependencies:
       string-width: 8.3.0
     optionalDependencies:
       '@promptctl/go-template-js': 0.10.0
-      mobx: 6.15.1
+      mobx: 7.0.6
 
   '@quansync/fs@1.0.0':
     dependencies:
@@ -6326,7 +6326,7 @@ snapshots:
 
   minipass@7.1.3: {}
 
-  mobx@6.15.1: {}
+  mobx@7.0.6: {}
 
   ms@2.1.3: {}
 
