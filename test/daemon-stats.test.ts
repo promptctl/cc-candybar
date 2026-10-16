@@ -30,6 +30,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       renderCacheSize: 3,
       effectCache: { sessions: 2, effects: 5 },
+      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
     });
@@ -64,6 +65,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCacheSize: 0,
       effectCache: { sessions: 0, effects: 0 },
+      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 0,
       handlerProbes: [],
     });
@@ -90,6 +92,7 @@ describe("formatStats", () => {
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4 },
       effectCache: { sessions: 2, effects: 3 },
+      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       subprocesses: {
         total: 0,
@@ -127,6 +130,7 @@ describe("formatStats", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0 },
       effectCache: { sessions: 0, effects: 0 },
+      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       subprocesses: {
         total: 0,

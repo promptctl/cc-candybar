@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { FeedStats } from "./frame-feed";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
@@ -68,6 +69,9 @@ export interface StatsSnapshot {
     sessions: number;
     effects: number;
   };
+  // Subscribed sessions, their subscribers, and the frames drawn for them and
+  // pushed (a drawn frame identical to the last is not pushed).
+  frameFeeds: FeedStats;
   watchers: {
     active: number;
     opened: number;
@@ -207,6 +211,7 @@ export class RuntimeStats {
     usageCache: StatsSnapshot["usageCache"];
     renderCacheSize: number;
     effectCache: StatsSnapshot["effectCache"];
+    frameFeeds: FeedStats;
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
@@ -233,6 +238,7 @@ export class RuntimeStats {
       usageCache: extras.usageCache,
       renderCache: { size: extras.renderCacheSize },
       effectCache: extras.effectCache,
+      frameFeeds: extras.frameFeeds,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,
