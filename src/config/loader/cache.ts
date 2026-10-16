@@ -1,10 +1,14 @@
 // [LAW:types-are-the-program] The cache-policy schema: a CacheDecl is exactly one
 // of ttl / watch_file / depends_on / key / never, declared as DATA (CACHE_SCHEMA)
 // and interpreted by the tag-by-present-key engine (oneOfPresent).
-// requireCache/optionalCache gate presence by source kind. This file changes when
+// requireCache gates presence by source kind. This file changes when
 // the cache vocabulary changes — add an arm to CACHE_SCHEMA and CacheDecl.
 
-import { CACHE_KEYS, type CacheDecl, type SourceKind } from "../dsl-types.js";
+import {
+  CACHE_KEYS,
+  type CacheDecl,
+  type VariableDeclWithCache,
+} from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   absolutePathProblem,
@@ -18,10 +22,10 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:types-are-the-program] The kinds whose source the daemon re-reads on a
-// policy only the author can choose (no sensible default) — the field maps that
-// call requireCacheSpec are the whole list, so the parameter type is the set.
-type PolicySourceKind = Extract<SourceKind, "file" | "shell">;
+// [LAW:one-source-of-truth] The kinds whose source the daemon re-reads on a
+// policy only the author can choose (no sensible default): exactly the kinds
+// that carry a cache, read off that one union rather than listed again.
+type PolicySourceKind = VariableDeclWithCache["kind"];
 
 export function requireCache(
   ctx: ValidateCtx,
@@ -40,36 +44,17 @@ export function requireCache(
   return validateCache(ctx, `${path}.cache`, raw.cache);
 }
 
-export function optionalCache(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): CacheDecl | undefined {
-  if (raw.cache === undefined) return undefined;
-  const c = validateCache(ctx, `${path}.cache`, raw.cache);
-  return c ?? undefined;
-}
-
 // [LAW:dataflow-not-control-flow] The `cache` field as a record-field spec, so a
-// per-kind variable schema declares its cache policy as DATA. `kind` selects the
-// requiredness: file/shell require it (a missing cache reports the per-kind
-// message and fails the arm); template leaves it optional; time and git take
-// none. The field key is conventionally "cache", read directly by
-// requireCache/optionalCache.
+// per-kind variable schema declares its cache policy as DATA: file/shell require
+// it (a missing cache reports the per-kind message and fails the arm); every
+// other kind takes none. The field key is conventionally "cache", read directly
+// by requireCache.
 export function requireCacheSpec(kind: PolicySourceKind): FieldSpec<CacheDecl> {
   return {
     required: true,
     json: cacheJson(),
     parse: (ctx, path, _field, raw) =>
       requireCache(ctx, path, raw, kind) ?? undefined,
-  };
-}
-
-export function optionalCacheSpec(): FieldSpec<CacheDecl> {
-  return {
-    required: false,
-    json: cacheJson(),
-    parse: (ctx, path, _field, raw) => optionalCache(ctx, path, raw),
   };
 }
 

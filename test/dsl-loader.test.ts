@@ -451,11 +451,20 @@ describe("loadDslConfig — variable source kinds", () => {
     );
   });
 
-  test("template: requires template; cache optional", () => {
+  // [LAW:no-silent-failure] A template variable is a computed that tracks what
+  // it reads, so a `cache:` — once accepted and never passed to the runtime —
+  // would change nothing; it is refused with that reason, once.
+  test("template: requires template, and a cache is refused", () => {
     expectIssue(`{ variables: { x: { kind: "template" } } }`, {
       path: "variables.x.template",
       message: "variables.x.template must be a string",
     });
+    const refused = expectError(
+      `{ variables: { x: { kind: "template", template: "{{ .y }}", cache: { depends_on: ["y"] } }, y: { kind: "literal", value: "1" } } }`,
+    ).issues.filter((i) => i.path === "variables.x.cache");
+    expect(refused.map((i) => i.message)).toEqual([
+      "variables.x.cache was removed: a template variable recomputes whenever a variable it reads changes, so it takes no cache policy — delete the key",
+    ]);
     const ok = parseAndValidate(
       FILE,
       `{ variables: { cwd_short: { kind: "template", template: "static" } } }`,
@@ -918,11 +927,11 @@ describe("loadDslConfig — cache policies", () => {
     });
     const ok = parseAndValidate(
       FILE,
-      `{ variables: { x: { kind: "template", template: "x", cache: { never: true } } } }`,
+      `{ variables: { x: { kind: "shell", command: "x", cache: { never: true } } } }`,
     );
     expect(ok.variables.x).toEqual({
-      kind: "template",
-      template: "x",
+      kind: "shell",
+      command: "x",
       cache: { never: true },
     });
   });

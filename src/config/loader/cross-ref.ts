@@ -686,12 +686,10 @@ function checkVarRefs(
       segCtx,
     });
   }
-  if (hasCacheField(v)) {
-    if (v.cache && "key" in v.cache) {
-      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, scope, {
-        segCtx,
-      });
-    }
+  if (hasCacheField(v) && "key" in v.cache) {
+    checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, scope, {
+      segCtx,
+    });
   }
 }
 
@@ -702,9 +700,7 @@ function checkDependsOn(
   scope: TemplateScope,
   segCtx?: string,
 ): void {
-  if (!hasCacheField(v)) return;
-  if (!v.cache) return;
-  if (!("depends_on" in v.cache)) return;
+  if (!hasCacheField(v) || !("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i]!;
     // [LAW:one-source-of-truth] Exact membership, not refResolves: the
