@@ -329,15 +329,16 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     }
 
     // A picker control open: the ticket's Done-when, verbatim — its trigger
-    // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the list of
-    // options it opens (brandon-menu-ia-q30.jl1) is a depth-2 item of that band.
+    // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the first
+    // row it opens — the theme picker's swatches (brandon-theme-swatch-8v9r)
+    // — is a depth-2 item of that band.
     const control = row2[0]!;
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(control, pickers, "candybar.apply.theme");
     rt.render();
     const band2: Disclosure = { ...band0, depth: 2 };
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
-    const list = "candybar.list.theme";
+    const list = "candybar.list.theme.0";
     expect(rt.bgOf(list)).toBe(
       bandItemFor(palette, band2, regionAddress(rt, list), ColorDepth.TRUECOLOR).hex,
     );

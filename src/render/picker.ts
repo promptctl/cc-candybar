@@ -29,6 +29,7 @@ import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
   presentedAction,
   linkFragment,
+  linkOver,
   realize,
   readVar,
   renderLook,
@@ -36,7 +37,8 @@ import {
   type CompiledActionDecl,
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
-import { closeOn, optionItemStyle } from "./band-style.js";
+import { closeOn } from "./band-style.js";
+import { optionPaint, type ItemPaint } from "./option-paint.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import { fitCells, libraryLayout, type LibraryPageLayout } from "./library.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
@@ -44,21 +46,7 @@ import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
-import { placedBy, type Position } from "../themes/decor.js";
-
-// [LAW:locality-or-seam] How an option cell is coloured, as a VALUE the caller
-// hands in: the picker lays out item `position` (which option, of how many) and
-// names the `option` that cell applies, and knows nothing of bands, hues, depth,
-// palettes, or how the instance PLACES its options — the caller completes the
-// position into an address step with its own distribution, and decides whether
-// the OPTION or its position is what colours the cell. Both callers go through
-// the one `optionItemStyle`, so a menu body and a standalone `{{ picker }}`
-// colour their items by one rule.
-//
-// The option was always sitting beside the call site below and was never passed,
-// which is why no item style could be a function of the choice being offered
-// (brandon-picker-31z).
-export type ItemStyle = (position: Position, option: string) => Style;
+import { placedBy } from "../themes/decor.js";
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -140,19 +128,20 @@ export function paginate(
 // ←/→ appear only on a multi-page grid. Reserve arrow space only after a first
 // pass proves it overflows — reserving it unconditionally is self-fulfilling (a
 // run that fits could be forced to split, making arrows appear unnecessarily).
-// The ✕'s room is the caller's: a picker that draws one reserves it. At an
+// The room of the cells before the page — a ✕ the picker draws, the caller's
+// lead — is the caller's to reserve. At an
 // infinite width (the wrap case) paginate yields one page, so neither pass
 // splits.
 function gridPages(
   widths: readonly number[],
   available: number,
-  closeReserve: number,
+  navReserve: number,
 ): readonly LibraryPageLayout[] {
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
-  const firstPass = paginate(widths, available, closeReserve);
+  const firstPass = paginate(widths, available, navReserve);
   return (
     firstPass.length > 1
-      ? paginate(widths, available, closeReserve + arrowReserve)
+      ? paginate(widths, available, navReserve + arrowReserve)
       : firstPass
   ).map((cells) => [{ label: "", indices: cells }]);
 }
@@ -210,7 +199,7 @@ export type PickerClose =
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
 // page ⇒ set-int) — a wrong kind is an author error surfaced loudly at render
 // (composeWithDiagnostics shows it), not a silent empty picker.
-function requireKind<K extends CompiledActionDecl["kind"]>(
+export function requireKind<K extends CompiledActionDecl["kind"]>(
   runtime: ActionRuntime,
   name: string,
   kind: K,
@@ -238,14 +227,20 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 // an artificial gap — there is nothing about "picker" that excludes one kind.
 //
 // [LAW:single-enforcer] Exported so the one thing a caller needs BEFORE the grid
-// renders — the option domain's own painter, for `optionItemStyle` — is read
+// renders — the option domain's own painter, for `optionPaint` — is read
 // through the same resolution renderPicker itself makes, a `do`'s head
 // included. A second lookup could disagree with the grid about which action
 // the options belong to.
 export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
-  helper: "picker" | "menu" | "carousel",
+  helper:
+    | "picker"
+    | "menu"
+    | "carousel"
+    | "swatch"
+    | "swatches"
+    | "themePreview",
 ): Extract<
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
@@ -286,10 +281,13 @@ export function renderPicker(
   close: PickerClose,
   paged: boolean,
   runtime: ActionRuntime,
-  itemStyle: ItemStyle,
+  itemPaint: ItemPaint,
   // The ✕'s text on the ground the picker is laid on (`closeOn`): the caller
   // knows that ground — a menu body's plane, a bare picker's own segment.
   closeStyle: Style,
+  // Cells the caller lays before the page, after any ✕ — a `{{ swatches }}`
+  // row's ◀ ? ▶. The page is fitted to what they leave of the row.
+  lead: readonly RichText[] = [],
 ): readonly RichText[] {
   const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the presented action above (its
@@ -309,6 +307,20 @@ export function renderPicker(
   const current =
     "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
 
+  // [LAW:dataflow-not-control-flow] An item is placed by its index in the
+  // WHOLE option domain, not on its page: paging changes which cells show,
+  // never how an option is drawn. The grid pages by the drawn cells' widths,
+  // so a cell carrying a swatch fits the row it is laid in.
+  const optionFace = (i: number, label: string): RichText => {
+    const option = apply.options[i]!;
+    return itemPaint(
+      { index: i, count: apply.options.length },
+      option,
+      label,
+      option === current,
+    );
+  };
+
   // In wrap mode (available = Infinity) everything stands on one page. A led
   // picker pages at the led row's width, and reserves no ✕ it does not draw.
   const available = !paged
@@ -316,8 +328,9 @@ export function renderPicker(
     : close.kind === "led"
       ? ledRowBudget(runtime)
       : rowBudget(runtime);
-  const closeReserve =
-    close.kind === "led" ? 0 : cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
+  const navReserve =
+    (close.kind === "led" ? 0 : cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1) +
+    lead.reduce((cols, cell) => cols + cell.cellLength + 1, 0);
 
   // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
   // domain's one section is the run of cells `paginate` fits to the width, and
@@ -332,16 +345,32 @@ export function renderPicker(
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
       ? libraryLayout(catalogue.entries, catalogue.groups, paged)
-      : gridPages(apply.options.map(cellWidth), available, closeReserve);
+      : gridPages(
+          apply.options.map((option, i) => optionFace(i, option).cellLength),
+          available,
+          navReserve,
+        );
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
-  // (the key was never written) — parse it at this trust boundary; an out-of-range
-  // or unset value clamps into the existing page set, so the picker never indexes
-  // a non-existent page. The segment's `when` gates visibility on page >= 0.
+  // (the key was never written) — parse it at this trust boundary; an unset
+  // value is the first page and one past the end the last, so the picker never
+  // indexes a non-existent page. A value below zero is the page holding the
+  // option in force (PAGE_HOLDING_CURRENT): a list opens where its value is,
+  // and a click that moves the value moves the view with it. (A standalone
+  // picker's `when` hides it at page < 0, so it never draws one.)
   const rawPage = parseInt(readVar(store, page.stateVar), 10);
-  const pageIdx = Number.isInteger(rawPage)
-    ? Math.max(0, Math.min(rawPage, pages.length - 1))
-    : 0;
+  const inForce = current === undefined ? -1 : apply.options.indexOf(current);
+  const holding = Math.max(
+    0,
+    pages.findIndex((sections) =>
+      sections.some((section) => section.indices.includes(inForce)),
+    ),
+  );
+  const pageIdx = !Number.isInteger(rawPage)
+    ? 0
+    : rawPage < 0
+      ? holding
+      : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
 
   const pageUrl = (value: number): string =>
@@ -375,18 +404,8 @@ export function renderPicker(
       ...closeEffects,
     ]);
 
-  // [LAW:dataflow-not-control-flow] An item is placed by its index in the
-  // WHOLE option domain, not on its page: paging changes which cells show,
-  // never what colour an option is.
-  const optionCell = (i: number, text: string): RichText => {
-    const option = apply.options[i]!;
-    return linkFragment(
-      text,
-      optionUrl(option),
-      option === current,
-      itemStyle({ index: i, count: apply.options.length }, option),
-    );
-  };
+  const optionCell = (i: number, label: string): RichText =>
+    linkOver(optionFace(i, label), optionUrl(apply.options[i]!));
   // [LAW:dataflow-not-control-flow] A led picker is closed by the body's ✕.
   const nav: RichText[] =
     close.kind === "led"
@@ -399,6 +418,7 @@ export function renderPicker(
             closeStyle,
           ),
         ];
+  nav.push(...lead);
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
@@ -545,7 +565,7 @@ export function pickerFuncs(
           // A bare `{{ picker }}` authors no options dict, so it places by
           // the default — the same resolution a `{{ menu }}` with no
           // "distribution" option makes.
-          optionItemStyle(
+          optionPaint(
             active,
             placedBy(undefined),
             renderLook(runtime, "{{ picker }}"),

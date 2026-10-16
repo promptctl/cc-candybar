@@ -18,7 +18,11 @@ import {
   disclosureStateVar,
   escapeTemplateLiteral,
 } from "./disclosure.js";
-import { menuActionName, menuPageKey } from "./menu-keys.js";
+import {
+  menuActionName,
+  menuPageKey,
+  PAGE_HOLDING_CURRENT,
+} from "./menu-keys.js";
 import type {
   DisclosureRef,
   SettingDecl,
@@ -38,14 +42,24 @@ import {
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] What a control can range: a flag, a bounded
-// integer, or the members of an option domain — a registered name ("themes",
-// "styles", …) or an inline list of words. Every declaration a setting source
-// can write projects onto one of these three, and the shape of the control
-// follows from the arm alone.
+// integer, the members of an option domain — a registered name ("styles",
+// "presets", …) or an inline list of words — or THEMES. Every declaration a
+// setting source can write projects onto one of these four, and the shape of
+// the control follows from the arm alone. Themes are an arm of their own
+// because a theme is chosen by looking at it (brandon-theme-swatch-8v9r): its
+// control is the theme picker, swatches and a demo, never a list of names. The
+// two domains whose members are themes are the arm's whole range.
+export type ThemeDomain = "themes" | typeof PLACEMENT_THEMES;
 export type ControlDomain =
   | "bool"
   | SettingRange
-  | { readonly from: OptionDomain };
+  | { readonly from: OptionDomain }
+  | { readonly themes: ThemeDomain };
+
+// The option domain a control over named options ranges.
+const optionsOf = (
+  domain: { readonly from: OptionDomain } | { readonly themes: ThemeDomain },
+): OptionDomain => ("from" in domain ? domain.from : domain.themes);
 
 export interface ControlDecl {
   readonly label: string;
@@ -54,13 +68,15 @@ export interface ControlDecl {
 
 // [LAW:types-are-the-program] What the generator hands back, discriminated by
 // whether the control opens anything: an `inline` control is one cell of its
-// row; a `picker` is `◀ name ▶` — the arrows step, the name opens the list of
-// every option (brandon-menu-ia-q30.jl1) — and carries that list: the
-// disclosure it opens on and the template of its row. The caller hangs the
-// list on the control (`disclosureNode`), with any rows of its own beneath it
-// in the same body, so they open, close and lead with one ✕ together. Either
-// way it carries the actions and state variables its templates name, so the
-// two cannot be separated.
+// row; a `picker` opens a list of its options — `◀ name ▶`, whose arrows step
+// and whose name opens a plain list of every option (brandon-menu-ia-q30.jl1),
+// or the theme picker, whose label and swatch open a row of swatches over a
+// demo of the selected theme — and carries that list: the disclosure it opens
+// on and the template of each of its rows. The caller hangs the list on the
+// control (`disclosureNode`), with any rows of its own beneath it in the same
+// body, so they open, close and lead with one ✕ together. Either way it
+// carries the actions and state variables its templates name, so the two
+// cannot be separated.
 interface AffordanceParts {
   readonly template: string;
   readonly actions: Readonly<Record<string, ActionDecl>>;
@@ -68,7 +84,7 @@ interface AffordanceParts {
 }
 export interface PickerList {
   readonly ref: DisclosureRef;
-  readonly template: string;
+  readonly rows: readonly string[];
 }
 export type Affordance =
   | (AffordanceParts & { readonly kind: "inline" })
@@ -86,10 +102,11 @@ export function controlDomainAdmits(
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): boolean {
   if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if ("from" in domain) {
-    return resolveOptionDomain(domain.from, perConfigDomains).members.includes(
-      value,
-    );
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains,
+    ).members.includes(value);
   }
   return parseSessionInt(value, domain) !== null;
 }
@@ -106,11 +123,12 @@ export function describeControlDomain(
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
 ): string {
   if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if ("from" in domain) {
-    const { members } = resolveOptionDomain(domain.from, perConfigDomains);
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
     const quoted = members.map((m) => JSON.stringify(m));
     if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-    const named = typeof domain.from === "string" ? ` "${domain.from}"` : "";
+    const named = typeof from === "string" ? ` "${from}"` : "";
     return `one of the ${members.length}${named} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
   }
   return `an integer from ${domain.min} to ${domain.max}`;
@@ -126,16 +144,17 @@ export function controlDeclOf(decl: SettingDecl): ControlDecl {
 // narrowing alone, so a new arm is a compile error here, not a stepper minted
 // over an undefined range.
 function controlDomainOf(domain: SettingDecl["domain"]): ControlDomain {
-  if (domain === "theme") return { from: PLACEMENT_THEMES };
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
   if (domain === "bool") return domain;
   return "min" in domain ? domain : { from: domain };
 }
 
 // The control, and the actions it writes `key` through — named `name` (and
 // `name.down`/`name.up` for a stepper). `readVar` is the variable holding the
-// value the bar renders with, which a stepper shows between its arrows (a
-// picker reads its own through its action's key). `listKey` is the accordion a picker's list
-// joins: the lists of one caller's controls share it, so one is open at a time.
+// value the bar renders with, which a stepper shows between its arrows and the
+// theme picker names while open (an option picker reads its own through its
+// action's key). `listKey` is the accordion a picker's list joins: the lists
+// of one caller's controls share it, so one is open at a time.
 //
 // [LAW:single-enforcer] Nothing here declares a gate: every action is a `set`
 // whose value source is the declared domain, and deriveActionValidators
@@ -160,7 +179,24 @@ export function settingControl(
     };
   }
   if ("from" in domain) {
-    return optionPicker(label, key, name, listKey, domain.from);
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ "${label}" }} {{ carousel "${n.apply}" 0 "${n.open}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`],
+    }));
+  }
+  if ("themes" in domain) {
+    // The theme picker (design-docs/PROPOSAL-ui-pickers.md, "Theme picker"):
+    // closed, the setting's label and the swatch of the theme in force; open,
+    // that theme's name and swatch, over the row of swatches and the two-row
+    // demo of the theme selected. Brandon: "The name loses its styling and
+    // the swatch carries the colour."
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label}" .${readVar} }} {{ swatch "${n.apply}" }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`,
+      ],
+    }));
   }
   const step = (by: number): ActionDecl => ({
     set: key,
@@ -182,45 +218,61 @@ export function settingControl(
   };
 }
 
-// [LAW:one-type-per-behavior] A choice among named options, as Brandon drew
-// it: `◀ name ▶`, the arrows applying the previous and next option (the bare
-// carousel, `{{ carousel … 0 }}`), the name opening a plain list of every
-// option — "a regular menu, no carousel" — paged to the width. The list is a
-// row of a disclosure body on `listKey`, so the body's ✕ is its close and the
-// picker draws none of its own. Opening it starts at the first page.
+// The names a picker's templates bind: the action applying an option, the one
+// opening the list (on the page holding the option in force), and the list's
+// page cursor.
+interface PickerNames {
+  readonly apply: string;
+  readonly open: string;
+  readonly page: string;
+}
+
+// What a picker looks like: the control's own template, and the rows of the
+// list it opens, first to last.
+interface PickerFace {
+  readonly template: string;
+  readonly rows: readonly string[];
+}
+
+// [LAW:one-type-per-behavior] A choice among named options, whatever it looks
+// like: an apply action over the domain, the list on `listKey` that the
+// control opens, and the page cursor of that list. The list is a disclosure
+// body on `listKey`, so the body's ✕ is its close and no row draws one of its
+// own. Opening it shows the page holding the option in force. What the
+// control and its rows SHOW is the face — `◀ name ▶` over a plain list of
+// every option, "a regular menu, no carousel", or the theme picker — and only
+// the face differs.
 // [LAW:one-source-of-truth] The toggle and the page cursor are named as a
 // shared-key `{{ menu }}` names its own (menu-keys.ts): the list IS a menu body
 // on an accordion key, so one cursor per key is exact, and the cursor lives in
 // the menu namespace, never under a setting's draft namespace.
 function optionPicker(
-  label: string,
   key: string,
   name: string,
   listKey: string,
   from: OptionDomain,
+  face: (names: PickerNames) => PickerFace,
 ): Affordance {
   const ref: DisclosureRef = { variable: listKey, key: listKey, member: name };
   const toggle = menuActionName(listKey, name);
   const open = `${name}.open`;
   const page = menuPageKey(listKey);
-  const firstPage = `${page}.first`;
+  const currentPage = `${page}.current`;
+  const { template, rows } = face({ apply: name, open, page });
   return {
     kind: "picker",
-    template: `{{ "${label}" }} {{ carousel "${name}" 0 "${open}" }}`,
+    template,
     actions: {
       [name]: { set: key, from },
       [toggle]: disclosureCycleAction(listKey, name),
       [page]: { set: page, int: true },
-      [firstPage]: { set: page, to: "0" },
-      [open]: { do: [toggle, firstPage] },
+      [currentPage]: { set: page, to: PAGE_HOLDING_CURRENT },
+      [open]: { do: [toggle, currentPage] },
     },
     variables: {
       [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
       [page]: { kind: "state", key: page, default: "0" },
     },
-    list: {
-      ref,
-      template: `{{ picker "${name}" "${page}" false true true }}`,
-    },
+    list: { ref, rows },
   };
 }

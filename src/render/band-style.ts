@@ -19,10 +19,7 @@ import {
   textOn,
   type Decoration,
   type PlacedStep,
-  type Distribution,
-  type Position,
 } from "../themes/decor.js";
-import type { OptionPalette, RenderPalettes } from "../config/option-domain.js";
 import type { ActiveSegment } from "./active-segment.js";
 
 /**
@@ -115,78 +112,4 @@ export function bandItemStyle(
     bandItemFor(active.palette, active.disclosure, [step], drawnAt),
     drawnAt,
   );
-}
-
-/**
- * The Style of one option cell in a picker — the ONE rule a `{{ menu }}` body,
- * a bare `{{ picker }}` and a `{{ carousel }}` colour their options by
- * (brandon-picker-31z, brandon-menu-ia-q30.jl1).
- *
- * Two rules, selected by one VALUE: the option domain's own `paletteOf`, or its
- * absence. A generic domain has none, and an option is coloured by where it sits
- * in the band. A COLOUR-VALUED domain has one, and every option sits on the one
- * `ground` the caller names — a menu body's plane, the segment's own background
- * — with its TEXT in the palette picking it would put in force. Brandon: "Only
- * the foreground should be in the themes colors, it looks like shit when the
- * backgrounds are drawn differently, very messy." So the only thing that
- * differs between two options is the thing being chosen, and the list reads as
- * one menu.
- *
- * [LAW:dataflow-not-control-flow] The selection happens ONCE per picker, not per
- * cell — a picker is painted by whichever rule its domain handed in.
- */
-export function optionItemStyle(
-  active: ActiveSegment,
-  distribution: Distribution,
-  render: RenderPalettes,
-  paletteOf: OptionPalette | undefined,
-  drawnAt: ColorDepth,
-  ground: ColorRgba,
-): (position: Position, option: string) => Style {
-  if (paletteOf === undefined) {
-    return (position) =>
-      bandItemStyle(active, { ...position, distribution }, drawnAt);
-  }
-  return (_position, option) =>
-    appliedText(paletteOf(option, render), ground, drawnAt);
-}
-
-/**
- * The contrast an option label must clear against its ground: WCAG AA body
- * text. An option is text you have to READ to pick it, so it is not the
- * deliberately-recessive case 3.0 exists for. [LAW:no-silent-failure] rich-js
- * refuses to default this, because the threshold is the whole decision.
- */
-const OPTION_TEXT_RATIO = 4.5;
-
-/**
- * A colour-valued option: the shared ground, and the applied palette's own
- * `primary` as the text — hue preserved, OKLCH lightness slid by rich-js until
- * it clears AA on that ground. The hue is what identifies a theme (a bar under
- * a theme is mostly its hues), and it is also what tells the styles apart:
- * `vivid` and `muted` scale chroma, which moves a primary and leaves a
- * near-neutral background where it was.
- *
- * [LAW:one-source-of-truth] The contrast math is rich-js's (`ensureContrast`,
- * the same function the `readableOn` binding is). This is deliberately NOT
- * `textOn`: that picks a theme POLE for a decorative background, where the text
- * says nothing; here the text colour is itself information, so the hue must
- * survive and only its lightness may move.
- */
-function appliedText(
-  applied: Palette,
-  ground: ColorRgba,
-  drawnAt: ColorDepth,
-): Style {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(ground),
-    color: ColorSpec.fromRgba(
-      ensureContrast(
-        paletteRole(applied, "primary"),
-        ground,
-        OPTION_TEXT_RATIO,
-        drawnAt,
-      ),
-    ),
-  });
 }

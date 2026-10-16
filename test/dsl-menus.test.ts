@@ -57,6 +57,7 @@ import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import {
   bandFor,
   bandItemFor,
+  DECOR_HUES,
   decorationFor,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
@@ -90,33 +91,52 @@ function addressOf(root: CompiledNode, name: string): Address {
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-// A colour-valued option (brandon-picker-31z, brandon-menu-ia-q30.jl1): it sits
-// on the ground the list is drawn on — every option the same — with the applied
-// palette's own `primary` as the text, slid in OKLCH lightness by rich-js until
-// it clears AA on that ground. Spelled once here, so the render's rule and this
-// file's expectation of it are one line apart rather than repeated per assertion.
+// A colour-valued option (brandon-theme-swatch-8v9r): its NAME is written in
+// the text of the ground the list is drawn on — every option alike, "the same
+// colour and background as the rest of the UI" — and the swatch beside it
+// carries the colour: one upper half block per decorative role, the role over
+// the applied palette's own background, every run carrying the option's link.
+// Spelled once here, so the render's rule and this file's expectation of it
+// are one line apart rather than repeated per assertion.
 type Ground = NonNullable<NonNullable<Style["bgcolor"]>["value"]>;
-const appliedText = (
-  applied: Palette,
-  ground: Ground,
-): { bg: string; fg: string } => ({
-  bg: ground.hex,
-  fg: ensureContrast(paletteRole(applied, "primary"), ground, 4.5).hex,
-});
-function expectApplied(
-  cell: { bg: string | undefined; fg: string | undefined },
-  applied: Palette,
-  ground: Ground,
-): void {
-  const { bg, fg } = appliedText(applied, ground);
-  expect(cell.bg).toBe(bg);
-  expect(cell.fg).toBe(fg);
+interface OptionRuns {
+  readonly name: Style;
+  readonly swatch: readonly Style[];
 }
-function expectAppliedCell(style: Style, applied: Palette, ground: Ground): void {
-  expectApplied(
-    { bg: style.bgcolor?.value?.hex, fg: style.color?.value?.hex },
-    applied,
-    ground,
+function optionRuns(body: RichText, option: string): OptionRuns {
+  const linked = body.spans.filter(
+    (s) => resolvedStyle(s.style).link !== undefined,
+  );
+  const span = linked.find((s) => body.plain.slice(s.start, s.end) === option);
+  if (span === undefined) throw new Error(`no option cell "${option}"`);
+  const link = resolvedStyle(span.style).link;
+  return {
+    name: resolvedStyle(span.style),
+    swatch: linked
+      .filter(
+        (s) =>
+          s.start >= span.end &&
+          body.plain.slice(s.start, s.end) === "▀" &&
+          resolvedStyle(s.style).link === link,
+      )
+      .map((s) => resolvedStyle(s.style)),
+  };
+}
+const swatchColours = (styles: readonly Style[]) =>
+  styles.map((s) => [s.color?.value?.hex, s.bgcolor?.value?.hex]);
+function expectSwatched(
+  runs: OptionRuns,
+  applied: Palette,
+  ground: Ground,
+  text: string,
+): void {
+  expect(runs.name.bgcolor?.value?.hex).toBe(ground.hex);
+  expect(runs.name.color?.value?.hex).toBe(text);
+  expect(swatchColours(runs.swatch)).toEqual(
+    DECOR_HUES.map((role) => [
+      paletteRole(applied, role).hex,
+      paletteRole(applied, "background").hex,
+    ]),
   );
 }
 // The ground a rendered line is drawn on: its own background.
@@ -375,7 +395,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       expect((e as ConfigError).message).toMatch(
-        /unknown action "noSuchApply" \(in a picker, menu or carousel\)/,
+        /unknown action "noSuchApply" \(in a picker, menu, carousel, swatch or swatches\)/,
       );
     }
   });
@@ -706,11 +726,11 @@ describe("toggle round trip + drop stacking", () => {
     const trigger = cells[0]!;
     expect(resolvedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
     expect(resolvedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
-    // The dropped line is the band: its plane. The OPTION cells sit on that
+    // The dropped line is the band: its plane. The OPTION names sit on that
     // plane too, every one — `themes` is a colour-valued domain, so each option
-    // says what it is in its TEXT, the theme's own primary (brandon-menu-ia-
-    // q30.jl1), rather than on a band item of its own (the next describe pins
-    // that the band placement is still what a generic domain gets).
+    // says what it is in its SWATCH (brandon-theme-swatch-8v9r), rather than
+    // on a band item of its own (the next describe pins that the band
+    // placement is still what a generic domain gets).
     const body = cells[1]!;
     expect(resolvedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
     const options = [...ALLOWED];
@@ -722,7 +742,12 @@ describe("toggle round trip + drop stacking", () => {
     for (const span of optionSpans) {
       const name = body.plain.slice(span.start, span.end);
       const style = resolvedStyle(span.style);
-      expectAppliedCell(style, paletteForThemeName(name), band.plane);
+      expectSwatched(
+        optionRuns(body, name),
+        paletteForThemeName(name),
+        band.plane,
+        textOn(palette, band.plane, ColorDepth.TRUECOLOR).hex,
+      );
       // And it is NOT the band item it would have worn as a generic option:
       // the address is out of the decision.
       expect(style.bgcolor?.value?.hex).not.toBe(
@@ -1400,23 +1425,39 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   }`;
   const LKEY = "menus.lookpicker.applyStyle";
 
-  test("every theme option sits on the list's one ground, its text in that theme's primary", () => {
-    const { render, sink, clickToggle } = buildRuntime(BOTH_PICKERS_SRC);
+  test("every theme option is its name in the list's own text, beside that theme's swatch", () => {
+    const { render, sink, palette, clickToggle } =
+      buildRuntime(BOTH_PICKERS_SRC);
     render();
     clickToggle(render(), TKEY, "applyTheme");
     render();
     const cells = optionCells(sink, "themepicker", [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
-    const ground = groundOf(sink.get("themepicker")![1]!);
-    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name), ground);
-    // The point of the exercise: the grid actually distinguishes its options,
-    // by their text alone — the ground is one.
-    expect(new Set(cells.map((c) => c.bg)).size).toBe(1);
-    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBeGreaterThan(1);
+    const body = sink.get("themepicker")![1]!;
+    const ground = groundOf(body);
+    const text = textOn(palette, ground, ColorDepth.TRUECOLOR).hex;
+    for (const cell of cells) {
+      expectSwatched(
+        optionRuns(body, cell.name),
+        paletteForThemeName(cell.name),
+        ground,
+        text,
+      );
+    }
+    // The point of the exercise: the names are one colour on one ground, and
+    // the swatches tell the options apart.
+    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBe(1);
+    expect(
+      new Set(
+        cells.map((c) =>
+          JSON.stringify(swatchColours(optionRuns(body, c.name).swatch)),
+        ),
+      ).size,
+    ).toBeGreaterThan(1);
   });
 
   test("a theme option's colour is a function of the option ALONE — not its index, count or distribution", () => {
-    const colours = (dictEntry: string): Map<string, string | undefined> => {
+    const colours = (dictEntry: string): Map<string, string> => {
       const { render, sink, clickToggle } = buildRuntime(
         BOTH_PICKERS_SRC.replace(
           '{{ menu "applyTheme" "\u25b8" "\u25be" }}',
@@ -1426,10 +1467,17 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       render();
       clickToggle(render(), TKEY, "applyTheme");
       render();
-      const out = new Map(
-        optionCells(sink, "themepicker", [...ALLOWED]).map((c) => [c.name, c.bg]),
+      const body = sink.get("themepicker")![1]!;
+      return new Map(
+        optionCells(sink, "themepicker", [...ALLOWED]).map((c) => [
+          c.name,
+          JSON.stringify([
+            c.bg,
+            c.fg,
+            swatchColours(optionRuns(body, c.name).swatch),
+          ]),
+        ]),
       );
-      return out;
     };
     // Two distributions that demonstrably place a band differently (the ai7.8
     // test above pins that) produce byte-identical option colours here: the
@@ -1440,7 +1488,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect([...monotonic.entries()]).toEqual([...uniform.entries()]);
   });
 
-  test("every style option's text is the BASE palette's primary under that style, not the bar's already-styled one", () => {
+  test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", () => {
     const { render, sink, config, palette, clickToggle } =
       buildRuntime(BOTH_PICKERS_SRC, "s1", "dim");
     render();
@@ -1449,21 +1497,23 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     const names = Object.keys(config.styles);
     const cells = optionCells(sink, "lookpicker", names);
     expect(cells.length).toBe(names.length);
+    const body = sink.get("lookpicker")![1]!;
+    const ground = groundOf(body);
     for (const cell of cells) {
       // rich-js's transposePalette DIRECTLY, never cc-candybar's memoized
       // `transposedPalette`: the function under test cannot be the oracle that
       // checks it. Asking rich-js fresh is what makes the base observable.
-      expectApplied(
-        cell,
+      expectSwatched(
+        optionRuns(body, cell.name),
         transposePalette(palette, config.styles[cell.name]!),
-        groundOf(sink.get("lookpicker")![1]!),
+        ground,
+        // The names are written in the text of the bar's own (styled) list.
+        cells[0]!.fg!,
       );
     }
-    // Every style sits on the one ground and only its text is the style's
-    // own. Text alone cannot always tell two styles apart — under `dim`,
-    // `vivid`'s chroma lift is clipped back to `none`'s primary — which is
-    // the swatch's job (brandon-theme-swatch-8v9r), not this cell's.
-    expect(new Set(cells.map((c) => c.bg)).size).toBe(1);
+    // Every style's name sits on the one ground in the one text colour; the
+    // swatch is the style's own.
+    expect(new Set(cells.map((c) => `${c.bg}/${c.fg}`)).size).toBe(1);
     // THE PREMISE, asserted rather than assumed: this bar really is wearing a
     // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
@@ -1482,23 +1532,22 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // instead of the base would transpose an already-transposed palette, and
     // the identity style `none` would come back wearing vivid's primary rather
     // than the base's.
-    const none = cells.find((c) => c.name === "none")!;
-    const dim = cells.find((c) => c.name === "dim")!;
-    expect(none.fg).not.toBe(dim.fg);
-    expect(none.fg).toBe(
-      ensureContrast(
-        paletteRole(palette, "primary"),
-        groundOf(sink.get("lookpicker")![1]!),
-        4.5,
-      ).hex,
+    const none = swatchColours(optionRuns(body, "none").swatch);
+    const dim = swatchColours(optionRuns(body, "dim").swatch);
+    expect(none).not.toEqual(dim);
+    expect(none).toEqual(
+      DECOR_HUES.map((role) => [
+        paletteRole(palette, role).hex,
+        paletteRole(palette, "background").hex,
+      ]),
     );
   });
 
   // The rule has two call sites — a `{{ menu }}` body and a bare `{{ picker }}`
-  // — and both must go through the one `optionItemStyle`. Every test above drives
+  // — and both must go through the one `optionPaint`. Every test above drives
   // the menu; this one drives the picker directly, so neither site can lose the
   // painter while the other keeps it.
-  test("a bare {{ picker }} over a colour-valued domain paints its options too", () => {
+  test("a bare {{ picker }} over a colour-valued domain draws its swatches too", () => {
     const PICKER_SRC = `{
       globals: {},
       variables: {
@@ -1515,12 +1564,21 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       },
       root: { h: ['grid'] },
     }`;
-    const { render, sink } = buildRuntime(PICKER_SRC);
+    const { render, sink, palette } = buildRuntime(PICKER_SRC);
     render();
-    const cells = optionCellsOf(sink.get("grid")![0]!, [...ALLOWED]);
+    const line = sink.get("grid")![0]!;
+    const cells = optionCellsOf(line, [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
-    const ground = groundOf(sink.get("grid")![0]!);
-    for (const cell of cells) expectApplied(cell, paletteForThemeName(cell.name), ground);
+    const ground = groundOf(line);
+    const text = textOn(palette, ground, ColorDepth.TRUECOLOR).hex;
+    for (const cell of cells) {
+      expectSwatched(
+        optionRuns(line, cell.name),
+        paletteForThemeName(cell.name),
+        ground,
+        text,
+      );
+    }
   });
 
   test("a picker over a domain that is NOT colour-valued keeps its band placement", () => {

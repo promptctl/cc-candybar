@@ -37,7 +37,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
+import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -122,35 +122,6 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
   return { config, compiled, sessionState, render, bgOf, click, ctx };
-}
-
-// The colours in force where `text` is first drawn on the line that lists
-// it: the last truecolor foreground and background the SGR before it set.
-function sgrBefore(bytes: string, text: string): { fg?: string; bg?: string } {
-  const plain = withoutLinks(bytes);
-  const at = plain
-    .split("\n")
-    // An option opens with its own SGR, so it follows a space or an escape's
-    // closing `m`, and is followed by a space or the next escape.
-    .map((line) => {
-      const m = new RegExp(`[ m]${text}(?=[ \x1b])`).exec(line);
-      return { line, i: m === null ? -1 : m.index };
-    })
-    .find((l) => l.i >= 0);
-  if (at === undefined) throw new Error(`"${text}" is drawn nowhere`);
-  const out: { fg?: string; bg?: string } = {};
-  for (const m of at.line.slice(0, at.i + 1).matchAll(/\x1b\[([\d;]*)m/g)) {
-    const p = m[1]!.split(";");
-    for (let k = 0; k < p.length; k++) {
-      if (p[k] === "0" || p[k] === "")
-        Object.assign(out, { fg: undefined, bg: undefined });
-      if ((p[k] === "38" || p[k] === "48") && p[k + 1] === "2") {
-        out[p[k] === "38" ? "fg" : "bg"] = p.slice(k + 2, k + 5).join(";");
-        k += 4;
-      }
-    }
-  }
-  return out;
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -258,14 +229,14 @@ describe("load errors", () => {
 });
 
 describe("configure mode picks a placement's theme", () => {
-  test("a pick from the theme list recolours that placement alone, its options read in their own text colour on one ground, and save writes it", () => {
+  test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", () => {
     durable.write(TWO);
     const rt = buildRuntime(TWO);
     configurePlacement(rt.sessionState, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
-    // The control is `theme ◀ value ▶`; its name opens the list of every
-    // theme (brandon-menu-ia-q30.jl1). The open click is the one whose write
-    // names the theme control's own segment as the open member.
+    // The control is the theme picker, `theme ▀▀▀` (brandon-theme-swatch-
+    // 8v9r); its label opens the row of swatches. The open click is the one
+    // whose write names the theme control's own segment as the open member.
     const open = linkUrls(rt.render(BAR_A)).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] !== key && (e.args[2] ?? "").endsWith(".theme"),
@@ -274,7 +245,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(open).toBeDefined();
     rt.click(open!);
     const out = rt.render(BAR_A);
-    // Every option of the list applies the theme it names, gated by the
+    // Every swatch of the row applies the theme it stands for, gated by the
     // theme domain.
     const writing = (value: string): string[] =>
       linkUrls(out).filter((u) =>
@@ -287,16 +258,25 @@ describe("configure mode picks a placement's theme", () => {
     expect(gate.validate(key, first!).ok).toBe(true);
     expect(gate.validate(key, FOLLOW_BAR).ok).toBe(true);
     expect(gate.validate(key, "nope").ok).toBe(false);
-    // Brandon: "Only the foreground should be in the themes colors". Two
-    // themes whose backgrounds differ are listed on ONE ground, and told
-    // apart by their text alone.
+    // Brandon: "The name loses its styling and the swatch carries the
+    // colour." Two themes whose backgrounds differ are two swatches that
+    // differ, and no theme name is a link that picks one.
     expect(hex(paletteForThemeName(first!), "background")).not.toBe(
       hex(paletteForThemeName(second!), "background"),
     );
-    const [a, b] = [sgrBefore(out, first!), sgrBefore(out, second!)];
-    expect(a.bg).toBeDefined();
-    expect(a.bg).toBe(b.bg);
-    expect(a.fg).not.toBe(b.fg);
+    const swatchOf = (value: string) =>
+      links(out).find(
+        (l) =>
+          /▀▀▀/u.test(stripAnsi(l.text)) &&
+          effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+      )!;
+    expect(stripAnsi(swatchOf(first!).text).trim()).toBe("▀▀▀");
+    expect(swatchOf(first!).text).not.toBe(swatchOf(second!).text);
+    expect(
+      links(out).filter((l) =>
+        listResolvablePaletteNames().includes(stripAnsi(l.text).trim()),
+      ),
+    ).toEqual([]);
 
     const pinnedBefore = rt.bgOf("pinned");
     rt.click(writing(first!)[0]!);
@@ -338,9 +318,9 @@ describe("configure mode over a placement several presets share", () => {
       presets: { zzz: { root: { v: [{ h: ['tag'] }] } } },
     }`);
     configurePlacement(rt.sessionState, SID, "default", "tag");
-    const key = placementDraftKey("default", "tag", "theme");
+    // The theme picker's label: the click opening its swatches.
     const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
-      effectsOf(u).some((e) => e.args[1] === key),
+      effectsOf(u).some((e) => (e.args[2] ?? "").endsWith(".theme")),
     );
     expect(controls.length).toBeGreaterThan(0);
   });

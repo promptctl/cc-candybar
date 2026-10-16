@@ -24,7 +24,7 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 | Tab | Holds |
 |---|---|
 | `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
-| `🎨 look` | Four selectors: theme, style, variation, endcaps (below) |
+| `🎨 look` | The theme picker and its `⚙` (style, variation, shade), then effect, endcaps and fade in/out (below) |
 | `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
 | `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds. `PLACE` in `settings-menu.ts` names each setting's tab, keyed by every `SETTINGS` row, so a control lands in exactly one |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
@@ -79,7 +79,15 @@ look
 
 Each selector is one widget with two click regions. The arrows select the previous or next value, as the `themeSwitcher` segment does today. The value opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
 
-The menu a name opens is "a regular menu, no carousel": the full row of choices, paged to the width, with the preview rows under it. Each choice shows its effect in its text colour only: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." Every choice sits on the same menu background. That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
+The menu a name opens is "a regular menu, no carousel": the full row of choices, paged to the width, with the preview rows under it. Every choice sits on the same menu background: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
+
+The theme selector became the proposal's theme picker (brandon-theme-swatch-8v9r): `🎨 theme ▀▀▀  ⚙`. The label opens a row of swatches, `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →`, over a two-row demo of the selected theme; the gear opens style, variation and shade. A style's name, like a theme's wherever one is shown, is written plainly with its swatch beside it: "The name loses its styling and the swatch carries the colour."
+
+```
+look
+🎨 theme ▀▀▀  ⚙  ✨ ◀ none ▶  ✦ ◀ powerline ▶  ☐ fade in/out
+⚙ open:  ◐ ◀ none ▀▀▀ ▶  🎼 ◀ accent ▶  🔆 ◀ middle ▶
+```
 
 ## Renames
 

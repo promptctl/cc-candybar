@@ -98,6 +98,7 @@ import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
+import { swatchFuncs } from "../render/swatches.js";
 import { layoutPreviewFuncs } from "../render/layout-preview.js";
 import { menuFuncs, type MenuRuntime } from "../render/menu.js";
 import {
@@ -521,6 +522,9 @@ export function registerDslConfig(
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime, activeSegment),
       ...themePreviewFuncs(actionRuntime, activeSegment),
+      // The swatch row's `?` picks from the render's one instant, so a render
+      // at a given instant offers one pick, as it shows one clock.
+      ...swatchFuncs(actionRuntime, activeSegment, registry.now),
       ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the

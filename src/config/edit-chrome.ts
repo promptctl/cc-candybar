@@ -403,17 +403,16 @@ function configureParts(
       ctx.artifacts.segments[segName] = { template: control.template };
       return { kind: "segment", name: segName };
     }
-    const listSeg = `${segName}.list`;
     ctx.artifacts.segments[segName] = { template: control.template };
-    ctx.artifacts.segments[listSeg] = { template: control.list.template };
+    const rows = control.list.rows.map((template, row): LayoutNode => {
+      const listSeg = `${segName}.list.${row}`;
+      ctx.artifacts.segments[listSeg] = { template };
+      return { kind: "segment", name: listSeg };
+    });
     return disclosureNode(
       segName,
       control.list.ref,
-      {
-        kind: "container",
-        direction: "vertical",
-        children: [{ kind: "segment", name: listSeg }],
-      },
+      { kind: "container", direction: "vertical", children: rows },
       "drop",
     );
   });

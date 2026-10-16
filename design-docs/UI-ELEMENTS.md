@@ -13,6 +13,8 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 **Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The carousel itself is unchanged where it remains: the opt-in `themeSwitcher` segment and an author's own `{{ carousel }}`.
 
+**And since then (brandon-theme-swatch-8v9r, 2026-10-15):** the theme picker of the proposal is built. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background. The theme control is `🎨 theme ▀▀▀` with a `⚙` beside it; its label opens `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` (previous, random, next, then pages of swatches with the one in force bracketed) over a two-row demo, and the gear opens the style, variation and shade controls. Configure mode's placement theme is the same picker. A list opens on the page holding the current value.
+
 ## At a glance
 
 | Element | What it is for | Where it is used | Authored as |
@@ -215,8 +217,8 @@ The body a [menu](#menu) drops: `✕`, then a row of option cells that fits the 
 | `←` / `→` | page cursor ± 1 |
 | `✕` | closes (page cursor ← −1 for a hand-written picker) |
 
-- **Colour:** an option over the theme domain is painted in that theme's own background and primary colour; an option over the style domain, in the base theme with that style applied. Other options wear their band's item colours, placed by their index in the whole domain, so paging does not recolour them. The current option is bold.
-- **Authored as:** `{{ picker "apply" "page" closeOnPick paged }}`. `src/render/picker.ts` (`renderPicker`, `pickerFuncs`); option colours in `src/render/band-style.ts` (`optionItemStyle`).
+- **Colour:** an option over the theme or style domain is its name in the list's own text, then the swatch of the palette it would apply. Other options wear their band's item colours, placed by their index in the whole domain, so paging does not recolour them. The current option is bold.
+- **Authored as:** `{{ picker "apply" "page" closeOnPick paged }}`. `src/render/picker.ts` (`renderPicker`, `pickerFuncs`); option cells in `src/render/option-paint.ts` (`optionPaint`), the swatch in `src/render/swatch.ts`.
 
 ### Library pages
 
@@ -284,10 +286,11 @@ Short domains fit whole at either width: style, endcaps, variation and colour de
 
 Read-only rows under a ring, showing what the current pick looks like. Neither has a click.
 
-`{{ themePreview }}`, under the theme and style rings: sample cells of the current theme, each drawn by the function that draws that kind of cell on the bar (decoration tones, an open trigger and its plane, warning, error):
+`{{ themePreview }}`, under the style list (and, as `{{ themePreview "apply" }}`, under the theme picker's swatches, sampling the selected theme): two rows of sample cells, each drawn by the function that draws that kind of cell on the bar (decoration tones; an open trigger and its plane, warning, error):
 
 ```
-    ~/code  main  opus  42%  5m  $1.20   ▾ open  menu   warn  error
+    ~/code  main  opus  42%  5m  $1.20
+    ▾ open  menu   warn  error
 ```
 
 `{{ layoutPreview }}`, under the preset and variation rings: one block per segment of the current preset's rows, in that row's colours, labelled with the segment's name:

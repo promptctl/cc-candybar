@@ -27,6 +27,7 @@ import { placedBy } from "../themes/decor.js";
 import {
   bindsTemplateValue,
   linkFragment,
+  linkOver,
   readVar,
   realize,
   renderLook,
@@ -36,14 +37,13 @@ import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
-import { optionItemStyle } from "./band-style.js";
+import { optionPaint, valuePaint, type ItemPaint } from "./option-paint.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 import {
   assemble,
   cellWidth,
   ledRowBudget,
   requireOptionKind,
-  type ItemStyle,
 } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
@@ -55,27 +55,22 @@ type OptionAction = ReturnType<typeof requireOptionKind>;
 // function of widths: whole symmetric levels are added while the row still
 // fits, never more than the ring holds without showing one option twice, and
 // never more than the author's `cap` (Infinity when none was asked for).
-// `ring(d)` is the option d steps from the centre (negative = before it).
-// Exported for unit testing.
+// `width(d)` is the drawn width of the option d steps from the centre
+// (negative = before it). Exported for unit testing.
 export function neighbourLevels(
-  ring: (offset: number) => string,
+  width: (offset: number) => number,
   count: number,
   base: number,
   available: number,
   cap: number,
 ): number {
   const most = Math.min(Math.floor((count - 1) / 2), cap);
-  let width = base;
+  let used = base;
   let levels = 0;
   while (levels < most) {
-    const next =
-      width +
-      cellWidth(ring(-(levels + 1))) +
-      1 +
-      cellWidth(ring(levels + 1)) +
-      1;
+    const next = used + width(-(levels + 1)) + 1 + width(levels + 1) + 1;
     if (next > available) break;
-    width = next;
+    used = next;
     levels += 1;
   }
   return levels;
@@ -85,7 +80,7 @@ export function renderCarousel(
   applyName: string,
   apply: OptionAction,
   runtime: ActionRuntime,
-  itemStyle: ItemStyle,
+  itemPaint: ItemPaint,
   neighbours: number,
   // What a click on the centre does. Absent, it applies the current option
   // again; given, it fires that declared action instead — the settings menu's
@@ -141,19 +136,30 @@ export function renderCarousel(
     urls.set(offset, made);
     return made;
   };
-  const option = (offset: number): RichText =>
-    linkFragment(
+  const face = (offset: number): RichText =>
+    itemPaint(
+      { index: indexAt(offset), count },
       ring(offset),
-      url(offset),
+      ring(offset),
       ring(offset) === current,
-      itemStyle({ index: indexAt(offset), count }, ring(offset)),
     );
+  const option = (offset: number): RichText =>
+    linkOver(face(offset), url(offset));
 
   const middle =
     centreAction === undefined
       ? option(0)
-      : linkFragment(
-          ring(0),
+      : linkOver(
+          // Drawn as the arrows are, in the segment's own colours: the name
+          // is the control's text, not an option laid out for picking
+          // (Brandon: "The name loses its styling"), its swatch beside it
+          // when the domain is colour-valued.
+          valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
+            { index: indexAt(0), count },
+            ring(0),
+            ring(0),
+            false,
+          ),
           effectsUrl(
             realize(
               runtime.compiled.get(centreAction)!,
@@ -163,10 +169,6 @@ export function renderCarousel(
               sessionId,
             ).effects,
           ),
-          // Drawn as the arrows are, in the segment's own colours: the name
-          // is the control's text, not an option laid out for picking
-          // (Brandon: "The name loses its styling").
-          false,
         );
   const base =
     cellWidth(CAROUSEL_PREV) +
@@ -175,7 +177,7 @@ export function renderCarousel(
     1 +
     cellWidth(CAROUSEL_NEXT);
   const levels = neighbourLevels(
-    ring,
+    (offset) => face(offset).cellLength,
     count,
     base,
     ledRowBudget(runtime),
@@ -196,9 +198,10 @@ export function renderCarousel(
   );
 }
 
-// [LAW:one-type-per-behavior] Options are coloured by the ONE rule both picker
-// shapes share (`optionItemStyle`): a colour-valued domain paints each name in
-// the palette it would apply, any other domain places it in the band.
+// [LAW:one-type-per-behavior] Options are drawn by the ONE rule every picker
+// shape shares (`optionPaint`): a colour-valued domain writes each name beside
+// the swatch of the palette it would apply, any other domain places it in the
+// band.
 export function carouselFuncs(
   runtime: ActionRuntime,
   activeSegment: ActiveSegmentRef,
@@ -262,7 +265,7 @@ export function carouselFuncs(
           apply,
           runtime,
           // Its options sit on the segment's own background, inline in it.
-          optionItemStyle(
+          optionPaint(
             active,
             placedBy(undefined),
             renderLook(runtime, "{{ carousel }}"),

@@ -40,7 +40,7 @@ export const SETTINGS = {
     configKey: "palette",
     sessionKey: "theme",
     effectiveVar: "theme.effective",
-    label: "🎨",
+    label: "🎨 theme",
   },
   // `preset` is a projection like the rest: the preset carousel sits on the
   // settings menu's always-visible first row, where "which arrangement am I

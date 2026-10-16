@@ -246,7 +246,7 @@ describe("84s — action refs through helpers", () => {
       root: "s",
     }`);
     expect(message).toMatch(
-      /helpers\.ring[^\n]*unknown action "nope" \(in a picker, menu or carousel\)/,
+      /helpers\.ring[^\n]*unknown action "nope" \(in a picker, menu, carousel, swatch or swatches\)/,
     );
   });
 
@@ -258,7 +258,7 @@ describe("84s — action refs through helpers", () => {
       root: "s",
     }`);
     expect(message).toMatch(
-      /helpers\.grid[^\n]*unknown action "typoPage" \(in a picker, menu or carousel\)/,
+      /helpers\.grid[^\n]*unknown action "typoPage" \(in a picker, menu, carousel, swatch or swatches\)/,
     );
     expect(message).not.toMatch(/unknown action "applyTheme"/);
   });

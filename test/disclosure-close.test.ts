@@ -203,16 +203,17 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
     expectBodyLedBy([lines[2]!], tabKey);
     expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
 
-    // A picker's list opened inside the tab's body is its own disclosure's
-    // body (brandon-menu-ia-q30.jl1): each of its rows — the list of options
-    // and the preview under it — is led by that disclosure's ✕ alone, never
-    // the tab's or 🍫's, and the list draws no ✕ of its own.
+    // A picker opened inside the tab's body is its own disclosure's body
+    // (brandon-menu-ia-q30.jl1): each of its rows — the theme picker's row
+    // of swatches and the two rows of its demo (brandon-theme-swatch-8v9r) —
+    // is led by that disclosure's ✕ alone, never the tab's or 🍫's, and the
+    // swatch row draws no ✕ of its own.
     const pickers = sharedMenuStateKey("candybar.pickers");
     rt.clickWriting(lines, pickers, "candybar.apply.theme");
     lines = rt.render();
-    expect(lines).toHaveLength(6);
-    expectBodyLedBy(lines.slice(3, 5), pickers);
-    for (const row of lines.slice(3, 5)) {
+    expect(lines).toHaveLength(7);
+    expectBodyLedBy(lines.slice(3, 6), pickers);
+    for (const row of lines.slice(3, 6)) {
       expect(links(row).some((l) => closes(l, tabKey))).toBe(false);
       expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
     }

@@ -31,13 +31,19 @@ export interface Link {
 
 /**
  * Each link in order: its URI and the bytes between its open and its close.
+ * A link the writer closes and reopens to change colour — a theme name's
+ * swatch, a cell of several runs — is one link: runs of one URI with nothing
+ * visible between them are one click target on the screen, so they are read
+ * as one.
  *
  * [LAW:one-source-of-truth] Read through rich-js's `osc8Sequences`, over the
  * OSC 8 grammar the bytes are written with, so a change to how a link is
  * written is a change in one place.
  */
 export function links(rendered: string): Link[] {
-  const out: Link[] = [];
+  // Where each link's bytes start and where its close ends, to join a run of
+  // one URI to the one before it.
+  const out: Array<Link & { readonly from: number; readonly end: number }> = [];
   let open: Osc8Sequence | undefined;
   for (const seq of osc8Sequences(rendered)) {
     if (seq.uri !== "") {
@@ -53,14 +59,33 @@ export function links(rendered: string): Link[] {
     if (open === undefined)
       throw new Error(`OSC 8 close at ${seq.index} with no open link`);
     const from = open.index + open.length;
-    out.push({ url: open.uri, text: rendered.slice(from, seq.index) });
+    const last = out.at(-1);
+    if (
+      last !== undefined &&
+      last.url === open.uri &&
+      stripAnsi(rendered.slice(last.end, open.index)) === ""
+    ) {
+      out[out.length - 1] = {
+        url: last.url,
+        text: rendered.slice(last.from, seq.index),
+        from: last.from,
+        end: seq.index + seq.length,
+      };
+    } else {
+      out.push({
+        url: open.uri,
+        text: rendered.slice(from, seq.index),
+        from,
+        end: seq.index + seq.length,
+      });
+    }
     open = undefined;
   }
   if (open !== undefined)
     throw new Error(
       `OSC 8 open at ${open.index} (${open.uri}) is never closed`,
     );
-  return out;
+  return out.map(({ url, text }) => ({ url, text }));
 }
 
 /** One link the bar drew: its visible text and its URL. */

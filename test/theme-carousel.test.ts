@@ -58,7 +58,12 @@ import {
   renderLayoutPreview,
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
-import { sharedMenuStateKey } from "../src/config/menu-keys";
+import {
+  menuPageKey,
+  PAGE_HOLDING_CURRENT,
+  sharedMenuStateKey,
+} from "../src/config/menu-keys";
+import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
@@ -326,7 +331,7 @@ describe("the carousel rotates by applying", () => {
         ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
-    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu or carousel\)/);
+    ).toThrow(/unknown action "noSuchApply" \(in a picker, menu, carousel, swatch or swatches\)/);
   });
 
   test("a carousel over the wrong kind of action names the carousel, not the picker", () => {
@@ -344,7 +349,8 @@ describe("the carousel rotates by applying", () => {
 
   test("neighbours come in symmetric pairs, only while they fit, never repeating an option", () => {
     const names = ["aa", "bb", "cc", "dd", "ee", "ff", "gg"];
-    const ring = (d: number) => names[((d % 7) + 7) % 7]!;
+    // The drawn width of the option d steps from the centre.
+    const ring = (d: number) => names[((d % 7) + 7) % 7]!.length;
     // ◀ aa ▶ = 6 cols; each level adds two names and two spaces = 6.
     expect(neighbourLevels(ring, 7, 6, 6, Infinity)).toBe(0);
     expect(neighbourLevels(ring, 7, 6, 11, Infinity)).toBe(0);
@@ -363,47 +369,107 @@ describe("the carousel rotates by applying", () => {
 // "◀ padding 0 ▶" carries two.
 const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
 
-// The door, then the control's tab, then its list: the click on the name
-// between its arrows.
+// The door, then the control's tab, then — for a setting behind the theme
+// picker's gear — the gear, then its list: the click on the name between its
+// arrows (on the theme picker, its label).
 const PICKERS = sharedMenuStateKey("candybar.pickers");
+const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
+const BEHIND_GEAR: ReadonlySet<string> = new Set(["style", "variation", "shade"]);
 function openPicker(rt: ReturnType<typeof rig>, control: string): void {
   rt.render();
   rt.clickText("🍫");
   // The preset control sits on the door's first line; the rest in a tab.
   if (control !== "preset") rt.clickText("🎨 look");
-  rt.clickWriting(PICKERS, `candybar.apply.${control}`);
+  if (BEHIND_GEAR.has(control)) rt.clickWriting(PICKERS, "gear");
+  rt.clickWriting(
+    BEHIND_GEAR.has(control) ? GEAR_PICKERS : PICKERS,
+    `candybar.apply.${control}`,
+  );
+}
+
+// The rendered rows of the body a picker opens, in order.
+function bodyRows(rt: ReturnType<typeof rig>, control: string): RichText[][] {
+  const rows: RichText[][] = [];
+  for (let i = 0; rt.sink.has(`candybar.list.${control}.${i}`); i++) {
+    rows.push([...rt.sink.get(`candybar.list.${control}.${i}`)!]);
+  }
+  return rows;
 }
 
 // brandon-menu-ia-q30.jl1: "a regular menu, no carousel". A control is
 // `label ◀ value ▶`; the name opens a plain list of every option below it.
-describe("the settings menu's look controls are ◀ name ▶ pickers whose name opens a list", () => {
-  test("opening the theme control drops a list of every theme and the preview, not a ring", () => {
+// The theme's control is the theme picker (brandon-theme-swatch-8v9r):
+// `🎨 theme ▀▀▀ ⚙`, whose label opens a row of swatches over a two-row demo.
+describe("the settings menu's look controls are pickers whose name opens a list", () => {
+  const THEMES = listResolvablePaletteNames();
+  // The links of the swatch row: every link writing the theme whose text is
+  // a swatch, with the theme it writes.
+  const swatchLinks = (rendered: string) =>
+    links(rendered)
+      .filter((l) => /▀▀▀/u.test(stripAnsi(l.text)))
+      .map((l) => ({
+        text: stripAnsi(l.text),
+        writes: effectsOf(l.url).find((e) => e.args[1] === "theme")?.args[2],
+      }));
+
+  test("closed, the theme picker is its label and the swatch of the theme in force, beside the gear", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "theme");
-    const text = stripAnsi(rt.render());
-    // The control stays a bare stepper: the value between its arrows, with no
-    // neighbour names around it.
-    expect(text).toMatch(new RegExp(`🎨 ${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
-    expect(rt.sink.has("candybar.carousel.theme")).toBe(false);
-    // The list: the picker grid from the domain's first page, paged at the
-    // row's width (→ turns it), every option a link that applies it.
-    const themes = listResolvablePaletteNames();
-    const listed = links(rt.render())
-      .filter((l) => effectsOf(l.url).some((e) => e.args[1] === "theme"))
-      .map((l) => stripAnsi(l.text))
-      .filter((t) => themes.includes(t));
-    expect(listed.length).toBeGreaterThan(2);
-    expect(listed).toEqual(themes.slice(0, listed.length));
-    expect(text).toMatch(/→/);
-    expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
+    rt.render();
+    rt.clickText("🍫");
+    rt.clickText("🎨 look");
+    const rendered = rt.render();
+    expect(stripAnsi(rendered)).toContain("🎨 theme ▀▀▀");
+    // No ring: the theme is chosen by looking at it, not stepped by name.
+    expect(stripAnsi(rendered)).not.toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
+    // The gear opens the theme's configuration on the same accordion.
+    const gear = links(rendered).find((l) => stripAnsi(l.text) === "⚙")!;
+    expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
+    // The style, variation and shade controls are behind it, not in the tab.
+    expect(rt.sink.has("candybar.style")).toBe(false);
+    rt.clickWriting(PICKERS, "gear");
+    for (const control of ["style", "variation", "shade"]) {
+      expect([control, rt.sink.has(`candybar.${control}`)]).toEqual([control, true]);
+    }
     rt.dispose();
   });
 
-  // The list and the rows beneath it are the rows of an open body: the first
-  // led by the body's one ✕ as a cell of its own (the list draws no ✕ of its
-  // own), the rest by a blank of its width; all of them fit the row that lead
-  // leaves them, at any padding and any strip shape, so the terminal never
-  // breaks a row away from its lead — and nothing else on the bar overflows.
+  test("open, it names the theme in force beside its swatch, over the swatch row and a two-row demo", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openPicker(rt, "theme");
+    const rendered = rt.render();
+    const text = stripAnsi(rendered);
+    expect(text).toContain("nord ▀▀▀");
+    expect(text).toContain(`${CAROUSEL_PREV} ${SWATCHES_RANDOM} ${CAROUSEL_NEXT}`);
+    // The row opens on the page holding the theme in force, a run of the
+    // domain in order, the one in force marked and every other not.
+    const row = swatchLinks(rendered);
+    expect(row.length).toBeGreaterThan(1);
+    const first = THEMES.indexOf(row[0]!.writes!);
+    expect(row.map((c) => c.writes)).toEqual(THEMES.slice(first, first + row.length));
+    expect(row.map((c) => [c.writes, c.text])).toEqual(
+      row.map((c) => [c.writes, c.writes === "nord" ? "[▀▀▀]" : " ▀▀▀ "]),
+    );
+    // "The name loses its styling and the swatch carries the colour": no
+    // theme NAME is a link that picks a theme.
+    expect(
+      links(rendered).filter(
+        (l) =>
+          THEMES.includes(stripAnsi(l.text)) &&
+          effectsOf(l.url).some((e) => e.args[1] === "theme"),
+      ),
+    ).toEqual([]);
+    // The demo is two rows: what the closed bar wears, then what opens.
+    const lines = text.split("\n");
+    const bar = lines.findIndex((l) => l.includes("~/code"));
+    expect(lines[bar + 1]).toContain("▾ open");
+    rt.dispose();
+  });
+
+  // The rows of the open body: the first led by the body's one ✕ as a cell of
+  // its own (no row draws a ✕ of its own), the rest by a blank of its width;
+  // all of them fit the row that lead leaves them, at any padding and any
+  // strip shape, so the terminal never breaks a row away from its lead — and
+  // nothing else on the bar overflows.
   test.each(
     (["theme", "preset"] as const).flatMap((control) =>
       (["powerline", "capsule", "plain"] as const).flatMap((style) =>
@@ -416,13 +482,14 @@ describe("the settings menu's look controls are ◀ name ▶ pickers whose name 
       openPicker(rt, control);
       const lines = stripAnsi(rt.render()).split("\n");
       // The body drops below the row the control sits in, which may itself
-      // wrap: it starts at the line holding the list's first option.
-      const listCells = rt.sink.get(`candybar.list.${control}`)!;
-      const first = listCells[0]!.plain.trim().split(/\s+/)[0]!;
-      const ring = lines.findIndex((l) => RING.test(l));
-      const start = lines.findIndex((l, i) => i > ring && l.includes(first));
-      const beneath = rt.sink.get(`candybar.list.${control}.0`)!.length;
-      const body = lines.slice(start, start + listCells.length + beneath);
+      // wrap: it starts at the first line after the control holding the
+      // body's first row.
+      const rows = bodyRows(rt, control);
+      const own = rt.sink.get(`candybar.${control}`)!.map((c) => c.plain).join("").trim();
+      const head = rows[0]!.map((c) => c.plain).join("").trim().slice(0, 5);
+      const at = lines.findIndex((l) => l.includes(own.slice(0, 8)));
+      const start = lines.findIndex((l, i) => i > at && l.includes(head));
+      const body = lines.slice(start, start + rows.flat().length);
       const ledByClose = body.map((l) => /^\W*✕/u.test(l));
       expect([width, ledByClose]).toEqual([
         width,
@@ -437,19 +504,84 @@ describe("the settings menu's look controls are ◀ name ▶ pickers whose name 
     }
   });
 
-  test("▶ applies the next theme and the whole bar recolours; ◀ takes it back", () => {
+  test("▶ applies the next theme and the whole bar recolours, turning the row to it; ◀ takes it back", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     openPicker(rt, "theme");
-    const themes = listResolvablePaletteNames();
-    const next = themes[(themes.indexOf("nord") + 1) % themes.length]!;
+    const next = THEMES[(THEMES.indexOf("nord") + 1) % THEMES.length]!;
     const before = rt.sink.get("directory")![0]!.style;
-    rt.click(rt.linkOn("theme", CAROUSEL_NEXT).url);
+    const step = rt.linkOn("theme", CAROUSEL_NEXT);
+    expect(writesOf(step.url)).toEqual([
+      ["theme", next],
+      [menuPageKey(PICKERS), PAGE_HOLDING_CURRENT],
+    ]);
+    rt.click(step.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
-    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} ${next} ${CAROUSEL_NEXT}`);
+    expect(stripAnsi(rt.render())).toContain(`${next} ▀▀▀`);
+    expect(swatchLinks(rt.render()).find((c) => c.writes === next)?.text).toBe("[▀▀▀]");
     expect(rt.sink.get("directory")![0]!.style).not.toEqual(before);
     rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe("nord");
     rt.dispose();
+  });
+
+  test("? applies a theme other than the one in force", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openPicker(rt, "theme");
+    const random = rt.linkOn("theme", SWATCHES_RANDOM);
+    const [key, value] = writesOf(random.url)[0]!;
+    expect(key).toBe("theme");
+    expect(THEMES).toContain(value);
+    expect(value).not.toBe("nord");
+    rt.click(random.url);
+    expect(rt.sessionState.get(SID, "theme")).toBe(value);
+    rt.dispose();
+  });
+
+  test("a swatch applies its theme and the row stays where it is", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openPicker(rt, "theme");
+    const row = swatchLinks(rt.render());
+    const other = links(rt.render()).find(
+      (l) => /▀▀▀/u.test(stripAnsi(l.text)) && stripAnsi(l.text) !== "[▀▀▀]",
+    )!;
+    expect(writesOf(other.url)).toHaveLength(1);
+    const picked = writesOf(other.url)[0]![1]!;
+    rt.click(other.url);
+    expect(rt.sessionState.get(SID, "theme")).toBe(picked);
+    expect(swatchLinks(rt.render()).map((c) => c.writes)).toEqual(row.map((c) => c.writes));
+    rt.dispose();
+  });
+
+  test("opening the theme's swatches closes the gear, and the gear's lists open inside it", () => {
+    const rt = rig(`{ globals: { palette: 'nord' } }`);
+    openPicker(rt, "style");
+    // The style list is open, and so is the gear holding it.
+    expect(rt.sink.has("candybar.list.style.0")).toBe(true);
+    expect(rt.sink.has("candybar.style")).toBe(true);
+    rt.clickWriting(PICKERS, "candybar.apply.theme");
+    expect(rt.sink.has("candybar.style")).toBe(false);
+    expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
+    rt.dispose();
+  });
+});
+
+describe("randomOther", () => {
+  test("never names the option in force, and reaches every other", () => {
+    for (const count of [2, 3, 7, 40]) {
+      for (const centre of [0, count - 1]) {
+        const seen = new Set<number>();
+        for (let seed = 0; seed < 4000; seed++) {
+          const pick = randomOther(Date.UTC(2026, 9, 15) + seed * 1000, count, centre);
+          expect(pick).not.toBe(centre);
+          expect(pick).toBeGreaterThanOrEqual(0);
+          expect(pick).toBeLessThan(count);
+          seen.add(pick);
+        }
+        expect([count, centre, seen.size]).toEqual([count, centre, count - 1]);
+      }
+    }
+    // One option has no other: the pick is that option.
+    expect(randomOther(12345, 1, 0)).toBe(0);
   });
 });
 
@@ -624,7 +756,7 @@ describe("the preset control's list carries the layout beneath it", () => {
       expect(labels).toEqual(barRows);
       // Each block wears what its segment wears on the closed bar; every
       // segment here authors no `bg:` under this payload's calm values.
-      const preview = rt.sink.get("candybar.list.preset.0")!;
+      const preview = rt.sink.get("candybar.list.preset.1")!;
       const blockBg = Object.fromEntries(
         preview.flatMap((cell) =>
           cell.spans.map((span) => [
@@ -756,7 +888,8 @@ describe("the preview is the bar's own colours", () => {
       const rt = rig(`{ globals: { palette: '${theme}' } }`);
       openPicker(rt, "theme");
       const palette = transposePalette(getThemePalette(theme)!, IDENTITY);
-      const preview = rt.sink.get("candybar.list.theme.0")!;
+      // Row 0 is the swatch row; the demo is row 1.
+      const preview = rt.sink.get("candybar.list.theme.1")!;
       const drawn = backgrounds(preview);
       // Every decoration a closed cell can wear is a swatch.
       const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
@@ -780,7 +913,7 @@ describe("the preview is the bar's own colours", () => {
     // anything but the door's own row shows an open colour the bar never draws.
     const rt = rig(`{ globals: { palette: 'textual-dark', variation: 'alt' } }`);
     openPicker(rt, "theme");
-    expect(bgUnder(rt.sink.get("candybar.list.theme.0")!, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
+    expect(bgUnder(rt.sink.get("candybar.list.theme.1")!, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();
   });
 
@@ -797,7 +930,7 @@ describe("the preview is the bar's own colours", () => {
       getThemePalette("gruvbox")!,
       rt.config.styles[look]!,
     );
-    const preview = rt.sink.get("candybar.list.style.0")!;
+    const preview = rt.sink.get("candybar.list.style.1")!;
     const drawn = backgrounds(preview);
     const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
     expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
@@ -809,8 +942,8 @@ describe("the preview is the bar's own colours", () => {
   test("the endcaps list has no preview row: an endcaps shape is not a palette", () => {
     const rt = rig(`{}`);
     openPicker(rt, "endcaps");
-    expect(rt.sink.has("candybar.list.endcaps")).toBe(true);
-    expect(rt.sink.has("candybar.list.endcaps.0")).toBe(false);
+    expect(rt.sink.has("candybar.list.endcaps.0")).toBe(true);
+    expect(rt.sink.has("candybar.list.endcaps.1")).toBe(false);
     rt.dispose();
   });
 });
@@ -821,6 +954,8 @@ describe("the preview is the bar's own colours", () => {
 // per-segment sink and serialized through the strip serializer the bar uses,
 // never by position in the bar (every row leads with the settings door).
 describe("the bundled themeSwitcher segment steps the session theme on the bar", () => {
+  // Every theme name the bar shows carries its swatch (brandon-theme-swatch-8v9r).
+  const SWATCH = "▀▀▀";
   const THEMES = listResolvablePaletteNames();
   // The theme `k` steps from the first, wrapping both ways — the ring's own
   // arithmetic, so no test depends on where nord happens to sit in the list.
@@ -852,7 +987,7 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
     // THEMES[0] instead.
     expect(THEMES[0]).not.toBe("nord");
     expect(switcher(rt)).toEqual({
-      text: `${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`,
+      text: `${CAROUSEL_PREV} nord ${SWATCH} ${CAROUSEL_NEXT}`,
       prev: [["theme", themeAt(NORD - 1)]],
       next: [["theme", themeAt(NORD + 1)]],
     });
@@ -865,7 +1000,7 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
       rt.sessionState.set(SID, "theme", THEMES[i]!);
       rt.render();
       expect(switcher(rt)).toEqual({
-        text: `${CAROUSEL_PREV} ${THEMES[i]} ${CAROUSEL_NEXT}`,
+        text: `${CAROUSEL_PREV} ${THEMES[i]} ${SWATCH} ${CAROUSEL_NEXT}`,
         prev: [["theme", themeAt(i - 1)]],
         next: [["theme", themeAt(i + 1)]],
       });
@@ -879,7 +1014,7 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
     rt.click(linkAt(bytesOf(rt, "themeSwitcher"), CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "theme")).toBe(themeAt(NORD + 1));
     expect(switcher(rt).text).toBe(
-      `${CAROUSEL_PREV} ${themeAt(NORD + 1)} ${CAROUSEL_NEXT}`,
+      `${CAROUSEL_PREV} ${themeAt(NORD + 1)} ${SWATCH} ${CAROUSEL_NEXT}`,
     );
     // Nothing opened: the bar has exactly as many rows as before the click.
     expect(stripAnsi(rt.render()).split("\n").length).toBe(rows);
@@ -889,11 +1024,12 @@ describe("the bundled themeSwitcher segment steps the session theme on the bar",
   test("a theme picked through the settings menu is the theme the segment shows", () => {
     const rt = rig(PLACED);
     openPicker(rt, "theme");
-    rt.click(linkAt(bytesOf(rt, "candybar.theme"), CAROUSEL_NEXT).url);
+    // ▶ leads the theme picker's swatch row.
+    rt.click(linkAt(bytesOf(rt, "candybar.list.theme.0"), CAROUSEL_NEXT).url);
     const picked = rt.sessionState.get(SID, "theme")!;
     expect(picked).toBe(themeAt(NORD + 1));
     expect(switcher(rt).text).toBe(
-      `${CAROUSEL_PREV} ${picked} ${CAROUSEL_NEXT}`,
+      `${CAROUSEL_PREV} ${picked} ${SWATCH} ${CAROUSEL_NEXT}`,
     );
     rt.dispose();
   });

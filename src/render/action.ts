@@ -36,6 +36,7 @@ import {
   type ResolvedDomain,
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
+import { resolvedStyle } from "./rich-theme.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
@@ -637,6 +638,27 @@ export function linkFragment(
   rt.overflow = "ignore";
   rt.end = "";
   return rt;
+}
+
+// [LAW:one-source-of-truth] The same link, laid into a cell already drawn:
+// the cell's own style and each of its runs keep their colours and carry the
+// click, so a cell of several colours (a name beside its swatch) is one click
+// target, and a cell of one colour is exactly what `linkFragment` draws.
+export function linkOver(cell: RichText, url: string): RichText {
+  const link = new Style({ link: url });
+  const linked = new RichText(cell.plain, {
+    style: Style.combine([resolvedStyle(cell.style), link]),
+  });
+  for (const span of cell.spans) {
+    linked.stylize(
+      Style.combine([resolvedStyle(span.style), link]),
+      span.start,
+      span.end,
+    );
+  }
+  linked.overflow = "ignore";
+  linked.end = "";
+  return linked;
 }
 
 // [LAW:one-source-of-truth] THE "unknown current counts as the first member"

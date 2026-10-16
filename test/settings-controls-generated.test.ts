@@ -120,10 +120,10 @@ describe("each controlled field's control is generated from its declared domain"
       // — and a ↺ that resets its config field.
       const writers = writersOf(config, row.sessionKey);
       expect(writers.length).toBeGreaterThan(0);
-      if (typeof domain === "object" && "from" in domain) {
+      if (typeof domain === "object" && !("min" in domain)) {
         expect(writers).toContainEqual({
           set: row.sessionKey,
-          from: domain.from,
+          from: "from" in domain ? domain.from : domain.themes,
         });
       }
       expect(
@@ -137,8 +137,11 @@ describe("each controlled field's control is generated from its declared domain"
         expect(admit("true").ok).toBe(true);
         expect(admit("false").ok).toBe(true);
         expect(admit("yes").ok).toBe(false);
-      } else if ("from" in domain) {
-        const { members } = resolveOptionDomain(domain.from, perConfig);
+      } else if (!("min" in domain)) {
+        const { members } = resolveOptionDomain(
+          "from" in domain ? domain.from : domain.themes,
+          perConfig,
+        );
         expect(members.length).toBeGreaterThan(0);
         for (const member of members) expect(admit(member).ok).toBe(true);
         expect(admit("no-such-member").ok).toBe(false);
@@ -199,7 +202,7 @@ describe("a global the menu has never seen gets its control from the generator",
       actions: ${JSON.stringify(actions)},
       segments: {
         zoomer: { template: ${JSON.stringify(control.template)} },
-        zoomlist: { template: ${JSON.stringify(control.list.template)} },
+        zoomlist: { template: ${JSON.stringify(control.list.rows[0])} },
       },
       root: { v: ['zoomer', 'zoomlist'] },
     }`);
