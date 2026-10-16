@@ -28,25 +28,11 @@ import {
 import { PACKAGE_VERSION } from "../src/version";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
+import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
-  probe({
-    urlHandler,
-    tmux: { kind: "outside" },
-    config: {
-      kind: "loaded",
-      layers: [],
-      warnings: [],
-      unused: [],
-    },
-    effect: { kind: "decided", name: "none", value: "none" },
-    placementEffects: [],
-    transitions: false,
-    nerdFont: { kind: "none" },
-    marks: { kind: "ok", value: {} },
-    claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
-  });
+  probe({ ...HEALTHY_FACTS, urlHandler });
 
 const APP = "/Users/u/Applications/CCCandybarURLHandler.app";
 
@@ -491,7 +477,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
+      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- (session=s1)",
     ]);
   });
 
@@ -502,7 +488,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
+      "doctor: config=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- (session=s1)",
     ]);
   });
 

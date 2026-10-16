@@ -19,6 +19,7 @@ import {
   type CheckReport,
   type MarkBook,
   type NerdFontFacts,
+  type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
@@ -47,6 +48,14 @@ export function doctorReportKeys(checkName: string): ReportKeys {
     fixable: `${base}fixable`,
     sighting: `${base}sighting`,
   };
+}
+
+// [LAW:nothing-unseen] Whether tmux writes OSC 8 to the client the bar's
+// terminal is attached as — `-` outside tmux, or where no client was seen.
+// The links check does not read it on a click, which is its own proof.
+export function linkFields(terminal: TerminalIdentity): string {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

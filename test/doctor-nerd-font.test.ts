@@ -35,6 +35,7 @@ import {
 } from "../src/doctor/report";
 import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
+import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,17 +59,7 @@ const facts = (
     kind: "ok",
     value: mark === null ? {} : withMark({}, "nerdFont", mark.sighting, mark.mark),
   },
-): DoctorFacts => ({
-  tmux: { kind: "outside" },
-  config: { kind: "loaded", layers: [], warnings: [], unused: [] },
-  effect: { kind: "decided", name: "none", value: "none" },
-  placementEffects: [],
-  transitions: false,
-  urlHandler: { kind: "unsupported" },
-  nerdFont,
-  marks,
-  claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
-});
+): DoctorFacts => ({ ...HEALTHY_FACTS, nerdFont, marks });
 
 const verdictIn = (terminal: TerminalFacts, mark: Made | null = null): Verdict =>
   probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal }, mark));

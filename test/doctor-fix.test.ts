@@ -79,6 +79,7 @@ const factsIn = (
 ({
     ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick),
     urlHandler: { kind: "unsupported" } as const,
+    askedBy: "command" as const,
   });
 // Outside tmux: the settings half alone.
 const factsOf = (conf: string) => factsIn(conf, null);

@@ -20,10 +20,13 @@ import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   BUNDLED_SINCE,
+  LINKS_SINCE,
   TERMINAL_LABEL,
   releasedSince,
   type BundlingTerminal,
   type ConfiguredTerminal,
+  type Identified,
+  type TerminalName,
   type TmuxClientTerm,
 } from "./terminal.js";
 
@@ -119,6 +122,20 @@ export type StatusLineFacts =
   | { readonly kind: "not-an-object"; readonly value: unknown }
   | { readonly kind: "present"; readonly refreshInterval: unknown };
 
+// [LAW:types-are-the-program] Which terminal draws the session's bar, or why
+// the doctor could not tell: a client too old to say, or a tmux server that
+// could not be asked about its client. A terminal seen is `identified` by
+// what named it, and `tmuxClient` is the client tmux attached it as — null
+// outside tmux, where nothing stands between the bar and the terminal.
+export type TerminalIdentity =
+  | { readonly kind: "unreported" }
+  | { readonly kind: "unasked"; readonly reason: string }
+  | {
+      readonly kind: "seen";
+      readonly identified: Identified;
+      readonly tmuxClient: TmuxClient | null;
+    };
+
 // The font a configured terminal draws private-use glyphs with, where that
 // was read from (`iTerm2 profile "Default"`, an Alacritty config file), and
 // which of the bar's glyphs it lacks — null when no installed font goes by
@@ -185,6 +202,10 @@ export interface PlacementEffectFact {
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
+  readonly terminal: TerminalIdentity;
+  // What asked for this run: a click on the bar's 🩺 doctor — a link the
+  // terminal drew and the user clicked — or the `cc-candybar doctor` command.
+  readonly askedBy: "click" | "command";
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   readonly nerdFont: NerdFontFacts;
@@ -441,6 +462,87 @@ const urlHandler: Check = {
   },
 };
 
+const LINK_TERMINALS = (Object.keys(LINKS_SINCE) as TerminalName[])
+  .filter((name) => LINKS_SINCE[name] !== null)
+  .map((name) => TERMINAL_LABEL[name])
+  .join(", ");
+
+// Why the terminal does not draw the bar's links, or nothing when it does.
+function terminalLinkProblems(
+  identified: Identified,
+  called: string,
+): string[] {
+  if (identified.kind === "unknown") {
+    return [
+      `the doctor does not know whether ${called} draws links (OSC 8) — the 🩺 doctor in the bar's settings menu is one: if clicking it runs the doctor, they work`,
+    ];
+  }
+  const { name, version } = identified.terminal;
+  const support = LINKS_SINCE[name];
+  if (support === null) {
+    return [
+      `${called} draws no links (OSC 8), so nothing on the bar can be clicked — run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`,
+    ];
+  }
+  if (support.since === null) return [];
+  const drawn = version === null ? null : releasedSince(version, support.since);
+  if (drawn === true) return [];
+  return [
+    drawn === null
+      ? `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is`
+      : `${called} ${version} draws no links (OSC 8 came in ${support.since}) — update ${called}`,
+  ];
+}
+
+// `hyperlinks` in `#{client_termfeatures}` is tmux's word that it writes OSC 8
+// to the client (tmux 3.4 and later; measured on 3.6a, where XTVERSION turns
+// it on for iTerm2) — without it tmux keeps the bar's links to itself.
+function tmuxLinkProblems(client: TmuxClient | null, called: string): string[] {
+  return client === null || client.features.includes("hyperlinks")
+    ? []
+    : [
+        `tmux does not pass links through to ${called} — add \`set -as terminal-features ",${client.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`,
+      ];
+}
+
+// "Links are available and clickable" (brandon-doctor-v62x.ryu): the terminal
+// drawing the bar draws OSC 8 links, and inside tmux, tmux passes them
+// through. A click on the bar's 🩺 doctor is such a link, drawn and clicked,
+// so a run it asked for is its own proof; the command reasons from what tmux
+// and the terminal say about themselves.
+const links: Check = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ askedBy, terminal }) => {
+    if (askedBy === "click") return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason:
+            "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`,
+        };
+      case "seen": {
+        const { identified, tmuxClient } = terminal;
+        const called =
+          identified.kind === "unknown"
+            ? identified.called || "this terminal"
+            : TERMINAL_LABEL[identified.terminal.name];
+        return problemsVerdict([
+          ...tmuxLinkProblems(tmuxClient, called),
+          ...terminalLinkProblems(identified, called),
+        ]);
+      }
+    }
+  },
+};
+
 // Claude Code's fastest statusline cadence, in seconds (`refreshInterval`'s
 // minimum; design-docs/ANTHROPIC-STATUSLINE-DOCS.md) — the frame rate every
 // effect curve is tuned for.
@@ -668,6 +770,7 @@ const nerdFont: Check = {
 export const CHECKS: readonly Check[] = [
   config,
   urlHandler,
+  links,
   tmuxTruecolor,
   effectRefresh,
   nerdFont,

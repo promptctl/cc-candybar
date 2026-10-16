@@ -62,10 +62,19 @@ describe("identifyFromEnv", () => {
     });
   });
 
+  test("Apple's Terminal and VS Code are named by TERM_PROGRAM alone", () => {
+    expect(
+      identifyFromEnv({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1", TERM: "xterm-256color" }),
+    ).toEqual({ kind: "known", terminal: { name: "apple-terminal", version: "455.1" } });
+    expect(
+      identifyFromEnv({ TERM_PROGRAM: "vscode", TERM_PROGRAM_VERSION: "1.95.3" }),
+    ).toEqual({ kind: "known", terminal: { name: "vscode", version: "1.95.3" } });
+  });
+
   test("anything else is unknown, under the name it went by", () => {
-    expect(identifyFromEnv({ TERM_PROGRAM: "vscode", TERM: "xterm-256color" })).toEqual({
+    expect(identifyFromEnv({ TERM_PROGRAM: "Hyper", TERM: "xterm-256color" })).toEqual({
       kind: "unknown",
-      called: "vscode",
+      called: "Hyper",
     });
     expect(identifyFromEnv({})).toEqual({ kind: "unknown", called: "" });
   });

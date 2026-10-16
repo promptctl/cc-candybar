@@ -61,8 +61,37 @@ export function itermDrawsItself(
 }
 
 export type BundlingTerminal = keyof typeof BUNDLED_SINCE;
-export type ConfiguredTerminal = "iterm2" | "alacritty";
-export type TerminalName = BundlingTerminal | ConfiguredTerminal;
+const CONFIGURED = ["iterm2", "alacritty"] as const;
+export type ConfiguredTerminal = (typeof CONFIGURED)[number];
+// Terminals the doctor knows by name but reads no font for.
+export type UnreadTerminal = "apple-terminal" | "vscode";
+export type TerminalName =
+  | BundlingTerminal
+  | ConfiguredTerminal
+  | UnreadTerminal;
+
+export function isConfigured(name: TerminalName): name is ConfiguredTerminal {
+  return (CONFIGURED as readonly TerminalName[]).includes(name);
+}
+
+// [LAW:one-source-of-truth] Whether each terminal draws OSC 8 links, and the
+// release it first did (`since: null`: every release did); `null` is a
+// terminal that draws none. From OSC 8 adoption in terminal emulators,
+// github.com/Alhadis/OSC8-Adoption: kitty 0.19, Alacritty 0.11, VS Code 1.72,
+// iTerm2 3.1; WezTerm since early 2018, Ghostty before its first public
+// release. Apple's Terminal is in no release of that list, and its users
+// report it ignores OSC 8 (apple.stackexchange.com/questions/460189).
+export const LINKS_SINCE: Readonly<
+  Record<TerminalName, { readonly since: string | null } | null>
+> = {
+  kitty: { since: "0.19.0" },
+  wezterm: { since: null },
+  ghostty: { since: null },
+  iterm2: { since: "3.1" },
+  alacritty: { since: "0.11.0" },
+  vscode: { since: "1.72" },
+  "apple-terminal": null,
+};
 
 // A terminal named, and the release it reported, or null when nothing said.
 export interface Terminal {
@@ -77,6 +106,8 @@ export const TERMINAL_LABEL: Readonly<Record<TerminalName, string>> = {
   ghostty: "Ghostty",
   iterm2: "iTerm2",
   alacritty: "Alacritty",
+  "apple-terminal": "Terminal",
+  vscode: "VS Code",
 };
 
 export function isBundling(name: TerminalName): name is BundlingTerminal {
@@ -94,12 +125,13 @@ export interface TmuxClientTerm {
 
 // [LAW:one-source-of-truth] Every spelling a terminal names itself with, in
 // the three places it does: its XTVERSION reply (a prefix, the version after
-// it), TERM_PROGRAM, and TERM. One table, read by every route below.
+// it), TERM_PROGRAM, and TERM. One table, read by every route below; `null`
+// is a place the terminal does not name itself.
 const SPELLINGS: Readonly<
   Record<
     TerminalName,
     {
-      readonly xtversion: string;
+      readonly xtversion: string | null;
       readonly program: string | null;
       readonly term: string | null;
     }
@@ -110,6 +142,8 @@ const SPELLINGS: Readonly<
   ghostty: { xtversion: "ghostty", program: "ghostty", term: "xterm-ghostty" },
   iterm2: { xtversion: "iTerm2", program: "iTerm.app", term: null },
   alacritty: { xtversion: "alacritty", program: null, term: "alacritty" },
+  "apple-terminal": { xtversion: null, program: "Apple_Terminal", term: null },
+  vscode: { xtversion: null, program: "vscode", term: null },
 };
 
 const NAMES = Object.keys(SPELLINGS) as TerminalName[];
@@ -140,7 +174,10 @@ export function releasedSince(version: string, since: string): boolean | null {
 function fromXtversion(termtype: string): Terminal | null {
   for (const name of NAMES) {
     const prefix = SPELLINGS[name].xtversion;
-    if (termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
+    if (
+      prefix !== null &&
+      termtype.toLowerCase().startsWith(prefix.toLowerCase())
+    ) {
       const rest = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
       const version = /^[^\s)]+/.exec(rest)?.[0] ?? null;
       return { name, version };

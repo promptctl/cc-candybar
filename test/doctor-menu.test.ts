@@ -228,13 +228,14 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
     expect(lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
-    const reports = lines.slice(toolsRow + 2, toolsRow + 5);
+    const reports = lines.slice(toolsRow + 2, toolsRow + 6);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
     expect(reports[1]).toContain("✓ URL handler");
-    expect(reports[2]).toContain("✗ tmux truecolor");
+    expect(reports[2]).toContain("✓ links");
+    expect(reports[3]).toContain("✗ tmux truecolor");
   });
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
@@ -257,7 +258,24 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- (session=s1)",
+    ]);
+  });
+
+  // brandon-doctor-v62x.ryu: the 🩺 click is a link the terminal drew and the
+  // user clicked, so the links row is ok in a terminal the CLI would fail.
+  test("the links row is ok on a click, even in a terminal said to draw none", () => {
+    const rt = buildRuntime(null, CLEAN_LOAD, {
+      env: { TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" },
+      fontInUse: GHOSTTY.fontInUse,
+    });
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    const out = rt.render();
+    expect(out).toContain("✓ links");
+    expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal's font");
+    expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
+      'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=unknown:"Terminal" font=- mark=- tmuxLinks=- (session=s1)',
     ]);
   });
 
@@ -389,7 +407,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, "\ue0b0\ue0b1"],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        'doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- (session=s1)',
+        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- (session=s1)',
       ]);
     });
 
@@ -407,7 +425,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         'doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1 (session=s1)',
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

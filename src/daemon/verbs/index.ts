@@ -121,7 +121,11 @@ import {
   type DoctorFacts,
   type GlyphMark,
 } from "../../doctor/checks";
-import { doctorReportPairs, nerdFontFields } from "../../doctor/report";
+import {
+  doctorReportPairs,
+  linkFields,
+  nerdFontFields,
+} from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
 import { DoctorBusy } from "../../doctor/busy";
 import {
@@ -1137,7 +1141,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal)} (session=${sid})`,
   );
 }
 
@@ -1158,7 +1162,11 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  return { ...gathered, urlHandler: clickArrived(ctx.clientVersion) };
+  return {
+    ...gathered,
+    urlHandler: clickArrived(ctx.clientVersion),
+    askedBy: "click",
+  };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
