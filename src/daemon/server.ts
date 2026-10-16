@@ -105,7 +105,13 @@ import {
   type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "./render-payload.js";
-import { EffectSessions, type PassageFrame } from "../render/effect.js";
+import {
+  EffectSessions,
+  frameMoves,
+  type PassageFrame,
+} from "../render/effect.js";
+import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
+import { reaction } from "mobx";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
@@ -165,6 +171,17 @@ const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
 const effectSessions = new EffectSessions<RenderedLine>();
+// Each subscribed session's frames, drawn from its latest render request
+// (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
+// click — draws its next frame at once.
+const frameFeeds = new FrameFeeds<RenderRequest>({
+  render: (req) => renderFrame(req),
+  watch: (sessionId, onChange) =>
+    reaction(() => sessionState.revision(sessionId), onChange),
+  periods: FEED_PERIODS,
+  now: () => Date.now(),
+  log: dlog,
+});
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -707,6 +724,15 @@ function handleConnection(sock: net.Socket): void {
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
+  // A connection is in flight until it is answered and closes, or until it
+  // becomes a subscription, which is counted by its feed instead.
+  let counted = true;
+  const leaveInFlight = (): void => {
+    if (!counted) return;
+    counted = false;
+    inFlight = Math.max(0, inFlight - 1);
+    stats.inFlight = inFlight;
+  };
 
   // [LAW:no-ambient-temporal-coupling] respond owns the response→exit
   // ordering. exitAfterFlush (an exit code; null = stay up) is performed
@@ -777,7 +803,11 @@ function handleConnection(sock: net.Socket): void {
   const reader = makeFrameReader(
     (frame) => {
       void handleRequest(frame as Request, () => timedOut)
-        .then((r) => respond(r.resp, r.exitAfterFlush))
+        .then((r) =>
+          r.kind === "reply"
+            ? respond(r.resp, r.exitAfterFlush)
+            : stream(r.sessionId),
+        )
         .catch((err: unknown) => {
           dlog("error", `handler threw: ${inspect(err)}`);
           respond(renderFailed(err), null);
@@ -797,14 +827,39 @@ function handleConnection(sock: net.Socket): void {
     },
   );
 
+  // The connection becomes the session's subscription: no reply, no request
+  // timeout, and frames until the subscriber closes it. It carries frames one
+  // way only, so anything more the subscriber sends is not read.
+  // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
+  // gets the newest one when its socket drains, never a backlog of stale ones.
+  const stream = (sessionId: string): void => {
+    clearTimeout(timer);
+    responded = true;
+    leaveInFlight();
+    sock.off("data", reader);
+    let pending: Response | null = null;
+    const write = (resp: Response): void => {
+      if (sock.writableNeedDrain) {
+        pending = resp;
+        return;
+      }
+      sock.write(encodeFrame(resp));
+    };
+    sock.on("drain", () => {
+      const next = pending;
+      pending = null;
+      if (next !== null) write(next);
+    });
+    sock.on("close", frameFeeds.subscribe(sessionId, write));
+  };
+
   sock.on("data", reader);
   sock.on("error", (err) => {
     dlog("warn", `socket error: ${err.message}`);
   });
   sock.on("close", () => {
     clearTimeout(timer);
-    inFlight = Math.max(0, inFlight - 1);
-    stats.inFlight = inFlight;
+    leaveInFlight();
   });
 }
 
@@ -816,12 +871,14 @@ function handleConnection(sock: net.Socket): void {
 // completion. No timer stands between respond and exit.
 // [LAW:effects-at-boundaries] handleRequest computes the description; the
 // socket boundary performs it.
-interface HandledRequest {
-  resp: Response;
-  exitAfterFlush: number | null;
-}
+// A subscription is the one request answered by a stream rather than a reply:
+// the connection boundary turns its socket over to the session's feed.
+type HandledRequest =
+  | { kind: "reply"; resp: Response; exitAfterFlush: number | null }
+  | { kind: "subscribe"; sessionId: string };
 
 const stay = (resp: Response): HandledRequest => ({
+  kind: "reply",
   resp,
   exitAfterFlush: null,
 });
@@ -873,6 +930,7 @@ export async function handleRequest(
       );
     }
     return {
+      kind: "reply",
       resp: {
         ok: false,
         error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
@@ -887,7 +945,7 @@ export async function handleRequest(
   }
 
   if (req.kind === "shutdown") {
-    return { resp: { ok: true, output: "" }, exitAfterFlush: 0 };
+    return { kind: "reply", resp: { ok: true, output: "" }, exitAfterFlush: 0 };
   }
 
   if (req.kind === "stats") {
@@ -904,6 +962,7 @@ export async function handleRequest(
           sessions: sessionState.size(),
           observers: sessionState.observers(),
         },
+        frameFeeds: frameFeeds.getStats(),
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
@@ -932,6 +991,9 @@ export async function handleRequest(
       }),
     );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+    // [LAW:one-source-of-truth] A request the render took is the session's
+    // data from now on: its frames are drawn from it.
+    else frameFeeds.note(req.hookData.session_id, req);
     // Whether the client was already told TIMEOUT while this render ran on.
     noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
     const { level, line } = renderEvent(
@@ -941,6 +1003,19 @@ export async function handleRequest(
     );
     dlog(level, line);
     return stay(rendered.resp);
+  }
+
+  if (req.kind === "subscribe") {
+    // [LAW:no-defensive-null-guards] exception: trust boundary — the session
+    // id is untrusted JSON, and it keys the feed.
+    return typeof req.sessionId === "string" && req.sessionId !== ""
+      ? { kind: "subscribe", sessionId: req.sessionId }
+      : stay({
+          ok: false,
+          error: "subscribe needs a non-empty string sessionId",
+          code: "BAD_REQUEST",
+          daemonV: PROTOCOL_VERSION,
+        });
   }
 
   if (req.kind === "click") {
@@ -1204,6 +1279,36 @@ function handleClick(
 }
 
 // --- render ---
+
+// One frame of a subscribed session, drawn from its latest request at this
+// instant, by the render a request gets. The response is the one that request
+// would be answered with, and the bar moves when its effects say it does.
+// [LAW:nothing-unseen] A frame that fails writes the render event a failing
+// request would; the feed summarizes the frames that render.
+async function renderFrame(req: RenderRequest): Promise<FeedFrame> {
+  const started = new Date();
+  const facts: RenderFacts = [];
+  const rendered = await renderRequest(req, instantOf(started), facts).catch(
+    (error: unknown) => ({
+      outcome: { kind: "threw", error } as const,
+      resp: renderFailed(error),
+    }),
+  );
+  if (rendered.outcome.kind !== "ok") {
+    const { level, line } = renderEvent(
+      facts,
+      rendered.outcome,
+      Date.now() - started.getTime(),
+    );
+    dlog(level, `frame ${line}`);
+  }
+  return {
+    resp: rendered.resp,
+    moving:
+      rendered.outcome.kind === "ok" &&
+      frameMoves(effectSessions.of(req.hookData.session_id).lastFrame()),
+  };
+}
 
 // One render request: the bar, or the refusal of a request no client of ours
 // builds. A throw is the third outcome, recorded by the caller. `facts` is the

@@ -315,8 +315,21 @@ export interface DebugRequest {
   what: DebugWhat;
 }
 
+// [LAW:one-type-per-behavior] A subscription's stream is a stream of the
+// responses a render request is answered with: every frame the daemon draws
+// for the session whose bytes differ from the last one sent, until the
+// subscriber closes the socket. The frames are drawn from the session's latest
+// render request (src/daemon/frame-feed.ts), so a session subscribed to before
+// its first render streams nothing until that render arrives.
+export interface SubscribeRequest {
+  v: number;
+  kind: "subscribe";
+  sessionId: string;
+}
+
 export type Request =
   | RenderRequest
+  | SubscribeRequest
   | ShutdownRequest
   | StatsRequest
   | ClickRequest
