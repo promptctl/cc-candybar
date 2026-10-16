@@ -10,7 +10,7 @@
 // file, or repoint the CHECKS rows in the same commit.
 
 import type { ClaudeHookData } from "../utils/claude";
-import { requestOutcome } from "./client-transport";
+import { interpretResponse, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { ClientHints, Response } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
@@ -42,6 +42,12 @@ function projectOutput(
 ): string | undefined {
   const output = (resp as { output?: unknown }).output;
   return typeof output === "string" ? output : undefined;
+}
+
+// A render response the daemon pushed (a frame stream), classified as the
+// answer to a render request is.
+export function renderOutcomeOf(resp: Response): ClientOutcome {
+  return interpretResponse("render", resp, projectOutput);
 }
 
 // Try to render via the daemon. Returns a typed outcome — see ClientOutcome.

@@ -74,13 +74,15 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
-  frames [--session ID | --config PATH]
+  frames [--session ID | --config PATH] [--format response|band]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a
                            click — one JSON render response per stdout line.
                            Without --session, reads Claude Code's statusline
                            JSON from stdin (one object a line) and sends it as
                            the session's data (--config then rides with it).
+                           --format band writes each frame as rows of styled
+                           runs, for the mod in mod/.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's 🩺 doctor does —
