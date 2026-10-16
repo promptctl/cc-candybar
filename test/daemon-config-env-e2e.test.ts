@@ -8,11 +8,12 @@
 // as the `configEnv` hint, the `--config` flag, or a load-config click.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { VERB_LOAD_CONFIG } from "../src/click/wire";
+import { logPath } from "../src/daemon/paths";
 import {
   click,
   hookData,
@@ -185,6 +186,15 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     );
     expect(bar).toContain('Client hints refused: configEnv="override.json5"');
     expect(bar).not.toContain("OVERRIDE-WINS");
+    // The render event names what was refused; a render that refused nothing
+    // says `-`, so "none refused" and "not logged" stay distinct.
+    const refusedOf = (sid: string) =>
+      readFileSync(logPath(env), "utf8")
+        .split("\n")
+        .filter((l) => l.includes(`render sid=${sid} `))
+        .map((l) => l.match(/ refused=(\S+) /)?.[1]);
+    expect(refusedOf("cfg-env-stale-client")).toContain("configEnv");
+    expect(refusedOf("cfg-env-valid")).toContain("-");
   });
 
   // The request's cwd anchors a relative --config, so a relative cwd is a

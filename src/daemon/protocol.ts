@@ -169,13 +169,21 @@ export function parseClientHints(
 // tightened (brandon-config-nuq6: `configEnv` was raw, now absolute), which
 // would otherwise render a different config with no word why. Derived from
 // the raw request and the stamped hints, so no sanitizer learns a third state.
-export function refusedHintsError(
+// The list is the fact (the render event's `refused=`); the strip's line is
+// its spelling.
+export function refusedHints(
   req: Partial<Record<keyof ClientHints, unknown>>,
   hints: ClientHints,
-): string | null {
-  const refused = CLIENT_HINT_FIELDS.filter(
+): ReadonlyArray<keyof ClientHints> {
+  return CLIENT_HINT_FIELDS.filter(
     (k) => req[k] !== undefined && hints[k] === undefined,
   );
+}
+
+export function refusedHintsError(
+  req: Partial<Record<keyof ClientHints, unknown>>,
+  refused: ReadonlyArray<keyof ClientHints>,
+): string | null {
   return refused.length === 0
     ? null
     : `Client hints refused: ${refused
