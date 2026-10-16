@@ -444,6 +444,11 @@ export function renderEffective(
       case "rule":
         failures.set(`${warning.slot} rule`, warning.message);
         return;
+      // A layout `when` that threw: the bar draws nothing it gates, which a
+      // headless pass would otherwise bless.
+      case "when":
+        failures.set(warning.where, warning.error);
+        return;
       // An open band the chosen look leaves short of a floor: the bar draws it
       // as near as it comes, and the message names what clears it.
       case "band-floor":
@@ -512,11 +517,12 @@ async function loadRegisterRender(
       config.globals.preset,
       config.presets,
     );
-    // [LAW:no-silent-failure] A render can THROW rather than report — a
-    // layout node's `when` that fails is not a ⚠ cell — and one pass's
-    // throw must neither lose the failures the other passes find nor drop
-    // the preset that reached it, so it is caught here and becomes that
-    // pass's one failure. `rendered` is absent exactly then.
+    // [LAW:no-silent-failure] Nothing a config authors makes a render throw
+    // — every fault it can hold is a ⚠ cell or a warning — so a throw is the
+    // renderer's own bug, and one pass's throw must neither lose the
+    // failures the other passes find nor drop the preset that reached it: it
+    // is caught here and becomes that pass's one failure. `rendered` is
+    // absent exactly then.
     const render = (preset: string, customized: boolean) => {
       const effective = resolveEffectiveGlobals(
         config,

@@ -1522,6 +1522,7 @@ async function renderRequest(
         return `rule:${w.slot}`;
       case "load":
       case "band-floor":
+      case "when":
         return w.kind;
     }
   };

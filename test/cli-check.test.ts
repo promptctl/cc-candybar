@@ -692,7 +692,7 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
-  it("a render that throws under one preset is reported with that preset, beside every other failure", async () => {
+  it("a layout when that fails under one preset is reported with that preset, beside every other failure", async () => {
     const p = write(
       "throw-other-preset.json5",
       `{
@@ -708,7 +708,12 @@ describe("checkConfig — explicit target", () => {
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain("config renders with 2 render errors");
     expect(message).toMatch(/^ {2}segment "broken": /m);
-    expect(message).toMatch(/^ {2}render: .*nope.* \(under preset "b"\)$/m);
+    // Nothing the failed gate holds is asked: preset "b" reports the gate
+    // alone, and the bar it renders is not lost.
+    expect(message).toMatch(
+      /^ {2}when over broken: .*nope.* \(under preset "b"\)$/m,
+    );
+    expect(message).not.toMatch(/^ {2}render: /m);
   });
 
   it("returns the render of the preset a fresh session opens in", async () => {
