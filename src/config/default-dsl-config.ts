@@ -201,6 +201,21 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "model.display_name",
       default: "",
     },
+    // The session's reasoning-effort setting (`/effort`): one of
+    // low|medium|high|xhigh|max, or "" when Claude Code sends none.
+    "effort.level": {
+      kind: "input",
+      path: "effort.level",
+      default: "",
+    },
+    // The effort gauge's glyph ladder, space-separated, one entry per ordinal
+    // the `effortGauge` helper folds a level to: unknown, low, medium, high,
+    // xhigh, max — the Nerd Font chevron_up / chevron_double_up /
+    // chevron_triple_up icons (nf-md, U+F0143 / U+F013F / U+F0DBC). Two pairs
+    // share a rung on purpose and are told apart by colour alone: low is the
+    // quiet medium, max is the filled xhigh. A font without the icons
+    // overrides this one variable (e.g. `"? ↑ ↑ ⇈ ⤊ ⤊"`).
+    "effort.glyphs": { kind: "literal", value: "? 󰅃 󰅃 󰄿 󰶼 󰶼" },
     version: { kind: "input", path: "version", default: "" },
 
     // home flows through the augmented payload (buildRenderPayload reads
@@ -628,8 +643,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     model: {
       group: "model-context",
-      description: "The active model's display name.",
-      template: "✱ {{ formatModelName .model.display_name }}",
+      description:
+        "The active model's display name, followed by the effort gauge (a chevron ladder: quiet single at low, filled triple at max) when an effort level is set.",
+      template:
+        '✱ {{ formatModelName .model.display_name }}{{ if ne .effort.level "" }} {{ template "effortGauge" . }}{{ end }}',
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
@@ -1471,6 +1488,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // single dot arg — variability flows as data across one boundary, not as a
   // bespoke multi-arg signature.
   helpers: {
+    // The effort gauge: the `effort.glyphs` rung for the level, coloured along
+    // one ramp from quiet text (low — the inactive colour, the same recipe the
+    // menu's inert controls wear) to the theme's `accent` (xhigh), and at max
+    // inverted: the glyph fills with `accent` and its text is the pole that
+    // reads on it. Effort is a choice, not an alert, so the ramp never
+    // reaches `warning`/`error` — those hues keep their meaning for the cells
+    // that measure danger.
+    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once;
+    // glyph, text and fill are all ramps over that one number, so they cannot
+    // disagree about which level they show — the fill is a "step" ramp that
+    // holds the cell's own background until the max stop, not an `if`. A level
+    // outside the five known names is ordinal 0: the ladder's `?`, visible
+    // rather than blank. Called with the scope as dot.
+    effortGauge:
+      '{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}' +
+      '{{ $fill := ramp $ord "step" 1 (bgOf) 5 (color "accent") }}' +
+      `{{ $text := ramp $ord "linear" 1 (${QUIET_TEXT}) 4 (color "accent") 5 (contrastOn (color "accent")) }}` +
+      '{{ bg $fill (fg $text (index (splitList " " .effort.glyphs) $ord)) }}',
     // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
     // it sits on: a theme's `success`/`warning`/`accent` is designed against
     // its own background, not the tint a bar cell wears (the raw role measured

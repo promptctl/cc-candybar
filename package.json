@@ -24,6 +24,7 @@
     "test:coverage": "jest --coverage",
     "demo": "tsx src/demo/dsl.ts",
     "gallery": "node --require ./scripts/version-stamp.cjs --import tsx src/demo/gallery.ts",
+    "effort-demo": "node --require ./scripts/version-stamp.cjs --import tsx src/demo/effort-gauge.ts",
     "bar": "node --require ./scripts/version-stamp.cjs --import tsx scripts/drive-bar.ts",
     "bar:web": "node --require ./scripts/version-stamp.cjs --import tsx scripts/bar-web.ts",
     "site:build": "node site/build.mjs",
