@@ -2,6 +2,10 @@
 // the argv binding performs: the exit code and the streams for an unreadable
 // settings file, a clean setup, and a failed check carrying a fix.
 
+import { glyphSighting } from "../src/doctor/checks";
+import { withMark } from "../src/doctor/mark-book";
+import { stripPrivateGlyphs } from "../src/render/strip";
+import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -40,6 +44,7 @@ const EDGE: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
+  marks: memoryMarkBook(),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -121,8 +126,8 @@ describe("doctorPlan", () => {
     });
   });
 
-  // The CLI can neither take nor read a mark: it shows the glyphs and the
-  // bar's doctor, where a mark is made and counted.
+  // The CLI cannot take a mark: it shows the glyphs, and the bar's doctor
+  // where one is made — and reads the marks made there.
   test("a check that shows glyphs to look at prints them, and where to mark them", async () => {
     const plan = await doctorPlan(
       EDGE,
@@ -134,12 +139,26 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toMatch(
       new RegExp(
         "\n✗ Nerd Font — the doctor cannot read vscode's font\n" +
-          "    look:  — this command cannot see what your terminal draws; " +
-          "mark them ✓ shapes or ✗ boxes in the bar's doctor: " +
+          "    look:  — mark them ✓ shapes or ✗ boxes in the bar's doctor, " +
+          "and this command reads your mark: " +
           `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n$`,
         "u",
       ),
     );
+  });
+
+  // brandon-doctor-v62x.2ww: the mark is the machine's, so the CLI reads a
+  // mark made in the bar's doctor and passes on it.
+  test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
+    const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
+    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "vscode" } }).id;
+    const plan = await doctorPlan(
+      { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
+      NO_HANDLER,
+      inDir({ TERM_PROGRAM: "vscode" }),
+      "/",
+    );
+    expect(plan.stdout).toContain("\n✓ Nerd Font\n");
   });
 
   test("a failed check is exit 1, its reason and the fix hint on the line", async () => {

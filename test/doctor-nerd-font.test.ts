@@ -8,7 +8,8 @@ import {
   glyphSighting,
   type DoctorFacts,
   type NerdFontFacts,
-  type RecordedMark,
+  type GlyphMark,
+  type MarkBook,
   type TerminalFacts,
   type Verdict,
 } from "../src/doctor/checks";
@@ -30,12 +31,10 @@ import {
 } from "../src/doctor/edge";
 import type { Asked } from "../src/doctor/checks";
 import {
-  doctorMarkKey,
-  markValue,
-  marksField,
   nerdFontFields,
-  parseMark,
 } from "../src/doctor/report";
+import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
+import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,9 +45,15 @@ import type { ClientHints } from "../src/daemon/protocol";
 const GLYPHS = "";
 const probe = checkByName("nerdFont")!.probe;
 
+// A mark made on one sighting, as the verb files it in the book.
+interface Made {
+  readonly mark: GlyphMark;
+  readonly sighting: string;
+}
+
 const facts = (
   nerdFont: NerdFontFacts,
-  mark: RecordedMark | null = null,
+  mark: Made | null = null,
 ): DoctorFacts => ({
   tmux: { kind: "outside" },
   config: { kind: "loaded", layers: [], warnings: [], unused: [] },
@@ -57,11 +62,11 @@ const facts = (
   transitions: false,
   urlHandler: { kind: "unsupported" },
   nerdFont,
-  marks: mark === null ? {} : { nerdFont: mark },
+  marks: mark === null ? {} : withMark({}, "nerdFont", mark.sighting, mark.mark),
   claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
 });
 
-const verdictIn = (terminal: TerminalFacts, mark: RecordedMark | null = null): Verdict =>
+const verdictIn = (terminal: TerminalFacts, mark: Made | null = null): Verdict =>
   probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal }, mark));
 
 const ITERM = (font: Extract<TerminalFacts, { kind: "configured" }>["font"]): TerminalFacts => ({
@@ -211,36 +216,69 @@ describe("the glyphs the bar draws", () => {
   });
 });
 
-describe("the marks a doctor verb records", () => {
-  test("read back as they were written", () => {
-    const mark = { mark: "boxes" as const, sighting: "iTerm2 3.7.2|U+E0B0 U+E0B1" };
-    expect(parseMark(markValue(mark))).toEqual(mark);
+describe("the mark book", () => {
+  const ID = "iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B1";
+
+  test("files each mark under its check and sighting; the latest mark on a sighting answers", () => {
+    const once = withMark({}, "nerdFont", ID, "boxes");
+    expect(once).toEqual({ nerdFont: { [ID]: "boxes" } });
+    expect(withMark(once, "nerdFont", "other", "drawn")).toEqual({
+      nerdFont: { [ID]: "boxes", other: "drawn" },
+    });
+    expect(withMark(once, "nerdFont", ID, "drawn")).toEqual({ nerdFont: { [ID]: "drawn" } });
   });
 
-  test("a value that does not read is a fault, never a missing mark", () => {
-    expect(() => parseMark("maybe:x")).toThrow(/a recorded mark reads "maybe:x"/);
-    expect(() => parseMark("drawn")).toThrow(/a recorded mark reads "drawn"/);
+  test("text that does not read is a fault naming the file, never an empty book", () => {
+    expect(parseMarkBook(JSON.stringify({ nerdFont: { [ID]: "drawn" } }), "/b.json")).toEqual({
+      nerdFont: { [ID]: "drawn" },
+    });
+    expect(() => parseMarkBook("{", "/b.json")).toThrow(/the mark book \/b\.json is not JSON/);
+    expect(() => parseMarkBook("[]", "/b.json")).toThrow(/is not an object/);
+    expect(() => parseMarkBook('{"nerdFont":3}', "/b.json")).toThrow(
+      /holds "nerdFont" as something other than its sightings/,
+    );
+    expect(() => parseMarkBook('{"nerdFont":{"x":"maybe"}}', "/b.json")).toThrow(
+      /marks "x" "maybe", not drawn or boxes/,
+    );
+  });
+
+  test("as a file: absent is the empty book, a mark made is read back by the next reader", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-marks-"));
+    try {
+      const file = path.join(dir, "state", "doctor-marks.json");
+      expect(fileMarkBook(file).read()).toEqual({});
+      fileMarkBook(file).record("nerdFont", ID, "drawn");
+      // Another process — the CLI, a later daemon — reads the same answer.
+      expect(fileMarkBook(file).read()).toEqual({ nerdFont: { [ID]: "drawn" } });
+      fs.writeFileSync(file, "junk");
+      expect(() => fileMarkBook(file).read()).toThrow(/is not JSON/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
 describe("the doctor event's Nerd Font fields", () => {
-  test("say the glyphs, the terminal, the font and the mark", () => {
-    expect(nerdFontFields({ kind: "glyphs", glyphs: GLYPHS, terminal: MENLO })).toBe(
-      'glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2',
+  test("say the glyphs, the terminal, the font and the mark honoured", () => {
+    const menlo = { kind: "glyphs" as const, glyphs: GLYPHS, terminal: MENLO };
+    expect(nerdFontFields(menlo, {})).toBe(
+      'glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=-',
     );
+    // The mark on the sighting shown is the one honoured; one on another is not.
+    const book: MarkBook = withMark(
+      withMark({}, "nerdFont", glyphSighting(menlo).id, "boxes"),
+      "nerdFont",
+      "elsewhere",
+      "drawn",
+    );
+    expect(nerdFontFields(menlo, book)).toMatch(/ mark=boxes$/);
     expect(
-      nerdFontFields({
-        kind: "glyphs",
-        glyphs: GLYPHS,
-        terminal: { kind: "unknown", called: "Apple Terminal" },
-      }),
-    ).toBe('glyphs=e0b0,e0b1 terminal=unknown:"Apple Terminal" font=-');
-    expect(nerdFontFields({ kind: "none" })).toBe("glyphs=- terminal=- font=-");
-  });
-
-  test("the marks field names each check's recorded mark", () => {
-    expect(marksField({})).toBe("marks=-");
-    expect(marksField({ nerdFont: { mark: "drawn", sighting: "x" } })).toBe("marks=nerdFont:drawn");
+      nerdFontFields(
+        { kind: "glyphs", glyphs: GLYPHS, terminal: { kind: "unknown", called: "Apple Terminal" } },
+        book,
+      ),
+    ).toBe('glyphs=e0b0,e0b1 terminal=unknown:"Apple Terminal" font=- mark=-');
+    expect(nerdFontFields({ kind: "none" }, book)).toBe("glyphs=- terminal=- font=- mark=-");
   });
 });
 
@@ -255,14 +293,15 @@ describe("parseTmuxClient", () => {
         pid: 84566,
       },
     });
-    expect(parseTmuxClient("\t\t\t1\n")).toEqual({
+    // No client attached to the pane's session: every field empty, an answer.
+    expect(parseTmuxClient("\t\t\t\n")).toEqual({
       kind: "ok",
-      value: { features: [], termtype: "", termname: "", pid: 1 },
+      value: { features: [], termtype: "", termname: "", pid: null },
     });
   });
 
   test("anything else is a failure naming what came back", () => {
-    for (const out of ["osc7,RGB\n", "osc7\tiTerm2\txterm\t\n", "osc7\tiTerm2\txterm\tx1\n"]) {
+    for (const out of ["osc7,RGB\n", "osc7\tiTerm2\txterm\tx1\n", "osc7\tiTerm2\txterm\t0\n"]) {
       expect(parseTmuxClient(out)).toEqual({
         kind: "failed",
         reason: `tmux answered ${JSON.stringify(out)}, not the four fields asked for`,
@@ -373,6 +412,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     client: DoctorEdge["probeTmux"],
     config: DslConfig = DEFAULT_DSL_CONFIG,
     remote: Asked<boolean> = LOCAL,
+    book: MarkBook = {},
   ) => {
     const asked: unknown[][] = [];
     const pids: number[] = [];
@@ -387,6 +427,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
         return COVERED;
       },
       loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config }),
+      marks: memoryMarkBook(book),
     };
     return { e, asked, pids };
   };
@@ -524,17 +565,10 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect(asked).toEqual([]);
   });
 
-  test("the session's recorded mark is read; one that does not read stops the run loudly", () => {
-    const { e } = edge(tmuxSays("ghostty 1.3.1"));
-    const mark = { mark: "drawn" as const, sighting: "Ghostty 1.3.1|U+E0B0 U+E0B1" };
-    const key = doctorMarkKey("nerdFont");
-    expect(gathered(e, { tmux: HINT }, (k) => (k === key ? markValue(mark) : null)).marks).toEqual({
-      nerdFont: mark,
-    });
-    expect(gathered(e, { tmux: HINT }).marks).toEqual({});
-    expect(() => gathered(e, { tmux: HINT }, (k) => (k === key ? "junk" : null))).toThrow(
-      /a recorded mark reads "junk"/,
-    );
+  test("the marks are the mark book's, whichever session made them", () => {
+    const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B1", "drawn");
+    const { e } = edge(tmuxSays("ghostty 1.3.1"), DEFAULT_DSL_CONFIG, LOCAL, book);
+    expect(gathered(e, { tmux: HINT }).marks).toBe(book);
   });
 });
 

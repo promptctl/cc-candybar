@@ -5,6 +5,7 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
@@ -144,6 +145,7 @@ function buildRuntime(
     remoteLogin: () => {
       throw new Error("remoteLogin must not run in this case");
     },
+    marks: memoryMarkBook(),
     fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
   };
@@ -254,7 +256,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- marks=- (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
     ]);
   });
 
@@ -386,7 +388,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, "\ue0b0\ue0b1"],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        'doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 marks=- (session=s1)',
+        'doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- (session=s1)',
       ]);
     });
 
@@ -404,7 +406,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         "doctor-mark: nerdFont drawn on iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B1 (session=s1)",
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* marks=nerdFont:drawn \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

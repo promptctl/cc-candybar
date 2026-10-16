@@ -37,7 +37,6 @@ import { presetRoot } from "../config/presets.js";
 import { EFFECT_FLOOR, FOLLOW_BAR } from "../themes/policy.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import {
-  MARKED_CHECKS,
   type Asked,
   type ConfigFacts,
   type DoctorFacts,
@@ -59,12 +58,15 @@ import {
 } from "./terminal.js";
 import { fontInUse } from "./font-edge.js";
 import { stripPrivateGlyphs } from "../render/strip.js";
-import { doctorMarkKey, parseMark } from "./report.js";
+import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
 
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
   readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient>;
+  // The marks the user has made on what the doctor showed them, kept for
+  // good (src/doctor/mark-book.ts).
+  readonly marks: MarkBookStore;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
   readonly remoteLogin: (pid: number) => Asked<boolean>;
@@ -117,12 +119,14 @@ const TMUX_CLIENT_FORMAT =
   "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}\t#{client_pid}";
 
 // [LAW:parse-dont-validate] tmux's answer, read as the four fields it was
-// asked for — a line that is not four fields, or a pid that is not one, is a
-// failure naming what came back, never a client with blank fields.
+// asked for — a line that is not four fields, or a pid that is neither one nor
+// empty, is a failure naming what came back. Every field is empty when no
+// client is attached to the pane's session: no features, no terminal, no
+// process, which is an answer, not a failure.
 export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
   const fields = stdout.replace(/\n$/, "").split("\t");
   const [features, termtype, termname, pid] = fields;
-  if (fields.length !== 4 || !/^[1-9]\d*$/.test(pid!)) {
+  if (fields.length !== 4 || !/^(?:[1-9]\d*)?$/.test(pid!)) {
     return {
       kind: "failed",
       reason: `tmux answered ${JSON.stringify(stdout)}, not the four fields asked for`,
@@ -134,7 +138,7 @@ export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
       features: features!.split(",").filter((f) => f !== ""),
       termtype: termtype!,
       termname: termname!,
-      pid: Number(pid),
+      pid: pid === "" ? null : Number(pid),
     },
   };
 }
@@ -202,7 +206,13 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
 export function productionEdge(
   loadConfig: DoctorEdge["loadConfig"],
 ): DoctorEdge {
-  return { probeTmux, remoteLogin, fontInUse, loadConfig };
+  return {
+    probeTmux,
+    remoteLogin,
+    fontInUse,
+    loadConfig,
+    marks: fileMarkBook(),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
@@ -287,9 +297,11 @@ function terminalFacts(
   const { ITERM_PROFILE: startedIn, ...unattached } = env ?? {};
   const inside = tmux.kind === "inside" ? tmux.client : null;
   const remote: Asked<boolean> =
-    inside?.kind === "ok"
-      ? edge.remoteLogin(inside.value.pid)
-      : { kind: "ok", value: hints.ssh === true };
+    inside?.kind !== "ok"
+      ? { kind: "ok", value: hints.ssh === true }
+      : inside.value.pid === null
+        ? { kind: "failed", reason: "tmux has no client attached to the pane" }
+        : edge.remoteLogin(inside.value.pid);
   return {
     kind: "configured",
     name,
@@ -388,12 +400,7 @@ export function gatherFacts(
             glyphs,
             terminal: terminalFacts(edge, tmux, hints, glyphs),
           },
-    marks: Object.fromEntries(
-      MARKED_CHECKS.flatMap((c) => {
-        const raw = sessionPick(doctorMarkKey(c.name));
-        return raw === null ? [] : [[c.name, parseMark(raw)]];
-      }),
-    ),
+    marks: edge.marks.read(),
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(

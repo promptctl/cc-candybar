@@ -13,12 +13,11 @@
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import {
-  GLYPH_MARKS,
+  NERD_FONT_CHECK,
+  glyphSighting,
   type CheckReport,
-  type DoctorFacts,
-  type GlyphMark,
+  type MarkBook,
   type NerdFontFacts,
-  type RecordedMark,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
@@ -49,39 +48,14 @@ export function doctorReportKeys(checkName: string): ReportKeys {
   };
 }
 
-// [LAW:one-source-of-truth] Where a check's mark lives — beside its report,
-// but never written by it: a report rewrites every key it names on every run,
-// and a mark is the user's, outliving the runs that read it.
-export function doctorMarkKey(checkName: string): string {
-  return `${DOCTOR_NS}${checkName}.mark`;
-}
-
-// The one spelling of a recorded mark, `<mark>:<sighting id>`, and its one
-// reading. Only the doctor verb writes the key, so a value that does not read
-// is a fault to name, never a missing mark.
-export function markValue({ mark, sighting }: RecordedMark): string {
-  return `${mark}:${sighting}`;
-}
-
-export function parseMark(raw: string): RecordedMark {
-  const split = raw.indexOf(":");
-  const mark = raw.slice(0, Math.max(split, 0));
-  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
-    throw new Error(
-      `doctor: a recorded mark reads ${JSON.stringify(raw)}, not <${GLYPH_MARKS.join("|")}>:<sighting>`,
-    );
-  }
-  return { mark: mark as GlyphMark, sighting: raw.slice(split + 1) };
-}
-
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
 // fields for the doctor's event: the glyphs it needed, the terminal it found
 // (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it
-// from finding one) and the font it read — every field `-` where there was
-// nothing to find. A value a terminal or font chose is a JSON string, since it
-// may hold a space.
-export function nerdFontFields(facts: NerdFontFacts): string {
-  if (facts.kind === "none") return "glyphs=- terminal=- font=-";
+// from finding one), the font it read and the mark it honoured, the one made
+// on the sighting it shows — every field `-` where there was nothing to find.
+// A value a terminal or font chose is a JSON string, since it may hold a space.
+export function nerdFontFields(facts: NerdFontFacts, marks: MarkBook): string {
+  if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
   const { glyphs, terminal } = facts;
   const codes = [...glyphs].map((g) => g.codePointAt(0)!.toString(16));
   const found = ((): string => {
@@ -102,14 +76,8 @@ export function nerdFontFields(facts: NerdFontFacts): string {
     const { font: name, lacks } = terminal.font.value;
     return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
   })();
-  return `glyphs=${codes.join(",")} terminal=${found} font=${font}`;
-}
-
-// [LAW:nothing-unseen] The marks a doctor run reasoned over, as one logfmt
-// field: `<check>:<mark>` each, `-` for none.
-export function marksField(marks: DoctorFacts["marks"]): string {
-  const each = Object.entries(marks).map(([check, m]) => `${check}:${m!.mark}`);
-  return `marks=${each.join(",") || "-"}`;
+  const mark = marks[NERD_FONT_CHECK]?.[glyphSighting(facts).id] ?? "-";
+  return `glyphs=${codes.join(",")} terminal=${found} font=${font} mark=${mark}`;
 }
 
 // The bar's row has room for one problem: it names the first and counts the

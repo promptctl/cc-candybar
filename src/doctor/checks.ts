@@ -31,12 +31,13 @@ import {
 // session's pane, or why it could not be asked: its verdict on the terminal's
 // features (`#{client_termfeatures}`), what that terminal is
 // (TmuxClientTerm), and the client's process (`#{client_pid}`), whose
-// ancestry says whether it was attached over a remote login. No `absent` arm:
+// ancestry says whether it was attached over a remote login — null when no
+// client is attached to the pane's session. No `absent` arm:
 // the query either answers or fails — there is no "tmux has no opinion", so a
 // probe never has to decide what an absent answer would mean.
 export interface TmuxClient extends TmuxClientTerm {
   readonly features: readonly string[];
-  readonly pid: number;
+  readonly pid: number | null;
 }
 
 // A question put to the system: it answers or it fails, never "no opinion".
@@ -156,11 +157,11 @@ export type TerminalFacts =
 export const GLYPH_MARKS = ["drawn", "boxes"] as const;
 export type GlyphMark = (typeof GLYPH_MARKS)[number];
 
-// A mark, and the sighting it was made on (Sighting.id).
-export interface RecordedMark {
-  readonly mark: GlyphMark;
-  readonly sighting: string;
-}
+// Every mark the user has made: per check that takes one, the mark on each
+// sighting (Sighting.id) it was made on (src/doctor/mark-book.ts keeps it).
+export type MarkBook = Readonly<
+  Partial<Record<string, Readonly<Record<string, GlyphMark>>>>
+>;
 
 // [LAW:types-are-the-program] A bar that draws no private-use glyph has no
 // terminal to ask about, so `none` carries none and nothing is read for it.
@@ -186,9 +187,8 @@ export interface DoctorFacts {
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   readonly nerdFont: NerdFontFacts;
-  // The user's mark, per check that takes one (MARKED_CHECKS), recorded under
-  // the sighting it answered; a mark on another sighting is no mark at all.
-  readonly marks: Readonly<Partial<Record<string, RecordedMark>>>;
+  // The user's marks; a check honours only the one on the sighting it shows.
+  readonly marks: MarkBook;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -560,7 +560,7 @@ const ASCII_WAY =
 // asked its font, so the font is read where the terminal reads it, and what
 // the doctor cannot settle that way the user settles by looking: every failed
 // verdict shows the glyphs to mark, and a mark on them is the answer.
-// The check's name, which its mark is keyed by (doctorMarkKey).
+// The check's name, which its marks are filed under in the mark book.
 export const NERD_FONT_CHECK = "nerdFont";
 
 const nerdFont: Check = {
@@ -577,8 +577,7 @@ const nerdFont: Check = {
     });
     const terminal = facts.terminal;
     const called = terminalCalled(terminal);
-    const recorded = marks[NERD_FONT_CHECK];
-    const mark = recorded?.sighting === sighting.id ? recorded.mark : null;
+    const mark = marks[NERD_FONT_CHECK]?.[sighting.id] ?? null;
     switch (mark) {
       case "drawn":
         return { ok: true };

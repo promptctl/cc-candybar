@@ -6,6 +6,7 @@
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
+import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +42,7 @@ const NO_TMUX: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
+  marks: memoryMarkBook(),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -349,6 +351,7 @@ describe("gatherFacts", () => {
         };
       },
       remoteLogin: NO_TMUX.remoteLogin,
+      marks: NO_TMUX.marks,
       fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };

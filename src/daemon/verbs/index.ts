@@ -121,13 +121,8 @@ import {
   type DoctorFacts,
   type GlyphMark,
 } from "../../doctor/checks";
-import {
-  doctorMarkKey,
-  doctorReportPairs,
-  markValue,
-  marksField,
-  nerdFontFields,
-} from "../../doctor/report";
+import { doctorReportPairs, nerdFontFields } from "../../doctor/report";
+import { withMark } from "../../doctor/mark-book";
 import {
   applyFix,
   clickArrived,
@@ -1141,7 +1136,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont)} ${marksField(facts.marks)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} (session=${sid})`,
   );
 }
 
@@ -1234,16 +1229,13 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
     );
   }
-  const recorded = { mark: mark as GlyphMark, sighting: verdict.sighting.id };
-  ctx.sessionState.set(sid, doctorMarkKey(check.name), markValue(recorded));
+  const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
+  ctx.doctor.marks.record(...made);
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  writeReport(ctx, sid, {
-    ...facts,
-    marks: { ...facts.marks, [check.name]: recorded },
-  });
+  writeReport(ctx, sid, { ...facts, marks: withMark(facts.marks, ...made) });
 };
 
 // ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────

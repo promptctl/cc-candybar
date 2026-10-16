@@ -41,9 +41,9 @@ const EXIT_USAGE = 2;
 
 const FIX_HINT = ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)`;
 
-// The CLI has no session, so it can neither take a mark nor read one: it shows
-// what to look at, and the bar's doctor, where a mark is made and counted.
-const MARK_HINT = `this command cannot see what your terminal draws; mark them ✓ shapes or ✗ boxes in the bar's doctor: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
+// The CLI has no bar to show glyphs in, so it cannot take a mark; it reads the
+// marks made in the bar's doctor (the mark book), and points there.
+const MARK_HINT = `mark them ✓ shapes or ✗ boxes in the bar's doctor, and this command reads your mark: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
 
 // A failed check's line, then one indented line per further problem it found,
 // then what it asks the user to look at.
