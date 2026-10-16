@@ -163,31 +163,35 @@ export function parseClientHints(
 
 // [LAW:no-silent-failure] A hint the client SENT that the checkpoint refused
 // is not the same fact as one it never sent: the render goes on without it
-// (one malformed field must not cost the bar), but the bar says so — the red
-// strip's line, null when every sent hint was taken. The producer that reaches
-// this is a client older than the daemon whose hint contract has since
-// tightened (brandon-config-nuq6: `configEnv` was raw, now absolute), which
-// would otherwise render a different config with no word why. Derived from
-// the raw request and the stamped hints, so no sanitizer learns a third state.
-// The list is the fact (the render event's `refused=`); the strip's line is
-// its spelling.
+// (one malformed field must not cost the bar), but the bar and the render
+// event say so. The producer that reaches this is a client older than the
+// daemon whose hint contract has since tightened (brandon-config-nuq6:
+// `configEnv` was raw, now absolute), which would otherwise render a
+// different config with no word why. Derived from the raw request and the
+// stamped hints, so no sanitizer learns a third state.
+export interface RefusedHint {
+  readonly hint: keyof ClientHints;
+  readonly sent: unknown;
+}
+
 export function refusedHints(
   req: Partial<Record<keyof ClientHints, unknown>>,
   hints: ClientHints,
-): ReadonlyArray<keyof ClientHints> {
+): readonly RefusedHint[] {
   return CLIENT_HINT_FIELDS.filter(
     (k) => req[k] !== undefined && hints[k] === undefined,
-  );
+  ).map((hint) => ({ hint, sent: req[hint] }));
 }
 
+// The red strip's line for the refused hints, null when every sent hint was
+// taken.
 export function refusedHintsError(
-  req: Partial<Record<keyof ClientHints, unknown>>,
-  refused: ReadonlyArray<keyof ClientHints>,
+  refused: readonly RefusedHint[],
 ): string | null {
   return refused.length === 0
     ? null
     : `Client hints refused: ${refused
-        .map((k) => `${k}=${JSON.stringify(req[k])}`)
+        .map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`)
         .join(
           ", ",
         )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;

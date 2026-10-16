@@ -188,13 +188,16 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(bar).not.toContain("OVERRIDE-WINS");
     // The render event names what was refused; a render that refused nothing
     // says `-`, so "none refused" and "not logged" stay distinct.
+    await render(sockPath, "cfg-env-taken", projectDir, {
+      configEnv: override,
+    });
     const refusedOf = (sid: string) =>
       readFileSync(logPath(env), "utf8")
         .split("\n")
         .filter((l) => l.includes(`render sid=${sid} `))
         .map((l) => l.match(/ refused=(\S+) /)?.[1]);
-    expect(refusedOf("cfg-env-stale-client")).toContain("configEnv");
-    expect(refusedOf("cfg-env-valid")).toContain("-");
+    expect(refusedOf("cfg-env-stale-client")).toEqual(["configEnv"]);
+    expect(refusedOf("cfg-env-taken")).toEqual(["-"]);
   });
 
   // The request's cwd anchors a relative --config, so a relative cwd is a

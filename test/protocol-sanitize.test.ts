@@ -163,17 +163,20 @@ describe("parseClientHints (the one wire checkpoint)", () => {
 
   // A hint the client sent and the checkpoint refused is named on the bar;
   // one never sent, and one taken, are not.
-  test("refusedHints names exactly the sent hints the checkpoint refused", () => {
+  test("refusedHints names exactly the sent hints the checkpoint refused, with what was sent", () => {
     const refused = (extra: Record<string, unknown>) =>
       refusedHints(extra, parseClientHints(req(extra)));
     expect(refused({})).toEqual([]);
+    expect(refusedHintsError(refused({}))).toBeNull();
     expect(
       refused({ termCols: 80, tmux: null, configEnv: "/etc/c.json5" }),
     ).toEqual([]);
-    const sent = { termCols: 80, configEnv: "c.json5", ssh: "yes" };
-    expect(refused(sent)).toEqual(["ssh", "configEnv"]);
-    expect(refusedHintsError(sent, [])).toBeNull();
-    expect(refusedHintsError(sent, refused(sent))).toMatch(
+    const sent = refused({ termCols: 80, configEnv: "c.json5", ssh: "yes" });
+    expect(sent).toEqual([
+      { hint: "ssh", sent: "yes" },
+      { hint: "configEnv", sent: "c.json5" },
+    ]);
+    expect(refusedHintsError(sent)).toMatch(
       /^Client hints refused: ssh="yes", configEnv="c.json5" — /,
     );
   });
