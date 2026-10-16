@@ -63,6 +63,7 @@ interface Feed {
   last: { readonly resp: Response; readonly bytes: string } | null;
   readonly since: number;
   drawn: number;
+  moving: number;
   pushed: number;
   drawMs: number;
   summarizedAt: number;
@@ -136,6 +137,20 @@ export class FrameFeeds<Req> {
     }
   }
 
+  // Draw every watched session's next frame now: something all their rates
+  // depend on changed.
+  wakeAll(): void {
+    for (const sessionId of this.feeds.keys()) this.wake(sessionId);
+  }
+
+  // The latest request of every session someone is watching.
+  watched(): Req[] {
+    return [...this.feeds.keys()].flatMap((id) => {
+      const req = this.requests.get(id);
+      return req === undefined ? [] : [req];
+    });
+  }
+
   getStats(): FeedStats {
     let subscribers = 0;
     for (const feed of this.feeds.values()) subscribers += feed.sinks.size;
@@ -157,6 +172,7 @@ export class FrameFeeds<Req> {
       last: null,
       since: now,
       drawn: 0,
+      moving: 0,
       pushed: 0,
       drawMs: 0,
       summarizedAt: now,
@@ -200,6 +216,7 @@ export class FrameFeeds<Req> {
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
+    if (frame?.moving === true) feed.moving++;
     if (frame !== null) this.push(feed, frame.resp);
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
@@ -239,7 +256,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} moving=${feed.moving} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }
